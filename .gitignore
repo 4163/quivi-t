@@ -24,7 +24,7 @@ dist-ssr
 *.sw?
 
 .agents/
-test-files/
+.ss/
 
 Makefile
 pipeline.instructions.md
