@@ -1472,6 +1472,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "http-range"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21dec9db110f5f872ed9699c3ecf50cf16f423502706ba5c72462e28d3157573"
+
+[[package]]
 name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1995,6 +2001,12 @@ dependencies = [
  "thiserror 2.0.19",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "natord"
+version = "1.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "308d96db8debc727c3fd9744aac51751243420e46edf401010908da7f8d5e57c"
 
 [[package]]
 name = "ndk"
@@ -3284,6 +3296,7 @@ dependencies = [
  "gtk",
  "heck 0.5.0",
  "http",
+ "http-range",
  "jni",
  "libc",
  "log",
@@ -3322,6 +3335,7 @@ dependencies = [
 name = "tauri-app"
 version = "0.1.0"
 dependencies = [
+ "natord",
  "serde",
  "serde_json",
  "tauri",

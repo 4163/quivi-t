@@ -4,32 +4,24 @@
  * Viewport rendering: fit-to-screen, zoom, and pan.
  * Communicates with core.js via state callbacks.
  * All DOM writes are confined to the #viewport and #viewer-img elements.
- *
- * Zoom is applied as a CSS transform on the <img> element.
- * Pan offsets are tracked internally and combined in a single rAF loop.
  */
 
 import { Core } from './core.js';
 
-// --- DOM refs -----------------------------------------------------------------
 const img = document.getElementById('viewer-img');
 const statusZoom = document.getElementById('status-zoom');
+const statusDims = document.getElementById('status-dims');
 
-// --- Transform state ----------------------------------------------------------
 let _scale  = 1;
-let _tx     = 0;  // translate X offset in px
-let _ty     = 0;  // translate Y offset in px
-
+let _tx     = 0;
+let _ty     = 0;
 let _naturalW = 0;
 let _naturalH = 0;
-
 let _rafPending = false;
-
-// --- Helpers ------------------------------------------------------------------
+let _currentFitMode = 'width-if-larger';
 
 function _applyTransform() {
-  img.style.transform =
-    `translate(calc(-50% + ${_tx}px), calc(-50% + ${_ty}px)) scale(${_scale})`;
+  img.style.transform = `translate(calc(-50% + ${_tx}px), calc(-50% + ${_ty}px)) scale(${_scale})`;
   if (statusZoom) statusZoom.textContent = `${Math.round(_scale * 100)}%`;
 }
 
@@ -43,51 +35,77 @@ function _scheduleTransform() {
 }
 
 /**
- * Scale the image to fit the viewport, with a small padding.
- * Called whenever a new image loads or the window resizes.
+ * Apply the current fit mode.
  */
-function fitToScreen() {
+function applyFitMode() {
   if (!_naturalW || !_naturalH) return;
 
-  const vw = window.innerWidth;
-  const vh = window.innerHeight - (document.body.classList.contains('has-image') ? 32 : 0);
+  const vp = document.getElementById('viewport');
+  const vw = vp.clientWidth;
+  const vh = vp.clientHeight;
+  const padding = 0; // The screenshot didn't seem to have much padding, but we can adjust later.
 
-  const padding = 32;
   const scaleX = (vw - padding * 2) / _naturalW;
   const scaleY = (vh - padding * 2) / _naturalH;
 
-  _scale = Math.min(scaleX, scaleY, 1); // never upscale beyond 1x by default
+  switch (_currentFitMode) {
+    case 'none':
+      _scale = 1;
+      break;
+    case 'width':
+      _scale = scaleX;
+      break;
+    case 'height':
+      _scale = scaleY;
+      break;
+    case 'window':
+      _scale = Math.min(scaleX, scaleY);
+      break;
+    case 'width-if-larger':
+      _scale = Math.min(scaleX, 1);
+      break;
+    case 'height-if-larger':
+      _scale = Math.min(scaleY, 1);
+      break;
+    case 'window-if-larger':
+    default:
+      _scale = Math.min(scaleX, scaleY, 1);
+      break;
+  }
+
   _tx = 0;
   _ty = 0;
-
   _scheduleTransform();
 }
 
-// --- Zoom --------------------------------------------------------------------- 
+// --- Zoom ---------------------------------------------------------------------
 
 const ZOOM_STEP   = 0.12;
 const ZOOM_MIN    = 0.05;
 const ZOOM_MAX    = 32;
 
-/**
- * Zoom toward a screen-space focal point (e.g. cursor position).
- * @param {number} delta  positive = zoom in, negative = zoom out
- * @param {number} cx     focal X in viewport px
- * @param {number} cy     focal Y in viewport px
- */
 function zoomAt(delta, cx, cy) {
   const prevScale = _scale;
   const factor = 1 + delta * ZOOM_STEP;
   _scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, _scale * factor));
 
-  // Shift translation so the pixel under the cursor stays fixed
-  const ratio = _scale / prevScale;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  // Switch to custom zoom (cancels fit mode)
+  if (_scale !== prevScale) {
+    Core.setFitMode('none');
+  }
 
-  // World-space coords of cursor before zoom
-  const wx = (cx - vw / 2 - _tx);
-  const wy = (cy - vh / 2 - _ty);
+  const vp = document.getElementById('viewport');
+  const rect = vp.getBoundingClientRect();
+  const vw = rect.width;
+  const vh = rect.height;
+
+  // Local pointer pos within viewport
+  const lx = cx - rect.left;
+  const ly = cy - rect.top;
+
+  const ratio = _scale / prevScale;
+  const wx = (lx - vw / 2 - _tx);
+  const wy = (ly - vh / 2 - _ty);
 
   _tx += wx - wx * ratio;
   _ty += wy - wy * ratio;
@@ -95,7 +113,13 @@ function zoomAt(delta, cx, cy) {
   _scheduleTransform();
 }
 
-// --- Pan ----------------------------------------------------------------------- 
+function zoomCenter(delta) {
+  const vp = document.getElementById('viewport');
+  const rect = vp.getBoundingClientRect();
+  zoomAt(delta, rect.left + rect.width / 2, rect.top + rect.height / 2);
+}
+
+// --- Pan -----------------------------------------------------------------------
 
 let _isPanning = false;
 let _panStartX = 0;
@@ -126,38 +150,42 @@ function _onMouseUp() {
   document.body.style.cursor = '';
 }
 
-// --- Wheel -------------------------------------------------------------------- 
-
 function _onWheel(e) {
   e.preventDefault();
   const delta = e.deltaY < 0 ? 1 : -1;
   zoomAt(delta, e.clientX, e.clientY);
 }
 
-// --- Image load --------------------------------------------------------------- 
+// --- Image load ---------------------------------------------------------------
 
 img.addEventListener('load', () => {
   _naturalW = img.naturalWidth;
   _naturalH = img.naturalHeight;
-
-  // Pixel-art mode for very small images
   img.style.imageRendering = (_naturalW <= 64 || _naturalH <= 64) ? 'pixelated' : 'auto';
-
-  fitToScreen();
+  
+  if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
+  applyFitMode();
 });
 
-// --- State subscription ------------------------------------------------------- 
+// --- State subscription -------------------------------------------------------
 
 Core.onStateChange((state) => {
   if (state.mode === 'empty') return;
 
-  img.src = state.src;
-  img.alt = state.filename;
+  if (img.src !== state.src) {
+    img.src = state.src;
+    img.alt = state.filename;
+  }
+
+  if (_currentFitMode !== state.fitMode) {
+    _currentFitMode = state.fitMode;
+    applyFitMode();
+  }
 });
 
-// --- Event listeners ---------------------------------------------------------- 
+// --- Event listeners ----------------------------------------------------------
 
-window.addEventListener('resize', fitToScreen);
+window.addEventListener('resize', applyFitMode);
 
 const viewport = document.getElementById('viewport');
 viewport.addEventListener('mousedown', _onMouseDown);
@@ -165,13 +193,27 @@ window.addEventListener('mousemove', _onMouseMove);
 window.addEventListener('mouseup', _onMouseUp);
 viewport.addEventListener('wheel', _onWheel, { passive: false });
 
-// Double-click to reset to fit-to-screen
 viewport.addEventListener('dblclick', () => {
-  _tx = 0;
-  _ty = 0;
-  fitToScreen();
+  // Toggle between 100% and current fit mode, or just reset fit mode
+  if (_currentFitMode === 'none') {
+    Core.setFitMode('width-if-larger'); // Reset to default
+  } else {
+    Core.setFitMode('none');
+    _scale = 1;
+    _tx = 0;
+    _ty = 0;
+    _scheduleTransform();
+  }
 });
 
-// --- Public API (consumed by main.js) ----------------------------------------
-
-export const Viewer = { fitToScreen, zoomAt };
+export const Viewer = { 
+  applyFitMode, 
+  zoomCenter,
+  setZoom(exactScale) {
+    _scale = exactScale;
+    _tx = 0;
+    _ty = 0;
+    Core.setFitMode('none');
+    _scheduleTransform();
+  }
+};

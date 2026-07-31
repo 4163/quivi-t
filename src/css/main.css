@@ -1,37 +1,76 @@
 /* ============================================================
    main.css — QuiviT
-   Core styles, dark theme, checkerboard, layout, transitions.
-   All color/spacing tokens live here as CSS custom properties.
+   System-theme aware (light default / dark via media query).
+   All tokens live here as CSS custom properties.
    ============================================================ */
 
-/* --- Tokens ------------------------------------------------- */
+/* --- System font stack (zero external requests → best LCP) -- */
 :root {
-  --bg:            #1a1a1a;
-  --bg-overlay:    #111111;
-  --surface:       #242424;
-  --border:        rgba(255,255,255,0.07);
-  --text:          #e0e0e0;
-  --text-muted:    #888;
-  --accent:        #4e9eff;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
 
-  /* Checkerboard (for transparent images) */
-  --checker-light: #3a3a3a;
-  --checker-dark:  #2a2a2a;
-  --checker-size:  16px;
+  /* Light theme tokens */
+  --bg:           #f0f0f0;
+  --surface:      #ffffff;
+  --surface-alt:  #fafafa;
+  --border:       #d4d4d4;
+  --border-light: #e8e8e8;
+  --text:         #1a1a1a;
+  --text-muted:   #666666;
+  --text-dim:     #999999;
+  --accent:       #0078d4;
+  --accent-hover: #106ebe;
+  --selected-bg:  #cce4f7;
+  --selected-text:#003f7f;
+  --hover-bg:     #e8f0f8;
+  --menu-bg:      #ffffff;
+  --menu-shadow:  0 2px 8px rgba(0,0,0,0.18);
 
-  --statusbar-h:   32px;
-  --transition:    0.18s ease;
+  /* Viewport / checkerboard */
+  --checker-a:    #c8c8c8;
+  --checker-b:    #b8b8b8;
+  --checker-size: 14px;
 
-  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
-  font-size: 14px;
-  color-scheme: dark;
+  /* Layout */
+  --menubar-h:    26px;
+  --statusbar-h:  22px;
+  --panel-w:      260px;
+  --panel-min-w:  120px;
+  --panel-max-w:  480px;
+  --resize-handle-w: 4px;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:           #1e1e1e;
+    --surface:      #252526;
+    --surface-alt:  #2d2d2d;
+    --border:       #3c3c3c;
+    --border-light: #333333;
+    --text:         #e8e8e8;
+    --text-muted:   #aaaaaa;
+    --text-dim:     #666666;
+    --accent:       #4ea4f7;
+    --accent-hover: #3a8ee0;
+    --selected-bg:  #1e3a5f;
+    --selected-text:#8fc8ff;
+    --hover-bg:     #2a3545;
+    --menu-bg:      #2d2d2d;
+    --menu-shadow:  0 2px 10px rgba(0,0,0,0.5);
+    --checker-a:    #3a3a3a;
+    --checker-b:    #2e2e2e;
+  }
 }
 
 /* --- Reset -------------------------------------------------- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
-  width: 100%; height: 100%;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
@@ -39,71 +78,250 @@ html, body {
   -webkit-user-select: none;
 }
 
-/* --- Checkerboard viewport ---------------------------------- */
-.viewport {
-  position: fixed;
-  inset: 0;
-  bottom: 0;
-  overflow: hidden;
+/* --- App layout: column flex ------------------------------ */
+/* menubar | workspace | statusbar */
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Menu bar --------------------------------------------- */
+#menubar {
+  display: flex;
+  align-items: stretch;
+  height: var(--menubar-h);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 100;
+}
+
+.menu-item {
+  position: relative;
+}
+
+.menu-trigger {
+  all: unset;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 10px;
+  font: inherit;
+  color: var(--text);
   cursor: default;
-
-  /* Checkerboard via repeating gradient — pure CSS, no image needed */
-  background-color: var(--checker-dark);
-  background-image:
-    linear-gradient(45deg, var(--checker-light) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--checker-light) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, var(--checker-light) 75%),
-    linear-gradient(-45deg, transparent 75%, var(--checker-light) 75%);
-  background-size: var(--checker-size) var(--checker-size);
-  background-position: 0 0, 0 calc(var(--checker-size) / 2),
-    calc(var(--checker-size) / 2) calc(-1 * var(--checker-size) / 2),
-    calc(-1 * var(--checker-size) / 2) 0;
+  white-space: nowrap;
+  border-radius: 0;
+  transition: background 0.08s;
 }
 
-/* When the status bar is shown, shrink the viewport above it */
-body.has-image .viewport {
-  bottom: var(--statusbar-h);
+.menu-trigger:hover,
+.menu-item.open .menu-trigger {
+  background: var(--selected-bg);
+  color: var(--selected-text);
 }
 
-/* --- Viewer image ------------------------------------------- */
-.viewer-img {
+/* Dropdown */
+.menu-dropdown {
+  display: none;
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform-origin: center center;
-  /* Initial transform set by viewer.js */
-  transform: translate(-50%, -50%);
-  max-width: none;  /* We control sizing manually */
-  display: block;
-  pointer-events: none;
-  image-rendering: auto; /* fallback; viewer.js sets pixelated for small images */
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  background: var(--menu-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--menu-shadow);
+  list-style: none;
+  padding: 3px 0;
+  z-index: 200;
 }
 
-/* --- Drop overlay ------------------------------------------- */
-.drop-overlay {
-  position: fixed;
+.menu-item.open .menu-dropdown {
+  display: block;
+}
+
+.menu-dropdown li[role="menuitem"] {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 20px 4px 24px;
+  gap: 24px;
+  cursor: default;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.menu-dropdown li[role="menuitem"]:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.menu-dropdown li[role="menuitem"]:hover .shortcut {
+  color: rgba(255,255,255,0.75);
+}
+
+.menu-dropdown li.separator {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 0;
+  padding: 0;
+}
+
+.shortcut {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* --- Workspace: file panel + viewport --------------------- */
+#workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0; /* allow flex children to scroll */
+  overflow: hidden;
+}
+
+/* --- File panel ------------------------------------------- */
+#file-panel {
+  display: flex;
+  flex-direction: column;
+  width: var(--panel-w);
+  min-width: var(--panel-min-w);
+  max-width: var(--panel-max-w);
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+#file-panel.hidden {
+  display: none;
+}
+
+#file-panel-header {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.col-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-ext  { width: 46px; flex-shrink: 0; }
+.col-date { width: 80px; flex-shrink: 0; font-size: 10px; }
+
+#file-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  list-style: none;
+  padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+#file-list li {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  gap: 8px;
+  cursor: default;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+#file-list li:hover {
+  background: var(--hover-bg);
+}
+
+#file-list li.selected {
+  background: var(--selected-bg);
+  color: var(--selected-text);
+}
+
+#file-list li.selected:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+#file-list .item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+#file-list .item-ext  { width: 46px; flex-shrink: 0; color: var(--text-muted); }
+#file-list .item-date { width: 80px; flex-shrink: 0; font-size: 10px; color: var(--text-dim); }
+
+/* Resize handle */
+#panel-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--resize-handle-w);
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 10;
+}
+
+#panel-resize-handle:hover,
+#panel-resize-handle.dragging {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+/* --- Viewport --------------------------------------------- */
+#viewport {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--checker-b);
+  background-image:
+    linear-gradient(45deg, var(--checker-a) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker-a) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-a) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker-a) 75%);
+  background-size: var(--checker-size) var(--checker-size);
+  background-position:
+    0 0,
+    0 calc(var(--checker-size) / 2),
+    calc(var(--checker-size) / 2) calc(var(--checker-size) / -2),
+    calc(var(--checker-size) / -2) 0;
+}
+
+/* Solid bg while no image loaded (no pointless checkerboard) */
+#viewport.empty {
+  background: var(--bg);
+}
+
+/* --- Drop overlay ----------------------------------------- */
+#drop-overlay {
+  position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-overlay);
-  opacity: 0;
+  background: var(--bg);
+  z-index: 5;
   pointer-events: none;
-  transition: opacity var(--transition);
-  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s;
 }
 
-.drop-overlay.active {
+#drop-overlay.active {
   opacity: 1;
   pointer-events: all;
 }
 
-/* Highlight when a file is dragged over the window */
-.drop-overlay.drag-over {
-  background: rgba(78, 158, 255, 0.08);
+#drop-overlay.drag-over {
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
 }
 
-.drop-overlay.drag-over .drop-hint {
+#drop-overlay.drag-over .drop-hint {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -112,53 +330,45 @@ body.has-image .viewport {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 48px 56px;
+  gap: 10px;
+  padding: 40px 52px;
   border: 1.5px dashed var(--border);
-  border-radius: 16px;
+  border-radius: 10px;
   color: var(--text-muted);
-  transition: border-color var(--transition), color var(--transition), background var(--transition);
+  transition: border-color 0.15s, color 0.15s;
 }
 
-.drop-hint svg {
-  width: 48px;
-  height: 48px;
-  opacity: 0.6;
+.drop-hint svg { width: 40px; height: 40px; opacity: 0.55; }
+.drop-hint p   { font-size: 0.95rem; font-weight: 500; }
+.drop-hint span{ font-size: 0.75rem; opacity: 0.5; letter-spacing: 0.04em; }
+
+/* --- Viewer image ----------------------------------------- */
+#viewer-img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: center center;
+  transform: translate(-50%, -50%);
+  max-width: none;
+  display: block;
+  pointer-events: none;
 }
 
-.drop-hint p {
-  font-size: 1rem;
-  font-weight: 500;
-}
-
-.drop-hint span {
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  opacity: 0.5;
-}
-
-/* --- Status bar -------------------------------------------- */
-.statusbar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: var(--statusbar-h);
-  background: var(--surface);
-  border-top: 1px solid var(--border);
+/* --- Status bar ------------------------------------------- */
+#statusbar {
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  gap: 16px;
-  font-size: 0.8rem;
+  height: var(--statusbar-h);
+  padding: 0 8px;
+  gap: 12px;
+  background: var(--surface-alt);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  font-size: 11.5px;
   color: var(--text-muted);
-  z-index: 5;
-  transition: opacity var(--transition);
 }
 
-.statusbar.hidden {
-  display: none;
-}
+#statusbar.hidden { display: none; }
 
 .status-filename {
   flex: 1;
@@ -168,11 +378,24 @@ body.has-image .viewport {
   color: var(--text);
 }
 
+.status-dims,
 .status-index,
-.status-zoom {
+.status-zoom,
+.status-fit {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
-/* --- Utility ----------------------------------------------- */
+.status-dims::before  { content: '·'; margin-right: 12px; color: var(--border); }
+.status-index::before { content: '·'; margin-right: 12px; color: var(--border); }
+.status-zoom::before  { content: '·'; margin-right: 12px; color: var(--border); }
+.status-fit::before   { content: '·'; margin-right: 12px; color: var(--border); }
+
+/* --- Utility ---------------------------------------------- */
 .hidden { display: none !important; }
+
+/* Scrollbar styling (Webkit) */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }

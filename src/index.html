@@ -3,38 +3,103 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="QuiviT — standalone image and comic viewer. Supports WebP, APNG, GIF, ZIP, CBZ and more." />
+    <meta name="description" content="QuiviT — standalone image and comic viewer." />
     <title>QuiviT</title>
     <link rel="stylesheet" href="/css/main.css" />
   </head>
 
   <body>
-    <!-- Drop overlay (shown when no image is loaded) -->
-    <div id="drop-overlay" class="drop-overlay active">
-      <div class="drop-hint">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="17 8 12 3 7 8"/>
-          <line x1="12" y1="3" x2="12" y2="15"/>
-        </svg>
-        <p>Drop an image or archive here</p>
-        <span>JPG · PNG · GIF · WebP · APNG · SVG · CBZ · ZIP</span>
+
+    <!-- ── Menu bar ─────────────────────────────────────────── -->
+    <nav id="menubar" role="menubar">
+
+      <div class="menu-item" id="menu-file">
+        <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">File</button>
+        <ul class="menu-dropdown" role="menu">
+          <li role="menuitem" id="cmd-open-dir">Open directory…<span class="shortcut">Ctrl+O</span></li>
+          <li class="separator"></li>
+          <li role="menuitem" id="cmd-options">Options…<span class="shortcut">F4</span></li>
+          <li class="separator"></li>
+          <li role="menuitem" id="cmd-quit">Quit</li>
+        </ul>
       </div>
+
+      <div class="menu-item" id="menu-folder">
+        <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Folder</button>
+        <ul class="menu-dropdown" role="menu">
+          <li role="menuitem" id="cmd-next">Select / Open next<span class="shortcut">Shift+S</span></li>
+          <li role="menuitem" id="cmd-prev">Select / Open previous<span class="shortcut">Shift+W</span></li>
+          <li class="separator"></li>
+          <li role="menuitem" id="cmd-parent">Open parent<span class="shortcut">Backspace</span></li>
+          <li role="menuitem" id="cmd-refresh">Refresh<span class="shortcut">F5</span></li>
+        </ul>
+      </div>
+
+      <div class="menu-item" id="menu-view">
+        <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">View</button>
+        <ul class="menu-dropdown" role="menu">
+          <li role="menuitem" id="cmd-zoom-in">Zoom in<span class="shortcut">C</span></li>
+          <li role="menuitem" id="cmd-zoom-out">Zoom out<span class="shortcut">Z</span></li>
+          <li role="menuitem" id="cmd-zoom-100">Zoom 100%<span class="shortcut">X</span></li>
+          <li class="separator"></li>
+          <li role="menuitem" id="cmd-fit-width">Fit width<span class="shortcut">E</span></li>
+          <li role="menuitem" id="cmd-fit-height">Fit height<span class="shortcut">R</span></li>
+          <li class="separator"></li>
+          <li role="menuitem" id="cmd-fullscreen">Full screen<span class="shortcut">Alt+Enter</span></li>
+          <li role="menuitem" id="cmd-toggle-filelist">File list<span class="shortcut">2</span></li>
+        </ul>
+      </div>
+
+    </nav>
+
+    <!-- ── Workspace (file panel + viewport) ────────────────── -->
+    <div id="workspace">
+
+      <!-- File list panel -->
+      <aside id="file-panel" aria-label="File list">
+        <div id="file-panel-header">
+          <span class="col-name">File</span>
+          <span class="col-ext">Extension</span>
+          <span class="col-date">Last modified</span>
+        </div>
+        <ul id="file-list" role="listbox" aria-label="Images in current directory">
+          <!-- populated by core.js -->
+        </ul>
+        <!-- Drag handle to resize panel -->
+        <div id="panel-resize-handle" title="Drag to resize"></div>
+      </aside>
+
+      <!-- Viewer viewport -->
+      <div id="viewport">
+        <!-- Drop overlay (shown when no image loaded) -->
+        <div id="drop-overlay" class="active">
+          <div class="drop-hint">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <p>Drop an image or archive here</p>
+            <span>JPG · PNG · GIF · WebP · APNG · SVG · CBZ · ZIP</span>
+          </div>
+        </div>
+
+        <!-- The image element -->
+        <img id="viewer-img" src="" alt="" draggable="false" decoding="async" />
+      </div>
+
     </div>
 
-    <!-- Viewport: the image is rendered here via CSS transform -->
-    <div id="viewport" class="viewport">
-      <img id="viewer-img" class="viewer-img" src="" alt="" draggable="false" />
-    </div>
-
-    <!-- Bottom status bar -->
-    <div id="statusbar" class="statusbar hidden">
+    <!-- ── Status bar ────────────────────────────────────────── -->
+    <footer id="statusbar" class="hidden" aria-live="polite">
       <span id="status-filename" class="status-filename"></span>
-      <span id="status-index" class="status-index"></span>
-      <span id="status-zoom" class="status-zoom"></span>
-    </div>
+      <span id="status-dims"     class="status-dims"></span>
+      <span id="status-index"    class="status-index"></span>
+      <span id="status-zoom"     class="status-zoom"></span>
+      <span id="status-fit"      class="status-fit"></span>
+    </footer>
 
-    <!-- Scripts: core logic first, then DOM bindings -->
+    <!-- Scripts: decoupled load order -->
     <script type="module" src="/js/core.js"></script>
     <script type="module" src="/js/viewer.js"></script>
     <script type="module" src="/js/main.js"></script>
