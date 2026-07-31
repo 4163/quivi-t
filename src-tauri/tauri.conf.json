@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tauri-app",
+  "productName": "QuiviT",
   "version": "0.1.0",
-  "identifier": "com.x4163.tauri-app",
+  "identifier": "com.x4163.quivit",
   "build": {
     "frontendDist": "../src"
   },
@@ -10,9 +10,11 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "tauri-app",
-        "width": 800,
-        "height": 600
+        "title": "QuiviT",
+        "width": 900,
+        "height": 650,
+        "minWidth": 400,
+        "minHeight": 300
       }
     ],
     "security": {

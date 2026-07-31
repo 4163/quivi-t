@@ -2,38 +2,41 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="stylesheet" href="styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri App</title>
-    <script type="module" src="/main.js" defer></script>
+    <meta name="description" content="QuiviT — standalone image and comic viewer. Supports WebP, APNG, GIF, ZIP, CBZ and more." />
+    <title>QuiviT</title>
+    <link rel="stylesheet" href="/css/main.css" />
   </head>
 
   <body>
-    <main class="container">
-      <h1>Welcome to Tauri</h1>
-
-      <div class="row">
-        <a href="https://tauri.app" target="_blank">
-          <img src="/assets/tauri.svg" class="logo tauri" alt="Tauri logo" />
-        </a>
-        <a
-          href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"
-          target="_blank"
-        >
-          <img
-            src="/assets/javascript.svg"
-            class="logo vanilla"
-            alt="JavaScript logo"
-          />
-        </a>
+    <!-- Drop overlay (shown when no image is loaded) -->
+    <div id="drop-overlay" class="drop-overlay active">
+      <div class="drop-hint">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <p>Drop an image or archive here</p>
+        <span>JPG · PNG · GIF · WebP · APNG · SVG · CBZ · ZIP</span>
       </div>
-      <p>Click on the Tauri logo to learn more about the framework</p>
+    </div>
 
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
-      <p id="greet-msg"></p>
-    </main>
+    <!-- Viewport: the image is rendered here via CSS transform -->
+    <div id="viewport" class="viewport">
+      <img id="viewer-img" class="viewer-img" src="" alt="" draggable="false" />
+    </div>
+
+    <!-- Bottom status bar -->
+    <div id="statusbar" class="statusbar hidden">
+      <span id="status-filename" class="status-filename"></span>
+      <span id="status-index" class="status-index"></span>
+      <span id="status-zoom" class="status-zoom"></span>
+    </div>
+
+    <!-- Scripts: core logic first, then DOM bindings -->
+    <script type="module" src="/js/core.js"></script>
+    <script type="module" src="/js/viewer.js"></script>
+    <script type="module" src="/js/main.js"></script>
   </body>
 </html>

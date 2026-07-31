@@ -1,0 +1,178 @@
+/* ============================================================
+   main.css — QuiviT
+   Core styles, dark theme, checkerboard, layout, transitions.
+   All color/spacing tokens live here as CSS custom properties.
+   ============================================================ */
+
+/* --- Tokens ------------------------------------------------- */
+:root {
+  --bg:            #1a1a1a;
+  --bg-overlay:    #111111;
+  --surface:       #242424;
+  --border:        rgba(255,255,255,0.07);
+  --text:          #e0e0e0;
+  --text-muted:    #888;
+  --accent:        #4e9eff;
+
+  /* Checkerboard (for transparent images) */
+  --checker-light: #3a3a3a;
+  --checker-dark:  #2a2a2a;
+  --checker-size:  16px;
+
+  --statusbar-h:   32px;
+  --transition:    0.18s ease;
+
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  color-scheme: dark;
+}
+
+/* --- Reset -------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* --- Checkerboard viewport ---------------------------------- */
+.viewport {
+  position: fixed;
+  inset: 0;
+  bottom: 0;
+  overflow: hidden;
+  cursor: default;
+
+  /* Checkerboard via repeating gradient — pure CSS, no image needed */
+  background-color: var(--checker-dark);
+  background-image:
+    linear-gradient(45deg, var(--checker-light) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--checker-light) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--checker-light) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--checker-light) 75%);
+  background-size: var(--checker-size) var(--checker-size);
+  background-position: 0 0, 0 calc(var(--checker-size) / 2),
+    calc(var(--checker-size) / 2) calc(-1 * var(--checker-size) / 2),
+    calc(-1 * var(--checker-size) / 2) 0;
+}
+
+/* When the status bar is shown, shrink the viewport above it */
+body.has-image .viewport {
+  bottom: var(--statusbar-h);
+}
+
+/* --- Viewer image ------------------------------------------- */
+.viewer-img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: center center;
+  /* Initial transform set by viewer.js */
+  transform: translate(-50%, -50%);
+  max-width: none;  /* We control sizing manually */
+  display: block;
+  pointer-events: none;
+  image-rendering: auto; /* fallback; viewer.js sets pixelated for small images */
+}
+
+/* --- Drop overlay ------------------------------------------- */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-overlay);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition);
+  z-index: 10;
+}
+
+.drop-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* Highlight when a file is dragged over the window */
+.drop-overlay.drag-over {
+  background: rgba(78, 158, 255, 0.08);
+}
+
+.drop-overlay.drag-over .drop-hint {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.drop-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 56px;
+  border: 1.5px dashed var(--border);
+  border-radius: 16px;
+  color: var(--text-muted);
+  transition: border-color var(--transition), color var(--transition), background var(--transition);
+}
+
+.drop-hint svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.6;
+}
+
+.drop-hint p {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.drop-hint span {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  opacity: 0.5;
+}
+
+/* --- Status bar -------------------------------------------- */
+.statusbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--statusbar-h);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 16px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  z-index: 5;
+  transition: opacity var(--transition);
+}
+
+.statusbar.hidden {
+  display: none;
+}
+
+.status-filename {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.status-index,
+.status-zoom {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Utility ----------------------------------------------- */
+.hidden { display: none !important; }
