@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <path id="body-path" d="M 220 80 C 300 80, 340 160, 340 220 C 340 260, 410 260, 380 320 C 350 380, 280 400, 220 400 C 140 400, 120 300, 120 220 C 120 140, 160 80, 220 80 Z" />
+    <clipPath id="body-clip">
+      <use href="#body-path" />
+    </clipPath>
+  </defs>
+
+  <g id="bird-logo">
+    <path d="M 260 380 L 260 440 L 200 440" fill="none" stroke="#3B2508" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 190 390 L 190 450 L 130 450" fill="none" stroke="#3B2508" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+    
+    <use href="#body-path" fill="#FDE4A9" />
+    
+	<!--
+    <g clip-path="url(#body-clip)">
+      <path d="M 110 260 A 200 200 0 0 0 360 220 L 500 500 L 0 500 Z" fill="#E2BC74" />
+    </g>
+	-->
+    
+    <use href="#body-path" fill="none" stroke="#3B2508" stroke-width="24" stroke-linejoin="round" />
+    
+    <path d="M 120 170 L 30 200 L 120 215 Z" fill="#3B2508" stroke="#3B2508" stroke-width="16" stroke-linejoin="round" />
+    <path d="M 150 140 L 170 140 L 160 170 Z" fill="#3B2508" stroke="#3B2508" stroke-width="8" stroke-linejoin="round" />
+    <path d="M 190 135 L 210 135 L 200 165 Z" fill="#3B2508" stroke="#3B2508" stroke-width="8" stroke-linejoin="round" />
+  </g>
+</svg>
