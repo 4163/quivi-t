@@ -9,14 +9,17 @@ export const DEFAULT_KEYBINDS = {
   'cmd-prev': ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'],
   'cmd-open-next-container': 'Ctrl+x',
   'cmd-open-prev-container': 'Ctrl+z',
+  'cmd-open-dir': 'Ctrl+o',
+  'cmd-open-file': 'Ctrl+Shift+o',
   'cmd-parent': 'Backspace',
   'cmd-options': '4',
   'cmd-fullscreen': '3',
   'cmd-toggle-menubar': '1',
-  'cmd-fit-width': 'e',
-  'cmd-fit-height': 'r',
-  'cmd-fit-width-if-larger': 't',
-  'cmd-fit-height-if-larger': 'y',
+  'cmd-fit-width': 'q',
+  'cmd-fit-height': 'e',
+  'cmd-fit-width-if-larger': 'r',
+  'cmd-fit-height-if-larger': 't',
+  'cmd-fit-best': 'f',
   'cmd-zoom-in': 'c',
   'cmd-zoom-out': 'z',
   'cmd-zoom-100': 'x',
@@ -38,46 +41,6 @@ export const VIEWER_KEYBOARD_PAN_STEP = 72;
 export const DEFAULT_FIT_MODE = 'height-if-larger';
 export const DEFAULT_SCALING_MODE = 'bicubic';
 
-const LEGACY_DEFAULT_KEYBINDS = {
-  'cmd-next': 'PageDown',
-  'cmd-prev': 'PageUp',
-  'cmd-options': 'F4',
-  'cmd-fullscreen': 'Alt+Enter',
-  'cmd-refresh': ['F5', '4'],
-  'cmd-open-prev-container': 'Ctrl+y',
-  'cmd-toggle-filelist': '2',
-  'cmd-toggle-menubar': '2',
-};
-
-function _sameBinding(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
-function _matchesLegacyBinding(binding, legacyBinding) {
-  if (Array.isArray(legacyBinding)) {
-    return legacyBinding.some(item => _sameBinding(binding, item));
-  }
-  return _sameBinding(binding, legacyBinding);
-}
-
-function _migrateLegacyDefaults(keybinds) {
-  const migrated = { ...keybinds };
-  for (const [id, legacyBinding] of Object.entries(LEGACY_DEFAULT_KEYBINDS)) {
-    if (_matchesLegacyBinding(migrated[id], legacyBinding)) {
-      migrated[id] = DEFAULT_KEYBINDS[id];
-    }
-  }
-  if (!migrated['cmd-toggle-menubar']) {
-    migrated['cmd-toggle-menubar'] = DEFAULT_KEYBINDS['cmd-toggle-menubar'];
-  }
-  return migrated;
-}
-
-/**
- * Merge a loaded config's frontend_data over the built-in defaults so
- * keybinds always exist even if a config file was saved before keybinds
- * existed (or was edited by hand).
- */
 export function mergeConfig(loaded) {
   const fd = loaded?.frontend_data && typeof loaded.frontend_data === 'object'
     ? loaded.frontend_data
@@ -94,7 +57,7 @@ export function mergeConfig(loaded) {
       show_hidden: fd.show_hidden === true,
       keybinds: {
         ...DEFAULT_KEYBINDS,
-        ..._migrateLegacyDefaults(fd.keybinds || {}),
+        ...(fd.keybinds || {}),
       },
     },
   };

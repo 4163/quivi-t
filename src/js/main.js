@@ -156,6 +156,7 @@ function bindMenuCommands() {
   document.getElementById('cmd-fit-height').addEventListener('click', () => Core.setFitMode('height', { persist: true }));
   document.getElementById('cmd-fit-width-if-larger').addEventListener('click', () => Core.setFitMode('width-if-larger', { persist: true }));
   document.getElementById('cmd-fit-height-if-larger').addEventListener('click', () => Core.setFitMode('height-if-larger', { persist: true }));
+  document.getElementById('cmd-fit-best').addEventListener('click', () => Core.setFitMode('window', { persist: true }));
   document.getElementById('cmd-scale-none').addEventListener('click', () => setScaling('none'));
   document.getElementById('cmd-scale-bicubic').addEventListener('click', () => setScaling('bicubic'));
   document.getElementById('cmd-scale-lanczos').addEventListener('click', () => setScaling('lanczos'));

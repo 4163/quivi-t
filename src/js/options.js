@@ -1,4 +1,4 @@
-import { mergeConfig } from './keybinds.js';
+import { mergeConfig, DEFAULT_KEYBINDS } from './keybinds.js';
 
 const tauri = window.__TAURI__ || {};
 const invoke = tauri.core?.invoke?.bind(tauri.core);
@@ -16,6 +16,7 @@ const ACTIONS = [
   { id: 'cmd-open-next-container', label: 'Open Next Folder/Archive' },
   { id: 'cmd-open-prev-container', label: 'Open Previous Folder/Archive' },
   { id: 'cmd-parent', label: 'Open Parent Folder' },
+  { id: 'cmd-open-dir', label: 'Open Directory' },
   { id: 'cmd-open-file', label: 'Open File/Archive' },
   { id: 'cmd-refresh', label: 'Refresh Directory' },
   { id: 'cmd-options', label: 'Open Options' },
@@ -26,6 +27,7 @@ const ACTIONS = [
   { id: 'cmd-fit-height', label: 'Fit Height' },
   { id: 'cmd-fit-width-if-larger', label: 'Fit Width If Larger' },
   { id: 'cmd-fit-height-if-larger', label: 'Fit Height If Larger' },
+  { id: 'cmd-fit-best', label: 'Auto Fit' },
   { id: 'cmd-zoom-in', label: 'Zoom In' },
   { id: 'cmd-zoom-out', label: 'Zoom Out' },
   { id: 'cmd-zoom-100', label: 'Zoom 100%' },
@@ -142,6 +144,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     document.getElementById(btn.dataset.target).classList.add('active');
   });
+});
+
+document.getElementById('btn-reset-keybinds').addEventListener('click', () => {
+  config.frontend_data.keybinds = { ...DEFAULT_KEYBINDS };
+  renderKeybinds();
+  showStatus('Keybindings reset to defaults.');
 });
 
 // --- Browse Start Dir ---
