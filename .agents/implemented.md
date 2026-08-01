@@ -124,6 +124,34 @@ This file tracks items that are fully implemented and verified, separate from th
 - Added a newest-first Codex continuation entry to `.agents/sessions.md`.
 - Replaced the superseded `.agents/implementation-plan.md` with `.agents/implementation-plan - additions.md` as the single active implementation plan.
 
+### Fit Mode Refactor
+
+- Renamed and remapped fit-mode shortcuts: `Q` fit width, `E` fit height, `R` fit width if larger, `T` fit height if larger.
+- Added new **Auto fit** mode (`F`) mapped to `cmd-fit-best` → viewer `window` fit mode, which scales up or down to fill the viewport (unlike the `if-larger` variants).
+- Auto fit selects `Math.min(scaleX, scaleY)` so the image always fits entirely on screen without scrolling. On 1:1 aspect ratio images the result equals fit width.
+- Added `cmd-fit-best` menu item and click listener in `main.js` and `index.html`.
+- Added Auto fit entry to the Options Keys tab `ACTIONS` list.
+
+### Keybind System Cleanup
+
+- Added `cmd-open-dir` (`Ctrl+O`) and `cmd-open-file` (`Ctrl+Shift+O`) to `DEFAULT_KEYBINDS` so both are fully configurable.
+- Removed hardcoded `Ctrl+o`, `1–5` fallback checks from `shortcuts.js`; all shortcuts now live exclusively in `DEFAULT_KEYBINDS`.
+- Removed `LEGACY_DEFAULT_KEYBINDS` migration block; simplified `mergeConfig` — saved user config is now merged directly over defaults.
+
+### Options: Reset to Defaults Button
+
+- Added a **Reset to Defaults** button in the Options Keys tab header.
+- Clicking it replaces `config.frontend_data.keybinds` with a fresh copy of `DEFAULT_KEYBINDS` and re-renders the keybind list in-place.
+- Styled via `.keybinds-header` and `#btn-reset-keybinds` in `options.css` — no inline styles.
+
+### Twemoji Flag (Language Tab)
+
+- Downloaded the official Twemoji US flag SVG (`1f1fa-1f1f8.svg`) and placed it at `src/assets/twemoji-us.svg`.
+- Replaced the native `🇺🇸` OS emoji in `options.html` with a Twemoji `<img class="flag-icon">` for consistent cross-platform rendering.
+- Added developer comment pointing to `https://github.com/jdecked/twemoji` for future localization work.
+- Styled via `.flag-icon` and `.language-name` in `options.css`.
+- Added Twemoji to the README attribution list.
+
 ## Verified Commands Used
 
 ```powershell

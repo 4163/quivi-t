@@ -170,6 +170,8 @@ Current defaults include:
 4                         Options
 5                         Refresh
 Backspace                 Parent directory
+Ctrl+O                    Open directory...
+Ctrl+Shift+O              Open file/archive...
 Ctrl+X                    Open next folder/archive
 Ctrl+Z                    Open previous folder/archive
 Shift+D / Shift+Right     Next item
@@ -179,8 +181,8 @@ Shift+W / Shift+Up        Previous item
 C                         Zoom in
 Z                         Zoom out
 X                         Zoom 100%
-E                         Fit width
-R                         Fit height
+Q                         Fit width
+E                         Fit height
 W / Up                    Pan up
 A / Left                  Pan left
 S / Down                  Pan down
@@ -189,8 +191,9 @@ G                         Rotate counter-clockwise
 H                         Rotate clockwise
 V                         Flip horizontal
 B                         Flip vertical
-T                         Fit width if larger
-Y                         Fit height if larger
+R                         Fit width if larger
+T                         Fit height if larger
+F                         Auto fit
 ```
 
 ## Backend Commands
@@ -214,3 +217,4 @@ The Options window command is async because creating a Tauri webview window from
 - GIF icon: [Gif icons created by Dimitry Miroliubov - Flaticon](https://www.flaticon.com/free-icon/gif_337936?term=gif&page=1&position=2&origin=search&related_id=337936)
 - CBZ icon: [Cbz icons created by Good Ware - Flaticon](https://www.flaticon.com/free-icon/cbz_4208350?term=cbz&page=1&position=7&origin=search&related_id=4208350)
 - SVG icon: [Svg icons created by The Chohans - Flaticon](https://www.flaticon.com/free-icon/svg-file_9704766?term=svg&page=1&position=4&origin=search&related_id=9704766)
+- Language Flags: [Twemoji](https://github.com/jdecked/twemoji)
