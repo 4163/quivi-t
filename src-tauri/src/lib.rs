@@ -131,20 +131,39 @@ async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let window = tauri::WebviewWindowBuilder::new(
+    const OPT_W: f64 = 560.0;
+    const OPT_H: f64 = 620.0;
+
+    // Try to position centered over the main window; fall back to screen center.
+    let position: Option<tauri::PhysicalPosition<i32>> = (|| {
+        let main = app.get_webview_window("main")?;
+        let pos  = main.outer_position().ok()?;
+        let size = main.outer_size().ok()?;
+        let scale = main.scale_factor().ok()?;
+        let x = pos.x + (size.width  as i32 - (OPT_W * scale) as i32) / 2;
+        let y = pos.y + (size.height as i32 - (OPT_H * scale) as i32) / 2;
+        Some(tauri::PhysicalPosition::new(x, y))
+    })();
+
+    let builder = tauri::WebviewWindowBuilder::new(
         &app,
         "options",
         tauri::WebviewUrl::App("options.html".into())
     )
     .title("Options")
-    .inner_size(560.0, 620.0)
+    .inner_size(OPT_W, OPT_H)
     .min_inner_size(460.0, 420.0)
     .resizable(true)
     .closable(true)
     .maximizable(false)
     .visible(true)
-    .center()
-    .devtools(cfg!(debug_assertions))
+    .devtools(cfg!(debug_assertions));
+
+    let window = if let Some(pos) = position {
+        builder.position(pos.x as f64, pos.y as f64)
+    } else {
+        builder.center()
+    }
     .build()
     .map_err(|e| format!("Failed to open options window: {e}"))?;
 
