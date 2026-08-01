@@ -214,3 +214,24 @@ cargo check
 ## Not Yet Fully Implemented
 
 See `.agents/implementation-plan - additions.md` for the active backlog and sequencing.
+
+### UI Module Decoupling
+- Decoupled \menubar.js\ logic and DOM bindings.
+- Decoupled \keybindUi.js\ from the options window, isolating configuration rendering and conflict tracking.
+- Decoupled \keyboardNav.js\ to manage accessible tab navigation across menus and options uniformly.
+
+### Options Tab Accessibility (Tab Navigation)
+- Implemented accessible keyboard navigation flows (\Tab\/\Shift+Tab\) across all Options tabs.
+- Added global \Home\ and \End\ shortcut jumps for immediately focusing the first and last tabbable elements within active scopes.
+- Fixed \Enter\/\Space\ activation for dropdowns in the main menubar.
+
+### Customization Tab & Custom CSS
+- Added Theme selection (System / Light / Dark) that applies instantly and auto-saves to config to prevent state drift on window close.
+- Added a Custom CSS textarea to inject raw styles into both windows dynamically.
+- Implemented \Ctrl+S\ auto-save-and-apply shortcut while editing the CSS text area.
+- Implemented a robust \Ctrl+Shift+Alt+C\ global emergency CSS reset that clears broken styles, broadcasts immediately across main and options windows, and persists to backend storage.
+
+### File Panel Actions
+- Added 'Reveal in File Explorer' and 'Open Folder in Explorer' actions.
+- Bound these to clickable UI elements in the file panel header.
+- Safely integrated Rust-backend explorer triggers across Windows platforms.

@@ -117,32 +117,14 @@ New modules may be warranted:
   - For file types that already have an icon under `icons/`, use those.
   - For types without a dedicated icon, decide on a practical fallback representation (open for discussion).
 
-### 6. Keyboard Activation In File List
 
-- Pressing `Enter` or `Space` on `..`, folders, and archives should open/navigate into them.
-- Pressing `Enter` or `Space` on image files can select/open the image consistently with click behavior.
-- Ensure list items can receive focus or the active selection handles the key even when the file list itself is not focused.
-- Preserve global Space binding behavior if it is later assigned as a shortcut.
-
-### 7. Archive Performance
+### 6. Archive Performance
 
 - Performance note: opening large or slow archives can make `quivit.exe` stop responding briefly; after this, Windows may show the generic executable icon on the taskbar.
 - Treat this as archive-processing/UI-blocking debt.
 - Prefer optimizing archive load/extraction so expensive work does not block the app window, rather than patching only the icon symptom.
 
-### 8. Parent Navigation Selection
-
-- When navigating back through folders via `..`, the highlighted entry should be the directory/archive just exited.
-- When entering a regular directory, the first image in the directory should be selected according to the active sorting order.
-- Folders and archives should remain visible, but not steal initial image selection unless explicitly selected by the user.
-- Verify with:
-  - entering a folder,
-  - pressing Backspace,
-  - opening `..`,
-  - entering an archive,
-  - leaving an archive.
-
-### 9. Persistent Directory Sorting
+### 7. Persistent Directory Sorting
 
 - Persist sorting order globally or in portable config depending on portable mode.
 - Store personal paths only in runtime config, never committed repo files.
@@ -169,13 +151,9 @@ New modules may be warranted:
   - per-directory setting overrides default,
   - archive path can be treated as a directory key.
 
-### 10. Options Layout and Wording
 
-- Add a Theme selection under the General tab (default to system theme; keep the choice persistent like other settings).
-- Bug: Cancel / Apply & Close buttons are not currently bottom-aligned in the Options window. If their container is a flex container, self-align them (e.g. `align-self: flex-end` or an equivalent end-aligned layout) so they sit at the bottom as intended.
-- When "show hidden folders" is toggled on, automatically refresh the current file list immediately rather than requiring a manual refresh.
 
-### 12. Single Instance Option
+### 8. Single Instance Option
 
 - Add an Options setting:
   - "Allow only one QuiviT instance"
@@ -195,23 +173,15 @@ New modules may be warranted:
   - verify this with built executable behavior once release builds/file associations exist.
 
 
+### 9. File Panel Favorites
 
-### 17. File List Function Buttons and Favorites
-
-- Add function buttons under the breadcrumb in the file panel, e.g.:
-  - open the current folder directly,
-  - reveal the selected file in the system file explorer,
-  - other similar actions as identified.
-- Each button should have an `title=""` attribute describing what it does on hover.
 - Add a Favorites button/feature:
   - favoriting a file or folder adds it to a new file-panel-header section shown under the function buttons.
   - This favorites section is a shortcut list only — it does not function as an independent file-navigation source. Selecting a favorited item jumps the main file-panel/file structure to that item rather than browsing within the favorites list itself.
 
-### 18. Drive Navigation At Filesystem Root
 
-- Currently, reaching the root of a filesystem directory leaves the user stuck since there's no way to change drives from the file list.
-- Add drive entries so navigation doesn't dead-end at a drive root.
-- Give drives their own icon treatment, distinct from folder icons.
+
+
 
 ## Verification Plan
 

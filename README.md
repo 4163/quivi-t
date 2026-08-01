@@ -1,5 +1,7 @@
 # QuiviT
 
+> *Pronounced similarly to the word 'pivot' lol*
+
 A modern standalone (performance-first) port of Quivi, built with Tauri and vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
 
 ## Quivi
@@ -7,7 +9,7 @@ A modern standalone (performance-first) port of Quivi, built with Tauri and vani
 Quivi is an image viewer specialized for comic and manga reading, with fast file browsing and compressed archive support.
 
 - Original project: [Quivi](http://quivi.sourceforge.net/)
-- Continuation/fork: [qazmlpok/quivi](https://github.com/qazmlpok/quivi) (used as reference)
+- Later continuation/fork: [qazmlpok/quivi](https://github.com/qazmlpok/quivi) (used as reference)
 
 ## Stack
 
@@ -54,7 +56,7 @@ QuiviT/
 - Opens image files, archive files, and directories.
 - Browses image siblings with keyboard or mouse.
 - Lists folders, images, and supported archives in the file panel.
-- Supports parent-directory navigation through `..`.
+- Supports parent-directory navigation through '`..`'.
 - Reads ZIP/CBZ and RAR/CBR archives directly.
 - Supports configurable keybindings.
 - Supports global or portable configuration storage.
@@ -148,6 +150,12 @@ When **Save config data locally** is enabled in Options, QuiviT writes:
 
 When it is disabled, QuiviT removes those portable files from the executable directory and writes to the user config directory instead.
 
+### Custom CSS & Emergency Reset
+
+QuiviT supports injecting custom CSS rules to fully theme the application (available in the Options menu under Customization). You can instantly save and apply these rules using `Ctrl+S` while editing.
+
+If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` globally in any window. This performs an emergency reset, instantly stripping the custom CSS and reloading the interface safely.
+
 ## Shortcuts
 
 Default shortcuts live in:
@@ -225,4 +233,4 @@ The Options window command is async because creating a Tauri webview window from
 - GIF icon: [Gif icons created by Dimitry Miroliubov - Flaticon](https://www.flaticon.com/free-icon/gif_337936?term=gif&page=1&position=2&origin=search&related_id=337936)
 - CBZ icon: [Cbz icons created by Good Ware - Flaticon](https://www.flaticon.com/free-icon/cbz_4208350?term=cbz&page=1&position=7&origin=search&related_id=4208350)
 - SVG icon: [Svg icons created by The Chohans - Flaticon](https://www.flaticon.com/free-icon/svg-file_9704766?term=svg&page=1&position=4&origin=search&related_id=9704766)
-- Language Flags: [Twemoji](https://github.com/jdecked/twemoji)
+- Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
