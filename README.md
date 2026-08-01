@@ -1,13 +1,13 @@
 # QuiviT
 
-A modern standalone performance-first port of Quivi, built with Tauri and vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
+A modern standalone (performance-first) port of Quivi, built with Tauri and vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
 
 ## Quivi
 
 Quivi is an image viewer specialized for comic and manga reading, with fast file browsing and compressed archive support.
 
 - Original project: [Quivi](http://quivi.sourceforge.net/)
-- Continuation/reference: [qazmlpok/quivi](https://github.com/qazmlpok/quivi)
+- Continuation/fork: [qazmlpok/quivi](https://github.com/qazmlpok/quivi) (used as reference)
 
 ## Stack
 
@@ -35,7 +35,7 @@ QuiviT/
 │     ├─ main.js              # DOM wiring for the main window
 │     ├─ options.js           # Options window DOM wiring
 │     ├─ shortcuts.js         # Shortcut matching and keyboard dispatch
-│     └─ viewer.js            # Image viewport, zoom, fit, pan, rotation
+│     └─ viewer.js            # Image viewport, zoom, fit, pan, rotation, flips
 ├─ src-tauri/
 │  ├─ capabilities/
 │  │  └─ default.json         # Tauri permissions for main/options windows
@@ -51,14 +51,15 @@ QuiviT/
 
 ## Features
 
-- Opens image files and directories.
+- Opens image files, archive files, and directories.
 - Browses image siblings with keyboard or mouse.
 - Lists folders, images, and supported archives in the file panel.
 - Supports parent-directory navigation through `..`.
 - Reads ZIP/CBZ and RAR/CBR archives directly.
 - Supports configurable keybindings.
 - Supports global or portable configuration storage.
-- Provides fit, zoom, pan, rotation, and scaling controls.
+- Provides fit, zoom, pan, rotation, flip, and scaling controls.
+- Provides a display-only breadcrumb for the current directory or archive.
 
 ## Supported Formats
 
@@ -103,6 +104,8 @@ node --check src/js/options.js
 node --check src/js/keybinds.js
 node --check src/js/viewer.js
 node --check src/js/core.js
+node --check src/js/shortcuts.js
+node --check src/js/filePanel.js
 ```
 
 ## Architecture
@@ -110,7 +113,7 @@ node --check src/js/core.js
 The frontend is intentionally split into small ES modules.
 
 - `core.js` owns application state and talks to Rust through Tauri commands.
-- `viewer.js` owns the image viewport only: image source, fit modes, zoom, pan, rotation, and scaling.
+- `viewer.js` owns the image viewport only: image source, fit modes, zoom, pan, rotation, flips, and scaling.
 - `keybinds.js` is the single source of truth for default shortcuts.
 - `shortcuts.js` owns keyboard combo normalization and action lookup.
 - `filePanel.js` owns the file list UI component, including column sizing and sorting.
@@ -136,7 +139,7 @@ Portable mode is enabled when the app finds either of these files next to the ex
 quivit_config.json
 ```
 
-When **Save config next to executable** is enabled in Options, QuiviT writes:
+When **Save config data locally** is enabled in Options, QuiviT writes:
 
 ```text
 <executable-directory>\.portable
@@ -161,10 +164,11 @@ The scaling method defaults to `DEFAULT_SCALING_MODE` (`bicubic`) and changes ma
 Current defaults include:
 
 ```text
-1                         Full screen
+1                         Toggle menu bar
 2                         Toggle file list
-3                         Options
-4                         Refresh
+3                         Full screen
+4                         Options
+5                         Refresh
 Backspace                 Parent directory
 Ctrl+X                    Open next folder/archive
 Ctrl+Z                    Open previous folder/archive
@@ -182,6 +186,9 @@ A / Left                  Pan left
 S / Down                  Pan down
 D / Right                 Pan right
 G                         Rotate counter-clockwise
+H                         Rotate clockwise
+V                         Flip horizontal
+B                         Flip vertical
 T                         Fit width if larger
 Y                         Fit height if larger
 ```
@@ -193,7 +200,9 @@ The Rust backend provides Tauri commands for:
 - Reading directories.
 - Reading archives.
 - Opening parent and sibling directories.
+- Opening sibling folders/archives.
 - Loading and saving config.
+- Resolving and opening the active config directory.
 - Opening the Options window.
 
 The Options window command is async because creating a Tauri webview window from a synchronous command can deadlock on Windows.

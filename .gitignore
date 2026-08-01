@@ -23,9 +23,18 @@ dist-ssr
 *.sln
 *.sw?
 
-.agents/
+.agents/*
+!.agents/implementation-plan - additions.md
+!.agents/implemented.md
 .ss/
 playwright/
+
+.codex_tauri_dev.err.log
+.codex_tauri_dev.out.log
+
+# Runtime/portable user config; may contain personal paths
+.portable
+quivit_config.json
 
 # Too large to host on GitHub (>100 MB), kept local only
 test-files/export_1785548648565.apng
