@@ -26,6 +26,7 @@
   --hover-bg:     #e8f0f8;
   --menu-bg:      #ffffff;
   --menu-shadow:  0 2px 8px rgba(0,0,0,0.18);
+  --drag-resize: #deb76c;
 
   /* Viewport / checkerboard */
   --checker-a:    #c8c8c8;
@@ -306,7 +307,7 @@ body {
 }
 
 .col-resizer:hover, .col-resizer.dragging {
-  background: var(--accent);
+  background: var(--drag-resize);
 }
 
 .sort-icon {
@@ -375,7 +376,7 @@ body {
 
 #panel-resize-handle:hover,
 #panel-resize-handle.dragging {
-  background: var(--accent);
+  background: var(--drag-resize);
   opacity: 0.5;
 }
 

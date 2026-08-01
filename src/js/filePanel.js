@@ -113,6 +113,9 @@ function renderBreadcrumb(state) {
 function renderEntry(item, index, selectedIndex) {
   const li = document.createElement('li');
   if (index === selectedIndex) li.classList.add('selected');
+  if (item.name !== '..') {
+    li.title = item.name;
+  }
 
   const itemName = document.createElement('span');
   itemName.className = 'item-name';
