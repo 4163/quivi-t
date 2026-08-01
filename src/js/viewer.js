@@ -126,10 +126,8 @@ function zoomAt(delta, cx, cy) {
   const factor = 1 + delta * ZOOM_STEP;
   _scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, _scale * factor));
 
-  // Switch to custom zoom (cancels fit mode)
-  if (_scale !== prevScale) {
-    Core.setFitMode('none');
-  }
+  // We intentionally do not set fit mode to 'none' here so that window
+  // resizes can fallback to recalculating the previously active fit.
 
   const vp = document.getElementById('viewport');
   const rect = vp.getBoundingClientRect();
@@ -287,7 +285,7 @@ export const Viewer = {
     _scale = exactScale;
     _tx = 0;
     _ty = 0;
-    Core.setFitMode('none');
+    _ty = 0;
     _scheduleTransform();
   }
 };
