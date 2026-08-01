@@ -183,6 +183,13 @@ New modules may be warranted:
 
 
 
+### 10. UI Sound Design (Low Priority)
+
+- Add custom SFX for UI interactions (e.g. button clicks, menu toggles, opening folders, error bumps).
+- Needs a toggle in the Options menu to disable sounds for users who prefer a silent experience.
+- Provide a volume slider or rely on system volume.
+- Audio assets should be small and fast-loading.
+
 ## Verification Plan
 
 Run after each coherent implementation slice:

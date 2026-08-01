@@ -32,9 +32,13 @@ QuiviT/
 │  │  └─ options.css          # Options window layout
 │  └─ js/
 │     ├─ core.js              # App state, config, directory/archive loading
-│     ├─ filePanel.js         # File list rendering, sorting, resizing
+│     ├─ directoryPrefs.js    # Persistent per-directory sorting logic
+│     ├─ filePanel.js         # File list rendering, sorting UI, resizing
+│     ├─ keyboardNav.js       # Accessible keyboard navigation (Tab/Home/End)
 │     ├─ keybinds.js          # Default shortcuts and config merge helpers
+│     ├─ keybindUi.js         # Keybind configuration grid and conflicts
 │     ├─ main.js              # DOM wiring for the main window
+│     ├─ menubar.js           # Main window menu bar DOM wiring
 │     ├─ options.js           # Options window DOM wiring
 │     ├─ shortcuts.js         # Shortcut matching and keyboard dispatch
 │     └─ viewer.js            # Image viewport, zoom, fit, pan, rotation, flips
@@ -119,7 +123,10 @@ The frontend is intentionally split into small ES modules.
 - `keybinds.js` is the single source of truth for default shortcuts.
 - `shortcuts.js` owns keyboard combo normalization and action lookup.
 - `filePanel.js` owns the file list UI component, including column sizing and sorting.
+- `menubar.js` owns the main window's top menu bar DOM wiring and state logic.
+- `keyboardNav.js` manages accessible keyboard navigation (Tab, Home, End) across UI elements.
 - `options.js` wires the options window UI to persisted config.
+- `keybindUi.js` renders the keybind configuration grid and handles conflict highlighting.
 - `main.js` should stay focused on DOM wiring and state callbacks for the main window.
 
 When behavior starts to grow inside `main.js`, prefer moving the domain logic into a focused module and leaving `main.js` as the bridge between DOM events and state/actions.

@@ -21,6 +21,7 @@ let startX = 0;
 let startWidth = 0;
 let columnResizeMoved = false;
 
+let lastRenderedList = null;
 let lastClickTime = 0;
 let lastClickIndex = -1;
 
@@ -172,9 +173,31 @@ function renderEntry(item, index, selectedIndex) {
   return li;
 }
 
+function updateSelection(selectedIndex) {
+  const previous = fileListUl.querySelector('.selected');
+  if (previous) previous.classList.remove('selected');
+  
+  if (selectedIndex >= 0 && selectedIndex < fileListUl.children.length) {
+    const li = fileListUl.children[selectedIndex];
+    li.classList.add('selected');
+    li.scrollIntoView({ block: 'nearest' });
+    
+    const wasFocused = document.activeElement && fileListUl.contains(document.activeElement);
+    if (wasFocused) {
+      li.focus({ preventScroll: true });
+    }
+  }
+}
+
 export function renderFilePanel(state) {
   filePanel.classList.toggle('hidden', !state.fileListVisible);
   renderBreadcrumb(state);
+
+  if (lastRenderedList === state.list) {
+    updateSelection(state.index);
+    return;
+  }
+  lastRenderedList = state.list;
 
   const wasFocused = document.activeElement && fileListUl.contains(document.activeElement);
 
