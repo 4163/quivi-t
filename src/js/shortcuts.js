@@ -28,7 +28,11 @@ function findAction(config, combo) {
   }
 
   if (combo === 'Ctrl+o') return 'cmd-open-dir';
-  if (combo === '3') return 'cmd-options';
+  if (combo === '1') return 'cmd-toggle-menubar';
+  if (combo === '2') return 'cmd-toggle-filelist';
+  if (combo === '3') return 'cmd-fullscreen';
+  if (combo === '4') return 'cmd-options';
+  if (combo === '5') return 'cmd-refresh';
 
   return null;
 }

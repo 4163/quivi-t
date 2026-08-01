@@ -9,6 +9,7 @@ import { VIEWER_KEYBOARD_PAN_STEP } from './keybinds.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts } from './shortcuts.js';
 
 const dropOverlay = document.getElementById('drop-overlay');
+const menubar = document.getElementById('menubar');
 const viewport = document.getElementById('viewport');
 const statusbar = document.getElementById('statusbar');
 const statusName = document.getElementById('status-filename');
@@ -22,6 +23,7 @@ const resizeHandle = document.getElementById('panel-resize-handle');
 
 let activeMenu = null;
 let activeScaling = '';
+let menuBarVisible = true;
 
 function closeMenus() {
   if (!activeMenu) return;
@@ -51,6 +53,21 @@ async function toggleFullscreen() {
   }
 }
 
+function toggleMenuBar() {
+  menuBarVisible = !menuBarVisible;
+  menubar.classList.toggle('hidden', !menuBarVisible);
+  closeMenus();
+}
+
+async function openGithub() {
+  const url = 'https://github.com/4163/quivi-t';
+  if (window.__TAURI__?.opener?.openUrl) {
+    await window.__TAURI__.opener.openUrl(url);
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+}
+
 function dispatchAction(actionId) {
   const btn = document.getElementById(actionId);
   if (btn) {
@@ -61,6 +78,15 @@ function dispatchAction(actionId) {
   switch (actionId) {
     case 'cmd-rotate-ccw':
       Viewer.rotate(-90);
+      break;
+    case 'cmd-rotate-cw':
+      Viewer.rotate(90);
+      break;
+    case 'cmd-flip-horizontal':
+      Viewer.flipHorizontal();
+      break;
+    case 'cmd-flip-vertical':
+      Viewer.flipVertical();
       break;
     case 'cmd-open-next-container':
       Core.openContainer(1);
@@ -119,6 +145,7 @@ function bindMenus() {
 
 function bindMenuCommands() {
   document.getElementById('cmd-open-dir').addEventListener('click', () => Core.openDirectoryDialog());
+  document.getElementById('cmd-open-file').addEventListener('click', () => Core.openFileDialog());
   document.getElementById('cmd-next').addEventListener('click', () => Core.navigate(1));
   document.getElementById('cmd-prev').addEventListener('click', () => Core.navigate(-1));
   document.getElementById('cmd-parent').addEventListener('click', () => Core.openParent());
@@ -132,8 +159,16 @@ function bindMenuCommands() {
   document.getElementById('cmd-scale-none').addEventListener('click', () => setScaling('none'));
   document.getElementById('cmd-scale-bicubic').addEventListener('click', () => setScaling('bicubic'));
   document.getElementById('cmd-scale-lanczos').addEventListener('click', () => setScaling('lanczos'));
+  document.getElementById('cmd-rotate-cw').addEventListener('click', () => Viewer.rotate(90));
+  document.getElementById('cmd-rotate-ccw').addEventListener('click', () => Viewer.rotate(-90));
+  document.getElementById('cmd-flip-horizontal').addEventListener('click', () => Viewer.flipHorizontal());
+  document.getElementById('cmd-flip-vertical').addEventListener('click', () => Viewer.flipVertical());
   document.getElementById('cmd-fullscreen').addEventListener('click', toggleFullscreen);
+  document.getElementById('cmd-toggle-menubar').addEventListener('click', toggleMenuBar);
   document.getElementById('cmd-toggle-filelist').addEventListener('click', () => Core.toggleFileList());
+  document.getElementById('cmd-github').addEventListener('click', () => {
+    openGithub().catch(err => console.error('[GitHub] Failed to open repository:', err));
+  });
 
   document.getElementById('cmd-refresh').addEventListener('click', () => {
     const state = Core.getState();

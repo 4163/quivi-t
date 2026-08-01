@@ -10,8 +10,9 @@ export const DEFAULT_KEYBINDS = {
   'cmd-open-next-container': 'Ctrl+x',
   'cmd-open-prev-container': 'Ctrl+z',
   'cmd-parent': 'Backspace',
-  'cmd-options': '3',
-  'cmd-fullscreen': '1',
+  'cmd-options': '4',
+  'cmd-fullscreen': '3',
+  'cmd-toggle-menubar': '1',
   'cmd-fit-width': 'e',
   'cmd-fit-height': 'r',
   'cmd-fit-width-if-larger': 't',
@@ -19,9 +20,12 @@ export const DEFAULT_KEYBINDS = {
   'cmd-zoom-in': 'c',
   'cmd-zoom-out': 'z',
   'cmd-zoom-100': 'x',
-  'cmd-refresh': '4',
+  'cmd-refresh': '5',
   'cmd-toggle-filelist': '2',
   'cmd-rotate-ccw': 'g',
+  'cmd-rotate-cw': 'h',
+  'cmd-flip-horizontal': 'v',
+  'cmd-flip-vertical': 'b',
   'cmd-pan-up': ['w', 'ArrowUp'],
   'cmd-pan-left': ['a', 'ArrowLeft'],
   'cmd-pan-down': ['s', 'ArrowDown'],
@@ -39,20 +43,32 @@ const LEGACY_DEFAULT_KEYBINDS = {
   'cmd-prev': 'PageUp',
   'cmd-options': 'F4',
   'cmd-fullscreen': 'Alt+Enter',
-  'cmd-refresh': 'F5',
+  'cmd-refresh': ['F5', '4'],
   'cmd-open-prev-container': 'Ctrl+y',
+  'cmd-toggle-filelist': '2',
+  'cmd-toggle-menubar': '2',
 };
 
 function _sameBinding(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function _matchesLegacyBinding(binding, legacyBinding) {
+  if (Array.isArray(legacyBinding)) {
+    return legacyBinding.some(item => _sameBinding(binding, item));
+  }
+  return _sameBinding(binding, legacyBinding);
+}
+
 function _migrateLegacyDefaults(keybinds) {
   const migrated = { ...keybinds };
   for (const [id, legacyBinding] of Object.entries(LEGACY_DEFAULT_KEYBINDS)) {
-    if (_sameBinding(migrated[id], legacyBinding)) {
+    if (_matchesLegacyBinding(migrated[id], legacyBinding)) {
       migrated[id] = DEFAULT_KEYBINDS[id];
     }
+  }
+  if (!migrated['cmd-toggle-menubar']) {
+    migrated['cmd-toggle-menubar'] = DEFAULT_KEYBINDS['cmd-toggle-menubar'];
   }
   return migrated;
 }

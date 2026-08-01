@@ -21,6 +21,8 @@ let _naturalH = 0;
 let _rafPending = false;
 let _currentFitMode = DEFAULT_FIT_MODE;
 let _rotation = 0;
+let _flipX = 1;
+let _flipY = 1;
 let _scaling = DEFAULT_SCALING_MODE;
 
 function _applyScaling() {
@@ -56,7 +58,7 @@ function _clampPan() {
 
 function _applyTransform() {
   _clampPan();
-  img.style.transform = `translate(calc(-50% + ${_tx}px), calc(-50% + ${_ty}px)) rotate(${_rotation}deg) scale(${_scale})`;
+  img.style.transform = `translate(calc(-50% + ${_tx}px), calc(-50% + ${_ty}px)) rotate(${_rotation}deg) scale(${_flipX * _scale}, ${_flipY * _scale})`;
   if (statusZoom) statusZoom.textContent = `${Math.round(_scale * 100)}%`;
 }
 
@@ -160,6 +162,16 @@ function rotate(deltaDegrees) {
   _scheduleTransform();
 }
 
+function flipHorizontal() {
+  _flipX *= -1;
+  _scheduleTransform();
+}
+
+function flipVertical() {
+  _flipY *= -1;
+  _scheduleTransform();
+}
+
 // --- Pan -----------------------------------------------------------------------
 
 let _isPanning = false;
@@ -230,6 +242,8 @@ Core.onStateChange((state) => {
     img.src = state.src;
     img.alt = state.filename;
     _rotation = 0;
+    _flipX = 1;
+    _flipY = 1;
   }
 
   if (_currentFitMode !== state.fitMode) {
@@ -266,6 +280,8 @@ export const Viewer = {
   zoomCenter,
   panBy,
   rotate,
+  flipHorizontal,
+  flipVertical,
   setScaling,
   setZoom(exactScale) {
     _scale = exactScale;

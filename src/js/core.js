@@ -447,6 +447,34 @@ export const Core = {
       console.error('[Core] openDirectoryDialog error:', err);
     }
   },
+
+  async openFileDialog() {
+    try {
+      const { open } = window.__TAURI__.dialog;
+      const selected = await open({
+        multiple: false,
+        filters: [
+          {
+            name: 'Images and archives',
+            extensions: [...SUPPORTED_IMAGES, ...SUPPORTED_ARCHIVES],
+          },
+          {
+            name: 'Images',
+            extensions: [...SUPPORTED_IMAGES],
+          },
+          {
+            name: 'Archives',
+            extensions: [...SUPPORTED_ARCHIVES],
+          },
+        ],
+      });
+      if (selected) {
+        await this.loadFile(selected);
+      }
+    } catch (err) {
+      console.error('[Core] openFileDialog error:', err);
+    }
+  },
   /**
    * Load the application configuration from Rust backend.
    */

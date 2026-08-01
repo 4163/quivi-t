@@ -12,15 +12,12 @@
       <button class="tab-btn active" data-target="tab-general">General</button>
       <button class="tab-btn" data-target="tab-keys">Keys</button>
       <button class="tab-btn" data-target="tab-associations">File Associations</button>
+      <button class="tab-btn" data-target="tab-language">Language</button>
     </div>
 
     <div class="tab-content active" id="tab-general">
       <div class="options-section">
         <h3>Startup</h3>
-        <label>
-          <input type="checkbox" id="opt-continue-last" />
-          Continue from last opened directory
-        </label>
         <label>
           <input type="checkbox" id="opt-show-hidden" />
           Show hidden folders and files
@@ -32,13 +29,18 @@
             <button id="btn-browse-start">Browse...</button>
           </div>
         </div>
+        <label>
+          <input type="checkbox" id="opt-continue-last" />
+          Continue from last opened directory
+        </label>
       </div>
       <div class="options-section">
         <h3>Configuration Persistence</h3>
         <label>
           <input type="checkbox" id="opt-portable-mode" />
-          Save config next to executable
+          Save config data locally
         </label>
+        <p class="hint">By default, QuiviT stores settings in your user config folder under %APPDATA%. Enable this to store settings beside the app executable for portable use.</p>
         <p class="hint">
           Config folder:
           <button id="btn-open-config-dir" class="link-button" type="button">
@@ -63,6 +65,16 @@
         <h3>System Integration</h3>
         <p class="hint">Associate supported image and archive formats with QuiviT.</p>
         <button id="btn-associate-files" class="primary">Register File Extensions</button>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-language">
+      <div class="options-section">
+        <h3>Language</h3>
+        <label>
+          <input type="radio" checked disabled />
+          🇺🇸 English
+        </label>
       </div>
     </div>
 

@@ -100,6 +100,37 @@ body {
   z-index: 100;
 }
 
+#menubar.hidden {
+  display: none;
+}
+
+.menubar-spacer {
+  flex: 1;
+}
+
+.menu-link {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 10px;
+  color: var(--text-muted);
+  cursor: default;
+  white-space: nowrap;
+}
+
+.menu-link svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.menu-link:hover {
+  background: var(--selected-bg);
+  color: var(--selected-text);
+}
+
 .menu-item {
   position: relative;
 }

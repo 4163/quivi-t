@@ -17,8 +17,9 @@
         <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">File</button>
         <ul class="menu-dropdown" role="menu">
           <li role="menuitem" id="cmd-open-dir">Open directory…<span class="shortcut">Ctrl+O</span></li>
+          <li role="menuitem" id="cmd-open-file">Open file/archive…<span class="shortcut"></span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-options">Options…<span class="shortcut">F4</span></li>
+          <li role="menuitem" id="cmd-options">Options…<span class="shortcut">4</span></li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-quit">Quit</li>
         </ul>
@@ -31,7 +32,7 @@
           <li role="menuitem" id="cmd-prev">Select / Open previous<span class="shortcut">Shift+W</span></li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-parent">Open parent<span class="shortcut">Backspace</span></li>
-          <li role="menuitem" id="cmd-refresh">Refresh<span class="shortcut">F5</span></li>
+          <li role="menuitem" id="cmd-refresh">Refresh<span class="shortcut">5</span></li>
         </ul>
       </div>
 
@@ -51,10 +52,24 @@
           <li role="menuitem" id="cmd-scale-bicubic" data-scaling="bicubic">Scaling: Bicubic</li>
           <li role="menuitem" id="cmd-scale-lanczos" data-scaling="lanczos">Scaling: Lanczos</li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-fullscreen">Full screen<span class="shortcut">Alt+Enter</span></li>
+          <li role="menuitem" id="cmd-rotate-cw">Rotate clockwise<span class="shortcut">H</span></li>
+          <li role="menuitem" id="cmd-rotate-ccw">Rotate counter-clockwise<span class="shortcut">G</span></li>
+          <li role="menuitem" id="cmd-flip-horizontal">Flip horizontal<span class="shortcut">V</span></li>
+          <li role="menuitem" id="cmd-flip-vertical">Flip vertical<span class="shortcut">B</span></li>
+          <li class="separator"></li>
+          <li role="menuitem" id="cmd-fullscreen">Full screen<span class="shortcut">3</span></li>
+          <li role="menuitem" id="cmd-toggle-menubar">Menu bar<span class="shortcut">1</span></li>
           <li role="menuitem" id="cmd-toggle-filelist">File list<span class="shortcut">2</span></li>
         </ul>
       </div>
+
+      <div class="menubar-spacer"></div>
+      <button id="cmd-github" class="menu-link" type="button" title="Open GitHub repository">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.36 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-.88-.01-1.73-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.93.86.09-.67.35-1.12.64-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.04 1.03-2.76-.1-.26-.45-1.31.1-2.72 0 0 .84-.28 2.75 1.05A9.28 9.28 0 0 1 12 6.96c.85 0 1.7.12 2.5.34 1.9-1.33 2.74-1.05 2.74-1.05.55 1.41.2 2.46.1 2.72.64.72 1.03 1.64 1.03 2.76 0 3.94-2.34 4.81-4.57 5.07.36.32.68.95.68 1.92 0 1.38-.01 2.5-.01 2.84 0 .27.18.59.69.49A10.18 10.18 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z"/>
+        </svg>
+        GitHub
+      </button>
 
     </nav>
 
