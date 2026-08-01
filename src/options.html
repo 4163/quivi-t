@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QuiviT Options</title>
+    <link rel="stylesheet" href="/css/main.css" />
+    <link rel="stylesheet" href="/css/options.css" />
+  </head>
+  <body>
+    <div class="tabs">
+      <button class="tab-btn active" data-target="tab-general">General</button>
+      <button class="tab-btn" data-target="tab-keys">Keys</button>
+      <button class="tab-btn" data-target="tab-associations">File Associations</button>
+    </div>
+
+    <div class="tab-content active" id="tab-general">
+      <div class="options-section">
+        <h3>Startup</h3>
+        <label>
+          <input type="checkbox" id="opt-continue-last" />
+          Continue from last opened directory
+        </label>
+        <label>
+          <input type="checkbox" id="opt-show-hidden" />
+          Show hidden folders and files
+        </label>
+        <div class="input-group">
+          <label for="opt-start-dir">Default Start Directory:</label>
+          <div class="flex-row">
+            <input type="text" id="opt-start-dir" readonly placeholder="No directory selected" />
+            <button id="btn-browse-start">Browse...</button>
+          </div>
+        </div>
+      </div>
+      <div class="options-section">
+        <h3>Configuration Persistence</h3>
+        <label>
+          <input type="checkbox" id="opt-portable-mode" />
+          Save config next to executable
+        </label>
+        <p class="hint">
+          Config folder:
+          <button id="btn-open-config-dir" class="link-button" type="button">
+            <span id="config-dir-label">Loading...</span>
+          </button>
+        </p>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-keys">
+      <div class="options-section">
+        <h3>Keybindings</h3>
+        <p class="hint">Click a field and press a key to rebind. Press Backspace or Delete to clear.</p>
+        <div class="keybinds-list" id="keybinds-container">
+          <!-- Populated dynamically by options.js -->
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-associations">
+      <div class="options-section">
+        <h3>System Integration</h3>
+        <p class="hint">Associate supported image and archive formats with QuiviT.</p>
+        <button id="btn-associate-files" class="primary">Register File Extensions</button>
+      </div>
+    </div>
+
+    <div class="dialog-footer">
+      <span id="options-status" role="status" aria-live="polite"></span>
+      <button id="btn-cancel">Cancel</button>
+      <button id="btn-save-options" class="primary">Apply & Close</button>
+    </div>
+
+    <script type="module" src="/js/options.js"></script>
+  </body>
+</html>

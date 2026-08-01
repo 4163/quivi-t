@@ -19,9 +19,43 @@ let _naturalW = 0;
 let _naturalH = 0;
 let _rafPending = false;
 let _currentFitMode = 'width-if-larger';
+let _rotation = 0;
+let _scaling = 'bicubic';
+
+function _applyScaling() {
+  img.dataset.scaling = _scaling;
+  img.style.imageRendering = _scaling === 'none' ? 'pixelated' : 'auto';
+}
+
+function _visualSize() {
+  const quarterTurns = Math.abs(Math.round(_rotation / 90)) % 2;
+  const baseW = quarterTurns ? _naturalH : _naturalW;
+  const baseH = quarterTurns ? _naturalW : _naturalH;
+  return {
+    width: baseW * _scale,
+    height: baseH * _scale,
+  };
+}
+
+function _clampPan() {
+  if (!_naturalW || !_naturalH) {
+    _tx = 0;
+    _ty = 0;
+    return;
+  }
+
+  const vp = document.getElementById('viewport');
+  const { width, height } = _visualSize();
+  const maxX = Math.abs(width - vp.clientWidth) / 2;
+  const maxY = Math.abs(height - vp.clientHeight) / 2;
+
+  _tx = maxX === 0 ? 0 : Math.min(maxX, Math.max(-maxX, _tx));
+  _ty = maxY === 0 ? 0 : Math.min(maxY, Math.max(-maxY, _ty));
+}
 
 function _applyTransform() {
-  img.style.transform = `translate(calc(-50% + ${_tx}px), calc(-50% + ${_ty}px)) scale(${_scale})`;
+  _clampPan();
+  img.style.transform = `translate(calc(-50% + ${_tx}px), calc(-50% + ${_ty}px)) rotate(${_rotation}deg) scale(${_scale})`;
   if (statusZoom) statusZoom.textContent = `${Math.round(_scale * 100)}%`;
 }
 
@@ -119,6 +153,12 @@ function zoomCenter(delta) {
   zoomAt(delta, rect.left + rect.width / 2, rect.top + rect.height / 2);
 }
 
+function rotate(deltaDegrees) {
+  _rotation = (_rotation + deltaDegrees) % 360;
+  _clampPan();
+  _scheduleTransform();
+}
+
 // --- Pan -----------------------------------------------------------------------
 
 let _isPanning = false;
@@ -141,6 +181,7 @@ function _onMouseMove(e) {
   if (!_isPanning) return;
   _tx = _panOriginTx + (e.clientX - _panStartX);
   _ty = _panOriginTy + (e.clientY - _panStartY);
+  _clampPan();
   _scheduleTransform();
 }
 
@@ -156,12 +197,24 @@ function _onWheel(e) {
   zoomAt(delta, e.clientX, e.clientY);
 }
 
+function panBy(dx, dy) {
+  _tx += dx;
+  _ty += dy;
+  _clampPan();
+  _scheduleTransform();
+}
+
+function setScaling(mode) {
+  _scaling = mode;
+  _applyScaling();
+}
+
 // --- Image load ---------------------------------------------------------------
 
 img.addEventListener('load', () => {
   _naturalW = img.naturalWidth;
   _naturalH = img.naturalHeight;
-  img.style.imageRendering = (_naturalW <= 64 || _naturalH <= 64) ? 'pixelated' : 'auto';
+  _applyScaling();
   
   if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
   applyFitMode();
@@ -175,6 +228,7 @@ Core.onStateChange((state) => {
   if (img.src !== state.src) {
     img.src = state.src;
     img.alt = state.filename;
+    _rotation = 0;
   }
 
   if (_currentFitMode !== state.fitMode) {
@@ -209,6 +263,9 @@ viewport.addEventListener('dblclick', () => {
 export const Viewer = { 
   applyFitMode, 
   zoomCenter,
+  panBy,
+  rotate,
+  setScaling,
   setZoom(exactScale) {
     _scale = exactScale;
     _tx = 0;

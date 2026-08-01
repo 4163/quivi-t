@@ -2,9 +2,11 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": ["main", "options"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "core:window:allow-close",
+    "opener:default",
+    "dialog:allow-open"
   ]
 }

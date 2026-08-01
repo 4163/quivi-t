@@ -44,6 +44,12 @@
           <li class="separator"></li>
           <li role="menuitem" id="cmd-fit-width">Fit width<span class="shortcut">E</span></li>
           <li role="menuitem" id="cmd-fit-height">Fit height<span class="shortcut">R</span></li>
+          <li role="menuitem" id="cmd-fit-width-if-larger">Fit width if larger<span class="shortcut">T</span></li>
+          <li role="menuitem" id="cmd-fit-height-if-larger">Fit height if larger<span class="shortcut">Y</span></li>
+          <li class="separator"></li>
+          <li role="menuitem" id="cmd-scale-none" data-scaling="none">Scaling: None</li>
+          <li role="menuitem" id="cmd-scale-bicubic" data-scaling="bicubic">Scaling: Bicubic</li>
+          <li role="menuitem" id="cmd-scale-lanczos" data-scaling="lanczos">Scaling: Lanczos</li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-fullscreen">Full screen<span class="shortcut">Alt+Enter</span></li>
           <li role="menuitem" id="cmd-toggle-filelist">File list<span class="shortcut">2</span></li>
@@ -58,9 +64,18 @@
       <!-- File list panel -->
       <aside id="file-panel" aria-label="File list">
         <div id="file-panel-header">
-          <span class="col-name">File</span>
-          <span class="col-ext">Extension</span>
-          <span class="col-date">Last modified</span>
+          <div class="header-cell col-name" data-sort="name">
+            File <span class="sort-icon"></span>
+            <div class="col-resizer"></div>
+          </div>
+          <div class="header-cell col-ext" data-sort="ext">
+            Ext <span class="sort-icon"></span>
+            <div class="col-resizer"></div>
+          </div>
+          <div class="header-cell col-date" data-sort="date">
+            Last modified <span class="sort-icon"></span>
+            <div class="col-resizer"></div>
+          </div>
         </div>
         <ul id="file-list" role="listbox" aria-label="Images in current directory">
           <!-- populated by core.js -->
@@ -98,6 +113,7 @@
       <span id="status-zoom"     class="status-zoom"></span>
       <span id="status-fit"      class="status-fit"></span>
     </footer>
+
 
     <!-- Scripts: decoupled load order -->
     <script type="module" src="/js/core.js"></script>
