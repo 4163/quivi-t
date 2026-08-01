@@ -26,4 +26,5 @@ natord = "1.0.9"
 tauri-plugin-dialog = "2.7.2"
 zip = "8.6.0"
 unrar = "0.5.8"
+notify = "6"
 

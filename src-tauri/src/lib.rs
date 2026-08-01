@@ -6,8 +6,9 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::http::Response;
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 use tauri_plugin_opener::OpenerExt;
+use notify::{Watcher, RecursiveMode, RecommendedWatcher, Event};
 
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
@@ -229,6 +230,18 @@ impl ArchiveCache {
     }
 }
 
+// ── Directory Watcher ────────────────────────────────────────────────────────
+
+struct WatcherState {
+    watcher: Option<RecommendedWatcher>,
+}
+
+impl WatcherState {
+    fn new() -> Self {
+        Self { watcher: None }
+    }
+}
+
 // ── ZIP reading ──────────────────────────────────────────────────────────────
 
 fn read_zip_entries(archive_path: &str) -> Result<HashMap<String, Vec<u8>>, String> {
@@ -424,11 +437,21 @@ fn read_directory_impl(
         .position(|f| f.name == target_filename)
         .unwrap_or(0);
 
+    let parent_dir_str = if let Some(parent) = dir.parent() {
+        if parent.as_os_str().is_empty() {
+            Some("__DRIVES__".to_string())
+        } else {
+            Some(parent.to_string_lossy().into_owned())
+        }
+    } else {
+        Some("__DRIVES__".to_string())
+    };
+
     Ok(DirectoryReadResult {
         files,
         initial_index,
         directory: dir.to_string_lossy().into_owned(),
-        parent_directory: dir.parent().map(|p| p.to_string_lossy().into_owned()),
+        parent_directory: parent_dir_str,
     })
 }
 
@@ -490,6 +513,10 @@ fn read_archive(
 fn open_parent(current_dir: &str, show_hidden: Option<bool>) -> Result<DirectoryReadResult, String> {
     let path = Path::new(current_dir);
     let parent = path.parent().ok_or("Already at root")?;
+    // On Windows, a drive root like "E:\" has parent == "" — treat that as root too
+    if parent.as_os_str().is_empty() {
+        return Err("Already at root".to_string());
+    }
     let target_name = path.file_name().and_then(|n| n.to_str());
     read_directory_impl(
         parent.to_str().unwrap_or(""),
@@ -601,6 +628,53 @@ fn open_sibling_container(
     Ok(siblings[new_idx].to_string_lossy().into_owned())
 }
 
+#[tauri::command]
+fn get_drives() -> Vec<String> {
+    let mut drives = Vec::new();
+    for c in b'A'..=b'Z' {
+        let path = format!("{}:\\", c as char);
+        if std::path::Path::new(&path).exists() {
+            drives.push(path);
+        }
+    }
+    drives
+}
+
+#[tauri::command]
+fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let state = app.state::<Mutex<WatcherState>>();
+    let mut state = state.lock().unwrap();
+    
+    // Drop existing watcher to stop tracking the old directory
+    state.watcher = None;
+    
+    let app_clone = app.clone();
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
+        if let Ok(event) = res {
+            if event.kind.is_create() || event.kind.is_remove() || event.kind.is_modify() {
+                let _ = app_clone.emit("directory-changed", ());
+            }
+        }
+    }).map_err(|e| format!("Failed to create watcher: {}", e))?;
+    
+    watcher
+        .watch(Path::new(&path), RecursiveMode::NonRecursive)
+        .map_err(|e| format!("Failed to watch directory: {}", e))?;
+        
+    state.watcher = Some(watcher);
+    Ok(())
+}
+
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn write_text_file(path: String, content: String) -> Result<(), String> {
+    fs::write(&path, content).map_err(|e| e.to_string())
+}
+
 // ── App entry point ──────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -609,6 +683,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(ArchiveCache::new()))
+        .manage(Mutex::new(WatcherState::new()))
         .invoke_handler(tauri::generate_handler![
             read_directory,
             read_archive,
@@ -620,6 +695,12 @@ pub fn run() {
             open_config_dir,
             save_config,
             open_options,
+            get_drives,
+            watch_directory,
+            open_in_explorer,
+            read_text_file,
+            write_text_file,
+            get_default_dir
         ])
         .register_asynchronous_uri_scheme_protocol("quivit", |ctx, request, responder| {
             // Protocol: quivit://archive/<archive_path_base64>/<entry_name>
@@ -753,6 +834,29 @@ fn urlencoding_decode(input: &str) -> String {
         }
     }
     result
+}
+
+#[tauri::command]
+fn open_in_explorer(path: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_default_dir() -> String {
+    #[cfg(windows)]
+    {
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            return format!("{}\\Pictures", profile);
+        }
+    }
+    String::new()
 }
 
 fn guess_mime(name: &str) -> &'static str {
