@@ -167,7 +167,15 @@ Shift+D / Shift+Right     Next item
 Shift+S / Shift+Down      Next item
 Shift+A / Shift+Left      Previous item
 Shift+W / Shift+Up        Previous item
-W/A/S/D or arrows         Pan
+C                         Zoom in
+Z                         Zoom out
+X                         Zoom 100%
+E                         Fit width
+R                         Fit height
+W / Up                    Pan up
+A / Left                  Pan left
+S / Down                  Pan down
+D / Right                 Pan right
 G                         Rotate counter-clockwise
 T                         Fit width if larger
 Y                         Fit height if larger
