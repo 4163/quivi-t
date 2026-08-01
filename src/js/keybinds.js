@@ -11,6 +11,8 @@ export const DEFAULT_KEYBINDS = {
   'cmd-open-prev-container': 'Ctrl+z',
   'cmd-open-dir': 'Ctrl+o',
   'cmd-open-file': 'Ctrl+Shift+o',
+  'cmd-open-explorer': [],
+  'cmd-open-folder': [],
   'cmd-parent': 'Backspace',
   'cmd-toggle-filelist': '1',
   'cmd-toggle-menubar': '2',

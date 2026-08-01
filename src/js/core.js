@@ -191,9 +191,16 @@ function _persistLastOpened(path) {
 
 function _applyDirectoryResult(result, options = {}) {
   const files = _buildDirectoryList(result);
-  const offset = result.parent_directory ? 1 : 0;
-  const preferredIndex = Math.min(files.length - 1, Math.max(0, result.initial_index + offset));
-  const index = options.preferInitial ? preferredIndex : _firstImageIndex(files, preferredIndex);
+  
+  let index = 0;
+  if (options.preserveFilename && _state.filename) {
+    const found = files.findIndex(f => f.name === _state.filename);
+    if (found !== -1) index = found;
+  } else {
+    const offset = result.parent_directory ? 1 : 0;
+    const preferredIndex = Math.min(files.length - 1, Math.max(0, result.initial_index + offset));
+    index = options.preferInitial ? preferredIndex : _firstImageIndex(files, preferredIndex);
+  }
 
   _revokeIfObjectURL(_state.src);
 
@@ -205,9 +212,22 @@ function _applyDirectoryResult(result, options = {}) {
   _state.archivePath = '';
   _state.filename = files[index]?.name || '';
   _state.src = _isImageEntry(files[index]) ? _buildFileSrc(files[index].path) : '';
+  
+  if (window.__TAURI__) {
+    invoke('watch_directory', { path: result.directory }).catch(err => {
+      console.warn('[Core] Failed to watch directory:', err);
+    });
+  }
 }
 
 function _selectEntry(index, activate = false) {
+  if (index === -1) {
+    _state.index = -1;
+    _state.filename = '';
+    _state.src = '';
+    _notify();
+    return;
+  }
   if (index < 0 || index >= _state.list.length || _state.list.length === 0) return;
   const file = _state.list[index];
 
@@ -315,6 +335,24 @@ export const Core = {
       ? pathStr.replace(/\\/g, '/').split('/').pop()
       : pathStr.name || '';
     const path = typeof pathStr === 'string' ? pathStr : (pathStr.path || pathStr.name);
+    
+    if (path === '__DRIVES__') {
+      try {
+        const drives = await invoke('get_drives');
+        const result = {
+          directory: 'Drives',
+          parent_directory: null,
+          initial_index: 0,
+          files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
+        };
+        _applyDirectoryResult(result);
+        _notify();
+      } catch (err) {
+        console.error('[Core] Failed to load drives:', err);
+      }
+      return;
+    }
+
     const ext = _ext(name);
 
     try {
@@ -406,15 +444,32 @@ export const Core = {
       return;
     }
 
-    if (!_state.directory) return;
+    if (!_state.directory || _state.directory === 'Drives') return;
     try {
       const result = await invoke('open_parent', { currentDir: _state.directory, showHidden: _showHidden() });
       _applyDirectoryResult(result);
       _persistLastOpened(result.directory);
-
       _notify();
     } catch (err) {
-      console.error('[Core] openParent error:', err);
+      if (err === 'Already at root') {
+        try {
+          const drives = await invoke('get_drives');
+          const result = {
+            directory: 'Drives',
+            parent_directory: null,
+            initial_index: 0,
+            files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
+          };
+          _applyDirectoryResult(result);
+          _notify();
+        } catch (driveErr) {
+          console.error('[Core] get_drives error:', driveErr);
+        }
+      } else {
+        console.error('[Core] openParent error:', err);
+        // Write to file for debugging
+        invoke('plugin:process|execute', { program: 'cmd', args: ['/c', 'echo', String(err), '>', 'error.log'] }).catch(()=>console.log(err));
+      }
     }
   },
 
@@ -476,14 +531,67 @@ export const Core = {
     }
   },
   /**
+   * Refresh the current file list, preserving filename selection if possible.
+   */
+  async refresh() {
+    if (_state.mode === 'archive' && _state.archivePath) {
+      try {
+        const result = await invoke('read_directory', { path: _state.archivePath, showHidden: _showHidden() });
+        _applyDirectoryResult(result, { preserveFilename: true });
+        this.sortList(); // re-applies current sort
+      } catch (err) {
+        console.error('[Core] Refresh archive error:', err);
+      }
+    } else if (_state.directory) {
+      try {
+        const result = await invoke('read_directory', { path: _state.directory, showHidden: _showHidden() });
+        _applyDirectoryResult(result, { preserveFilename: true });
+        this.sortList(); // re-applies current sort
+      } catch (err) {
+        console.error('[Core] Refresh directory error:', err);
+      }
+    }
+  },
+
+  /**
    * Load the application configuration from Rust backend.
    */
   async loadConfig() {
     try {
       const loaded = await invoke('load_config');
+      
+      const oldShowHidden = _state.config?.frontend_data?.show_hidden;
       _state.config = mergeConfig(loaded);
+      
       _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
       _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
+      
+      // Apply Theme
+      const theme = _state.config.frontend_data.theme || 'system';
+      document.documentElement.removeAttribute('data-theme');
+      if (theme === 'light' || theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', theme);
+        try { localStorage.setItem('quivit-theme', theme); } catch(e) {}
+      } else {
+        try { localStorage.removeItem('quivit-theme'); } catch(e) {}
+      }
+      
+      // Auto-refresh if show_hidden changed
+      if (oldShowHidden !== undefined && oldShowHidden !== _state.config.frontend_data.show_hidden) {
+        if (_state.directory) {
+          const state = this.getState();
+          // We can't easily call this.loadFile without clearing index, but openParent to same dir works, or just a new load
+          // For simplicity, just invoke read_directory directly like openParent does
+          if (_state.mode === 'archive' && _state.archivePath) {
+            const result = await invoke('read_directory', { path: _state.archivePath, showHidden: _showHidden() });
+            _applyDirectoryResult(result, { preferInitial: false });
+          } else if (_state.directory) {
+            const result = await invoke('read_directory', { path: _state.directory, showHidden: _showHidden() });
+            _applyDirectoryResult(result, { preferInitial: false });
+          }
+        }
+      }
+
       _notify();
     } catch (err) {
       console.error('[Core] Failed to load config:', err);
@@ -523,6 +631,8 @@ export const Core = {
       startPath = fd.last_opened_path || fd.last_opened_dir;
     } else if (fd.start_dir) {
       startPath = fd.start_dir;
+    } else {
+      startPath = await invoke('get_default_dir').catch(() => '');
     }
     
     if (startPath && window.__TAURI__) {

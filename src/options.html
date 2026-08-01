@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>QuiviT Options</title>
+    <!-- Apply theme and custom CSS before paint to prevent flicker -->
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('quivit-theme');
+          if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+          var c = localStorage.getItem('quivit-custom-css');
+          if (c) {
+            var s = document.createElement('style');
+            s.id = 'custom-css';
+            s.textContent = c;
+            document.head.appendChild(s);
+          }
+        } catch(e) {}
+      })();
+    </script>
     <link rel="stylesheet" href="/css/main.css" />
     <link rel="stylesheet" href="/css/options.css" />
   </head>
@@ -12,6 +28,7 @@
       <button class="tab-btn active" data-target="tab-general">General</button>
       <button class="tab-btn" data-target="tab-keys">Keys</button>
       <button class="tab-btn" data-target="tab-associations">File Associations</button>
+      <button class="tab-btn" data-target="tab-customization">Customization</button>
       <button class="tab-btn" data-target="tab-language">Language</button>
     </div>
 
@@ -25,7 +42,7 @@
         <div class="input-group">
           <label for="opt-start-dir">Default Start Directory:</label>
           <div class="flex-row">
-            <input type="text" id="opt-start-dir" readonly placeholder="No directory selected" />
+            <input type="text" id="opt-start-dir" placeholder="No directory selected" />
             <button id="btn-browse-start">Browse...</button>
           </div>
         </div>
@@ -36,6 +53,7 @@
       </div>
       <div class="options-section">
         <h3>Interface</h3>
+
         <label>
           <input type="checkbox" id="opt-hide-chrome-fullscreen" checked />
           Hide menu bar and status bar when entering fullscreen
@@ -75,6 +93,36 @@
         <h3>System Integration</h3>
         <p class="hint">Associate supported image and archive formats with QuiviT.</p>
         <button id="btn-associate-files" class="primary">Register File Extensions</button>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-customization">
+      <div class="options-section">
+        <h3>Theme</h3>
+        <p class="hint">Select your preferred appearance.</p>
+        <div class="theme-group flex-row">
+          <button type="button" class="theme-btn secondary" data-theme="system">System</button>
+          <button type="button" class="theme-btn secondary" data-theme="light">Light</button>
+          <button type="button" class="theme-btn secondary" data-theme="dark">Dark</button>
+        </div>
+      </div>
+      <div class="options-section">
+        <h3>Custom CSS</h3>
+        <p class="hint">Override QuiviT's default styles here. Leave empty to use defaults.<br>
+          Press <code>Ctrl+S</code> while editing to quickly apply changes.<br>
+          <strong>Emergency Reset:</strong> Press <code>Ctrl+Shift+Alt+C</code> to clear custom CSS if the UI becomes unusable.
+        </p>
+        <div class="flex-row">
+          <button id="btn-import-css">Import .css</button>
+          <button id="btn-export-css">Export .css</button>
+          <button id="btn-save-apply-css">Save & Apply</button>
+        </div>
+        <textarea id="opt-custom-css" rows="12" spellcheck="false" placeholder="/* Example custom theme */
+:root {
+  --bg: #1e1e1e;
+  --surface: #252526;
+  --accent: #4ea4f7;
+}"></textarea>
       </div>
     </div>
 

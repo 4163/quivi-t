@@ -1,8 +1,23 @@
+/* Keyboard-only focus ring — matches main.css */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
 body {
   background: var(--surface);
-  padding: 16px;
+  padding: 16px 8px;
   overflow-y: auto;
-  display: block;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+body > * {
+  padding: 0 8px;
 }
 
 .tabs {
@@ -45,6 +60,14 @@ body {
 
 .tab-content.active {
   display: flex;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: visible;
+  min-height: 0;
+}
+
+.options-section:last-of-type {
+  margin-bottom: 20px;
 }
 
 .options-section h3 {
@@ -60,6 +83,12 @@ body {
   align-items: center;
   gap: 8px;
   cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.theme-group {
+  display: flex;
+  gap: 16px;
   margin-bottom: 8px;
 }
 
@@ -129,6 +158,26 @@ body {
   padding: 4px 8px;
   font-size: 11px;
   white-space: nowrap;
+}
+textarea {
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 100px;
+  outline: none;
+  transition: border-color 0.15s;
+  margin-top: 8px;
+}
+
+textarea:focus {
+  border-color: var(--accent);
 }
 
 .flex-row input[type="text"] {
@@ -237,13 +286,14 @@ body {
 }
 
 .dialog-footer {
-  margin-top: 30px;
+  margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid var(--border);
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 #options-status {
@@ -262,8 +312,20 @@ button {
   border-radius: 4px;
   background: var(--surface);
   color: var(--text);
+  font-weight: 500;
   cursor: pointer;
-  font: inherit;
+  outline: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.theme-group {
+  gap: 8px;
+}
+
+.theme-btn {
+  flex: 1;
+  padding: 6px 0;
+  text-align: center;
 }
 
 button:hover {
@@ -278,4 +340,10 @@ button.primary {
 
 button.primary:hover {
   background: var(--accent-hover);
+}
+
+/* --- Accessibility: keyboard focus outlines --- */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

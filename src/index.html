@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="QuiviT — standalone image and comic viewer." />
     <title>QuiviT</title>
+    <!-- Apply theme and custom CSS before paint to prevent flicker -->
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('quivit-theme');
+          if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+          var c = localStorage.getItem('quivit-custom-css');
+          if (c) {
+            var s = document.createElement('style');
+            s.id = 'custom-css';
+            s.textContent = c;
+            document.head.appendChild(s);
+          }
+        } catch(e) {}
+      })();
+    </script>
     <link rel="stylesheet" href="/css/main.css" />
   </head>
 
@@ -16,53 +32,53 @@
       <div class="menu-item" id="menu-file">
         <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">File</button>
         <ul class="menu-dropdown" role="menu">
-          <li role="menuitem" id="cmd-open-dir">Open directory…<span class="shortcut">Ctrl+O</span></li>
-          <li role="menuitem" id="cmd-open-file">Open file/archive…<span class="shortcut"></span></li>
+          <li role="menuitem" id="cmd-open-dir" tabindex="0">Open directory…<span class="shortcut">Ctrl+O</span></li>
+          <li role="menuitem" id="cmd-open-file" tabindex="0">Open file/archive…<span class="shortcut"></span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-options">Options…<span class="shortcut">5</span></li>
+          <li role="menuitem" id="cmd-options" tabindex="0">Options…<span class="shortcut">5</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-quit">Quit</li>
+          <li role="menuitem" id="cmd-quit" tabindex="0">Quit</li>
         </ul>
       </div>
 
       <div class="menu-item" id="menu-folder">
         <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Folder</button>
         <ul class="menu-dropdown" role="menu">
-          <li role="menuitem" id="cmd-next">Select / Open next<span class="shortcut">Shift+S</span></li>
-          <li role="menuitem" id="cmd-prev">Select / Open previous<span class="shortcut">Shift+W</span></li>
+          <li role="menuitem" id="cmd-next" tabindex="0">Select / Open next<span class="shortcut">Shift+S</span></li>
+          <li role="menuitem" id="cmd-prev" tabindex="0">Select / Open previous<span class="shortcut">Shift+W</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-parent">Open parent<span class="shortcut">Backspace</span></li>
-          <li role="menuitem" id="cmd-refresh">Refresh<span class="shortcut">6</span></li>
+          <li role="menuitem" id="cmd-parent" tabindex="0">Open parent<span class="shortcut">Backspace</span></li>
+          <li role="menuitem" id="cmd-refresh" tabindex="0">Refresh<span class="shortcut">6</span></li>
         </ul>
       </div>
 
       <div class="menu-item" id="menu-view">
         <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">View</button>
         <ul class="menu-dropdown" role="menu">
-          <li role="menuitem" id="cmd-zoom-in">Zoom in<span class="shortcut">C</span></li>
-          <li role="menuitem" id="cmd-zoom-out">Zoom out<span class="shortcut">Z</span></li>
-          <li role="menuitem" id="cmd-zoom-100">Zoom 100%<span class="shortcut">X</span></li>
+          <li role="menuitem" id="cmd-zoom-in" tabindex="0">Zoom in<span class="shortcut">C</span></li>
+          <li role="menuitem" id="cmd-zoom-out" tabindex="0">Zoom out<span class="shortcut">Z</span></li>
+          <li role="menuitem" id="cmd-zoom-100" tabindex="0">Zoom 100%<span class="shortcut">X</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-fit-width">Fit width<span class="shortcut">Q</span></li>
-          <li role="menuitem" id="cmd-fit-height">Fit height<span class="shortcut">E</span></li>
-          <li role="menuitem" id="cmd-fit-width-if-larger">Fit width if larger<span class="shortcut">R</span></li>
-          <li role="menuitem" id="cmd-fit-height-if-larger">Fit height if larger<span class="shortcut">T</span></li>
-          <li role="menuitem" id="cmd-fit-best">Auto fit<span class="shortcut">F</span></li>
+          <li role="menuitem" id="cmd-fit-width" tabindex="0">Fit width<span class="shortcut">Q</span></li>
+          <li role="menuitem" id="cmd-fit-height" tabindex="0">Fit height<span class="shortcut">E</span></li>
+          <li role="menuitem" id="cmd-fit-width-if-larger" tabindex="0">Fit width if larger<span class="shortcut">R</span></li>
+          <li role="menuitem" id="cmd-fit-height-if-larger" tabindex="0">Fit height if larger<span class="shortcut">T</span></li>
+          <li role="menuitem" id="cmd-fit-best" tabindex="0">Auto fit<span class="shortcut">F</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-scale-none" data-scaling="none" title="Cycle Through Modes: ]">Scaling: None</li>
-          <li role="menuitem" id="cmd-scale-bicubic" data-scaling="bicubic" title="Cycle Through Modes: ]">Scaling: Bicubic</li>
-          <li role="menuitem" id="cmd-scale-lanczos" data-scaling="lanczos" title="Cycle Through Modes: ]">Scaling: Lanczos</li>
+          <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none" title="Cycle Through Modes: ]">Scaling: None</li>
+          <li role="menuitem" id="cmd-scale-bicubic" tabindex="0" data-scaling="bicubic" title="Cycle Through Modes: ]">Scaling: Bicubic</li>
+          <li role="menuitem" id="cmd-scale-lanczos" tabindex="0" data-scaling="lanczos" title="Cycle Through Modes: ]">Scaling: Lanczos</li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-rotate-cw">Rotate clockwise<span class="shortcut">H</span></li>
-          <li role="menuitem" id="cmd-rotate-ccw">Rotate counter-clockwise<span class="shortcut">G</span></li>
-          <li role="menuitem" id="cmd-flip-horizontal">Flip horizontal<span class="shortcut">V</span></li>
-          <li role="menuitem" id="cmd-flip-vertical">Flip vertical<span class="shortcut">B</span></li>
+          <li role="menuitem" id="cmd-rotate-cw" tabindex="0">Rotate clockwise<span class="shortcut">H</span></li>
+          <li role="menuitem" id="cmd-rotate-ccw" tabindex="0">Rotate counter-clockwise<span class="shortcut">G</span></li>
+          <li role="menuitem" id="cmd-flip-horizontal" tabindex="0">Flip horizontal<span class="shortcut">V</span></li>
+          <li role="menuitem" id="cmd-flip-vertical" tabindex="0">Flip vertical<span class="shortcut">B</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-fullscreen">Full screen<span class="shortcut">4</span></li>
+          <li role="menuitem" id="cmd-fullscreen" tabindex="0">Full screen<span class="shortcut">4</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-toggle-filelist">File list<span class="shortcut">1</span></li>
-          <li role="menuitem" id="cmd-toggle-menubar">Menu bar<span class="shortcut">2</span></li>
-          <li role="menuitem" id="cmd-toggle-statusbar">Status bar<span class="shortcut">3</span></li>
+          <li role="menuitem" id="cmd-toggle-filelist" tabindex="0">File list<span class="shortcut">1</span></li>
+          <li role="menuitem" id="cmd-toggle-menubar" tabindex="0">Menu bar<span class="shortcut">2</span></li>
+          <li role="menuitem" id="cmd-toggle-statusbar" tabindex="0">Status bar<span class="shortcut">3</span></li>
         </ul>
       </div>
 
@@ -81,17 +97,19 @@
 
       <!-- File list panel -->
       <aside id="file-panel" aria-label="File list">
-        <div id="file-panel-breadcrumb" aria-label="Current location" title=""></div>
+        <div id="file-panel-header-top">
+          <div id="file-panel-breadcrumb" aria-label="Current location" title=""></div>
+        </div>
         <div id="file-panel-header">
-          <div class="header-cell col-name" data-sort="name">
+          <div class="header-cell col-name" data-sort="name" tabindex="0">
             File <span class="sort-icon"></span>
             <div class="col-resizer"></div>
           </div>
-          <div class="header-cell col-ext" data-sort="ext">
+          <div class="header-cell col-ext" data-sort="ext" tabindex="0">
             Ext <span class="sort-icon"></span>
             <div class="col-resizer"></div>
           </div>
-          <div class="header-cell col-date" data-sort="date">
+          <div class="header-cell col-date" data-sort="date" tabindex="0">
             Last modified <span class="sort-icon"></span>
             <div class="col-resizer"></div>
           </div>
@@ -99,6 +117,14 @@
         <ul id="file-list" role="listbox" aria-label="Images in current directory">
           <!-- populated by core.js -->
         </ul>
+        <div class="file-panel-actions">
+          <button id="cmd-open-explorer" class="icon-btn" title="Open in File Explorer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          </button>
+          <button id="cmd-open-folder" class="icon-btn" title="Open Folder">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          </button>
+        </div>
         <!-- Drag handle to resize panel -->
         <div id="panel-resize-handle" title="Drag to resize"></div>
       </aside>

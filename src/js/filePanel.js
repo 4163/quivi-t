@@ -20,6 +20,10 @@ let resizingCol = null;
 let startX = 0;
 let startWidth = 0;
 let columnResizeMoved = false;
+
+let lastClickTime = 0;
+let lastClickIndex = -1;
+
 let sortCol = 'name';
 let sortDesc = false;
 let columnsInitialized = false;
@@ -120,7 +124,9 @@ function renderEntry(item, index, selectedIndex) {
   const itemName = document.createElement('span');
   itemName.className = 'item-name';
 
-  if (item.is_dir) {
+  if (item.is_drive) {
+    itemName.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>';
+  } else if (item.is_dir) {
     itemName.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>';
   }
 
@@ -140,9 +146,28 @@ function renderEntry(item, index, selectedIndex) {
   li.appendChild(itemName);
   li.appendChild(itemExt);
   li.appendChild(itemDate);
+  
+  li.setAttribute('role', 'option');
+  li.setAttribute('tabindex', '0');
 
-  li.addEventListener('click', () => Core.selectIndex(index));
-  li.addEventListener('dblclick', () => Core.jumpToIndex(index));
+  li.addEventListener('focus', () => {
+    if (Core.getState().index !== index) {
+      Core.selectIndex(index);
+    }
+  });
+
+  li.addEventListener('click', (e) => {
+    Core.selectIndex(index);
+    const now = Date.now();
+    if (lastClickIndex === index && (now - lastClickTime < 400)) {
+      Core.jumpToIndex(index);
+      lastClickTime = 0;
+      lastClickIndex = -1;
+    } else {
+      lastClickTime = now;
+      lastClickIndex = index;
+    }
+  });
 
   return li;
 }
@@ -151,6 +176,8 @@ export function renderFilePanel(state) {
   filePanel.classList.toggle('hidden', !state.fileListVisible);
   renderBreadcrumb(state);
 
+  const wasFocused = document.activeElement && fileListUl.contains(document.activeElement);
+
   fileListUl.innerHTML = '';
   state.list.forEach((item, index) => {
     const li = renderEntry(item, index, state.index);
@@ -158,6 +185,9 @@ export function renderFilePanel(state) {
 
     if (index === state.index) {
       li.scrollIntoView({ block: 'nearest' });
+      if (wasFocused) {
+        li.focus({ preventScroll: true });
+      }
     }
   });
 }
@@ -167,6 +197,67 @@ export function initFilePanel(deps) {
 
   initializeColumns();
   updateSortIcons();
+
+  fileListUl.addEventListener('click', (e) => {
+    if (e.target === fileListUl) {
+      Core.selectIndex(-1);
+    }
+  });
+
+  // Composite widget keyboard navigation
+  fileListUl.addEventListener('keydown', (e) => {
+    const state = Core.getState();
+    const list = state.list;
+    if (!list.length) return;
+
+    const currentIndex = state.index;
+
+    switch (e.key) {
+      case 'ArrowDown': {
+        e.preventDefault();
+        e.stopPropagation();
+        const next = currentIndex === -1 ? 0 : Math.min(currentIndex + 1, list.length - 1);
+        Core.selectIndex(next);
+        break;
+      }
+      case 'ArrowUp': {
+        e.preventDefault();
+        e.stopPropagation();
+        const prev = currentIndex === -1 ? list.length - 1 : Math.max(currentIndex - 1, 0);
+        Core.selectIndex(prev);
+        break;
+      }
+      case 'Home': {
+        e.preventDefault();
+        Core.selectIndex(0);
+        break;
+      }
+      case 'End': {
+        e.preventDefault();
+        Core.selectIndex(list.length - 1);
+        break;
+      }
+      case 'Enter':
+      case ' ': {
+        if (currentIndex !== -1) {
+          e.preventDefault();
+          Core.jumpToIndex(currentIndex);
+        }
+        break;
+      }
+      case 'Escape': {
+        e.preventDefault();
+        Core.selectIndex(-1);
+        // Blurring the active li
+        if (document.activeElement && fileListUl.contains(document.activeElement)) {
+          document.activeElement.blur();
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  });
 
   resizeHandle.addEventListener('mousedown', (e) => {
     isResizingPanel = true;

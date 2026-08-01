@@ -7,9 +7,62 @@ import { Viewer } from './viewer.js';
 import { initFilePanel, renderFilePanel } from './filePanel.js';
 import { VIEWER_KEYBOARD_PAN_STEP } from './keybinds.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts } from './shortcuts.js';
+import {
+  initMenuBar,
+  closeMenus,
+  toggleMenuBar,
+  menuBarVisible,
+  setMenuBarVisible,
+  getPreFullscreenState,
+  setPreFullscreenState,
+  saveUIState
+} from './menubar.js';
 
 // Reset the options tab state on app startup so it defaults to General per session
 localStorage.removeItem('options-active-tab');
+
+// Emergency CSS Reset (Ctrl+Shift+Alt+C)
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.shiftKey && e.altKey && e.key.toLowerCase() === 'c') {
+    e.preventDefault();
+    localStorage.removeItem('quivit-custom-css');
+    if (window.__TAURI__) {
+      window.__TAURI__.event.emit('css-preview', '');
+    }
+    const state = Core.getState();
+    if (state.config && state.config.frontend_data) {
+      state.config.frontend_data.custom_css = "";
+      if (window.__TAURI__) {
+        window.__TAURI__.core.invoke('save_config', { config: state.config })
+          .then(() => {
+            window.__TAURI__.event.emit('config-updated');
+            window.location.reload();
+          })
+          .catch(err => {
+            console.error('Failed emergency reset save:', err);
+            window.location.reload();
+          });
+      }
+    } else {
+      window.location.reload();
+    }
+  }
+
+  // Global Tab Navigation Jump (Home/End)
+  if (!['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && (e.key === 'Home' || e.key === 'End')) {
+    const tabbables = Array.from(document.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+      .filter(el => el.offsetWidth > 0 && el.offsetHeight > 0 && window.getComputedStyle(el).visibility !== 'hidden');
+    if (tabbables.length > 0) {
+      if (e.key === 'Home') {
+        e.preventDefault();
+        tabbables[0].focus();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        tabbables[tabbables.length - 1].focus();
+      }
+    }
+  }
+});
 
 const dropOverlay = document.getElementById('drop-overlay');
 const menubar = document.getElementById('menubar');
@@ -24,31 +77,9 @@ const filePanelBreadcrumb = document.getElementById('file-panel-breadcrumb');
 const fileListUl = document.getElementById('file-list');
 const resizeHandle = document.getElementById('panel-resize-handle');
 
-let activeMenu = null;
 let activeScaling = '';
-let menuBarVisible = true;
 let statusBarVisible = true; // updated from config when loaded
-
-// Snapshot taken on entering fullscreen, restored on exit
-let _preFullscreenState = null;
 let _uiInitialized = false;
-
-function saveUIState() {
-  const state = Core.getState();
-  if (state.config && state.config.frontend_data) {
-    state.config.frontend_data.menu_visible = menuBarVisible;
-    state.config.frontend_data.status_visible = statusBarVisible;
-    if (window.__TAURI__) {
-      window.__TAURI__.core.invoke('save_config', { config: state.config }).catch(console.error);
-    }
-  }
-}
-
-function closeMenus() {
-  if (!activeMenu) return;
-  activeMenu.classList.remove('open');
-  activeMenu = null;
-}
 
 function updateScalingMenu() {
   document.querySelectorAll('[data-scaling]').forEach(item => {
@@ -70,17 +101,18 @@ async function toggleFullscreen() {
 
   if (enteringFullscreen) {
     // Snapshot current visibility before hiding
-    _preFullscreenState = { menuBar: menuBarVisible, statusBar: statusBarVisible };
+    setPreFullscreenState({ menuBar: menuBarVisible, statusBar: statusBarVisible });
     if (hideChrome) {
       if (menuBarVisible) toggleMenuBar();
       if (statusBarVisible) toggleStatusBar();
     }
   } else {
     // Restore from snapshot if we have one
-    if (_preFullscreenState) {
-      if (menuBarVisible !== _preFullscreenState.menuBar) toggleMenuBar();
-      if (statusBarVisible !== _preFullscreenState.statusBar) toggleStatusBar();
-      _preFullscreenState = null;
+    const pre = getPreFullscreenState();
+    if (pre) {
+      if (menuBarVisible !== pre.menuBar) toggleMenuBar();
+      if (statusBarVisible !== pre.statusBar) toggleStatusBar();
+      setPreFullscreenState(null);
     }
   }
 
@@ -94,21 +126,20 @@ async function toggleFullscreen() {
   }
 }
 
-function toggleMenuBar() {
-  menuBarVisible = !menuBarVisible;
-  menubar.classList.toggle('hidden', !menuBarVisible);
-  closeMenus();
-  saveUIState();
-}
-
 function toggleStatusBar() {
   statusBarVisible = !statusBarVisible;
-  // If we're in empty mode, it stays hidden regardless of the toggle, 
+  // If we're in empty mode, it stays hidden regardless of the toggle,
   // but we still persist the toggle state.
   if (Core.getState().mode !== 'empty') {
     statusbar.classList.toggle('hidden', !statusBarVisible);
   }
-  saveUIState();
+  const state = Core.getState();
+  if (state.config && state.config.frontend_data) {
+    state.config.frontend_data.status_visible = statusBarVisible;
+    if (window.__TAURI__) {
+      window.__TAURI__.core.invoke('save_config', { config: state.config }).catch(console.error);
+    }
+  }
 }
 
 async function openGithub() {
@@ -170,38 +201,6 @@ function dispatchAction(actionId) {
   }
 }
 
-function bindMenus() {
-  document.querySelectorAll('.menu-item').forEach(menu => {
-    const trigger = menu.querySelector('.menu-trigger');
-
-    trigger.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      if (activeMenu === menu) {
-        closeMenus();
-      } else {
-        closeMenus();
-        menu.classList.add('open');
-        activeMenu = menu;
-      }
-    });
-
-    trigger.addEventListener('mouseenter', () => {
-      if (!activeMenu || activeMenu === menu) return;
-      closeMenus();
-      menu.classList.add('open');
-      activeMenu = menu;
-    });
-  });
-
-  document.addEventListener('mousedown', (e) => {
-    if (!e.target.closest('.menu-item')) closeMenus();
-  });
-
-  document.querySelectorAll('.menu-dropdown li[role="menuitem"]').forEach(item => {
-    item.addEventListener('click', closeMenus);
-  });
-}
-
 function bindMenuCommands() {
   document.getElementById('cmd-open-dir').addEventListener('click', () => Core.openDirectoryDialog());
   document.getElementById('cmd-open-file').addEventListener('click', () => Core.openFileDialog());
@@ -250,6 +249,47 @@ function bindMenuCommands() {
     else window.close();
   });
 
+  // --- File panel action buttons ---
+  const btnOpenExplorer = document.getElementById('cmd-open-explorer');
+  if (btnOpenExplorer) {
+    btnOpenExplorer.addEventListener('click', async () => {
+      const state = Core.getState();
+      if (!window.__TAURI__) return;
+      const entry = state.list[state.index];
+      if (!entry) return;
+      try {
+        if (entry.is_parent) {
+          await window.__TAURI__.core.invoke('open_in_explorer', { path: state.directory });
+        } else {
+          await window.__TAURI__.opener.revealItemInDir(entry.path);
+        }
+      } catch (err) {
+        console.error('[Action] Failed to open explorer:', err);
+      }
+    });
+  }
+
+  const btnOpenFolder = document.getElementById('cmd-open-folder');
+  if (btnOpenFolder) {
+    btnOpenFolder.addEventListener('click', async () => {
+      const state = Core.getState();
+      if (!window.__TAURI__) return;
+      const entry = state.list[state.index];
+      let targetPath = state.directory;
+
+      if (entry) {
+        if (entry.is_dir || entry.is_parent) {
+          targetPath = entry.path;
+        }
+      }
+      try {
+        await window.__TAURI__.core.invoke('open_in_explorer', { path: targetPath });
+      } catch (err) {
+        console.error('[Action] Failed to open folder:', err);
+      }
+    });
+  }
+
   updateScalingMenu();
 }
 
@@ -265,6 +305,23 @@ function bindDragDrop() {
       if (paths && paths.length > 0) Core.loadFile(paths[0]);
     });
     listen('config-updated', () => Core.loadConfig());
+    listen('theme-preview', (e) => {
+      const theme = e.payload;
+      document.documentElement.removeAttribute('data-theme');
+      if (theme === 'light' || theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
+    });
+    listen('css-preview', (e) => {
+      const cssText = e.payload;
+      let styleEl = document.getElementById('custom-css');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'custom-css';
+        document.head.appendChild(styleEl);
+      }
+      styleEl.textContent = cssText || '';
+    });
     return;
   }
 
@@ -290,8 +347,7 @@ Core.onStateChange((state) => {
   if (!_uiInitialized && state.config?.frontend_data) {
     const fd = state.config.frontend_data;
     if (fd.menu_visible !== undefined) {
-      menuBarVisible = fd.menu_visible;
-      menubar.classList.toggle('hidden', !menuBarVisible);
+      setMenuBarVisible(fd.menu_visible);
     }
     if (fd.status_visible !== undefined) {
       statusBarVisible = fd.status_visible;
@@ -330,7 +386,7 @@ Core.onStateChange((state) => {
 });
 
 initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, Viewer });
-bindMenus();
+initMenuBar();
 bindMenuCommands();
 bindDragDrop();
 bindKeyboardShortcuts({ Core, dispatchAction });
