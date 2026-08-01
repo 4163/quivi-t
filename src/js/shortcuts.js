@@ -6,18 +6,37 @@ function bindingMatches(binding, combo) {
   return Array.isArray(binding) ? binding.includes(combo) : binding === combo;
 }
 
-function formatKeyCombo(e) {
+export const activeKeys = new Set();
+export const activeButtons = new Set();
+
+export function formatKeysCombo(keysSet, buttonsSet) {
   const combo = [];
-  if (e.ctrlKey) combo.push('Ctrl');
-  if (e.altKey) combo.push('Alt');
-  if (e.shiftKey) combo.push('Shift');
+  const lowerKeys = Array.from(keysSet).map(k => k.toLowerCase());
+  
+  if (lowerKeys.includes('control')) combo.push('Ctrl');
+  if (lowerKeys.includes('alt')) combo.push('Alt');
+  if (lowerKeys.includes('shift')) combo.push('Shift');
 
-  let key = e.key;
-  if (key === ' ') key = 'Space';
-  if (key.length === 1) key = key.toLowerCase();
+  const modifiers = ['control', 'alt', 'shift', 'meta'];
+  const others = [];
 
-  combo.push(key);
-  return combo.join('+');
+  for (const k of lowerKeys) {
+    if (!modifiers.includes(k)) {
+      others.push(k === ' ' ? 'Space' : k);
+    }
+  }
+
+  for (const b of buttonsSet) {
+    const buttons = { 0: 'MouseLeft', 1: 'MouseMiddle', 2: 'MouseRight', 3: 'MouseBack', 4: 'MouseForward' };
+    others.push(buttons[b] || `Mouse${b}`);
+  }
+
+  others.sort();
+  return combo.concat(others).join('+');
+}
+
+export function formatKeyCombo(e) {
+  return formatKeysCombo(activeKeys, activeButtons);
 }
 
 function findAction(config, combo) {
@@ -39,17 +58,40 @@ export function updateMenuShortcuts(config) {
 }
 
 export function bindKeyboardShortcuts({ Core, dispatchAction }) {
-  window.addEventListener('keydown', (e) => {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
-      e.preventDefault();
-    }
+  const handleShortcut = (e) => {
+    // Ignore bare modifiers for dispatch
+    if (e.type === 'keydown' && ['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
 
-    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+    if (e.type === 'mousedown') {
+      const isUI = e.target.closest('.menu-item, #statusbar, .file-panel-header');
+      if (isUI) return;
+    }
 
     const actionId = findAction(Core.getState().config, formatKeyCombo(e));
     if (!actionId) return;
 
     e.preventDefault();
     dispatchAction(actionId);
+  };
+
+  window.addEventListener('keydown', (e) => {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+      e.preventDefault();
+    }
+    activeKeys.add(e.key.toLowerCase());
+    handleShortcut(e);
+  });
+
+  window.addEventListener('keyup', (e) => {
+    activeKeys.delete(e.key.toLowerCase());
+  });
+
+  window.addEventListener('mousedown', (e) => {
+    activeButtons.add(e.button);
+    handleShortcut(e);
+  });
+
+  window.addEventListener('mouseup', (e) => {
+    activeButtons.delete(e.button);
   });
 }

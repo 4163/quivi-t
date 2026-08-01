@@ -161,23 +161,31 @@ Keyboard pan distance is tuned by `VIEWER_KEYBOARD_PAN_STEP` in the same file.
 The startup fit mode defaults to `DEFAULT_FIT_MODE` (`height-if-larger`) and changes made from the View menu are saved in config.
 The scaling method defaults to `DEFAULT_SCALING_MODE` (`bicubic`) and changes made from the View menu are saved in config.
 
+### Advanced Shortcut Capabilities
+
+QuiviT's shortcut engine fully supports:
+- **Simultaneous Multi-Key Combinations:** You can bind arbitrary keys without standard modifiers (e.g., `A + B`). The capture engine tracks all keys held and finalizes the binding on release.
+- **Native Mouse Input:** Mouse buttons (`MouseLeft`, `MouseMiddle`, `MouseRight`, `MouseBack`, `MouseForward`) are bindable individually or combined with modifiers (e.g., `Shift + MouseBack`).
+- **Conflict Highlighting:** The options menu visually highlights keybind conflicts by matching them with dynamically generated hues.
+
 Current defaults include:
 
 ```text
-1                         Toggle menu bar
-2                         Toggle file list
-3                         Full screen
-4                         Options
-5                         Refresh
+1                         Toggle file list
+2                         Toggle menu bar
+3                         Toggle status bar
+4 / Alt+Enter             Full screen
+5                         Options
+6 / Ctrl+R                Refresh
 Backspace                 Parent directory
 Ctrl+O                    Open directory...
 Ctrl+Shift+O              Open file/archive...
 Ctrl+X                    Open next folder/archive
 Ctrl+Z                    Open previous folder/archive
-Shift+D / Shift+Right     Next item
-Shift+S / Shift+Down      Next item
-Shift+A / Shift+Left      Previous item
-Shift+W / Shift+Up        Previous item
+Shift+D / Shift+Right / MouseForward     Next item
+Shift+S / Shift+Down                     Next item
+Shift+A / Shift+Left / MouseBack         Previous item
+Shift+W / Shift+Up                       Previous item
 C                         Zoom in
 Z                         Zoom out
 X                         Zoom 100%

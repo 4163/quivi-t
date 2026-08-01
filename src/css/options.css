@@ -64,14 +64,15 @@ body {
 }
 
 .flag-icon {
-  width: 1.8em;
-  height: 1.8em;
+  width: 1.6em;
+  height: 1.6em;
+  flex-shrink: 0;
 }
 
 .language-name {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .options-section .hint {
@@ -104,6 +105,10 @@ body {
   gap: 4px;
 }
 
+.continue-last-label {
+  margin-top: 12px;
+}
+
 .flex-row {
   display: flex;
   gap: 8px;
@@ -113,6 +118,7 @@ body {
 .keybinds-header {
   justify-content: space-between;
   align-items: baseline;
+  margin-bottom: 8px;
 }
 
 .keybinds-header .hint {
@@ -160,23 +166,74 @@ body {
   font-size: 12px;
 }
 
-.keybind-input {
-  width: 140px;
+.keybind-category-header {
+  margin: 16px 0 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.keybind-category-header:first-child {
+  margin-top: 0;
+}
+
+.keybind-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.keybind-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bg);
   color: var(--accent);
   font: inherit;
+  font-size: 11px;
   font-weight: 600;
-  text-align: center;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.keybind-input:focus {
+.keybind-tag:hover {
+  background: var(--hover-bg);
+  border-color: var(--accent);
+}
+
+.keybind-tag .remove-btn {
+  font-size: 14px;
+  line-height: 1;
+  color: #999;
+  padding: 0 2px;
+}
+
+.keybind-tag .remove-btn:hover {
+  color: #e53935;
+}
+
+.keybind-tag.capturing {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
   color: var(--text);
+}
+
+.keybind-tag.add-btn {
+  color: var(--text-dim);
+  background: transparent;
+  border-style: dashed;
+}
+
+.keybind-tag.add-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  border-style: solid;
 }
 
 .dialog-footer {

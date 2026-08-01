@@ -5,16 +5,18 @@
  */
 
 export const DEFAULT_KEYBINDS = {
-  'cmd-next': ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'],
-  'cmd-prev': ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'],
+  'cmd-next': ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown', 'MouseForward'],
+  'cmd-prev': ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp', 'MouseBack'],
   'cmd-open-next-container': 'Ctrl+x',
   'cmd-open-prev-container': 'Ctrl+z',
   'cmd-open-dir': 'Ctrl+o',
   'cmd-open-file': 'Ctrl+Shift+o',
   'cmd-parent': 'Backspace',
-  'cmd-options': '4',
-  'cmd-fullscreen': '3',
-  'cmd-toggle-menubar': '1',
+  'cmd-toggle-filelist': '1',
+  'cmd-toggle-menubar': '2',
+  'cmd-toggle-statusbar': '3',
+  'cmd-fullscreen': ['4', 'Alt+Enter'],
+  'cmd-options': '5',
   'cmd-fit-width': 'q',
   'cmd-fit-height': 'e',
   'cmd-fit-width-if-larger': 'r',
@@ -23,8 +25,8 @@ export const DEFAULT_KEYBINDS = {
   'cmd-zoom-in': 'c',
   'cmd-zoom-out': 'z',
   'cmd-zoom-100': 'x',
-  'cmd-refresh': '5',
-  'cmd-toggle-filelist': '2',
+  'cmd-cycle-scaling': ']',
+  'cmd-refresh': ['6', 'Ctrl+r'],
   'cmd-rotate-ccw': 'g',
   'cmd-rotate-cw': 'h',
   'cmd-flip-horizontal': 'v',
@@ -55,10 +57,17 @@ export function mergeConfig(loaded) {
       fit_mode: fd.fit_mode || DEFAULT_FIT_MODE,
       scaling_mode: fd.scaling_mode || DEFAULT_SCALING_MODE,
       show_hidden: fd.show_hidden === true,
-      keybinds: {
-        ...DEFAULT_KEYBINDS,
-        ...(fd.keybinds || {}),
-      },
+      hide_chrome_on_fullscreen: fd.hide_chrome_on_fullscreen !== false,
+      menu_visible: fd.menu_visible !== false,
+      status_visible: fd.status_visible !== false,
+      keybinds: (() => {
+        const defaultClone = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
+        const userBinds = fd.keybinds || {};
+        return {
+          ...defaultClone,
+          ...userBinds,
+        };
+      })(),
     },
   };
 }
