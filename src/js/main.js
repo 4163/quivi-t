@@ -8,6 +8,9 @@ import { initFilePanel, renderFilePanel } from './filePanel.js';
 import { VIEWER_KEYBOARD_PAN_STEP } from './keybinds.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts } from './shortcuts.js';
 
+// Reset the options tab state on app startup so it defaults to General per session
+localStorage.removeItem('options-active-tab');
+
 const dropOverlay = document.getElementById('drop-overlay');
 const menubar = document.getElementById('menubar');
 const viewport = document.getElementById('viewport');
@@ -24,6 +27,22 @@ const resizeHandle = document.getElementById('panel-resize-handle');
 let activeMenu = null;
 let activeScaling = '';
 let menuBarVisible = true;
+let statusBarVisible = true; // updated from config when loaded
+
+// Snapshot taken on entering fullscreen, restored on exit
+let _preFullscreenState = null;
+let _uiInitialized = false;
+
+function saveUIState() {
+  const state = Core.getState();
+  if (state.config && state.config.frontend_data) {
+    state.config.frontend_data.menu_visible = menuBarVisible;
+    state.config.frontend_data.status_visible = statusBarVisible;
+    if (window.__TAURI__) {
+      window.__TAURI__.core.invoke('save_config', { config: state.config }).catch(console.error);
+    }
+  }
+}
 
 function closeMenus() {
   if (!activeMenu) return;
@@ -42,11 +61,33 @@ function setScaling(mode) {
 }
 
 async function toggleFullscreen() {
+  const enteringFullscreen = window.__TAURI__
+    ? !(await window.__TAURI__.window.getCurrentWindow().isFullscreen())
+    : !document.fullscreenElement;
+
+  const config = Core.getState()?.config;
+  const hideChrome = config?.frontend_data?.hide_chrome_on_fullscreen !== false;
+
+  if (enteringFullscreen) {
+    // Snapshot current visibility before hiding
+    _preFullscreenState = { menuBar: menuBarVisible, statusBar: statusBarVisible };
+    if (hideChrome) {
+      if (menuBarVisible) toggleMenuBar();
+      if (statusBarVisible) toggleStatusBar();
+    }
+  } else {
+    // Restore from snapshot if we have one
+    if (_preFullscreenState) {
+      if (menuBarVisible !== _preFullscreenState.menuBar) toggleMenuBar();
+      if (statusBarVisible !== _preFullscreenState.statusBar) toggleStatusBar();
+      _preFullscreenState = null;
+    }
+  }
+
   if (window.__TAURI__) {
-    const { getCurrentWindow } = window.__TAURI__.window;
-    const win = getCurrentWindow();
-    win.setFullscreen(!(await win.isFullscreen()));
-  } else if (!document.fullscreenElement) {
+    const win = window.__TAURI__.window.getCurrentWindow();
+    win.setFullscreen(enteringFullscreen);
+  } else if (enteringFullscreen) {
     document.documentElement.requestFullscreen();
   } else {
     document.exitFullscreen();
@@ -57,6 +98,17 @@ function toggleMenuBar() {
   menuBarVisible = !menuBarVisible;
   menubar.classList.toggle('hidden', !menuBarVisible);
   closeMenus();
+  saveUIState();
+}
+
+function toggleStatusBar() {
+  statusBarVisible = !statusBarVisible;
+  // If we're in empty mode, it stays hidden regardless of the toggle, 
+  // but we still persist the toggle state.
+  if (Core.getState().mode !== 'empty') {
+    statusbar.classList.toggle('hidden', !statusBarVisible);
+  }
+  saveUIState();
 }
 
 async function openGithub() {
@@ -106,6 +158,13 @@ function dispatchAction(actionId) {
     case 'cmd-pan-right':
       Viewer.panBy(-VIEWER_KEYBOARD_PAN_STEP, 0);
       break;
+    case 'cmd-cycle-scaling': {
+      const modes = ['none', 'bicubic', 'lanczos'];
+      const current = Core.getState().scalingMode;
+      const next = modes[(modes.indexOf(current) + 1) % modes.length];
+      setScaling(next);
+      break;
+    }
     default:
       break;
   }
@@ -167,6 +226,7 @@ function bindMenuCommands() {
   document.getElementById('cmd-fullscreen').addEventListener('click', toggleFullscreen);
   document.getElementById('cmd-toggle-menubar').addEventListener('click', toggleMenuBar);
   document.getElementById('cmd-toggle-filelist').addEventListener('click', () => Core.toggleFileList());
+  document.getElementById('cmd-toggle-statusbar').addEventListener('click', toggleStatusBar);
   document.getElementById('cmd-github').addEventListener('click', () => {
     openGithub().catch(err => console.error('[GitHub] Failed to open repository:', err));
   });
@@ -227,6 +287,18 @@ function bindDragDrop() {
 }
 
 Core.onStateChange((state) => {
+  if (!_uiInitialized && state.config?.frontend_data) {
+    const fd = state.config.frontend_data;
+    if (fd.menu_visible !== undefined) {
+      menuBarVisible = fd.menu_visible;
+      menubar.classList.toggle('hidden', !menuBarVisible);
+    }
+    if (fd.status_visible !== undefined) {
+      statusBarVisible = fd.status_visible;
+    }
+    _uiInitialized = true;
+  }
+
   updateMenuShortcuts(state.config);
 
   if (state.mode === 'empty') {
@@ -238,7 +310,9 @@ Core.onStateChange((state) => {
 
   dropOverlay.classList.remove('active');
   viewport.classList.remove('empty');
-  statusbar.classList.remove('hidden');
+  // Show statusbar only if the user hasn't hidden it
+  if (statusBarVisible) statusbar.classList.remove('hidden');
+  else statusbar.classList.add('hidden');
 
   statusName.textContent = state.filename;
   statusIndex.textContent = state.list.length > 1 ? `${state.index + 1} / ${state.list.length}` : '';
