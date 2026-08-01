@@ -7,6 +7,8 @@
 export const DEFAULT_KEYBINDS = {
   'cmd-next': ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'],
   'cmd-prev': ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'],
+  'cmd-open-next-container': 'Ctrl+x',
+  'cmd-open-prev-container': 'Ctrl+z',
   'cmd-parent': 'Backspace',
   'cmd-options': '3',
   'cmd-fullscreen': '1',
@@ -26,12 +28,19 @@ export const DEFAULT_KEYBINDS = {
   'cmd-pan-right': ['d', 'ArrowRight'],
 };
 
+// Pixel distance moved by keyboard pan commands. Increase/decrease this to tune
+// W/A/S/D and arrow-key panning without touching the command dispatch code.
+export const VIEWER_KEYBOARD_PAN_STEP = 72;
+export const DEFAULT_FIT_MODE = 'height-if-larger';
+export const DEFAULT_SCALING_MODE = 'bicubic';
+
 const LEGACY_DEFAULT_KEYBINDS = {
   'cmd-next': 'PageDown',
   'cmd-prev': 'PageUp',
   'cmd-options': 'F4',
   'cmd-fullscreen': 'Alt+Enter',
   'cmd-refresh': 'F5',
+  'cmd-open-prev-container': 'Ctrl+y',
 };
 
 function _sameBinding(a, b) {
@@ -61,10 +70,12 @@ export function mergeConfig(loaded) {
   return {
     portable_mode: !!loaded?.portable_mode,
     frontend_data: {
+      ...fd,
       continue_last: fd.continue_last !== false,
       start_dir: fd.start_dir || '',
+      fit_mode: fd.fit_mode || DEFAULT_FIT_MODE,
+      scaling_mode: fd.scaling_mode || DEFAULT_SCALING_MODE,
       show_hidden: fd.show_hidden === true,
-      ...fd,
       keybinds: {
         ...DEFAULT_KEYBINDS,
         ..._migrateLegacyDefaults(fd.keybinds || {}),

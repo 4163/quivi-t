@@ -9,6 +9,7 @@ const MIN_COL_WIDTHS = {
 };
 
 let filePanel = null;
+let breadcrumbEl = null;
 let fileListUl = null;
 let resizeHandle = null;
 let Core = null;
@@ -98,6 +99,17 @@ function updateSortIcons() {
   }
 }
 
+function formatBreadcrumbPath(path) {
+  return path ? path.replace(/[\\/]+/g, ' > ') : '';
+}
+
+function renderBreadcrumb(state) {
+  if (!breadcrumbEl) return;
+  const path = state.mode === 'archive' ? state.archivePath : state.directory;
+  breadcrumbEl.textContent = formatBreadcrumbPath(path);
+  breadcrumbEl.title = path || '';
+}
+
 function renderEntry(item, index, selectedIndex) {
   const li = document.createElement('li');
   if (index === selectedIndex) li.classList.add('selected');
@@ -134,6 +146,7 @@ function renderEntry(item, index, selectedIndex) {
 
 export function renderFilePanel(state) {
   filePanel.classList.toggle('hidden', !state.fileListVisible);
+  renderBreadcrumb(state);
 
   fileListUl.innerHTML = '';
   state.list.forEach((item, index) => {
@@ -147,7 +160,7 @@ export function renderFilePanel(state) {
 }
 
 export function initFilePanel(deps) {
-  ({ filePanel, fileListUl, resizeHandle, Core, Viewer } = deps);
+  ({ filePanel, breadcrumbEl, fileListUl, resizeHandle, Core, Viewer } = deps);
 
   initializeColumns();
   updateSortIcons();

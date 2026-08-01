@@ -5,6 +5,7 @@
 import { Core } from './core.js';
 import { Viewer } from './viewer.js';
 import { initFilePanel, renderFilePanel } from './filePanel.js';
+import { VIEWER_KEYBOARD_PAN_STEP } from './keybinds.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts } from './shortcuts.js';
 
 const dropOverlay = document.getElementById('drop-overlay');
@@ -15,11 +16,12 @@ const statusIndex = document.getElementById('status-index');
 const statusFit = document.getElementById('status-fit');
 
 const filePanel = document.getElementById('file-panel');
+const filePanelBreadcrumb = document.getElementById('file-panel-breadcrumb');
 const fileListUl = document.getElementById('file-list');
 const resizeHandle = document.getElementById('panel-resize-handle');
 
 let activeMenu = null;
-let activeScaling = 'bicubic';
+let activeScaling = '';
 
 function closeMenus() {
   if (!activeMenu) return;
@@ -34,9 +36,7 @@ function updateScalingMenu() {
 }
 
 function setScaling(mode) {
-  activeScaling = mode;
-  Viewer.setScaling(mode);
-  updateScalingMenu();
+  Core.setScalingMode(mode, { persist: true });
 }
 
 async function toggleFullscreen() {
@@ -62,17 +62,23 @@ function dispatchAction(actionId) {
     case 'cmd-rotate-ccw':
       Viewer.rotate(-90);
       break;
+    case 'cmd-open-next-container':
+      Core.openContainer(1);
+      break;
+    case 'cmd-open-prev-container':
+      Core.openContainer(-1);
+      break;
     case 'cmd-pan-up':
-      Viewer.panBy(0, 32);
+      Viewer.panBy(0, VIEWER_KEYBOARD_PAN_STEP);
       break;
     case 'cmd-pan-left':
-      Viewer.panBy(32, 0);
+      Viewer.panBy(VIEWER_KEYBOARD_PAN_STEP, 0);
       break;
     case 'cmd-pan-down':
-      Viewer.panBy(0, -32);
+      Viewer.panBy(0, -VIEWER_KEYBOARD_PAN_STEP);
       break;
     case 'cmd-pan-right':
-      Viewer.panBy(-32, 0);
+      Viewer.panBy(-VIEWER_KEYBOARD_PAN_STEP, 0);
       break;
     default:
       break;
@@ -119,10 +125,10 @@ function bindMenuCommands() {
   document.getElementById('cmd-zoom-in').addEventListener('click', () => Viewer.zoomCenter(1));
   document.getElementById('cmd-zoom-out').addEventListener('click', () => Viewer.zoomCenter(-1));
   document.getElementById('cmd-zoom-100').addEventListener('click', () => Viewer.setZoom(1));
-  document.getElementById('cmd-fit-width').addEventListener('click', () => Core.setFitMode('width'));
-  document.getElementById('cmd-fit-height').addEventListener('click', () => Core.setFitMode('height'));
-  document.getElementById('cmd-fit-width-if-larger').addEventListener('click', () => Core.setFitMode('width-if-larger'));
-  document.getElementById('cmd-fit-height-if-larger').addEventListener('click', () => Core.setFitMode('height-if-larger'));
+  document.getElementById('cmd-fit-width').addEventListener('click', () => Core.setFitMode('width', { persist: true }));
+  document.getElementById('cmd-fit-height').addEventListener('click', () => Core.setFitMode('height', { persist: true }));
+  document.getElementById('cmd-fit-width-if-larger').addEventListener('click', () => Core.setFitMode('width-if-larger', { persist: true }));
+  document.getElementById('cmd-fit-height-if-larger').addEventListener('click', () => Core.setFitMode('height-if-larger', { persist: true }));
   document.getElementById('cmd-scale-none').addEventListener('click', () => setScaling('none'));
   document.getElementById('cmd-scale-bicubic').addEventListener('click', () => setScaling('bicubic'));
   document.getElementById('cmd-scale-lanczos').addEventListener('click', () => setScaling('lanczos'));
@@ -204,10 +210,16 @@ Core.onStateChange((state) => {
   const fitDisplay = state.fitMode.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   statusFit.textContent = `Fit: ${fitDisplay}`;
 
+  if (state.scalingMode !== activeScaling) {
+    activeScaling = state.scalingMode;
+    Viewer.setScaling(activeScaling);
+    updateScalingMenu();
+  }
+
   renderFilePanel(state);
 });
 
-initFilePanel({ filePanel, fileListUl, resizeHandle, Core, Viewer });
+initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, Viewer });
 bindMenus();
 bindMenuCommands();
 bindDragDrop();

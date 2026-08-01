@@ -7,6 +7,7 @@
  */
 
 import { Core } from './core.js';
+import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from './keybinds.js';
 
 const img = document.getElementById('viewer-img');
 const statusZoom = document.getElementById('status-zoom');
@@ -18,9 +19,9 @@ let _ty     = 0;
 let _naturalW = 0;
 let _naturalH = 0;
 let _rafPending = false;
-let _currentFitMode = 'width-if-larger';
+let _currentFitMode = DEFAULT_FIT_MODE;
 let _rotation = 0;
-let _scaling = 'bicubic';
+let _scaling = DEFAULT_SCALING_MODE;
 
 function _applyScaling() {
   img.dataset.scaling = _scaling;
@@ -250,7 +251,7 @@ viewport.addEventListener('wheel', _onWheel, { passive: false });
 viewport.addEventListener('dblclick', () => {
   // Toggle between 100% and current fit mode, or just reset fit mode
   if (_currentFitMode === 'none') {
-    Core.setFitMode('width-if-larger'); // Reset to default
+    Core.setFitMode(DEFAULT_FIT_MODE); // Reset to default without changing the saved preference.
   } else {
     Core.setFitMode('none');
     _scale = 1;

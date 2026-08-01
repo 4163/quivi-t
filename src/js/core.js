@@ -5,7 +5,7 @@
  * Communicates outward exclusively via registered callbacks.
  */
 
-import { DEFAULT_KEYBINDS, mergeConfig } from './keybinds.js';
+import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, mergeConfig } from './keybinds.js';
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 
@@ -46,7 +46,10 @@ const _state = {
   fileListVisible: true,
 
   /** View State: How to fit the image */
-  fitMode: 'width-if-larger',
+  fitMode: DEFAULT_FIT_MODE,
+
+  /** View State: Which image scaling mode to use */
+  scalingMode: DEFAULT_SCALING_MODE,
   
   /** Options configuration */
   config: {
@@ -54,6 +57,8 @@ const _state = {
     frontend_data: {
       continue_last: true,
       start_dir: '',
+      fit_mode: DEFAULT_FIT_MODE,
+      scaling_mode: DEFAULT_SCALING_MODE,
       keybinds: { ...DEFAULT_KEYBINDS },
     }
   }
@@ -143,6 +148,22 @@ function _buildDirectoryList(result) {
   return files;
 }
 
+function _buildArchiveList(result) {
+  const archivePath = result.archive_path;
+  return [
+    {
+      name: '..',
+      path: archivePath,
+      ext: '',
+      date: '',
+      rawDate: 0,
+      is_dir: true,
+      is_parent: true,
+    },
+    ...result.files.map(_formatEntry),
+  ];
+}
+
 function _firstImageIndex(list, preferredIndex = 0) {
   if (_isImageEntry(list[preferredIndex])) return preferredIndex;
   const next = list.findIndex(_isImageEntry);
@@ -153,11 +174,26 @@ function _showHidden() {
   return _state.config.frontend_data?.show_hidden === true;
 }
 
-function _applyDirectoryResult(result) {
+async function _persistConfig() {
+  try {
+    await invoke('save_config', { config: _state.config });
+  } catch (err) {
+    console.error('[Core] Failed to persist config:', err);
+  }
+}
+
+function _persistLastOpened(path) {
+  if (_state.config.frontend_data.continue_last === false) return;
+  _state.config.frontend_data.last_opened_path = path;
+  _state.config.frontend_data.last_opened_dir = path;
+  _persistConfig();
+}
+
+function _applyDirectoryResult(result, options = {}) {
   const files = _buildDirectoryList(result);
   const offset = result.parent_directory ? 1 : 0;
   const preferredIndex = Math.min(files.length - 1, Math.max(0, result.initial_index + offset));
-  const index = _firstImageIndex(files, preferredIndex);
+  const index = options.preferInitial ? preferredIndex : _firstImageIndex(files, preferredIndex);
 
   _revokeIfObjectURL(_state.src);
 
@@ -188,10 +224,12 @@ function _selectEntry(index, activate = false) {
   _state.index = index;
   _state.filename = file.name;
 
-  if (_state.mode === 'archive') {
+  if (file.is_parent || file.is_dir || !_isImageEntry(file)) {
+    _state.src = '';
+  } else if (_state.mode === 'archive') {
     _revokeIfObjectURL(_state.src);
     _state.src = _buildArchiveSrc(_state.archivePath, file.name);
-  } else if (_isImageEntry(file)) {
+  } else {
     _revokeIfObjectURL(_state.src);
     _state.src = _buildFileSrc(file.path);
   }
@@ -215,8 +253,21 @@ export const Core = {
     _notify();
   },
 
-  setFitMode(mode) {
+  setFitMode(mode, options = {}) {
     _state.fitMode = mode;
+    if (options.persist) {
+      _state.config.frontend_data.fit_mode = mode;
+      _persistConfig();
+    }
+    _notify();
+  },
+
+  setScalingMode(mode, options = {}) {
+    _state.scalingMode = mode;
+    if (options.persist) {
+      _state.config.frontend_data.scaling_mode = mode;
+      _persistConfig();
+    }
     _notify();
   },
 
@@ -227,6 +278,22 @@ export const Core = {
     if (_state.list.length <= 1) return;
     const next = (_state.index + delta + _state.list.length) % _state.list.length;
     _selectEntry(next);
+  },
+
+  async openContainer(delta) {
+    const currentPath = _state.mode === 'archive' ? _state.archivePath : _state.directory;
+    if (!currentPath) return;
+
+    try {
+      const path = await invoke('open_sibling_container', {
+        currentPath,
+        delta,
+        showHidden: _showHidden(),
+      });
+      await this.loadFile(path);
+    } catch (err) {
+      console.error('[Core] openContainer error:', err);
+    }
   },
 
   /**
@@ -255,18 +322,19 @@ export const Core = {
         // Archive mode
         const result = await invoke('read_archive', { archivePath: path });
 
-        const files = result.files.map(_formatEntry);
+        const files = _buildArchiveList(result);
 
         _revokeIfObjectURL(_state.src);
 
         _state.mode = 'archive';
         _state.list = files;
-        _state.index = 0;
+        _state.index = _firstImageIndex(files, 1);
         _state.archivePath = result.archive_path;
         _state.directory = '';
-        _state.parentDirectory = '';
-        _state.filename = files[0]?.name || '';
-        _state.src = files[0] ? _buildArchiveSrc(result.archive_path, files[0].name) : '';
+        _state.parentDirectory = result.archive_path.replace(/[\\/][^\\/]*$/, '');
+        _state.filename = files[_state.index]?.name || '';
+        _state.src = _isImageEntry(files[_state.index]) ? _buildArchiveSrc(result.archive_path, files[_state.index].name) : '';
+        _persistLastOpened(result.archive_path);
 
         _notify();
         return;
@@ -275,9 +343,7 @@ export const Core = {
       // Image or directory mode
       const result = await invoke('read_directory', { path, showHidden: _showHidden() });
       _applyDirectoryResult(result);
-
-      _state.config.frontend_data.last_opened_dir = result.directory;
-      this.saveConfig(_state.config.portable_mode, _state.config.frontend_data);
+      _persistLastOpened(result.directory);
 
       _notify();
 
@@ -328,10 +394,23 @@ export const Core = {
    * Open the parent directory of the current directory.
    */
   async openParent() {
+    if (_state.mode === 'archive' && _state.archivePath) {
+      try {
+        const result = await invoke('read_directory', { path: _state.archivePath, showHidden: _showHidden() });
+        _applyDirectoryResult(result, { preferInitial: true });
+        _persistLastOpened(result.directory);
+        _notify();
+      } catch (err) {
+        console.error('[Core] openParent archive error:', err);
+      }
+      return;
+    }
+
     if (!_state.directory) return;
     try {
       const result = await invoke('open_parent', { currentDir: _state.directory, showHidden: _showHidden() });
       _applyDirectoryResult(result);
+      _persistLastOpened(result.directory);
 
       _notify();
     } catch (err) {
@@ -375,6 +454,8 @@ export const Core = {
     try {
       const loaded = await invoke('load_config');
       _state.config = mergeConfig(loaded);
+      _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
+      _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
       _notify();
     } catch (err) {
       console.error('[Core] Failed to load config:', err);
@@ -387,6 +468,12 @@ export const Core = {
   async saveConfig(portable_mode, frontend_data) {
     try {
       _state.config = mergeConfig({ portable_mode, frontend_data });
+      if (_state.config.frontend_data.continue_last === false) {
+        delete _state.config.frontend_data.last_opened_path;
+        delete _state.config.frontend_data.last_opened_dir;
+      }
+      _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
+      _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
       await invoke('save_config', { config: _state.config });
       _notify();
     } catch (err) {
@@ -404,8 +491,8 @@ export const Core = {
     const fd = _state.config.frontend_data || {};
     let startPath = '';
     
-    if (fd.continue_last !== false && fd.last_opened_dir) {
-      startPath = fd.last_opened_dir;
+    if (fd.continue_last !== false && (fd.last_opened_path || fd.last_opened_dir)) {
+      startPath = fd.last_opened_path || fd.last_opened_dir;
     } else if (fd.start_dir) {
       startPath = fd.start_dir;
     }

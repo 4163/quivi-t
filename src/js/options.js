@@ -13,6 +13,8 @@ const configDirLabel = document.getElementById('config-dir-label');
 const ACTIONS = [
   { id: 'cmd-next', label: 'Next Image' },
   { id: 'cmd-prev', label: 'Previous Image' },
+  { id: 'cmd-open-next-container', label: 'Open Next Folder/Archive' },
+  { id: 'cmd-open-prev-container', label: 'Open Previous Folder/Archive' },
   { id: 'cmd-parent', label: 'Open Parent Folder' },
   { id: 'cmd-refresh', label: 'Refresh Directory' },
   { id: 'cmd-options', label: 'Open Options' },
@@ -171,6 +173,10 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   config.frontend_data.continue_last = document.getElementById('opt-continue-last').checked;
   config.frontend_data.show_hidden = document.getElementById('opt-show-hidden').checked;
   config.frontend_data.start_dir = document.getElementById('opt-start-dir').value;
+  if (!config.frontend_data.continue_last) {
+    delete config.frontend_data.last_opened_path;
+    delete config.frontend_data.last_opened_dir;
+  }
   config = mergeConfig(config);
   
   try {

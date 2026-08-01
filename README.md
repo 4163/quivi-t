@@ -154,6 +154,9 @@ src/js/keybinds.js
 ```
 
 The backend does not define shortcut defaults. It only loads and saves the config object.
+Keyboard pan distance is tuned by `VIEWER_KEYBOARD_PAN_STEP` in the same file.
+The startup fit mode defaults to `DEFAULT_FIT_MODE` (`height-if-larger`) and changes made from the View menu are saved in config.
+The scaling method defaults to `DEFAULT_SCALING_MODE` (`bicubic`) and changes made from the View menu are saved in config.
 
 Current defaults include:
 
@@ -163,6 +166,8 @@ Current defaults include:
 3                         Options
 4                         Refresh
 Backspace                 Parent directory
+Ctrl+X                    Open next folder/archive
+Ctrl+Z                    Open previous folder/archive
 Shift+D / Shift+Right     Next item
 Shift+S / Shift+Down      Next item
 Shift+A / Shift+Left      Previous item

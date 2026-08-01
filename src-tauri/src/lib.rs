@@ -528,6 +528,60 @@ fn open_sibling(
     read_directory_impl(sibling.to_str().unwrap_or(""), show_hidden, None)
 }
 
+#[tauri::command]
+fn open_sibling_container(
+    current_path: &str,
+    delta: i32,
+    show_hidden: Option<bool>,
+) -> Result<String, String> {
+    let path = Path::new(current_path);
+    let parent = path.parent().ok_or("Already at root")?;
+    let show_hidden = show_hidden.unwrap_or(false);
+
+    let mut siblings: Vec<PathBuf> = Vec::new();
+    if let Ok(entries) = fs::read_dir(parent) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            let is_dir = p.is_dir();
+            let is_archive = p
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(is_archive_ext)
+                .unwrap_or(false);
+
+            if is_dir || is_archive {
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if !show_hidden && is_hidden_path(&p, name) {
+                    continue;
+                }
+                siblings.push(p);
+            }
+        }
+    }
+
+    if siblings.is_empty() {
+        return Err("No sibling folders or archives found".into());
+    }
+
+    siblings.sort_by(|a, b| {
+        b.is_dir().cmp(&a.is_dir()).then_with(|| {
+            natord::compare(
+                &a.file_name().unwrap_or_default().to_string_lossy(),
+                &b.file_name().unwrap_or_default().to_string_lossy(),
+            )
+        })
+    });
+
+    let current_idx = siblings
+        .iter()
+        .position(|s| s == path)
+        .ok_or("Current folder/archive not found among siblings")?;
+
+    let new_idx =
+        ((current_idx as i32 + delta).rem_euclid(siblings.len() as i32)) as usize;
+    Ok(siblings[new_idx].to_string_lossy().into_owned())
+}
+
 // ── App entry point ──────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -541,6 +595,7 @@ pub fn run() {
             read_archive,
             open_parent,
             open_sibling,
+            open_sibling_container,
             load_config,
             get_config_dir,
             open_config_dir,

@@ -209,6 +209,27 @@ body {
   display: none;
 }
 
+#file-panel-breadcrumb {
+  min-height: 24px;
+  max-height: 72px;
+  padding: 4px 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  flex-shrink: 0;
+}
+
+#file-panel-breadcrumb:empty {
+  display: none;
+}
+
 #file-panel-header {
   display: grid;
   grid-template-columns: var(--col-name-w) var(--col-ext-w) var(--col-date-w);
