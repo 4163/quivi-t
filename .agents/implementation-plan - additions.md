@@ -194,43 +194,7 @@ New modules may be warranted:
   - ensure activation/focus works after handoff;
   - verify this with built executable behavior once release builds/file associations exist.
 
-### 13. Shortcut Changes
 
-- Mouse buttons should be bindable.
-- The menu-bar toggle keybind must always have at least one binding assigned; the user cannot remove it entirely, to prevent a softlock where the menu bar (and its controls) becomes unreachable. The specific key doesn't matter, only that one is always set.
-- Keybind defaults and README must stay synchronized as future shortcut changes land.
-
-### 14. Mouse Shortcut Binding
-
-- Extend shortcut representation to support mouse inputs.
-- Decide normalized names:
-  - `MouseLeft`
-  - `MouseMiddle`
-  - `MouseRight`
-  - `MouseBack`
-  - `MouseForward`
-  - modifiers such as `Shift+MouseBack`
-- Options keybind capture should listen to `mousedown` as well as `keydown`.
-- Avoid binding primary left click in a way that breaks normal UI unless the UI explicitly allows it.
-- Consider warning or preventing dangerous bindings for basic UI interaction.
-- Keybind capture feedback: while capturing, indicate live which keys/buttons are currently being held, including combinations (e.g. show "Shift" held, then show "Shift + H" as H is pressed), so the user can see what's being registered as they press it rather than only seeing the final result.
-
-### 15. Categorized Keybinds UI
-
-- Replace the flat keybind list with sections aligned to app areas:
-  - Navigation
-  - View
-  - Zoom
-  - Pan
-  - Rotation
-  - Window/UI
-  - Files/Folders
-- Keep existing saved bindings working.
-- Add rotate clockwise.
-- Add menu-bar toggle.
-- If file-list toggle remains available, assign or expose it intentionally.
-- Keybind display legibility: when multiple keybinds are set for the same action/row, the current display makes them hard to distinguish/see. Find a clearer layout for showing multiple bound inputs per action.
-- Keybind-to-function assignment: it is not currently possible to assign a keybind to a function from the UI. Implement this so users can bind/rebind an action to a key (or mouse input) from the Options keybinds UI.
 
 ### 17. File List Function Buttons and Favorites
 

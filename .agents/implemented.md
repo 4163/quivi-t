@@ -152,6 +152,46 @@ This file tracks items that are fully implemented and verified, separate from th
 - Styled via `.flag-icon` and `.language-name` in `options.css`.
 - Added Twemoji to the README attribution list.
 
+### Resize & Zoom Snapping Polish
+
+- Refactored viewer resize handling to accurately respect the current `fitMode` (auto-fit, fit-width, fit-height, etc.) on window resize, preventing sudden intuitive snap-backs.
+- Disabled reverting `fitMode` to `none` during standard zooming operations. The user can now zoom in/out freely without losing their underlying fit preference, and the app recalculates appropriately during the next resize event.
+
+### UI Defaults & Tooltips
+
+- Set the `menubar` and `statusbar` to be visible by default for new users.
+- Set the `file-panel` to be hidden by default.
+- Added `title` attributes (tooltips) to all items in the file list (except `..`) so users can hover to read long, truncated filenames.
+- Added `title` attributes to the View menu scaling options indicating their cycle shortcut `]`.
+
+### Categorized Keybinds UI
+
+- Replaced the flat keybind list in Options with categorized sections: Navigation, View, Zoom, Pan, Rotation, Window & UI, Files & Folders.
+- Replaced basic text inputs with click-to-bind interactive tags and a persistent `+` button for alternative bindings.
+- Added a circular `×` remove button inside tags that appears on hover and turns red to easily delete bindings.
+
+### Options Tab Session Persistence
+
+- Implemented `localStorage` memory for the active Options tab, persisting tab selection across Options window opens within the same app session.
+- Added a `localStorage.removeItem` cleanup hook in `main.js` so the Options window naturally defaults to the General tab on a fresh program restart.
+
+### Advanced Shortcut System: Multi-Key & Mouse Support
+
+- Rewrote `options.js` and `shortcuts.js` capture logic to accumulate simultaneous keys in a `Set`.
+- Combinations are now formed dynamically by recording the maximum key-press state and finalizing only on `keyup` when all keys are released (enabling arbitrary combos like `A + B`).
+- Added native Mouse binding support (`MouseLeft`, `MouseMiddle`, `MouseRight`, `MouseBack`, `MouseForward`).
+- Updated defaults to include `MouseForward` and `MouseBack` for Next/Previous item navigation.
+
+### Options Conflict Highlighting
+
+- Implemented dynamic, auto-generated color highlighting in the Options menu for keybind conflicts.
+- `getConflictColors()` generates distinct, golden-ratio based hues evenly spread across the non-blue spectrum (skipping 190°-240°), assigning the exact same color to all tags sharing a conflicted combination.
+
+### Keybind Failsafe & Deep Copy Fix
+
+- Blocked removal of the final uncontested binding for the Menu Bar Toggle to prevent UI softlocks. (If the last binding is shared with another action, removal is permitted).
+- Fixed a bug where saving or resetting keybinds unintentionally mutated the underlying `DEFAULT_KEYBINDS` by explicitly wrapping assignments in a deep copy (`JSON.parse(JSON.stringify())`).
+
 ## Verified Commands Used
 
 ```powershell
