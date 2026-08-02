@@ -26,7 +26,6 @@ dist-ssr
 .agents/*
 !.agents/additions.md
 !.agents/implemented.md
-!.agents/sessions.md
 playwright/
 
 .codex_tauri_dev.err.log
