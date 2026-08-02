@@ -22,6 +22,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Config:** JSON through `serde` / `serde_json`
 - **File watching:** `notify` (directory watcher / auto-refresh)
 - **ICO extraction:** `image` (ico feature)
+- **Archive hashing:** `md5` (deterministic temp directory naming)
 - **Plugins:** `tauri-plugin-opener` (open config folders in Explorer), `tauri-plugin-dialog` (native pickers), `tauri-plugin-single-instance` (single-instance handoff)
 
 ## Project Structure
@@ -68,6 +69,9 @@ QuiviT/
 - Lists folders, images, and supported archives in the file panel.
 - Supports parent-directory navigation through '`..`'.
 - Reads ZIP/CBZ and RAR/CBR archives directly, treating them as folders.
+- **Instant archive listing** — reads only headers (central directory) for immediate file lists without full extraction.
+- **Hybrid archive caching** — ZIP/CBZ uses on-demand in-memory LRU cache (20 images) with background prefetch (7 ahead / 3 behind); RAR/CBR uses background sequential extraction to temp disk.
+- **Seamless image navigation** — retains previous image on screen until new image fully loads, eliminating flicker between archive images.
 - Supports configurable keybindings, multi-key combos, and mouse shortcuts.
 - Supports global or portable configuration storage.
 - Provides fit, zoom, pan, rotation, flip, and scaling controls.
@@ -250,12 +254,14 @@ F                                           Auto fit
 The Rust backend provides Tauri commands for:
 
 - Reading directories.
-- Reading archives.
+- **Listing archive headers instantly** (`list_archive`).
+- **Prefetching archive entries** (`prefetch_archive_entries`).
 - Opening parent and sibling directories.
 - Opening sibling folders/archives.
 - Loading and saving config.
 - Resolving and opening the global and local config directories.
 - Opening the Options window.
+- **ICO frame extraction** (`get_ico_frames`).
 
 The Options window command is async because creating a Tauri webview window from a synchronous command can deadlock on Windows.
 

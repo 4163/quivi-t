@@ -332,3 +332,15 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 ### Options & State Persistence
 - Added "Remember last active image" Options checkbox.
 - Implemented logic in `fsUtils.js` and `core.js` to remember and automatically jump to the last active image when entering a directory.
+
+### Archive Performance Overhaul
+
+- **Instant archive listing**: Added \list_archive\ Tauri command that reads only archive headers (central directory) for ZIP/CBZ/RAR/CBR, returning file lists instantly without extracting images.
+- **Hybrid caching strategy**:
+  - ZIP/CBZ: On-demand in-memory LRU cache (20 images) with \prefetch_archive_entries\ command for background prefetching (7 ahead / 3 behind).
+  - RAR/CBR: Background sequential extraction to OS temp directory (\%TEMP%\\QuiviT\\<hash>\\) via spawned thread; \quivit://\ protocol polls temp disk with 3-second timeout.
+- **Unified protocol handler**: \quivit://archive/<base64_path>/<entry>\ now routes seamlessly — serves from LRU cache (ZIP) or temp disk (RAR), with on-demand extraction fallback for ZIP cache misses.
+- **Seamless image swapping**: \iewer.js\ uses off-screen \Image\ preloader — retains previous image on screen until new image fully loads, eliminating flicker/black frames during navigation.
+- **Prefetch integration**: \core.js\ triggers \prefetchAhead\ on navigation; \sUtils.js\ triggers initial prefetch on archive load.
+- **Dependencies**: Added \md5\ crate for deterministic temp directory naming.
+- **Cleanup**: Old RAR temp directories cleaned up on new archive load; ZIP LRU evicts oldest entries at capacity.

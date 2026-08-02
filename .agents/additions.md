@@ -100,7 +100,7 @@ New modules may be warranted:
 
 - Rework the drag-and-drop overlay: folder opening already works, so update the wording, refine the drop cursor affordance, and make the overlay itself clickable so it opens a folder picker.
 - Prevent drag/drop on the canvas element behind the overlay — the drop target should be the overlay, not the canvas.
-- Verify: dropping a folder opens it; clicking the overlay opens a folder picker; no canvas drag interaction leaks through.
+- Verify: dropping a folder/image/archive opens it; clicking the overlay opens a folder picker; no canvas drag interaction leaks through. drop. dropping an an supported file should show a file type not supported warning instead of opening the directory.
 
 ### 10. Responsive Keyboard Panning
 
