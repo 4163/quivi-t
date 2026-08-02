@@ -59,10 +59,27 @@ fn is_portable() -> bool {
     exe_dir.join(".portable").exists() || exe_dir.join("quivit_config.json").exists()
 }
 
+fn roaming_dir_path(app_handle: &tauri::AppHandle) -> PathBuf {
+    app_handle.path().app_config_dir().unwrap_or_default()
+}
+
 fn roaming_dir(app_handle: &tauri::AppHandle) -> PathBuf {
-    let path = app_handle.path().app_config_dir().unwrap_or_default();
+    let path = roaming_dir_path(app_handle);
     fs::create_dir_all(&path).ok();
     path
+}
+
+const ROAMING_FILES: &[&str] = &[
+    "quivit_config.json",
+    "quivit_state.json",
+    "quivit_directory_sort.json",
+    "quivit_favorites.json",
+];
+
+fn remove_roaming_files(dir: &Path) {
+    for name in ROAMING_FILES {
+        let _ = fs::remove_file(dir.join(name));
+    }
 }
 
 // ── Config split helpers ──────────────────────────────────────────────────────
@@ -159,16 +176,18 @@ fn open_local_data_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Result<(), String> {
     let exe_dir = get_exe_dir();
+
     if config.portable_mode {
-        // Single self-contained file beside the executable
-        let _ = fs::write(exe_dir.join(".portable"), "");
+        // Portable: write the single self-contained file beside the executable
+        // first, then drop the roaming copies so exactly one location stays active.
         let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
         fs::write(exe_dir.join("quivit_config.json"), data).map_err(|e| e.to_string())?;
-    } else {
-        // Roaming: remove portable leftovers, then split into config/state/sort files
-        let _ = fs::remove_file(exe_dir.join(".portable"));
-        let _ = fs::remove_file(exe_dir.join("quivit_config.json"));
+        let _ = fs::write(exe_dir.join(".portable"), "");
 
+        remove_roaming_files(&roaming_dir_path(&app_handle));
+    } else {
+        // Roaming: write the split files first, then remove portable leftovers so
+        // a failed write never loses the config.
         let mut fd = std::mem::take(&mut config.frontend_data);
         let state = extract_keys(&mut fd, STATE_KEYS);
         let sort = extract_keys(&mut fd, SORT_KEYS);
@@ -193,6 +212,9 @@ fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Result<()
             serde_json::to_string_pretty(&favorites).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
+
+        let _ = fs::remove_file(exe_dir.join(".portable"));
+        let _ = fs::remove_file(exe_dir.join("quivit_config.json"));
     }
     Ok(())
 }

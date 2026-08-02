@@ -175,7 +175,7 @@ When **Save config data locally** is enabled in Options, QuiviT writes a single 
 <executable-directory>\quivit_config.json
 ```
 
-When it is disabled, QuiviT removes those portable files from the executable directory and writes to the user config directory instead.
+Enabling portable mode moves your settings out of the roaming directory (the roaming files are removed once the portable copy is written), so only one active location exists at a time. When the option is disabled, QuiviT writes the split files back to the roaming directory and removes the portable files instead.
 
 ### Custom CSS & Emergency Reset
 
