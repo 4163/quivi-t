@@ -19,6 +19,10 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Desktop webview:** WebView2 on Windows
 - **Archives:** ZIP/CBZ through `zip`, RAR/CBR through `unrar`
 - **Sorting:** natural sorting through `natord`
+- **Config:** JSON through `serde` / `serde_json`
+- **File watching:** `notify` (directory watcher / auto-refresh)
+- **ICO extraction:** `image` (ico feature)
+- **Plugins:** `tauri-plugin-opener` (open config folders in Explorer), `tauri-plugin-dialog` (native pickers), `tauri-plugin-single-instance` (single-instance handoff)
 
 ## Project Structure
 

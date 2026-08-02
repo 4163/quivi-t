@@ -96,6 +96,31 @@ New modules may be warranted:
 - Provide a volume slider or rely on system volume.
 - Audio assets should be small and fast-loading.
 
+### 9. Drag-and-Drop Folder Opening
+
+- Rework the drag-and-drop overlay: folder opening already works, so update the wording, refine the drop cursor affordance, and make the overlay itself clickable so it opens a folder picker.
+- Prevent drag/drop on the canvas element behind the overlay — the drop target should be the overlay, not the canvas.
+- Verify: dropping a folder opens it; clicking the overlay opens a folder picker; no canvas drag interaction leaks through.
+
+### 10. Responsive Keyboard Panning
+
+- W/A/S/D and arrow-key panning is less responsive than the original Python Quivi viewer, which pans instantly and handles rapid multi-directional spam; the current build has a perceived delay/debounce before panning.
+- Audit the keyboard pan pipeline (viewer pan handling and dispatch timing) for debounce or re-trigger delay.
+- Make panning apply immediately per key press and support fast direction changes.
+- Verify: hold and rapidly alternate directions; panning responds instantly per press.
+
+### 11. Scroll-Wheel Zoom vs Pan (Manga Reading)
+
+- Add scroll-wheel behavior suited to manga reading: plain wheel scrolls/pans the image up and down, while `Ctrl` + wheel zooms in/out.
+- Add scroll-wheel actions to the Options Keys tab keybinds, with defaults of `Ctrl+ScrollUp` = zoom in, `Ctrl+ScrollDown` = zoom out, and `ScrollUp` / `ScrollDown` = pan.
+- Verify: wheel pans, Ctrl+wheel zooms, and the scroll actions are remappable in Options.
+
+### 12. Update Availability Indicator
+
+- Full auto-update is likely out of scope for a single-executable app, but add a lightweight check that surfaces when a newer release exists on the GitHub page (the menu bar already links to it).
+- Fail silently when offline or rate-limited; show an unobtrusive indicator/link when an update is available.
+- Verify: with no network the app behaves normally; with an update available the indicator appears.
+
 ## Verification Plan
 
 Run after each coherent implementation slice:
@@ -129,6 +154,10 @@ Runtime/manual verification:
 - Confirm per-directory sort persists after app restart.
 - Confirm mouse shortcut capture works in Options.
 - Confirm ICO spritesheet rendering with multi-entry ICO files.
+- Confirm drag-and-drop opens a folder, the overlay is clickable with a proper cursor, and the canvas behind it cannot be dragged.
+- Confirm keyboard panning is instant and spam-friendly across all four directions.
+- Confirm plain wheel pans and Ctrl+wheel zooms, with scroll actions remappable in Options.
+- Confirm the update indicator appears when a new GitHub release exists and stays silent offline.
 
 ## User Verification Gates
 
@@ -143,6 +172,10 @@ Implement slowly in reviewable slices:
 7. ICO spritesheet support.
 8. Keybind categorization.
 9. Final architecture review and README/session updates.
+10. Drag-and-drop folder opening polish.
+11. Responsive keyboard panning.
+12. Scroll-wheel zoom vs pan behavior.
+13. Update availability indicator.
 
 After each slice:
 

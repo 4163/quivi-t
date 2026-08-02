@@ -24,7 +24,7 @@ dist-ssr
 *.sw?
 
 .agents/*
-!.agents/implementation-plan - additions.md
+!.agents/additions.md
 !.agents/implemented.md
 playwright/
 
