@@ -253,15 +253,33 @@ img.addEventListener('load', () => {
 
 // --- State subscription -------------------------------------------------------
 
+let _currentPreloadSrc = null;
+
 Core.onStateChange((state) => {
   if (state.mode === 'empty') return;
 
-  if (img.src !== state.src) {
-    img.src = state.src;
-    img.alt = state.filename;
-    _rotation = 0;
-    _flipX = 1;
-    _flipY = 1;
+  // Seamless loading: show the previous image until the new one is ready.
+  // This effectively acts as the "spinner" and eliminates flickering.
+  if (img.src !== state.src && _currentPreloadSrc !== state.src) {
+    _currentPreloadSrc = state.src;
+    
+    const preloader = new Image();
+    preloader.onload = () => {
+      if (_currentPreloadSrc === state.src) {
+        img.src = state.src;
+        img.alt = state.filename;
+        _rotation = 0;
+        _flipX = 1;
+        _flipY = 1;
+      }
+    };
+    preloader.onerror = () => {
+      if (_currentPreloadSrc === state.src) {
+        img.src = state.src; // Fallback so main img shows error state
+        img.alt = state.filename;
+      }
+    };
+    preloader.src = state.src;
   }
 
   if (_currentFitMode !== state.fitMode) {

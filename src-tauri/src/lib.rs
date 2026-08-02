@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::http::Response;
@@ -296,32 +295,25 @@ struct ArchiveReadResult {
 // ── Archive cache (thread-safe) ──────────────────────────────────────────────
 // Caches extracted bytes so we don't re-read the archive for every image.
 
+use std::collections::VecDeque;
+
 struct ArchiveCache {
-    /// Key: archive_path, Value: map of entry_name → bytes
-    entries: HashMap<String, HashMap<String, Vec<u8>>>,
+    active_path: Option<String>,
+    zip_entries: HashMap<String, Vec<u8>>,
+    zip_lru: VecDeque<String>,
+    zip_capacity: usize,
+    rar_temp_dir: Option<PathBuf>,
 }
 
 impl ArchiveCache {
     fn new() -> Self {
         Self {
-            entries: HashMap::new(),
+            active_path: None,
+            zip_entries: HashMap::new(),
+            zip_lru: VecDeque::new(),
+            zip_capacity: 20, // Keep 20 images in RAM
+            rar_temp_dir: None,
         }
-    }
-
-    fn get(&self, archive_path: &str, entry_name: &str) -> Option<&Vec<u8>> {
-        self.entries.get(archive_path)?.get(entry_name)
-    }
-
-    fn has_archive(&self, archive_path: &str) -> bool {
-        self.entries.contains_key(archive_path)
-    }
-
-    fn insert_archive(&mut self, archive_path: String, entries: HashMap<String, Vec<u8>>) {
-        self.entries.insert(archive_path, entries);
-    }
-
-    fn clear(&mut self) {
-        self.entries.clear();
     }
 }
 
@@ -339,81 +331,113 @@ impl WatcherState {
 
 // ── ZIP reading ──────────────────────────────────────────────────────────────
 
-fn read_zip_entries(archive_path: &str) -> Result<HashMap<String, Vec<u8>>, String> {
+fn list_zip_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
     let file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
-    let mut archive =
-        zip::ZipArchive::new(file).map_err(|e| format!("Invalid ZIP archive: {e}"))?;
-
-    let mut entries = HashMap::new();
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid ZIP archive: {e}"))?;
+    let mut files = Vec::new();
 
     for i in 0..archive.len() {
-        let mut entry = archive
-            .by_index(i)
-            .map_err(|e| format!("Error reading ZIP entry: {e}"))?;
+        let entry = archive.by_index(i).map_err(|e| format!("Error reading ZIP entry: {e}"))?;
         let name = entry.name().to_string();
+        if entry.is_dir() { continue; }
+        let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
+        if !is_image_ext(&ext) { continue; }
 
-        // Skip directories and non-image files
-        if entry.is_dir() {
-            continue;
-        }
-        let ext = name.rsplit('.').next().unwrap_or("");
-        if !is_image_ext(ext) {
-            continue;
-        }
-
-        let mut buf = Vec::with_capacity(entry.size() as usize);
-        entry
-            .read_to_end(&mut buf)
-            .map_err(|e| format!("Error reading ZIP entry data: {e}"))?;
-
-        entries.insert(name, buf);
+        files.push(FileEntry {
+            name: name.clone(),
+            path: format!("{}|{}", archive_path, name),
+            ext: ext.to_uppercase(),
+            date: "".to_string(),
+            is_dir: false,
+        });
     }
+    
+    files.sort_by(|a, b| natord::compare(&a.name, &b.name));
+    Ok(files)
+}
 
-    Ok(entries)
+fn extract_zip_entry(archive_path: &str, entry_name: &str) -> Result<Vec<u8>, String> {
+    let file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid ZIP archive: {e}"))?;
+    
+    let mut entry = archive.by_name(entry_name).map_err(|e| format!("Cannot find ZIP entry {}: {}", entry_name, e))?;
+    let mut buf = Vec::with_capacity(entry.size() as usize);
+    std::io::Read::read_to_end(&mut entry, &mut buf).map_err(|e| format!("Error reading entry: {e}"))?;
+    Ok(buf)
 }
 
 // ── RAR reading ──────────────────────────────────────────────────────────────
 
-fn read_rar_entries(archive_path: &str) -> Result<HashMap<String, Vec<u8>>, String> {
-    let mut entries = HashMap::new();
-
+fn list_rar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
     let archive = unrar::Archive::new(archive_path)
         .open_for_processing()
         .map_err(|e| format!("Cannot open RAR archive: {e}"))?;
 
     let mut iter = archive;
+    let mut files = Vec::new();
     loop {
-        let result = iter.read_header();
-        match result {
+        match iter.read_header() {
             Ok(Some(header)) => {
                 let entry = header.entry();
                 let name = entry.filename.to_string_lossy().to_string();
-                let is_file = !entry.is_directory();
-
-                if is_file {
-                    let ext = name.rsplit('.').next().unwrap_or("");
-                    if is_image_ext(ext) {
-                        // Extract to memory
-                        let (data, next) = header
-                            .read()
-                            .map_err(|e| format!("Error reading RAR entry: {e}"))?;
-                        entries.insert(name, data);
-                        iter = next;
-                        continue;
+                if !entry.is_directory() {
+                    let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
+                    if is_image_ext(&ext) {
+                        files.push(FileEntry {
+                            name: name.clone(),
+                            path: format!("{}|{}", archive_path, name),
+                            ext: ext.to_uppercase(),
+                            date: "".to_string(),
+                            is_dir: false,
+                        });
                     }
                 }
-
-                // Skip this entry
-                iter = header
-                    .skip()
-                    .map_err(|e| format!("Error skipping RAR entry: {e}"))?;
+                iter = header.skip().map_err(|e| e.to_string())?;
             }
             Ok(None) => break,
             Err(e) => return Err(format!("Error iterating RAR archive: {e}")),
         }
     }
+    files.sort_by(|a, b| natord::compare(&a.name, &b.name));
+    Ok(files)
+}
 
-    Ok(entries)
+fn extract_rar_to_temp(archive_path: String, temp_dir: PathBuf) {
+    if let Ok(archive) = unrar::Archive::new(&archive_path).open_for_processing() {
+        let mut iter = archive;
+        loop {
+            match iter.read_header() {
+                Ok(Some(header)) => {
+                    let entry = header.entry();
+                    let name = entry.filename.to_string_lossy().to_string();
+                    if !entry.is_directory() {
+                        let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
+                        if is_image_ext(&ext) {
+                            if let Ok((data, next)) = header.read() {
+                                let safe_name = name.replace('\\', "/");
+                                let out_path = temp_dir.join(&safe_name);
+                                if let Some(parent) = out_path.parent() {
+                                    fs::create_dir_all(parent).ok();
+                                }
+                                fs::write(out_path, data).ok();
+                                iter = next;
+                                continue;
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    if let Ok(next) = header.skip() {
+                        iter = next;
+                    } else {
+                        break;
+                    }
+                }
+                Ok(None) => break,
+                Err(_) => break,
+            }
+        }
+    }
 }
 
 // ── Tauri commands ───────────────────────────────────────────────────────────
@@ -556,52 +580,90 @@ fn read_directory(path: &str, show_hidden: Option<bool>) -> Result<DirectoryRead
 }
 
 #[tauri::command]
-fn read_archive(
+fn list_archive(
     archive_path: &str,
     state: tauri::State<'_, Mutex<ArchiveCache>>,
 ) -> Result<ArchiveReadResult, String> {
-    let mut cache = state.lock().map_err(|e| format!("Lock error: {e}"))?;
+    let mut cache = state.lock().map_err(|e| e.to_string())?;
 
-    // Load the archive into cache if not already loaded
-    if !cache.has_archive(archive_path) {
-        cache.clear(); // Only cache one archive at a time to limit memory
+    if cache.active_path.as_deref() != Some(archive_path) {
+        cache.active_path = Some(archive_path.to_string());
+        cache.zip_entries.clear();
+        cache.zip_lru.clear();
+        
+        // Cleanup old rar temp dir if exists
+        if let Some(old_dir) = &cache.rar_temp_dir {
+            let _ = fs::remove_dir_all(old_dir);
+        }
+        cache.rar_temp_dir = None;
 
         let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
-        let entries = match ext.as_str() {
-            "zip" | "cbz" => read_zip_entries(archive_path)?,
-            "rar" | "cbr" => read_rar_entries(archive_path)?,
-            _ => return Err(format!("Unsupported archive format: {ext}")),
-        };
-
-        cache.insert_archive(archive_path.to_string(), entries);
+        if ext == "rar" || ext == "cbr" {
+            let hash = format!("{:x}", md5::compute(archive_path));
+            let temp_dir = std::env::temp_dir().join("QuiviT").join(hash);
+            fs::create_dir_all(&temp_dir).ok();
+            cache.rar_temp_dir = Some(temp_dir.clone());
+            
+            // Spawn background extractor
+            let archive_path_clone = archive_path.to_string();
+            std::thread::spawn(move || {
+                extract_rar_to_temp(archive_path_clone, temp_dir);
+            });
+        }
     }
 
-    // Build the sorted file list from cached entries
-    let entry_map = cache.entries.get(archive_path).unwrap();
-    let mut files: Vec<FileEntry> = entry_map
-        .keys()
-        .map(|name| {
-            let ext = name
-                .rsplit('.')
-                .next()
-                .unwrap_or("")
-                .to_uppercase();
-            FileEntry {
-                name: name.clone(),
-                path: format!("{}|{}", archive_path, name), // pipe-separated for protocol
-                ext,
-                date: "".to_string(),
-                is_dir: false,
-            }
-        })
-        .collect();
-
-    files.sort_by(|a, b| natord::compare(&a.name, &b.name));
+    let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
+    let files = match ext.as_str() {
+        "zip" | "cbz" => list_zip_entries(archive_path)?,
+        "rar" | "cbr" => list_rar_entries(archive_path)?,
+        _ => return Err(format!("Unsupported archive format: {ext}")),
+    };
 
     Ok(ArchiveReadResult {
         files,
         archive_path: archive_path.to_string(),
     })
+}
+
+#[tauri::command(async)]
+fn prefetch_archive_entries(
+    archive_path: String,
+    entries: Vec<String>,
+    state: tauri::State<'_, Mutex<ArchiveCache>>,
+) -> Result<(), String> {
+    let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
+    if ext != "zip" && ext != "cbz" {
+        return Ok(());
+    }
+
+    for entry_name in entries {
+        // Skip if already in cache
+        {
+            let cache = state.lock().unwrap();
+            if cache.active_path.as_deref() != Some(archive_path.as_str()) {
+                break; // archive changed
+            }
+            if cache.zip_entries.contains_key(&entry_name) {
+                continue;
+            }
+        }
+
+        if let Ok(data) = extract_zip_entry(&archive_path, &entry_name) {
+            let mut cache = state.lock().unwrap();
+            if cache.active_path.as_deref() == Some(archive_path.as_str()) && !cache.zip_entries.contains_key(&entry_name) {
+                cache.zip_capacity = 20;
+                if cache.zip_lru.len() >= cache.zip_capacity {
+                    if let Some(oldest) = cache.zip_lru.pop_front() {
+                        cache.zip_entries.remove(&oldest);
+                    }
+                }
+                cache.zip_entries.insert(entry_name.clone(), data);
+                cache.zip_lru.push_back(entry_name);
+            }
+        }
+    }
+    
+    Ok(())
 }
 
 #[tauri::command]
@@ -936,7 +998,8 @@ pub fn run() {
         .manage(Mutex::new(WatcherState::new()))
         .invoke_handler(tauri::generate_handler![
             read_directory,
-            read_archive,
+            list_archive,
+            prefetch_archive_entries,
             open_parent,
             open_sibling,
             open_sibling_container,
@@ -996,22 +1059,81 @@ pub fn run() {
             // URL-decode the entry name (handles %20, etc.)
             let entry_name = urlencoding_decode(path_parts[1]);
 
-            let state = ctx.app_handle().state::<Mutex<ArchiveCache>>();
-            let cache = state.lock().unwrap();
+            let mut data = None;
+            let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
+            
+            {
+                let state = ctx.app_handle().state::<Mutex<ArchiveCache>>();
+                let cache = state.lock().unwrap();
+                
+                if ext == "zip" || ext == "cbz" {
+                    if let Some(cached_data) = cache.zip_entries.get(&entry_name) {
+                        data = Some(cached_data.clone());
+                    }
+                } else if ext == "rar" || ext == "cbr" {
+                    if let Some(temp_dir) = &cache.rar_temp_dir {
+                        let safe_name = entry_name.replace('\\', "/");
+                        let file_path = temp_dir.join(&safe_name);
+                        if let Ok(bytes) = fs::read(&file_path) {
+                            data = Some(bytes);
+                        }
+                    }
+                }
+            }
+            
+            if data.is_none() {
+                if ext == "zip" || ext == "cbz" {
+                    if let Ok(extracted) = extract_zip_entry(&archive_path, &entry_name) {
+                        data = Some(extracted.clone());
+                        let state = ctx.app_handle().state::<Mutex<ArchiveCache>>();
+                        let mut cache = state.lock().unwrap();
+                        if cache.active_path.as_deref() == Some(archive_path.as_str()) {
+                            cache.zip_capacity = 20;
+                            if cache.zip_lru.len() >= cache.zip_capacity {
+                                if let Some(oldest) = cache.zip_lru.pop_front() {
+                                    cache.zip_entries.remove(&oldest);
+                                }
+                            }
+                            cache.zip_entries.insert(entry_name.clone(), extracted);
+                            cache.zip_lru.push_back(entry_name.clone());
+                        }
+                    }
+                } else if ext == "rar" || ext == "cbr" {
+                    let temp_dir_opt = {
+                        let app_handle = ctx.app_handle();
+                        let state = app_handle.state::<Mutex<ArchiveCache>>();
+                        let opt = state.lock().unwrap().rar_temp_dir.clone();
+                        opt
+                    };
+                    if let Some(temp_dir) = temp_dir_opt {
+                        let safe_name = entry_name.replace('\\', "/");
+                        let file_path = temp_dir.join(&safe_name);
+                        
+                        // Poll for up to 3000ms
+                        for _ in 0..30 {
+                            if let Ok(bytes) = fs::read(&file_path) {
+                                data = Some(bytes);
+                                break;
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                        }
+                    }
+                }
+            }
 
-            if let Some(data) = cache.get(&archive_path, &entry_name) {
+            if let Some(d) = data {
                 let mime = guess_mime(&entry_name);
                 let response = Response::builder()
                     .status(200)
                     .header("Content-Type", mime)
                     .header("Access-Control-Allow-Origin", "*")
-                    .body(data.clone())
+                    .body(d)
                     .unwrap();
                 responder.respond(response);
             } else {
                 let response = Response::builder()
                     .status(404)
-                    .body(b"Entry not found in archive cache".to_vec())
+                    .body(b"Entry not found or failed to extract".to_vec())
                     .unwrap();
                 responder.respond(response);
             }

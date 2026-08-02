@@ -124,6 +124,10 @@ async function _selectEntry(index, activate = false) {
     }
   }
 
+  if (_state.mode === 'archive') {
+    FsUtils.prefetchAhead(_state.archivePath, index, 1);
+  }
+
   _notify();
 }
 

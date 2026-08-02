@@ -208,7 +208,7 @@ export const FsUtils = {
 
     try {
       if (SUPPORTED_ARCHIVES.has(ext)) {
-        const result = await invoke('read_archive', { archivePath: path });
+        const result = await invoke('list_archive', { archivePath: path });
         let files = this.buildArchiveList(result);
         const prefs = DirectoryPrefs.getSortPrefs(result.archive_path);
         files = DirectoryPrefs.applySort(files, prefs.col, prefs.desc);
@@ -242,6 +242,10 @@ export const FsUtils = {
           src: this.isImageEntry(files[index]) ? this.buildArchiveSrc(result.archive_path, files[index].name) : ''
         });
         this.persistLastOpened(result.archive_path);
+        
+        // Trigger prefetch for initial load
+        this.prefetchAhead(result.archive_path, index, 1);
+        
         return;
       }
 
@@ -432,6 +436,36 @@ export const FsUtils = {
       } catch (err) {
         console.error('[Core] refresh error:', err);
       }
+    }
+  },
+
+  prefetchAhead(archivePath, currentIndex, direction = 1) {
+    const state = Core.getState();
+    const files = state.list;
+    if (!files || files.length === 0 || state.mode !== 'archive' || state.archivePath !== archivePath) return;
+
+    const indicesToPrefetch = [];
+    
+    // 7 ahead
+    for (let i = 1; i <= 7; i++) {
+      let idx = currentIndex + (direction * i);
+      if (idx >= 0 && idx < files.length && this.isImageEntry(files[idx])) {
+        indicesToPrefetch.push(files[idx].name);
+      }
+    }
+    // 3 behind
+    for (let i = 1; i <= 3; i++) {
+      let idx = currentIndex - (direction * i);
+      if (idx >= 0 && idx < files.length && this.isImageEntry(files[idx])) {
+        indicesToPrefetch.push(files[idx].name);
+      }
+    }
+
+    if (indicesToPrefetch.length > 0) {
+      invoke('prefetch_archive_entries', { 
+        archivePath: archivePath, 
+        entries: indicesToPrefetch 
+      }).catch(err => console.warn('[Prefetch] Error:', err));
     }
   }
 };
