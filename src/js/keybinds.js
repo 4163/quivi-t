@@ -18,6 +18,7 @@ export const DEFAULT_KEYBINDS = {
   'cmd-toggle-menubar': '2',
   'cmd-toggle-statusbar': '3',
   'cmd-fullscreen': ['4', 'Alt+Enter'],
+  'cmd-toggle-transparent': [],
   'cmd-options': '5',
   'cmd-fit-width': 'q',
   'cmd-fit-height': 'e',
@@ -55,6 +56,9 @@ export function mergeConfig(loaded) {
     frontend_data: {
       ...fd,
       continue_last: fd.continue_last !== false,
+      remember_last_image: fd.remember_last_image === true,
+      single_instance: fd.single_instance !== false,
+      transparent_bg: fd.transparent_bg === true,
       start_dir: fd.start_dir || '',
       fit_mode: fd.fit_mode || DEFAULT_FIT_MODE,
       scaling_mode: fd.scaling_mode || DEFAULT_SCALING_MODE,

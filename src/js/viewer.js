@@ -75,12 +75,24 @@ function _scheduleTransform() {
  * Apply the current fit mode.
  */
 function applyFitMode() {
-  if (!_naturalW || !_naturalH) return;
-
   const vp = document.getElementById('viewport');
   const vw = vp.clientWidth;
   const vh = vp.clientHeight;
-  const padding = 0; // The screenshot didn't seem to have much padding, but we can adjust later.
+  
+  // For SVGs with percentage-based dimensions (e.g. width="100%"), naturalWidth/Height is 0.
+  // In that case img.clientWidth reflects the current layout size; dividing by the
+  // previous _scale recovers the true intrinsic size so _visualSize() and _clampPan()
+  // compute correct bounds.  Fall back to viewport size if scale is 0 or client dims unknown.
+  if (img.naturalWidth > 0) {
+    _naturalW = img.naturalWidth;
+    _naturalH = img.naturalHeight;
+  } else {
+    const prevScale = _scale || 1;
+    _naturalW = img.clientWidth  ? img.clientWidth  / prevScale : vw;
+    _naturalH = img.clientHeight ? img.clientHeight / prevScale : vh;
+  }
+
+  const padding = 0;
 
   const scaleX = (vw - padding * 2) / _naturalW;
   const scaleY = (vh - padding * 2) / _naturalH;
@@ -223,8 +235,16 @@ function setScaling(mode) {
 // --- Image load ---------------------------------------------------------------
 
 img.addEventListener('load', () => {
-  _naturalW = img.naturalWidth;
-  _naturalH = img.naturalHeight;
+  if (img.naturalWidth > 0) {
+    _naturalW = img.naturalWidth;
+    _naturalH = img.naturalHeight;
+  } else {
+    // SVG with percentage dimensions — reset scale to 1 first so clientWidth
+    // equals the intrinsic size, then applyFitMode will compute the correct scale.
+    _scale = 1;
+    _naturalW = img.clientWidth  || 1000;
+    _naturalH = img.clientHeight || 1000;
+  }
   _applyScaling();
   
   if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
@@ -282,10 +302,10 @@ export const Viewer = {
   flipVertical,
   setScaling,
   setZoom(exactScale) {
-    _scale = exactScale;
+    _scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, exactScale));
     _tx = 0;
     _ty = 0;
-    _ty = 0;
+    _currentFitMode = 'none';
     _scheduleTransform();
   }
 };

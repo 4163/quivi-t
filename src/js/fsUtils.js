@@ -44,7 +44,15 @@ export const FsUtils = {
     return `${base}/archive/${encoded}/${encodeURIComponent(entryName)}`;
   },
 
-  buildFileSrc(filePath) {
+  async buildFileSrc(filePath) {
+    if (filePath.toLowerCase().endsWith('.ico') && window.__TAURI__) {
+      try {
+        return await invoke('get_ico_frames', { path: filePath });
+      } catch (e) {
+        console.error('Failed to extract ICO frames:', e);
+        return convertFileSrc(filePath);
+      }
+    }
     return convertFileSrc(filePath);
   },
 
@@ -107,7 +115,7 @@ export const FsUtils = {
     Core.persistConfig();
   },
 
-  applyDirectoryResult(result, options = {}) {
+  async applyDirectoryResult(result, options = {}) {
     let files = this.buildDirectoryList(result);
     const prefs = DirectoryPrefs.getSortPrefs(result.directory);
     files = DirectoryPrefs.applySort(files, prefs.col, prefs.desc);
@@ -118,8 +126,20 @@ export const FsUtils = {
       const found = files.findIndex(f => f.name === state.filename);
       if (found !== -1) index = found;
     } else {
-      const offset = result.parent_directory ? 1 : 0;
-      const preferredIndex = Math.min(files.length - 1, Math.max(0, result.initial_index + offset));
+      const fd = state.config?.frontend_data || {};
+      let preferredIndex = -1;
+      
+      // Only restore last active image if we're NOT forced to a specific initial position
+      // (e.g. when returning from an archive, we must land on the archive entry, not a stale image)
+      if (!options.preferInitial && fd.remember_last_image && fd.last_active_images && fd.last_active_images[result.directory]) {
+        const targetPath = fd.last_active_images[result.directory];
+        preferredIndex = files.findIndex(f => f.path === targetPath);
+      }
+      
+      if (preferredIndex === -1) {
+        const offset = result.parent_directory ? 1 : 0;
+        preferredIndex = Math.min(files.length - 1, Math.max(0, result.initial_index + offset));
+      }
       index = options.preferInitial ? preferredIndex : this.firstImageIndex(files, preferredIndex);
     }
 
@@ -133,7 +153,7 @@ export const FsUtils = {
       parentDirectory: result.parent_directory || '',
       archivePath: '',
       filename: files[index]?.name || '',
-      src: this.isImageEntry(files[index]) ? this.buildFileSrc(files[index].path) : ''
+      src: this.isImageEntry(files[index]) ? await this.buildFileSrc(files[index].path) : ''
     });
 
     if (window.__TAURI__) {
@@ -177,7 +197,16 @@ export const FsUtils = {
         const state = Core.getState();
         this.revokeIfObjectURL(state.src);
 
-        const index = this.firstImageIndex(files, 1);
+        let index = 1;
+        const fd = state.config?.frontend_data || {};
+        let preferredIndex = -1;
+        
+        if (fd.remember_last_image && fd.last_active_images && fd.last_active_images[result.archive_path]) {
+          const targetPath = fd.last_active_images[result.archive_path];
+          preferredIndex = files.findIndex(f => f.path === targetPath);
+        }
+        
+        index = preferredIndex !== -1 ? preferredIndex : this.firstImageIndex(files, 1);
         
         Core.setState({
           mode: 'archive',

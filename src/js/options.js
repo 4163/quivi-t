@@ -87,6 +87,8 @@ async function init() {
     // Bind data to inputs
     document.getElementById('opt-portable-mode').checked = config.portable_mode;
     document.getElementById('opt-continue-last').checked = config.frontend_data.continue_last !== false;
+    document.getElementById('opt-remember-last-image').checked = config.frontend_data.remember_last_image === true;
+    document.getElementById('opt-single-instance').checked = config.frontend_data.single_instance !== false;
     document.getElementById('opt-show-hidden').checked = config.frontend_data.show_hidden === true;
     document.getElementById('opt-hide-chrome-fullscreen').checked = config.frontend_data.hide_chrome_on_fullscreen !== false;
     document.getElementById('opt-start-dir').value = config.frontend_data.start_dir || '';
@@ -261,6 +263,8 @@ document.getElementById('opt-custom-css').addEventListener('keydown', (e) => {
 document.getElementById('btn-save-options').addEventListener('click', async () => {
   config.portable_mode = document.getElementById('opt-portable-mode').checked;
   config.frontend_data.continue_last = document.getElementById('opt-continue-last').checked;
+  config.frontend_data.remember_last_image = document.getElementById('opt-remember-last-image').checked;
+  config.frontend_data.single_instance = document.getElementById('opt-single-instance').checked;
   config.frontend_data.show_hidden = document.getElementById('opt-show-hidden').checked;
   config.frontend_data.hide_chrome_on_fullscreen = document.getElementById('opt-hide-chrome-fullscreen').checked;
   config.frontend_data.start_dir = document.getElementById('opt-start-dir').value;
