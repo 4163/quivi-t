@@ -192,6 +192,56 @@ This file tracks items that are fully implemented and verified, separate from th
 - Blocked removal of the final uncontested binding for the Menu Bar Toggle to prevent UI softlocks. (If the last binding is shared with another action, removal is permitted).
 - Fixed a bug where saving or resetting keybinds unintentionally mutated the underlying `DEFAULT_KEYBINDS` by explicitly wrapping assignments in a deep copy (`JSON.parse(JSON.stringify())`).
 
+### Managed-Config Favorites
+
+- Moved favorites out of WebView2 `localStorage` into managed config (`frontend_data.favorites` and `frontend_data.favorites_collapsed`) so they persist through the normal config/portable machinery.
+- Added a one-time migration that imports legacy `quivit-favorites` / `quivit-favorites-collapsed` `localStorage` keys into config and removes them.
+- Collapsed/expanded favorites state is persisted and restored; empty lists auto-collapse and persist that state.
+- Favorite items now support single-click highlight and double-click open for folders/archives, with the current folder/archive taking priority over the selected entry so a favorited location stays highlighted.
+
+### Split Config Storage
+
+- Roaming config is now split into separate files: `quivit_config.json` (preferences), `quivit_state.json` (last-opened/remembered-image state), `quivit_directory_sort.json` (per-directory sort), and `quivit_favorites.json` (favorites).
+- Portable mode still writes a single self-contained `quivit_config.json` beside the executable; disabling portable mode removes portable leftovers.
+- Legacy single-file config layouts load unchanged and are re-split on next save.
+
+### Last-Active-Image Rewrite
+
+- Replaced the per-folder `last_active_images` map with a single `last_active_image = { container, path }` pair.
+- Restoration now runs only at program startup (via `restoreLastImage` from `Core.init()`), never during ordinary navigation, and always wins over the first-image/position logic when the container matches.
+- The legacy `last_active_images` map key is dropped on config load.
+
+### Open-First-Image Option
+
+- Added the `open_first_image` config option (default OFF) with an Options checkbox "Open first image automatically".
+- When ON, entering a directory or archive highlights the first image; when OFF, the target entry is highlighted instead.
+
+### Sort-Aware Sibling Navigation
+
+- Rewrote `openSibling` (`Ctrl+X`/`Ctrl+Z` next/previous directory or archive) to compute siblings client-side instead of via the Rust `open_sibling_container` command.
+- Sibling order now follows the parent directory's current sort prefs (column + direction) through the same `DirectoryPrefs.applySort` used for the visible listing, so traversal matches the file panel order.
+- Drive-root stepping (wrapping between physical drives) is retained, and `formatEntry` is applied so date sorting works.
+
+### Archive Parent Navigation Fixes
+
+- `..`/Backspace from a deleted or moved archive now falls back to the containing folder (via the new `parentOf` helper), then to the drives list if unreachable.
+- `..` from an archive that is not listed (e.g. hidden with "show hidden" off) falls back to the first image, else the first item.
+
+### Static Config-Folder Pointers
+
+- Options now shows static "Global config folder (Roaming)" (`%APPDATA%\com.x4163.quivit`) and "Local config folder (portable)" (executable directory) pointers; they no longer track the "Save config data locally" state.
+- Added backend commands `get_local_data_dir` / `open_local_data_dir` alongside the existing global folder commands.
+
+### Toggle Favorite Keybind
+
+- Added the `cmd-toggle-favorite` action (unbound by default) under the File Operations category in the Options keybind UI.
+- `toggleFavoriteCurrent()` toggles the current folder/archive/image favorite and expands the favorites section when adding; wired through `dispatchAction` in `main.js`.
+
+### Keybind Canonicalization
+
+- Added `formatKeyName()` / `normalizeCombo()` in `shortcuts.js` with a `SPECIAL_KEY_MAP` so named keys are captured and stored with canonical casing (`Backspace`, `ArrowLeft`, `Delete`, `F5`, ...) instead of lowercase forms.
+- `mergeConfig` normalizes all default and user keybinds on load, so previously stored lowercase combos display and persist consistently.
+
 ## Verified Commands Used
 
 ```powershell

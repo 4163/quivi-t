@@ -33,7 +33,7 @@ QuiviT/
 │  └─ js/
 │     ├─ core.js              # Central app state and config management
 │     ├─ directoryPrefs.js    # Persistent per-directory grouping and sorting
-│     ├─ filePanel.js         # File list rendering, sorting UI, resizing
+│     ├─ filePanel.js         # File list rendering, sorting UI, resizing, favorites
 │     ├─ fsUtils.js           # Filesystem and Rust backend interaction
 │     ├─ keyboardNav.js       # Accessible keyboard navigation (Tab/Home/End)
 │     ├─ keybinds.js          # Default shortcuts and config merge helpers
@@ -60,7 +60,7 @@ QuiviT/
 
 - Opens image files, archive files, and directories.
 - Browses image siblings with keyboard or mouse.
-- Seamlessly jumps to previous/next folders, archives, and root drives.
+- Seamlessly jumps to previous/next directories, archives, and root drives, following the active sort order.
 - Lists folders, images, and supported archives in the file panel.
 - Supports parent-directory navigation through '`..`'.
 - Reads ZIP/CBZ and RAR/CBR archives directly, treating them as folders.
@@ -70,8 +70,9 @@ QuiviT/
 - Provides a display-only breadcrumb for the current directory or archive.
 - Displays multi-frame ICO files as a horizontal spritesheet.
 - Toggleable opaque backdrop for transparent images.
-- Favorites system for quick access to frequently visited folders and files.
+- Favorites system for quick access to frequently visited folders and files, persisted through the config (not browser storage).
 - Single-instance handoff for routing external file opens into an active session.
+- Optionally auto-opens the first image when entering a directory, or restores the last active image at startup.
 
 ## Supported Formats
 
@@ -145,10 +146,19 @@ When behavior starts to grow inside `main.js`, prefer moving the domain logic in
 
 Normal configuration is saved through Tauri's app config directory.
 
-On this Windows app identifier, the global config file is normally:
+On this Windows app identifier, the global config directory is normally:
 
 ```text
-C:\Users\<user>\AppData\Roaming\com.x4163.quivit\quivit_config.json
+C:\Users\<user>\AppData\Roaming\com.x4163.quivit
+```
+
+In normal (roaming) mode QuiviT splits its data across four files in that directory:
+
+```text
+quivit_config.json          # user preferences (keybinds, fit/scaling, options)
+quivit_state.json           # runtime state (last opened location, remembered image)
+quivit_directory_sort.json  # per-directory sort column/direction
+quivit_favorites.json       # favorited folders and files
 ```
 
 Portable mode is enabled when the app finds either of these files next to the executable:
@@ -158,7 +168,7 @@ Portable mode is enabled when the app finds either of these files next to the ex
 quivit_config.json
 ```
 
-When **Save config data locally** is enabled in Options, QuiviT writes:
+When **Save config data locally** is enabled in Options, QuiviT writes a single self-contained file:
 
 ```text
 <executable-directory>\.portable
@@ -191,6 +201,7 @@ The scaling method defaults to `DEFAULT_SCALING_MODE` (`bicubic`) and changes ma
 QuiviT's shortcut engine fully supports:
 - **Simultaneous Multi-Key Combinations:** You can bind arbitrary keys without standard modifiers (e.g., `A + B`). The capture engine tracks all keys held and finalizes the binding on release.
 - **Native Mouse Input:** Mouse buttons (`MouseLeft`, `MouseMiddle`, `MouseRight`, `MouseBack`, `MouseForward`) are bindable individually or combined with modifiers (e.g., `Shift + MouseBack`).
+- **Canonical Named Keys:** Captured combos use canonical casing (`Backspace`, `ArrowLeft`, `F5`, ...) matching the defaults, and stored bindings are normalized on load.
 - **Conflict Highlighting:** The options menu visually highlights keybind conflicts by matching them with dynamically generated hues.
 
 Current defaults include:
@@ -205,8 +216,9 @@ Current defaults include:
 Backspace                                   Parent directory
 Ctrl+O                                      Open directory...
 Ctrl+Shift+O                                Open file/archive...
-Ctrl+X                                      Open next folder/archive
-Ctrl+Z                                      Open previous folder/archive
+Toggle favorite                             (unbound by default)
+Ctrl+X                                      Open next directory/archive
+Ctrl+Z                                      Open previous directory/archive
 Shift+D / Shift+Right / MouseForward        Next item
 Shift+S / Shift+Down                        Next item
 Shift+A / Shift+Left / MouseBack            Previous item
@@ -238,7 +250,7 @@ The Rust backend provides Tauri commands for:
 - Opening parent and sibling directories.
 - Opening sibling folders/archives.
 - Loading and saving config.
-- Resolving and opening the active config directory.
+- Resolving and opening the global and local config directories.
 - Opening the Options window.
 
 The Options window command is async because creating a Tauri webview window from a synchronous command can deadlock on Windows.
