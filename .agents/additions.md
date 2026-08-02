@@ -121,6 +121,29 @@ New modules may be warranted:
 - Fail silently when offline or rate-limited; show an unobtrusive indicator/link when an update is available.
 - Verify: with no network the app behaves normally; with an update available the indicator appears.
 
+### 13. File Associations (Options > File Associations)
+
+**Goal.** Register image/archive extensions so they open with QuiviT. Each registered format should pick up the per-format icon from the app's icon set; formats without a dedicated icon fall back to the default QuiviT icon. Registration also unlocks real single-instance testing: double-clicking an associated file launches the exe with the file path as an argument, which the single-instance plugin forwards to the running instance.
+
+**Notes on icon files.** The per-format icons exist as identical copies in two places:
+- `icons/` (repo root) — the icon sources.
+- `src/assets/icons/` — the copies the file list already uses (referenced by `filePanel.js` as `/assets/icons/<name>.ico`).
+
+Current format icons present: `apng.ico`, `cbz.ico`, `gif.ico`, `svg.ico`, `webp.ico` (with `cbr` mapping to `cbz.ico` in `filePanel.js`). Formats like `jpg`, `jpeg`, `png`, `bmp`, `ico`, `avif`, `zip`, `rar` have no dedicated icon yet and should use a default/generic icon.
+
+**Requirements (implementation details to be worked out by codex/antigravity):**
+
+- **13.1 Backend (Rust):** register/unregister per-user file associations on Windows (no admin), with `DefaultIcon` and open-with command per extension; track which extensions QuiviT itself registered so unregister only removes QuiviT-owned keys. Windows-guarded; non-Windows returns a friendly "not supported" message. Shared format catalog consolidating the existing `SUPPORTED_IMAGES` / `SUPPORTED_ARCHIVES` lists (in `lib.rs`), each entry carrying ext, display name, optional icon file name, and category. Formats are NOT limited to the ones with icons.
+- **13.2 Options UI:** replace the stub `#tab-associations` with a format list grouped by Images / Archives — each row has a checkbox, a per-format icon preview (reuse the `/assets/icons/<name>.ico` pipeline from `filePanel.js`), and the extension/display name; plus "Select all", "Register selected", "Unregister selected", and a status line. On open, reflect actual registry state. Persist the enabled set in config so it survives restarts and is silently re-asserted on startup (so a moved exe path updates the command target).
+- **13.3 First-instance open-with handling:** the *second* instance path already works (single-instance callback → `single-instance-open` → `FsUtils.loadFile`). The *first* instance launched via "Open with" must also load its argument on startup.
+- **13.4 Icons:** Explorer renders `DefaultIcon`, which must point to a real on-disk icon file — the `.ico` files are currently embedded assets, not shipped loose. Decide how the icon files reach disk (and whether to trigger a shell refresh so Explorer updates its cache).
+- **13.5 Verification:**
+  - Cold start: double-click a registered `.webp`/`.png`/`.cbz` → QuiviT opens the file.
+  - Warm start: with an instance running, double-click another file → it opens in the existing window (tests the "Allow only one instance" option).
+  - Unregister: extensions return to their previous default program; no other apps' associations are touched.
+  - Formats without a dedicated icon still register and open correctly (default icon).
+  - Checkbox state reflects actual registry state on Options open.
+
 ## Verification Plan
 
 Run after each coherent implementation slice:
@@ -158,6 +181,7 @@ Runtime/manual verification:
 - Confirm keyboard panning is instant and spam-friendly across all four directions.
 - Confirm plain wheel pans and Ctrl+wheel zooms, with scroll actions remappable in Options.
 - Confirm the update indicator appears when a new GitHub release exists and stays silent offline.
+- Confirm file associations register/unregister in HKCU, Explorer icons reflect the per-format icons, and double-clicking an associated file opens it (cold start) or forwards to the running instance (warm start).
 
 ## User Verification Gates
 
@@ -176,6 +200,7 @@ Implement slowly in reviewable slices:
 11. Responsive keyboard panning.
 12. Scroll-wheel zoom vs pan behavior.
 13. Update availability indicator.
+14. File associations (Options tab, registry registration, cold/warm open-with, icons).
 
 After each slice:
 
