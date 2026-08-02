@@ -254,14 +254,14 @@ F                                           Auto fit
 The Rust backend provides Tauri commands for:
 
 - Reading directories.
-- **Listing archive headers instantly** (`list_archive`).
-- **Prefetching archive entries** (`prefetch_archive_entries`).
+- Listing archive headers instantly (`list_archive`).
+- Prefetching archive entries (`prefetch_archive_entries`).
 - Opening parent and sibling directories.
 - Opening sibling folders/archives.
 - Loading and saving config.
 - Resolving and opening the global and local config directories.
 - Opening the Options window.
-- **ICO frame extraction** (`get_ico_frames`).
+- ICO frame extraction (`get_ico_frames`).
 
 The Options window command is async because creating a Tauri webview window from a synchronous command can deadlock on Windows.
 
