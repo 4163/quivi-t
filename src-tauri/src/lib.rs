@@ -54,47 +54,87 @@ fn get_exe_dir() -> PathBuf {
         .to_path_buf()
 }
 
-fn get_config_path(app_handle: &tauri::AppHandle) -> PathBuf {
+fn is_portable() -> bool {
     let exe_dir = get_exe_dir();
-    let portable_flag = exe_dir.join(".portable");
-    let portable_config = exe_dir.join("quivit_config.json");
+    exe_dir.join(".portable").exists() || exe_dir.join("quivit_config.json").exists()
+}
 
-    if portable_flag.exists() || portable_config.exists() {
-        return portable_config;
-    }
-
-    let mut path = app_handle.path().app_config_dir().unwrap_or_default();
+fn roaming_dir(app_handle: &tauri::AppHandle) -> PathBuf {
+    let path = app_handle.path().app_config_dir().unwrap_or_default();
     fs::create_dir_all(&path).ok();
-    path.push("quivit_config.json");
     path
 }
 
-fn get_config_dir_path(app_handle: &tauri::AppHandle) -> PathBuf {
-    get_config_path(app_handle)
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_default()
+// ── Config split helpers ──────────────────────────────────────────────────────
+// Runtime state (last-opened location, remembered images), per-directory
+// sort prefs, and favorites are persisted as their own files so the roaming
+// config file only holds user preferences. Portable mode keeps a single
+// self-contained file.
+
+const STATE_KEYS: &[&str] = &["last_opened_path", "last_active_image"];
+const SORT_KEYS: &[&str] = &["directory_sort"];
+const FAVORITES_KEYS: &[&str] = &["favorites", "favorites_collapsed"];
+
+fn extract_keys(src: &mut JsonValue, keys: &[&str]) -> JsonValue {
+    let mut out = serde_json::Map::new();
+    if let Some(obj) = src.as_object_mut() {
+        for k in keys {
+            if let Some(v) = obj.remove(*k) {
+                out.insert(k.to_string(), v);
+            }
+        }
+    }
+    JsonValue::Object(out)
+}
+
+fn merge_keys(dst: &mut JsonValue, src: JsonValue) {
+    if let (Some(d), Some(s)) = (dst.as_object_mut(), src.as_object()) {
+        for (k, v) in s {
+            d.insert(k.clone(), v.clone());
+        }
+    }
+}
+
+fn read_json_file<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
+    let data = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
+fn merge_file_into(path: &Path, frontend_data: &mut JsonValue) {
+    if let Some(value) = read_json_file::<JsonValue>(path) {
+        merge_keys(frontend_data, value);
+    }
 }
 
 #[tauri::command]
 fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
-    let path = get_config_path(&app_handle);
-    if let Ok(data) = fs::read_to_string(&path) {
-        if let Ok(config) = serde_json::from_str(&data) {
-            return config;
-        }
+    if is_portable() {
+        return read_json_file(&get_exe_dir().join("quivit_config.json")).unwrap_or_default();
     }
-    AppConfig::default()
+
+    let dir = roaming_dir(&app_handle);
+    let mut config: AppConfig = read_json_file(&dir.join("quivit_config.json")).unwrap_or_default();
+    // New layout: state, directory-sort, and favorites live in their own files.
+    // Legacy layout (everything in quivit_config.json) loads unchanged.
+    merge_file_into(&dir.join("quivit_state.json"), &mut config.frontend_data);
+    merge_file_into(&dir.join("quivit_directory_sort.json"), &mut config.frontend_data);
+    merge_file_into(&dir.join("quivit_favorites.json"), &mut config.frontend_data);
+    config
 }
+
+// Static pointers shown in Options. The global config folder always points at
+// the roaming location (%APPDATA%\com.x4163.quivit); the local folder always
+// points beside the executable (the portable location). They do not track the
+// "Save config data locally" state.
 
 #[tauri::command]
 fn get_config_dir(app_handle: tauri::AppHandle) -> String {
-    get_config_dir_path(&app_handle).to_string_lossy().into_owned()
+    roaming_dir(&app_handle).to_string_lossy().into_owned()
 }
 
 #[tauri::command]
 fn open_config_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
-    let dir = get_config_dir_path(&app_handle);
+    let dir = roaming_dir(&app_handle);
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create config directory: {e}"))?;
     app_handle
         .opener()
@@ -103,23 +143,56 @@ fn open_config_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn save_config(app_handle: tauri::AppHandle, config: AppConfig) -> Result<(), String> {
+fn get_local_data_dir() -> String {
+    get_exe_dir().to_string_lossy().into_owned()
+}
+
+#[tauri::command]
+fn open_local_data_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let dir = get_exe_dir();
+    app_handle
+        .opener()
+        .open_path(dir.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|e| format!("Failed to open local data directory: {e}"))
+}
+
+#[tauri::command]
+fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Result<(), String> {
+    let exe_dir = get_exe_dir();
     if config.portable_mode {
-        let exe_dir = get_exe_dir();
+        // Single self-contained file beside the executable
         let _ = fs::write(exe_dir.join(".portable"), "");
-        let portable_config = exe_dir.join("quivit_config.json");
         let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-        fs::write(portable_config, data).map_err(|e| e.to_string())?;
+        fs::write(exe_dir.join("quivit_config.json"), data).map_err(|e| e.to_string())?;
     } else {
-        let exe_dir = get_exe_dir();
+        // Roaming: remove portable leftovers, then split into config/state/sort files
         let _ = fs::remove_file(exe_dir.join(".portable"));
         let _ = fs::remove_file(exe_dir.join("quivit_config.json"));
-        
-        let mut path = app_handle.path().app_config_dir().unwrap_or_default();
-        fs::create_dir_all(&path).ok();
-        path.push("quivit_config.json");
+
+        let mut fd = std::mem::take(&mut config.frontend_data);
+        let state = extract_keys(&mut fd, STATE_KEYS);
+        let sort = extract_keys(&mut fd, SORT_KEYS);
+        let favorites = extract_keys(&mut fd, FAVORITES_KEYS);
+        config.frontend_data = fd;
+
+        let dir = roaming_dir(&app_handle);
         let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-        fs::write(path, data).map_err(|e| e.to_string())?;
+        fs::write(dir.join("quivit_config.json"), data).map_err(|e| e.to_string())?;
+        fs::write(
+            dir.join("quivit_state.json"),
+            serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        fs::write(
+            dir.join("quivit_directory_sort.json"),
+            serde_json::to_string_pretty(&sort).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        fs::write(
+            dir.join("quivit_favorites.json"),
+            serde_json::to_string_pretty(&favorites).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -848,6 +921,8 @@ pub fn run() {
             load_config,
             get_config_dir,
             open_config_dir,
+            get_local_data_dir,
+            open_local_data_dir,
             save_config,
             open_options,
             get_drives,

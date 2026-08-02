@@ -117,12 +117,9 @@ async function _selectEntry(index, activate = false) {
   _state.src = newSrc;
 
   if (_state.config?.frontend_data?.remember_last_image && _state.src !== '') {
-    if (!_state.config.frontend_data.last_active_images) {
-      _state.config.frontend_data.last_active_images = {};
-    }
     const container = _state.mode === 'archive' ? _state.archivePath : _state.directory;
     if (container) {
-      _state.config.frontend_data.last_active_images[container] = file.path;
+      _state.config.frontend_data.last_active_image = { container, path: file.path };
       _persistConfig();
     }
   }
@@ -230,6 +227,11 @@ export const Core = {
       const oldShowHidden = _state.config?.frontend_data?.show_hidden;
       _state.config = mergeConfig(loaded);
       
+      // Drop the legacy per-folder map in favor of a single last-active pair
+      if (_state.config.frontend_data.last_active_images !== undefined) {
+        delete _state.config.frontend_data.last_active_images;
+      }
+      
       _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
       _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
       
@@ -251,6 +253,7 @@ export const Core = {
       }
 
       _notify();
+      window.dispatchEvent(new CustomEvent('quivit-config-loaded'));
     } catch (err) {
       console.error('[Core] Failed to load config:', err);
     }
@@ -264,7 +267,6 @@ export const Core = {
       _state.config = mergeConfig({ portable_mode, frontend_data });
       if (_state.config.frontend_data.continue_last === false) {
         delete _state.config.frontend_data.last_opened_path;
-        delete _state.config.frontend_data.last_opened_dir;
       }
       _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
       _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
@@ -285,8 +287,8 @@ export const Core = {
     const fd = _state.config.frontend_data || {};
     let startPath = '';
     
-    if (fd.continue_last !== false && (fd.last_opened_path || fd.last_opened_dir)) {
-      startPath = fd.last_opened_path || fd.last_opened_dir;
+    if (fd.continue_last !== false && fd.last_opened_path) {
+      startPath = fd.last_opened_path;
     } else if (fd.start_dir) {
       startPath = fd.start_dir;
     } else {
@@ -294,7 +296,7 @@ export const Core = {
     }
     
     if (startPath && window.__TAURI__) {
-      FsUtils.loadFile(startPath);
+      FsUtils.loadFile(startPath, { restoreLastImage: true });
     }
   }
 };

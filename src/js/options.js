@@ -10,6 +10,7 @@ const open = tauri.dialog?.open?.bind(tauri.dialog);
 let config = mergeConfig({});
 const statusEl = document.getElementById('options-status');
 const configDirLabel = document.getElementById('config-dir-label');
+const localDataDirLabel = document.getElementById('local-data-dir-label');
 let keybindUiInstance = null;
 
 // Emergency CSS Reset (Ctrl+Shift+Alt+C)
@@ -83,11 +84,13 @@ async function init() {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
     config = mergeConfig(await invoke('load_config'));
     if (configDirLabel) configDirLabel.textContent = await invoke('get_config_dir');
+    if (localDataDirLabel) localDataDirLabel.textContent = await invoke('get_local_data_dir');
     
     // Bind data to inputs
     document.getElementById('opt-portable-mode').checked = config.portable_mode;
     document.getElementById('opt-continue-last').checked = config.frontend_data.continue_last !== false;
     document.getElementById('opt-remember-last-image').checked = config.frontend_data.remember_last_image === true;
+    document.getElementById('opt-open-first-image').checked = config.frontend_data.open_first_image === true;
     document.getElementById('opt-single-instance').checked = config.frontend_data.single_instance !== false;
     document.getElementById('opt-show-hidden').checked = config.frontend_data.show_hidden === true;
     document.getElementById('opt-hide-chrome-fullscreen').checked = config.frontend_data.hide_chrome_on_fullscreen !== false;
@@ -163,6 +166,16 @@ document.getElementById('btn-open-config-dir').addEventListener('click', async (
   } catch (err) {
     console.error('Failed to open config directory:', err);
     showStatus(`Failed to open config directory: ${err}`);
+  }
+});
+
+document.getElementById('btn-open-local-data-dir').addEventListener('click', async () => {
+  try {
+    if (!invoke) throw new Error('Tauri invoke API is unavailable.');
+    await invoke('open_local_data_dir');
+  } catch (err) {
+    console.error('Failed to open local data directory:', err);
+    showStatus(`Failed to open local data directory: ${err}`);
   }
 });
 
@@ -264,6 +277,7 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   config.portable_mode = document.getElementById('opt-portable-mode').checked;
   config.frontend_data.continue_last = document.getElementById('opt-continue-last').checked;
   config.frontend_data.remember_last_image = document.getElementById('opt-remember-last-image').checked;
+  config.frontend_data.open_first_image = document.getElementById('opt-open-first-image').checked;
   config.frontend_data.single_instance = document.getElementById('opt-single-instance').checked;
   config.frontend_data.show_hidden = document.getElementById('opt-show-hidden').checked;
   config.frontend_data.hide_chrome_on_fullscreen = document.getElementById('opt-hide-chrome-fullscreen').checked;
@@ -273,7 +287,6 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   try { localStorage.setItem('quivit-custom-css', config.frontend_data.custom_css); } catch(e) {}
   if (!config.frontend_data.continue_last) {
     delete config.frontend_data.last_opened_path;
-    delete config.frontend_data.last_opened_dir;
   }
   config = mergeConfig(config);
   

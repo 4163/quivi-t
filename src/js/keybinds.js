@@ -4,6 +4,8 @@
  * (main window) and options.js (options window).
  */
 
+import { normalizeCombo } from './shortcuts.js';
+
 export const DEFAULT_KEYBINDS = {
   'cmd-next': ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown', 'MouseForward'],
   'cmd-prev': ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp', 'MouseBack'],
@@ -13,6 +15,7 @@ export const DEFAULT_KEYBINDS = {
   'cmd-open-file': 'Ctrl+Shift+o',
   'cmd-open-explorer': [],
   'cmd-open-folder': [],
+  'cmd-toggle-favorite': [],
   'cmd-parent': 'Backspace',
   'cmd-toggle-filelist': '1',
   'cmd-toggle-menubar': '2',
@@ -57,6 +60,7 @@ export function mergeConfig(loaded) {
       ...fd,
       continue_last: fd.continue_last !== false,
       remember_last_image: fd.remember_last_image === true,
+      open_first_image: fd.open_first_image === true,
       single_instance: fd.single_instance !== false,
       transparent_bg: fd.transparent_bg === true,
       start_dir: fd.start_dir || '',
@@ -69,10 +73,11 @@ export function mergeConfig(loaded) {
       keybinds: (() => {
         const defaultClone = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
         const userBinds = fd.keybinds || {};
-        return {
-          ...defaultClone,
-          ...userBinds,
-        };
+        const merged = { ...defaultClone, ...userBinds };
+        for (const [actionId, combo] of Object.entries(merged)) {
+          merged[actionId] = Array.isArray(combo) ? combo.map(normalizeCombo) : normalizeCombo(combo);
+        }
+        return merged;
       })(),
     },
   };

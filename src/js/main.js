@@ -5,7 +5,7 @@
 import { Core } from './core.js';
 import { FsUtils } from './fsUtils.js';
 import { Viewer } from './viewer.js';
-import { initFilePanel, renderFilePanel } from './filePanel.js';
+import { initFilePanel, renderFilePanel, toggleFavoriteCurrent } from './filePanel.js';
 import { VIEWER_KEYBOARD_PAN_STEP } from './keybinds.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts } from './shortcuts.js';
 import {
@@ -168,6 +168,9 @@ function dispatchAction(actionId) {
       break;
     case 'cmd-refresh':
       FsUtils.refresh();
+      break;
+    case 'cmd-toggle-favorite':
+      toggleFavoriteCurrent();
       break;
     case 'cmd-fullscreen':
       toggleFullscreen();

@@ -28,11 +28,14 @@ let lastClickIndex = -1;
 let currentPath = '';
 
 // Favorites
-const FAVORITES_KEY = 'quivit-favorites';
 let favoritesExpanded = false;
+let configLoaded = false;
 let favoritesBtnEl = null;
 let favoritesListUl = null;
 let favoritesHeaderEl = null;
+let FsUtils = null;
+let favLastClickPath = '';
+let favLastClickTime = 0;
 
 let columnsInitialized = false;
 
@@ -126,11 +129,53 @@ function renderBreadcrumb(state) {
 // --- Favorites helpers ---
 
 function getFavorites() {
-  try { return JSON.parse(localStorage.getItem(FAVORITES_KEY)) || []; } catch { return []; }
+  const favs = Core.getState().config?.frontend_data?.favorites;
+  return Array.isArray(favs) ? favs : [];
 }
 
 function saveFavorites(favs) {
-  localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+  Core.getState().config.frontend_data.favorites = favs;
+  if (configLoaded) Core.persistConfig();
+}
+
+function getFavoritesCollapsed() {
+  return Core.getState().config?.frontend_data?.favorites_collapsed === true;
+}
+
+function saveFavoritesCollapsed(collapsed) {
+  Core.getState().config.frontend_data.favorites_collapsed = collapsed;
+  if (configLoaded) Core.persistConfig();
+}
+
+// One-time import of favorites from WebView2 localStorage into managed config
+function migrateFavorites() {
+  let imported = false;
+  try {
+    const raw = localStorage.getItem('quivit-favorites');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const fd = Core.getState().config.frontend_data;
+        if (!Array.isArray(fd.favorites) || fd.favorites.length === 0) {
+          fd.favorites = parsed;
+          imported = true;
+        }
+      }
+    }
+    localStorage.removeItem('quivit-favorites');
+  } catch {}
+  try {
+    const collapsed = localStorage.getItem('quivit-favorites-collapsed');
+    if (collapsed !== null) {
+      const fd = Core.getState().config.frontend_data;
+      if (fd.favorites_collapsed === undefined) {
+        fd.favorites_collapsed = collapsed === '1';
+        imported = true;
+      }
+    }
+    localStorage.removeItem('quivit-favorites-collapsed');
+  } catch {}
+  if (imported) Core.persistConfig();
 }
 
 function isFavorite(path) {
@@ -156,6 +201,22 @@ function updateFavoriteBtn(path) {
   if (svg) svg.setAttribute('fill', starred ? 'currentColor' : 'none');
   favoritesBtnEl.title = starred ? 'Remove from Favorites' : 'Add to Favorites';
   favoritesBtnEl.classList.toggle('active', starred);
+}
+
+export function toggleFavoriteCurrent() {
+  if (!Core || !favoritesBtnEl) return;
+  const state = Core.getState();
+  const entry = state.list[state.index];
+  if (!entry || entry.is_parent) return;
+  const wasFavorite = isFavorite(entry.path);
+  toggleFavorite(entry);
+  updateFavoriteBtn(entry.path);
+  // Always expand the section when a new favorite is added
+  if (!wasFavorite) {
+    favoritesExpanded = true;
+    saveFavoritesCollapsed(false);
+  }
+  renderFavorites();
 }
 
 // Extensions with custom ICO files in /assets/icons/
@@ -187,6 +248,7 @@ function getIconSvg(item) {
 function buildFavoriteEntry(fav) {
   const li = document.createElement('li');
   li.title = fav.name;
+  li.dataset.path = fav.path;
   
   const itemName = document.createElement('span');
   itemName.className = 'item-name';
@@ -199,7 +261,7 @@ function buildFavoriteEntry(fav) {
   
   const itemExt = document.createElement('span');
   itemExt.className = 'item-ext';
-  itemExt.textContent = fav.ext || '';
+  itemExt.textContent = fav.is_dir ? 'DIR' : (fav.ext || '');
   
   const itemDate = document.createElement('span');
   itemDate.className = 'item-date';
@@ -222,11 +284,28 @@ function buildFavoriteEntry(fav) {
   li.appendChild(removeBtn);
 
   li.addEventListener('click', () => {
-    const { FsUtils } = window._quivitFsUtils || {};
-    if (FsUtils) {
-      FsUtils.loadFile(fav.path).catch(console.error);
-    } else if (window.__TAURI__) {
-      window.dispatchEvent(new CustomEvent('quivit-load-file', { detail: fav.path }));
+    const openFavorite = () => {
+      if (FsUtils) {
+        FsUtils.loadFile(fav.path).catch(console.error);
+      } else if (window.__TAURI__) {
+        window.dispatchEvent(new CustomEvent('quivit-load-file', { detail: fav.path }));
+      }
+    };
+    // Folders and archives: single click highlights, double-click navigates
+    const isDirOrArchive = fav.is_dir || (fav.ext && FsUtils && FsUtils.isArchive(fav.name));
+    if (isDirOrArchive) {
+      highlightFavoriteByPath(fav.path);
+      const now = Date.now();
+      if (favLastClickPath === fav.path && (now - favLastClickTime < 400)) {
+        favLastClickPath = '';
+        favLastClickTime = 0;
+        openFavorite();
+      } else {
+        favLastClickPath = fav.path;
+        favLastClickTime = now;
+      }
+    } else {
+      openFavorite();
     }
   });
 
@@ -242,22 +321,55 @@ function renderFavorites() {
   }
   
   favoritesListUl.innerHTML = '';
+  const panel = document.getElementById('file-panel-favorites');
   if (favs.length === 0) {
     favoritesExpanded = false;
-    const panel = document.getElementById('file-panel-favorites');
-    if (panel) panel.classList.add('collapsed');
+    saveFavoritesCollapsed(true);
   } else {
     favs.forEach(fav => favoritesListUl.appendChild(buildFavoriteEntry(fav)));
   }
+  if (panel) {
+    panel.classList.toggle('collapsed', !favoritesExpanded);
+    const icon = favoritesHeaderEl?.querySelector('.toggle-icon');
+    if (icon) icon.textContent = favoritesExpanded ? '▲' : '▼';
+  }
+  if (Core) updateFavoritesSelection(Core.getState());
 }
 
 function toggleFavoritesExpanded() {
   favoritesExpanded = !favoritesExpanded;
+  saveFavoritesCollapsed(!favoritesExpanded);
   const panel = document.getElementById('file-panel-favorites');
   if (panel) panel.classList.toggle('collapsed', !favoritesExpanded);
   const icon = favoritesHeaderEl?.querySelector('.toggle-icon');
   if (icon) icon.textContent = favoritesExpanded ? '▲' : '▼';
   if (favoritesExpanded) renderFavorites();
+}
+
+function updateFavoritesSelection(state) {
+  if (!favoritesListUl) return;
+  // The current folder/archive takes priority over the selected entry, so a
+  // favorited location stays highlighted no matter which item is active.
+  const containerPath = state.mode === 'archive' ? state.archivePath : state.directory;
+  let activePath = '';
+  if (containerPath && isFavorite(containerPath)) {
+    activePath = containerPath;
+  } else {
+    const entry = state.list?.[state.index];
+    if (entry && !entry.is_parent) {
+      activePath = entry.path;
+    }
+  }
+  for (const li of favoritesListUl.children) {
+    li.classList.toggle('selected', li.dataset.path === activePath);
+  }
+}
+
+function highlightFavoriteByPath(path) {
+  if (!favoritesListUl) return;
+  for (const li of favoritesListUl.children) {
+    li.classList.toggle('selected', li.dataset.path === path);
+  }
 }
 
 function renderEntry(item, index, selectedIndex) {
@@ -350,6 +462,9 @@ export function renderFilePanel(state) {
     }
   }
 
+  // Sync favorites highlighting to the currently active file-panel item
+  updateFavoritesSelection(state);
+
   const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
   if (currentDir !== currentPath) {
     currentPath = currentDir;
@@ -379,7 +494,7 @@ export function renderFilePanel(state) {
 }
 
 export function initFilePanel(deps) {
-  ({ filePanel, breadcrumbEl, fileListUl, resizeHandle, Core, Viewer } = deps);
+  ({ filePanel, breadcrumbEl, fileListUl, resizeHandle, Core, Viewer, FsUtils } = deps);
 
   // Wire favorites UI
   favoritesBtnEl = document.getElementById('btn-favorite-current');
@@ -388,19 +503,7 @@ export function initFilePanel(deps) {
 
   if (favoritesBtnEl) {
     favoritesBtnEl.disabled = true;
-    favoritesBtnEl.addEventListener('click', () => {
-      const state = Core.getState();
-      const entry = state.list[state.index];
-      if (!entry || entry.is_parent) return;
-      const wasEmpty = getFavorites().length === 0;
-      toggleFavorite(entry);
-      updateFavoriteBtn(entry.path);
-      renderFavorites();
-      // Auto-expand when adding the very first favorite
-      if (wasEmpty && getFavorites().length > 0 && !favoritesExpanded) {
-        toggleFavoritesExpanded();
-      }
-    });
+    favoritesBtnEl.addEventListener('click', toggleFavoriteCurrent);
   }
 
   if (favoritesHeaderEl) {
@@ -410,12 +513,21 @@ export function initFilePanel(deps) {
     });
   }
 
-  // Initialize favorites header visibility
+  // Restore the persisted collapsed state, then initialize header visibility.
+  // Config loads asynchronously after init, so re-render once it arrives and
+  // import any favorites still left in WebView2 localStorage.
+  favoritesExpanded = !getFavoritesCollapsed();
   renderFavorites();
+  window.addEventListener('quivit-config-loaded', () => {
+    configLoaded = true;
+    migrateFavorites();
+    favoritesExpanded = !getFavoritesCollapsed();
+    renderFavorites();
+  });
 
   // Allow favorites entries to load files via custom event
   window.addEventListener('quivit-load-file', (e) => {
-    if (deps.FsUtils) deps.FsUtils.loadFile(e.detail).catch(console.error);
+    if (FsUtils) FsUtils.loadFile(e.detail).catch(console.error);
   });
 
   initializeColumns();

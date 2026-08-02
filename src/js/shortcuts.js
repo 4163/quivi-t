@@ -9,6 +9,41 @@ function bindingMatches(binding, combo) {
 export const activeKeys = new Set();
 export const activeButtons = new Set();
 
+const SPECIAL_KEY_MAP = {
+  backspace: 'Backspace',
+  delete: 'Delete',
+  insert: 'Insert',
+  home: 'Home',
+  end: 'End',
+  enter: 'Enter',
+  tab: 'Tab',
+  escape: 'Escape',
+  arrowup: 'ArrowUp',
+  arrowdown: 'ArrowDown',
+  arrowleft: 'ArrowLeft',
+  arrowright: 'ArrowRight',
+  pageup: 'PageUp',
+  pagedown: 'PageDown',
+  capslock: 'CapsLock',
+  scrolllock: 'ScrollLock',
+  numlock: 'NumLock',
+  printscreen: 'PrintScreen',
+  contextmenu: 'ContextMenu',
+  pause: 'Pause',
+};
+
+export function formatKeyName(key) {
+  const k = key.toLowerCase();
+  if (SPECIAL_KEY_MAP[k]) return SPECIAL_KEY_MAP[k];
+  if (k.length === 1) return k;
+  return k.charAt(0).toUpperCase() + k.slice(1);
+}
+
+export function normalizeCombo(combo) {
+  if (typeof combo !== 'string') return combo;
+  return combo.split('+').map(formatKeyName).join('+');
+}
+
 export function formatKeysCombo(keysSet, buttonsSet) {
   const combo = [];
   const lowerKeys = Array.from(keysSet).map(k => k.toLowerCase());
@@ -22,7 +57,7 @@ export function formatKeysCombo(keysSet, buttonsSet) {
 
   for (const k of lowerKeys) {
     if (!modifiers.includes(k)) {
-      others.push(k === ' ' ? 'Space' : k);
+      others.push(k === ' ' ? 'Space' : formatKeyName(k));
     }
   }
 

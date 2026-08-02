@@ -71,6 +71,7 @@ const CATEGORIES = [
     actions: [
       { id: 'cmd-open-explorer', label: 'Reveal in File Explorer' },
       { id: 'cmd-open-folder', label: 'Open Folder in Explorer' },
+      { id: 'cmd-toggle-favorite', label: 'Toggle Favorite' },
     ]
   }
 ];

@@ -51,12 +51,16 @@
           Continue from last opened directory
         </label>
         <label class="checkbox-label">
-          <input type="checkbox" id="opt-single-instance" />
-          Allow only one QuiviT instance
-        </label>
-        <label class="checkbox-label">
           <input type="checkbox" id="opt-remember-last-image" />
           Continue from last active image
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="opt-open-first-image" />
+          Open first image of directory automatically
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="opt-single-instance" />
+          Allow only one QuiviT instance
         </label>
       </div>
       <div class="options-section">
@@ -73,11 +77,19 @@
           <input type="checkbox" id="opt-portable-mode" />
           Save config data locally
         </label>
-        <p class="hint">By default, QuiviT stores settings in your user config folder under %APPDATA%. Enable this to store settings beside the app executable for portable use.</p>
+        <p class="hint">By default, QuiviT stores settings in your user config folder under %APPDATA%. Enable this to store settings beside the app executable for portable use.<br>
+          <strong>Warning:</strong> Sharing the app folder or its config file exposes your personal directory paths and file names.
+        </p>
         <p class="hint">
-          Config folder:
+          Global config folder (Roaming):
           <button id="btn-open-config-dir" class="link-button" type="button">
             <span id="config-dir-label">Loading...</span>
+          </button>
+        </p>
+        <p class="hint">
+          Local config folder (portable):
+          <button id="btn-open-local-data-dir" class="link-button" type="button">
+            <span id="local-data-dir-label">Loading...</span>
           </button>
         </p>
       </div>

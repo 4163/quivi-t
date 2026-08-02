@@ -13,6 +13,15 @@ function _ext(name) {
   return name.split('.').pop().toLowerCase();
 }
 
+// Parent of a file/folder path; normalizes Windows drive roots to "E:\"
+function parentOf(path) {
+  const trimmed = path.replace(/[\\/]+$/, '');
+  const idx = Math.max(trimmed.lastIndexOf('\\'), trimmed.lastIndexOf('/'));
+  if (idx === -1) return path;
+  const parent = trimmed.slice(0, idx);
+  return /^[A-Za-z]:$/.test(parent) ? parent + '\\' : parent;
+}
+
 function _formatDate(msStr) {
   if (!msStr) return '';
   const ms = parseInt(msStr, 10);
@@ -111,7 +120,6 @@ export const FsUtils = {
     const state = Core.getState();
     if (state.config.frontend_data.continue_last === false) return;
     state.config.frontend_data.last_opened_path = path;
-    state.config.frontend_data.last_opened_dir = path;
     Core.persistConfig();
   },
 
@@ -128,19 +136,30 @@ export const FsUtils = {
     } else {
       const fd = state.config?.frontend_data || {};
       let preferredIndex = -1;
-      
-      // Only restore last active image if we're NOT forced to a specific initial position
-      // (e.g. when returning from an archive, we must land on the archive entry, not a stale image)
-      if (!options.preferInitial && fd.remember_last_image && fd.last_active_images && fd.last_active_images[result.directory]) {
-        const targetPath = fd.last_active_images[result.directory];
+
+      // Continue from last active image runs only at startup and always wins.
+      if (options.restoreLastImage && fd.remember_last_image && fd.last_active_image && fd.last_active_image.container === result.directory) {
+        const targetPath = fd.last_active_image.path;
         preferredIndex = files.findIndex(f => f.path === targetPath);
       }
-      
+
       if (preferredIndex === -1) {
         const offset = result.parent_directory ? 1 : 0;
         preferredIndex = Math.min(files.length - 1, Math.max(0, result.initial_index + offset));
       }
-      index = options.preferInitial ? preferredIndex : this.firstImageIndex(files, preferredIndex);
+
+      // options.preferInitial forces the target entry (e.g. highlight the archive
+      // you came back from). options.forceFirstImage forces the first image with a
+      // first-item fallback (hidden archive). Otherwise the config decides: ON
+      // opens the first image, OFF highlights the target entry.
+      if (options.forceFirstImage) {
+        const idx = this.firstImageIndex(files, preferredIndex);
+        index = idx === 0 && files.length > 1 ? 1 : idx;
+      } else if (options.preferInitial || !fd.open_first_image) {
+        index = preferredIndex;
+      } else {
+        index = this.firstImageIndex(files, preferredIndex);
+      }
     }
 
     this.revokeIfObjectURL(state.src);
@@ -163,7 +182,7 @@ export const FsUtils = {
     }
   },
 
-  async loadFile(pathStr) {
+  async loadFile(pathStr, options = {}) {
     const name = typeof pathStr === 'string'
       ? pathStr.replace(/\\/g, '/').split('/').pop()
       : pathStr.name || '';
@@ -201,12 +220,16 @@ export const FsUtils = {
         const fd = state.config?.frontend_data || {};
         let preferredIndex = -1;
         
-        if (fd.remember_last_image && fd.last_active_images && fd.last_active_images[result.archive_path]) {
-          const targetPath = fd.last_active_images[result.archive_path];
+        if (options.restoreLastImage && fd.remember_last_image && fd.last_active_image && fd.last_active_image.container === result.archive_path) {
+          const targetPath = fd.last_active_image.path;
           preferredIndex = files.findIndex(f => f.path === targetPath);
         }
-        
-        index = preferredIndex !== -1 ? preferredIndex : this.firstImageIndex(files, 1);
+
+        if (preferredIndex !== -1) {
+          index = preferredIndex;
+        } else if (fd.open_first_image) {
+          index = this.firstImageIndex(files, 1);
+        }
         
         Core.setState({
           mode: 'archive',
@@ -223,7 +246,7 @@ export const FsUtils = {
       }
 
       const result = await invoke('read_directory', { path, showHidden: this.showHidden() });
-      this.applyDirectoryResult(result);
+      this.applyDirectoryResult(result, options);
       this.persistLastOpened(result.directory);
 
     } catch (err) {
@@ -253,10 +276,34 @@ export const FsUtils = {
     if (state.mode === 'archive' && state.archivePath) {
       try {
         const result = await invoke('read_directory', { path: state.archivePath, showHidden: this.showHidden() });
-        this.applyDirectoryResult(result, { preferInitial: true });
+        // Land on the archive entry when it's present (so it can be re-opened).
+        // If it's missing from the listing (e.g. hidden with "show hidden" off),
+        // highlight the first image in the folder, else the first item.
+        const archiveListed = result.files.some(f => f.path === state.archivePath);
+        if (archiveListed) {
+          this.applyDirectoryResult(result, { preferInitial: true });
+        } else {
+          this.applyDirectoryResult(result, { forceFirstImage: true });
+        }
         this.persistLastOpened(result.directory);
       } catch (err) {
+        // The archive may have been deleted or moved while open — fall back to its
+        // parent folder, or to the drives list if that's unreachable too.
         console.error('[Core] openParent archive error:', err);
+        try {
+          const result = await invoke('read_directory', { path: parentOf(state.archivePath), showHidden: this.showHidden() });
+          this.applyDirectoryResult(result);
+          this.persistLastOpened(result.directory);
+        } catch (parentErr) {
+          console.error('[Core] openParent archive parent fallback error:', parentErr);
+          const drives = await invoke('get_drives');
+          this.applyDirectoryResult({
+            directory: 'Drives',
+            parent_directory: null,
+            initial_index: 0,
+            files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
+          });
+        }
       }
       return;
     }
@@ -264,6 +311,8 @@ export const FsUtils = {
     if (!state.directory || state.directory === 'Drives') return;
     try {
       const result = await invoke('open_parent', { currentDir: state.directory, showHidden: this.showHidden() });
+      // Config handled inside applyDirectoryResult: open_first_image (ON) opens
+      // the first image, OFF (default) highlights the folder we came from.
       this.applyDirectoryResult(result);
       this.persistLastOpened(result.directory);
     } catch (err) {
@@ -289,15 +338,40 @@ export const FsUtils = {
   async openSibling(delta) {
     const state = Core.getState();
     const currentPath = state.mode === 'archive' ? state.archivePath : state.directory;
-    if (!currentPath) return;
+    if (!currentPath || currentPath === 'Drives') return;
 
     try {
-      const path = await invoke('open_sibling_container', {
-        currentPath,
-        delta,
-        showHidden: this.showHidden(),
-      });
-      await this.loadFile(path);
+      const parent = parentOf(currentPath);
+      const atRoot = parent === currentPath;
+
+      let containers = [];
+      let prefsPath = parent;
+
+      if (atRoot) {
+        const drives = await invoke('get_drives');
+        containers = drives.map(d => ({ name: d, path: d, ext: '', date: '', rawDate: 0, is_dir: true, is_drive: true }));
+        prefsPath = null;
+      } else {
+        const result = await invoke('read_directory', { path: parent, showHidden: this.showHidden() });
+        containers = result.files.filter(f => f.is_dir || this.isArchive(f.name)).map(e => this.formatEntry(e));
+      }
+
+      if (containers.length === 0) {
+        console.error('[Core] openSibling: no sibling folders or archives found');
+        return;
+      }
+
+      const prefs = DirectoryPrefs.getSortPrefs(prefsPath);
+      const sorted = DirectoryPrefs.applySort(containers, prefs.col, prefs.desc);
+
+      const currentIdx = sorted.findIndex(f => f.path === currentPath);
+      if (currentIdx === -1) {
+        console.error('[Core] openSibling: current folder/archive not found among siblings');
+        return;
+      }
+
+      const newIdx = ((currentIdx + delta) % sorted.length + sorted.length) % sorted.length;
+      await this.loadFile(sorted[newIdx].path);
     } catch (err) {
       console.error('[Core] openSibling error:', err);
     }
