@@ -77,7 +77,7 @@ async function _persistConfig() {
   }
 }
 
-function _selectEntry(index, activate = false) {
+async function _selectEntry(index, activate = false) {
   if (index === -1) {
     _state.index = -1;
     _state.filename = '';
@@ -101,14 +101,30 @@ function _selectEntry(index, activate = false) {
   _state.index = index;
   _state.filename = file.name;
 
-  if (file.is_parent || file.is_dir || !FsUtils.isImageEntry(file)) {
-    _state.src = '';
+  let newSrc = '';
+  if (file.is_dir || file.is_parent || FsUtils.isArchiveEntry(file) || !FsUtils.isImageEntry(file)) {
+    newSrc = '';
   } else if (_state.mode === 'archive') {
-    FsUtils.revokeIfObjectURL(_state.src);
-    _state.src = FsUtils.buildArchiveSrc(_state.archivePath, file.name);
+    newSrc = FsUtils.buildArchiveSrc(_state.archivePath, file.name);
   } else {
-    FsUtils.revokeIfObjectURL(_state.src);
-    _state.src = FsUtils.buildFileSrc(file.path);
+    newSrc = await FsUtils.buildFileSrc(file.path);
+  }
+
+  // Prevent race condition if user navigated away while we were loading ICO frames
+  if (_state.index !== index) return;
+
+  FsUtils.revokeIfObjectURL(_state.src);
+  _state.src = newSrc;
+
+  if (_state.config?.frontend_data?.remember_last_image && _state.src !== '') {
+    if (!_state.config.frontend_data.last_active_images) {
+      _state.config.frontend_data.last_active_images = {};
+    }
+    const container = _state.mode === 'archive' ? _state.archivePath : _state.directory;
+    if (container) {
+      _state.config.frontend_data.last_active_images[container] = file.path;
+      _persistConfig();
+    }
   }
 
   _notify();
@@ -142,6 +158,12 @@ export const Core = {
 
   toggleFileList() {
     _state.fileListVisible = !_state.fileListVisible;
+    _notify();
+  },
+
+  toggleTransparentBg() {
+    _state.config.frontend_data.transparent_bg = !_state.config.frontend_data.transparent_bg;
+    _persistConfig();
     _notify();
   },
 

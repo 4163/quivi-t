@@ -77,6 +77,9 @@
           <li role="menuitem" id="cmd-flip-vertical" tabindex="0">Flip vertical<span class="shortcut">B</span></li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-fullscreen" tabindex="0">Full screen<span class="shortcut">4</span></li>
+          <li role="menuitem" id="cmd-toggle-transparent" tabindex="0" data-checked="false" title="Render an opaque backdrop behind transparent images to see image bounds">
+            Transparent Canvas<span class="shortcut"></span>
+          </li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-toggle-filelist" tabindex="0">File list<span class="shortcut">1</span></li>
           <li role="menuitem" id="cmd-toggle-menubar" tabindex="0">Menu bar<span class="shortcut">2</span></li>
@@ -102,6 +105,12 @@
         <div id="file-panel-header-top">
           <div id="file-panel-breadcrumb" aria-label="Current location" title=""></div>
         </div>
+        <div id="file-panel-favorites" class="collapsed">
+          <div id="file-panel-favorites-header" tabindex="0">
+            Favorites <span class="toggle-icon">▼</span>
+          </div>
+          <ul id="favorites-list" role="listbox" aria-label="Favorites"></ul>
+        </div>
         <div id="file-panel-header">
           <div class="header-cell col-name" data-sort="name" tabindex="0">
             File <span class="sort-icon"></span>
@@ -125,6 +134,9 @@
           </button>
           <button id="cmd-open-folder" class="icon-btn" title="Open Folder">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          </button>
+          <button id="btn-favorite-current" class="icon-btn" title="Toggle Favorite" aria-label="Toggle Favorite">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
           </button>
         </div>
         <!-- Drag handle to resize panel -->

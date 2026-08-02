@@ -255,6 +255,9 @@ function dispatchAction(actionId) {
     case 'cmd-toggle-filelist':
       Core.toggleFileList();
       break;
+    case 'cmd-toggle-transparent':
+      Core.toggleTransparentBg();
+      break;
     case 'cmd-toggle-statusbar':
       toggleStatusBar();
       break;
@@ -302,6 +305,7 @@ function bindMenuCommands() {
   document.getElementById('cmd-rotate-ccw').addEventListener('click', () => Viewer.rotate(-90));
   document.getElementById('cmd-flip-horizontal').addEventListener('click', () => Viewer.flipHorizontal());
   document.getElementById('cmd-flip-vertical').addEventListener('click', () => Viewer.flipVertical());
+  document.getElementById('cmd-toggle-transparent').addEventListener('click', () => Core.toggleTransparentBg());
   document.getElementById('cmd-toggle-menubar').addEventListener('click', toggleMenuBar);
   document.getElementById('cmd-toggle-filelist').addEventListener('click', () => Core.toggleFileList());
   document.getElementById('cmd-toggle-statusbar').addEventListener('click', toggleStatusBar);
@@ -378,6 +382,9 @@ function bindDragDrop() {
       const paths = e.payload.paths;
       if (paths && paths.length > 0) FsUtils.loadFile(paths[0]);
     });
+    listen('single-instance-open', (e) => {
+      if (e.payload) FsUtils.loadFile(e.payload).catch(console.error);
+    });
     listen('config-updated', () => Core.loadConfig());
     listen('theme-preview', (e) => {
       const theme = e.payload;
@@ -438,11 +445,28 @@ Core.onStateChange((state) => {
     return;
   }
 
-  dropOverlay.classList.remove('active');
-  viewport.classList.remove('empty');
+  if (!state.src) {
+    dropOverlay.classList.add('active');
+    viewport.classList.add('empty');
+  } else {
+    dropOverlay.classList.remove('active');
+    viewport.classList.remove('empty');
+  }
+
   // Show statusbar only if the user hasn't hidden it
   if (statusBarVisible) statusbar.classList.remove('hidden');
   else statusbar.classList.add('hidden');
+
+  if (state.config && state.config.frontend_data) {
+    const isTransparent = !!state.config.frontend_data.transparent_bg;
+    const imgEl = document.getElementById('viewer-img');
+    const toggleEl = document.getElementById('cmd-toggle-transparent');
+    
+    imgEl.classList.toggle('opaque-bg', !isTransparent);
+    if (toggleEl) {
+      toggleEl.classList.toggle('checked', !isTransparent);
+    }
+  }
 
   statusName.textContent = state.filename;
   statusIndex.textContent = state.list.length > 1 ? `${state.index + 1} / ${state.list.length}` : '';
@@ -459,7 +483,7 @@ Core.onStateChange((state) => {
   renderFilePanel(state);
 });
 
-initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, Viewer });
+initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, Viewer, FsUtils });
 initMenuBar();
 bindMenuCommands();
 bindDragDrop();
