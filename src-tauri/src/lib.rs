@@ -581,8 +581,24 @@ fn open_sibling_container(
     show_hidden: Option<bool>,
 ) -> Result<String, String> {
     let path = Path::new(current_path);
-    let parent = path.parent().ok_or("Already at root")?;
     let show_hidden = show_hidden.unwrap_or(false);
+
+    let parent_opt = path.parent();
+    
+    // If we are at the root (no parent), jump between drives
+    if parent_opt.is_none() {
+        let drives = get_drives();
+        if drives.is_empty() {
+            return Err("No drives found".into());
+        }
+        
+        let path_upper = current_path.to_ascii_uppercase();
+        let current_idx = drives.iter().position(|d| d.to_ascii_uppercase() == path_upper).unwrap_or(0);
+        let new_idx = ((current_idx as i32 + delta).rem_euclid(drives.len() as i32)) as usize;
+        return Ok(drives[new_idx].clone());
+    }
+
+    let parent = parent_opt.unwrap();
 
     let mut siblings: Vec<PathBuf> = Vec::new();
     if let Ok(entries) = fs::read_dir(parent) {
