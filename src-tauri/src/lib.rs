@@ -691,11 +691,150 @@ fn write_text_file(path: String, content: String) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+// ── ICO Spritesheet ──────────────────────────────────────────────────────────
+
+/// Extract all frames from an ICO file and return them as a horizontal
+/// spritesheet encoded as a PNG data-URL.
+#[tauri::command]
+fn get_ico_frames(path: String) -> Result<String, String> {
+    let data = fs::read(&path).map_err(|e| format!("Cannot read ICO file: {e}"))?;
+    
+    // Parse the ICO directory header manually to find all image entries,
+    // then decode each sub-image individually.
+    if data.len() < 6 {
+        return Err("File too small to be an ICO".into());
+    }
+    
+    // ICO header: reserved(2) + type(2) + count(2)
+    let count = u16::from_le_bytes([data[4], data[5]]) as usize;
+    if count == 0 || data.len() < 6 + count * 16 {
+        return Err("Invalid ICO file structure".into());
+    }
+    
+    let mut frames: Vec<image::DynamicImage> = Vec::new();
+    
+    for i in 0..count {
+        let entry_offset = 6 + i * 16;
+        let offset = u32::from_le_bytes([
+            data[entry_offset + 12],
+            data[entry_offset + 13],
+            data[entry_offset + 14],
+            data[entry_offset + 15],
+        ]) as usize;
+        let size = u32::from_le_bytes([
+            data[entry_offset + 8],
+            data[entry_offset + 9],
+            data[entry_offset + 10],
+            data[entry_offset + 11],
+        ]) as usize;
+        
+        if offset + size > data.len() {
+            continue;
+        }
+        
+        let frame_data = &data[offset..offset + size];
+        
+        // Try to decode as PNG first (modern ICOs embed PNG), then as BMP
+        let img = if frame_data.starts_with(b"\x89PNG") {
+            image::load_from_memory_with_format(frame_data, image::ImageFormat::Png)
+                .map_err(|e| format!("Failed to decode PNG frame: {e}"))
+        } else {
+            // BMP frame in ICO: needs ICO-specific BMP handling
+            // Fallback: use image::load_from_memory with the full ICO
+            image::load_from_memory_with_format(&data, image::ImageFormat::Ico)
+                .map_err(|e| format!("Failed to decode ICO: {e}"))
+        };
+        
+        match img {
+            Ok(image) => frames.push(image),
+            Err(_) => continue,
+        }
+        
+        // For BMP frames we only use the whole-ICO fallback once
+        if !frame_data.starts_with(b"\x89PNG") {
+            break;
+        }
+    }
+    
+    if frames.is_empty() {
+        // Last resort: just load the whole ICO
+        let img = image::load_from_memory_with_format(&data, image::ImageFormat::Ico)
+            .map_err(|e| format!("Failed to decode ICO: {e}"))?;
+        frames.push(img);
+    }
+    
+    // Sort largest to smallest for a consistent left-to-right order
+    frames.sort_by(|a, b| b.width().cmp(&a.width()));
+    // Deduplicate by width/height
+    frames.dedup_by(|a, b| a.width() == b.width() && a.height() == b.height());
+    
+    let total_width: u32 = frames.iter().map(|f| f.width()).sum();
+    let max_height: u32 = frames.iter().map(|f| f.height()).max().unwrap_or(0);
+    
+    let mut spritesheet = image::RgbaImage::new(total_width, max_height);
+    let mut x_offset = 0u32;
+    for frame in &frames {
+        let rgba = frame.to_rgba8();
+        let y_offset = (max_height - rgba.height()) / 2;
+        for (px, py, pixel) in rgba.enumerate_pixels() {
+            spritesheet.put_pixel(x_offset + px, y_offset + py, *pixel);
+        }
+        x_offset += rgba.width();
+    }
+    
+    // Encode as PNG and return as data-URL
+    let mut png_bytes: Vec<u8> = Vec::new();
+    {
+        use image::ImageEncoder;
+        let encoder = image::codecs::png::PngEncoder::new(&mut png_bytes);
+        encoder
+            .write_image(
+                spritesheet.as_raw(),
+                spritesheet.width(),
+                spritesheet.height(),
+                image::ColorType::Rgba8.into(),
+            )
+            .map_err(|e| format!("Failed to encode PNG: {e}"))?;
+    }
+    
+    let b64 = base64_encode(&png_bytes);
+    Ok(format!("data:image/png;base64,{b64}"))
+}
+
+fn base64_encode(data: &[u8]) -> String {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::new();
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        result.push(CHARS[((n >> 18) & 63) as usize] as char);
+        result.push(CHARS[((n >> 12) & 63) as usize] as char);
+        result.push(if chunk.len() > 1 { CHARS[((n >> 6) & 63) as usize] as char } else { '=' });
+        result.push(if chunk.len() > 2 { CHARS[(n & 63) as usize] as char } else { '=' });
+    }
+    result
+}
+
 // ── App entry point ──────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // A second instance was launched. Focus the primary window and
+            // optionally open the file that was passed as an argument.
+            if let Some(main_window) = app.get_webview_window("main") {
+                let _ = main_window.show();
+                let _ = main_window.set_focus();
+                // If a path was passed, emit it so main.js can load it
+                if argv.len() > 1 {
+                    let path = argv[1].clone();
+                    let _ = main_window.emit("single-instance-open", path);
+                }
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(Mutex::new(ArchiveCache::new()))
@@ -716,7 +855,8 @@ pub fn run() {
             open_in_explorer,
             read_text_file,
             write_text_file,
-            get_default_dir
+            get_default_dir,
+            get_ico_frames
         ])
         .register_asynchronous_uri_scheme_protocol("quivit", |ctx, request, responder| {
             // Protocol: quivit://archive/<archive_path_base64>/<entry_name>

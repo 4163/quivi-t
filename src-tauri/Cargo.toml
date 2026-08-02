@@ -27,4 +27,6 @@ tauri-plugin-dialog = "2.7.2"
 zip = "8.6.0"
 unrar = "0.5.8"
 notify = "6"
+tauri-plugin-single-instance = "2"
+image = { version = "0.25", features = ["ico"] }
 
