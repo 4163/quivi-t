@@ -64,10 +64,14 @@ QuiviT/
 - Lists folders, images, and supported archives in the file panel.
 - Supports parent-directory navigation through '`..`'.
 - Reads ZIP/CBZ and RAR/CBR archives directly, treating them as folders.
-- Supports configurable keybindings.
+- Supports configurable keybindings, multi-key combos, and mouse shortcuts.
 - Supports global or portable configuration storage.
 - Provides fit, zoom, pan, rotation, flip, and scaling controls.
 - Provides a display-only breadcrumb for the current directory or archive.
+- Displays multi-frame ICO files as a horizontal spritesheet.
+- Toggleable opaque backdrop for transparent images.
+- Favorites system for quick access to frequently visited folders and files.
+- Single-instance handoff for routing external file opens into an active session.
 
 ## Supported Formats
 
@@ -192,37 +196,37 @@ QuiviT's shortcut engine fully supports:
 Current defaults include:
 
 ```text
-1                         Toggle file list
-2                         Toggle menu bar
-3                         Toggle status bar
-4 / Alt+Enter             Full screen
-5                         Options
-6 / Ctrl+R                Refresh
-Backspace                 Parent directory
-Ctrl+O                    Open directory...
-Ctrl+Shift+O              Open file/archive...
-Ctrl+X                    Open next folder/archive
-Ctrl+Z                    Open previous folder/archive
-Shift+D / Shift+Right / MouseForward     Next item
-Shift+S / Shift+Down                     Next item
-Shift+A / Shift+Left / MouseBack         Previous item
-Shift+W / Shift+Up                       Previous item
-C                         Zoom in
-Z                         Zoom out
-X                         Zoom 100%
-Q                         Fit width
-E                         Fit height
-W / Up                    Pan up
-A / Left                  Pan left
-S / Down                  Pan down
-D / Right                 Pan right
-G                         Rotate counter-clockwise
-H                         Rotate clockwise
-V                         Flip horizontal
-B                         Flip vertical
-R                         Fit width if larger
-T                         Fit height if larger
-F                         Auto fit
+1                                           Toggle file list
+2                                           Toggle menu bar
+3                                           Toggle status bar
+4 / Alt+Enter                               Full screen
+5                                           Options
+6 / Ctrl+R                                  Refresh
+Backspace                                   Parent directory
+Ctrl+O                                      Open directory...
+Ctrl+Shift+O                                Open file/archive...
+Ctrl+X                                      Open next folder/archive
+Ctrl+Z                                      Open previous folder/archive
+Shift+D / Shift+Right / MouseForward        Next item
+Shift+S / Shift+Down                        Next item
+Shift+A / Shift+Left / MouseBack            Previous item
+Shift+W / Shift+Up                          Previous item
+C                                           Zoom in
+Z                                           Zoom out
+X                                           Zoom 100%
+Q                                           Fit width
+E                                           Fit height
+W / Up                                      Pan up
+A / Left                                    Pan left
+S / Down                                    Pan down
+D / Right                                   Pan right
+G                                           Rotate counter-clockwise
+H                                           Rotate clockwise
+V                                           Flip horizontal
+B                                           Flip vertical
+R                                           Fit width if larger
+T                                           Fit height if larger
+F                                           Auto fit
 ```
 
 ## Backend Commands

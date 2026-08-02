@@ -76,27 +76,12 @@ New modules may be warranted:
 
 ### 3. Viewer Rendering
 
-- Transparent image background:
-  - Transparent images currently make it impossible to visually gauge the canvas/image element's actual width/height.
-  - Add an opaque backdrop behind the image element, colored black/white (or theme-appropriate) depending on the active theme, so transparency is visible against a bounded reference area rather than the app background.
-  - Add it as a toggle in the View menu of the menu bar, defaulting to on, and keep the choice persistent like other settings.
-- SVG indefinite-zoom bug:
-  - Some SVG files (not all — condition not yet identified, e.g. `quivi-t_moe_original.svg`) can be zoomed in indefinitely.
-  - Panning does not scale with this unbounded zoom, so at high zoom levels the edges of the SVG become unreachable.
-  - Investigate why only certain SVGs trigger this (likely related to intrinsic viewBox/dimension parsing) and clamp zoom and/or correct pan bounds so the full image remains reachable at any zoom level.
+- Audit SVG behavior if indefinite zoom issues remain in some edge cases.
 
-### 4. ICO Handling
+### 4. General Rendering
 
-- Treat `.ico` as a special multi-image container when valid ICO data exists.
-- Parse ICO directory entries.
-- Extract embedded images.
-- Order frames from largest to smallest horizontally.
-- Display as a spritesheet in the viewer.
-- If an ICO has only one valid entry, display it normally through the same path.
-- Decide whether this belongs in:
-  - Rust backend extraction command, preferred if binary parsing and image bytes are cleaner there.
-  - Frontend parser, only if simple and reliable.
-- Make sure invalid or unsupported ICO data fails gracefully.
+- Review rendering quality and artifacts.
+
 
 ### 6. Archive Performance
 
@@ -104,32 +89,7 @@ New modules may be warranted:
 - Treat this as archive-processing/UI-blocking debt.
 - Prefer optimizing archive load/extraction so expensive work does not block the app window, rather than patching only the icon symptom.
 
-### 8. Single Instance Option
-
-- Add an Options setting:
-  - "Allow only one QuiviT instance"
-- This can be implemented later, but the intended behavior should be documented now.
-- When enabled:
-  - launching QuiviT normally from the executable should still be allowed to open another app instance for now, especially during unreleased/dev builds;
-  - opening an image/archive file directly through file association or command-line file path should route that file to the first already-open QuiviT instance instead of creating a second viewer instance;
-  - the first instance should load/focus the directly opened file/archive;
-  - the second process should hand off the file path and exit cleanly after the handoff succeeds.
-- When disabled:
-  - every launch/file-open can create an independent QuiviT instance.
-- Implementation notes:
-  - use a Tauri single-instance plugin or equivalent OS-level lock when ready;
-  - distinguish "plain executable launch" from "launch with file/archive path argument";
-  - make file handoff use the same `Core.loadFile()` path as normal open/drop flows;
-  - ensure activation/focus works after handoff;
-  - verify this with built executable behavior once release builds/file associations exist.
-
-### 9. File Panel Favorites
-
-- Add a Favorites button/feature:
-  - favoriting a file or folder adds it to a new file-panel-header section shown under the function buttons.
-  - This favorites section is a shortcut list only — it does not function as an independent file-navigation source. Selecting a favorited item jumps the main file-panel/file structure to that item rather than browsing within the favorites list itself.
-
-### 10. UI Sound Design (Low Priority)
+### 8. UI Sound Design (Low Priority)
 
 - Add custom SFX for UI interactions (e.g. button clicks, menu toggles, opening folders, error bumps).
 - Needs a toggle in the Options menu to disable sounds for users who prefer a silent experience.

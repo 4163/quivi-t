@@ -255,3 +255,30 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 ### Drive Jumping
 - Modified `open_sibling_container` to detect when the user is at the root of a drive (e.g., `C:\`) and jump to the next/previous physical drive (e.g., `D:\`) upon container traversal (`Ctrl+X` / `Ctrl+Z`).
 - Added sibling container jump shortcuts to the File dropdown menu.
+
+### SVG Viewer Fixes
+- Added `MAX_SCALE` and fixed intrinsic dimension fallback in `viewer.js` to prevent indefinite zoom on certain SVG files without defined widths.
+
+### Transparent Background
+- Added `opaque-bg` class and toggle logic for transparent background visualization against dark/light backdrops.
+- Added `cmd-toggle-transparent` keybind and wired it to the Options and View menu.
+
+### File Panel Favorites & Icons
+- Added inline SVG icons for Image, Folder, and Archive files in the file list.
+- Implemented Favorites UI header section in `filePanel.js` and `index.html`.
+- Implemented star/favorite logic and persistence using `localStorage`.
+
+### Single Instance Option
+- Added `tauri-plugin-single-instance`.
+- Wired file arguments to `FsUtils.loadFile()` upon secondary launch.
+- Enabled focus transfer to the primary window.
+- Added "Allow only one QuiviT instance" toggle in the Options menu.
+
+### ICO Spritesheets
+- Added `image` crate with `ico` feature.
+- Implemented `get_ico_frames` Rust command to parse ICO files, arrange frames horizontally, and serve them securely as a base64 PNG data-url.
+- Updated frontend to await `get_ico_frames` dynamically for `.ico` files.
+
+### Options & State Persistence
+- Added "Remember last active image" Options checkbox.
+- Implemented logic in `fsUtils.js` and `core.js` to remember and automatically jump to the last active image when entering a directory.
