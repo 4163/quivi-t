@@ -42,8 +42,13 @@ export function formatKeyCombo(e) {
 function findAction(config, combo) {
   const binds = config?.frontend_data?.keybinds || {};
 
+  const lowerCombo = combo.toLowerCase();
   for (const [id, bindCombo] of Object.entries(binds)) {
-    if (bindingMatches(bindCombo, combo)) return id;
+    if (Array.isArray(bindCombo)) {
+      if (bindCombo.some(b => b.toLowerCase() === lowerCombo)) return id;
+    } else {
+      if (bindCombo.toLowerCase() === lowerCombo) return id;
+    }
   }
 
   return null;

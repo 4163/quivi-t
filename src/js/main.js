@@ -3,6 +3,7 @@
  */
 
 import { Core } from './core.js';
+import { FsUtils } from './fsUtils.js';
 import { Viewer } from './viewer.js';
 import { initFilePanel, renderFilePanel } from './filePanel.js';
 import { VIEWER_KEYBOARD_PAN_STEP } from './keybinds.js';
@@ -152,13 +153,72 @@ async function openGithub() {
 }
 
 function dispatchAction(actionId) {
+  // Try to find the button just to provide visual feedback if needed, but don't rely on it for execution
   const btn = document.getElementById(actionId);
-  if (btn) {
-    btn.click();
-    return;
+  if (btn && btn.classList.contains('menu-trigger')) {
+     // If it's a top level menu we could toggle it, but for actions we just execute them below
   }
 
   switch (actionId) {
+    case 'cmd-open-dir':
+      FsUtils.openDirectoryDialog();
+      break;
+    case 'cmd-open-file':
+      FsUtils.openFileDialog();
+      break;
+    case 'cmd-refresh':
+      FsUtils.refresh();
+      break;
+    case 'cmd-fullscreen':
+      toggleFullscreen();
+      break;
+    case 'cmd-parent':
+      FsUtils.openParent();
+      break;
+    case 'cmd-next':
+      Core.navigate(1);
+      break;
+    case 'cmd-prev':
+      Core.navigate(-1);
+      break;
+    case 'cmd-zoom-in':
+      Viewer.zoomCenter(1);
+      break;
+    case 'cmd-zoom-out':
+      Viewer.zoomCenter(-1);
+      break;
+    case 'cmd-zoom-100':
+      Viewer.setZoom(1);
+      break;
+    case 'cmd-fit-width':
+      Core.setFitMode('width', { persist: true });
+      Viewer.applyFitMode();
+      break;
+    case 'cmd-fit-height':
+      Core.setFitMode('height', { persist: true });
+      Viewer.applyFitMode();
+      break;
+    case 'cmd-fit-width-if-larger':
+      Core.setFitMode('width-if-larger', { persist: true });
+      Viewer.applyFitMode();
+      break;
+    case 'cmd-fit-height-if-larger':
+      Core.setFitMode('height-if-larger', { persist: true });
+      Viewer.applyFitMode();
+      break;
+    case 'cmd-fit-best':
+      Core.setFitMode('window', { persist: true });
+      Viewer.applyFitMode();
+      break;
+    case 'cmd-scale-none':
+      setScaling('none');
+      break;
+    case 'cmd-scale-bicubic':
+      setScaling('bicubic');
+      break;
+    case 'cmd-scale-lanczos':
+      setScaling('lanczos');
+      break;
     case 'cmd-rotate-ccw':
       Viewer.rotate(-90);
       break;
@@ -172,10 +232,10 @@ function dispatchAction(actionId) {
       Viewer.flipVertical();
       break;
     case 'cmd-open-next-container':
-      Core.openContainer(1);
+      FsUtils.openSibling(1);
       break;
     case 'cmd-open-prev-container':
-      Core.openContainer(-1);
+      FsUtils.openSibling(-1);
       break;
     case 'cmd-pan-up':
       Viewer.panBy(0, VIEWER_KEYBOARD_PAN_STEP);
@@ -188,6 +248,22 @@ function dispatchAction(actionId) {
       break;
     case 'cmd-pan-right':
       Viewer.panBy(-VIEWER_KEYBOARD_PAN_STEP, 0);
+      break;
+    case 'cmd-toggle-menubar':
+      toggleMenuBar();
+      break;
+    case 'cmd-toggle-filelist':
+      Core.toggleFileList();
+      break;
+    case 'cmd-toggle-statusbar':
+      toggleStatusBar();
+      break;
+    case 'cmd-options':
+      if (window.__TAURI__) window.__TAURI__.core.invoke('open_options').catch(console.error);
+      break;
+    case 'cmd-quit':
+      if (window.__TAURI__) window.__TAURI__.core.invoke('plugin:process|exit');
+      else window.close();
       break;
     case 'cmd-cycle-scaling': {
       const modes = ['none', 'bicubic', 'lanczos'];
@@ -202,11 +278,15 @@ function dispatchAction(actionId) {
 }
 
 function bindMenuCommands() {
-  document.getElementById('cmd-open-dir').addEventListener('click', () => Core.openDirectoryDialog());
-  document.getElementById('cmd-open-file').addEventListener('click', () => Core.openFileDialog());
+  document.getElementById('cmd-open-dir').addEventListener('click', () => FsUtils.openDirectoryDialog());
+  document.getElementById('cmd-open-file').addEventListener('click', () => FsUtils.openFileDialog());
+  document.getElementById('cmd-refresh').addEventListener('click', () => FsUtils.refresh());
+  document.getElementById('cmd-fullscreen').addEventListener('click', () => toggleFullscreen());
+  document.getElementById('cmd-parent').addEventListener('click', () => FsUtils.openParent());
   document.getElementById('cmd-next').addEventListener('click', () => Core.navigate(1));
   document.getElementById('cmd-prev').addEventListener('click', () => Core.navigate(-1));
-  document.getElementById('cmd-parent').addEventListener('click', () => Core.openParent());
+  document.getElementById('cmd-open-next-container').addEventListener('click', () => FsUtils.openSibling(1));
+  document.getElementById('cmd-open-prev-container').addEventListener('click', () => FsUtils.openSibling(-1));
   document.getElementById('cmd-zoom-in').addEventListener('click', () => Viewer.zoomCenter(1));
   document.getElementById('cmd-zoom-out').addEventListener('click', () => Viewer.zoomCenter(-1));
   document.getElementById('cmd-zoom-100').addEventListener('click', () => Viewer.setZoom(1));
@@ -222,17 +302,11 @@ function bindMenuCommands() {
   document.getElementById('cmd-rotate-ccw').addEventListener('click', () => Viewer.rotate(-90));
   document.getElementById('cmd-flip-horizontal').addEventListener('click', () => Viewer.flipHorizontal());
   document.getElementById('cmd-flip-vertical').addEventListener('click', () => Viewer.flipVertical());
-  document.getElementById('cmd-fullscreen').addEventListener('click', toggleFullscreen);
   document.getElementById('cmd-toggle-menubar').addEventListener('click', toggleMenuBar);
   document.getElementById('cmd-toggle-filelist').addEventListener('click', () => Core.toggleFileList());
   document.getElementById('cmd-toggle-statusbar').addEventListener('click', toggleStatusBar);
   document.getElementById('cmd-github').addEventListener('click', () => {
     openGithub().catch(err => console.error('[GitHub] Failed to open repository:', err));
-  });
-
-  document.getElementById('cmd-refresh').addEventListener('click', () => {
-    const state = Core.getState();
-    if (state.directory) Core.loadFile(state.directory);
   });
 
   document.getElementById('cmd-options').addEventListener('click', async () => {
@@ -302,7 +376,7 @@ function bindDragDrop() {
     listen('tauri://drag-drop', (e) => {
       dropOverlay.classList.remove('drag-over');
       const paths = e.payload.paths;
-      if (paths && paths.length > 0) Core.loadFile(paths[0]);
+      if (paths && paths.length > 0) FsUtils.loadFile(paths[0]);
     });
     listen('config-updated', () => Core.loadConfig());
     listen('theme-preview', (e) => {
@@ -338,8 +412,8 @@ function bindDragDrop() {
     e.preventDefault();
     dropOverlay.classList.remove('drag-over');
 
-    const file = e.dataTransfer?.files?.[0];
-    if (file) Core.loadFile(file);
+    const file = e.dataTransfer.getData('text/plain');
+    if (file) FsUtils.loadFile(file);
   });
 }
 
@@ -390,4 +464,15 @@ initMenuBar();
 bindMenuCommands();
 bindDragDrop();
 bindKeyboardShortcuts({ Core, dispatchAction });
+
+if (window.__TAURI__) {
+  let watchTimer = null;
+  window.__TAURI__.event.listen('directory-changed', () => {
+    clearTimeout(watchTimer);
+    watchTimer = setTimeout(() => {
+      FsUtils.refresh();
+    }, 500);
+  }).catch(console.error);
+}
+
 Core.init();

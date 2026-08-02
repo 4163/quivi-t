@@ -1,6 +1,7 @@
 /**
  * filePanel.js - file list rendering, sorting, and column resizing.
  */
+import { DirectoryPrefs } from './directoryPrefs.js';
 
 const MIN_COL_WIDTHS = {
   name: 64,
@@ -24,9 +25,8 @@ let columnResizeMoved = false;
 let lastRenderedList = null;
 let lastClickTime = 0;
 let lastClickIndex = -1;
+let currentPath = '';
 
-let sortCol = 'name';
-let sortDesc = false;
 let columnsInitialized = false;
 
 function setColumnWidth(col, width) {
@@ -98,9 +98,10 @@ function initializeColumns() {
 
 function updateSortIcons() {
   document.querySelectorAll('.header-cell .sort-icon').forEach(icon => icon.textContent = '');
-  const activeCell = document.querySelector(`.header-cell[data-sort="${sortCol}"]`);
+  const prefs = DirectoryPrefs.getSortPrefs(currentPath);
+  const activeCell = document.querySelector(`.header-cell[data-sort="${prefs.col}"]`);
   if (activeCell) {
-    activeCell.querySelector('.sort-icon').textContent = sortDesc ? '▼' : '▲';
+    activeCell.querySelector('.sort-icon').textContent = prefs.desc ? '▼' : '▲';
   }
 }
 
@@ -192,6 +193,12 @@ function updateSelection(selectedIndex) {
 export function renderFilePanel(state) {
   filePanel.classList.toggle('hidden', !state.fileListVisible);
   renderBreadcrumb(state);
+
+  const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
+  if (currentDir !== currentPath) {
+    currentPath = currentDir;
+    updateSortIcons();
+  }
 
   if (lastRenderedList === state.list) {
     updateSelection(state.index);
@@ -298,14 +305,13 @@ export function initFilePanel(deps) {
       }
 
       const col = cell.dataset.sort;
-      if (sortCol === col) {
-        sortDesc = !sortDesc;
-      } else {
-        sortCol = col;
-        sortDesc = false;
+      const prefs = DirectoryPrefs.getSortPrefs(currentPath);
+      let desc = false;
+      if (prefs.col === col) {
+        desc = !prefs.desc;
       }
-
-      Core.sortList(sortCol, sortDesc);
+      
+      DirectoryPrefs.sortCurrentState(currentPath, col, desc);
       updateSortIcons();
     });
   });

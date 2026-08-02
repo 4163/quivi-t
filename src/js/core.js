@@ -6,14 +6,9 @@
  */
 
 import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, mergeConfig } from './keybinds.js';
+import { FsUtils } from './fsUtils.js';
 
-const { invoke, convertFileSrc } = window.__TAURI__.core;
-
-const SUPPORTED_IMAGES = new Set([
-  'jpg', 'jpeg', 'png', 'gif', 'webp', 'apng', 'svg', 'bmp', 'ico', 'avif',
-]);
-
-const SUPPORTED_ARCHIVES = new Set(['zip', 'cbz', 'rar', 'cbr']);
+const { invoke } = window.__TAURI__.core;
 
 // --- Internal state -----------------------------------------------------------
 
@@ -69,109 +64,9 @@ const _listeners = [];
 
 // --- Helpers ------------------------------------------------------------------
 
-function _ext(name) {
-  return name.split('.').pop().toLowerCase();
-}
-
 function _notify() {
   const snapshot = { ..._state };
   for (const fn of _listeners) fn(snapshot);
-}
-
-function _revokeIfObjectURL(src) {
-  if (src && src.startsWith('blob:')) URL.revokeObjectURL(src);
-}
-
-function _formatDate(msStr) {
-  if (!msStr) return '';
-  const ms = parseInt(msStr, 10);
-  if (isNaN(ms)) return '';
-  return new Date(ms).toLocaleDateString();
-}
-
-function _base64Encode(str) {
-  // URL-safe base64 encoding
-  const bytes = new TextEncoder().encode(str);
-  let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function _buildArchiveSrc(archivePath, entryName) {
-  const encoded = _base64Encode(archivePath);
-  const isWindows = navigator.userAgent.includes('Windows');
-  const base = isWindows ? 'http://quivit.localhost' : 'quivit://localhost';
-  return `${base}/archive/${encoded}/${encodeURIComponent(entryName)}`;
-}
-
-function _buildFileSrc(filePath) {
-  return convertFileSrc(filePath);
-}
-
-function _isArchive(name) {
-  return SUPPORTED_ARCHIVES.has(_ext(name));
-}
-
-function _isImage(name) {
-  return SUPPORTED_IMAGES.has(_ext(name));
-}
-
-function _isArchiveEntry(entry) {
-  return entry && !entry.is_dir && _isArchive(entry.name);
-}
-
-function _isImageEntry(entry) {
-  return entry && !entry.is_dir && _isImage(entry.name);
-}
-
-function _formatEntry(entry) {
-  return {
-    ...entry,
-    rawDate: entry.date ? parseInt(entry.date, 10) : 0,
-    date: _formatDate(entry.date),
-  };
-}
-
-function _buildDirectoryList(result) {
-  const files = result.files.map(_formatEntry);
-  if (result.parent_directory) {
-    files.unshift({
-      name: '..',
-      path: result.parent_directory,
-      ext: '',
-      date: '',
-      rawDate: 0,
-      is_dir: true,
-      is_parent: true,
-    });
-  }
-  return files;
-}
-
-function _buildArchiveList(result) {
-  const archivePath = result.archive_path;
-  return [
-    {
-      name: '..',
-      path: archivePath,
-      ext: '',
-      date: '',
-      rawDate: 0,
-      is_dir: true,
-      is_parent: true,
-    },
-    ...result.files.map(_formatEntry),
-  ];
-}
-
-function _firstImageIndex(list, preferredIndex = 0) {
-  if (_isImageEntry(list[preferredIndex])) return preferredIndex;
-  const next = list.findIndex(_isImageEntry);
-  return next === -1 ? 0 : next;
-}
-
-function _showHidden() {
-  return _state.config.frontend_data?.show_hidden === true;
 }
 
 async function _persistConfig() {
@@ -179,44 +74,6 @@ async function _persistConfig() {
     await invoke('save_config', { config: _state.config });
   } catch (err) {
     console.error('[Core] Failed to persist config:', err);
-  }
-}
-
-function _persistLastOpened(path) {
-  if (_state.config.frontend_data.continue_last === false) return;
-  _state.config.frontend_data.last_opened_path = path;
-  _state.config.frontend_data.last_opened_dir = path;
-  _persistConfig();
-}
-
-function _applyDirectoryResult(result, options = {}) {
-  const files = _buildDirectoryList(result);
-  
-  let index = 0;
-  if (options.preserveFilename && _state.filename) {
-    const found = files.findIndex(f => f.name === _state.filename);
-    if (found !== -1) index = found;
-  } else {
-    const offset = result.parent_directory ? 1 : 0;
-    const preferredIndex = Math.min(files.length - 1, Math.max(0, result.initial_index + offset));
-    index = options.preferInitial ? preferredIndex : _firstImageIndex(files, preferredIndex);
-  }
-
-  _revokeIfObjectURL(_state.src);
-
-  _state.mode = 'image';
-  _state.list = files;
-  _state.index = index;
-  _state.directory = result.directory;
-  _state.parentDirectory = result.parent_directory || '';
-  _state.archivePath = '';
-  _state.filename = files[index]?.name || '';
-  _state.src = _isImageEntry(files[index]) ? _buildFileSrc(files[index].path) : '';
-  
-  if (window.__TAURI__) {
-    invoke('watch_directory', { path: result.directory }).catch(err => {
-      console.warn('[Core] Failed to watch directory:', err);
-    });
   }
 }
 
@@ -232,26 +89,26 @@ function _selectEntry(index, activate = false) {
   const file = _state.list[index];
 
   if (activate && file.is_parent) {
-    Core.openParent();
+    FsUtils.openParent();
     return;
   }
 
-  if (activate && (file.is_dir || _isArchiveEntry(file))) {
-    Core.loadFile(file.path);
+  if (activate && (file.is_dir || FsUtils.isArchiveEntry(file))) {
+    FsUtils.loadFile(file.path);
     return;
   }
 
   _state.index = index;
   _state.filename = file.name;
 
-  if (file.is_parent || file.is_dir || !_isImageEntry(file)) {
+  if (file.is_parent || file.is_dir || !FsUtils.isImageEntry(file)) {
     _state.src = '';
   } else if (_state.mode === 'archive') {
-    _revokeIfObjectURL(_state.src);
-    _state.src = _buildArchiveSrc(_state.archivePath, file.name);
+    FsUtils.revokeIfObjectURL(_state.src);
+    _state.src = FsUtils.buildArchiveSrc(_state.archivePath, file.name);
   } else {
-    _revokeIfObjectURL(_state.src);
-    _state.src = _buildFileSrc(file.path);
+    FsUtils.revokeIfObjectURL(_state.src);
+    _state.src = FsUtils.buildFileSrc(file.path);
   }
 
   _notify();
@@ -266,6 +123,21 @@ export const Core = {
 
   getState() {
     return { ..._state };
+  },
+
+  persistConfig() {
+    _persistConfig();
+  },
+
+  setListAndIndex(newList, newIndex) {
+    _state.list = newList;
+    if (newIndex !== undefined && newIndex !== -1) _state.index = newIndex;
+    _notify();
+  },
+
+  setState(partial) {
+    Object.assign(_state, partial);
+    _notify();
   },
 
   toggleFileList() {
@@ -315,7 +187,6 @@ export const Core = {
       console.error('[Core] openContainer error:', err);
     }
   },
-
   /**
    * Jump directly to an index.
    */
@@ -325,232 +196,6 @@ export const Core = {
 
   selectIndex(index) {
     _selectEntry(index);
-  },
-
-  /**
-   * Load a file or directory from an absolute path string.
-   */
-  async loadFile(pathStr) {
-    const name = typeof pathStr === 'string'
-      ? pathStr.replace(/\\/g, '/').split('/').pop()
-      : pathStr.name || '';
-    const path = typeof pathStr === 'string' ? pathStr : (pathStr.path || pathStr.name);
-    
-    if (path === '__DRIVES__') {
-      try {
-        const drives = await invoke('get_drives');
-        const result = {
-          directory: 'Drives',
-          parent_directory: null,
-          initial_index: 0,
-          files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
-        };
-        _applyDirectoryResult(result);
-        _notify();
-      } catch (err) {
-        console.error('[Core] Failed to load drives:', err);
-      }
-      return;
-    }
-
-    const ext = _ext(name);
-
-    try {
-      if (SUPPORTED_ARCHIVES.has(ext)) {
-        // Archive mode
-        const result = await invoke('read_archive', { archivePath: path });
-
-        const files = _buildArchiveList(result);
-
-        _revokeIfObjectURL(_state.src);
-
-        _state.mode = 'archive';
-        _state.list = files;
-        _state.index = _firstImageIndex(files, 1);
-        _state.archivePath = result.archive_path;
-        _state.directory = '';
-        _state.parentDirectory = result.archive_path.replace(/[\\/][^\\/]*$/, '');
-        _state.filename = files[_state.index]?.name || '';
-        _state.src = _isImageEntry(files[_state.index]) ? _buildArchiveSrc(result.archive_path, files[_state.index].name) : '';
-        _persistLastOpened(result.archive_path);
-
-        _notify();
-        return;
-      }
-
-      // Image or directory mode
-      const result = await invoke('read_directory', { path, showHidden: _showHidden() });
-      _applyDirectoryResult(result);
-      _persistLastOpened(result.directory);
-
-      _notify();
-
-    } catch (err) {
-      console.error('[Core] Error loading file:', err);
-    }
-  },
-
-  /**
-   * Sort the current file list.
-   */
-  sortList(col, desc) {
-    if (_state.list.length === 0) return;
-    
-    const dirList = _state.list.filter(f => f.is_dir);
-    const fileList = _state.list.filter(f => !f.is_dir);
-
-    const sortFn = (a, b) => {
-      let cmp = 0;
-      if (col === 'name') {
-        // Natural sort
-        cmp = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
-      } else if (col === 'ext') {
-        cmp = a.ext.localeCompare(b.ext);
-        if (cmp === 0) cmp = a.name.localeCompare(b.name, undefined, { numeric: true });
-      } else if (col === 'date') {
-        cmp = a.rawDate - b.rawDate;
-        if (cmp === 0) cmp = a.name.localeCompare(b.name, undefined, { numeric: true });
-      }
-      return desc ? -cmp : cmp;
-    };
-
-    dirList.sort(sortFn);
-    fileList.sort(sortFn);
-
-    // Folders always on top
-    _state.list = [...dirList, ...fileList];
-    
-    // Keep the currently viewed file selected
-    const newIdx = _state.list.findIndex(f => f.name === _state.filename && _isImageEntry(f));
-    if (newIdx !== -1) {
-      _state.index = newIdx;
-    }
-    _notify();
-  },
-
-  /**
-   * Open the parent directory of the current directory.
-   */
-  async openParent() {
-    if (_state.mode === 'archive' && _state.archivePath) {
-      try {
-        const result = await invoke('read_directory', { path: _state.archivePath, showHidden: _showHidden() });
-        _applyDirectoryResult(result, { preferInitial: true });
-        _persistLastOpened(result.directory);
-        _notify();
-      } catch (err) {
-        console.error('[Core] openParent archive error:', err);
-      }
-      return;
-    }
-
-    if (!_state.directory || _state.directory === 'Drives') return;
-    try {
-      const result = await invoke('open_parent', { currentDir: _state.directory, showHidden: _showHidden() });
-      _applyDirectoryResult(result);
-      _persistLastOpened(result.directory);
-      _notify();
-    } catch (err) {
-      if (err === 'Already at root') {
-        try {
-          const drives = await invoke('get_drives');
-          const result = {
-            directory: 'Drives',
-            parent_directory: null,
-            initial_index: 0,
-            files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
-          };
-          _applyDirectoryResult(result);
-          _notify();
-        } catch (driveErr) {
-          console.error('[Core] get_drives error:', driveErr);
-        }
-      } else {
-        console.error('[Core] openParent error:', err);
-        // Write to file for debugging
-        invoke('plugin:process|execute', { program: 'cmd', args: ['/c', 'echo', String(err), '>', 'error.log'] }).catch(()=>console.log(err));
-      }
-    }
-  },
-
-  /**
-   * Open the next or previous sibling directory.
-   */
-  async openSibling(delta) {
-    if (!_state.directory) return;
-    try {
-      const result = await invoke('open_sibling', { currentDir: _state.directory, delta, showHidden: _showHidden() });
-      _applyDirectoryResult(result);
-
-      _notify();
-    } catch (err) {
-      console.error('[Core] openSibling error:', err);
-    }
-  },
-
-  /**
-   * Open a native directory picker dialog.
-   */
-  async openDirectoryDialog() {
-    try {
-      const { open } = window.__TAURI__.dialog;
-      const selected = await open({ directory: true, multiple: false });
-      if (selected) {
-        await this.loadFile(selected);
-      }
-    } catch (err) {
-      console.error('[Core] openDirectoryDialog error:', err);
-    }
-  },
-
-  async openFileDialog() {
-    try {
-      const { open } = window.__TAURI__.dialog;
-      const selected = await open({
-        multiple: false,
-        filters: [
-          {
-            name: 'Images and archives',
-            extensions: [...SUPPORTED_IMAGES, ...SUPPORTED_ARCHIVES],
-          },
-          {
-            name: 'Images',
-            extensions: [...SUPPORTED_IMAGES],
-          },
-          {
-            name: 'Archives',
-            extensions: [...SUPPORTED_ARCHIVES],
-          },
-        ],
-      });
-      if (selected) {
-        await this.loadFile(selected);
-      }
-    } catch (err) {
-      console.error('[Core] openFileDialog error:', err);
-    }
-  },
-  /**
-   * Refresh the current file list, preserving filename selection if possible.
-   */
-  async refresh() {
-    if (_state.mode === 'archive' && _state.archivePath) {
-      try {
-        const result = await invoke('read_directory', { path: _state.archivePath, showHidden: _showHidden() });
-        _applyDirectoryResult(result, { preserveFilename: true });
-        this.sortList(); // re-applies current sort
-      } catch (err) {
-        console.error('[Core] Refresh archive error:', err);
-      }
-    } else if (_state.directory) {
-      try {
-        const result = await invoke('read_directory', { path: _state.directory, showHidden: _showHidden() });
-        _applyDirectoryResult(result, { preserveFilename: true });
-        this.sortList(); // re-applies current sort
-      } catch (err) {
-        console.error('[Core] Refresh directory error:', err);
-      }
-    }
   },
 
   /**
@@ -578,17 +223,8 @@ export const Core = {
       
       // Auto-refresh if show_hidden changed
       if (oldShowHidden !== undefined && oldShowHidden !== _state.config.frontend_data.show_hidden) {
-        if (_state.directory) {
-          const state = this.getState();
-          // We can't easily call this.loadFile without clearing index, but openParent to same dir works, or just a new load
-          // For simplicity, just invoke read_directory directly like openParent does
-          if (_state.mode === 'archive' && _state.archivePath) {
-            const result = await invoke('read_directory', { path: _state.archivePath, showHidden: _showHidden() });
-            _applyDirectoryResult(result, { preferInitial: false });
-          } else if (_state.directory) {
-            const result = await invoke('read_directory', { path: _state.directory, showHidden: _showHidden() });
-            _applyDirectoryResult(result, { preferInitial: false });
-          }
+        if (_state.directory || _state.archivePath) {
+          FsUtils.refresh();
         }
       }
 
@@ -636,9 +272,7 @@ export const Core = {
     }
     
     if (startPath && window.__TAURI__) {
-      this.loadFile(startPath);
+      FsUtils.loadFile(startPath);
     }
   }
 };
-
-export { SUPPORTED_IMAGES, SUPPORTED_ARCHIVES };
