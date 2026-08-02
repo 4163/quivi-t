@@ -31,9 +31,10 @@ QuiviT/
 │  │  ├─ main.css             # Viewer layout and shared theme tokens
 │  │  └─ options.css          # Options window layout
 │  └─ js/
-│     ├─ core.js              # App state, config, directory/archive loading
-│     ├─ directoryPrefs.js    # Persistent per-directory sorting logic
+│     ├─ core.js              # Central app state and config management
+│     ├─ directoryPrefs.js    # Persistent per-directory grouping and sorting
 │     ├─ filePanel.js         # File list rendering, sorting UI, resizing
+│     ├─ fsUtils.js           # Filesystem and Rust backend interaction
 │     ├─ keyboardNav.js       # Accessible keyboard navigation (Tab/Home/End)
 │     ├─ keybinds.js          # Default shortcuts and config merge helpers
 │     ├─ keybindUi.js         # Keybind configuration grid and conflicts
@@ -59,9 +60,10 @@ QuiviT/
 
 - Opens image files, archive files, and directories.
 - Browses image siblings with keyboard or mouse.
+- Seamlessly jumps to previous/next folders, archives, and root drives.
 - Lists folders, images, and supported archives in the file panel.
 - Supports parent-directory navigation through '`..`'.
-- Reads ZIP/CBZ and RAR/CBR archives directly.
+- Reads ZIP/CBZ and RAR/CBR archives directly, treating them as folders.
 - Supports configurable keybindings.
 - Supports global or portable configuration storage.
 - Provides fit, zoom, pan, rotation, flip, and scaling controls.
@@ -110,6 +112,8 @@ node --check src/js/options.js
 node --check src/js/keybinds.js
 node --check src/js/viewer.js
 node --check src/js/core.js
+node --check src/js/fsUtils.js
+node --check src/js/directoryPrefs.js
 node --check src/js/shortcuts.js
 node --check src/js/filePanel.js
 ```
@@ -118,7 +122,9 @@ node --check src/js/filePanel.js
 
 The frontend is intentionally split into small ES modules.
 
-- `core.js` owns application state and talks to Rust through Tauri commands.
+- `core.js` is the single source of truth for application state and configuration.
+- `fsUtils.js` handles all file system interactions, Tauri backend commands, and dialogs.
+- `directoryPrefs.js` owns the grouping and persistent sorting logic for directory entries.
 - `viewer.js` owns the image viewport only: image source, fit modes, zoom, pan, rotation, flips, and scaling.
 - `keybinds.js` is the single source of truth for default shortcuts.
 - `shortcuts.js` owns keyboard combo normalization and action lookup.

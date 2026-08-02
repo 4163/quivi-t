@@ -235,3 +235,23 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 - Added 'Reveal in File Explorer' and 'Open Folder in Explorer' actions.
 - Bound these to clickable UI elements in the file panel header.
 - Safely integrated Rust-backend explorer triggers across Windows platforms.
+
+### Core Architecture Decoupling
+- Extracted filesystem interaction logic from `core.js` into `fsUtils.js`.
+- Extracted file list grouping and sorting logic into `directoryPrefs.js`.
+- Refactored `main.js` shortcut dispatching to directly route commands via a switch statement, bypassing DOM programmatic click bugs.
+- Fixed shortcut case-insensitivity matching and preserved multi-key combo accuracy.
+
+### File-Type Semantics
+- Ensure `..`, folders, and archives are not treated as image files.
+- Ensure selecting these entries does not attempt to display them in the viewer.
+- Archives are treated like folders in the file list (Enter/Space opens them, double-click opens them, archive scope includes `..` navigation).
+
+### Persistent Directory Sorting
+- Implemented per-directory sorting and grouping that separates drives, folders, and files before applying the sort.
+- Persisted sorting order globally or in portable config depending on portable mode.
+- Sorting gracefully falls back to default settings per-directory, allowing independent sort states.
+
+### Drive Jumping
+- Modified `open_sibling_container` to detect when the user is at the root of a drive (e.g., `C:\`) and jump to the next/previous physical drive (e.g., `D:\`) upon container traversal (`Ctrl+X` / `Ctrl+Z`).
+- Added sibling container jump shortcuts to the File dropdown menu.

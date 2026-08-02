@@ -98,60 +98,11 @@ New modules may be warranted:
   - Frontend parser, only if simple and reliable.
 - Make sure invalid or unsupported ICO data fails gracefully.
 
-### 5. File-Type Semantics
-
-- Ensure `..`, folders, and archives are not treated as image files.
-- Ensure selecting these entries does not attempt to display them in the viewer.
-- Archives should be treated like folders in the file list:
-  - folder-like icon/entry behavior,
-  - Enter/Space opens them,
-  - double-click opens them,
-  - archive scope includes `..` navigation.
-- Add or refine predicates:
-  - `isImageEntry`
-  - `isDirectoryLikeEntry`
-  - `isArchiveEntry`
-  - `isParentEntry`
-- File-list icons:
-  - Add icons to image and archive entries in the file list.
-  - For file types that already have an icon under `icons/`, use those.
-  - For types without a dedicated icon, decide on a practical fallback representation (open for discussion).
-
-
 ### 6. Archive Performance
 
 - Performance note: opening large or slow archives can make `quivit.exe` stop responding briefly; after this, Windows may show the generic executable icon on the taskbar.
 - Treat this as archive-processing/UI-blocking debt.
 - Prefer optimizing archive load/extraction so expensive work does not block the app window, rather than patching only the icon symptom.
-
-### 7. Persistent Directory Sorting
-
-- Persist sorting order globally or in portable config depending on portable mode.
-- Store personal paths only in runtime config, never committed repo files.
-- Proposed config structure:
-
-```json
-{
-  "frontend_data": {
-    "default_sort": { "col": "name", "desc": false },
-    "directory_sort": {
-      "<normalized absolute path>": { "col": "name", "desc": false }
-    }
-  }
-}
-```
-
-- Use the existing config path behavior:
-  - normal mode: user app config directory,
-  - portable mode: executable-adjacent config.
-- Confirm `quivit_config.json` remains ignored when executable-adjacent.
-- Consider limiting stored directory-sort entries to avoid unbounded config growth.
-- Sorting behavior:
-  - default order remains File ascending unless saved otherwise,
-  - per-directory setting overrides default,
-  - archive path can be treated as a directory key.
-
-
 
 ### 8. Single Instance Option
 
@@ -172,16 +123,11 @@ New modules may be warranted:
   - ensure activation/focus works after handoff;
   - verify this with built executable behavior once release builds/file associations exist.
 
-
 ### 9. File Panel Favorites
 
 - Add a Favorites button/feature:
   - favoriting a file or folder adds it to a new file-panel-header section shown under the function buttons.
   - This favorites section is a shortcut list only — it does not function as an independent file-navigation source. Selecting a favorited item jumps the main file-panel/file structure to that item rather than browsing within the favorites list itself.
-
-
-
-
 
 ### 10. UI Sound Design (Low Priority)
 
