@@ -76,7 +76,11 @@ New modules may be warranted:
 
 ### 3. Viewer Rendering
 
-- Audit SVG behavior if indefinite zoom issues remain in some edge cases.
+- Audit SVG elements behavior of hitbox/dimensions going over the canvas edge.
+- The calculations for SVG images that have a WxH of 100% compared to a set WxH, acts different / breaks the border/edge calculations on the canvas and/or image. Key examples: test-files/gfl-spinner.svg works as expected, while icons/quivi-t_moe-2.svg does not.
+- Visual insight on SVGs that have a WxH of 100%; the bounds/edge of the image seems to visually be the center of the image. instead of the very edges.
+  "very edges" = 0x, 0y, widthX, heightY (left, top, right, bottom) of the displayed image element.
+  "center of the image" = (widthX / 2)x, (heightY / 2)y, (widthX / 2)x, (heightY / 2)y (left, top, right, bottom) of the displayed image element.
 
 ### 4. General Rendering
 
@@ -89,7 +93,7 @@ New modules may be warranted:
 - Treat this as archive-processing/UI-blocking debt.
 - Prefer optimizing archive load/extraction so expensive work does not block the app window, rather than patching only the icon symptom.
 
-### 8. UI Sound Design (Low Priority)
+### 8. UI Sound Design (Low/Last Priority)
 
 - Add custom SFX for UI interactions (e.g. button clicks, menu toggles, opening folders, error bumps).
 - Needs a toggle in the Options menu to disable sounds for users who prefer a silent experience.
@@ -98,8 +102,8 @@ New modules may be warranted:
 
 ### 9. Drag-and-Drop Folder Opening
 
-- Rework the drag-and-drop overlay: folder opening already works, so update the wording, refine the drop cursor affordance, and make the overlay itself clickable so it opens a folder picker.
-- Prevent drag/drop on the canvas element behind the overlay — the drop target should be the overlay, not the canvas.
+- Rework the drag-and-drop overlay: folder opening already works, so update the wording, refine the drop cursor affordance, and make the overlay itself clickable so it opens a folder picker (broad .drop-overlay query, no need to mess around with css pointers, pointers are already set as intended).
+- Prevent panning on the canvas element behind the overlay — at the momment .drop-overlay is just on top and panning interaction still leaks.
 - Verify: dropping a folder/image/archive opens it; clicking the overlay opens a folder picker; no canvas drag interaction leaks through. drop. dropping an unsupported file should show a file type not supported warning instead of opening the directory.
 
 ### 10. Responsive Keyboard Panning
