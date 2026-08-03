@@ -67,7 +67,7 @@
         </label>
         <label class="checkbox-label">
           <input type="checkbox" id="opt-open-first-image" />
-          Open first image of directory automatically
+          Automatically open the first image in a directory 
         </label>
       </div>
       <div class="options-section">
@@ -137,11 +137,20 @@
           <button id="btn-save-apply-css">Save & Apply</button>
         </div>
         <textarea id="opt-custom-css" rows="12" spellcheck="false" placeholder="/* Example custom theme */
+
 :root {
-  --bg: #1e1e1e;
-  --surface: #252526;
-  --accent: #4ea4f7;
-}"></textarea>
+  --surface: #dfe0df !important;
+  --accent: #00ad95 !important;
+  --accent-hover: #007662 !important;
+}
+
+html {
+  font-size: 20px !important;
+}
+
+ ̶*̶ ̶{̶
+̶d̶i̶s̶p̶l̶a̶y̶:̶ ̶n̶o̶n̶e̶ ̶!̶i̶m̶p̶o̶r̶t̶a̶n̶t̶;̶
+̶}̶"></textarea>
       </div>
     </div>
 
@@ -151,7 +160,7 @@
         <label>
           <input type="radio" checked disabled />
           <!-- Twemoji US Flag. See: https://github.com/jdecked/twemoji -->
-          <span class="language-name"><img class="flag-icon" src="/assets/twemoji-us.svg" alt="US"> English</span>
+          <span class="language-name"><img class="flag-icon" src="/assets/lang-flags/twemoji-us.svg" alt="US"> English</span>
         </label>
       </div>
     </div>
