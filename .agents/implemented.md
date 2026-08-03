@@ -242,6 +242,18 @@ This file tracks items that are fully implemented and verified, separate from th
 - Added `formatKeyName()` / `normalizeCombo()` in `shortcuts.js` with a `SPECIAL_KEY_MAP` so named keys are captured and stored with canonical casing (`Backspace`, `ArrowLeft`, `Delete`, `F5`, ...) instead of lowercase forms.
 - `mergeConfig` normalizes all default and user keybinds on load, so previously stored lowercase combos display and persist consistently.
 
+### Scroll-Wheel Pan vs Zoom (Manga Reading)
+
+- Wheel input now routes through the keybind table instead of the viewer's hardcoded zoom handler, so scroll actions are fully remappable in Options → Keys.
+- Defaults: `ScrollUp` / `ScrollDown` = Pan Up / Down (`cmd-pan-up` / `cmd-pan-down`) and `Ctrl+ScrollUp` / `Ctrl+ScrollDown` = Zoom In / Out (`cmd-zoom-in` / `cmd-zoom-out`).
+- Wheel zoom zooms toward the cursor position (`Viewer.zoomAt` is now exported; `dispatchAction` accepts a wheel payload with `clientX`/`clientY`).
+- Wheel pan uses a dedicated `VIEWER_WHEEL_PAN_STEP` (120px per notch), independent of the keyboard `VIEWER_KEYBOARD_PAN_STEP` (72px).
+- Wheel events over the file panel, menu bar, dropdowns, or status bar are never hijacked so those UIs keep native scrolling (`isWheelOverUI`).
+- Added a **Scroll Wheel** section to the Options Keys tab with a Hold Ctrl / Toggle Ctrl (sticky) modifier switch, persisted as `frontend_data.scroll_zoom_modifier` (`'hold'` default / `'toggle'`).
+- In toggle mode, a standalone `Ctrl` tap latches zoom mode (synthesizing the `Ctrl` modifier in wheel combos) until `Ctrl` is tapped again; a `Ctrl+Scroll Zoom` badge appears in the status bar while latched. Ordinary `Ctrl` shortcuts (e.g. `Ctrl+X`) do not trip the latch.
+- The keybind capture UI in `keybindUi.js` now supports binding wheel combos (`ScrollUp`, `Ctrl+ScrollDown`, ...) by scrolling while holding the desired modifiers.
+- Added `ScrollUp` / `ScrollDown` to `SPECIAL_KEY_MAP` so wheel combos persist with canonical casing.
+
 ## Verified Commands Used
 
 ```powershell

@@ -738,6 +738,15 @@ li:hover > .fav-remove {
 .status-zoom::before  { content: '·'; margin-right: 12px; color: var(--border); }
 .status-fit::before   { content: '·'; margin-right: 12px; color: var(--border); }
 
+/* Sticky zoom-mode indicator (Options → Keys → Scroll Wheel → Toggle Ctrl) */
+.status-scroll-zoom {
+  display: none;
+}
+
+#statusbar.zoom-latched .status-scroll-zoom {
+  display: inline-block;
+}
+
 /* --- Utility ---------------------------------------------- */
 .hidden { display: none !important; }
 

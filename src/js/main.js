@@ -6,8 +6,8 @@ import { Core } from './core.js';
 import { FsUtils } from './fsUtils.js';
 import { Viewer } from './viewer.js';
 import { initFilePanel, renderFilePanel, toggleFavoriteCurrent } from './filePanel.js';
-import { VIEWER_KEYBOARD_PAN_STEP } from './keybinds.js';
-import { bindKeyboardShortcuts, updateMenuShortcuts } from './shortcuts.js';
+import { VIEWER_KEYBOARD_PAN_STEP, VIEWER_WHEEL_PAN_STEP } from './keybinds.js';
+import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch } from './shortcuts.js';
 import {
   initMenuBar,
   closeMenus,
@@ -69,9 +69,11 @@ const dropOverlay = document.getElementById('drop-overlay');
 const menubar = document.getElementById('menubar');
 const viewport = document.getElementById('viewport');
 const statusbar = document.getElementById('statusbar');
-const statusName = document.getElementById('status-filename');
-const statusIndex = document.getElementById('status-index');
-const statusFit = document.getElementById('status-fit');
+const statusName = document.querySelector('.status-filename');
+const statusDims = document.querySelector('.status-dims');
+const statusIndex = document.querySelector('.status-index');
+const statusZoom = document.querySelector('.status-zoom');
+const statusFit = document.querySelector('.status-fit');
 
 const filePanel = document.getElementById('file-panel');
 const filePanelBreadcrumb = document.getElementById('file-panel-breadcrumb');
@@ -152,12 +154,14 @@ async function openGithub() {
   }
 }
 
-function dispatchAction(actionId) {
+function dispatchAction(actionId, payload) {
   // Try to find the button just to provide visual feedback if needed, but don't rely on it for execution
   const btn = document.getElementById(actionId);
   if (btn && btn.classList.contains('menu-trigger')) {
      // If it's a top level menu we could toggle it, but for actions we just execute them below
   }
+
+  const wheelStep = payload?.wheel ? VIEWER_WHEEL_PAN_STEP : VIEWER_KEYBOARD_PAN_STEP;
 
   switch (actionId) {
     case 'cmd-open-dir':
@@ -185,10 +189,12 @@ function dispatchAction(actionId) {
       Core.navigate(-1);
       break;
     case 'cmd-zoom-in':
-      Viewer.zoomCenter(1);
+      if (payload?.wheel) Viewer.zoomAt(1, payload.clientX, payload.clientY);
+      else Viewer.zoomCenter(1);
       break;
     case 'cmd-zoom-out':
-      Viewer.zoomCenter(-1);
+      if (payload?.wheel) Viewer.zoomAt(-1, payload.clientX, payload.clientY);
+      else Viewer.zoomCenter(-1);
       break;
     case 'cmd-zoom-100':
       Viewer.setZoom(1);
@@ -241,16 +247,16 @@ function dispatchAction(actionId) {
       FsUtils.openSibling(-1);
       break;
     case 'cmd-pan-up':
-      Viewer.panBy(0, VIEWER_KEYBOARD_PAN_STEP);
+      Viewer.panBy(0, wheelStep);
       break;
     case 'cmd-pan-left':
-      Viewer.panBy(VIEWER_KEYBOARD_PAN_STEP, 0);
+      Viewer.panBy(wheelStep, 0);
       break;
     case 'cmd-pan-down':
-      Viewer.panBy(0, -VIEWER_KEYBOARD_PAN_STEP);
+      Viewer.panBy(0, -wheelStep);
       break;
     case 'cmd-pan-right':
-      Viewer.panBy(-VIEWER_KEYBOARD_PAN_STEP, 0);
+      Viewer.panBy(-wheelStep, 0);
       break;
     case 'cmd-toggle-menubar':
       toggleMenuBar();
@@ -385,10 +391,13 @@ function bindDragDrop() {
       const paths = e.payload.paths;
       if (paths && paths.length > 0) FsUtils.loadFile(paths[0]);
     });
+    listen('config-updated', () => {
+      resetScrollLatch();
+      Core.loadConfig();
+    });
     listen('single-instance-open', (e) => {
       if (e.payload) FsUtils.loadFile(e.payload).catch(console.error);
     });
-    listen('config-updated', () => Core.loadConfig());
     listen('theme-preview', (e) => {
       const theme = e.payload;
       document.documentElement.removeAttribute('data-theme');
@@ -473,6 +482,15 @@ Core.onStateChange((state) => {
 
   statusName.textContent = state.filename;
   statusIndex.textContent = state.list.length > 1 ? `${state.index + 1} / ${state.list.length}` : '';
+
+  // Items that aren't images (folders, archives, `..`, drives) have no
+  // dimensions or zoom level; show N/A instead of stale image metrics.
+  const currentEntry = state.list[state.index];
+  const isImage = !!currentEntry && FsUtils.isImageEntry(currentEntry) && state.src;
+  if (!isImage) {
+    statusDims.textContent = 'N/A';
+    statusZoom.textContent = 'N/A';
+  }
 
   const fitDisplay = state.fitMode.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   statusFit.textContent = `Fit: ${fitDisplay}`;

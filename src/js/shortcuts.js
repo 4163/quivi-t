@@ -30,6 +30,8 @@ const SPECIAL_KEY_MAP = {
   printscreen: 'PrintScreen',
   contextmenu: 'ContextMenu',
   pause: 'Pause',
+  scrollup: 'ScrollUp',
+  scrolldown: 'ScrollDown',
 };
 
 export function formatKeyName(key) {
@@ -44,7 +46,7 @@ export function normalizeCombo(combo) {
   return combo.split('+').map(formatKeyName).join('+');
 }
 
-export function formatKeysCombo(keysSet, buttonsSet) {
+export function formatKeysCombo(keysSet, buttonsSet, scrollDir) {
   const combo = [];
   const lowerKeys = Array.from(keysSet).map(k => k.toLowerCase());
   
@@ -65,6 +67,8 @@ export function formatKeysCombo(keysSet, buttonsSet) {
     const buttons = { 0: 'MouseLeft', 1: 'MouseMiddle', 2: 'MouseRight', 3: 'MouseBack', 4: 'MouseForward' };
     others.push(buttons[b] || `Mouse${b}`);
   }
+
+  if (scrollDir) others.push(scrollDir);
 
   others.sort();
   return combo.concat(others).join('+');
@@ -97,6 +101,35 @@ export function updateMenuShortcuts(config) {
   }
 }
 
+// Scroll-wheel modifier latch (Options → Keys → Scroll Wheel → Toggle).
+// In 'toggle' mode, pressing Ctrl once enters a sticky "zoom mode" so the
+// wheel keeps zooming without holding Ctrl; pressing Ctrl again exits.
+let ctrlLatched = false;
+let ctrlKeyDown = false;
+let ctrlChordBroken = false;
+
+export function resetScrollLatch() {
+  ctrlLatched = false;
+  ctrlKeyDown = false;
+  ctrlChordBroken = false;
+  _updateLatchIndicator();
+}
+
+function isToggleModifier(config) {
+  return config?.frontend_data?.scroll_zoom_modifier === 'toggle';
+}
+
+function _updateLatchIndicator() {
+  const bar = document.getElementById('statusbar');
+  if (bar) bar.classList.toggle('zoom-latched', ctrlLatched);
+}
+
+// The wheel should never hijack scrolling over UI chrome or the file list.
+function isWheelOverUI(e) {
+  const el = e.target;
+  return !!(el.closest?.('#file-panel, .menubar, .dropdown-menu, #statusbar'));
+}
+
 export function bindKeyboardShortcuts({ Core, dispatchAction }) {
   const handleShortcut = (e) => {
     // Ignore bare modifiers for dispatch
@@ -118,11 +151,33 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
       e.preventDefault();
     }
+
+    // Track a clean Ctrl tap so 'toggle' mode can latch zoom without being
+    // triggered by ordinary shortcuts like Ctrl+X.
+    if (e.key === 'Control') {
+      if (!e.repeat) {
+        ctrlKeyDown = true;
+        ctrlChordBroken = false;
+      }
+    } else {
+      if (ctrlKeyDown) ctrlChordBroken = true;
+    }
+
     activeKeys.add(e.key.toLowerCase());
     handleShortcut(e);
   });
 
   window.addEventListener('keyup', (e) => {
+    if (e.key === 'Control') {
+      // A standalone Ctrl press/release (no other key in between) toggles the
+      // sticky zoom latch in 'toggle' mode.
+      if (ctrlKeyDown && !ctrlChordBroken && isToggleModifier(Core.getState().config)) {
+        ctrlLatched = !ctrlLatched;
+        _updateLatchIndicator();
+      }
+      ctrlKeyDown = false;
+      ctrlChordBroken = false;
+    }
     activeKeys.delete(e.key.toLowerCase());
   });
 
@@ -134,4 +189,33 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
   window.addEventListener('mouseup', (e) => {
     activeButtons.delete(e.button);
   });
+
+  // Scroll wheel: route through the keybind table so ScrollUp/ScrollDown and
+  // Ctrl+ScrollUp/Ctrl+ScrollDown are remappable. In hold mode a physically
+  // held Ctrl synthesizes the modifier; in toggle mode only the sticky latch
+  // does, so zooming requires the "zoom mode" to actually be active.
+  window.addEventListener('wheel', (e) => {
+    if (isWheelOverUI(e)) return;
+
+    const config = Core.getState().config;
+    const toggleMode = isToggleModifier(config);
+    const latched = toggleMode && ctrlLatched;
+    const keys = new Set(activeKeys);
+    const scrollDir = e.deltaY < 0 ? 'ScrollUp' : 'ScrollDown';
+
+    if (toggleMode) {
+      if (latched) keys.add('control');
+      else keys.delete('control');
+    }
+    // A wheel event while Ctrl is down means the press wasn't a clean tap, so
+    // releasing Ctrl must not toggle the latch.
+    if (activeKeys.has('control')) ctrlChordBroken = true;
+
+    const combo = formatKeysCombo(keys, activeButtons, scrollDir);
+    const actionId = findAction(config, combo);
+    if (!actionId) return;
+
+    e.preventDefault();
+    dispatchAction(actionId, { wheel: true, clientX: e.clientX, clientY: e.clientY });
+  }, { passive: false });
 }

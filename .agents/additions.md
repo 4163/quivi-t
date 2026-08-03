@@ -113,11 +113,12 @@ New modules may be warranted:
 - Make panning apply immediately per key press and support fast direction changes.
 - Verify: hold and rapidly alternate directions; panning responds instantly per press.
 
-### 11. Scroll-Wheel Zoom vs Pan (Manga Reading)
+### 11. Scroll-Wheel Zoom vs Pan (Manga Reading) ✅ DONE
 
 - Add scroll-wheel behavior suited to manga reading: plain wheel scrolls/pans the image up and down, while `Ctrl` + wheel zooms in/out.
 - Add scroll-wheel actions to the Options Keys tab keybinds, with defaults of `Ctrl+ScrollUp` = zoom in, `Ctrl+ScrollDown` = zoom out, and `ScrollUp` / `ScrollDown` = pan.
 - Verify: wheel pans, Ctrl+wheel zooms, and the scroll actions are remappable in Options.
+- **Implemented 2026-08-03** — wheel routes through the keybind table (`ScrollUp`/`ScrollDown` on `cmd-pan-up`/`cmd-pan-down`, `Ctrl+ScrollUp`/`Ctrl+ScrollDown` on `cmd-zoom-in`/`cmd-zoom-out`); cursor-anchored zoom; `VIEWER_WHEEL_PAN_STEP`; UI-scroll passthrough; Options Keys "Scroll Wheel" section with a Hold Ctrl / Toggle Ctrl (sticky) switch (`scroll_zoom_modifier`); status-bar latch badge; wheel-combo capture in `keybindUi.js`.
 
 ### 12. Update Availability Indicator
 

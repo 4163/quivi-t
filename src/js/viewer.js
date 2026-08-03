@@ -10,8 +10,8 @@ import { Core } from './core.js';
 import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from './keybinds.js';
 
 const img = document.getElementById('viewer-img');
-const statusZoom = document.getElementById('status-zoom');
-const statusDims = document.getElementById('status-dims');
+const statusZoom = document.querySelector('.status-zoom');
+const statusDims = document.querySelector('.status-dims');
 
 let _scale  = 1;
 let _tx     = 0;
@@ -214,12 +214,6 @@ function _onMouseUp() {
   document.body.style.cursor = '';
 }
 
-function _onWheel(e) {
-  e.preventDefault();
-  const delta = e.deltaY < 0 ? 1 : -1;
-  zoomAt(delta, e.clientX, e.clientY);
-}
-
 function panBy(dx, dy) {
   _tx += dx;
   _ty += dy;
@@ -296,7 +290,6 @@ const viewport = document.getElementById('viewport');
 viewport.addEventListener('mousedown', _onMouseDown);
 window.addEventListener('mousemove', _onMouseMove);
 window.addEventListener('mouseup', _onMouseUp);
-viewport.addEventListener('wheel', _onWheel, { passive: false });
 
 viewport.addEventListener('dblclick', () => {
   // Toggle between 100% and current fit mode, or just reset fit mode
@@ -313,6 +306,7 @@ viewport.addEventListener('dblclick', () => {
 
 export const Viewer = { 
   applyFitMode, 
+  zoomAt,
   zoomCenter,
   panBy,
   rotate,

@@ -75,6 +75,7 @@ QuiviT/
 - Supports configurable keybindings, multi-key combos, and mouse shortcuts.
 - Supports global or portable configuration storage.
 - Provides fit, zoom, pan, rotation, flip, and scaling controls.
+- Scroll-wheel panning with Ctrl+wheel zoom (both remappable, manga-friendly), plus an optional sticky-Ctrl "toggle" mode so you press Ctrl once to enter zoom mode instead of holding it.
 - Provides a display-only breadcrumb for the current directory or archive.
 - Displays multi-frame ICO files as a horizontal spritesheet.
 - Toggleable opaque backdrop for transparent images.
@@ -203,6 +204,15 @@ The backend does not define shortcut defaults. It only loads and saves the confi
 Keyboard pan distance is tuned by `VIEWER_KEYBOARD_PAN_STEP` in the same file.
 The startup fit mode defaults to `DEFAULT_FIT_MODE` (`height-if-larger`) and changes made from the View menu are saved in config.
 The scaling method defaults to `DEFAULT_SCALING_MODE` (`bicubic`) and changes made from the View menu are saved in config.
+The scroll-wheel modifier defaults to `hold` (hold `Ctrl` while scrolling to zoom) and can be switched to `toggle` (sticky `Ctrl`, press once to enter zoom mode) in Options → Keys → Scroll Wheel, saved as `scroll_zoom_modifier`.
+
+### Scroll Wheel Behavior
+
+- Plain wheel pans the image up/down (bound to `cmd-pan-up` / `cmd-pan-down` as `ScrollUp` / `ScrollDown`).
+- `Ctrl` + wheel zooms in/out (bound to `cmd-zoom-in` / `cmd-zoom-out` as `Ctrl+ScrollUp` / `Ctrl+ScrollDown`).
+- All four are ordinary keybinds in the Options Keys tab, so they are fully remappable; zooming zooms toward the cursor position.
+- Wheel scrolling over the file list or menu chrome is never hijacked — it keeps scrolling that UI.
+- In **Hold** mode, keep `Ctrl` held while scrolling to zoom. In **Toggle** mode, press `Ctrl` once to latch zoom mode (a status-bar badge appears); the wheel keeps zooming without `Ctrl` until you press `Ctrl` again.
 
 ### Advanced Shortcut Capabilities
 
@@ -231,6 +241,8 @@ Shift+D / Shift+Right / MouseForward        Next item
 Shift+S / Shift+Down                        Next item
 Shift+A / Shift+Left / MouseBack            Previous item
 Shift+W / Shift+Up                          Previous item
+ScrollUp / ScrollDown                       Pan up / pan down
+Ctrl+ScrollUp / Ctrl+ScrollDown             Zoom in / zoom out
 C                                           Zoom in
 Z                                           Zoom out
 X                                           Zoom 100%

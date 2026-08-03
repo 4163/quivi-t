@@ -9,6 +9,8 @@ import { normalizeCombo } from './shortcuts.js';
 export const DEFAULT_KEYBINDS = {
   'cmd-next': ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown', 'MouseForward'],
   'cmd-prev': ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp', 'MouseBack'],
+  'cmd-zoom-in': ['c', 'Ctrl+ScrollUp'],
+  'cmd-zoom-out': ['z', 'Ctrl+ScrollDown'],
   'cmd-open-next-container': 'Ctrl+x',
   'cmd-open-prev-container': 'Ctrl+z',
   'cmd-open-dir': 'Ctrl+o',
@@ -28,8 +30,6 @@ export const DEFAULT_KEYBINDS = {
   'cmd-fit-width-if-larger': 'r',
   'cmd-fit-height-if-larger': 't',
   'cmd-fit-best': 'f',
-  'cmd-zoom-in': 'c',
-  'cmd-zoom-out': 'z',
   'cmd-zoom-100': 'x',
   'cmd-cycle-scaling': ']',
   'cmd-refresh': ['6', 'Ctrl+r'],
@@ -37,15 +37,18 @@ export const DEFAULT_KEYBINDS = {
   'cmd-rotate-cw': 'h',
   'cmd-flip-horizontal': 'v',
   'cmd-flip-vertical': 'b',
-  'cmd-pan-up': ['w', 'ArrowUp'],
+  'cmd-pan-up': ['w', 'ArrowUp', 'ScrollUp'],
   'cmd-pan-left': ['a', 'ArrowLeft'],
-  'cmd-pan-down': ['s', 'ArrowDown'],
+  'cmd-pan-down': ['s', 'ArrowDown', 'ScrollDown'],
   'cmd-pan-right': ['d', 'ArrowRight'],
 };
 
 // Pixel distance moved by keyboard pan commands. Increase/decrease this to tune
 // W/A/S/D and arrow-key panning without touching the command dispatch code.
 export const VIEWER_KEYBOARD_PAN_STEP = 72;
+
+// Pixel distance moved per scroll-wheel notch when the wheel is bound to pan.
+export const VIEWER_WHEEL_PAN_STEP = 120;
 export const DEFAULT_FIT_MODE = 'height-if-larger';
 export const DEFAULT_SCALING_MODE = 'bicubic';
 
@@ -64,6 +67,7 @@ export function mergeConfig(loaded) {
       single_instance: fd.single_instance !== false,
       transparent_bg: fd.transparent_bg === true,
       start_dir: fd.start_dir || '',
+      scroll_zoom_modifier: fd.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold',
       fit_mode: fd.fit_mode || DEFAULT_FIT_MODE,
       scaling_mode: fd.scaling_mode || DEFAULT_SCALING_MODE,
       show_hidden: fd.show_hidden === true,

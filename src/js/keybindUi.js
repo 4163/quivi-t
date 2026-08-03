@@ -165,6 +165,7 @@ export function initKeybindUi(containerId, config, showStatus) {
       window.removeEventListener('keyup', onKeyUp, true);
       window.removeEventListener('mousedown', onMouseDown, true);
       window.removeEventListener('mouseup', onMouseUp, true);
+      window.removeEventListener('wheel', onWheel, true);
       window.removeEventListener('contextmenu', onContextMenu, true);
       setTimeout(() => { isCapturing = false; }, 100);
     };
@@ -226,12 +227,65 @@ export function initKeybindUi(containerId, config, showStatus) {
       e.preventDefault();
       e.stopPropagation();
     };
-  
+
+    // Scroll wheel bindings: ScrollUp / ScrollDown (optionally combined with
+    // modifiers) finalize immediately on the wheel event — there is no keyup.
+    const onWheel = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isFinalizing) return;
+      const scrollDir = e.deltaY < 0 ? 'ScrollUp' : 'ScrollDown';
+      finish(formatKeysCombo(activeKeys, activeButtons, scrollDir));
+    };
+
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp, true);
     window.addEventListener('mousedown', onMouseDown, true);
     window.addEventListener('mouseup', onMouseUp, true);
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true });
     window.addEventListener('contextmenu', onContextMenu, true);
+  }
+
+  function createScrollModeToggle() {
+    const wrap = document.createElement('div');
+    wrap.className = 'scroll-mode-toggle';
+
+    const label = document.createElement('span');
+    label.className = 'scroll-mode-label';
+    label.textContent = 'Modifier Key';
+
+    const btnHold = document.createElement('button');
+    btnHold.type = 'button';
+    btnHold.className = 'scroll-mode-btn';
+    btnHold.textContent = 'Hold';
+    btnHold.title = 'Temporarily switch zoom/pan states.';
+
+    const btnToggle = document.createElement('button');
+    btnToggle.type = 'button';
+    btnToggle.className = 'scroll-mode-btn';
+    btnToggle.textContent = 'Toggle';
+    btnToggle.title = 'Persistently switch zoom/pan states.';
+
+    const apply = () => {
+      const active = config.frontend_data.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold';
+      btnHold.classList.toggle('active', active === 'hold');
+      btnToggle.classList.toggle('active', active === 'toggle');
+    };
+
+    btnHold.addEventListener('click', () => {
+      config.frontend_data.scroll_zoom_modifier = 'hold';
+      apply();
+    });
+    btnToggle.addEventListener('click', () => {
+      config.frontend_data.scroll_zoom_modifier = 'toggle';
+      apply();
+    });
+
+    apply();
+    wrap.appendChild(label);
+    wrap.appendChild(btnHold);
+    wrap.appendChild(btnToggle);
+    return wrap;
   }
 
   function renderKeybinds() {
@@ -306,7 +360,7 @@ export function initKeybindUi(containerId, config, showStatus) {
           const addBtn = document.createElement('button');
           addBtn.className = 'keybind-tag add-btn';
           addBtn.textContent = '+';
-          addBtn.title = 'Add alternative bind';
+          addBtn.title = currentBinds.length > 0 ? 'Add alternative keybind' : 'Add keybind';
           addBtn.addEventListener('click', () => captureKeybind(action.id, currentBinds.length, addBtn));
           tagsContainer.appendChild(addBtn);
         };
@@ -316,6 +370,14 @@ export function initKeybindUi(containerId, config, showStatus) {
         row.appendChild(tagsContainer);
         container.appendChild(row);
       });
+
+      if (category.name === 'Pan') {
+        const scrollHeader = document.createElement('h3');
+        scrollHeader.textContent = 'Wheel Behaviour';
+        scrollHeader.className = 'keybind-category-header';
+        container.appendChild(scrollHeader);
+        container.appendChild(createScrollModeToggle());
+      }
     });
   }
 
