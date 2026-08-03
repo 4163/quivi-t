@@ -36,6 +36,9 @@ body > * {
   border-radius: 4px 4px 0 0;
   color: var(--text-muted);
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tab-btn:hover {
@@ -71,7 +74,7 @@ body > * {
 }
 
 .options-section h3 {
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-weight: 600;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -105,7 +108,7 @@ body > * {
 }
 
 .options-section .hint {
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--text-dim);
   margin-bottom: 8px;
 }
@@ -156,12 +159,12 @@ body > * {
 
 #btn-reset-keybinds {
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: var(--fs-11);
   white-space: nowrap;
 }
 textarea {
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 13px;
+  font-size: var(--fs-13);
   background: var(--input-bg);
   color: var(--text);
   border: 1px solid var(--border);
@@ -212,12 +215,12 @@ textarea:focus {
 }
 
 .keybind-name {
-  font-size: 12px;
+  font-size: var(--fs-12);
 }
 
 .keybind-category-header {
   margin: 16px 0 4px 0;
-  font-size: 13px;
+  font-size: var(--fs-13);
   font-weight: 600;
   color: var(--accent);
   text-transform: uppercase;
@@ -245,7 +248,7 @@ textarea:focus {
   background: var(--bg);
   color: var(--accent);
   font: inherit;
-  font-size: 11px;
+  font-size: var(--fs-11);
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -257,7 +260,7 @@ textarea:focus {
 }
 
 .keybind-tag .remove-btn {
-  font-size: 14px;
+  font-size: var(--fs-14);
   line-height: 1;
   color: #999;
   padding: 0 2px;
@@ -300,7 +303,7 @@ textarea:focus {
   flex: 1;
   min-width: 0;
   color: #b00020;
-  font-size: 11px;
+  font-size: var(--fs-11);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

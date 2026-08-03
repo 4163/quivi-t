@@ -6,10 +6,6 @@
 
 /* --- System font stack (zero external requests → best LCP) -- */
 :root {
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  font-size: 13px;
-  line-height: 1.4;
-
   /* Light theme tokens */
   --bg:           #f0f0f0;
   --surface:      #ffffff;
@@ -34,8 +30,6 @@
   --checker-size: 14px;
 
   /* Layout */
-  --menubar-h:    26px;
-  --statusbar-h:  22px;
   --panel-w:      260px;
   --panel-min-w:  120px;
   --panel-max-w:  480px;
@@ -45,6 +39,18 @@
   --col-date-w:   92px;
 
   color-scheme: light dark;
+
+  /* Font sizes in px */
+  --fs-9: 0.5625rem;
+  --fs-10: 0.625rem;
+  --fs-11: 0.6875rem;
+  --fs-11-5: 0.71875rem; /* 11.5 */
+  --fs-12: 0.75rem;
+  --fs-13: 0.8125rem;
+  --fs-14: 0.875rem;
+  --fs-15: 0.9375rem;
+  --fs-16: 1rem;
+  --fs-40: 2.5rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -102,6 +108,12 @@
   border-radius: 2px;
 }
 
+html {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 100%;
+  line-height: 1.4;
+}
+
 html, body {
   width: 100%;
   height: 100%;
@@ -117,13 +129,21 @@ html, body {
 body {
   display: flex;
   flex-direction: column;
+
+  /*
+    global of 13px for the font-size
+    really weird implementation;
+    - font sizes are done this way so users can set a default html value via the css section in options.
+    - this isn't inherently bad, as browser preferences cannot be set in tauri applications in the first place.
+  */
+  font-size: var(--fs-13); 
 }
 
 /* --- Menu bar --------------------------------------------- */
 #menubar {
   display: flex;
   align-items: stretch;
-  height: var(--menubar-h);
+  padding: 1.3045px 0;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -152,9 +172,8 @@ body {
 }
 
 .menu-link svg {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
+  width: var(--fs-14);
+  height: var(--fs-14);
 }
 
 .menu-link:hover,
@@ -247,7 +266,7 @@ body {
 }
 
 .shortcut {
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -322,7 +341,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--text-muted);
   cursor: pointer;
   user-select: none;
@@ -336,7 +355,7 @@ body {
 }
 
 #file-panel-favorites-header .toggle-icon {
-  font-size: 9px;
+  font-size: var(--fs-9);
   opacity: 0.6;
 }
 
@@ -352,12 +371,17 @@ body {
   background: transparent;
   border: none;
   color: #999;
-  font-size: 14px;
+  font-size: var(--fs-14);
   line-height: 1;
   padding: 0 8px;
   cursor: pointer;
   opacity: 0;
   flex-shrink: 0;
+}
+
+.fav-remove svg {
+  width: var(--fs-12);
+  height: var(--fs-12);
 }
 
 li:hover > .fav-remove {
@@ -370,7 +394,7 @@ li:hover > .fav-remove {
 
 .fav-empty {
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--text-muted);
   font-style: italic;
 }
@@ -390,7 +414,7 @@ li:hover > .fav-remove {
   overflow-wrap: anywhere;
   word-break: break-word;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--fs-11);
   line-height: 1.35;
 }
 
@@ -398,6 +422,21 @@ li:hover > .fav-remove {
   display: flex;
   justify-content: space-around;
   border-top: 1px solid var(--border);
+}
+
+#cmd-file {
+  width: var(--fs-14);
+  height: var(--fs-14);
+}
+
+#cmd-folder {
+  width: var(--fs-14);
+  height: var(--fs-14);
+}
+
+#star {
+  width: var(--fs-16);
+  height: var(--fs-16);
 }
 
 .icon-btn {
@@ -424,7 +463,7 @@ li:hover > .fav-remove {
   height: 22px;
   background: var(--surface-alt);
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--text-muted);
   flex-shrink: 0;
 }
@@ -467,13 +506,13 @@ li:hover > .fav-remove {
 
 .sort-icon {
   margin-left: 4px;
-  font-size: 9px;
+  font-size: var(--fs-10);
   opacity: 0.5;
 }
 
 .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .col-ext  { min-width: 38px; }
-.col-date { min-width: 92px; font-size: 10px; }
+.col-date { min-width: 92px; font-size: var(--fs-10); }
 
 #file-list {
   flex: 1;
@@ -499,7 +538,7 @@ li:hover > .fav-remove {
   height: 20px;
   gap: 0;
   cursor: default;
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -533,7 +572,7 @@ li:hover > .fav-remove {
 #file-list .item-name > img, #favorites-list .item-name > img { width: 14px; min-width: 14px; height: 14px; flex: 0 0 14px; }
 #file-list .item-label, #favorites-list .item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #file-list .item-ext, #favorites-list .item-ext  { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); padding-left: 8px; }
-#file-list .item-date, #favorites-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 10px; color: var(--text-dim); padding-left: 8px; }
+#file-list .item-date, #favorites-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-10); color: var(--text-dim); padding-left: 8px; }
 
 /* Resize handle */
 #panel-resize-handle {
@@ -588,6 +627,24 @@ li:hover > .fav-remove {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s;
+  container-type: inline-size;
+  container-name: box;
+}
+
+
+
+@container box (max-width: 240px) {
+  .drop-hint p,
+  .drop-hint span {
+    display: none;
+  }
+}
+
+@container box (max-width: 194px) {
+  .drop-hint {
+    width: calc(100% - 50px);
+    padding: 42px 0 !important;  /* emulates subtle squeeze */
+  }
 }
 
 #drop-overlay.active {
@@ -611,14 +668,16 @@ li:hover > .fav-remove {
   gap: 10px;
   padding: 40px 52px;
   border: 1.5px dashed var(--border);
+  margin: 0 25px;
   border-radius: 10px;
   color: var(--text-muted);
   transition: border-color 0.15s, color 0.15s;
+  cursor: pointer;
 }
 
-.drop-hint svg { width: 40px; height: 40px; opacity: 0.55; }
-.drop-hint p   { font-size: 0.95rem; font-weight: 500; }
-.drop-hint span{ font-size: 0.75rem; opacity: 0.5; letter-spacing: 0.04em; }
+.drop-hint svg { width: var(--fs-40); height: var(--fs-40); opacity: 0.55; }
+.drop-hint p   { font-size: 0.95rem; font-weight: 500; text-align: center; }
+.drop-hint span{ font-size: 0.75rem; opacity: 0.5; letter-spacing: 0.04em; text-align: center; }
 
 /* --- Viewer image ----------------------------------------- */
 #viewer-img {
@@ -646,13 +705,13 @@ li:hover > .fav-remove {
 #statusbar {
   display: flex;
   align-items: center;
-  height: var(--statusbar-h);
+  padding: 2.453px;
   padding: 0 8px;
   gap: 12px;
   background: var(--surface-alt);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
-  font-size: 11.5px;
+  font-size: var(--fs-11-5);
   color: var(--text-muted);
 }
 
