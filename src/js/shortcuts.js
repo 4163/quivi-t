@@ -148,7 +148,12 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
   };
 
   window.addEventListener('keydown', (e) => {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+    // Don't hijack Space/arrows when an interactive element (e.g. a button)
+    // has focus — Space should still activate the button natively.
+    const target = e.target;
+    const onInteractive = target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.closest?.('button, input, textarea, select'));
+
+    if (!onInteractive && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
       e.preventDefault();
     }
 
