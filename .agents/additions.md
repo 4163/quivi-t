@@ -219,13 +219,9 @@ After all implementation slices:
 
 1. Manually review that the project remains coherently decoupled.
 2. Move features into their own JS files where warranted.
-3. Update `README.md` with new shortcuts, config behavior, ICO behavior, archive behavior, and module structure.
-   - Optionally include the project logo (`quivi-t_moe-1.svg`) as a small, tasteful addition — it should not dominate or distract from the main README content.
-4. Verify every config-backed feature meets both global and portable-mode requirements:
-   - normal mode writes user settings to the app config directory only;
-   - portable mode writes user settings beside the executable only;
-   - switching modes does not leak private paths into tracked repository files;
-   - defaults, keybinds, fit/scaling mode, hidden-folder visibility, start/continue directory, and directory-sort data persist in the correct location.
-5. Add a new entry to `.agents/sessions.md`.
-6. Repeat static and runtime verifications as needed.
-7. Leave the repository ready for the user to run the push pipeline.
+3. Port the completed items from this file into `.agents/implemented.md` — including any additions and fixes made during the pass that were not originally listed here.
+4. Update `README.md` with new shortcuts, config behavior, rchive behavior, and module structure, and any relevant changes.
+5. Verify every config-backed feature meets both global and portable-mode requirements:
+6. Add a new entry to `.agents/sessions.md`.
+7. Repeat static and runtime verifications as needed.
+8. Leave the repository ready for the user to run the push pipeline.

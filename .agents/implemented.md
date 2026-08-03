@@ -254,6 +254,25 @@ This file tracks items that are fully implemented and verified, separate from th
 - The keybind capture UI in `keybindUi.js` now supports binding wheel combos (`ScrollUp`, `Ctrl+ScrollDown`, ...) by scrolling while holding the desired modifiers.
 - Added `ScrollUp` / `ScrollDown` to `SPECIAL_KEY_MAP` so wheel combos persist with canonical casing.
 
+### Status Bar Class-Only Selectors & Non-Image Placeholders
+
+- Deduplicated the status bar spans in `index.html`: each span now carries only its class (`.status-filename`, `.status-dims`, `.status-zoom`, ...), removing the redundant matching `id="status-*"` attributes.
+- Updated `main.js` and `viewer.js` to query those spans via `document.querySelector('.status-*')` instead of `getElementById`.
+- Non-image entries (folders, archives, `..`, drives) now render `N/A` in the dims and zoom status fields instead of stale metrics from a previously displayed image.
+
+### Favorites Keyboard Navigation & Archive-Entry Favorites
+
+- Added full keyboard navigation to the Favorites list: ArrowUp/Down, Home, End, Enter, Space, Escape with a tracked highlight (`highlightedFavoritePath`) mirroring the file-list selection model; single-click highlights, double-click opens directories/archives.
+- Exported `getHighlightedFavorite()` and `navigateHighlightedFavorite(delta)` in `filePanel.js` for external consumers (main.js action buttons).
+- Favorites for images inside archives now store composite "archive|entry" paths; added `loadArchive()` in `fsUtils.js` to handle these and restored `remember_last_image` / `open_first_image` logic there.
+- Updated "Open in Explorer" and "Open Folder" action buttons in `main.js` to resolve real archive paths and container paths for both favorites and main-list archive entries.
+- Added `.hidden` utility class in CSS; favorites header uses `classList.toggle('hidden', favs.length === 0)` instead of inline `style.display`.
+- Favorites composite widget: focus ring on container (`#favorites-list:focus-visible`), remove-button focus visibility, ArrowUp/Down/Home/End/Enter/Space/Escape keydown handler on `#favorites-list`.
+
+### Space/Arrow Key Hijacking Fix
+
+- Fixed Space/Arrow key hijacking in `shortcuts.js` so they no longer prevent default when a button/input/textarea/select has focus (allows native button activation via Space).
+
 ## Verified Commands Used
 
 ```powershell
