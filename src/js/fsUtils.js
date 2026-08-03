@@ -182,6 +182,56 @@ export const FsUtils = {
     }
   },
 
+  async loadArchive(archivePath, targetPath = '', options = {}) {
+    try {
+      const result = await invoke('list_archive', { archivePath });
+      let files = this.buildArchiveList(result);
+      const prefs = DirectoryPrefs.getSortPrefs(result.archive_path);
+      files = DirectoryPrefs.applySort(files, prefs.col, prefs.desc);
+
+      const state = Core.getState();
+      this.revokeIfObjectURL(state.src);
+
+      let index = 1;
+      const fd = state.config?.frontend_data || {};
+      let preferredIndex = -1;
+
+      if (targetPath) {
+        preferredIndex = files.findIndex(f => f.path === targetPath);
+      }
+
+      if (preferredIndex === -1 && options?.restoreLastImage && fd.remember_last_image && fd.last_active_image && fd.last_active_image.container === result.archive_path) {
+        const targetPath = fd.last_active_image.path;
+        preferredIndex = files.findIndex(f => f.path === targetPath);
+      }
+
+      if (preferredIndex !== -1) {
+        index = preferredIndex;
+      } else if (fd.open_first_image) {
+        index = this.firstImageIndex(files, 1);
+      }
+
+      Core.setState({
+        mode: 'archive',
+        list: files,
+        index,
+        archivePath: result.archive_path,
+        directory: '',
+        parentDirectory: result.archive_path.replace(/[\\/][^\\/]*$/, ''),
+        filename: files[index]?.name || '',
+        src: this.isImageEntry(files[index]) ? this.buildArchiveSrc(result.archive_path, files[index].name) : ''
+      });
+      this.persistLastOpened(result.archive_path);
+
+      // Trigger prefetch for initial load
+      this.prefetchAhead(result.archive_path, index, 1);
+
+      return;
+    } catch (err) {
+      console.error('[Core] Error loading archive:', err);
+    }
+  },
+
   async loadFile(pathStr, options = {}) {
     const name = typeof pathStr === 'string'
       ? pathStr.replace(/\\/g, '/').split('/').pop()
@@ -204,48 +254,22 @@ export const FsUtils = {
       return;
     }
 
+    // Composite archive-entry path: "<archive path>|<inner entry name>". Used by
+    // favorites saved for images inside archives.
+    if (path.includes('|')) {
+      const sep = path.indexOf('|');
+      const archivePath = path.slice(0, sep);
+      if (this.isArchive(archivePath)) {
+        await this.loadArchive(archivePath, path);
+        return;
+      }
+    }
+
     const ext = _ext(name);
 
     try {
       if (SUPPORTED_ARCHIVES.has(ext)) {
-        const result = await invoke('list_archive', { archivePath: path });
-        let files = this.buildArchiveList(result);
-        const prefs = DirectoryPrefs.getSortPrefs(result.archive_path);
-        files = DirectoryPrefs.applySort(files, prefs.col, prefs.desc);
-
-        const state = Core.getState();
-        this.revokeIfObjectURL(state.src);
-
-        let index = 1;
-        const fd = state.config?.frontend_data || {};
-        let preferredIndex = -1;
-        
-        if (options.restoreLastImage && fd.remember_last_image && fd.last_active_image && fd.last_active_image.container === result.archive_path) {
-          const targetPath = fd.last_active_image.path;
-          preferredIndex = files.findIndex(f => f.path === targetPath);
-        }
-
-        if (preferredIndex !== -1) {
-          index = preferredIndex;
-        } else if (fd.open_first_image) {
-          index = this.firstImageIndex(files, 1);
-        }
-        
-        Core.setState({
-          mode: 'archive',
-          list: files,
-          index,
-          archivePath: result.archive_path,
-          directory: '',
-          parentDirectory: result.archive_path.replace(/[\\/][^\\/]*$/, ''),
-          filename: files[index]?.name || '',
-          src: this.isImageEntry(files[index]) ? this.buildArchiveSrc(result.archive_path, files[index].name) : ''
-        });
-        this.persistLastOpened(result.archive_path);
-        
-        // Trigger prefetch for initial load
-        this.prefetchAhead(result.archive_path, index, 1);
-        
+        await this.loadArchive(path, '', options);
         return;
       }
 

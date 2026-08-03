@@ -143,7 +143,6 @@ body {
 #menubar {
   display: flex;
   align-items: stretch;
-  padding: 1.3045px 0;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -193,6 +192,7 @@ body {
   align-items: center;
   height: 100%;
   padding: 0 10px;
+  margin:1.3045px 0;
   font: inherit;
   color: var(--text);
   cursor: default;
@@ -332,6 +332,10 @@ body {
   flex-shrink: 0;
 }
 
+#file-panel-favorites:has(.hidden) {
+  display: none
+}
+
 #file-panel-favorites.collapsed #favorites-list {
   display: none;
 }
@@ -347,6 +351,10 @@ body {
   user-select: none;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.hidden {
+  display: none;
 }
 
 #file-panel-favorites-header:hover {
@@ -367,6 +375,12 @@ body {
   overflow-y: auto;
 }
 
+/* Favorites composite widget — show ring on the container, not items */
+#favorites-list:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 .fav-remove {
   background: transparent;
   border: none;
@@ -384,11 +398,18 @@ body {
   height: var(--fs-12);
 }
 
-li:hover > .fav-remove {
+li:hover > .fav-remove,
+#favorites-list li:focus > .fav-remove,
+#favorites-list li:focus-within > .fav-remove {
   opacity: 1;
 }
 
-.fav-remove:hover {
+#favorites-list li.selected > .fav-remove {
+  opacity: 1;
+}
+
+.fav-remove:hover,
+.fav-remove:focus {
   color: #e53935;
 }
 

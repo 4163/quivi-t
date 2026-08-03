@@ -36,6 +36,7 @@ let favoritesHeaderEl = null;
 let FsUtils = null;
 let favLastClickPath = '';
 let favLastClickTime = 0;
+let highlightedFavoritePath = '';
 
 let columnsInitialized = false;
 
@@ -245,11 +246,25 @@ function getIconSvg(item) {
   }
 }
 
+function openFavorite(fav) {
+  if (FsUtils) {
+    FsUtils.loadFile(fav.path).catch(console.error);
+  } else if (window.__TAURI__) {
+    window.dispatchEvent(new CustomEvent('quivit-load-file', { detail: fav.path }));
+  }
+}
+
 function buildFavoriteEntry(fav) {
   const li = document.createElement('li');
-  li.title = fav.name;
+  // Full system path as tooltip. For archive entries ("archive|inner/path.png")
+  // put the inner entry on its own line, keeping its native "/" separators.
+  li.title = fav.path.includes('|')
+    ? fav.path.replace('|', '\n→ ')
+    : fav.path;
   li.dataset.path = fav.path;
-  
+  li.setAttribute('role', 'option');
+  li.setAttribute('tabindex', '0');
+
   const itemName = document.createElement('span');
   itemName.className = 'item-name';
   itemName.innerHTML = getIconSvg(fav);
@@ -269,6 +284,7 @@ function buildFavoriteEntry(fav) {
   const removeBtn = document.createElement('button');
   removeBtn.className = 'fav-remove';
   removeBtn.title = 'Remove';
+  removeBtn.tabIndex = -1;
   removeBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
   removeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -283,15 +299,28 @@ function buildFavoriteEntry(fav) {
   li.appendChild(itemDate);
   li.appendChild(removeBtn);
 
-  li.addEventListener('click', () => {
-    const openFavorite = () => {
-      if (FsUtils) {
-        FsUtils.loadFile(fav.path).catch(console.error);
-      } else if (window.__TAURI__) {
-        window.dispatchEvent(new CustomEvent('quivit-load-file', { detail: fav.path }));
+  li.addEventListener('focus', () => {
+    highlightFavoriteByPath(fav.path);
+    if (favoritesListUl) {
+      for (const row of favoritesListUl.children) {
+        const btn = row.querySelector('.fav-remove');
+        if (btn) btn.tabIndex = -1;
       }
-    };
-    // Folders and archives: single click highlights, double-click navigates
+    }
+    removeBtn.tabIndex = 0;
+  });
+
+  removeBtn.addEventListener('focus', () => {
+    if (favoritesListUl) {
+      for (const row of favoritesListUl.children) {
+        const btn = row.querySelector('.fav-remove');
+        if (btn) btn.tabIndex = -1;
+      }
+    }
+    removeBtn.tabIndex = 0;
+  });
+
+  li.addEventListener('click', () => {
     const isDirOrArchive = fav.is_dir || (fav.ext && FsUtils && FsUtils.isArchive(fav.name));
     if (isDirOrArchive) {
       highlightFavoriteByPath(fav.path);
@@ -299,13 +328,14 @@ function buildFavoriteEntry(fav) {
       if (favLastClickPath === fav.path && (now - favLastClickTime < 400)) {
         favLastClickPath = '';
         favLastClickTime = 0;
-        openFavorite();
+        openFavorite(fav);
       } else {
         favLastClickPath = fav.path;
         favLastClickTime = now;
       }
     } else {
-      openFavorite();
+      highlightFavoriteByPath(fav.path);
+      openFavorite(fav);
     }
   });
 
@@ -317,7 +347,7 @@ function renderFavorites() {
   const favs = getFavorites();
   
   if (favoritesHeaderEl) {
-    favoritesHeaderEl.style.display = favs.length > 0 ? 'flex' : 'none';
+    favoritesHeaderEl.classList.toggle('hidden', favs.length === 0);
   }
   
   favoritesListUl.innerHTML = '';
@@ -366,10 +396,35 @@ function updateFavoritesSelection(state) {
 }
 
 function highlightFavoriteByPath(path) {
+  highlightedFavoritePath = path;
   if (!favoritesListUl) return;
   for (const li of favoritesListUl.children) {
     li.classList.toggle('selected', li.dataset.path === path);
   }
+}
+
+// Returns the favorite entry currently highlighted in the favorites list (via
+// focus/click), else null so the file panel action buttons fall back to the
+// main file-list selection.
+export function getHighlightedFavorite() {
+  if (!highlightedFavoritePath) return null;
+  return getFavorites().find(f => f.path === highlightedFavoritePath) || null;
+}
+
+// Move the highlighted favorite by delta (mirrors ArrowDown/ArrowUp). Moves the
+// row highlight only; opening still requires Enter/Space/click.
+export function navigateHighlightedFavorite(delta) {
+  if (!favoritesListUl) return;
+  const items = Array.from(favoritesListUl.children);
+  if (!items.length) return;
+  const currentIndex = items.findIndex(li => li.dataset.path === highlightedFavoritePath);
+  let nextIndex;
+  if (currentIndex === -1) {
+    nextIndex = delta > 0 ? 0 : items.length - 1;
+  } else {
+    nextIndex = (currentIndex + delta + items.length) % items.length;
+  }
+  items[nextIndex].focus();
 }
 
 function renderEntry(item, index, selectedIndex) {
@@ -513,6 +568,67 @@ export function initFilePanel(deps) {
     });
   }
 
+  // Composite widget keyboard navigation (mirrors the file list below)
+  if (favoritesListUl) {
+    favoritesListUl.addEventListener('keydown', (e) => {
+      const items = Array.from(favoritesListUl.children);
+      if (!items.length) return;
+
+      const activeRow = document.activeElement && document.activeElement.closest('li');
+      const currentIndex = activeRow && favoritesListUl.contains(activeRow) ? items.indexOf(activeRow) : -1;
+      const onRemoveBtn = document.activeElement && document.activeElement.classList.contains('fav-remove');
+      let nextIndex = null;
+
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault();
+          e.stopPropagation();
+          nextIndex = currentIndex === -1 ? 0 : Math.min(currentIndex + 1, items.length - 1);
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          e.stopPropagation();
+          nextIndex = currentIndex === -1 ? items.length - 1 : Math.max(currentIndex - 1, 0);
+          break;
+        }
+        case 'Home': {
+          e.preventDefault();
+          nextIndex = 0;
+          break;
+        }
+        case 'End': {
+          e.preventDefault();
+          nextIndex = items.length - 1;
+          break;
+        }
+        case 'Enter':
+        case ' ': {
+          if (!onRemoveBtn && currentIndex !== -1) {
+            e.preventDefault();
+            const fav = getFavorites().find(f => f.path === items[currentIndex].dataset.path);
+            if (fav) openFavorite(fav);
+          }
+          break;
+        }
+        case 'Escape': {
+          e.preventDefault();
+          highlightFavoriteByPath('');
+          if (document.activeElement && favoritesListUl.contains(document.activeElement)) {
+            document.activeElement.blur();
+          }
+          break;
+        }
+        default:
+          break;
+      }
+
+      if (nextIndex !== null) {
+        items[nextIndex].focus();
+      }
+    });
+  }
+
   // Restore the persisted collapsed state, then initialize header visibility.
   // Config loads asynchronously after init, so re-render once it arrives and
   // import any favorites still left in WebView2 localStorage.
@@ -537,6 +653,12 @@ export function initFilePanel(deps) {
     if (e.target === fileListUl) {
       Core.selectIndex(-1);
     }
+  });
+
+  // Interacting with the main file list clears any highlighted favorite so the
+  // action buttons target the list selection again.
+  fileListUl.addEventListener('focusin', () => {
+    highlightedFavoritePath = '';
   });
 
   // Composite widget keyboard navigation
@@ -618,6 +740,12 @@ export function initFilePanel(deps) {
       
       DirectoryPrefs.sortCurrentState(currentPath, col, desc);
       updateSortIcons();
+    });
+    cell.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        cell.click();
+      }
     });
   });
 

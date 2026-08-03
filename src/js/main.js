@@ -5,7 +5,7 @@
 import { Core } from './core.js';
 import { FsUtils } from './fsUtils.js';
 import { Viewer } from './viewer.js';
-import { initFilePanel, renderFilePanel, toggleFavoriteCurrent } from './filePanel.js';
+import { initFilePanel, renderFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite } from './filePanel.js';
 import { VIEWER_KEYBOARD_PAN_STEP, VIEWER_WHEEL_PAN_STEP } from './keybinds.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch } from './shortcuts.js';
 import {
@@ -183,10 +183,12 @@ function dispatchAction(actionId, payload) {
       FsUtils.openParent();
       break;
     case 'cmd-next':
-      Core.navigate(1);
+      if (document.activeElement?.closest('#favorites-list')) navigateHighlightedFavorite(1);
+      else Core.navigate(1);
       break;
     case 'cmd-prev':
-      Core.navigate(-1);
+      if (document.activeElement?.closest('#favorites-list')) navigateHighlightedFavorite(-1);
+      else Core.navigate(-1);
       break;
     case 'cmd-zoom-in':
       if (payload?.wheel) Viewer.zoomAt(1, payload.clientX, payload.clientY);
@@ -337,16 +339,42 @@ function bindMenuCommands() {
   });
 
   // --- File panel action buttons ---
+  // Favorites for images inside archives store composite "archive|entry" paths.
+  // These helpers resolve the real archive path / its containing folder so the
+  // OS-explorer actions work.
+  function archiveEntryRealPath(favPath) {
+    const sep = favPath.indexOf('|');
+    return sep === -1 ? favPath : favPath.slice(0, sep);
+  }
+  function archiveEntryContainerPath(favPath) {
+    return archiveEntryRealPath(favPath).replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '');
+  }
+
   const btnOpenExplorer = document.getElementById('cmd-open-explorer');
   if (btnOpenExplorer) {
     btnOpenExplorer.addEventListener('click', async () => {
       const state = Core.getState();
       if (!window.__TAURI__) return;
+      const favorite = getHighlightedFavorite();
+      if (favorite) {
+        try {
+          if (favorite.is_drive) {
+            await window.__TAURI__.core.invoke('open_in_explorer', { path: favorite.path });
+          } else {
+            await window.__TAURI__.opener.revealItemInDir(favorite.path.includes('|') ? archiveEntryRealPath(favorite.path) : favorite.path);
+          }
+        } catch (err) {
+          console.error('[Action] Failed to open explorer:', err);
+        }
+        return;
+      }
       const entry = state.list[state.index];
       if (!entry) return;
       try {
         if (entry.is_parent) {
           await window.__TAURI__.core.invoke('open_in_explorer', { path: state.directory });
+        } else if (entry.path.includes('|')) {
+          await window.__TAURI__.opener.revealItemInDir(archiveEntryRealPath(entry.path));
         } else {
           await window.__TAURI__.opener.revealItemInDir(entry.path);
         }
@@ -361,12 +389,31 @@ function bindMenuCommands() {
     btnOpenFolder.addEventListener('click', async () => {
       const state = Core.getState();
       if (!window.__TAURI__) return;
+      const favorite = getHighlightedFavorite();
+      if (favorite) {
+        try {
+          let targetPath;
+          if (favorite.is_dir || favorite.is_drive) {
+            targetPath = favorite.path;
+          } else if (favorite.path.includes('|')) {
+            targetPath = archiveEntryContainerPath(favorite.path);
+          } else {
+            targetPath = favorite.path.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '');
+          }
+          await window.__TAURI__.core.invoke('open_in_explorer', { path: targetPath });
+        } catch (err) {
+          console.error('[Action] Failed to open folder:', err);
+        }
+        return;
+      }
       const entry = state.list[state.index];
       let targetPath = state.directory;
 
       if (entry) {
         if (entry.is_dir || entry.is_parent) {
           targetPath = entry.path;
+        } else if (entry.path.includes('|')) {
+          targetPath = archiveEntryContainerPath(entry.path);
         }
       }
       try {
