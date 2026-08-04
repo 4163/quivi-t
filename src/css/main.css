@@ -762,6 +762,9 @@ li:hover > .fav-remove,
 /* Sticky zoom-mode indicator (Options → Keys → Scroll Wheel → Toggle Ctrl) */
 .status-scroll-zoom {
   display: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #statusbar.zoom-latched .status-scroll-zoom {
