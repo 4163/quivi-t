@@ -52,6 +52,10 @@ export const VIEWER_WHEEL_PAN_STEP = 120;
 export const DEFAULT_FIT_MODE = 'height-if-larger';
 export const DEFAULT_SCALING_MODE = 'bicubic';
 
+// persistence: frontend_data is merged here with normalized defaults. Preference
+// flags (theme, keybinds, scroll_zoom_modifier) belong in quivit_config.json;
+// last-known runtime state like scroll_zoom_latched is split into
+// quivit_state.json by the backend (STATE_KEYS). See the policy in core.js.
 export function mergeConfig(loaded) {
   const fd = loaded?.frontend_data && typeof loaded.frontend_data === 'object'
     ? loaded.frontend_data
@@ -68,6 +72,7 @@ export function mergeConfig(loaded) {
       transparent_bg: fd.transparent_bg === true,
       start_dir: fd.start_dir || '',
       scroll_zoom_modifier: fd.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold',
+      scroll_zoom_latched: fd.scroll_zoom_latched === true,
       fit_mode: fd.fit_mode || DEFAULT_FIT_MODE,
       scaling_mode: fd.scaling_mode || DEFAULT_SCALING_MODE,
       show_hidden: fd.show_hidden === true,

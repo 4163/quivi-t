@@ -104,6 +104,9 @@ export function updateMenuShortcuts(config) {
 // Scroll-wheel modifier latch (Options → Keys → Scroll Wheel → Toggle).
 // In 'toggle' mode, pressing Ctrl once enters a sticky "zoom mode" so the
 // wheel keeps zooming without holding Ctrl; pressing Ctrl again exits.
+// persistence: the latched state is last-known runtime state, split into
+// quivit_state.json by the backend (STATE_KEYS) alongside last_active_image.
+// See the persistence policy in core.js.
 let ctrlLatched = false;
 let ctrlKeyDown = false;
 let ctrlChordBroken = false;
@@ -112,6 +115,14 @@ export function resetScrollLatch() {
   ctrlLatched = false;
   ctrlKeyDown = false;
   ctrlChordBroken = false;
+  _updateLatchIndicator();
+}
+
+// Re-read the persisted latch after config loads (startup or Options Apply &
+// Close). Only meaningful in 'toggle' modifier mode; in 'hold' mode a stale
+// latch must not show the badge or latch zoom.
+export function syncScrollLatch(config) {
+  ctrlLatched = isToggleModifier(config) && config?.frontend_data?.scroll_zoom_latched === true;
   _updateLatchIndicator();
 }
 
@@ -179,6 +190,9 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
       if (ctrlKeyDown && !ctrlChordBroken && isToggleModifier(Core.getState().config)) {
         ctrlLatched = !ctrlLatched;
         _updateLatchIndicator();
+        const config = Core.getState().config;
+        config.frontend_data.scroll_zoom_latched = ctrlLatched;
+        Core.persistConfig();
       }
       ctrlKeyDown = false;
       ctrlChordBroken = false;

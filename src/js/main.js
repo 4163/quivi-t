@@ -7,7 +7,7 @@ import { FsUtils } from './fsUtils.js';
 import { Viewer } from './viewer.js';
 import { initFilePanel, renderFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite } from './filePanel.js';
 import { VIEWER_KEYBOARD_PAN_STEP, VIEWER_WHEEL_PAN_STEP } from './keybinds.js';
-import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch } from './shortcuts.js';
+import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from './shortcuts.js';
 import {
   initMenuBar,
   closeMenus,
@@ -441,6 +441,12 @@ function bindDragDrop() {
     listen('config-updated', () => {
       resetScrollLatch();
       Core.loadConfig();
+    });
+    // Re-apply the persisted scroll-wheel latch once config has (re)loaded —
+    // startup and after Options Apply & Close. resetScrollLatch() above clears
+    // it in-memory first, then this restores the saved toggle state.
+    window.addEventListener('quivit-config-loaded', () => {
+      syncScrollLatch(Core.getState().config);
     });
     listen('single-instance-open', (e) => {
       if (e.payload) FsUtils.loadFile(e.payload).catch(console.error);

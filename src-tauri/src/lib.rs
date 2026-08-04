@@ -87,7 +87,7 @@ fn remove_roaming_files(dir: &Path) {
 // config file only holds user preferences. Portable mode keeps a single
 // self-contained file.
 
-const STATE_KEYS: &[&str] = &["last_opened_path", "last_active_image"];
+const STATE_KEYS: &[&str] = &["last_opened_path", "last_active_image", "scroll_zoom_latched"];
 const SORT_KEYS: &[&str] = &["directory_sort"];
 const FAVORITES_KEYS: &[&str] = &["favorites", "favorites_collapsed"];
 
