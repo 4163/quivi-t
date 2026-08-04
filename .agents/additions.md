@@ -4,19 +4,10 @@ Date: 2026-08-01
 
 This plan covers the current requested changes. No application code should be changed until this plan is reviewed.
 
-## Goals
-
-- Improve shell/window polish during resize.
-- Correct viewer behavior for folders, archives, ICO files, and keyboard activation.
-- Make file-list navigation and sorting persistent and intuitive.
-- Improve Options layout, shortcut organization, shortcut capabilities, and wording.
-- Add planned single-instance behavior for file-open workflows.
-- Keep the frontend coherently decoupled: domain behavior should live in focused modules, while `main.js` remains main-window wiring.
-- Update documentation and session recovery notes after implementation and verification.
-
 ## Non-Goals For This Pass
 
 - Full localization implementation beyond adding a Language tab placeholder with English only.
+- Full implementation user feedback sound effects.
 - Rewriting the entire viewer or file-list architecture if a focused extraction is enough.
 - Committing or pushing changes from this agent. The user will run the push pipeline.
 
@@ -190,30 +181,13 @@ Runtime/manual verification:
 
 ## User Verification Gates
 
-Implement slowly in reviewable slices:
-
-1. Shell/background and Options wording/layout.
-2. Remaining file-type semantics and Enter/Space activation.
-3. Archive performance work.
-4. Sorting persistence and privacy/ignore verification.
-5. Single-instance option UI/documentation placeholder.
-6. Remaining shortcut work, mouse bindings, and menu-toggle softlock prevention.
-7. ICO spritesheet support.
-8. Keybind categorization.
-9. Final architecture review and README/session updates.
-10. Drag-and-drop folder opening polish.
-11. Responsive keyboard panning.
-12. Scroll-wheel zoom vs pan behavior.
-13. Update availability indicator.
-14. File associations (Options tab, registry registration, cold/warm open-with, icons).
-
 After each slice:
 
 - Summarize changed files.
 - State what was verified.
 - Ask for user verification before moving to the next larger behavioral slice when needed.
 
-## Finalization Plan
+## Verification Steps
 
 After all implementation slices:
 

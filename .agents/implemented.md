@@ -194,8 +194,7 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ### Managed-Config Favorites
 
-- Moved favorites out of WebView2 `localStorage` into managed config (`frontend_data.favorites` and `frontend_data.favorites_collapsed`) so they persist through the normal config/portable machinery.
-- Added a one-time migration that imports legacy `quivit-favorites` / `quivit-favorites-collapsed` `localStorage` keys into config and removes them.
+- Moved favorites out of WebView2 `localStorage` into managed config (`frontend_data.favorites` and `frontend_data.favorites_collapsed`) so they persist through the normal config/portable machinery. (The one-time legacy `localStorage` migration was later removed since the app has not shipped — see "Favorites LocalStorage Migration Removal".)
 - Collapsed/expanded favorites state is persisted and restored; empty lists auto-collapse and persist that state.
 - Favorite items now support single-click highlight and double-click open for folders/archives, with the current folder/archive taking priority over the selected entry so a favorited location stays highlighted.
 
@@ -272,6 +271,23 @@ This file tracks items that are fully implemented and verified, separate from th
 ### Space/Arrow Key Hijacking Fix
 
 - Fixed Space/Arrow key hijacking in `shortcuts.js` so they no longer prevent default when a button/input/textarea/select has focus (allows native button activation via Space).
+
+### Persistent Scroll-Zoom Toggle Latch
+
+- The scroll-wheel toggle latch (`ctrlLatched`, Options → Keys → Scroll Wheel → Toggle Ctrl) now persists across restarts as `frontend_data.scroll_zoom_latched`.
+- Split into `quivit_state.json` in roaming mode via the new `STATE_KEYS` entry in `lib.rs`; portable mode keeps it inline in the single self-contained config file.
+- `shortcuts.js` persists the latch whenever a clean Ctrl tap toggles it, and exports `syncScrollLatch(config)` which restores it after config load; `main.js` calls it on `quivit-config-loaded` (startup and Options Apply & Close).
+- `syncScrollLatch` only applies the latch when the modifier is `'toggle'` — in `'hold'` mode a stale latch never shows the badge or latches zoom.
+
+### Favorites LocalStorage Migration Removal
+
+- Removed `migrateFavorites()` and the one-time `quivit-favorites` / `quivit-favorites-collapsed` WebView2-localStorage import from `filePanel.js`; the app has not shipped, so no legacy users exist and the migration was dead code.
+- The `quivit-config-loaded` handler in `filePanel.js` now only marks config loaded and re-renders favorites.
+
+### Persistence Policy Documentation
+
+- Added a canonical persistence-policy comment block to the `core.js` header: which data belongs in `quivit_config.json` (preferences) vs `quivit_state.json` (last-known runtime state, `STATE_KEYS` in `lib.rs`) vs WebView2 `localStorage` (pre-paint caches and session-only state only — never a source of truth).
+- Added `// persistence:` pointer comments in `keybinds.js` (`mergeConfig`), `shortcuts.js` (latch), and `filePanel.js` (favorites).
 
 ## Verified Commands Used
 

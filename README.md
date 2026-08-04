@@ -169,7 +169,7 @@ In normal (roaming) mode QuiviT splits its data across four files in that direct
 
 ```text
 quivit_config.json          # user preferences (keybinds, fit/scaling, options)
-quivit_state.json           # runtime state (last opened location, remembered image)
+quivit_state.json           # runtime state (last opened location, remembered image, scroll-zoom latch)
 quivit_directory_sort.json  # per-directory sort column/direction
 quivit_favorites.json       # favorited folders and files
 ```
@@ -216,7 +216,7 @@ The scroll-wheel modifier defaults to `hold` (hold `Ctrl` while scrolling to zoo
 - `Ctrl` + wheel zooms in/out (bound to `cmd-zoom-in` / `cmd-zoom-out` as `Ctrl+ScrollUp` / `Ctrl+ScrollDown`).
 - All four are ordinary keybinds in the Options Keys tab, so they are fully remappable; zooming zooms toward the cursor position.
 - Wheel scrolling over the file list or menu chrome is never hijacked — it keeps scrolling that UI.
-- In **Hold** mode, keep `Ctrl` held while scrolling to zoom. In **Toggle** mode, press `Ctrl` once to latch zoom mode (a status-bar badge appears); the wheel keeps zooming without `Ctrl` until you press `Ctrl` again.
+- In **Hold** mode, keep `Ctrl` held while scrolling to zoom. In **Toggle** mode, press `Ctrl` once to latch zoom mode (a status-bar badge appears); the wheel keeps zooming without `Ctrl` until you press `Ctrl` again. The latch persists across restarts (`scroll_zoom_latched` in `quivit_state.json`).
 
 ### Advanced Shortcut Capabilities
 
