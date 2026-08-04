@@ -128,6 +128,9 @@ function renderBreadcrumb(state) {
 }
 
 // --- Favorites helpers ---
+// persistence: favorites + collapsed state live in config (split into
+// quivit_favorites.json by the backend), NOT WebView2 localStorage. See the
+// persistence policy in core.js.
 
 function getFavorites() {
   const favs = Core.getState().config?.frontend_data?.favorites;
@@ -146,37 +149,6 @@ function getFavoritesCollapsed() {
 function saveFavoritesCollapsed(collapsed) {
   Core.getState().config.frontend_data.favorites_collapsed = collapsed;
   if (configLoaded) Core.persistConfig();
-}
-
-// One-time import of favorites from WebView2 localStorage into managed config
-function migrateFavorites() {
-  let imported = false;
-  try {
-    const raw = localStorage.getItem('quivit-favorites');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const fd = Core.getState().config.frontend_data;
-        if (!Array.isArray(fd.favorites) || fd.favorites.length === 0) {
-          fd.favorites = parsed;
-          imported = true;
-        }
-      }
-    }
-    localStorage.removeItem('quivit-favorites');
-  } catch {}
-  try {
-    const collapsed = localStorage.getItem('quivit-favorites-collapsed');
-    if (collapsed !== null) {
-      const fd = Core.getState().config.frontend_data;
-      if (fd.favorites_collapsed === undefined) {
-        fd.favorites_collapsed = collapsed === '1';
-        imported = true;
-      }
-    }
-    localStorage.removeItem('quivit-favorites-collapsed');
-  } catch {}
-  if (imported) Core.persistConfig();
 }
 
 function isFavorite(path) {
@@ -630,13 +602,11 @@ export function initFilePanel(deps) {
   }
 
   // Restore the persisted collapsed state, then initialize header visibility.
-  // Config loads asynchronously after init, so re-render once it arrives and
-  // import any favorites still left in WebView2 localStorage.
+  // Config loads asynchronously after init, so re-render once it arrives.
   favoritesExpanded = !getFavoritesCollapsed();
   renderFavorites();
   window.addEventListener('quivit-config-loaded', () => {
     configLoaded = true;
-    migrateFavorites();
     favoritesExpanded = !getFavoritesCollapsed();
     renderFavorites();
   });

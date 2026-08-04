@@ -3,6 +3,32 @@
  *
  * State machine and application logic. No DOM access here.
  * Communicates outward exclusively via registered callbacks.
+ *
+ * ── Persistence policy ──────────────────────────────────────────────────
+ * Where app data lives, and which situation uses which mechanism:
+ *
+ * Roaming/portable files (backend save_config / load_config) — SOURCE OF TRUTH.
+ *   quivit_config.json            → user PREFERENCES (theme, keybinds,
+ *                                   scroll_zoom_modifier, fit/scaling mode, …)
+ *   quivit_state.json             → last-known RUNTIME STATE (last_opened_path,
+ *                                   last_active_image, scroll_zoom_latched)
+ *   quivit_directory_sort.json    → per-directory sort prefs
+ *   quivit_favorites.json         → favorites + collapsed state
+ * Portable mode folds all of these into one self-contained quivit_config.json
+ * beside the executable; roaming mode keeps them as separate files.
+ *
+ * WebView2 localStorage — NEVER the source of truth for anything that must
+ * survive a restart. Allowed roles:
+ *   quivit-theme / quivit-custom-css → pre-paint caches mirroring config so the
+ *                                      head <script> applies theme/CSS before
+ *                                      first paint (prevents flicker)
+ *   options-active-tab               → session-only; cleared each app start
+ *
+ * Decision guide:
+ *   user chose it explicitly       → quivit_config.json (frontend_data)
+ *   "last-known" runtime state     → quivit_state.json (STATE_KEYS in lib.rs)
+ *   only needed before first paint → localStorage cache of config
+ *   ephemeral within a session     → localStorage + cleared on startup
  */
 
 import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, mergeConfig } from './keybinds.js';
