@@ -40,7 +40,7 @@
 
   color-scheme: light dark;
 
-  /* Font sizes in px */
+  /* Font sizes in px (rem = px ÷ 16) */
   --fs-9: 0.5625rem;
   --fs-10: 0.625rem;
   --fs-11: 0.6875rem;
@@ -50,6 +50,15 @@
   --fs-14: 0.875rem;
   --fs-15: 0.9375rem;
   --fs-16: 1rem;
+  --fs-17: 1.0625rem;
+  --fs-18: 1.125rem;
+  --fs-19: 1.1875rem;
+  --fs-20: 1.25rem;
+  --fs-21: 1.3125rem;
+  --fs-22: 1.375rem;
+  --fs-23: 1.4375rem;
+  --fs-24: 1.5rem;
+  --fs-25: 1.5625rem;
   --fs-40: 2.5rem;
 }
 
@@ -137,6 +146,10 @@ body {
     - this isn't inherently bad, as browser preferences cannot be set in tauri applications in the first place.
   */
   font-size: var(--fs-13); 
+}
+
+button {
+  font-size: inherit;
 }
 
 /* --- Menu bar --------------------------------------------- */
@@ -371,7 +384,6 @@ body {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 140px;
   overflow-y: auto;
 }
 
@@ -427,7 +439,6 @@ li:hover > .fav-remove,
 #file-panel-breadcrumb {
   flex: 1;
   min-height: 24px;
-  max-height: 72px;
   padding: 4px 8px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -481,7 +492,7 @@ li:hover > .fav-remove,
   display: grid;
   grid-template-columns: var(--col-name-w) var(--col-ext-w) var(--col-date-w);
   align-items: stretch;
-  height: 22px;
+  padding: 6.609px 0;
   background: var(--surface-alt);
   border-bottom: 1px solid var(--border);
   font-size: var(--fs-11);
@@ -556,7 +567,7 @@ li:hover > .fav-remove,
   display: grid;
   grid-template-columns: var(--col-name-w) var(--col-ext-w) var(--col-date-w);
   align-items: center;
-  height: 20px;
+  padding: 1.6015px 0;
   gap: 0;
   cursor: default;
   font-size: var(--fs-12);
@@ -590,7 +601,7 @@ li:hover > .fav-remove,
 
 #file-list .item-name, #favorites-list .item-name { min-width: 0; overflow: hidden; padding-left: 8px; display: flex; align-items: center; gap: 4px; }
 #file-list .item-name > svg, #favorites-list .item-name > svg,
-#file-list .item-name > img, #favorites-list .item-name > img { width: 14px; min-width: 14px; height: 14px; flex: 0 0 14px; }
+#file-list .item-name > img, #favorites-list .item-name > img { width: var(--fs-14); height: var(--fs-14); flex: 0 0 var(--fs-14); }
 #file-list .item-label, #favorites-list .item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #file-list .item-ext, #favorites-list .item-ext  { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); padding-left: 8px; }
 #file-list .item-date, #favorites-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-10); color: var(--text-dim); padding-left: 8px; }
@@ -659,12 +670,14 @@ li:hover > .fav-remove,
   .drop-hint span {
     display: none;
   }
+  .drop-hint {
+    width: calc(100% - (10.4167% * 2));
+  }
 }
 
 @container box (max-width: 194px) {
   .drop-hint {
-    width: calc(100% - 50px);
-    padding: 42px 0 !important;  /* emulates subtle squeeze */
+    padding: 21.6495% 0 !important;  /* emulates subtle squeeze */
   }
 }
 
@@ -689,7 +702,7 @@ li:hover > .fav-remove,
   gap: 10px;
   padding: 40px 52px;
   border: 1.5px dashed var(--border);
-  margin: 0 25px;
+  margin: 0 var(--fs-25);
   border-radius: 10px;
   color: var(--text-muted);
   transition: border-color 0.15s, color 0.15s;
