@@ -123,7 +123,15 @@ function applyFitMode() {
   }
 
   _tx = 0;
-  _ty = 0;
+  if (['none', 'width', 'width-if-larger'].includes(_currentFitMode)) {
+    // Top-aligned modes: pin the image's top edge to the viewport top so tall
+    // pages start at the top and you scroll down. Images that fit vertically
+    // stay centered. The offset matches _clampPan()'s maxY bound exactly.
+    const { height } = _visualSize();
+    _ty = height > vh ? (height - vh) / 2 : 0;
+  } else {
+    _ty = 0;
+  }
   _scheduleTransform();
 }
 
@@ -133,13 +141,10 @@ const ZOOM_STEP   = 0.12;
 const ZOOM_MIN    = 0.05;
 const ZOOM_MAX    = 32;
 
-function zoomAt(delta, cx, cy) {
+function zoomTo(exactScale, cx, cy) {
   const prevScale = _scale;
-  const factor = 1 + delta * ZOOM_STEP;
-  _scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, _scale * factor));
-
-  // We intentionally do not set fit mode to 'none' here so that window
-  // resizes can fallback to recalculating the previously active fit.
+  const targetScale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, exactScale));
+  _scale = targetScale;
 
   const vp = document.getElementById('viewport');
   const rect = vp.getBoundingClientRect();
@@ -158,6 +163,12 @@ function zoomAt(delta, cx, cy) {
   _ty += wy - wy * ratio;
 
   _scheduleTransform();
+}
+
+function zoomAt(delta, cx, cy) {
+  // We intentionally do not set fit mode to 'none' here so that window
+  // resizes can fallback to recalculating the previously active fit.
+  zoomTo(_scale * (1 + delta * ZOOM_STEP), cx, cy);
 }
 
 function zoomCenter(delta) {
@@ -291,18 +302,8 @@ viewport.addEventListener('mousedown', _onMouseDown);
 window.addEventListener('mousemove', _onMouseMove);
 window.addEventListener('mouseup', _onMouseUp);
 
-viewport.addEventListener('dblclick', () => {
-  // Toggle between 100% and current fit mode, or just reset fit mode
-  if (_currentFitMode === 'none') {
-    Core.setFitMode(DEFAULT_FIT_MODE); // Reset to default without changing the saved preference.
-  } else {
-    Core.setFitMode('none');
-    _scale = 1;
-    _tx = 0;
-    _ty = 0;
-    _scheduleTransform();
-  }
-});
+// Double-click is now a keybind gesture (cmd-fit-none default = DoubleClick),
+// dispatched through shortcuts.js, so there is no hardcoded handler here.
 
 export const Viewer = { 
   applyFitMode, 
@@ -314,10 +315,11 @@ export const Viewer = {
   flipVertical,
   setScaling,
   setZoom(exactScale) {
-    _scale = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, exactScale));
-    _tx = 0;
-    _ty = 0;
+    // Zoom to the exact scale anchored on the viewport center so the content
+    // currently under the middle of the screen stays there (no recenter jump).
+    const vp = document.getElementById('viewport');
+    const rect = vp.getBoundingClientRect();
+    zoomTo(exactScale, rect.left + rect.width / 2, rect.top + rect.height / 2);
     _currentFitMode = 'none';
-    _scheduleTransform();
   }
 };

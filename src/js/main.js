@@ -201,6 +201,10 @@ function dispatchAction(actionId, payload) {
     case 'cmd-zoom-100':
       Viewer.setZoom(1);
       break;
+    case 'cmd-fit-none':
+      Core.setFitMode('none', { persist: true });
+      Viewer.applyFitMode();
+      break;
     case 'cmd-fit-width':
       Core.setFitMode('width', { persist: true });
       Viewer.applyFitMode();
@@ -279,10 +283,12 @@ function dispatchAction(actionId, payload) {
       if (window.__TAURI__) window.__TAURI__.core.invoke('plugin:process|exit');
       else window.close();
       break;
-    case 'cmd-cycle-scaling': {
+    case 'cmd-cycle-scaling':
+    case 'cmd-cycle-scaling-back': {
       const modes = ['none', 'bicubic', 'lanczos'];
       const current = Core.getState().scalingMode;
-      const next = modes[(modes.indexOf(current) + 1) % modes.length];
+      const delta = actionId === 'cmd-cycle-scaling-back' ? -1 : 1;
+      const next = modes[(modes.indexOf(current) + delta + modes.length) % modes.length];
       setScaling(next);
       break;
     }
@@ -304,6 +310,7 @@ function bindMenuCommands() {
   document.getElementById('cmd-zoom-in').addEventListener('click', () => Viewer.zoomCenter(1));
   document.getElementById('cmd-zoom-out').addEventListener('click', () => Viewer.zoomCenter(-1));
   document.getElementById('cmd-zoom-100').addEventListener('click', () => Viewer.setZoom(1));
+  document.getElementById('cmd-fit-none').addEventListener('click', () => Core.setFitMode('none', { persist: true }));
   document.getElementById('cmd-fit-width').addEventListener('click', () => Core.setFitMode('width', { persist: true }));
   document.getElementById('cmd-fit-height').addEventListener('click', () => Core.setFitMode('height', { persist: true }));
   document.getElementById('cmd-fit-width-if-larger').addEventListener('click', () => Core.setFitMode('width-if-larger', { persist: true }));

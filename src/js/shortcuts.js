@@ -32,6 +32,8 @@ const SPECIAL_KEY_MAP = {
   pause: 'Pause',
   scrollup: 'ScrollUp',
   scrolldown: 'ScrollDown',
+  doubleclick: 'DoubleClick',
+  doublerightclick: 'DoubleRightClick',
 };
 
 export function formatKeyName(key) {
@@ -68,9 +70,9 @@ export function formatKeysCombo(keysSet, buttonsSet, scrollDir) {
     others.push(buttons[b] || `Mouse${b}`);
   }
 
+  others.sort();
   if (scrollDir) others.push(scrollDir);
 
-  others.sort();
   return combo.concat(others).join('+');
 }
 
@@ -201,13 +203,67 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
   });
 
   window.addEventListener('mousedown', (e) => {
+    // Mouse/double-click gestures are viewport actions — never over the file
+    // panel, menubar/dropdowns, or status bar (which handle their own clicks).
+    const isUI = e.target.closest('#file-panel, .menubar, .dropdown-menu, #statusbar');
+    if (isUI) return;
+
     activeButtons.add(e.button);
-    handleShortcut(e);
+    handleMouseButton(e);
   });
 
   window.addEventListener('mouseup', (e) => {
     activeButtons.delete(e.button);
   });
+
+  // Buttons 0 (left) and 2 (right) wait out a short window before dispatching
+  // their single-button binding so a rapid second press can be recognized as a
+  // DoubleClick / DoubleRightClick gesture instead of two separate clicks.
+  // Other buttons (middle, side) dispatch immediately.
+  const DOUBLE_CLICK_MS = 350;
+  let clickState = { button: null, x: 0, y: 0, time: 0, timer: null };
+
+  function clearClickTimer() {
+    if (clickState.timer) {
+      clearTimeout(clickState.timer);
+      clickState.timer = null;
+    }
+  }
+
+  function handleMouseButton(e) {
+    const button = e.button;
+    if (button !== 0 && button !== 2) {
+      handleShortcut(e);
+      return;
+    }
+
+    const now = Date.now();
+    const isDouble = clickState.button === button
+      && now - clickState.time < DOUBLE_CLICK_MS
+      && Math.abs(e.clientX - clickState.x) < 8
+      && Math.abs(e.clientY - clickState.y) < 8;
+
+    if (isDouble) {
+      clearClickTimer();
+      clickState = { button: null, x: 0, y: 0, time: 0, timer: null };
+      const combo = button === 0 ? 'DoubleClick' : 'DoubleRightClick';
+      const actionId = findAction(Core.getState().config, combo);
+      if (actionId) {
+        e.preventDefault();
+        dispatchAction(actionId);
+      }
+      return;
+    }
+
+    const combo = formatKeyCombo(e);
+    clearClickTimer();
+    clickState = { button, x: e.clientX, y: e.clientY, time: now, timer: null };
+    clickState.timer = setTimeout(() => {
+      clickState.timer = null;
+      const actionId = findAction(Core.getState().config, combo);
+      if (actionId) dispatchAction(actionId);
+    }, DOUBLE_CLICK_MS);
+  }
 
   // Scroll wheel: route through the keybind table so ScrollUp/ScrollDown and
   // Ctrl+ScrollUp/Ctrl+ScrollDown are remappable. In hold mode a physically
