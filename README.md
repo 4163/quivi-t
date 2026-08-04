@@ -207,6 +207,8 @@ src/js/keybinds.js
 The backend does not define shortcut defaults. It only loads and saves the config object.
 Keyboard pan distance is tuned by `VIEWER_KEYBOARD_PAN_STEP` in the same file.
 The startup fit mode defaults to `DEFAULT_FIT_MODE` (`height-if-larger`) and changes made from the View menu are saved in config.
+`Fit none`, `Fit width`, and `Fit width if larger` align the image's top edge to the viewport top (tall pages start from the top; images that fit vertically stay centered).
+`Zoom 100%` keeps the content under the viewport center fixed while snapping to true size, so it never jumps your reading position.
 The scaling method defaults to `DEFAULT_SCALING_MODE` (`bicubic`) and changes made from the View menu are saved in config.
 The scroll-wheel modifier defaults to `hold` (hold `Ctrl` while scrolling to zoom) and can be switched to `toggle` (sticky `Ctrl`, press once to enter zoom mode) in Options → Keys → Scroll Wheel, saved as `scroll_zoom_modifier`.
 
@@ -223,6 +225,9 @@ The scroll-wheel modifier defaults to `hold` (hold `Ctrl` while scrolling to zoo
 QuiviT's shortcut engine fully supports:
 - **Simultaneous Multi-Key Combinations:** You can bind arbitrary keys without standard modifiers (e.g., `A + B`). The capture engine tracks all keys held and finalizes the binding on release.
 - **Native Mouse Input:** Mouse buttons (`MouseLeft`, `MouseMiddle`, `MouseRight`, `MouseBack`, `MouseForward`) are bindable individually or combined with modifiers (e.g., `Shift + MouseBack`).
+- **Mouse Double-Click Gestures:** `DoubleClick` and `DoubleRightClick` are bindable gestures; the double-click on the viewport is what drives "Fit none" by default. The click that starts capture (a tag or the `+` button) counts as the first press, so clicking a tag then clicking once more captures `DoubleClick` naturally. During keybind capture the browser context menu is suppressed (including through the finalizing right-click press) so right-click gestures can be bound cleanly.
+- **Middle-Click to Remove:** Middle-clicking a keybind tag in Options removes that binding (alternative to the × button). The tag's middle `mousedown` is intercepted to block the browser's native autoscroll, and removal fires on `mouseup`. While capture is active middle-click removal is disabled so `MouseMiddle` itself is bindable. Only left/right clicks wait the double-click window during capture — `MouseMiddle`, `MouseBack`, and `MouseForward` commit instantly on release.
+- **Scroll-Wheel Capture:** Binding `ScrollUp`/`ScrollDown` (optionally with `Ctrl`/`Shift`/`Alt`) shows the combo live while you scroll and only finalizes once the gesture settles — the options page never scrolls during or right after capture. Only modifier keys combine with the scroll direction (non-modifier keys and mouse buttons are ignored), and combos always read `Modifiers+Scroll`. A lone modifier press (e.g. `Ctrl` by itself) is ignored instead of leaving capture stuck.
 - **Canonical Named Keys:** Captured combos use canonical casing (`Backspace`, `ArrowLeft`, `F5`, ...) matching the defaults, and stored bindings are normalized on load.
 - **Conflict Highlighting:** The options menu visually highlights keybind conflicts by matching them with dynamically generated hues.
 
@@ -250,8 +255,8 @@ Ctrl+ScrollUp / Ctrl+ScrollDown             Zoom in / zoom out
 C                                           Zoom in
 Z                                           Zoom out
 X                                           Zoom 100%
-Q                                           Fit width
-E                                           Fit height
+Q                                           Fit width if larger
+E                                           Fit height if larger
 W / Up                                      Pan up
 A / Left                                    Pan left
 S / Down                                    Pan down
@@ -260,9 +265,11 @@ G                                           Rotate counter-clockwise
 H                                           Rotate clockwise
 V                                           Flip horizontal
 B                                           Flip vertical
-R                                           Fit width if larger
-T                                           Fit height if larger
+R / DoubleClick                             Fit none
+T                                           Fit width
+Y                                           Fit height
 F                                           Auto fit
+] / [                                       Cycle scaling mode (forward / backward)
 ```
 
 ## Backend Commands

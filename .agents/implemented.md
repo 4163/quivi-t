@@ -162,7 +162,7 @@ This file tracks items that are fully implemented and verified, separate from th
 - Set the `menubar` and `statusbar` to be visible by default for new users.
 - Set the `file-panel` to be hidden by default.
 - Added `title` attributes (tooltips) to all items in the file list (except `..`) so users can hover to read long, truncated filenames.
-- Added `title` attributes to the View menu scaling options indicating their cycle shortcut `]`.
+- Added `title` attributes to the View menu scaling options indicating their cycle shortcut `]` / `[`.
 
 ### Categorized Keybinds UI
 
@@ -288,6 +288,44 @@ This file tracks items that are fully implemented and verified, separate from th
 
 - Added a canonical persistence-policy comment block to the `core.js` header: which data belongs in `quivit_config.json` (preferences) vs `quivit_state.json` (last-known runtime state, `STATE_KEYS` in `lib.rs`) vs WebView2 `localStorage` (pre-paint caches and session-only state only — never a source of truth).
 - Added `// persistence:` pointer comments in `keybinds.js` (`mergeConfig`), `shortcuts.js` (latch), and `filePanel.js` (favorites).
+
+### Scaling Mode Backward Cycle
+
+- Added a `cmd-cycle-scaling-back` keybind defaulting to `[` (mirror of the forward `]` cycle), so the three scaling modes can be cycled backward.
+- `main.js` shares one switch case for both directions (`delta = actionId === 'cmd-cycle-scaling-back' ? -1 : 1`).
+- Added the "Cycle Scaling Mode (Backward)" row to the Options Keys → View actions list in `keybindUi.js`.
+- Updated the View-menu scaling tooltips to show the cycle shortcut as `] / [`.
+
+### Fit None + Mouse Double-Click Keybinds
+
+- Added `cmd-fit-none` ("Fit: None") to the View menu, `main.js` dispatch/menu wiring, and the Options Keys → View list; default binding is `['DoubleClick', 'r']`. `mergeConfig` adds it to existing configs.
+- Removed the hardcoded viewport `dblclick` toggle in `viewer.js`; double-click now goes through the keybind table like any other gesture.
+- Added `DoubleClick` / `DoubleRightClick` as bindable gestures in `shortcuts.js`: the mouse dispatch for left/right buttons waits out a 350 ms window so a rapid second press becomes the double gesture instead of two single `MouseLeft`/`MouseRight` dispatches. Dispatches are scoped to the viewport (excluded from `#file-panel`, `.menubar`, `.dropdown-menu`, `#statusbar`) so the file list's own double-click-to-open still works.
+- Capture in `keybindUi.js` now recognizes both double-click gestures (same debounce window + position threshold) and fixed a bug where plain mouse-button bindings (`MouseLeft`/`MouseRight`) were discarded — `hasNonModifier` now also counts `maxButtons`, so a bare mouse gesture finalizes correctly.
+- Middle-click (button 1) on a keybind tag removes that binding (alternative to the × button): the tag's middle `mousedown` is `preventDefault()`ed to block the browser's native autoscroll, and removal fires on the tag's `mouseup`, reusing the same removal path.
+- The browser right-click context menu stays enabled in the options window generally but is suppressed during keybind capture (`onContextMenu`), so right-click / double right-click can be captured cleanly.
+- Auto fit menu item now has `title=""`.
+
+### Viewer: Top-Aligned Fit Modes + Focal Zoom 100%
+
+- `applyFitMode` now top-aligns `none`, `width`, and `width-if-larger` (`_ty = (visualHeight - vh) / 2` when the image is taller than the viewport, `0` otherwise), so tall pages start at the top edge and scroll down; vertically-fitting images stay centered. The offset equals `_clampPan`'s `maxY` bound, so the clamp keeps it pinned.
+- Refactored the wheel zoom math into a shared `zoomTo(exactScale, cx, cy)` helper (focal-point preserving) that both `zoomAt` and the new `setZoom` use.
+- `setZoom` (Zoom 100%) now zooms to true size anchored on the viewport center: the content under the middle of the screen stays put instead of the image re-centering, and pressing `X` at 100% while panned no longer resets the pan.
+
+### Keybind Capture Fixes
+
+- **Middle-click removal works again.** Each keybind tag's `mousedown` handler now `preventDefault()`s button 1, blocking the browser's native autoscroll (which previously swallowed the click and suppressed `auxclick`); removal fires on the tag's `mouseup` for button 1 instead of relying on `auxclick`.
+- **Middle mouse stays bindable.** During capture the window capture-phase listener `stopPropagation`s the tag events and already blocks autoscroll, and the tag's removal handler is additionally guarded by `isCapturing`, so `MouseMiddle` can be bound cleanly and middle-click removal is disabled while listening.
+- **Context menu suppression covers the finalizing press.** `cleanup()` now keeps the capture's `onContextMenu` listener attached until the 100ms `isCapturing` reset instead of removing it synchronously — the `contextmenu` event that trails a finalizing right-click press (`mousedown → contextmenu`) used to escape suppression and pop the native menu on the second click of a `DoubleRightClick` capture.
+- **Wheel capture no longer scrolls the page.** Wheel finalization is debounced (`WHEEL_SETTLE_MS = 300`): `onWheel` keeps `preventDefault`ing, shows the live combo (`ScrollUp` / `Ctrl+ScrollDown`, ...) on the element, and only `finish()`es once the gesture settles — a longer scroll no longer bleeds past the capture and scrolls the options page. The settle timer is cleared in `cleanup()`.
+- **Initiating click counts as the first press of a double-click.** `captureKeybind` now receives the initiating click event and seeds `mousePress` from it, so clicking a tag/`+` then clicking once more within the window captures `DoubleClick` (2 presses) instead of requiring a triple-click. Right-click sequences and distant/delayed second presses are unaffected.
+
+### Keybind Capture Consistency
+
+- **Non-double mouse buttons commit instantly.** The capture debounce (waiting for a potential second press) now applies only to buttons 0/2 (`MouseLeft`/`MouseRight`), which have double-click gestures; `MouseMiddle`, `MouseBack`, and `MouseForward` finalize immediately on `mouseup` since they have no double state. This matches dispatch, which already treats buttons 1/3/4 as immediate.
+- **Scroll capture is modifier-only.** `onWheel` builds the combo from held modifier keys (`Ctrl`/`Shift`/`Alt`/`Meta`) plus the scroll direction, ignoring non-modifier keys and mouse buttons — so `ScrollUp`, `Ctrl+ScrollUp`, and `Ctrl+Shift+ScrollUp` are bindable while `A+ScrollUp` is not, mirroring the double-click gestures (no key/button + gesture).
+- **Scroll combos always read `Modifiers+Scroll`.** `formatKeysCombo` now pushes `scrollDir` last (after `others.sort()`), so a captured combo can never appear as `ScrollUp+a`; ordering is consistent on both capture and dispatch.
+- **Lone modifier presses no longer get stuck.** When everything is released but the captured state is modifier-only (no real key/button/double), `updateState` resets `maxKeys`/`maxButtons` and shows `Listening...`, ignoring the press instead of leaving the stale modifier displayed. The next input captures normally. (Dispatch has always ignored bare modifiers — `shortcuts.js` returns early for `Control`/`Shift`/`Alt`/`Meta` keydowns — so this was purely a capture-UX fix.)
 
 ## Verified Commands Used
 

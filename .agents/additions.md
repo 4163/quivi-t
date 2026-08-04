@@ -189,13 +189,27 @@ After each slice:
 
 ## Verification Steps
 
-After all implementation slices:
+Scope:
+every/all changes made after the last remote push. The last remote push is the most recent commit present on `origin/master`;
+everything in the working tree on top of it is what this pass must verify before the manual `make push` pipeline —
+unless the user states otherwise (e.g., they request to emulate and go through the `make push` pipeline instead, since the active session already has most of the context).
 
-1. Manually review that the project remains coherently decoupled.
-2. Move features into their own JS files where warranted.
-3. Port the completed items from this file into `.agents/implemented.md` — including any additions and fixes made during the pass that were not originally listed here.
-4. Update `README.md` with new shortcuts, config behavior, rchive behavior, and module structure, and any relevant changes.
-5. Verify every config-backed feature meets both global and portable-mode requirements:
-6. Add a new entry to `.agents/sessions.md`.
-7. Repeat static and runtime verifications as needed.
-8. Leave the repository ready for the user to run the push pipeline.
+1. Confirm the change set. `git status` must show only the intended files;
+   reconcile anything unexpected before continuing.
+2. Static checks. `node --check` on every touched JS module and `cargo check` in
+   `src-tauri`.
+3. Runtime-verify each change made after the last remote push: exercise the new
+   behavior in the app and confirm it works as intended.
+4. Manually review that the project remains coherently decoupled, with features
+   in their own JS files where warranted.
+5. Verify every config-backed feature meets both global and portable-mode
+   requirements.
+6. Port the completed items from this file into `.agents/implemented.md`,
+   including any additions and fixes made during the pass that were not
+   originally listed here.
+7. Update `README.md` with new shortcuts, config behavior, archive behavior,
+   module structure, and any relevant changes.
+8. Add a new entry to `.agents/sessions-index.md`.
+9. Repeat static and runtime verifications as needed.
+10. Leave the repository ready for the user to run the push pipeline: final
+    `git diff` matches the verified change set, nothing extra staged, no secrets.
