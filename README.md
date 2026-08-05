@@ -272,7 +272,7 @@ R / DoubleClick                             Fit none
 T                                           Fit width
 Y                                           Fit height
 F                                           Auto fit
-] / [                                       Cycle scaling mode (forward / backward)
+[ / ]                                       Cycle scaling mode (backward / forward)
 ```
 
 ## Backend Commands
