@@ -12,6 +12,19 @@ use notify::{Watcher, RecursiveMode, RecommendedWatcher, Event};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 
+#[cfg(windows)]
+use windows::Win32::UI::Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_USEFILEATTRIBUTES};
+#[cfg(windows)]
+use windows::Win32::UI::WindowsAndMessaging::{GetIconInfo, DestroyIcon, DrawIconEx, DI_NORMAL};
+#[cfg(windows)]
+use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC, CreateCompatibleDC, DeleteDC, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, DeleteObject, CreateDIBSection, SelectObject, GetObjectW, BITMAP};
+#[cfg(windows)]
+use windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_DIRECTORY};
+#[cfg(windows)]
+use std::ffi::OsStr;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
+
 // ── Supported formats ────────────────────────────────────────────────────────
 
 const SUPPORTED_IMAGES: &[&str] = &[
@@ -276,6 +289,7 @@ struct FileEntry {
     ext: String,
     date: String,
     is_dir: bool,
+    is_hidden: bool,
 }
 
 #[derive(Serialize)]
@@ -355,6 +369,7 @@ fn list_zip_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
             ext: ext.to_uppercase(),
             date: "".to_string(),
             is_dir: false,
+            is_hidden: false,
         });
     }
     
@@ -395,6 +410,7 @@ fn list_rar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
                             ext: ext.to_uppercase(),
                             date: "".to_string(),
                             is_dir: false,
+                            is_hidden: false,
                         });
                     }
                 }
@@ -482,6 +498,7 @@ fn list_7z_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
             ext: ext.to_uppercase(),
             date: "".to_string(),
             is_dir: false,
+            is_hidden: false,
         });
     }
 
@@ -554,6 +571,7 @@ fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
             ext: ext.to_uppercase(),
             date: "".to_string(),
             is_dir: false,
+            is_hidden: false,
         });
     }
 
@@ -678,11 +696,12 @@ fn read_directory_impl(
                     };
 
                     files.push(FileEntry {
-                        name,
+                        name: name.clone(),
                         path: path.to_string_lossy().into_owned(),
                         ext: ext_upper,
                         date,
                         is_dir,
+                        is_hidden: is_hidden_path(&path, &name),
                     });
                 }
             }
@@ -1150,6 +1169,162 @@ fn base64_encode(data: &[u8]) -> String {
     result
 }
 
+#[tauri::command]
+fn get_native_icon(ext: &str) -> Result<Option<String>, String> {
+    #[cfg(not(windows))]
+    return Ok(None);
+
+    #[cfg(windows)]
+    unsafe {
+        use image::RgbaImage;
+        use std::io::Cursor;
+        use base64::prelude::*;
+
+        let is_folder = ext == "__folder__";
+
+        let dummy_name = if is_folder {
+            "dummy".to_string()
+        } else {
+            let name = format!("dummy{}", if ext.starts_with('.') { "" } else { "." });
+            format!("{}{}", name, ext)
+        };
+        
+        let ext_wide: Vec<u16> = OsStr::new(&dummy_name).encode_wide().chain(std::iter::once(0)).collect();
+        let mut shfi = SHFILEINFOW::default();
+        let flags = SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | windows::Win32::UI::Shell::SHGFI_SMALLICON;
+        let attrs = if is_folder {
+            FILE_ATTRIBUTE_DIRECTORY
+        } else {
+            FILE_ATTRIBUTE_NORMAL
+        };
+
+        let res = SHGetFileInfoW(
+            windows::core::PCWSTR(ext_wide.as_ptr()),
+            attrs,
+            Some(&mut shfi),
+            std::mem::size_of::<SHFILEINFOW>() as u32,
+            flags,
+        );
+
+        if res == 0 || shfi.hIcon.is_invalid() {
+            return Ok(None);
+        }
+
+        let hicon = shfi.hIcon;
+        
+        let mut icon_info = windows::Win32::UI::WindowsAndMessaging::ICONINFO::default();
+        if GetIconInfo(hicon, &mut icon_info).is_err() {
+            let _ = DestroyIcon(hicon);
+            return Ok(None);
+        }
+
+        // Get bitmap info
+        let mut bmp = BITMAP::default();
+        GetObjectW(
+            icon_info.hbmColor.into(),
+            std::mem::size_of::<BITMAP>() as i32,
+            Some(&mut bmp as *mut _ as *mut std::ffi::c_void),
+        );
+
+        let width = bmp.bmWidth as u32;
+        let height = bmp.bmHeight as u32;
+        
+        let hdc_screen = GetDC(None);
+        let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
+        
+        let mut bmi = BITMAPINFO::default();
+        bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bmi.bmiHeader.biWidth = width as i32;
+        bmi.bmiHeader.biHeight = -(height as i32); // top-down
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB.0;
+
+        let mut pixels: Vec<u8> = vec![0; (width * height * 4) as usize];
+        
+        let mut bits_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+        let hbm_dib = match CreateDIBSection(
+            Some(hdc_mem),
+            &bmi,
+            DIB_RGB_COLORS,
+            &mut bits_ptr,
+            None,
+            0,
+        ) {
+            Ok(h) => h,
+            Err(_) => {
+                let _ = DeleteDC(hdc_mem);
+                let _ = ReleaseDC(None, hdc_screen);
+                let _ = DeleteObject(icon_info.hbmColor.into());
+                let _ = DeleteObject(icon_info.hbmMask.into());
+                let _ = DestroyIcon(hicon);
+                return Ok(None);
+            }
+        };
+
+        if hbm_dib.is_invalid() {
+            let _ = DeleteDC(hdc_mem);
+            let _ = ReleaseDC(None, hdc_screen);
+            let _ = DeleteObject(icon_info.hbmColor.into());
+            let _ = DeleteObject(icon_info.hbmMask.into());
+            let _ = DestroyIcon(hicon);
+            return Ok(None);
+        }
+
+        let old_bmp = SelectObject(hdc_mem, hbm_dib.into());
+        
+        // Draw the icon onto the DIB
+        let _ = DrawIconEx(
+            hdc_mem,
+            0,
+            0,
+            hicon,
+            width as i32,
+            height as i32,
+            0,
+            None,
+            DI_NORMAL,
+        );
+        
+        // Copy bits from DIB to our vec
+        std::ptr::copy_nonoverlapping(bits_ptr as *const u8, pixels.as_mut_ptr(), pixels.len());
+        
+        // Clean up GDI
+        SelectObject(hdc_mem, old_bmp);
+        let _ = DeleteObject(hbm_dib.into());
+        let _ = DeleteDC(hdc_mem);
+        let _ = ReleaseDC(None, hdc_screen);
+        
+        let _ = DeleteObject(icon_info.hbmColor.into());
+        let _ = DeleteObject(icon_info.hbmMask.into());
+        let _ = DestroyIcon(hicon);
+        
+        // Convert BGRA to RGBA
+        for chunk in pixels.chunks_exact_mut(4) {
+            let b = chunk[0];
+            let r = chunk[2];
+            chunk[0] = r;
+            chunk[2] = b;
+        }
+
+        let img = RgbaImage::from_raw(width, height, pixels).ok_or("Failed to create RgbaImage")?;
+        let mut buf = Cursor::new(Vec::new());
+        image::write_buffer_with_format(
+            &mut buf,
+            &img,
+            width,
+            height,
+            image::ColorType::Rgba8,
+            image::ImageFormat::Png,
+        ).map_err(|e| e.to_string())?;
+        
+        let base64_str = BASE64_STANDARD.encode(buf.into_inner());
+        let data_uri = format!("data:image/png;base64,{}", base64_str);
+        
+        Ok(Some(data_uri))
+    }
+}
+
 // ── App entry point ──────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1192,7 +1367,8 @@ pub fn run() {
             read_text_file,
             write_text_file,
             get_default_dir,
-            get_ico_frames
+            get_ico_frames,
+            get_native_icon
         ])
         .register_asynchronous_uri_scheme_protocol("quivit", |ctx, request, responder| {
             // Protocol: quivit://archive/<archive_path_base64>/<entry_name>
@@ -1461,7 +1637,7 @@ fn guess_mime(name: &str) -> &'static str {
 #[cfg(test)]
 mod archive_tests {
     use super::*;
-    use std::io::{Read, Write};
+    use std::io::Read;
 
     fn test_file(name: &str) -> std::path::PathBuf {
         // Tests run with CWD = src-tauri; test files live under the repo root.

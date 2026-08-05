@@ -192,34 +192,65 @@ export function toggleFavoriteCurrent() {
   renderFavorites();
 }
 
-// Extensions with custom ICO files in /assets/icons/
-const CUSTOM_ICON_EXTS = new Set(['apng', 'cbz', 'cbr', 'gif', 'svg', 'webp', '7z', 'cb7', 'cbt', 'tar']);
-// Map extensions to their icon filename (for grouped exts like cbr -> cbz.ico)
-const ICON_FILE_MAP = {
-  cbr: 'cbz',
-  '7z': 'cbz',
-  cb7: 'cbz',
-  cbt: 'cbz',
-  tar: 'cbz',
-};
+const iconCache = new Map();
 
-function getIconSvg(item) {
+function fetchNativeIcon(ext) {
+  if (iconCache.has(ext)) return;
+  iconCache.set(ext, 'pending'); // mark as pending
+
+  if (window.__TAURI__) {
+    const extArg = ext === '__folder__' ? ext : '.' + ext;
+    window.__TAURI__.core.invoke('get_native_icon', { ext: extArg })
+      .then(src => {
+        iconCache.set(ext, src || '');
+        document.querySelectorAll(`img[data-ext="${ext}"]`).forEach(img => {
+          if (src) {
+            img.src = src;
+            img.style.imageRendering = 'pixelated';
+            img.removeAttribute('data-ext');
+          } else {
+            // fallback generic icon
+            const isFolder = ext === '__folder__';
+            img.outerHTML = isFolder
+              ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
+              : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+          }
+        });
+      })
+      .catch(err => console.error('Failed to get native icon:', err));
+  }
+}
+
+function getIconHtml(item) {
   if (item.is_drive) {
     return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>';
-  } else if (item.is_dir || item.is_parent) {
-    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>';
   }
+  
+  let ext;
+  let fallbackSvg;
 
-  const ext = (item.ext || '').toLowerCase();
-
-  if (CUSTOM_ICON_EXTS.has(ext)) {
-    const file = ICON_FILE_MAP[ext] || ext;
-    return `<img src="/assets/icons/${file}.ico" width="14" height="14" style="object-fit:contain;image-rendering:auto" draggable="false">`;
-  } else if (ext.match(/^(zip|rar|7z|cb7|tar|gz|bz2)$/)) {
-    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-9 3h2v2h-2V9zm0 4h2v2h-2v-2zm0 4h2v2h-2v-2z"/></svg>';
+  if (item.is_dir || item.is_parent) {
+    ext = '__folder__';
+    fallbackSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>';
   } else {
-    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+    ext = (item.ext || '').toLowerCase();
+    fallbackSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+    if (!ext) return fallbackSvg;
   }
+
+  if (iconCache.has(ext)) {
+    const src = iconCache.get(ext);
+    if (src === 'pending') {
+      return `<img data-ext="${ext}" width="14" height="14" style="object-fit:contain;image-rendering:auto" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
+    }
+    if (src) {
+      return `<img src="${src}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false">`;
+    }
+    return fallbackSvg;
+  }
+
+  fetchNativeIcon(ext);
+  return `<img data-ext="${ext}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
 }
 
 function openFavorite(fav) {
@@ -243,7 +274,7 @@ function buildFavoriteEntry(fav) {
 
   const itemName = document.createElement('span');
   itemName.className = 'item-name';
-  itemName.innerHTML = getIconSvg(fav);
+  itemName.innerHTML = getIconHtml(fav);
   
   const itemLabel = document.createElement('span');
   itemLabel.className = 'item-label';
@@ -413,7 +444,11 @@ function renderEntry(item, index, selectedIndex) {
   const itemName = document.createElement('span');
   itemName.className = 'item-name';
 
-  itemName.innerHTML = getIconSvg(item);
+  itemName.innerHTML = getIconHtml(item);
+  if (item.is_hidden) {
+    const icon = itemName.firstElementChild;
+    if (icon) icon.style.opacity = '0.65';
+  }
 
   const itemLabel = document.createElement('span');
   itemLabel.className = 'item-label';
