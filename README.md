@@ -57,8 +57,14 @@ QuiviT/
 │  │  └─ default.json         # Tauri permissions for main/options windows
 │  ├─ icons/                  # Application icons
 │  ├─ src/
+│  │  ├─ archives.rs          # Archive extraction and caching
+│  │  ├─ commands.rs          # Tauri commands and directory watcher
+│  │  ├─ config.rs            # Configuration state and app settings
+│  │  ├─ ico.rs               # ICO frame extraction and spritesheet
+│  │  ├─ lib.rs               # Module definitions and app entry point
 │  │  ├─ main.rs              # Native executable entry point
-│  │  └─ lib.rs               # Tauri commands, config, archive protocol
+│  │  ├─ models.rs            # Data structures and structs
+│  │  └─ utils.rs             # Supported formats and helpers
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json
 ├─ package.json

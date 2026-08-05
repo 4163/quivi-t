@@ -6,6 +6,11 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ## Fully Implemented
 
+### Rust Backend Decoupling
+- Decoupled the monolithic `src/lib.rs` backend file into distinct logical modules: `archives.rs`, `commands.rs`, `config.rs`, `ico.rs`, `models.rs`, and `utils.rs`.
+- `lib.rs` is now restricted to module aggregation and the Tauri app initialization flow.
+- Reduced overall complexity and merge conflicts by segmenting code by domain without losing any logic (verified via exact line porting and unit testing).
+
 ### Native Windows File Icons
 
 - Replaced custom static icons in the file list with the exact native system icons fetched directly from the OS.
