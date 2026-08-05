@@ -34,4 +34,5 @@ image = { version = "0.25", features = ["ico"] }
 md5 = "0.8.1"
 base64 = "0.23.1"
 windows = { version = "0.62.2", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_Foundation", "Win32_Storage_FileSystem"] }
+winreg = "0.53.0"
 

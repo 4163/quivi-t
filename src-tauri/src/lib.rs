@@ -19,22 +19,63 @@ use ico::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            // A second instance was launched. Focus the primary window and
-            // optionally open the file that was passed as an argument.
+    let config = crate::config::load_config_early();
+    // Single instance defaults to true if not explicitly set to false
+    let single_instance = config.frontend_data.get("single_instance").and_then(|v| v.as_bool()).unwrap_or(true);
+
+    let mut builder = tauri::Builder::default();
+    
+    if single_instance {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(main_window) = app.get_webview_window("main") {
                 let _ = main_window.show();
                 let _ = main_window.set_focus();
-                // If a path was passed, emit it so main.js can load it
                 if argv.len() > 1 {
                     let path = argv[1].clone();
                     let _ = main_window.emit("single-instance-open", path);
                 }
             }
-        }))
+        }));
+    }
+
+    builder = builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                use notify::{Watcher, RecursiveMode, EventKind};
+                use std::time::Duration;
+                
+                let config_path = crate::config::get_config_path();
+                if let Some(parent) = config_path.parent() {
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    let mut watcher = notify::recommended_watcher(tx).unwrap();
+                    let _ = watcher.watch(parent, RecursiveMode::NonRecursive);
+                    
+                    let mut last_emit = std::time::Instant::now();
+                    
+                    for res in rx {
+                        match res {
+                            Ok(event) => {
+                                if let EventKind::Modify(_) = event.kind {
+                                    if event.paths.iter().any(|p| p.file_name() == config_path.file_name()) {
+                                        if last_emit.elapsed() > Duration::from_millis(500) {
+                                            last_emit = std::time::Instant::now();
+                                            let _ = app_handle.emit("config-changed", ());
+                                        }
+                                    }
+                                }
+                            },
+                            Err(_) => {}
+                        }
+                    }
+                }
+            });
+            Ok(())
+        });
+
+    builder
         .manage(Mutex::new(ArchiveCache::new()))
         .manage(Mutex::new(WatcherState::new()))
         .invoke_handler(tauri::generate_handler![
@@ -58,7 +99,12 @@ pub fn run() {
             write_text_file,
             get_default_dir,
             get_ico_frames,
-            get_native_icon
+            get_native_icon,
+            get_format_status,
+            register_associations,
+            unregister_associations,
+            get_initial_args,
+            show_window
         ])
         .register_asynchronous_uri_scheme_protocol("quivit", |ctx, request, responder| {
             // Protocol: quivit://archive/<archive_path_base64>/<entry_name>

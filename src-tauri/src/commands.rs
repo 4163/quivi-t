@@ -155,6 +155,7 @@ pub fn read_directory_impl(
     Ok(DirectoryReadResult {
         files,
         initial_index,
+        target_filename: target_filename.to_string(),
         directory: dir.to_string_lossy().into_owned(),
         parent_directory: parent_dir_str,
     })
@@ -466,3 +467,211 @@ pub fn write_text_file(path: String, content: String) -> Result<(), String> {
     fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+
+#[cfg(windows)]
+use winreg::{enums::*, RegKey};
+
+#[derive(serde::Serialize)]
+pub struct FormatStatus {
+    pub ext: String,
+    pub name: String,
+    pub icon: String,
+    pub category: String,
+    pub registered: bool,
+}
+
+#[tauri::command]
+pub fn get_format_status() -> Vec<FormatStatus> {
+    let mut statuses = Vec::new();
+    
+    #[cfg(windows)]
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+    for fmt in SUPPORTED_FORMATS {
+        let mut registered = false;
+        let expected_progid = format!("QuiviT.{}", fmt.ext.to_lowercase());
+
+        #[cfg(windows)]
+        {
+            // Check if QuiviT has registered itself for this extension.
+            // On Windows 10/11, UserChoice (the actual default) is hash-protected and
+            // cannot be set programmatically. Our registration writes to Classes, so
+            // the checkbox reflects "QuiviT registered for this format."
+            // The "Register File Extensions in Windows Settings" button is how the
+            // user sets the actual default app.
+            let ext_key_path = format!(r#"Software\Classes\.{}"#, fmt.ext.to_lowercase());
+            if let Ok(ext_key) = hkcu.open_subkey(&ext_key_path) {
+                if let Ok(current_progid) = ext_key.get_value::<String, _>("") {
+                    if current_progid == expected_progid {
+                        registered = true;
+                    }
+                }
+            }
+        }
+
+        statuses.push(FormatStatus {
+            ext: fmt.ext.to_string(),
+            name: fmt.name.to_string(),
+            icon: fmt.icon.to_string(),
+            category: fmt.category.to_string(),
+            registered,
+        });
+    }
+
+    statuses
+}
+
+const ICON_APNG: &[u8] = include_bytes!("../../icons/apng.ico");
+const ICON_CBR: &[u8] = include_bytes!("../../icons/cbr.ico");
+const ICON_CBZ: &[u8] = include_bytes!("../../icons/cbz.ico");
+const ICON_GIF: &[u8] = include_bytes!("../../icons/gif.ico");
+const ICON_SVG: &[u8] = include_bytes!("../../icons/svg.ico");
+const ICON_WEBP: &[u8] = include_bytes!("../../icons/webp.ico");
+const ICON_MOE: &[u8] = include_bytes!("../../icons/quivi-t_moe-icon.ico");
+
+pub fn dump_icons(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let config_dir = crate::config::roaming_dir(app);
+    let icon_dir = config_dir.join("icons");
+    std::fs::create_dir_all(&icon_dir).map_err(|e| {
+        let _ = std::fs::write("DEBUG_ERR.txt", format!("create_dir_all failed: {}", e));
+        e.to_string()
+    })?;
+
+    if let Err(e) = std::fs::write(icon_dir.join("apng.ico"), ICON_APNG) {
+        let _ = std::fs::write("DEBUG_ERR.txt", format!("Failed to write apng.ico: {}", e));
+        return Err(e.to_string());
+    }
+    let _ = std::fs::write(icon_dir.join("cbr.ico"), ICON_CBR);
+    let _ = std::fs::write(icon_dir.join("cbz.ico"), ICON_CBZ);
+    let _ = std::fs::write(icon_dir.join("gif.ico"), ICON_GIF);
+    let _ = std::fs::write(icon_dir.join("svg.ico"), ICON_SVG);
+    let _ = std::fs::write(icon_dir.join("webp.ico"), ICON_WEBP);
+    let _ = std::fs::write(icon_dir.join("quivi-t_moe-icon.ico"), ICON_MOE);
+
+    Ok(icon_dir)
+}
+
+#[tauri::command]
+pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe_str = exe_path.to_string_lossy().into_owned();
+        let icon_dir = dump_icons(&app)?;
+
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        
+        for ext in extensions {
+            let lower_ext = ext.to_lowercase();
+            let format_info = SUPPORTED_FORMATS.iter().find(|f| f.ext == lower_ext);
+            let display_name = format_info.map(|f| f.name).unwrap_or("QuiviT File");
+            let icon_name = format_info.map(|f| f.icon).unwrap_or("quivi-t_moe-icon.ico");
+            
+            let progid = format!("QuiviT.{}", lower_ext);
+
+            // 1. HKCU\Software\Classes\.ext
+            let ext_key_path = format!(r#"Software\Classes\.{}"#, lower_ext);
+            let (ext_key, _) = hkcu.create_subkey(&ext_key_path).map_err(|e| {
+                let _ = std::fs::write("DEBUG_ERR.txt", format!("Failed ext_key_path {}: {}", ext_key_path, e));
+                format!("Failed creating subkey {}: {}", ext_key_path, e)
+            })?;
+            let _ = ext_key.set_value("", &progid);
+
+            // 2. HKCU\Software\Classes\.ext\OpenWithProgids
+            let owp_path = format!(r#"Software\Classes\.{}\OpenWithProgids"#, lower_ext);
+            if let Ok((owp_key, _)) = hkcu.create_subkey(&owp_path) {
+                let _ = owp_key.set_value(&progid, &"");
+            }
+
+            // 3. HKCU\Software\Classes\QuiviT.ext
+            let progid_path = format!(r#"Software\Classes\{}"#, progid);
+            let (progid_key, _) = hkcu.create_subkey(&progid_path).map_err(|e| {
+                let _ = std::fs::write("DEBUG_ERR.txt", format!("Failed progid_path {}: {}", progid_path, e));
+                format!("Failed creating progid {}: {}", progid_path, e)
+            })?;
+            let _ = progid_key.set_value("", &display_name);
+
+            // DefaultIcon
+            let icon_path_key = format!(r#"Software\Classes\{}\DefaultIcon"#, progid);
+            let (icon_key, _) = hkcu.create_subkey(&icon_path_key).map_err(|e| {
+                let _ = std::fs::write("DEBUG_ERR.txt", format!("Failed icon_path_key {}: {}", icon_path_key, e));
+                format!("Failed creating DefaultIcon {}: {}", icon_path_key, e)
+            })?;
+            let full_icon_path = icon_dir.join(icon_name).to_string_lossy().into_owned();
+            let _ = icon_key.set_value("", &full_icon_path);
+
+            // shell\open\command
+            let cmd_path = format!(r#"Software\Classes\{}\shell\open\command"#, progid);
+            let (cmd_key, _) = hkcu.create_subkey(&cmd_path).map_err(|e| {
+                let _ = std::fs::write("DEBUG_ERR.txt", format!("Failed cmd_path {}: {}", cmd_path, e));
+                format!("Failed creating command {}: {}", cmd_path, e)
+            })?;
+            let cmd_val = format!(r#""{}" "%1""#, exe_str);
+            let _ = cmd_key.set_value("", &cmd_val);
+        }
+
+        let _ = std::fs::write("DEBUG_REG.txt", "SUCCESSFULLY REGISTERED!");
+
+        // Notify shell to refresh icons
+        unsafe {
+            use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    return Err("File associations are only supported natively on Windows.".into());
+}
+
+#[tauri::command]
+pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        
+        for ext in extensions {
+            let lower_ext = ext.to_lowercase();
+            let progid = format!("QuiviT.{}", lower_ext);
+
+            // Remove ProgId
+            let progid_path = format!(r#"Software\Classes\{}"#, progid);
+            let _ = hkcu.delete_subkey_all(&progid_path);
+
+            // If .ext default is our progid, clear it
+            let ext_key_path = format!(r#"Software\Classes\.{}"#, lower_ext);
+            if let Ok(ext_key) = hkcu.open_subkey_with_flags(&ext_key_path, KEY_ALL_ACCESS) {
+                if let Ok(default_val) = ext_key.get_value::<String, _>("") {
+                    if default_val.eq_ignore_ascii_case(&progid) {
+                        let _ = ext_key.delete_value("");
+                    }
+                }
+            }
+
+            // Remove from OpenWithProgids
+            let owp_path = format!(r#"Software\Classes\.{}\OpenWithProgids"#, lower_ext);
+            if let Ok(owp_key) = hkcu.open_subkey_with_flags(&owp_path, KEY_ALL_ACCESS) {
+                let _ = owp_key.delete_value(&progid);
+            }
+        }
+        
+        unsafe {
+            use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
+        }
+        return Ok(());
+    }
+    
+    #[cfg(not(windows))]
+    return Err("File associations are only supported natively on Windows.".into());
+}
+
+#[tauri::command]
+pub fn get_initial_args() -> Vec<String> {
+    std::env::args().collect()
+}
+
+#[tauri::command]
+pub fn show_window(window: tauri::Window) {
+    let _ = window.show();
+}

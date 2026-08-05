@@ -16,6 +16,7 @@ pub struct FileEntry {
 pub struct DirectoryReadResult {
     pub files: Vec<FileEntry>,
     pub initial_index: usize,
+    pub target_filename: String,
     pub directory: String,
     pub parent_directory: Option<String>,
 }

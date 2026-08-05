@@ -306,3 +306,8 @@ The Options window command is async because creating a Tauri webview window from
 - CBR icon: [Cbr icons created by Good Ware - Flaticon](https://www.flaticon.com/free-icon/cbz_4208350)
 - SVG icon: [Svg icons created by The Chohans - Flaticon](https://www.flaticon.com/free-icon/cbr_4208358)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
+
+## References
+
+- [qBittorrent](https://github.com/qbittorrent/qBittorrent) — Referenced for Windows file association registration patterns (registry ProgID setup, `SHChangeNotify`, and `UserChoice` handling).
+- [NanaZip](https://github.com/M2Team/NanaZip) — Referenced for file association UI patterns and Windows default app integration approaches.

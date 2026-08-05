@@ -94,6 +94,16 @@ function setScaling(mode) {
   Core.setScalingMode(mode, { persist: true });
 }
 
+function applyCustomCss(cssText) {
+  let styleEl = document.getElementById('custom-css');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'custom-css';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = cssText || '';
+}
+
 async function toggleFullscreen() {
   const enteringFullscreen = window.__TAURI__
     ? !(await window.__TAURI__.window.getCurrentWindow().isFullscreen())
@@ -443,20 +453,31 @@ function bindDragDrop() {
     listen('tauri://drag-drop', (e) => {
       dropOverlay.classList.remove('drag-over');
       const paths = e.payload.paths;
-      if (paths && paths.length > 0) FsUtils.loadFile(paths[0]);
+      if (paths && paths.length > 0) {
+        FsUtils.loadFile(paths[0], { preferInitial: true, restoreLastImage: false });
+      }
     });
     listen('config-updated', () => {
       resetScrollLatch();
       Core.loadConfig();
     });
+    // File watcher detected another instance saved config — reload to stay in sync
+    listen('config-changed', () => {
+      resetScrollLatch();
+      Core.loadConfig();
+    });
     // Re-apply the persisted scroll-wheel latch once config has (re)loaded —
-    // startup and after Options Apply & Close. resetScrollLatch() above clears
+    // startup and after Options Apply. resetScrollLatch() above clears
     // it in-memory first, then this restores the saved toggle state.
     window.addEventListener('quivit-config-loaded', () => {
-      syncScrollLatch(Core.getState().config);
+      const config = Core.getState().config;
+      syncScrollLatch(config);
+      applyCustomCss(config?.frontend_data?.custom_css || '');
     });
     listen('single-instance-open', (e) => {
-      if (e.payload) FsUtils.loadFile(e.payload).catch(console.error);
+      if (e.payload) {
+        FsUtils.loadFile(e.payload, { preferInitial: true, restoreLastImage: false }).catch(console.error);
+      }
     });
     listen('theme-preview', (e) => {
       const theme = e.payload;
@@ -466,14 +487,7 @@ function bindDragDrop() {
       }
     });
     listen('css-preview', (e) => {
-      const cssText = e.payload;
-      let styleEl = document.getElementById('custom-css');
-      if (!styleEl) {
-        styleEl = document.createElement('style');
-        styleEl.id = 'custom-css';
-        document.head.appendChild(styleEl);
-      }
-      styleEl.textContent = cssText || '';
+      applyCustomCss(e.payload);
     });
     return;
   }

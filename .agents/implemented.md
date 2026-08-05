@@ -284,6 +284,16 @@ This file tracks items that are fully implemented and verified, separate from th
 - Updated `main.js` and `viewer.js` to query those spans via `document.querySelector('.status-*')` instead of `getElementById`.
 - Non-image entries (folders, archives, `..`, drives) now render `N/A` in the dims and zoom status fields instead of stale metrics from a previously displayed image.
 
+### File Association And Explicit-Open Bug Fixes
+
+- Explicit file opens now bypass remembered-image restoration: first-instance CLI/file-association paths, warm `single-instance-open` handoffs, drag/drop opens, and the direct file/archive picker all pass `restoreLastImage: false` with target-preserving selection.
+- Added async navigation generation guards in `fsUtils.js` so stale directory/archive/parent/refresh/sibling results are discarded instead of overwriting a newer fast navigation.
+- Main-window config reload now reapplies persisted Custom CSS via the existing `quivit-config-loaded` event, matching the live CSS preview path without moving DOM work into `core.js`.
+- Options Apply now saves without closing the window; Close exits the Options window.
+- Options `config-changed` handling now refreshes live presentation state (theme, custom CSS, config-folder labels) without forcing a full window reload.
+- Added Options notes explaining that "Continue from last active image" depends on "Continue from last opened directory", and that the single-instance setting requires restart.
+- Clarified File Types UI wording: checkboxes mean QuiviT is registered for a format, while Windows Settings controls the active Windows 10/11 default handler.
+
 ### Favorites Keyboard Navigation & Archive-Entry Favorites
 
 - Added full keyboard navigation to the Favorites list: ArrowUp/Down, Home, End, Enter, Space, Escape with a tracked highlight (`highlightedFavoritePath`) mirroring the file-list selection model; single-click highlights, double-click opens directories/archives.

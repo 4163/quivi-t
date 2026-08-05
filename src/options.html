@@ -54,10 +54,12 @@
           <input type="checkbox" id="opt-remember-last-image" />
           Continue from last active image
         </label>
+        <p class="hint">Only applies when "Continue from last opened directory" is enabled, since QuiviT needs a startup location to restore an image inside.</p>
         <label class="checkbox-label">
           <input type="checkbox" id="opt-single-instance" />
           Allow only one QuiviT instance
         </label>
+        <p class="hint">Changing this takes effect after restarting QuiviT.</p>
       </div>
       <div class="options-section">
         <h3>Interface</h3>
@@ -110,8 +112,20 @@
     <div class="tab-content" id="tab-associations">
       <div class="options-section">
         <h3>System Integration</h3>
-        <p class="hint">Associate supported image and archive formats with QuiviT.</p>
-        <button id="btn-associate-files" class="primary">Register File Extensions</button>
+        <p class="hint">Register supported image and archive formats with QuiviT. Windows 10/11 protects the actual default-app choice, so checked formats mean QuiviT is registered for that type; use Windows Settings to make QuiviT the active default handler.</p>
+        
+        <div class="associations-list" id="associations-container">
+          <p>Loading formats...</p>
+        </div>
+        
+        <div class="flex-row" style="margin-bottom: 10px;">
+          <button id="btn-assoc-select-all" class="secondary">Select All</button>
+          <button id="btn-assoc-deselect-all" class="secondary">Deselect All</button>
+        </div>
+        
+        <div class="flex-row">
+          <button id="btn-assoc-settings" class="secondary" title="Use this if Windows restricts native registration">Register File Extensions in Windows Settings</button>
+        </div>
       </div>
     </div>
 
@@ -167,8 +181,8 @@ html {
 
     <div class="dialog-footer">
       <span id="options-status" role="status" aria-live="polite"></span>
-      <button id="btn-cancel">Cancel</button>
-      <button id="btn-save-options" class="primary">Apply & Close</button>
+      <button id="btn-cancel">Close</button>
+      <button id="btn-save-options" class="primary">Apply</button>
     </div>
 
     <script type="module" src="/js/options.js"></script>

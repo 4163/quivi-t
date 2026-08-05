@@ -1,10 +1,12 @@
 import { mergeConfig, DEFAULT_KEYBINDS } from './keybinds.js';
 import { makeListNavigable } from './keyboardNav.js';
 import { initKeybindUi } from './keybindUi.js';
+import { initAssociationsUi, applyAssociations } from './associationsUi.js';
 
 const tauri = window.__TAURI__ || {};
 const invoke = tauri.core?.invoke?.bind(tauri.core);
 const emit = tauri.event?.emit?.bind(tauri.event);
+const listen = tauri.event?.listen?.bind(tauri.event);
 const open = tauri.dialog?.open?.bind(tauri.dialog);
 
 let config = mergeConfig({});
@@ -79,7 +81,31 @@ function showStatus(message) {
   if (statusEl) statusEl.textContent = message || '';
 }
 
+async function refreshLiveConfigState() {
+  if (!invoke) return;
+  const latest = mergeConfig(await invoke('load_config'));
+  const latestTheme = latest.frontend_data.theme || 'system';
+  const latestCss = latest.frontend_data.custom_css || '';
+
+  applyTheme(latestTheme);
+  applyCustomCss(latestCss);
+  try {
+    if (latestCss) localStorage.setItem('quivit-custom-css', latestCss);
+    else localStorage.removeItem('quivit-custom-css');
+  } catch (e) {}
+
+  if (configDirLabel) configDirLabel.textContent = await invoke('get_config_dir');
+  if (localDataDirLabel) localDataDirLabel.textContent = await invoke('get_local_data_dir');
+}
+
 async function init() {
+  if (listen) {
+    listen('config-changed', () => {
+      refreshLiveConfigState().catch(err => {
+        console.error('Failed to refresh live config state:', err);
+      });
+    });
+  }
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
     config = mergeConfig(await invoke('load_config'));
@@ -111,6 +137,7 @@ async function init() {
     applyCustomCss(customCss);
     
     keybindUiInstance = initKeybindUi('keybinds-container', config, showStatus);
+    initAssociationsUi('associations-container', showStatus);
   } catch (err) {
     console.error('Failed to load config:', err);
     showStatus(`Failed to load config: ${err}`);
@@ -191,7 +218,7 @@ document.querySelectorAll('.theme-btn').forEach((btn, index, NodeList) => {
     applyTheme(currentTheme);
     emit?.('theme-preview', currentTheme);
     
-    // Auto-save the theme directly so it persists even if they close without 'Apply & Close'
+    // Auto-save the theme directly so it persists even if they close without Apply.
     config.frontend_data.theme = currentTheme;
     if (invoke) {
       invoke('save_config', { config }).catch(err => {
@@ -272,8 +299,9 @@ document.getElementById('opt-custom-css').addEventListener('keydown', (e) => {
   }
 });
 
-// --- Save & Close ---
+// --- Save ---
 document.getElementById('btn-save-options').addEventListener('click', async () => {
+  await applyAssociations(showStatus);
   config.portable_mode = document.getElementById('opt-portable-mode').checked;
   config.frontend_data.continue_last = document.getElementById('opt-continue-last').checked;
   config.frontend_data.remember_last_image = document.getElementById('opt-remember-last-image').checked;
@@ -295,8 +323,7 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
     await invoke('save_config', { config });
     // Tell the main window to reload config
     await emit?.('config-updated');
-    // Close this window
-    await closeOptionsWindow();
+    showStatus('Options applied.');
   } catch (err) {
     console.error('Failed to save config:', err);
     showStatus(`Failed to save config: ${err}`);

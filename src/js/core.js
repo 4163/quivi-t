@@ -316,8 +316,15 @@ export const Core = {
     // Resolve startup directory
     const fd = _state.config.frontend_data || {};
     let startPath = '';
+    let args = [];
     
-    if (fd.continue_last !== false && fd.last_opened_path) {
+    if (window.__TAURI__) {
+      args = await invoke('get_initial_args').catch(() => []);
+    }
+    
+    if (args.length > 1) {
+      startPath = args[1];
+    } else if (fd.continue_last !== false && fd.last_opened_path) {
       startPath = fd.last_opened_path;
     } else if (fd.start_dir) {
       startPath = fd.start_dir;
@@ -326,7 +333,17 @@ export const Core = {
     }
     
     if (startPath && window.__TAURI__) {
-      FsUtils.loadFile(startPath, { restoreLastImage: true });
+      const explicitOpen = args.length > 1;
+      FsUtils.loadFile(startPath, {
+        restoreLastImage: !explicitOpen,
+        preferInitial: explicitOpen,
+      });
+    }
+    
+    if (window.__TAURI__) {
+      setTimeout(() => {
+        invoke('show_window').catch(e => console.error(e));
+      }, 50); // slight delay to allow first render
     }
   }
 };

@@ -58,6 +58,31 @@ pub fn remove_roaming_files(dir: &Path) {
     }
 }
 
+pub fn get_config_path() -> PathBuf {
+    let exe_dir = get_exe_dir();
+    let is_port = exe_dir.join(".portable").exists() || exe_dir.join("quivit_config.json").exists();
+    
+    if is_port {
+        exe_dir.join("quivit_config.json")
+    } else {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            Path::new(&appdata).join("com.x4163.quivit").join("quivit_config.json")
+        } else {
+            PathBuf::new()
+        }
+    }
+}
+
+pub fn load_config_early() -> AppConfig {
+    let config_path = get_config_path();
+    
+    if let Ok(content) = fs::read_to_string(&config_path) {
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        AppConfig::default()
+    }
+}
+
 // ── Config split helpers ──────────────────────────────────────────────────────
 // Runtime state (last-opened location, remembered images), per-directory
 // sort prefs, and favorites are persisted as their own files so the roaming

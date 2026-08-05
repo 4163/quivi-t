@@ -13,6 +13,17 @@ function _ext(name) {
   return name.split('.').pop().toLowerCase();
 }
 
+let _navigationGeneration = 0;
+
+function _nextNavigationGeneration() {
+  _navigationGeneration += 1;
+  return _navigationGeneration;
+}
+
+function _isCurrentGeneration(generation) {
+  return generation === undefined || generation === _navigationGeneration;
+}
+
 // Parent of a file/folder path; normalizes Windows drive roots to "E:\"
 function parentOf(path) {
   const trimmed = path.replace(/[\\/]+$/, '');
@@ -124,6 +135,8 @@ export const FsUtils = {
   },
 
   async applyDirectoryResult(result, options = {}) {
+    if (!_isCurrentGeneration(options.generation)) return;
+
     let files = this.buildDirectoryList(result);
     const prefs = DirectoryPrefs.getSortPrefs(result.directory);
     files = DirectoryPrefs.applySort(files, prefs.col, prefs.desc);
@@ -141,6 +154,11 @@ export const FsUtils = {
       if (options.restoreLastImage && fd.remember_last_image && fd.last_active_image && fd.last_active_image.container === result.directory) {
         const targetPath = fd.last_active_image.path;
         preferredIndex = files.findIndex(f => f.path === targetPath);
+      }
+
+      if (preferredIndex === -1 && result.target_filename) {
+        // Find by name after sorting — initial_index is stale if sort order differs
+        preferredIndex = files.findIndex(f => f.name === result.target_filename);
       }
 
       if (preferredIndex === -1) {
@@ -164,6 +182,9 @@ export const FsUtils = {
 
     this.revokeIfObjectURL(state.src);
 
+    const selectedSrc = this.isImageEntry(files[index]) ? await this.buildFileSrc(files[index].path) : '';
+    if (!_isCurrentGeneration(options.generation)) return;
+
     Core.setState({
       mode: 'image',
       list: files,
@@ -172,7 +193,7 @@ export const FsUtils = {
       parentDirectory: result.parent_directory || '',
       archivePath: '',
       filename: files[index]?.name || '',
-      src: this.isImageEntry(files[index]) ? await this.buildFileSrc(files[index].path) : ''
+      src: selectedSrc,
     });
 
     if (window.__TAURI__) {
@@ -183,8 +204,14 @@ export const FsUtils = {
   },
 
   async loadArchive(archivePath, targetPath = '', options = {}) {
+    if (options.generation === undefined) {
+      options = { ...options, generation: _nextNavigationGeneration() };
+    }
+
     try {
       const result = await invoke('list_archive', { archivePath });
+      if (!_isCurrentGeneration(options.generation)) return;
+
       let files = this.buildArchiveList(result);
       const prefs = DirectoryPrefs.getSortPrefs(result.archive_path);
       files = DirectoryPrefs.applySort(files, prefs.col, prefs.desc);
@@ -221,6 +248,7 @@ export const FsUtils = {
         filename: files[index]?.name || '',
         src: this.isImageEntry(files[index]) ? this.buildArchiveSrc(result.archive_path, files[index].name) : ''
       });
+      if (!_isCurrentGeneration(options.generation)) return;
       this.persistLastOpened(result.archive_path);
 
       // Trigger prefetch for initial load
@@ -233,6 +261,10 @@ export const FsUtils = {
   },
 
   async loadFile(pathStr, options = {}) {
+    if (options.generation === undefined) {
+      options = { ...options, generation: _nextNavigationGeneration() };
+    }
+
     const name = typeof pathStr === 'string'
       ? pathStr.replace(/\\/g, '/').split('/').pop()
       : pathStr.name || '';
@@ -241,13 +273,14 @@ export const FsUtils = {
     if (path === '__DRIVES__') {
       try {
         const drives = await invoke('get_drives');
+        if (!_isCurrentGeneration(options.generation)) return;
         const result = {
           directory: 'Drives',
           parent_directory: null,
           initial_index: 0,
           files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
         };
-        this.applyDirectoryResult(result);
+        this.applyDirectoryResult(result, options);
       } catch (err) {
         console.error('[Core] Failed to load drives:', err);
       }
@@ -260,7 +293,7 @@ export const FsUtils = {
       const sep = path.indexOf('|');
       const archivePath = path.slice(0, sep);
       if (this.isArchive(archivePath)) {
-        await this.loadArchive(archivePath, path);
+        await this.loadArchive(archivePath, path, options);
         return;
       }
     }
@@ -274,6 +307,7 @@ export const FsUtils = {
       }
 
       const result = await invoke('read_directory', { path, showHidden: this.showHidden() });
+      if (!_isCurrentGeneration(options.generation)) return;
       this.applyDirectoryResult(result, options);
       this.persistLastOpened(result.directory);
 
@@ -283,6 +317,7 @@ export const FsUtils = {
   },
 
   async openContainer(delta) {
+    const generation = _nextNavigationGeneration();
     const state = Core.getState();
     const currentPath = state.mode === 'archive' ? state.archivePath : state.directory;
     if (!currentPath) return;
@@ -293,25 +328,28 @@ export const FsUtils = {
         delta,
         showHidden: this.showHidden(),
       });
-      await this.loadFile(path);
+      if (!_isCurrentGeneration(generation)) return;
+      await this.loadFile(path, { generation });
     } catch (err) {
       console.error('[Core] openContainer error:', err);
     }
   },
 
   async openParent() {
+    const generation = _nextNavigationGeneration();
     const state = Core.getState();
     if (state.mode === 'archive' && state.archivePath) {
       try {
         const result = await invoke('read_directory', { path: state.archivePath, showHidden: this.showHidden() });
+        if (!_isCurrentGeneration(generation)) return;
         // Land on the archive entry when it's present (so it can be re-opened).
         // If it's missing from the listing (e.g. hidden with "show hidden" off),
         // highlight the first image in the folder, else the first item.
         const archiveListed = result.files.some(f => f.path === state.archivePath);
         if (archiveListed) {
-          this.applyDirectoryResult(result, { preferInitial: true });
+          this.applyDirectoryResult(result, { preferInitial: true, generation });
         } else {
-          this.applyDirectoryResult(result, { forceFirstImage: true });
+          this.applyDirectoryResult(result, { forceFirstImage: true, generation });
         }
         this.persistLastOpened(result.directory);
       } catch (err) {
@@ -320,17 +358,19 @@ export const FsUtils = {
         console.error('[Core] openParent archive error:', err);
         try {
           const result = await invoke('read_directory', { path: parentOf(state.archivePath), showHidden: this.showHidden() });
-          this.applyDirectoryResult(result);
+          if (!_isCurrentGeneration(generation)) return;
+          this.applyDirectoryResult(result, { generation });
           this.persistLastOpened(result.directory);
         } catch (parentErr) {
           console.error('[Core] openParent archive parent fallback error:', parentErr);
           const drives = await invoke('get_drives');
+          if (!_isCurrentGeneration(generation)) return;
           this.applyDirectoryResult({
             directory: 'Drives',
             parent_directory: null,
             initial_index: 0,
             files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
-          });
+          }, { generation });
         }
       }
       return;
@@ -339,21 +379,23 @@ export const FsUtils = {
     if (!state.directory || state.directory === 'Drives') return;
     try {
       const result = await invoke('open_parent', { currentDir: state.directory, showHidden: this.showHidden() });
+      if (!_isCurrentGeneration(generation)) return;
       // Config handled inside applyDirectoryResult: open_first_image (ON) opens
       // the first image, OFF (default) highlights the folder we came from.
-      this.applyDirectoryResult(result);
+      this.applyDirectoryResult(result, { generation });
       this.persistLastOpened(result.directory);
     } catch (err) {
       if (err === 'Already at root') {
         try {
           const drives = await invoke('get_drives');
+          if (!_isCurrentGeneration(generation)) return;
           const drivesResult = {
             directory: 'Drives',
             parent_directory: null,
             initial_index: 0,
             files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
           };
-          this.applyDirectoryResult(drivesResult);
+          this.applyDirectoryResult(drivesResult, { generation });
         } catch (driveErr) {
           console.error('[Core] Error fetching drives:', driveErr);
         }
@@ -364,6 +406,7 @@ export const FsUtils = {
   },
 
   async openSibling(delta) {
+    const generation = _nextNavigationGeneration();
     const state = Core.getState();
     const currentPath = state.mode === 'archive' ? state.archivePath : state.directory;
     if (!currentPath || currentPath === 'Drives') return;
@@ -399,7 +442,8 @@ export const FsUtils = {
       }
 
       const newIdx = ((currentIdx + delta) % sorted.length + sorted.length) % sorted.length;
-      await this.loadFile(sorted[newIdx].path);
+      if (!_isCurrentGeneration(generation)) return;
+      await this.loadFile(sorted[newIdx].path, { generation });
     } catch (err) {
       console.error('[Core] openSibling error:', err);
     }
@@ -438,7 +482,7 @@ export const FsUtils = {
         ],
       });
       if (selected) {
-        await this.loadFile(selected);
+        await this.loadFile(selected, { preferInitial: true, restoreLastImage: false });
       }
     } catch (err) {
       console.error('[Core] File Dialog error:', err);
@@ -446,17 +490,19 @@ export const FsUtils = {
   },
 
   async refresh() {
+    const generation = _nextNavigationGeneration();
     const state = Core.getState();
     if (state.mode === 'archive' && state.archivePath) {
       try {
-        await this.loadFile(state.archivePath);
+        await this.loadFile(state.archivePath, { generation });
       } catch (err) {
         console.error('[Core] refresh error:', err);
       }
     } else if (state.directory) {
       try {
         const result = await invoke('read_directory', { path: state.directory, showHidden: this.showHidden() });
-        this.applyDirectoryResult(result, { preserveFilename: true });
+        if (!_isCurrentGeneration(generation)) return;
+        this.applyDirectoryResult(result, { preserveFilename: true, generation });
       } catch (err) {
         console.error('[Core] refresh error:', err);
       }
