@@ -21,7 +21,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Backend:** Rust
 - **Frontend:** Vanilla HTML, CSS, and ES modules
 - **Desktop webview:** WebView2 on Windows
-- **Archives:** ZIP/CBZ through `zip`, RAR/CBR through `unrar`
+- **Archives:** ZIP/CBZ through `zip`, RAR/CBR through `unrar`, 7Z/CB7 through `sevenz-rust2`, TAR/CBT through `tar`
 - **Sorting:** natural sorting through `natord`
 - **Config:** JSON through `serde` / `serde_json`
 - **File watching:** `notify` (directory watcher / auto-refresh)
@@ -72,9 +72,11 @@ QuiviT/
 - Seamlessly jumps to previous/next directories, archives, and root drives, following the active sort order.
 - Lists folders, images, and supported archives in the file panel.
 - Supports parent-directory navigation through '`..`'.
-- Reads ZIP/CBZ and RAR/CBR archives directly, treating them as folders.
-- **Instant archive listing** — reads only headers (central directory) for immediate file lists without full extraction.
-- **Hybrid archive caching** — ZIP/CBZ uses on-demand in-memory LRU cache (20 images) with background prefetch (7 ahead / 3 behind); RAR/CBR uses background sequential extraction to temp disk.
+- Reads ZIP/CBZ, RAR/CBR, 7Z/CB7, and TAR/CBT archives directly, treating them as folders.
+- **Instant archive listing** — reads only headers (central directory) for immediate file lists without full extraction (ZIP/CBZ, 7Z/CB7); TAR/CBT lists via on-demand entry reads.
+- **Hybrid archive caching** — ZIP/CBZ uses on-demand in-memory LRU cache (20 images) with background prefetch (7 ahead / 3 behind); RAR/CBR and 7Z/CB7 use background extraction to temp disk (7Z in a sequential worker thread, since solid 7z archives aren't seekable).
+- **Non-blocking archive protocol** — all archive image requests are served asynchronously off the WebView thread, so the UI stays responsive even while large archives are still extracting.
+- **Note on 7Z/CB7 performance** — 7Z archives typically use solid compression, meaning every entry must be decompressed sequentially from the beginning of the block. This is an inherent limitation of the format — the very first image cannot be displayed until the decompressor reaches it. For large 7Z/CB7 files, expect an initial loading delay proportional to archive size. ZIP/CBZ, RAR/CBR, and TAR/CBT do not have this limitation.
 - **Seamless image navigation** — retains previous image on screen until new image fully loads, eliminating flicker between archive images.
 - Supports configurable keybindings, multi-key combos, and mouse shortcuts.
 - Supports global or portable configuration storage.
@@ -98,7 +100,7 @@ jpg, jpeg, png, gif, webp, apng, svg, bmp, ico, avif
 Archives:
 
 ```text
-zip, cbz, rar, cbr
+zip, cbz, rar, cbr, 7z, cb7, cbt, tar
 ```
 
 ## Development

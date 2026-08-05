@@ -429,3 +429,18 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 - **Prefetch integration**: \core.js\ triggers \prefetchAhead\ on navigation; \sUtils.js\ triggers initial prefetch on archive load.
 - **Dependencies**: Added \md5\ crate for deterministic temp directory naming.
 - **Cleanup**: Old RAR temp directories cleaned up on new archive load; ZIP LRU evicts oldest entries at capacity.
+
+### 7Z/CB7 and TAR/CBT Archive Support
+
+- **New formats**: `list_archive` now handles 7z, cb7, cbt, and tar in addition to zip/cbz/rar/cbr; `SUPPORTED_ARCHIVES` updated in Rust and `fsUtils.js`; file panel icons map 7z/cb7/cbt/tar to the cbz archive icon.
+- **7Z/CB7 (7z, cb7)**: Added \list_7z_entries\ (header-only via `sevenz-rust2` file metadata — instant, no decompression) and \extract_7z_to_temp\. Solid 7z archives are single-block and not seekable, so they use the same background sequential extraction to the deterministic md5 temp dir as RAR (no ZIP-style random access). Background extraction runs in a spawned thread; protocol handler serves from temp disk with a 3-second poll, then on-demand extraction fallback for cache misses.
+- **TAR/CBT (tar, cbt)**: TAR is uncompressed and seekable, so \list_tar_entries\ lists on demand and \extract_tar_entry\ seeks + reads individual entries directly — no temp copy, no full extraction.
+- **Dependencies**: Added \sevenz-rust2 = "0.21"\ and \tar = "0.4"\.
+- **ArchiveCache**: \rar_temp_dir\ generalized to \extract_temp_dir\ for the 7z/RAR shared temp-disk path.
+- **Tests**: Added \archive_tests\ module (6 tests) covering solid 7z listing + nested extraction to temp, cb7 alias routing, tar listing + entry extraction, RAR5/CBR listing, and supported-format registration. Verified \cargo test\ (6/6 pass), \cargo check\, and \node --check\ on frontend files.
+- **Test fixtures**: \test-files/archives/7z.7z\ (solid LZMA2, 14 files incl. `New folder/` nesting) and \test-files/archives/cbr.cbr\ (non-solid RAR5). The \test-files/archives/cbt.cbt\ fixture is self-provisioned by the \ensure_cbt()\ test helper, which rebuilds it (validating 3 entries) from images re-packed out of the 7z fixture via the \tar\ builder — no external 7z/7za tool needed in tests.
+
+### Non-Blocking Archive Protocol & Loading States
+
+- **Threaded Protocol Handler**: Wrapped the `quivit://` URI scheme protocol handler in a background `std::thread::spawn` on Windows, preventing the WebView I/O threads from blocking during heavy solid-archive extraction. This fixes the application icon reverting to a generic executable and keeps the UI responsive.
+- **Frontend Loading Feedback**: `viewer.js` now immediately writes "Loading..." into the statusbar fields (filename, dimensions, zoom) when a new image fetch begins. Once the fetch completes successfully (or errors out), the actual filename and metrics are restored. `main.js` was updated to only eagerly write filename on state change if the image has already successfully loaded.

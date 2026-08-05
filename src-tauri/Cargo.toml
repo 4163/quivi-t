@@ -26,6 +26,8 @@ natord = "1.0.9"
 tauri-plugin-dialog = "2.7.2"
 zip = "8.6.0"
 unrar = "0.5.8"
+sevenz-rust2 = "0.21"
+tar = "0.4"
 notify = "6"
 tauri-plugin-single-instance = "2"
 image = { version = "0.25", features = ["ico"] }

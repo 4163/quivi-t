@@ -540,8 +540,13 @@ Core.onStateChange((state) => {
     }
   }
 
-  statusName.textContent = state.filename;
-  statusIndex.textContent = state.list.length > 1 ? `${state.index + 1} / ${state.list.length}` : '';
+  // Only update filename/index if the image is already loaded;
+  // otherwise viewer.js is showing "Loading..." and we don't want to overwrite it.
+  const imgEl2 = document.getElementById('viewer-img');
+  if (!state.src || imgEl2.src === state.src) {
+    statusName.textContent = state.filename;
+    statusIndex.textContent = state.list.length > 1 ? `${state.index + 1} / ${state.list.length}` : '';
+  }
 
   // Items that aren't images (folders, archives, `..`, drives) have no
   // dimensions or zoom level; show N/A instead of stale image metrics.

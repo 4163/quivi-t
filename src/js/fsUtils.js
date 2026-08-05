@@ -7,7 +7,7 @@ export const SUPPORTED_IMAGES = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'apng', 'svg', 'bmp', 'ico', 'avif',
 ]);
 
-export const SUPPORTED_ARCHIVES = new Set(['zip', 'cbz', 'rar', 'cbr']);
+export const SUPPORTED_ARCHIVES = new Set(['zip', 'cbz', 'rar', 'cbr', '7z', 'cb7', 'cbt', 'tar']);
 
 function _ext(name) {
   return name.split('.').pop().toLowerCase();
@@ -470,6 +470,11 @@ export const FsUtils = {
 
     const indicesToPrefetch = [];
     
+    // Warm current entry
+    if (currentIndex >= 0 && currentIndex < files.length && this.isImageEntry(files[currentIndex])) {
+      indicesToPrefetch.push(files[currentIndex].name);
+    }
+
     // 7 ahead
     for (let i = 1; i <= 7; i++) {
       let idx = currentIndex + (direction * i);

@@ -193,10 +193,14 @@ export function toggleFavoriteCurrent() {
 }
 
 // Extensions with custom ICO files in /assets/icons/
-const CUSTOM_ICON_EXTS = new Set(['apng', 'cbz', 'cbr', 'gif', 'svg', 'webp']);
+const CUSTOM_ICON_EXTS = new Set(['apng', 'cbz', 'cbr', 'gif', 'svg', 'webp', '7z', 'cb7', 'cbt', 'tar']);
 // Map extensions to their icon filename (for grouped exts like cbr -> cbz.ico)
 const ICON_FILE_MAP = {
   cbr: 'cbz',
+  '7z': 'cbz',
+  cb7: 'cbz',
+  cbt: 'cbz',
+  tar: 'cbz',
 };
 
 function getIconSvg(item) {

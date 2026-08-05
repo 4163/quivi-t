@@ -12,6 +12,8 @@ import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from './keybinds.js';
 const img = document.getElementById('viewer-img');
 const statusZoom = document.querySelector('.status-zoom');
 const statusDims = document.querySelector('.status-dims');
+const statusName = document.querySelector('.status-filename');
+const statusIndex = document.querySelector('.status-index');
 
 let _scale  = 1;
 let _tx     = 0;
@@ -268,6 +270,11 @@ Core.onStateChange((state) => {
   if (img.src !== state.src && _currentPreloadSrc !== state.src) {
     _currentPreloadSrc = state.src;
     
+    // Show loading state in statusbar while the image is being fetched
+    if (statusName) statusName.textContent = 'Loading...';
+    if (statusDims) statusDims.textContent = 'Loading...';
+    if (statusZoom) statusZoom.textContent = 'Loading...';
+
     const preloader = new Image();
     preloader.onload = () => {
       if (_currentPreloadSrc === state.src) {
@@ -276,12 +283,19 @@ Core.onStateChange((state) => {
         _rotation = 0;
         _flipX = 1;
         _flipY = 1;
+        // Restore filename and index now that the image is ready
+        if (statusName) statusName.textContent = state.filename;
+        if (statusIndex) statusIndex.textContent = state.list && state.list.length > 1 ? `${state.index + 1} / ${state.list.length}` : '';
       }
     };
     preloader.onerror = () => {
       if (_currentPreloadSrc === state.src) {
         img.src = state.src; // Fallback so main img shows error state
         img.alt = state.filename;
+        if (statusName) statusName.textContent = state.filename;
+        if (statusDims) statusDims.textContent = 'Error';
+        if (statusZoom) statusZoom.textContent = 'N/A';
+        if (statusIndex) statusIndex.textContent = state.list && state.list.length > 1 ? `${state.index + 1} / ${state.list.length}` : '';
       }
     };
     preloader.src = state.src;
