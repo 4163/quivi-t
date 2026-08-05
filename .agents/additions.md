@@ -46,7 +46,7 @@ New modules may be warranted:
 
 ## Work Plan
 
-### 1. Shell Resize Background
+### Shell Resize Background
 
 - Investigate whether the black flash comes from Tauri/WebView2 window background, document background, or first paint.
 - Set shell/webview/background color to match system theme as closely as possible.
@@ -56,7 +56,7 @@ New modules may be warranted:
   - Tauri window builder options if required.
 - Verify by resizing the app in light and dark system themes if practical.
 
-### 2. Scaling Modes: Bicubic vs Lanczos
+### Scaling Modes: Bicubic vs Lanczos
 
 - Audit current implementation of `Viewer.setScaling()`.
 - Confirm whether `bicubic` and `lanczos` differ visually or are currently both `image-rendering: auto`.
@@ -65,7 +65,7 @@ New modules may be warranted:
   - Implement real mode-specific rendering if feasible.
 - Avoid pretending Lanczos exists if the browser/WebView cannot actually expose it directly.
 
-### 3. Viewer Rendering
+### Viewer Rendering
 
 - Audit SVG elements behavior of hitbox/dimensions going over the canvas edge.
 - The calculations for SVG images that have a WxH of 100% compared to a set WxH, acts different / breaks the border/edge calculations on the canvas and/or image. Key examples: test-files/gfl-spinner.svg works as expected, while icons/quivi-t_moe-2.svg does not.
@@ -73,51 +73,44 @@ New modules may be warranted:
   "very edges" = 0x, 0y, widthX, heightY (left, top, right, bottom) of the displayed image element.
   "center of the image" = (widthX / 2)x, (heightY / 2)y, (widthX / 2)x, (heightY / 2)y (left, top, right, bottom) of the displayed image element.
 
-### 4. General Rendering
+### General Rendering
 
 - Review rendering quality and artifacts.
 
 
-### 6. Archive Performance
+### Archive Performance
 
 - Performance note: opening large or slow archives can make `quivit.exe` stop responding briefly; after this, Windows may show the generic executable icon on the taskbar.
 - Treat this as archive-processing/UI-blocking debt.
 - Prefer optimizing archive load/extraction so expensive work does not block the app window, rather than patching only the icon symptom.
 
-### 8. UI Sound Design (Low/Last Priority)
-
-- Add custom SFX for UI interactions (e.g. button clicks, menu toggles, opening folders, error bumps).
-- Needs a toggle in the Options menu to disable sounds for users who prefer a silent experience.
-- Provide a volume slider or rely on system volume.
-- Audio assets should be small and fast-loading.
-
-### 9. Drag-and-Drop Folder Opening
+### Drag-and-Drop Folder Opening
 
 - Rework the drag-and-drop overlay: folder opening already works, so update the wording, refine the drop cursor affordance, and make the overlay itself clickable so it opens a folder picker (broad .drop-overlay query, no need to mess around with css pointers, pointers are already set as intended).
 - Prevent panning on the canvas element behind the overlay — at the momment .drop-overlay is just on top and panning interaction still leaks.
 - Verify: dropping a folder/image/archive opens it; clicking the overlay opens a folder picker; no canvas drag interaction leaks through. drop. dropping an unsupported file should show a file type not supported warning instead of opening the directory.
 
-### 10. Responsive Keyboard Panning
+### Responsive Keyboard Panning
 
 - W/A/S/D and arrow-key panning is less responsive than the original Python Quivi viewer, which pans instantly and handles rapid multi-directional spam; the current build has a perceived delay/debounce before panning.
 - Audit the keyboard pan pipeline (viewer pan handling and dispatch timing) for debounce or re-trigger delay.
 - Make panning apply immediately per key press and support fast direction changes.
 - Verify: hold and rapidly alternate directions; panning responds instantly per press.
 
-### 11. Scroll-Wheel Zoom vs Pan (Manga Reading) ✅ DONE
+### Scroll-Wheel Zoom vs Pan (Manga Reading) ✅ DONE
 
 - Add scroll-wheel behavior suited to manga reading: plain wheel scrolls/pans the image up and down, while `Ctrl` + wheel zooms in/out.
 - Add scroll-wheel actions to the Options Keys tab keybinds, with defaults of `Ctrl+ScrollUp` = zoom in, `Ctrl+ScrollDown` = zoom out, and `ScrollUp` / `ScrollDown` = pan.
 - Verify: wheel pans, Ctrl+wheel zooms, and the scroll actions are remappable in Options.
 - **Implemented 2026-08-03** — wheel routes through the keybind table (`ScrollUp`/`ScrollDown` on `cmd-pan-up`/`cmd-pan-down`, `Ctrl+ScrollUp`/`Ctrl+ScrollDown` on `cmd-zoom-in`/`cmd-zoom-out`); cursor-anchored zoom; `VIEWER_WHEEL_PAN_STEP`; UI-scroll passthrough; Options Keys "Scroll Wheel" section with a Hold Ctrl / Toggle Ctrl (sticky) switch (`scroll_zoom_modifier`); status-bar latch badge; wheel-combo capture in `keybindUi.js`.
 
-### 12. Update Availability Indicator
+### Update Availability Indicator
 
 - Full auto-update is likely out of scope for a single-executable app, but add a lightweight check that surfaces when a newer release exists on the GitHub page (the menu bar already links to it).
 - Fail silently when offline or rate-limited; show an unobtrusive indicator/link when an update is available.
 - Verify: with no network the app behaves normally; with an update available the indicator appears.
 
-### 13. File Associations (Options > File Associations)
+### File Associations (Options > File Associations)
 
 **Goal.** Register image/archive extensions so they open with QuiviT. Each registered format should pick up the per-format icon from the app's icon set; formats without a dedicated icon fall back to the default QuiviT icon. Registration also unlocks real single-instance testing: double-clicking an associated file launches the exe with the file path as an argument, which the single-instance plugin forwards to the running instance.
 
@@ -139,6 +132,18 @@ Current format icons present: `apng.ico`, `cbz.ico`, `gif.ico`, `svg.ico`, `webp
   - Unregister: extensions return to their previous default program; no other apps' associations are touched.
   - Formats without a dedicated icon still register and open correctly (default icon).
   - Checkbox state reflects actual registry state on Options open.
+- **13.6 Fallback:** if a built-in file-type association selector turns out not to be possible, open the Windows Settings app for associating files with QuiviT instead (`ms-settings:defaultapps`), similarly to how NanaZip handles it.
+
+### Native Windows File Icons
+
+Use the native Windows file icons instead of the current placeholder/custom icons — we want to move away from the current custom-icon approach.
+
+- **Ideal:** dynamically grab the native Windows icons via a Windows API/library so the icons update per user environment. Since different users have different default programs set for certain formats (WinRAR | 7-Zip, Windows Photos | Windows Photo Viewer, etc.), the icons would differ per user environment; a way to dynamically fetch and use them is ideal.
+- **Not ideal:** fetch them locally once and embed them directly in the app — if the user's default program differs from what was embedded, the icon used in the app won't match the actual Windows icon.
+- **Currently:** custom icons for the application specifically — we want to move away from this.
+- **Reference:** NanaZip handles icons the way we want to handle ours — check how they do it (https://github.com/M2Team/NanaZip) and see if we can implement the same.
+
+Related to the file associations work above (per-format icons / `DefaultIcon`).
 
 ## Verification Plan
 
@@ -178,6 +183,29 @@ Runtime/manual verification:
 - Confirm plain wheel pans and Ctrl+wheel zooms, with scroll actions remappable in Options.
 - Confirm the update indicator appears when a new GitHub release exists and stays silent offline.
 - Confirm file associations register/unregister in HKCU, Explorer icons reflect the per-format icons, and double-clicking an associated file opens it (cold start) or forwards to the running instance (warm start).
+
+## Post-Release Backlog (Future Considerations)
+
+Items that are deliberately deferred until after the initial release. Low priority by design — do not start without re-validating the need.
+
+### Native 7-Zip Sidecar Extraction (7Z/CB7 speed)
+- Replace the pure-Rust `sevenz-rust2` extraction with the native 7-Zip engine (`7zr.exe` bundled as a Tauri sidecar) for 2-5x faster LZMA2 extraction.
+- Full plan: `.agents/7z_implementation.md` (retained for future reference; has a `Status: Shelved` note).
+- **Why shelved:** the original UI-blocking bug was already solved in pure Rust — background-thread extraction with atomic `.tmp`+`fs::rename` writes, `Condvar` wait replacing the 3s poll, `Content-Length` header, thread-offloaded protocol handler. The ~10MB/s vs ~50MB/s speed gap for typical image archives does not manifest as a real UX problem, and the sidecar adds deployment complexity (LGPL binary per platform, `tauri-plugin-shell`, capability config) plus re-introduces partial-file race concerns unless the plan's filesystem-watcher design is updated to match the current atomic-rename approach.
+- If picked up later: re-read `.agents/7z_implementation.md`, keep the pure-Rust path as a fallback, and prefer single-entry `7zr` extraction over the full-extraction + watcher design in the current plan.
+- 7z only — RAR already uses the native `unrar` crate; no consistency concern.
+
+### File List Relocation, Detach & Drag-and-Drop
+- Add a way to change the location of the file list (left default, top, bottom, right). Detached as well? Maybe drag-and-droppable — how practical would the implementation be?
+- Using a JS library sounds ideal; this has been done before on a smaller scale at `E:\Projects\x4163-apps\dither-app` (not sure if it's the best/most-used library — performance-first). Prioritize clean user interaction with no jank.
+- **Double page view** (manga spread) — same low priority.
+- Partial implementation via UI buttons (detach + move location) is acceptable; drag-and-drop capabilities should be implemented after release.
+
+### UI Sound Design (Low/Last Priority)
+- Add custom SFX for UI interactions (e.g. button clicks, menu toggles, opening folders, error bumps).
+- Needs a toggle in the Options menu to disable sounds for users who prefer a silent experience.
+- Provide a volume slider or rely on system volume.
+- Audio assets should be small and fast-loading.
 
 ## User Verification Gates
 
