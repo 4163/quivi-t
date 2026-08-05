@@ -134,17 +134,6 @@ Current format icons present: `apng.ico`, `cbz.ico`, `gif.ico`, `svg.ico`, `webp
   - Checkbox state reflects actual registry state on Options open.
 - **13.6 Fallback:** if a built-in file-type association selector turns out not to be possible, open the Windows Settings app for associating files with QuiviT instead (`ms-settings:defaultapps`), similarly to how NanaZip handles it.
 
-### Native Windows File Icons
-
-Use the native Windows file icons instead of the current placeholder/custom icons — we want to move away from the current custom-icon approach.
-
-- **Ideal:** dynamically grab the native Windows icons via a Windows API/library so the icons update per user environment. Since different users have different default programs set for certain formats (WinRAR | 7-Zip, Windows Photos | Windows Photo Viewer, etc.), the icons would differ per user environment; a way to dynamically fetch and use them is ideal.
-- **Not ideal:** fetch them locally once and embed them directly in the app — if the user's default program differs from what was embedded, the icon used in the app won't match the actual Windows icon.
-- **Currently:** custom icons for the application specifically — we want to move away from this.
-- **Reference:** NanaZip handles icons the way we want to handle ours — check how they do it (https://github.com/M2Team/NanaZip) and see if we can implement the same.
-
-Related to the file associations work above (per-format icons / `DefaultIcon`).
-
 ## Verification Plan
 
 Run after each coherent implementation slice:

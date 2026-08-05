@@ -6,6 +6,26 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ## Fully Implemented
 
+### Native Windows File Icons
+
+- Replaced custom static icons in the file list with the exact native system icons fetched directly from the OS.
+- Implemented `SHGetFileInfoW` backend calls with `SHGFI_SMALLICON` to fetch sharp 16x16 standard system icons for files and folders (including the `__folder__` abstraction).
+- Rewrote the frontend to use a DOM-rendered placeholder `<img>` tagged with `data-ext` while asynchronously loading icons without UI freezing, caching them via Base64 PNGs natively supported by the browser.
+- Deleted legacy custom icons (`icons/` and `src/assets/icons/`).
+- Added a fallback SVG for unknown files or fetch failures.
+
+### Hidden Folders Handling
+
+- Added `is_hidden: bool` directly to `FileEntry` struct.
+- Checked via `is_hidden_path()` to align Windows's native `FILE_ATTRIBUTE_HIDDEN` flag and dot-prefix paths.
+- Frontend translates this to a cleaner UI by rendering hidden items (and their icons) at 65% opacity.
+
+### 7Z/CB7 Performance
+
+- Resolved UI blocking and freezing during large 7z/cb7 archive extraction by adopting an atomic extraction pipeline (`.tmp` to `.ext` renaming).
+- Removed the rigid 3-second sleep polling mechanism, replacing it with a robust pure-Rust `Condvar` notification wait and atomic read triggers.
+- This stabilizes thread-offloaded protocol serving, keeping the app entirely responsive even during long background extractions.
+
 ### Options Window Recovery
 
 - Fixed the Windows/Tauri Options-window deadlock by making `open_options` an async Tauri command.

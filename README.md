@@ -88,6 +88,7 @@ QuiviT/
 - Favorites system for quick access to frequently visited folders and files, persisted through the config (not browser storage).
 - Single-instance handoff for routing external file opens into an active session.
 - Optionally auto-opens the first image when entering a directory, or restores the last active image at startup.
+- Uses native Windows file and folder icons in the file panel, accurately rendering hidden items with opacity.
 
 ## Supported Formats
 
