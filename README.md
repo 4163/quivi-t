@@ -293,9 +293,10 @@ The Options window command is async because creating a Tauri webview window from
 
 ## Icon Attributions
 
-- APNG icon: [Cosplayer icons created by Magnific - Flaticon](https://www.flaticon.com/free-icon/cosplayer_949561?term=anime&page=1&position=28&origin=search&related_id=949561)
-- WebP icon: [Webp icons created by JessHG - Flaticon](https://www.flaticon.com/free-icon/webp_13434961?term=webp&page=1&position=3&origin=search&related_id=13434961)
-- GIF icon: [Gif icons created by Dimitry Miroliubov - Flaticon](https://www.flaticon.com/free-icon/gif_337936?term=gif&page=1&position=2&origin=search&related_id=337936)
-- CBZ icon: [Cbz icons created by Good Ware - Flaticon](https://www.flaticon.com/free-icon/cbz_4208350?term=cbz&page=1&position=7&origin=search&related_id=4208350)
-- SVG icon: [Svg icons created by The Chohans - Flaticon](https://www.flaticon.com/free-icon/svg-file_9704766?term=svg&page=1&position=4&origin=search&related_id=9704766)
+- APNG icon: [Cosplayer icons created by Magnific - Flaticon](https://www.flaticon.com/free-icon/cosplayer_949561)
+- WebP icon: [Webp icons created by JessHG - Flaticon](https://www.flaticon.com/free-icon/webp_13434961)
+- GIF icon: [Gif icons created by Dimitry Miroliubov - Flaticon](https://www.flaticon.com/free-icon/gif_337936)
+- CBZ icon: [Cbz icons created by Good Ware - Flaticon](https://www.flaticon.com/free-icon/cbz_4208350)
+- CBR icon: [Cbr icons created by Good Ware - Flaticon](https://www.flaticon.com/free-icon/cbz_4208350)
+- SVG icon: [Svg icons created by The Chohans - Flaticon](https://www.flaticon.com/free-icon/cbr_4208358)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
