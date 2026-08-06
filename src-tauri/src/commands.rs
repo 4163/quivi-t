@@ -493,17 +493,30 @@ pub fn get_format_status() -> Vec<FormatStatus> {
 
         #[cfg(windows)]
         {
-            // Check if QuiviT has registered itself for this extension.
-            // On Windows 10/11, UserChoice (the actual default) is hash-protected and
-            // cannot be set programmatically. Our registration writes to Classes, so
-            // the checkbox reflects "QuiviT registered for this format."
-            // The "Register File Extensions in Windows Settings" button is how the
-            // user sets the actual default app.
-            let ext_key_path = format!(r#"Software\Classes\.{}"#, fmt.ext.to_lowercase());
-            if let Ok(ext_key) = hkcu.open_subkey(&ext_key_path) {
-                if let Ok(current_progid) = ext_key.get_value::<String, _>("") {
-                    if current_progid == expected_progid {
+            // Check UserChoice first — this is the actual default handler on Win10/11.
+            // UserChoice is hash-protected and can only be set by the user through
+            // Windows Settings, but we can *read* it to know if QuiviT is the active default.
+            let userchoice_path = format!(
+                r#"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.{}\UserChoice"#,
+                fmt.ext.to_lowercase()
+            );
+            if let Ok(uc_key) = hkcu.open_subkey(&userchoice_path) {
+                if let Ok(prog_id) = uc_key.get_value::<String, _>("ProgId") {
+                    if prog_id.eq_ignore_ascii_case(&expected_progid) {
                         registered = true;
+                    }
+                    // If UserChoice exists but points elsewhere, QuiviT is NOT the
+                    // default — leave registered = false so the user can re-register.
+                }
+            } else {
+                // No UserChoice set — fall back to checking Classes default value.
+                // This covers fresh installs or formats where no app has claimed default.
+                let ext_key_path = format!(r#"Software\Classes\.{}"#, fmt.ext.to_lowercase());
+                if let Ok(ext_key) = hkcu.open_subkey(&ext_key_path) {
+                    if let Ok(current_progid) = ext_key.get_value::<String, _>("") {
+                        if current_progid.eq_ignore_ascii_case(&expected_progid) {
+                            registered = true;
+                        }
                     }
                 }
             }
@@ -557,7 +570,7 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
 
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
         
-        for ext in extensions {
+        for ext in &extensions {
             let lower_ext = ext.to_lowercase();
             let format_info = SUPPORTED_FORMATS.iter().find(|f| f.ext == lower_ext);
             let display_name = format_info.map(|f| f.name).unwrap_or("QuiviT File");
@@ -602,6 +615,29 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             let _ = cmd_key.set_value("", &cmd_val);
         }
 
+        // 4. Register app capabilities so QuiviT appears in Windows Default Apps
+        let (cap_key, _) = hkcu.create_subkey(r"Software\QuiviT\Capabilities").map_err(|e| {
+            format!("Failed creating Capabilities key: {}", e)
+        })?;
+        let _ = cap_key.set_value("ApplicationName", &"QuiviT");
+        let _ = cap_key.set_value("ApplicationDescription", &"QuiviT Image Viewer");
+
+        // 5. Populate Capabilities\FileAssociations with all registered extensions
+        let (fa_key, _) = hkcu.create_subkey(r"Software\QuiviT\Capabilities\FileAssociations").map_err(|e| {
+            format!("Failed creating FileAssociations key: {}", e)
+        })?;
+        for ext in &extensions {
+            let lower_ext = ext.to_lowercase();
+            let progid = format!("QuiviT.{}", lower_ext);
+            let _ = fa_key.set_value(format!(".{}", lower_ext), &progid);
+        }
+
+        // 6. Register in RegisteredApplications so Windows knows about QuiviT
+        let (reg_apps, _) = hkcu.create_subkey(r"Software\RegisteredApplications").map_err(|e| {
+            format!("Failed creating RegisteredApplications: {}", e)
+        })?;
+        let _ = reg_apps.set_value("QuiviT", &r"Software\QuiviT\Capabilities");
+
         // Notify shell to refresh icons
         unsafe {
             use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
@@ -620,11 +656,11 @@ pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
     {
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
         
-        for ext in extensions {
+        for ext in &extensions {
             let lower_ext = ext.to_lowercase();
             let progid = format!("QuiviT.{}", lower_ext);
 
-            // Remove ProgId
+            // Remove ProgId class entry
             let progid_path = format!(r#"Software\Classes\{}"#, progid);
             let _ = hkcu.delete_subkey_all(&progid_path);
 
@@ -642,6 +678,25 @@ pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
             let owp_path = format!(r#"Software\Classes\.{}\OpenWithProgids"#, lower_ext);
             if let Ok(owp_key) = hkcu.open_subkey_with_flags(&owp_path, KEY_ALL_ACCESS) {
                 let _ = owp_key.delete_value(&progid);
+            }
+
+            // Remove from Capabilities\FileAssociations
+            if let Ok(fa_key) = hkcu.open_subkey_with_flags(
+                r"Software\QuiviT\Capabilities\FileAssociations", KEY_ALL_ACCESS
+            ) {
+                let _ = fa_key.delete_value(format!(".{}", lower_ext));
+            }
+        }
+
+        // If no more file associations remain, clean up Capabilities + RegisteredApplications
+        let mut has_remaining = false;
+        if let Ok(fa_key) = hkcu.open_subkey(r"Software\QuiviT\Capabilities\FileAssociations") {
+            has_remaining = fa_key.enum_values().count() > 0;
+        }
+        if !has_remaining {
+            let _ = hkcu.delete_subkey_all(r"Software\QuiviT");
+            if let Ok(reg_apps) = hkcu.open_subkey_with_flags(r"Software\RegisteredApplications", KEY_ALL_ACCESS) {
+                let _ = reg_apps.delete_value("QuiviT");
             }
         }
         
