@@ -532,13 +532,9 @@ const ICON_MOE: &[u8] = include_bytes!("../../icons/quivi-t_moe-icon.ico");
 pub fn dump_icons(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     let config_dir = crate::config::roaming_dir(app);
     let icon_dir = config_dir.join("icons");
-    std::fs::create_dir_all(&icon_dir).map_err(|e| {
-        let _ = std::fs::write("DEBUG_ERR.txt", format!("create_dir_all failed: {}", e));
-        e.to_string()
-    })?;
+    std::fs::create_dir_all(&icon_dir).map_err(|e| e.to_string())?;
 
     if let Err(e) = std::fs::write(icon_dir.join("apng.ico"), ICON_APNG) {
-        let _ = std::fs::write("DEBUG_ERR.txt", format!("Failed to write apng.ico: {}", e));
         return Err(e.to_string());
     }
     let _ = std::fs::write(icon_dir.join("cbr.ico"), ICON_CBR);
@@ -572,7 +568,6 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             // 1. HKCU\Software\Classes\.ext
             let ext_key_path = format!(r#"Software\Classes\.{}"#, lower_ext);
             let (ext_key, _) = hkcu.create_subkey(&ext_key_path).map_err(|e| {
-                let _ = std::fs::write("DEBUG_ERR.txt", format!("Failed ext_key_path {}: {}", ext_key_path, e));
                 format!("Failed creating subkey {}: {}", ext_key_path, e)
             })?;
             let _ = ext_key.set_value("", &progid);
@@ -586,7 +581,6 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             // 3. HKCU\Software\Classes\QuiviT.ext
             let progid_path = format!(r#"Software\Classes\{}"#, progid);
             let (progid_key, _) = hkcu.create_subkey(&progid_path).map_err(|e| {
-                let _ = std::fs::write("DEBUG_ERR.txt", format!("Failed progid_path {}: {}", progid_path, e));
                 format!("Failed creating progid {}: {}", progid_path, e)
             })?;
             let _ = progid_key.set_value("", &display_name);
@@ -594,7 +588,6 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             // DefaultIcon
             let icon_path_key = format!(r#"Software\Classes\{}\DefaultIcon"#, progid);
             let (icon_key, _) = hkcu.create_subkey(&icon_path_key).map_err(|e| {
-                let _ = std::fs::write("DEBUG_ERR.txt", format!("Failed icon_path_key {}: {}", icon_path_key, e));
                 format!("Failed creating DefaultIcon {}: {}", icon_path_key, e)
             })?;
             let full_icon_path = icon_dir.join(icon_name).to_string_lossy().into_owned();
@@ -603,14 +596,11 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             // shell\open\command
             let cmd_path = format!(r#"Software\Classes\{}\shell\open\command"#, progid);
             let (cmd_key, _) = hkcu.create_subkey(&cmd_path).map_err(|e| {
-                let _ = std::fs::write("DEBUG_ERR.txt", format!("Failed cmd_path {}: {}", cmd_path, e));
                 format!("Failed creating command {}: {}", cmd_path, e)
             })?;
             let cmd_val = format!(r#""{}" "%1""#, exe_str);
             let _ = cmd_key.set_value("", &cmd_val);
         }
-
-        let _ = std::fs::write("DEBUG_REG.txt", "SUCCESSFULLY REGISTERED!");
 
         // Notify shell to refresh icons
         unsafe {
