@@ -81,6 +81,12 @@ body > * {
   margin-bottom: 8px;
 }
 
+.options-section h4 {
+  font-weight: 400;
+  margin: 8px 0;
+  color: var(--text-muted);
+}
+
 .options-section label {
   display: flex;
   align-items: center;

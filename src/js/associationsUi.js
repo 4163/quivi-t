@@ -47,7 +47,7 @@ export async function initAssociationsUi(containerId, statusCallback) {
     
     for (const [category, items] of Object.entries(grouped)) {
       const header = document.createElement('h4');
-      header.textContent = category;
+      header.textContent = `${category}s`;
       header.style.marginTop = '10px';
       container.appendChild(header);
 
@@ -74,8 +74,8 @@ export async function initAssociationsUi(containerId, statusCallback) {
         const pngIcon = item.icon.replace('.ico', '.png');
         img.src = '/assets/icons/' + pngIcon;
         img.alt = item.ext;
-        img.style.width = '24px';
-        img.style.height = '24px';
+        img.style.width = 'var(--fs-24)';
+        img.style.height = 'var(--fs-24)';
         img.style.objectFit = 'contain';
         
         const text = document.createElement('span');
