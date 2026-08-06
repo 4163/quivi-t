@@ -32,6 +32,9 @@ dist-ssr
 .portable
 quivit_config.json
 
+# Registry-debug scratch file produced during file-association development
+DEBUG_REG
+
 # Too large to host on GitHub (>100 MB), kept local only
 test-files/export_1785548648565.apng
 
