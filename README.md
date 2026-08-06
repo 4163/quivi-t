@@ -6,7 +6,7 @@
   <img src="icons/quivi-t_moe-mascot.svg" alt="QuiviT mascot" width="25%" />
 </p>
 
-A modern standalone (performance-first) port of Quivi, built with Tauri and vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
+A modern standalone (performance-first) port of Quivi, built with Tauri and Vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
 
 ## Quivi
 

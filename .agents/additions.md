@@ -36,6 +36,7 @@
 *The easiest and least invasive fixes are at the top to allow rapid checking off. Slices progress into more complex logical and visual changes.*
 
 ### UI Wording, Polish & Simple Toggles (Easy)
+- **Portable Mode README Clarification:** The README's Portable Mode section (the "Options → Save config data locally" wording) should mention that only one of the config variants (split roaming files vs. single `quivit_config.json`) exists at a time, to prevent stale data usage/mismatches. Verify if the current function actually acts this way first.
 - **Label Shortening:** Shorten the wording for "Hide menu bar and status bar when entering fullscreen" and "Automatically open the first image in a directory". Use the `title=""` attribute for the full description.
 - **Language Flags:** Make the language flags a bit larger.
 - **View Dropdown Checkmarks:** Add checkmarks to the View dropdown for toggles like Menu Bar, Status Bar, and Fullscreen based on their active state. Consolidate into a helper function if handled individually.
@@ -63,6 +64,7 @@
 - **Initial Window Sizes:** Adjust the initial and minimum window sizes of the Tauri windows. Consider a fixed 560x630 initial size for Options, or auto-fit to tabs for width, and auto-fit to Options page for height.
 - **Responsive Keyboard Panning:** Audit the keyboard pan pipeline (debounce/delay). Make panning apply immediately per key press and support fast multi-directional spam. Currently the performance is just not up to par with the original Quivi application.
 - **Pan Lengths & Smooth Panning:** Add individual pan lengths for scroll vs shortcuts (copying original Quivi defaults). Try implementing a smooth panning option and test to see if that feels nice and responsive, if not just revert.
+- ** Zoom Smoothing** Same as the above, try out -> decide.
 - **Scaling Modes (Bicubic vs Lanczos):** Implement a proper way to scale via Bicubic and Lanczos (using external API or JS library if CSS doesn't support Lanczos). Doing this should also  provide us the initial entry for using more advanced custom scaling methods.
 - **SVG Rendering & Bounds:** Audit SVG elements behavior of hitbox/dimensions going over the canvas edge. The calculations for SVG images that have a WxH of 100% compared to a set WxH act differently and break the border/edge calculations on the canvas and/or image.
   - *Key examples:* `test-files/gfl-spinner.svg` works as expected, while `icons/quivi-t_moe-2.svg` does not. 
@@ -90,7 +92,7 @@
   6. The remaining smaller sizes are just a shadow of the main ico element, layed out (with space between them) in the spritesheet order. This means that it follows the main ico file whilst not having any hitbox/bounding calculations.
   7. Render out the 'opaque canvas' option for every ico element.
 - **Missing .ico Spritesheets:** Fix bug where certain ICO files (like `test-files/endfield.ico`) do not get the spritesheet treatment.
-- **Extended Format Support:** Support PSD, XSPF, and PDF files (decide whether to process via JS or backend, performance-first).
+- **Extended Format Support:** Support PSD, XCF, and PDF files (decide whether to process via JS or backend, performance-first).
 - **Password-Protected Archives:** Add support for password-protected archives.
 - **File Association Prompt:** Add a prompt notification at the center of the screen pointing users to the File Associations tab (reminding them that they can and should and can set file associations).
 
@@ -153,7 +155,7 @@ unless the user states otherwise (e.g., they request to emulate and go through t
   - Play/pause button.
   - Frame count indicator (`X / Y`).
   - Draggable scrubber bar to seek through frames.
-  - Keyboard navigatable: vi-style arrows, tab navigation.
+  - Keyboard navigatable via arrow keys and tab navigation.
   - The existing `cmd-next` / `cmd-prev` keybinds should tie into frame stepping when an animated file is active.
 - **Layout:** Sits at the bottom of the canvas viewer (not full-width of the window). Height should always match `#file-panel-actions` via a shared CSS variable so it stays visually consistent. Exact width behavior TBD — full width feels off for files with few frames, so consider a constrained or content-aware width.
 - **Performance-first**: snappy (not sluggish) interaction with little to no visual delays/jank (delayed responses/unresponsiveness, flickering etc.), and only activate timeline logic when an animated format is detected; no overhead for static images.
@@ -162,7 +164,7 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 - Add custom SFX for UI interactions (e.g. button clicks, menu toggles, opening folders, error bumps).
 - Needs a toggle in the Options menu to disable sounds for users who prefer a silent experience.
 - Provide a volume slider or rely on system volume.
-- Audio assets should be small and fast-loading.
+- Audio assets should be small and fast-loading, or even script-generated (e.g. 8-bit style SFX).
 
 ### Advanced Favorites System
 - Improve favorites system: add a Favorites dropdown under the menu bar to load/save favorites. Consider an input for titles, only if the styling/intuitiveness of the dropdown interaction is good.
@@ -174,10 +176,14 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 - Full plan: `.agents/7z_implementation.md` (retained for future reference; has a `Status: Shelved` note).
 - **Why shelved:** the original UI-blocking bug was already solved in pure Rust. The speed gap does not manifest as a real UX problem, and the sidecar adds deployment complexity plus re-introduces partial-file race concerns.
 - If picked up later: keep the pure-Rust path as a fallback, and prefer single-entry `7zr` extraction over the full-extraction + watcher design in the current plan.
+- **Optional single-file engine:** Ship the 7z/cb7 DLL as a drop-in sidecar — if it's present next to the exe, use it; otherwise fall back to the optimized pure-Rust path. Keeps the app portable for users who don't use 7z/cb7.
+- **Placement (leaning):** require the DLL to be either next to the exe or in the roaming folder to take effect. Not storing it as a portable-mode config item.
+- Future optional dependencies could follow the same drop-in pattern — they act like non-required modules.
+- Document this on the README under documentation after it is implemented.
 
 ### Custom QuiviT Icons
 - Create custom QuiviT icons for each file type (incorporating the mascot) rather than using generic ones.
 
 ### Windows Thumbnails (APNG/WebP)
 - Add working Windows thumbnails (including preview pane) for APNG and animated WebP.
-  - Antigravity IDE actually adds multiple things that Windows doesn't natively have, SVG thumbnails, code and MD files for the preview pane. It would be great if we can support APNG/WebP files in a similar way that's practical to the project scope.
+  - Antigravity IDE actually adds multiple things that Windows doesn't natively have, SVG thumbnails, code and MD files for the preview pane/animated thumbnail/icons. It would be great if we can support APNG/WebP files in a similar way that's practical to the project scope.
