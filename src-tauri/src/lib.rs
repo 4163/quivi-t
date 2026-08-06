@@ -259,6 +259,15 @@ pub fn run() {
                 }
             });
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if window.label() == "main" {
+                    if let Some(options_window) = window.app_handle().get_webview_window("options") {
+                        let _ = options_window.close();
+                    }
+                }
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
