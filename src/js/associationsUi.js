@@ -1,15 +1,21 @@
 const tauri = window.__TAURI__ || {};
 const invoke = tauri.core?.invoke?.bind(tauri.core);
 
+const initialState = {};
+
 export async function applyAssociations(statusCallback) {
   if (!invoke) return;
   const toRegister = [];
   const toUnregister = [];
   document.querySelectorAll('.assoc-checkbox').forEach(cb => {
-    if (cb.checked) {
-      toRegister.push(cb.dataset.ext);
-    } else {
-      toUnregister.push(cb.dataset.ext);
+    const ext = cb.dataset.ext;
+    if (cb.checked !== initialState[ext]) {
+      if (cb.checked) {
+        toRegister.push(ext);
+      } else {
+        toUnregister.push(ext);
+      }
+      initialState[ext] = cb.checked; // Update baseline
     }
   });
   
@@ -68,6 +74,7 @@ export async function initAssociationsUi(containerId, statusCallback) {
         checkbox.className = 'assoc-checkbox';
         checkbox.dataset.ext = item.ext;
         checkbox.checked = item.registered;
+        initialState[item.ext] = item.registered;
         checkbox.title = 'Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.';
         
         const img = document.createElement('img');
@@ -99,10 +106,10 @@ export async function initAssociationsUi(containerId, statusCallback) {
 
   const selectAll = document.getElementById('btn-assoc-select-all');
   if (selectAll) selectAll.onclick = () => document.querySelectorAll('.assoc-checkbox').forEach(cb => cb.checked = true);
-  
+
   const deselectAll = document.getElementById('btn-assoc-deselect-all');
   if (deselectAll) deselectAll.onclick = () => document.querySelectorAll('.assoc-checkbox').forEach(cb => cb.checked = false);
-  
+
   // Hide the redundant apply button since we hook into the shared Options Apply.
   const applyBtn = document.getElementById('btn-assoc-apply');
   if (applyBtn) {
@@ -113,9 +120,14 @@ export async function initAssociationsUi(containerId, statusCallback) {
   if (settingsBtn) {
     settingsBtn.onclick = async () => {
       try {
-        await invoke('open_in_explorer', { path: "ms-settings:defaultapps" });
+        // Try deep-link to QuiviT's section (Win11 23H2+), falls back to generic page
+        await invoke('open_in_explorer', { path: "ms-settings:defaultapps?registeredAppUser=QuiviT" });
       } catch (err) {
-        statusCallback('Failed to open Windows Settings.');
+        try {
+          await invoke('open_in_explorer', { path: "ms-settings:defaultapps" });
+        } catch (err2) {
+          statusCallback('Failed to open Windows Settings.');
+        }
       }
     };
   }

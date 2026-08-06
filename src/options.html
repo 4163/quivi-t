@@ -112,6 +112,7 @@
     <div class="tab-content" id="tab-associations">
       <div class="options-section">
         <h3>Associated File Types</h3>
+        <p class="hint">Checking these boxes registers QuiviT as an available handler. You may still need to manually assign it through the file's `<i>Open with</i>` dialog, or as the default app in Windows Settings.</p>
         <div class="flex-row" style="margin-bottom: 10px;">
           <button id="btn-assoc-select-all" class="secondary">Select All</button>
           <button id="btn-assoc-deselect-all" class="secondary">Deselect All</button>
@@ -125,7 +126,7 @@
         <h3>System Integration</h3>
         <p class="hint">Use if Windows restricts native registration.</p>
         <div class="flex-row">
-          <button id="btn-assoc-settings" class="secondary">Register File Extensions via Windows Settings</button>
+          <button id="btn-assoc-settings" class="secondary">Open Windows Default Apps Settings</button>
         </div>
       </div>
     </div>
@@ -144,7 +145,7 @@
         <h3>Custom CSS</h3>
         <p class="hint">Override QuiviT's default styles here. Leave empty to use defaults.<br>
           Press <code>Ctrl+S</code> while editing to quickly apply changes.<br>
-          <strong>Emergency Reset:</strong> Press <code>Ctrl+Shift+Alt+C</code> to clear custom CSS if the UI becomes unusable.
+          <strong>Emergency Reset:</strong> Press `<i>Ctrl+Shift+Alt+C</i>` to clear custom CSS if the UI becomes unusable.
         </p>
         <div class="flex-row">
           <button id="btn-import-css">Import .css</button>
@@ -163,8 +164,9 @@ html {
   font-size: 20px !important;
 }
 
- ̶*̶ ̶{̶
-̶d̶i̶s̶p̶l̶a̶y̶:̶ ̶n̶o̶n̶e̶ ̶!̶i̶m̶p̶o̶r̶t̶a̶n̶t̶;̶
+ ̶/̶*̶ ̶b̶r̶i̶c̶k̶s̶ ̶t̶h̶e̶ ̶U̶I̶ ̶d̶o̶n̶'̶t̶ ̶d̶o̶ ̶t̶h̶i̶s̶ ̶l̶o̶l̶ ̶*̶/̶
+̶*̶ ̶{̶
+̶ ̶ ̶d̶i̶s̶p̶l̶a̶y̶:̶ ̶n̶o̶n̶e̶ ̶!̶i̶m̶p̶o̶r̶t̶a̶n̶t̶;̶
 ̶}̶"></textarea>
       </div>
     </div>
