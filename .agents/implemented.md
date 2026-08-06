@@ -6,6 +6,12 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ## Fully Implemented
 
+### Documentation & Developer Polish
+- **README Overhaul:** Updated the README to document every stack/functionality elegantly.
+  - Added a features section modeled after the original Quivi page but cleaner.
+  - Omitted the roadmap and added a simplified Changelog pointing to the Releases page to reduce maintainability burden.
+- **Inspect Element:** Kept Inspect Element exposed in the release build for Custom CSS debugging and documented this in the README.
+
 ### Rust Backend Decoupling
 - Decoupled the monolithic `src/lib.rs` backend file into distinct logical modules: `archives.rs`, `commands.rs`, `config.rs`, `ico.rs`, `models.rs`, and `utils.rs`.
 - `lib.rs` is now restricted to module aggregation and the Tauri app initialization flow.
@@ -228,6 +234,7 @@ This file tracks items that are fully implemented and verified, separate from th
 - Roaming config is now split into separate files: `quivit_config.json` (preferences), `quivit_state.json` (last-opened/remembered-image state), `quivit_directory_sort.json` (per-directory sort), and `quivit_favorites.json` (favorites).
 - Portable mode still writes a single self-contained `quivit_config.json` beside the executable; disabling portable mode removes portable leftovers.
 - Legacy single-file config layouts load unchanged and are re-split on next save.
+- **Data Resiliency & Unknown Fields:** Added `#[serde(default)]` to the Rust `AppConfig` struct. This prevents strict parsing failures if top-level fields (like `portable_mode`) are ever missing from the JSON file, while the underlying `frontend_data: JsonValue` securely round-trips all unknown or future frontend settings without dropping them. Verified via `cargo test`.
 
 ### Last-Active-Image Rewrite
 
@@ -293,6 +300,22 @@ This file tracks items that are fully implemented and verified, separate from th
 - Options `config-changed` handling now refreshes live presentation state (theme, custom CSS, config-folder labels) without forcing a full window reload.
 - Added Options notes explaining that "Continue from last active image" depends on "Continue from last opened directory", and that the single-instance setting requires restart.
 - Clarified File Types UI wording: checkboxes mean QuiviT is registered for a format, while Windows Settings controls the active Windows 10/11 default handler.
+
+### Options Apply/Preview Behavior & Window Lifecycle
+
+- Theme and Custom CSS changes in Options are now **local previews only** — they apply instantly to both windows (`theme-preview` / `css-preview` events) but are no longer auto-saved on click. Clicking **Apply** persists them to config and emits `config-updated`; **Close/Cancel** re-fetches the saved config and reverts the live previews (theme + CSS) before closing.
+- The Apply status message is no longer clobbered by association results: after `applyAssociations` runs, Apply preserves any "failed/error" status from the associations step instead of overwriting it with a generic success message.
+- Added an `on_window_event` hook in `lib.rs` so closing the main window also closes the Options window (if open).
+
+### File Association: Windows Default-Apps Registration
+
+- **Registration now follows the VLC/qBittorrent/SumatraPDF pattern.** `register_associations` additionally writes `HKCU\Software\QuiviT\Capabilities` (ApplicationName / ApplicationDescription), `HKCU\Software\QuiviT\Capabilities\FileAssociations` (`.ext` → `QuiviT.<ext>`), and `HKCU\Software\RegisteredApplications\QuiviT` so QuiviT shows up in Windows Settings → Default Apps.
+- **`get_format_status` now reads `UserChoice` first** (the real active default handler on Win10/11). If `UserChoice` exists and points at another program, the checkbox correctly stays unticked; it only falls back to the `Classes` default value when no `UserChoice` exists yet (fresh installs / unclaimed formats).
+- `unregister_associations` now also removes extensions from `Capabilities\FileAssociations`, and when the last format is removed it deletes `Software\QuiviT` and drops the `RegisteredApplications` entry.
+- The "Open Windows Default Apps Settings" button deep-links via `ms-settings:defaultapps?registeredAppUser=QuiviT` (Win11 23H2+), falling back to the generic page.
+- Options → File Types wording updated: checking a box registers QuiviT as an *available* handler; on Windows 10/11 a format with no existing default (no `UserChoice`) gets QuiviT as its handler directly, while a format whose `UserChoice` points at another program can only be changed by the user — but Windows offers QuiviT in the automatic "How do you want to open this file?" picker that appears when opening such a file, as well as via "Open with" and Windows Settings.
+- Select All / Deselect All buttons in the File Types tab work again (restored in the verification pass — their `onclick` handlers had been dropped in the dirty-tracking refactor).
+- Added `.taurignore` so `npm run tauri dev` does not hot-reload when `quivit_config.json`, `.portable`, or `DEBUG_REG` change; `DEBUG_REG` added to `.gitignore`.
 
 ### Favorites Keyboard Navigation & Archive-Entry Favorites
 

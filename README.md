@@ -15,19 +15,177 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - Original project: [Quivi](http://quivi.sourceforge.net/)
 - Later continuation/fork: [qazmlpok/quivi](https://github.com/qazmlpok/quivi) (used as reference)
 
+## Features
+
+- **Broad Format Support**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `svg`, `bmp`, `ico`, `avif`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
+- **Archive Integration**: Reads compressed files directly, treating them as standard folders. Supports seamless image navigation within and across archives.
+- **High-Performance Caching**: Instant archive listing via header-only reads. Hybrid caching strategy uses an in-memory LRU cache with background prefetch for ZIP/CBZ, and non-blocking asynchronous disk extraction for solid archives (7Z/RAR).
+- **Advanced Navigation**: Browse siblings with keyboard or mouse. Jump seamlessly to previous/next directories, archives, and root drives following the active sort order. Parent directory navigation (`..`) natively supported.
+- **Customizable Controls**: High-quality zooming, panning, rotation, and flipping. Includes scroll-wheel panning with `Ctrl`+wheel zoom (manga-friendly), plus a sticky-Ctrl toggle mode.
+- **Advanced Shortcuts**: Fully customizable keybindings supporting multi-key combos, native mouse inputs, double-click gestures, and scroll-wheel capture with conflict highlighting.
+- **Persistent States**: Configurable favorites system, single-instance handoff, optional auto-open first image, and restoration of the last active image.
+- **System Integration**: Uses native Windows file/folder icons (with opacity for hidden items). Registers file associations per-user, appearing natively in Windows Default Apps.
+- **Configuration Modes**: Supports global (least-privileged user) or portable (single config) configuration storage.
+- **Custom Theming**: Inject and live-reload custom CSS rules to fully theme the application.
+
+## Shortcuts & Controls
+
+The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`), native mouse inputs (`MouseMiddle`, `MouseForward`), double-click gestures (`DoubleClick`), and scroll-wheel capture with modifiers (`Ctrl+ScrollUp`). All keybinds can be configured dynamically in the Options menu with built-in conflict highlighting.
+
+| Action | Default Shortcut |
+|---|---|
+| Toggle file list | `1` |
+| Toggle menu bar | `2` |
+| Toggle status bar | `3` |
+| Full screen | `4` / `Alt+Enter` |
+| Options | `5` |
+| Refresh | `6` / `Ctrl+R` |
+| Parent directory | `Backspace` |
+| Open directory... | `Ctrl+O` |
+| Open file/archive... | `Ctrl+Shift+O` |
+| Open next/previous directory | `Ctrl+X` / `Ctrl+Z` |
+| Next item | `Shift+D` / `Shift+Right` / `MouseForward` / `Shift+S` / `Shift+Down` |
+| Previous item | `Shift+A` / `Shift+Left` / `MouseBack` / `Shift+W` / `Shift+Up` |
+| Pan up / down | `ScrollUp` / `ScrollDown` |
+| Zoom in / out | `Ctrl+ScrollUp` / `Ctrl+ScrollDown` |
+| Zoom in / out (Keys) | `C` / `Z` |
+| Zoom 100% | `X` |
+| Fit width / height if larger | `Q` / `E` |
+| Pan (Up/Left/Down/Right) | `W` / `A` / `S` / `D` or Arrow Keys |
+| Rotate counter-clockwise/clockwise | `G` / `H` |
+| Flip horizontal/vertical | `V` / `B` |
+| Fit none | `R` / `DoubleClick` |
+| Fit width / height | `T` / `Y` |
+| Auto fit | `F` |
+| Cycle scaling mode | `[` / `]` |
+
+## Custom CSS
+
+QuiviT supports injecting custom CSS rules to fully theme the application (available in the Options menu under Customization). You can instantly save and apply these rules using `Ctrl+S` while editing.
+
+**Example:**
+```css
+:root {
+  --surface: #dfe0df !important;
+  --accent: #00ad95 !important;
+  --accent-hover: #007662 !important;
+}
+
+html {
+  font-size: 20px !important;
+}
+
+ ̶/̶*̶ ̶b̶r̶i̶c̶k̶s̶ ̶t̶h̶e̶ ̶U̶I̶ ̶d̶o̶n̶'̶t̶ ̶d̶o̶ ̶t̶h̶i̶s̶ ̶l̶o̶l̶ ̶*̶/̶
+̶*̶ ̶{̶
+̶ ̶ ̶d̶i̶s̶p̶l̶a̶y̶:̶ ̶n̶o̶n̶e̶ ̶!̶i̶m̶p̶o̶r̶t̶a̶n̶t̶;̶
+̶}̶
+```
+
+**Developer Tools:** Inspect Element is intentionally left enabled in release builds to help create and debug custom CSS.
+
+> [!TIP]
+> If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` in any QuiviT window. This emergency reset instantly removes the custom CSS and reloads the interface safely.
+
+## Documentation
+
+### System Defaults
+
+The following system defaults are used:
+
+- **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
+- **Scaling Mode:** `bicubic`
+- **Keyboard Pan Step:** `VIEWER_KEYBOARD_PAN_STEP` (100px).
+- **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`) in Options.
+- **Archive Caching (ZIP/CBZ):** In-memory LRU cache holds up to 20 images. Background prefetch loads 7 images ahead and 3 images behind the current position.
+- **Single Instance:** Enabled by default. External file opens are handed off to the active session.
+
+### Configuration & Persistence
+
+QuiviT persists data through two separate mechanisms:
+
+**Roaming files (source of truth)** — stored in Tauri's app config directory:
+`C:\Users\<user>\AppData\Roaming\com.x4163.quivit`
+
+Data is split across four files:
+- `quivit_config.json` — User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, custom CSS, options)
+- `quivit_state.json` — Runtime state (`last_opened_path`, `last_active_image`, `scroll_zoom_latched`)
+- `quivit_directory_sort.json` — Per-directory sort column/direction
+- `quivit_favorites.json` — Favorited folders/files and collapsed state
+
+**WebView2 localStorage** — never the source of truth; used only as a fast cache layer:
+- `quivit-theme` / `quivit-custom-css` — Pre-paint mirrors of config so the theme and custom CSS apply before first render (prevents flicker)
+- `options-active-tab` — Session-only; cleared on each app start
+
+**Portable Mode** can be enabled via **Options → Save config data locally**. When enabled, QuiviT folds all four roaming files into a single self-contained `quivit_config.json` next to the executable. When disabled, the file is split back into the roaming directory.
+
+### Architecture
+
+The frontend is intentionally split into small, decoupled ES modules:
+- `core.js` — Single source of truth for app state and configuration
+- `fsUtils.js` — Filesystem and backend interaction
+- `viewer.js` — Image viewport logic (zoom, pan, fit, rotation, flips)
+- `shortcuts.js` / `keybinds.js` — Input normalization and action dispatch
+- `filePanel.js` / `menubar.js` / `options.js` — UI component wiring
+
+> **Design Principle:** When behavior starts to grow inside `main.js`, prefer moving the domain logic into a focused module and leaving `main.js` as the bridge between DOM events and state/actions.
+
+### File Associations (Windows)
+
+Options → File Types registers image and archive formats with QuiviT. Registration is per-user (no admin rights required): it writes `HKCU\Software\Classes` ProgIDs, dumps format icons to the roaming config directory, and registers QuiviT as an app in Windows Settings → Default Apps. The "Open Windows Default Apps Settings" button deep-links straight to QuiviT's entry.
+
+Checkboxes reflect whether QuiviT is the active default handler for each format, reading the `UserChoice` registry key first and falling back to the `Classes` registration.
+
+> **Note on Windows 10/11 defaults:** A format's active default handler lives in the `UserChoice` registry key, which is hash-protected and cannot be written programmatically. A format with no existing `UserChoice` becomes QuiviT's once registered — double-click opens it directly. For formats already claimed by another program, registering only adds QuiviT as an *available* handler; Windows surfaces it automatically via the "How do you want to open this file?" picker when such a file is opened, and the default can be changed permanently there, via "Open with", or in Windows Settings.
+
+### Command-Line Interface
+
+QuiviT accepts paths passed via the command line. When single-instance mode is enabled (default), secondary launches hand off their arguments to the primary instance.
+
+```bash
+quivit.exe "C:\Path\To\Archive.cbz"
+```
+
+## Changelog
+See the [Releases](../../releases) page for version history and release notes.
+
+## Development & Installation
+
+**Prerequisites:**
+- [Node.js](https://nodejs.org/) (for `npm`)
+- [Rust](https://www.rust-lang.org/) (Cargo)
+
+Install dependencies and run the Tauri development build:
+```bash
+npm install
+npm run tauri dev
+```
+
+Run backend and frontend syntax checks:
+```bash
+cd src-tauri && cargo check
+node --check src/js/main.js
+node --check src/js/options.js
+# etc.
+```
+
 ## Stack
 
-- **Runtime:** Tauri 2
-- **Backend:** Rust
-- **Frontend:** Vanilla HTML, CSS, and ES modules
-- **Desktop webview:** WebView2 on Windows
-- **Archives:** ZIP/CBZ through `zip`, RAR/CBR through `unrar`, 7Z/CB7 through `sevenz-rust2`, TAR/CBT through `tar`
-- **Sorting:** natural sorting through `natord`
-- **Config:** JSON through `serde` / `serde_json`
-- **File watching:** `notify` (directory watcher / auto-refresh)
-- **ICO extraction:** `image` (ico feature)
-- **Archive hashing:** `md5` (deterministic temp directory naming)
-- **Plugins:** `tauri-plugin-opener` (open config folders in Explorer), `tauri-plugin-dialog` (native pickers), `tauri-plugin-single-instance` (single-instance handoff)
+| Component | Technology | Purpose |
+|---|---|---|
+| **Runtime** | Tauri 2 | Desktop application framework |
+| **Backend** | Rust | Core logic and filesystem operations |
+| **Frontend** | Vanilla HTML/CSS/JS | ES modules-based user interface |
+| **Desktop Webview** | WebView2 | Native Windows web rendering |
+| **Archives (ZIP/CBZ)** | `zip` | Fast on-demand extraction |
+| **Archives (RAR/CBR)** | `unrar` | Legacy archive support |
+| **Archives (7Z/CB7)** | `sevenz-rust2` | Solid LZMA archive support |
+| **Archives (TAR/CBT)** | `tar` | Uncompressed archive reading |
+| **Sorting** | `natord` | Natural alphanumeric sorting |
+| **Config** | `serde` / `serde_json` | Configuration serialization |
+| **File Watching** | `notify` | Directory watcher for auto-refresh |
+| **ICO Extraction** | `image` | Multi-frame ICO spritesheet generation |
+| **Hashing** | `md5` | Deterministic temp directory naming |
+| **Tauri Plugins** | `opener`, `dialog`, `single-instance` | System integration (explorer, pickers, handoff) |
 
 ## Project Structure
 
@@ -71,238 +229,7 @@ QuiviT/
 └─ README.md
 ```
 
-## Features
+## Attributions
 
-- Opens image files, archive files, and directories.
-- Browses image siblings with keyboard or mouse.
-- Seamlessly jumps to previous/next directories, archives, and root drives, following the active sort order.
-- Lists folders, images, and supported archives in the file panel.
-- Supports parent-directory navigation through '`..`'.
-- Reads ZIP/CBZ, RAR/CBR, 7Z/CB7, and TAR/CBT archives directly, treating them as folders.
-- **Instant archive listing** — reads only headers (central directory) for immediate file lists without full extraction (ZIP/CBZ, 7Z/CB7); TAR/CBT lists via on-demand entry reads.
-- **Hybrid archive caching** — ZIP/CBZ uses on-demand in-memory LRU cache (20 images) with background prefetch (7 ahead / 3 behind); RAR/CBR and 7Z/CB7 use background extraction to temp disk (7Z in a sequential worker thread, since solid 7z archives aren't seekable).
-- **Non-blocking archive protocol** — all archive image requests are served asynchronously off the WebView thread, so the UI stays responsive even while large archives are still extracting.
-- **Note on 7Z/CB7 performance** — 7Z archives typically use solid compression, meaning every entry must be decompressed sequentially from the beginning of the block. This is an inherent limitation of the format — the very first image cannot be displayed until the decompressor reaches it. For large 7Z/CB7 files, expect an initial loading delay proportional to archive size. ZIP/CBZ, RAR/CBR, and TAR/CBT do not have this limitation.
-- **Seamless image navigation** — retains previous image on screen until new image fully loads, eliminating flicker between archive images.
-- Supports configurable keybindings, multi-key combos, and mouse shortcuts.
-- Supports global or portable configuration storage.
-- Provides fit, zoom, pan, rotation, flip, and scaling controls.
-- Scroll-wheel panning with Ctrl+wheel zoom (both remappable, manga-friendly), plus an optional sticky-Ctrl "toggle" mode so you press Ctrl once to enter zoom mode instead of holding it.
-- Provides a display-only breadcrumb for the current directory or archive.
-- Displays multi-frame ICO files as a horizontal spritesheet.
-- Toggleable opaque backdrop for transparent images.
-- Favorites system for quick access to frequently visited folders and files, persisted through the config (not browser storage).
-- Single-instance handoff for routing external file opens into an active session.
-- Optionally auto-opens the first image when entering a directory, or restores the last active image at startup.
-- Uses native Windows file and folder icons in the file panel, accurately rendering hidden items with opacity.
-
-## Supported Formats
-
-Images:
-
-```text
-jpg, jpeg, png, gif, webp, apng, svg, bmp, ico, avif
-```
-
-Archives:
-
-```text
-zip, cbz, rar, cbr, 7z, cb7, cbt, tar
-```
-
-## Development
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Run the Tauri development build:
-
-```bash
-npm run tauri dev
-```
-
-Run backend checks:
-
-```bash
-cd src-tauri
-cargo check
-```
-
-Run frontend syntax checks:
-
-```bash
-node --check src/js/main.js
-node --check src/js/options.js
-node --check src/js/keybinds.js
-node --check src/js/viewer.js
-node --check src/js/core.js
-node --check src/js/fsUtils.js
-node --check src/js/directoryPrefs.js
-node --check src/js/shortcuts.js
-node --check src/js/filePanel.js
-```
-
-## Architecture
-
-The frontend is intentionally split into small ES modules.
-
-- `core.js` is the single source of truth for application state and configuration.
-- `fsUtils.js` handles all file system interactions, Tauri backend commands, and dialogs.
-- `directoryPrefs.js` owns the grouping and persistent sorting logic for directory entries.
-- `viewer.js` owns the image viewport only: image source, fit modes, zoom, pan, rotation, flips, and scaling.
-- `keybinds.js` is the single source of truth for default shortcuts.
-- `shortcuts.js` owns keyboard combo normalization and action lookup.
-- `filePanel.js` owns the file list UI component, including column sizing and sorting.
-- `menubar.js` owns the main window's top menu bar DOM wiring and state logic.
-- `keyboardNav.js` manages accessible keyboard navigation (Tab, Home, End) across UI elements.
-- `options.js` wires the options window UI to persisted config.
-- `keybindUi.js` renders the keybind configuration grid and handles conflict highlighting.
-- `main.js` should stay focused on DOM wiring and state callbacks for the main window.
-
-When behavior starts to grow inside `main.js`, prefer moving the domain logic into a focused module and leaving `main.js` as the bridge between DOM events and state/actions.
-
-## Configuration
-
-Normal configuration is saved through Tauri's app config directory.
-
-On this Windows app identifier, the global config directory is normally:
-
-```text
-C:\Users\<user>\AppData\Roaming\com.x4163.quivit
-```
-
-In normal (roaming) mode QuiviT splits its data across four files in that directory:
-
-```text
-quivit_config.json          # user preferences (keybinds, fit/scaling, options)
-quivit_state.json           # runtime state (last opened location, remembered image, scroll-zoom latch)
-quivit_directory_sort.json  # per-directory sort column/direction
-quivit_favorites.json       # favorited folders and files
-```
-
-Portable mode is enabled when the app finds either of these files next to the executable:
-
-```text
-.portable
-quivit_config.json
-```
-
-When **Save config data locally** is enabled in Options, QuiviT writes a single self-contained file:
-
-```text
-<executable-directory>\.portable
-<executable-directory>\quivit_config.json
-```
-
-Enabling portable mode moves your settings out of the roaming directory (the roaming files are removed once the portable copy is written), so only one active location exists at a time. When the option is disabled, QuiviT writes the split files back to the roaming directory and removes the portable files instead.
-
-### Custom CSS & Emergency Reset
-
-QuiviT supports injecting custom CSS rules to fully theme the application (available in the Options menu under Customization). You can instantly save and apply these rules using `Ctrl+S` while editing.
-
-If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` globally in any window. This performs an emergency reset, instantly stripping the custom CSS and reloading the interface safely.
-
-## Shortcuts
-
-Default shortcuts live in:
-
-```text
-src/js/keybinds.js
-```
-
-The backend does not define shortcut defaults. It only loads and saves the config object.
-Keyboard pan distance is tuned by `VIEWER_KEYBOARD_PAN_STEP` in the same file.
-The startup fit mode defaults to `DEFAULT_FIT_MODE` (`height-if-larger`) and changes made from the View menu are saved in config.
-`Fit none`, `Fit width`, and `Fit width if larger` align the image's top edge to the viewport top (tall pages start from the top; images that fit vertically stay centered).
-`Zoom 100%` keeps the content under the viewport center fixed while snapping to true size, so it never jumps your reading position.
-The scaling method defaults to `DEFAULT_SCALING_MODE` (`bicubic`) and changes made from the View menu are saved in config.
-The scroll-wheel modifier defaults to `hold` (hold `Ctrl` while scrolling to zoom) and can be switched to `toggle` (sticky `Ctrl`, press once to enter zoom mode) in Options → Keys → Scroll Wheel, saved as `scroll_zoom_modifier`.
-
-### Scroll Wheel Behavior
-
-- Plain wheel pans the image up/down (bound to `cmd-pan-up` / `cmd-pan-down` as `ScrollUp` / `ScrollDown`).
-- `Ctrl` + wheel zooms in/out (bound to `cmd-zoom-in` / `cmd-zoom-out` as `Ctrl+ScrollUp` / `Ctrl+ScrollDown`).
-- All four are ordinary keybinds in the Options Keys tab, so they are fully remappable; zooming zooms toward the cursor position.
-- Wheel scrolling over the file list or menu chrome is never hijacked — it keeps scrolling that UI.
-- In **Hold** mode, keep `Ctrl` held while scrolling to zoom. In **Toggle** mode, press `Ctrl` once to latch zoom mode (a status-bar badge appears); the wheel keeps zooming without `Ctrl` until you press `Ctrl` again. The latch persists across restarts (`scroll_zoom_latched` in `quivit_state.json`).
-
-### Advanced Shortcut Capabilities
-
-QuiviT's shortcut engine fully supports:
-- **Simultaneous Multi-Key Combinations:** You can bind arbitrary keys without standard modifiers (e.g., `A + B`). The capture engine tracks all keys held and finalizes the binding on release.
-- **Native Mouse Input:** Mouse buttons (`MouseLeft`, `MouseMiddle`, `MouseRight`, `MouseBack`, `MouseForward`) are bindable individually or combined with modifiers (e.g., `Shift + MouseBack`).
-- **Mouse Double-Click Gestures:** `DoubleClick` and `DoubleRightClick` are bindable gestures; the double-click on the viewport is what drives "Fit none" by default. The click that starts capture (a tag or the `+` button) counts as the first press, so clicking a tag then clicking once more captures `DoubleClick` naturally. During keybind capture the browser context menu is suppressed (including through the finalizing right-click press) so right-click gestures can be bound cleanly.
-- **Middle-Click to Remove:** Middle-clicking a keybind tag in Options removes that binding (alternative to the × button). The tag's middle `mousedown` is intercepted to block the browser's native autoscroll, and removal fires on `mouseup`. While capture is active middle-click removal is disabled so `MouseMiddle` itself is bindable. Only left/right clicks wait the double-click window during capture — `MouseMiddle`, `MouseBack`, and `MouseForward` commit instantly on release.
-- **Scroll-Wheel Capture:** Binding `ScrollUp`/`ScrollDown` (optionally with `Ctrl`/`Shift`/`Alt`) shows the combo live while you scroll and only finalizes once the gesture settles — the options page never scrolls during or right after capture. Only modifier keys combine with the scroll direction (non-modifier keys and mouse buttons are ignored), and combos always read `Modifiers+Scroll`. A lone modifier press (e.g. `Ctrl` by itself) is ignored instead of leaving capture stuck.
-- **Canonical Named Keys:** Captured combos use canonical casing (`Backspace`, `ArrowLeft`, `F5`, ...) matching the defaults, and stored bindings are normalized on load.
-- **Conflict Highlighting:** The options menu visually highlights keybind conflicts by matching them with dynamically generated hues.
-
-Current defaults include:
-
-```text
-1                                           Toggle file list
-2                                           Toggle menu bar
-3                                           Toggle status bar
-4 / Alt+Enter                               Full screen
-5                                           Options
-6 / Ctrl+R                                  Refresh
-Backspace                                   Parent directory
-Ctrl+O                                      Open directory...
-Ctrl+Shift+O                                Open file/archive...
-Toggle favorite                             (unbound by default)
-Ctrl+X                                      Open next directory/archive
-Ctrl+Z                                      Open previous directory/archive
-Shift+D / Shift+Right / MouseForward        Next item
-Shift+S / Shift+Down                        Next item
-Shift+A / Shift+Left / MouseBack            Previous item
-Shift+W / Shift+Up                          Previous item
-ScrollUp / ScrollDown                       Pan up / pan down
-Ctrl+ScrollUp / Ctrl+ScrollDown             Zoom in / zoom out
-C                                           Zoom in
-Z                                           Zoom out
-X                                           Zoom 100%
-Q                                           Fit width if larger
-E                                           Fit height if larger
-W / Up                                      Pan up
-A / Left                                    Pan left
-S / Down                                    Pan down
-D / Right                                   Pan right
-G                                           Rotate counter-clockwise
-H                                           Rotate clockwise
-V                                           Flip horizontal
-B                                           Flip vertical
-R / DoubleClick                             Fit none
-T                                           Fit width
-Y                                           Fit height
-F                                           Auto fit
-[ / ]                                       Cycle scaling mode (backward / forward)
-```
-
-## Backend Commands
-
-The Rust backend provides Tauri commands for:
-
-- Reading directories.
-- Listing archive headers instantly (`list_archive`).
-- Prefetching archive entries (`prefetch_archive_entries`).
-- Opening parent and sibling directories.
-- Opening sibling folders/archives.
-- Loading and saving config.
-- Resolving and opening the global and local config directories.
-- Opening the Options window.
-- ICO frame extraction (`get_ico_frames`).
-
-The Options window command is async because creating a Tauri webview window from a synchronous command can deadlock on Windows.
-
-## Icon Attributions
-
-- APNG icon: [Cosplayer icons created by Magnific - Flaticon](https://www.flaticon.com/free-icon/cosplayer_949561)
-- WebP icon: [Webp icons created by JessHG - Flaticon](https://www.flaticon.com/free-icon/webp_13434961)
-- GIF icon: [Gif icons created by Dimitry Miroliubov - Flaticon](https://www.flaticon.com/free-icon/gif_337936)
-- CBZ icon: [Cbz icons created by Good Ware - Flaticon](https://www.flaticon.com/free-icon/cbz_4208350)
-- CBR icon: [Cbr icons created by Good Ware - Flaticon](https://www.flaticon.com/free-icon/cbz_4208350)
-- SVG icon: [Svg icons created by The Chohans - Flaticon](https://www.flaticon.com/free-icon/cbr_4208358)
+- Icons: [Flaticon (Cosplayer, Webp, Gif, Cbz, Cbr, Svg)](https://www.flaticon.com)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)

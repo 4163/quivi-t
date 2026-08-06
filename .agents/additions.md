@@ -1,200 +1,105 @@
 # QuiviT Implementation Plan
 
-Date: 2026-08-01
+## Current Architecture State
 
-This plan covers the current requested changes. No application code should be changed until this plan is reviewed.
+> **Keep this section updated after every structural change.** Stale information here CAN result in duplicated work, broken patterns, regressions, and clutter debt that compounds.
 
-## Non-Goals For This Pass
+**Config & Persistence (Verified):**
+- Rust `AppConfig` uses `#[serde(default)]` — missing top-level fields won't brick the config file.
+- `frontend_data` is an untyped `JsonValue` — unknown/future keys round-trip safely without being dropped.
+- `mergeConfig()` in `keybinds.js` spreads saved data over defaults — missing keys get filled in, extra keys pass through.
+- Persistence policy is documented in `core.js` header and `keybinds.js`. Roaming files are the source of truth; `localStorage` is only a pre-paint cache.
+- Split files: `quivit_config.json` (preferences), `quivit_state.json` (runtime state), `quivit_directory_sort.json`, `quivit_favorites.json`. Portable mode folds all into one file.
 
-- Full localization implementation beyond adding a Language tab placeholder with English only.
-- Full implementation user feedback sound effects.
-- Rewriting the entire viewer or file-list architecture if a focused extraction is enough.
-- Committing or pushing changes from this agent. The user will run the push pipeline.
+**JS Module Structure:**
+- `core.js` — state machine, no DOM access. Communicates via callbacks.
+- `keybinds.js` — default bindings, `mergeConfig()`, pan/zoom constants.
+- `shortcuts.js` — keyboard/mouse/scroll dispatch, combo normalization.
+- `viewer.js` — image rendering, zoom, pan, fit modes.
+- `filePanel.js` — file list, favorites, sorting UI, column resizing.
+- `fsUtils.js` — filesystem interactions, archive loading, sibling navigation.
+- `directoryPrefs.js` — per-directory sort/grouping logic.
+- `main.js` — DOM wiring, action dispatch, event listeners.
+- `options.js` — Options window logic.
+- `keybindUi.js` — keybind capture/conflict UI (Options).
 
-## Safety Notes
-
-- Do not disturb the user's Git workflow.
-- Do not commit private paths into the public repository.
-- Do not track generated runtime config, portable config, build output, or personal directory-sort metadata.
-- Keep `.gitignore` / `src-tauri/.gitignore` coverage current for:
-  - `src-tauri/target/`
-  - executable-adjacent `.portable`
-  - executable-adjacent `quivit_config.json`
-  - any future per-directory sort/settings data if stored outside `quivit_config.json`
-- If portable mode writes personal paths next to the executable during development, confirm those files are ignored before any push.
-
-## Architecture Plan
-
-Keep or improve the current split:
-
-- `core.js`: app state, config, directory/archive loading, navigation semantics.
-- `viewer.js`: image rendering, fit/zoom/pan/rotation, ICO spritesheet display if implemented in viewer scope.
-- `filePanel.js`: file list rendering, sorting UI, resizing UI, keyboard activation hooks if local to the list.
-- `shortcuts.js`: keyboard and mouse shortcut normalization, matching, and dispatch.
-- `keybinds.js`: default keybind definitions and config merge/migration.
-- `options.js`: Options window DOM wiring and save/load interaction.
-- `main.js`: main-window wiring only.
-
-New modules may be warranted:
-
-- `ico.js` or `icoSpritesheet.js`: parse ICO container data and produce an ordered spritesheet source.
-- `directoryPrefs.js` or config helpers in `core.js`: normalize persistent per-directory sort settings.
-- `language.js`: only if the Language tab needs structure beyond static English placeholder UI.
-- `fileIcons.js` or icon-mapping helpers: map image/archive/file-type entries to icon assets under `icons/` for entries without a natural preview, and define a fallback representation for types with no dedicated icon.
-- `drives.js` or drive-list helpers: enumerate available drives so root-level navigation does not dead-end, including drive icon handling distinct from folder icons.
-- `favorites.js` or favorites persistence helpers: store/load favorited files and folders for a shortcut list in the file panel (navigation shortcut only, not a parallel file-list source of truth).
+**Rust Module Structure:**
+- `config.rs` — `AppConfig`, load/save, split-file helpers, portable detection.
+- `commands.rs` — Tauri commands (directory listing, file ops, sibling nav).
+- `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants).
+- `ico.rs` — ICO spritesheet processing.
+- `models.rs` — shared structs (`FileEntry`, etc.).
+- `utils.rs` — path helpers, hidden-file detection.
 
 ## Work Plan
 
-### Shell Resize Background
+*The easiest and least invasive fixes are at the top to allow rapid checking off. Slices progress into more complex logical and visual changes.*
 
-- Investigate whether the black flash comes from Tauri/WebView2 window background, document background, or first paint.
-- Set shell/webview/background color to match system theme as closely as possible.
-- Candidate areas:
-  - `tauri.conf.json` window/background settings if supported.
-  - CSS `html`, `body`, `#viewport`, and initial root background.
-  - Tauri window builder options if required.
-- Verify by resizing the app in light and dark system themes if practical.
+### UI Wording, Polish & Simple Toggles (Easy)
+- **Label Shortening:** Shorten the wording for "Hide menu bar and status bar when entering fullscreen" and "Automatically open the first image in a directory". Use the `title=""` attribute for the full description.
+- **Language Flags:** Make the language flags a bit larger.
+- **View Dropdown Checkmarks:** Add checkmarks to the View dropdown for toggles like Menu Bar, Status Bar, and Fullscreen based on their active state. Consolidate into a helper function if handled individually.
+- **Opaque Canvas Keybind:** Add the 'View > Opaque canvas' option as a configurable keybind in the options (no default key needed).
 
-### Scaling Modes: Bicubic vs Lanczos
+### File Navigation & Core Behavior Fixes (Medium Logic)
+- **Drag-and-Drop Overlay Refinements:** Rework the drag-and-drop overlay: update wording, keep the css cursors untouched (since they already correct), and make the overlay clickable to open a folder picker. Prevent panning on the canvas element behind the overlay. Display "file type not supported" warning instead of opening the directory if dropping an unsupported file.
+- **Image Navigation Clamping:** If the first or last item in the file list is an image (or if there is only a single image file and no other folders/archives), navigating past them should clamp the selection to that image instead of booting out to the empty drag-and-drop screen.
+- **File Deletion Fallbacks:** When an active archive or folder is deleted while viewing, boot the user back appropriately. For images, go to the previous file (or none if empty). Ensure "Continue from last opened directory/image" falls back gracefully if the target doesn't exist at startup.
+- **Archive Interruption Fix:** Prevent active image interruptions inside an archive. Currently, when new files are created in the archive's working directory, the user is booted back to the first image. Whilst folders don't have any image data to be viewed, still make sure the selection is not interrupted when new files are added.
+- **Navigation Trail History:** Keep track of the session's navigation trail (Need feedback: since it's only for the session, is there a need to cap the size?). Add keybinds for Forward and Back navigation (Defaults: Alt+A, Alt+W, MouseBack for back; Alt+D, Alt+S, MouseForward for forward, plus Alt+Arrow variations). Add these to their relevant menu bar folder dropdown section.
+- **'This PC' Directory Bug:** Fix open directory behavior where selecting 'This PC' does not work. See if Tauri can route this to drive selection for the filelist.
+- **Character Encoding Compatibility:** Support full character encoding file paths (emojis, JP, CN, KR, etc.) so no filenames or paths crash or present a 404 displayed image.
+- **Hidden File Config:** Add a hidden true/false config inside the portable config file. Dynamically change and listen to the Windows/System hidden state of the file and appropriate sync.
+- **Directory Sort Limit:** Determine if we are capping out the number of items for `directory_sort`.
 
-- Audit current implementation of `Viewer.setScaling()`.
-- Confirm whether `bicubic` and `lanczos` differ visually or are currently both `image-rendering: auto`.
-- If no real difference exists:
-  - Either document that only `none` versus smoothed scaling is currently meaningful, or
-  - Implement real mode-specific rendering if feasible.
-- Avoid pretending Lanczos exists if the browser/WebView cannot actually expose it directly.
+### View, Rendering & Window Enhancements (Visuals/Features)
+- **HTML Flickering & Image Navigation:** Optimize image navigation to prevent HTML flickering. 
+  - *Context:* Whilst the processing has already been improved to be identical to the original Quivi behavior (show previous image until new one is ready), there's still inherent flickering caused by the presentation: `click/active > load image > present image`. This can easily be fixed by improving the html/js functions (caching/preloading).
+  - This additionally fixes the lag when holding down a key and switching images really fast.
+  - Fix the issue where the opaque canvas appears first and then the image; they should always appear at the same time.
+  - Consider keeping a session cache of files inside archives, prevents decompressing them again in the same session. Discuss adding a cache limit in the options (though leaning towards being against putting it in options).
+- **Initial HTML Loading (LCP):** Completely remove the blank page time on initial loading of both HTML pages before the main UI renders. It's currently acting this way because we are optimizing for LCP on the flickering of themes. Refer to the way LCP is handled on `E:\Projects\PixiJS Live2D Spine (Springfield)` for reference.
+- **Shell Resize Background:** Match the default application shell background color to the system/active theme as closely as possible. Currently, this default color becomes visibly exposed when the browser shell dynamically resizes to catch up with the application shell during window resizing.
+- **Initial Window Sizes:** Adjust the initial and minimum window sizes of the Tauri windows. Consider a fixed 560x630 initial size for Options, or auto-fit to tabs for width, and auto-fit to Options page for height.
+- **Responsive Keyboard Panning:** Audit the keyboard pan pipeline (debounce/delay). Make panning apply immediately per key press and support fast multi-directional spam. Currently the performance is just not up to par with the original Quivi application.
+- **Pan Lengths & Smooth Panning:** Add individual pan lengths for scroll vs shortcuts (copying original Quivi defaults). Try implementing a smooth panning option and test to see if that feels nice and responsive, if not just revert.
+- **Scaling Modes (Bicubic vs Lanczos):** Implement a proper way to scale via Bicubic and Lanczos (using external API or JS library if CSS doesn't support Lanczos). Doing this should also  provide us the initial entry for using more advanced custom scaling methods.
+- **SVG Rendering & Bounds:** Audit SVG elements behavior of hitbox/dimensions going over the canvas edge. The calculations for SVG images that have a WxH of 100% compared to a set WxH act differently and break the border/edge calculations on the canvas and/or image.
+  - *Key examples:* `test-files/gfl-spinner.svg` works as expected, while `icons/quivi-t_moe-2.svg` does not. 
+  - *Visual insight on SVGs that have a WxH of 100%:* the bounds/edge of the image seems to visually be the **center of the image** instead of the **very edges**. 
+  - "very edges" = `0x, 0y, widthX, heightY` (left, top, right, bottom) of the displayed image element. 
+  - "center of the image" = `(widthX / 2)x, (heightY / 2)y, (widthX / 2)x, (heightY / 2)y` (left, top, right, bottom) of the displayed image element.
+- **Emergency Boss Key:** Add an "Emergency Button" to hide the application into the system tray, with a configurable keybind.
+- **Helium Exit-Fullscreen:** Copy Helium browser's exit-fullscreen functionality (hold to exit, and a top exit button offscreen that slides down via hover). (https://github.com/imputnet/helium) 
 
-### Viewer Rendering
+### CSS, Styling & Code Structure (Refactoring)
+- **CSS Decoupling:** Clean up CSS. Create a `global.css` for root vars, global resets, and general rules. Allow individual HTML pages to have specific CSS files to reduce clutter.
+- **JS DOM Decoupling:** Move DOM interaction/manipulation to its own file and communicate between files via state callbacks. Refer to the `E:\Projects\PixiJS Live2D Spine (Springfield)` project structure.
+- **Tab Navigation Extraction:** Move a huge portion of the tab navigation logic into its own JS file (e.g., `keyboardNav.js`) using state callbacks to decouple and reduce clutter. Manually style active tab navigation items into their own CSS file.
+- **Persistent Root Column Sizes:** Treat CSS root column sizes as persistent data saved via WebView2. Add a reset column sizes button in the options (under General).
+- **Custom CSS Persistence Bugs:** Fix custom CSS persistence. Fix the bug where it sometimes doesn't apply on restart, or applies even when it was removed. **Note: Unsure if this bug still exists, as it has not been encountered since the major syncing refactor.**
+- **Syntax Highlighting:** Add syntax highlighting to the Custom CSS field in Customization using an available font (fonts that have syntax highlighting) or a small library.
 
-- Audit SVG elements behavior of hitbox/dimensions going over the canvas edge.
-- The calculations for SVG images that have a WxH of 100% compared to a set WxH, acts different / breaks the border/edge calculations on the canvas and/or image. Key examples: test-files/gfl-spinner.svg works as expected, while icons/quivi-t_moe-2.svg does not.
-- Visual insight on SVGs that have a WxH of 100%; the bounds/edge of the image seems to visually be the center of the image. instead of the very edges.
-  "very edges" = 0x, 0y, widthX, heightY (left, top, right, bottom) of the displayed image element.
-  "center of the image" = (widthX / 2)x, (heightY / 2)y, (widthX / 2)x, (heightY / 2)y (left, top, right, bottom) of the displayed image element.
+### Supported Formats & Advanced Icons (Complex)
+- **Advanced .ico Processing:** Improve .ico processing (performance-first). Change the .ico processing and rendering spec:
+  1. Add a 'ICO Spritesheet' to the view dropdown under 'opaque canvas' (make sure this is configurable in the keybinds option). Default: ON.
+  2. OFF: .ico files should not be processed at all and should just act as a legacy image file. ON: .ico files should be processed.
+  3. Process each .ico size as an individual image file instead of a single spritesheet.
+  4. Render out each size individually in the canvas.
+  5. The largest ico size is the single source of truth; this element should be the only element that has canvas bounding calculations.
+  6. The remaining smaller sizes are just a shadow of the main ico element, layed out (with space between them) in the spritesheet order. This means that it follows the main ico file whilst not having any hitbox/bounding calculations.
+  7. Render out the 'opaque canvas' option for every ico element.
+- **Missing .ico Spritesheets:** Fix bug where certain ICO files (like `test-files/endfield.ico`) do not get the spritesheet treatment.
+- **Extended Format Support:** Support PSD, XSPF, and PDF files (decide whether to process via JS or backend, performance-first).
+- **Password-Protected Archives:** Add support for password-protected archives.
+- **File Association Prompt:** Add a prompt notification at the center of the screen pointing users to the File Associations tab (reminding them that they can and should and can set file associations).
 
-### General Rendering
+### Documentation & GitHub (Project Health)
 
-- Review rendering quality and artifacts.
+- **Contributing Section:** Add a contributing section to the github page, for general contributions to the project, but more on documenting how new languages should be created for the language settings.
+- **Update Availability Indicator:** Add a lightweight GitHub releases check that surfaces an unobtrusive notice on the menubar's existing GitHub button when a newer version is available. No auto-download or auto-install — this intentionally avoids an auto-update system, which is out of scope and conflicts with the portable-first goals. Fail silently when offline or rate-limited.
 
-
-### Archive Performance
-
-- Performance note: opening large or slow archives can make `quivit.exe` stop responding briefly; after this, Windows may show the generic executable icon on the taskbar.
-- Treat this as archive-processing/UI-blocking debt.
-- Prefer optimizing archive load/extraction so expensive work does not block the app window, rather than patching only the icon symptom.
-
-### Drag-and-Drop Folder Opening
-
-- Rework the drag-and-drop overlay: folder opening already works, so update the wording, refine the drop cursor affordance, and make the overlay itself clickable so it opens a folder picker (broad .drop-overlay query, no need to mess around with css pointers, pointers are already set as intended).
-- Prevent panning on the canvas element behind the overlay — at the momment .drop-overlay is just on top and panning interaction still leaks.
-- Verify: dropping a folder/image/archive opens it; clicking the overlay opens a folder picker; no canvas drag interaction leaks through. drop. dropping an unsupported file should show a file type not supported warning instead of opening the directory.
-
-### Responsive Keyboard Panning
-
-- W/A/S/D and arrow-key panning is less responsive than the original Python Quivi viewer, which pans instantly and handles rapid multi-directional spam; the current build has a perceived delay/debounce before panning.
-- Audit the keyboard pan pipeline (viewer pan handling and dispatch timing) for debounce or re-trigger delay.
-- Make panning apply immediately per key press and support fast direction changes.
-- Verify: hold and rapidly alternate directions; panning responds instantly per press.
-
-### Scroll-Wheel Zoom vs Pan (Manga Reading) ✅ DONE
-
-- Add scroll-wheel behavior suited to manga reading: plain wheel scrolls/pans the image up and down, while `Ctrl` + wheel zooms in/out.
-- Add scroll-wheel actions to the Options Keys tab keybinds, with defaults of `Ctrl+ScrollUp` = zoom in, `Ctrl+ScrollDown` = zoom out, and `ScrollUp` / `ScrollDown` = pan.
-- Verify: wheel pans, Ctrl+wheel zooms, and the scroll actions are remappable in Options.
-- **Implemented 2026-08-03** — wheel routes through the keybind table (`ScrollUp`/`ScrollDown` on `cmd-pan-up`/`cmd-pan-down`, `Ctrl+ScrollUp`/`Ctrl+ScrollDown` on `cmd-zoom-in`/`cmd-zoom-out`); cursor-anchored zoom; `VIEWER_WHEEL_PAN_STEP`; UI-scroll passthrough; Options Keys "Scroll Wheel" section with a Hold Ctrl / Toggle Ctrl (sticky) switch (`scroll_zoom_modifier`); status-bar latch badge; wheel-combo capture in `keybindUi.js`.
-
-### Update Availability Indicator
-
-- Full auto-update is likely out of scope for a single-executable app, but add a lightweight check that surfaces when a newer release exists on the GitHub page (the menu bar already links to it).
-- Fail silently when offline or rate-limited; show an unobtrusive indicator/link when an update is available.
-- Verify: with no network the app behaves normally; with an update available the indicator appears.
-
-### File Associations (Options > File Associations)
-
-**Goal.** Register image/archive extensions so they open with QuiviT. Each registered format should pick up the per-format icon from the app's icon set; formats without a dedicated icon fall back to the default QuiviT icon. Registration also unlocks real single-instance testing: double-clicking an associated file launches the exe with the file path as an argument, which the single-instance plugin forwards to the running instance.
-
-**Notes on icon files.** The per-format icons exist as identical copies in two places:
-- `icons/` (repo root) — the icon sources.
-- `src/assets/icons/` — the copies the file list already uses (referenced by `filePanel.js` as `/assets/icons/<name>.ico`).
-
-Current format icons present: `apng.ico`, `cbz.ico`, `gif.ico`, `svg.ico`, `webp.ico` (with `cbr` mapping to `cbz.ico` in `filePanel.js`). Formats like `jpg`, `jpeg`, `png`, `bmp`, `ico`, `avif`, `zip`, `rar` have no dedicated icon yet and should use a default/generic icon.
-
-**Requirements (implementation details to be worked out by codex/antigravity):**
-
-- **13.1 Backend (Rust):** register/unregister per-user file associations on Windows (no admin), with `DefaultIcon` and open-with command per extension; track which extensions QuiviT itself registered so unregister only removes QuiviT-owned keys. Windows-guarded; non-Windows returns a friendly "not supported" message. Shared format catalog consolidating the existing `SUPPORTED_IMAGES` / `SUPPORTED_ARCHIVES` lists (in `lib.rs`), each entry carrying ext, display name, optional icon file name, and category. Formats are NOT limited to the ones with icons.
-- **13.2 Options UI:** replace the stub `#tab-associations` with a format list grouped by Images / Archives — each row has a checkbox, a per-format icon preview (reuse the `/assets/icons/<name>.ico` pipeline from `filePanel.js`), and the extension/display name; plus "Select all", "Register selected", "Unregister selected", and a status line. On open, reflect actual registry state. Persist the enabled set in config so it survives restarts and is silently re-asserted on startup (so a moved exe path updates the command target).
-- **13.3 First-instance open-with handling:** the *second* instance path already works (single-instance callback → `single-instance-open` → `FsUtils.loadFile`). The *first* instance launched via "Open with" must also load its argument on startup.
-- **13.4 Icons:** Explorer renders `DefaultIcon`, which must point to a real on-disk icon file — the `.ico` files are currently embedded assets, not shipped loose. Decide how the icon files reach disk (and whether to trigger a shell refresh so Explorer updates its cache).
-- **13.5 Verification:**
-  - Cold start: double-click a registered `.webp`/`.png`/`.cbz` → QuiviT opens the file.
-  - Warm start: with an instance running, double-click another file → it opens in the existing window (tests the "Allow only one instance" option).
-  - Unregister: extensions return to their previous default program; no other apps' associations are touched.
-  - Formats without a dedicated icon still register and open correctly (default icon).
-  - Checkbox state reflects actual registry state on Options open.
-- **13.6 Fallback:** if a built-in file-type association selector turns out not to be possible, open the Windows Settings app for associating files with QuiviT instead (`ms-settings:defaultapps`), similarly to how NanaZip handles it.
-
-## Verification Plan
-
-Run after each coherent implementation slice:
-
-```powershell
-node --check src\js\main.js
-node --check src\js\filePanel.js
-node --check src\js\shortcuts.js
-node --check src\js\options.js
-node --check src\js\viewer.js
-node --check src\js\keybinds.js
-cd src-tauri
-cargo check
-```
-
-Runtime/manual verification:
-
-- Resize the app window and check shell/background flash.
-- Open Options with `4`; confirm close/cancel/apply paths.
-- Confirm config folder link opens the resolved config directory.
-- Confirm Refresh is `5`.
-- Confirm `1` toggles the menu bar.
-- Confirm `2` toggles the file list.
-- Confirm fullscreen command works from key and menu.
-- Confirm keyboard pan distance is larger and can be adjusted from the chosen config/constants file.
-- Confirm folders, archives, and `..` do not attempt to render as images.
-- Confirm Enter/Space opens folders, archives, and `..`.
-- Confirm archive file lists include `..`.
-- Confirm back navigation highlights the folder/archive just exited.
-- Confirm first image selection follows sorting order when entering a directory.
-- Confirm per-directory sort persists after app restart.
-- Confirm mouse shortcut capture works in Options.
-- Confirm ICO spritesheet rendering with multi-entry ICO files.
-- Confirm drag-and-drop opens a folder, the overlay is clickable with a proper cursor, and the canvas behind it cannot be dragged.
-- Confirm keyboard panning is instant and spam-friendly across all four directions.
-- Confirm plain wheel pans and Ctrl+wheel zooms, with scroll actions remappable in Options.
-- Confirm the update indicator appears when a new GitHub release exists and stays silent offline.
-- Confirm file associations register/unregister in HKCU, Explorer icons reflect the per-format icons, and double-clicking an associated file opens it (cold start) or forwards to the running instance (warm start).
-
-## Post-Release Backlog (Future Considerations)
-
-Items that are deliberately deferred until after the initial release. Low priority by design — do not start without re-validating the need.
-
-### Native 7-Zip Sidecar Extraction (7Z/CB7 speed)
-- Replace the pure-Rust `sevenz-rust2` extraction with the native 7-Zip engine (`7zr.exe` bundled as a Tauri sidecar) for 2-5x faster LZMA2 extraction.
-- Full plan: `.agents/7z_implementation.md` (retained for future reference; has a `Status: Shelved` note).
-- **Why shelved:** the original UI-blocking bug was already solved in pure Rust — background-thread extraction with atomic `.tmp`+`fs::rename` writes, `Condvar` wait replacing the 3s poll, `Content-Length` header, thread-offloaded protocol handler. The ~10MB/s vs ~50MB/s speed gap for typical image archives does not manifest as a real UX problem, and the sidecar adds deployment complexity (LGPL binary per platform, `tauri-plugin-shell`, capability config) plus re-introduces partial-file race concerns unless the plan's filesystem-watcher design is updated to match the current atomic-rename approach.
-- If picked up later: re-read `.agents/7z_implementation.md`, keep the pure-Rust path as a fallback, and prefer single-entry `7zr` extraction over the full-extraction + watcher design in the current plan.
-- 7z only — RAR already uses the native `unrar` crate; no consistency concern.
-
-### File List Relocation, Detach & Drag-and-Drop
-- Add a way to change the location of the file list (left default, top, bottom, right). Detached as well? Maybe drag-and-droppable — how practical would the implementation be?
-- Using a JS library sounds ideal; this has been done before on a smaller scale at `E:\Projects\x4163-apps\dither-app` (not sure if it's the best/most-used library — performance-first). Prioritize clean user interaction with no jank.
-- **Double page view** (manga spread) — same low priority.
-- Partial implementation via UI buttons (detach + move location) is acceptable; drag-and-drop capabilities should be implemented after release.
-
-### UI Sound Design (Low/Last Priority)
-- Add custom SFX for UI interactions (e.g. button clicks, menu toggles, opening folders, error bumps).
-- Needs a toggle in the Options menu to disable sounds for users who prefer a silent experience.
-- Provide a volume slider or rely on system volume.
-- Audio assets should be small and fast-loading.
+---
 
 ## User Verification Gates
 
@@ -211,22 +116,68 @@ every/all changes made after the last remote push. The last remote push is the m
 everything in the working tree on top of it is what this pass must verify before the manual `make push` pipeline —
 unless the user states otherwise (e.g., they request to emulate and go through the `make push` pipeline instead, since the active session already has most of the context).
 
-1. Confirm the change set. `git status` must show only the intended files;
-   reconcile anything unexpected before continuing.
-2. Static checks. `node --check` on every touched JS module and `cargo check` in
-   `src-tauri`.
-3. Runtime-verify each change made after the last remote push: exercise the new
-   behavior in the app and confirm it works as intended.
-4. Manually review that the project remains coherently decoupled, with features
-   in their own JS files where warranted.
-5. Verify every config-backed feature meets both global and portable-mode
-   requirements.
-6. Port the completed items from this file into `.agents/implemented.md`,
-   including any additions and fixes made during the pass that were not
-   originally listed here.
-7. Update `README.md` with new shortcuts, config behavior, archive behavior,
-   module structure, and any relevant changes.
-8. Add a new entry to `.agents/sessions-index.md`.
-9. Repeat static and runtime verifications as needed.
-10. Leave the repository ready for the user to run the push pipeline: final
-    `git diff` matches the verified change set, nothing extra staged, no secrets.
+1. Confirm the change set. `git status` must show only the intended files; reconcile anything unexpected before continuing.
+2. Confirm `.gitignore` coverage (do not track generated runtime config, portable config, build output, or personal directory-sort metadata). If portable mode writes personal paths next to the executable, ensure those files are ignored.
+3. Static checks. `node --check` on every touched JS module and `cargo check` in `src-tauri`.
+4. Runtime-verify each change made after the last remote push: exercise the new behavior in the app and confirm it works as intended.
+5. Manually review that the project remains coherently decoupled, with features in their own JS files where warranted. Keep or improve the current split (`core.js`, `viewer.js`, `filePanel.js`, `shortcuts.js`, `keybinds.js`, `options.js`, `main.js`).
+6. Verify every config-backed feature meets both global and portable-mode requirements.
+7. Port the completed items from this file into `.agents/implemented.md`, including any additions and fixes made during the pass that were not originally listed here.
+8. Update `README.md` with new shortcuts, config behavior, archive behavior, module structure, and any relevant changes.
+9. Add a new entry to `.agents/sessions-index.md`.
+10. Repeat static and runtime verifications as needed.
+11. Leave the repository ready for the user to run the push pipeline: final `git diff` matches the verified change set, nothing extra staged, no secrets, no private paths.
+
+---
+
+## Post-Release Backlog (Future Considerations)
+
+*Items deliberately deferred until after the initial release. Low priority by design — do not start without re-validating the need.*
+
+### File List Relocation, Detach & Drag-and-Drop
+- Add a way to change the location of the file list (left default, top, bottom, right). Detached as well? Maybe drag-and-droppable — how practical would the implementation be?
+- Using a JS library sounds ideal; this has been done before on a smaller scale at `E:\Projects\x4163-apps\dither-app` (not sure if it's the best/most-used library — performance-first). Prioritize clean user interaction with no jank.
+- Partial implementation via UI buttons (detach + move location) is acceptable pre-release; drag-and-drop capabilities should be implemented after release.
+
+### Double Page View (Manga Spread)
+- Low priority, implement after initial release. Imagine split window esque.
+
+### Detach Image Window
+- Add the ability to pop the currently viewed image out into its own standalone window, separate from the main QuiviT UI.
+- Relevant alongside Double Page View and File List Detach/Drag-and-Drop as they share the same "detach" interaction paradigm.
+
+### Animated Frame Timeline
+- Add a frame timeline bar at the bottom of the canvas viewer for animated formats (WebP, APNG, GIF, SVG? (if that's even possible, discuss practical options), and any other animated image formats supported).
+- **Reference:** https://sourceforge.net/projects/gifviewer/ — match its visual style and interaction model.
+- **Controls:**
+  - Play/pause button.
+  - Frame count indicator (`X / Y`).
+  - Draggable scrubber bar to seek through frames.
+  - Keyboard navigatable: vi-style arrows, tab navigation.
+  - The existing `cmd-next` / `cmd-prev` keybinds should tie into frame stepping when an animated file is active.
+- **Layout:** Sits at the bottom of the canvas viewer (not full-width of the window). Height should always match `#file-panel-actions` via a shared CSS variable so it stays visually consistent. Exact width behavior TBD — full width feels off for files with few frames, so consider a constrained or content-aware width.
+- **Performance-first**: snappy (not sluggish) interaction with little to no visual delays/jank (delayed responses/unresponsiveness, flickering etc.), and only activate timeline logic when an animated format is detected; no overhead for static images.
+
+### UI Sound Design (Low/Last Priority)
+- Add custom SFX for UI interactions (e.g. button clicks, menu toggles, opening folders, error bumps).
+- Needs a toggle in the Options menu to disable sounds for users who prefer a silent experience.
+- Provide a volume slider or rely on system volume.
+- Audio assets should be small and fast-loading.
+
+### Advanced Favorites System
+- Improve favorites system: add a Favorites dropdown under the menu bar to load/save favorites. Consider an input for titles, only if the styling/intuitiveness of the dropdown interaction is good.
+- Consider a separate bookmarks thing acting like legacy favorites, placed under favorites.
+- The JS names can just be consolidated and changed into the same thing; the only difference for favorites is saving and loading it as a favorites list.
+
+### Native 7-Zip Sidecar Extraction (7Z/CB7 speed)
+- Replace the pure-Rust `sevenz-rust2` extraction with the native 7-Zip engine (`7zr.exe` bundled as a Tauri sidecar) for 2-5x faster LZMA2 extraction.
+- Full plan: `.agents/7z_implementation.md` (retained for future reference; has a `Status: Shelved` note).
+- **Why shelved:** the original UI-blocking bug was already solved in pure Rust. The speed gap does not manifest as a real UX problem, and the sidecar adds deployment complexity plus re-introduces partial-file race concerns.
+- If picked up later: keep the pure-Rust path as a fallback, and prefer single-entry `7zr` extraction over the full-extraction + watcher design in the current plan.
+
+### Custom QuiviT Icons
+- Create custom QuiviT icons for each file type (incorporating the mascot) rather than using generic ones.
+
+### Windows Thumbnails (APNG/WebP)
+- Add working Windows thumbnails (including preview pane) for APNG and animated WebP.
+  - Antigravity IDE actually adds multiple things that Windows doesn't natively have, SVG thumbnails, code and MD files for the preview pane. It would be great if we can support APNG/WebP files in a similar way that's practical to the project scope.
