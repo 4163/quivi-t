@@ -8,6 +8,7 @@ use tauri_plugin_opener::OpenerExt;
 // ── Configuration ────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct AppConfig {
     pub portable_mode: bool,
     pub frontend_data: JsonValue,
@@ -266,4 +267,30 @@ pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
 
     window.show().map_err(|e| format!("Failed to show options window: {e}"))?;
     window.set_focus().map_err(|e| format!("Failed to focus options window: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_appconfig_resiliency() {
+        // Test missing portable_mode
+        let json_str = r#"{
+            "frontend_data": {
+                "theme": "dark"
+            }
+        }"#;
+        let config: AppConfig = serde_json::from_str(json_str).unwrap();
+        assert_eq!(config.portable_mode, false);
+        assert_eq!(config.frontend_data["theme"], "dark");
+
+        // Test missing frontend_data
+        let json_str = r#"{
+            "portable_mode": true
+        }"#;
+        let config: AppConfig = serde_json::from_str(json_str).unwrap();
+        assert_eq!(config.portable_mode, true);
+        assert!(config.frontend_data.is_object());
+    }
 }
