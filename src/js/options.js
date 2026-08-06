@@ -217,14 +217,6 @@ document.querySelectorAll('.theme-btn').forEach((btn, index, NodeList) => {
     });
     applyTheme(currentTheme);
     emit?.('theme-preview', currentTheme);
-    
-    // Auto-save the theme directly so it persists even if they close without Apply.
-    config.frontend_data.theme = currentTheme;
-    if (invoke) {
-      invoke('save_config', { config }).catch(err => {
-        console.error('Failed to auto-save theme:', err);
-      });
-    }
   });
 });
 makeListNavigable(document.querySelectorAll('.theme-btn'), { horizontal: true, vertical: false });
@@ -272,30 +264,20 @@ document.getElementById('btn-export-css').addEventListener('click', async () => 
   }
 });
 
-async function saveAndApplyCss() {
+async function previewCss() {
   const css = document.getElementById('opt-custom-css').value;
-  config.frontend_data.custom_css = css;
   try { localStorage.setItem('quivit-custom-css', css); } catch(e) {}
   applyCustomCss(css);
   emit?.('css-preview', css);
-  
-  try {
-    if (invoke) {
-      await invoke('save_config', { config });
-      showStatus('CSS saved and applied.');
-    }
-  } catch (err) {
-    console.error('Failed to save config:', err);
-    showStatus('Failed to save CSS config.');
-  }
+  showStatus('CSS previewed locally (Click Apply to save).');
 }
 
-document.getElementById('btn-save-apply-css').addEventListener('click', saveAndApplyCss);
+document.getElementById('btn-save-apply-css').addEventListener('click', previewCss);
 
 document.getElementById('opt-custom-css').addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key.toLowerCase() === 's') {
     e.preventDefault();
-    saveAndApplyCss();
+    previewCss();
   }
 });
 
@@ -323,7 +305,12 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
     await invoke('save_config', { config });
     // Tell the main window to reload config
     await emit?.('config-updated');
-    showStatus('Options applied.');
+    const currentStatus = statusEl ? statusEl.textContent : '';
+    if (currentStatus.toLowerCase().includes('failed') || currentStatus.toLowerCase().includes('error')) {
+      showStatus('Options applied, but some operations failed (see above logs).');
+    } else {
+      showStatus('Options applied successfully.');
+    }
   } catch (err) {
     console.error('Failed to save config:', err);
     showStatus(`Failed to save config: ${err}`);
@@ -331,6 +318,17 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
 });
 
 document.getElementById('btn-cancel').addEventListener('click', async () => {
+  // Revert theme/css previews if they were not saved
+  try {
+    const loaded = await invoke('load_config');
+    const loadedTheme = loaded.frontend_data.theme || 'system';
+    const loadedCss = loaded.frontend_data.custom_css || '';
+    emit?.('theme-preview', loadedTheme);
+    emit?.('css-preview', loadedCss);
+    if (loadedCss) localStorage.setItem('quivit-custom-css', loadedCss);
+    else localStorage.removeItem('quivit-custom-css');
+  } catch (e) {}
+
   await closeOptionsWindow();
 });
 
