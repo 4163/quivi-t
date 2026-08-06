@@ -28,9 +28,6 @@ dist-ssr
 !.agents/implemented.md
 !.agents/7z_implementation.md
 
-.codex_tauri_dev.err.log
-.codex_tauri_dev.out.log
-
 # Runtime/portable user config; may contain personal paths
 .portable
 quivit_config.json
