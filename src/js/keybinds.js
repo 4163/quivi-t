@@ -7,8 +7,10 @@
 import { normalizeCombo } from './shortcuts.js';
 
 export const DEFAULT_KEYBINDS = {
-  'cmd-next': ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown', 'MouseForward'],
-  'cmd-prev': ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp', 'MouseBack'],
+  'cmd-next': ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'],
+  'cmd-prev': ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'],
+  'cmd-history-back': ['Alt+a', 'Alt+w', 'Alt+ArrowLeft', 'Alt+ArrowUp', 'MouseBack'],
+  'cmd-history-forward': ['Alt+d', 'Alt+s', 'Alt+ArrowRight', 'Alt+ArrowDown', 'MouseForward'],
   'cmd-zoom-in': ['c', 'Ctrl+ScrollUp'],
   'cmd-zoom-out': ['z', 'Ctrl+ScrollDown'],
   'cmd-open-next-container': 'Ctrl+x',

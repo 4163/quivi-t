@@ -5,6 +5,7 @@
 import { Core } from './core.js';
 import { FsUtils } from './fsUtils.js';
 import { Viewer } from './viewer.js';
+import * as NavigationHistory from './navigationHistory.js';
 import { initFilePanel, renderFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite } from './filePanel.js';
 import { VIEWER_KEYBOARD_PAN_STEP, VIEWER_WHEEL_PAN_STEP } from './keybinds.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from './shortcuts.js';
@@ -83,11 +84,33 @@ const resizeHandle = document.getElementById('panel-resize-handle');
 let activeScaling = '';
 let statusBarVisible = true; // updated from config when loaded
 let _uiInitialized = false;
+let fullscreenActive = false;
+let dropMessageTimer = null;
+const DEFAULT_DROP_MESSAGE = 'Drop files here, or click to open a folder';
 
 function updateScalingMenu() {
   document.querySelectorAll('[data-scaling]').forEach(item => {
     item.classList.toggle('checked', item.dataset.scaling === activeScaling);
   });
+}
+
+function setMenuItemMuted(id, muted) {
+  const item = document.getElementById(id);
+  if (!item) return;
+  item.classList.toggle('muted', muted);
+  item.setAttribute('aria-disabled', muted ? 'true' : 'false');
+}
+
+function updateHistoryMenu() {
+  setMenuItemMuted('cmd-history-back', !NavigationHistory.canGoBack());
+  setMenuItemMuted('cmd-history-forward', !NavigationHistory.canGoForward());
+}
+
+function updateViewToggleMenu(state = Core.getState()) {
+  document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!state.fileListVisible);
+  document.getElementById('cmd-toggle-menubar')?.classList.toggle('checked', menuBarVisible);
+  document.getElementById('cmd-toggle-statusbar')?.classList.toggle('checked', statusBarVisible);
+  document.getElementById('cmd-fullscreen')?.classList.toggle('checked', fullscreenActive);
 }
 
 function setScaling(mode) {
@@ -137,6 +160,8 @@ async function toggleFullscreen() {
   } else {
     document.exitFullscreen();
   }
+  fullscreenActive = enteringFullscreen;
+  updateViewToggleMenu();
 }
 
 function toggleStatusBar() {
@@ -164,6 +189,53 @@ async function openGithub() {
   }
 }
 
+function pathBasename(path) {
+  return String(path || '').replace(/\\/g, '/').split('/').pop() || '';
+}
+
+function showDropMessage(message, tone = 'default') {
+  const textEl = dropOverlay?.querySelector('.drop-hint p');
+  if (!textEl) return;
+  clearTimeout(dropMessageTimer);
+  textEl.textContent = message;
+  dropOverlay.classList.toggle('unsupported', tone === 'error');
+  if (tone === 'error') {
+    dropMessageTimer = setTimeout(() => {
+      textEl.textContent = DEFAULT_DROP_MESSAGE;
+      dropOverlay.classList.remove('unsupported');
+    }, 1800);
+  }
+}
+
+function resetDropMessage() {
+  showDropMessage(DEFAULT_DROP_MESSAGE);
+}
+
+async function loadDroppedPath(path) {
+  if (!path) return;
+  if (window.__TAURI__) {
+    const kind = await window.__TAURI__.core.invoke('get_path_kind', { path }).catch(() => 'missing');
+    if (kind === 'file') {
+      const name = pathBasename(path);
+      if (!FsUtils.isImage(name) && !FsUtils.isArchive(name)) {
+        showDropMessage('File type not supported', 'error');
+        return;
+      }
+    } else if (kind === 'missing') {
+      showDropMessage('Path not found', 'error');
+      return;
+    }
+  } else {
+    const name = pathBasename(path);
+    if (name.includes('.') && !FsUtils.isImage(name) && !FsUtils.isArchive(name)) {
+      showDropMessage('File type not supported', 'error');
+      return;
+    }
+  }
+
+  FsUtils.loadFile(path, { preferInitial: true, restoreLastImage: false });
+}
+
 function dispatchAction(actionId, payload) {
   // Try to find the button just to provide visual feedback if needed, but don't rely on it for execution
   const btn = document.getElementById(actionId);
@@ -183,6 +255,16 @@ function dispatchAction(actionId, payload) {
     case 'cmd-refresh':
       FsUtils.refresh();
       break;
+    case 'cmd-history-back': {
+      const entry = NavigationHistory.goBack(Core.getState());
+      if (entry) FsUtils.loadHistoryEntry(entry).catch(console.error);
+      break;
+    }
+    case 'cmd-history-forward': {
+      const entry = NavigationHistory.goForward(Core.getState());
+      if (entry) FsUtils.loadHistoryEntry(entry).catch(console.error);
+      break;
+    }
     case 'cmd-toggle-favorite':
       toggleFavoriteCurrent();
       break;
@@ -276,6 +358,7 @@ function dispatchAction(actionId, payload) {
       break;
     case 'cmd-toggle-menubar':
       toggleMenuBar();
+      updateViewToggleMenu();
       break;
     case 'cmd-toggle-filelist':
       Core.toggleFileList();
@@ -285,6 +368,7 @@ function dispatchAction(actionId, payload) {
       break;
     case 'cmd-toggle-statusbar':
       toggleStatusBar();
+      updateViewToggleMenu();
       break;
     case 'cmd-options':
       if (window.__TAURI__) window.__TAURI__.core.invoke('open_options').catch(console.error);
@@ -311,6 +395,8 @@ function bindMenuCommands() {
   document.getElementById('cmd-open-dir').addEventListener('click', () => FsUtils.openDirectoryDialog());
   document.getElementById('cmd-open-file').addEventListener('click', () => FsUtils.openFileDialog());
   document.getElementById('cmd-refresh').addEventListener('click', () => FsUtils.refresh());
+  document.getElementById('cmd-history-back').addEventListener('click', () => dispatchAction('cmd-history-back'));
+  document.getElementById('cmd-history-forward').addEventListener('click', () => dispatchAction('cmd-history-forward'));
   document.getElementById('cmd-fullscreen').addEventListener('click', () => toggleFullscreen());
   document.getElementById('cmd-parent').addEventListener('click', () => FsUtils.openParent());
   document.getElementById('cmd-next').addEventListener('click', () => Core.navigate(1));
@@ -334,9 +420,9 @@ function bindMenuCommands() {
   document.getElementById('cmd-flip-horizontal').addEventListener('click', () => Viewer.flipHorizontal());
   document.getElementById('cmd-flip-vertical').addEventListener('click', () => Viewer.flipVertical());
   document.getElementById('cmd-toggle-transparent').addEventListener('click', () => Core.toggleTransparentBg());
-  document.getElementById('cmd-toggle-menubar').addEventListener('click', toggleMenuBar);
+  document.getElementById('cmd-toggle-menubar').addEventListener('click', () => dispatchAction('cmd-toggle-menubar'));
   document.getElementById('cmd-toggle-filelist').addEventListener('click', () => Core.toggleFileList());
-  document.getElementById('cmd-toggle-statusbar').addEventListener('click', toggleStatusBar);
+  document.getElementById('cmd-toggle-statusbar').addEventListener('click', () => dispatchAction('cmd-toggle-statusbar'));
   document.getElementById('cmd-github').addEventListener('click', () => {
     openGithub().catch(err => console.error('[GitHub] Failed to open repository:', err));
   });
@@ -442,19 +528,39 @@ function bindMenuCommands() {
   }
 
   updateScalingMenu();
+  updateHistoryMenu();
+  updateViewToggleMenu();
 }
 
 function bindDragDrop() {
+  dropOverlay.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+  });
+
+  dropOverlay.addEventListener('click', (e) => {
+    e.stopPropagation();
+    FsUtils.openDirectoryDialog();
+  });
+
   if (window.__TAURI__) {
     const { listen } = window.__TAURI__.event;
 
-    listen('tauri://drag-enter', () => dropOverlay.classList.add('drag-over'));
-    listen('tauri://drag-leave', () => dropOverlay.classList.remove('drag-over'));
+    listen('tauri://drag-enter', () => {
+      dropOverlay.classList.add('drag-over');
+      showDropMessage('Drop to open');
+    });
+    listen('tauri://drag-leave', () => {
+      dropOverlay.classList.remove('drag-over');
+      resetDropMessage();
+    });
     listen('tauri://drag-drop', (e) => {
       dropOverlay.classList.remove('drag-over');
       const paths = e.payload.paths;
       if (paths && paths.length > 0) {
-        FsUtils.loadFile(paths[0], { preferInitial: true, restoreLastImage: false });
+        loadDroppedPath(paths[0]).catch(err => {
+          console.error('[Drop] Failed to open path:', err);
+          showDropMessage('Unable to open file', 'error');
+        });
       }
     });
     listen('config-updated', () => {
@@ -495,10 +601,14 @@ function bindDragDrop() {
   window.addEventListener('dragover', (e) => {
     e.preventDefault();
     dropOverlay.classList.add('drag-over');
+    showDropMessage('Drop to open');
   });
 
   window.addEventListener('dragleave', (e) => {
-    if (e.relatedTarget === null) dropOverlay.classList.remove('drag-over');
+    if (e.relatedTarget === null) {
+      dropOverlay.classList.remove('drag-over');
+      resetDropMessage();
+    }
   });
 
   window.addEventListener('drop', (e) => {
@@ -506,7 +616,12 @@ function bindDragDrop() {
     dropOverlay.classList.remove('drag-over');
 
     const file = e.dataTransfer.getData('text/plain');
-    if (file) FsUtils.loadFile(file);
+    if (file) {
+      loadDroppedPath(file).catch(err => {
+        console.error('[Drop] Failed to open path:', err);
+        showDropMessage('Unable to open file', 'error');
+      });
+    }
   });
 }
 
@@ -580,7 +695,14 @@ Core.onStateChange((state) => {
     updateScalingMenu();
   }
 
+  updateHistoryMenu();
+  updateViewToggleMenu(state);
+
   renderFilePanel(state);
+});
+
+window.addEventListener('quivit-history-changed', () => {
+  updateHistoryMenu();
 });
 
 initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, Viewer, FsUtils });

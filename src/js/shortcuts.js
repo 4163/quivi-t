@@ -144,6 +144,34 @@ function isWheelOverUI(e) {
 }
 
 export function bindKeyboardShortcuts({ Core, dispatchAction }) {
+  let lastSideButtonDispatch = { button: null, time: 0 };
+
+  function dispatchMouseButton(button, e) {
+    const combo = formatKeysCombo(activeKeys, new Set([button]));
+    const actionId = findAction(Core.getState().config, combo);
+    if (!actionId) return false;
+
+    e.preventDefault();
+    e.stopPropagation();
+    lastSideButtonDispatch = { button, time: Date.now() };
+    dispatchAction(actionId);
+    return true;
+  }
+
+  function handleSideButton(e) {
+    if (e.button !== 3 && e.button !== 4) return false;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const now = Date.now();
+    if (lastSideButtonDispatch.button === e.button && now - lastSideButtonDispatch.time < 120) {
+      return true;
+    }
+
+    return dispatchMouseButton(e.button, e);
+  }
+
   const handleShortcut = (e) => {
     // Ignore bare modifiers for dispatch
     if (e.type === 'keydown' && ['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
@@ -203,6 +231,8 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
   });
 
   window.addEventListener('mousedown', (e) => {
+    if (handleSideButton(e)) return;
+
     // Mouse/double-click gestures are viewport actions — never over the file
     // panel, menubar/dropdowns, or status bar (which handle their own clicks).
     const isUI = e.target.closest('#file-panel, .menubar, .dropdown-menu, #statusbar');
@@ -210,11 +240,19 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
 
     activeButtons.add(e.button);
     handleMouseButton(e);
-  });
+  }, { capture: true });
 
   window.addEventListener('mouseup', (e) => {
+    if (e.button === 3 || e.button === 4) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     activeButtons.delete(e.button);
   });
+
+  window.addEventListener('auxclick', (e) => {
+    handleSideButton(e);
+  }, { capture: true });
 
   // Buttons 0 (left) and 2 (right) wait out a short window before dispatching
   // their single-button binding so a rapid second press can be recognized as a

@@ -433,6 +433,18 @@ pub fn get_drives() -> Vec<String> {
 }
 
 #[tauri::command]
+pub fn get_path_kind(path: &str) -> String {
+    let path = Path::new(path);
+    if path.is_dir() {
+        "directory".to_string()
+    } else if path.is_file() {
+        "file".to_string()
+    } else {
+        "missing".to_string()
+    }
+}
+
+#[tauri::command]
 pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String> {
     let state = app.state::<Mutex<WatcherState>>();
     let mut state = state.lock().unwrap();

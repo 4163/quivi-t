@@ -221,21 +221,6 @@ export const Core = {
     _selectEntry(next);
   },
 
-  async openContainer(delta) {
-    const currentPath = _state.mode === 'archive' ? _state.archivePath : _state.directory;
-    if (!currentPath) return;
-
-    try {
-      const path = await invoke('open_sibling_container', {
-        currentPath,
-        delta,
-        showHidden: _showHidden(),
-      });
-      await this.loadFile(path);
-    } catch (err) {
-      console.error('[Core] openContainer error:', err);
-    }
-  },
   /**
    * Jump directly to an index.
    */

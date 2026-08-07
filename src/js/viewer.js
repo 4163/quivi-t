@@ -261,9 +261,45 @@ img.addEventListener('load', () => {
 // --- State subscription -------------------------------------------------------
 
 let _currentPreloadSrc = null;
+let _loadingAltTimer = null;
+
+function stopLoadingAltAnimation() {
+  if (_loadingAltTimer) {
+    clearInterval(_loadingAltTimer);
+    _loadingAltTimer = null;
+  }
+}
+
+function startLoadingAltAnimation() {
+  stopLoadingAltAnimation();
+  let frame = 0;
+  const labels = ['Loading.', 'Loading..', 'Loading...'];
+  img.alt = labels[frame];
+  _loadingAltTimer = setInterval(() => {
+    frame = (frame + 1) % labels.length;
+    img.alt = labels[frame];
+  }, 320);
+}
+
+function clearDisplayedImage() {
+  stopLoadingAltAnimation();
+  _currentPreloadSrc = null;
+  _naturalW = 0;
+  _naturalH = 0;
+  img.removeAttribute('src');
+  img.alt = '';
+}
 
 Core.onStateChange((state) => {
-  if (state.mode === 'empty') return;
+  if (state.mode === 'empty') {
+    clearDisplayedImage();
+    return;
+  }
+
+  if (!state.src) {
+    clearDisplayedImage();
+    return;
+  }
 
   // Seamless loading: show the previous image until the new one is ready.
   // This effectively acts as the "spinner" and eliminates flickering.
@@ -271,6 +307,7 @@ Core.onStateChange((state) => {
     _currentPreloadSrc = state.src;
     
     // Show loading state in statusbar while the image is being fetched
+    startLoadingAltAnimation();
     if (statusName) statusName.textContent = 'Loading...';
     if (statusDims) statusDims.textContent = 'Loading...';
     if (statusZoom) statusZoom.textContent = 'Loading...';
@@ -278,6 +315,7 @@ Core.onStateChange((state) => {
     const preloader = new Image();
     preloader.onload = () => {
       if (_currentPreloadSrc === state.src) {
+        stopLoadingAltAnimation();
         img.src = state.src;
         img.alt = state.filename;
         _rotation = 0;
@@ -290,8 +328,9 @@ Core.onStateChange((state) => {
     };
     preloader.onerror = () => {
       if (_currentPreloadSrc === state.src) {
+        stopLoadingAltAnimation();
         img.src = state.src; // Fallback so main img shows error state
-        img.alt = state.filename;
+        img.alt = state.filename ? `Failed to load ${state.filename}` : 'Failed to load image';
         if (statusName) statusName.textContent = state.filename;
         if (statusDims) statusDims.textContent = 'Error';
         if (statusZoom) statusZoom.textContent = 'N/A';

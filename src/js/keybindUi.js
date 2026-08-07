@@ -6,6 +6,8 @@ const CATEGORIES = [
     actions: [
       { id: 'cmd-next', label: 'Next Item' },
       { id: 'cmd-prev', label: 'Previous Item' },
+      { id: 'cmd-history-back', label: 'History Back' },
+      { id: 'cmd-history-forward', label: 'History Forward' },
       { id: 'cmd-open-next-container', label: 'Open Next Folder/Archive' },
       { id: 'cmd-open-prev-container', label: 'Open Previous Folder/Archive' },
       { id: 'cmd-parent', label: 'Open Parent Folder' },
@@ -22,6 +24,7 @@ const CATEGORIES = [
       { id: 'cmd-fit-best', label: 'Auto Fit' },
       { id: 'cmd-cycle-scaling-back', label: 'Scaling: Previous' },
       { id: 'cmd-cycle-scaling', label: 'Scaling: Next' },
+      { id: 'cmd-toggle-transparent', label: 'Opaque Canvas' },
     ]
   },
   {

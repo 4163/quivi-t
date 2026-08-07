@@ -37,6 +37,7 @@ let FsUtils = null;
 let favLastClickPath = '';
 let favLastClickTime = 0;
 let highlightedFavoritePath = '';
+let refreshPulseTimer = null;
 
 let columnsInitialized = false;
 
@@ -508,6 +509,26 @@ function updateSelection(selectedIndex) {
   }
 }
 
+function setRefreshingVisual(active) {
+  if (!fileListUl && !favoritesListUl) return;
+  clearTimeout(refreshPulseTimer);
+
+  if (active) {
+    fileListUl?.classList.remove('refreshing');
+    favoritesListUl?.classList.remove('refreshing');
+    requestAnimationFrame(() => {
+      fileListUl?.classList.add('refreshing');
+      favoritesListUl?.classList.add('refreshing');
+    });
+    return;
+  }
+
+  refreshPulseTimer = setTimeout(() => {
+    fileListUl?.classList.remove('refreshing');
+    favoritesListUl?.classList.remove('refreshing');
+  }, 60);
+}
+
 export function renderFilePanel(state) {
   filePanel.classList.toggle('hidden', !state.fileListVisible);
   renderBreadcrumb(state);
@@ -654,6 +675,9 @@ export function initFilePanel(deps) {
   window.addEventListener('quivit-load-file', (e) => {
     if (FsUtils) FsUtils.loadFile(e.detail).catch(console.error);
   });
+
+  window.addEventListener('quivit-refresh-start', () => setRefreshingVisual(true));
+  window.addEventListener('quivit-refresh-end', () => setRefreshingVisual(false));
 
   initializeColumns();
   updateSortIcons();

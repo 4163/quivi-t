@@ -44,6 +44,9 @@
       <div class="menu-item" id="menu-folder">
         <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Folder</button>
         <ul class="menu-dropdown" role="menu">
+          <li role="menuitem" id="cmd-history-back" tabindex="0">Back<span class="shortcut">Alt+A</span></li>
+          <li role="menuitem" id="cmd-history-forward" tabindex="0">Forward<span class="shortcut">Alt+D</span></li>
+          <li class="separator"></li>
           <li role="menuitem" id="cmd-next" tabindex="0">Select / Open next<span class="shortcut">Shift+S</span></li>
           <li role="menuitem" id="cmd-prev" tabindex="0">Select / Open previous<span class="shortcut">Shift+W</span></li>
           <li role="menuitem" id="cmd-open-next-container" tabindex="0">Open next directory<span class="shortcut">Ctrl+X</span></li>
@@ -154,8 +157,8 @@
               <polyline points="17 8 12 3 7 8"/>
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            <p>Drop an image or archive here</p>
-            <span>JPG · PNG · GIF · WebP · APNG · SVG · CBZ · ZIP</span>
+            <p>Drop files here, or click to open a folder</p>
+            <span>Images, archives, and folders are supported</span>
           </div>
         </div>
 

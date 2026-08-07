@@ -1,5 +1,6 @@
 import { Core } from './core.js';
 import { DirectoryPrefs } from './directoryPrefs.js';
+import { createHistoryEntry, recordNavigation } from './navigationHistory.js';
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
 
@@ -156,6 +157,14 @@ export const FsUtils = {
         preferredIndex = files.findIndex(f => f.path === targetPath);
       }
 
+      if (preferredIndex === -1 && options.targetPath) {
+        preferredIndex = files.findIndex(f => f.path === options.targetPath);
+      }
+
+      if (preferredIndex === -1 && options.targetName) {
+        preferredIndex = files.findIndex(f => f.name === options.targetName);
+      }
+
       if (preferredIndex === -1 && result.target_filename) {
         // Find by name after sorting — initial_index is stale if sort order differs
         preferredIndex = files.findIndex(f => f.name === result.target_filename);
@@ -195,6 +204,7 @@ export const FsUtils = {
       filename: files[index]?.name || '',
       src: selectedSrc,
     });
+    recordNavigation(options.previousEntry, Core.getState(), options);
 
     if (window.__TAURI__) {
       invoke('watch_directory', { path: result.directory }).catch(err => {
@@ -248,6 +258,7 @@ export const FsUtils = {
         filename: files[index]?.name || '',
         src: this.isImageEntry(files[index]) ? this.buildArchiveSrc(result.archive_path, files[index].name) : ''
       });
+      recordNavigation(options.previousEntry, Core.getState(), options);
       if (!_isCurrentGeneration(options.generation)) return;
       this.persistLastOpened(result.archive_path);
 
@@ -263,6 +274,9 @@ export const FsUtils = {
   async loadFile(pathStr, options = {}) {
     if (options.generation === undefined) {
       options = { ...options, generation: _nextNavigationGeneration() };
+    }
+    if (options.previousEntry === undefined) {
+      options = { ...options, previousEntry: createHistoryEntry(Core.getState()) };
     }
 
     const name = typeof pathStr === 'string'
@@ -338,6 +352,7 @@ export const FsUtils = {
   async openParent() {
     const generation = _nextNavigationGeneration();
     const state = Core.getState();
+    const previousEntry = createHistoryEntry(state);
     if (state.mode === 'archive' && state.archivePath) {
       try {
         const result = await invoke('read_directory', { path: state.archivePath, showHidden: this.showHidden() });
@@ -347,9 +362,9 @@ export const FsUtils = {
         // highlight the first image in the folder, else the first item.
         const archiveListed = result.files.some(f => f.path === state.archivePath);
         if (archiveListed) {
-          this.applyDirectoryResult(result, { preferInitial: true, generation });
+          this.applyDirectoryResult(result, { preferInitial: true, generation, previousEntry });
         } else {
-          this.applyDirectoryResult(result, { forceFirstImage: true, generation });
+          this.applyDirectoryResult(result, { forceFirstImage: true, generation, previousEntry });
         }
         this.persistLastOpened(result.directory);
       } catch (err) {
@@ -359,7 +374,7 @@ export const FsUtils = {
         try {
           const result = await invoke('read_directory', { path: parentOf(state.archivePath), showHidden: this.showHidden() });
           if (!_isCurrentGeneration(generation)) return;
-          this.applyDirectoryResult(result, { generation });
+          this.applyDirectoryResult(result, { generation, previousEntry });
           this.persistLastOpened(result.directory);
         } catch (parentErr) {
           console.error('[Core] openParent archive parent fallback error:', parentErr);
@@ -370,7 +385,7 @@ export const FsUtils = {
             parent_directory: null,
             initial_index: 0,
             files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
-          }, { generation });
+          }, { generation, previousEntry });
         }
       }
       return;
@@ -382,7 +397,7 @@ export const FsUtils = {
       if (!_isCurrentGeneration(generation)) return;
       // Config handled inside applyDirectoryResult: open_first_image (ON) opens
       // the first image, OFF (default) highlights the folder we came from.
-      this.applyDirectoryResult(result, { generation });
+      this.applyDirectoryResult(result, { generation, previousEntry });
       this.persistLastOpened(result.directory);
     } catch (err) {
       if (err === 'Already at root') {
@@ -395,7 +410,7 @@ export const FsUtils = {
             initial_index: 0,
             files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
           };
-          this.applyDirectoryResult(drivesResult, { generation });
+          this.applyDirectoryResult(drivesResult, { generation, previousEntry });
         } catch (driveErr) {
           console.error('[Core] Error fetching drives:', driveErr);
         }
@@ -492,21 +507,38 @@ export const FsUtils = {
   async refresh() {
     const generation = _nextNavigationGeneration();
     const state = Core.getState();
-    if (state.mode === 'archive' && state.archivePath) {
-      try {
-        await this.loadFile(state.archivePath, { generation });
-      } catch (err) {
-        console.error('[Core] refresh error:', err);
-      }
-    } else if (state.directory) {
-      try {
+    window.dispatchEvent(new CustomEvent('quivit-refresh-start'));
+    try {
+      if (state.mode === 'archive' && state.archivePath) {
+        await this.loadFile(state.archivePath, { generation, history: 'skip' });
+      } else if (state.directory) {
         const result = await invoke('read_directory', { path: state.directory, showHidden: this.showHidden() });
         if (!_isCurrentGeneration(generation)) return;
-        this.applyDirectoryResult(result, { preserveFilename: true, generation });
-      } catch (err) {
-        console.error('[Core] refresh error:', err);
+        this.applyDirectoryResult(result, { preserveFilename: true, generation, history: 'skip' });
       }
+    } catch (err) {
+      console.error('[Core] refresh error:', err);
+    } finally {
+      window.dispatchEvent(new CustomEvent('quivit-refresh-end'));
     }
+  },
+
+  async loadHistoryEntry(entry) {
+    if (!entry) return;
+    const options = {
+      history: 'skip',
+      preferInitial: true,
+      targetPath: entry.selectedPath,
+      targetName: entry.selectedName,
+      restoreLastImage: false,
+    };
+
+    if (entry.containerKind === 'archive') {
+      await this.loadArchive(entry.containerPath, entry.selectedPath, options);
+      return;
+    }
+
+    await this.loadFile(entry.containerPath, options);
   },
 
   prefetchAhead(archivePath, currentIndex, direction = 1) {
