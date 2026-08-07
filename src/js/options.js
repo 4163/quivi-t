@@ -14,11 +14,15 @@ const statusEl = document.getElementById('options-status');
 const configDirLabel = document.getElementById('config-dir-label');
 const localDataDirLabel = document.getElementById('local-data-dir-label');
 let keybindUiInstance = null;
+// True once the user has previewed a theme or custom CSS. While set, config
+// reloads (config-changed from the file watcher) must not revert the preview.
+let previewing = false;
 
 // Emergency CSS Reset (Ctrl+Shift+Alt+C)
 window.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.shiftKey && e.altKey && e.key.toLowerCase() === 'c') {
     e.preventDefault();
+    previewing = false;
     localStorage.removeItem('quivit-custom-css');
     emit?.('css-preview', ''); // Immediately clear main window CSS
     if (config && config.frontend_data) {
@@ -87,12 +91,14 @@ async function refreshLiveConfigState() {
   const latestTheme = latest.frontend_data.theme || 'system';
   const latestCss = latest.frontend_data.custom_css || '';
 
-  applyTheme(latestTheme);
-  applyCustomCss(latestCss);
-  try {
-    if (latestCss) localStorage.setItem('quivit-custom-css', latestCss);
-    else localStorage.removeItem('quivit-custom-css');
-  } catch (e) {}
+  if (!previewing) {
+    applyTheme(latestTheme);
+    applyCustomCss(latestCss);
+    try {
+      if (latestCss) localStorage.setItem('quivit-custom-css', latestCss);
+      else localStorage.removeItem('quivit-custom-css');
+    } catch (e) {}
+  }
 
   if (configDirLabel) configDirLabel.textContent = await invoke('get_config_dir');
   if (localDataDirLabel) localDataDirLabel.textContent = await invoke('get_local_data_dir');
@@ -216,6 +222,7 @@ document.querySelectorAll('.theme-btn').forEach((btn, index, NodeList) => {
       b.classList.toggle('secondary', b.dataset.theme !== currentTheme);
     });
     applyTheme(currentTheme);
+    previewing = true;
     emit?.('theme-preview', currentTheme);
   });
 });
@@ -268,6 +275,7 @@ async function previewCss() {
   const css = document.getElementById('opt-custom-css').value;
   try { localStorage.setItem('quivit-custom-css', css); } catch(e) {}
   applyCustomCss(css);
+  previewing = true;
   emit?.('css-preview', css);
   showStatus('CSS previewed locally (Click Apply to save).');
 }
@@ -303,6 +311,7 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
     await invoke('save_config', { config });
+    previewing = false;
     // Tell the main window to reload config
     await emit?.('config-updated');
     const currentStatus = statusEl ? statusEl.textContent : '';
@@ -319,6 +328,7 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
 
 document.getElementById('btn-cancel').addEventListener('click', async () => {
   // Revert theme/css previews if they were not saved
+  previewing = false;
   try {
     const loaded = await invoke('load_config');
     const loadedTheme = loaded.frontend_data.theme || 'system';

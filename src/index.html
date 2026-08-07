@@ -5,7 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="QuiviT — standalone image and comic viewer." />
     <title>QuiviT</title>
-    <!-- Apply theme and custom CSS before paint to prevent flicker -->
+    <link rel="stylesheet" href="/css/main.css" />
+    <!-- Apply theme and custom CSS after all stylesheets so the injected
+         #custom-css style lands last and wins the cascade (inline scripts
+         block parsing, so this still runs before first paint). -->
     <script>
       (function() {
         try {
@@ -21,7 +24,6 @@
         } catch(e) {}
       })();
     </script>
-    <link rel="stylesheet" href="/css/main.css" />
   </head>
 
   <body>
@@ -183,5 +185,6 @@
     <script type="module" src="/js/core.js"></script>
     <script type="module" src="/js/viewer.js"></script>
     <script type="module" src="/js/main.js"></script>
+    <script type="module" src="/js/shellBackground.js"></script>
   </body>
 </html>

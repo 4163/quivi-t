@@ -171,7 +171,7 @@ body > * {
 textarea {
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: var(--fs-13);
-  background: var(--input-bg);
+  background: var(--field-bg);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -194,7 +194,7 @@ textarea:focus {
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--bg);
+  background: var(--field-bg);
   color: var(--text);
   font: inherit;
 }
@@ -251,7 +251,7 @@ textarea:focus {
   padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--bg);
+  background: var(--field-bg);
   color: var(--accent);
   font: inherit;
   font-size: var(--fs-11);
@@ -357,7 +357,7 @@ button {
   padding: 4px 10px;
   border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--bg);
+  background: var(--field-bg);
   color: var(--text);
   font: inherit;
   font-size: var(--fs-11);

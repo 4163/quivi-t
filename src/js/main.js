@@ -563,11 +563,28 @@ function bindDragDrop() {
         });
       }
     });
+    // Active theme/CSS previews are kept across config reloads so they are not
+    // wiped by config-changed (the file watcher fires whenever the main window
+    // persists state, e.g. last_active_image). Cleared on Options Apply.
+    let previewTheme = null;
+    let previewCss = null;
+
+    function applyPreviewTheme(theme) {
+      document.documentElement.removeAttribute('data-theme');
+      if (theme === 'light' || theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
+    }
+
     listen('config-updated', () => {
+      previewTheme = null;
+      previewCss = null;
       resetScrollLatch();
       Core.loadConfig();
     });
-    // File watcher detected another instance saved config — reload to stay in sync
+    // File watcher detected the config file changed on disk (another instance,
+    // or the main window's own state persistence) — reload to stay in sync but
+    // keep an in-progress theme/CSS preview intact.
     listen('config-changed', () => {
       resetScrollLatch();
       Core.loadConfig();
@@ -578,7 +595,14 @@ function bindDragDrop() {
     window.addEventListener('quivit-config-loaded', () => {
       const config = Core.getState().config;
       syncScrollLatch(config);
-      applyCustomCss(config?.frontend_data?.custom_css || '');
+      if (previewTheme !== null) {
+        applyPreviewTheme(previewTheme);
+      }
+      if (previewCss !== null) {
+        applyCustomCss(previewCss);
+      } else {
+        applyCustomCss(config?.frontend_data?.custom_css || '');
+      }
     });
     listen('single-instance-open', (e) => {
       if (e.payload) {
@@ -586,14 +610,12 @@ function bindDragDrop() {
       }
     });
     listen('theme-preview', (e) => {
-      const theme = e.payload;
-      document.documentElement.removeAttribute('data-theme');
-      if (theme === 'light' || theme === 'dark') {
-        document.documentElement.setAttribute('data-theme', theme);
-      }
+      previewTheme = e.payload;
+      applyPreviewTheme(previewTheme);
     });
     listen('css-preview', (e) => {
-      applyCustomCss(e.payload);
+      previewCss = e.payload;
+      applyCustomCss(previewCss);
     });
     return;
   }

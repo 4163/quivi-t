@@ -1,0 +1,74 @@
+/**
+ * shellBackground.js — mirrors the app's main surface color (--surface) into
+ * the native window background so the shell behind the webview matches the
+ * visible page background. Self-contained leaf module: include it on any page
+ * (Tauri or plain browser); no-ops outside Tauri. Re-syncs automatically when
+ * the theme or custom CSS changes, so future pages get shell sync for free.
+ *
+ * Why not use the official `@tauri-apps/api` `Window#setBackgroundColor`?
+ * Its wrapper invokes `plugin:window|set_background_color` with `{ color }`,
+ * but the backend command parameter is named `value`. Because both `label`
+ * and `value` are `Option`, Tauri's IPC silently turns the missing key into
+ * `None` (see the `deserialize_option` CommandItem impl) instead of erroring —
+ * so the wrapper actually *resets* the background to the default (black) and
+ * the real color never arrives. We therefore bypass the wrapper and invoke
+ * the command directly with the correct `value` key.
+ */
+(function () {
+  if (!window.__TAURI__?.core?.invoke) return;
+
+  let timer = null;
+  let probe = null;
+
+  function surfaceColor() {
+    if (!probe) {
+      probe = document.createElement('div');
+      probe.style.cssText =
+        'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;visibility:hidden;';
+      probe.style.background = 'var(--surface)';
+      document.body.appendChild(probe);
+    }
+    const bg = getComputedStyle(probe).backgroundColor;
+    const m = bg.match(
+      /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/
+    );
+    if (!m) return null;
+    return {
+      red: +m[1],
+      green: +m[2],
+      blue: +m[3],
+      alpha: m[4] !== undefined ? Math.round(+m[4] * 255) : 255,
+    };
+  }
+
+  function sync() {
+    if (timer) return;
+    timer = setTimeout(async () => {
+      timer = null;
+      const color = surfaceColor();
+      if (!color) return;
+      try {
+        await window.__TAURI__.core.invoke('plugin:window|set_background_color', {
+          value: color,
+        });
+      } catch (err) {
+        console.error('[Shell] Failed to sync background color:', err);
+      }
+    }, 20);
+  }
+
+  sync();
+
+  const observer = new MutationObserver(sync);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  });
+  observer.observe(document.head, {
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
+
+  document.addEventListener('quivit:shell-sync', sync);
+})();

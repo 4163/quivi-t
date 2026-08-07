@@ -4,7 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>QuiviT Options</title>
-    <!-- Apply theme and custom CSS before paint to prevent flicker -->
+    <link rel="stylesheet" href="/css/main.css" />
+    <link rel="stylesheet" href="/css/options.css" />
+    <!-- Apply theme and custom CSS after all stylesheets so the injected
+         #custom-css style lands last and wins the cascade (inline scripts
+         block parsing, so this still runs before first paint). -->
     <script>
       (function() {
         try {
@@ -20,8 +24,6 @@
         } catch(e) {}
       })();
     </script>
-    <link rel="stylesheet" href="/css/main.css" />
-    <link rel="stylesheet" href="/css/options.css" />
   </head>
   <body>
     <div class="tabs">
@@ -152,22 +154,44 @@
           <button id="btn-export-css">Export .css</button>
           <button id="btn-save-apply-css">Save & Apply</button>
         </div>
-        <textarea id="opt-custom-css" rows="12" spellcheck="false" placeholder="/* Example custom theme */
-
-:root {
-  --surface: #dfe0df !important;
-  --accent: #00ad95 !important;
-  --accent-hover: #007662 !important;
-}
-
+<textarea id="opt-custom-css" rows="12" spellcheck="false" placeholder="/* Example custom theme */
 html {
-  font-size: 20px !important;
+  font-size: 20px;
+}
+:root {
+  --bg:           #f4ecdc;
+  --surface:      #faf5e9;
+  --text:         #4a3826;
+  --accent:       #7a5c3e;
+  --accent-hover: #634a32;
+  --selected-bg:  #e6d9bd;
+  --hover-bg:     #eee2c9;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=&quot;light&quot;]) {
+    --bg:           #241e17;
+    --surface:      #2e261c;
+    --text:         #e8dcc4;
+    --accent:       #c9a870;
+    --accent-hover: #d9bc88;
+    --selected-bg:  #3d3322;
+    --hover-bg:     #332b1f;
+  }
+}
+:root[data-theme=&quot;dark&quot;] {
+  --bg:           #241e17;
+  --surface:      #2e261c;
+  --text:         #e8dcc4;
+  --accent:       #c9a870;
+  --accent-hover: #d9bc88;
+  --selected-bg:  #3d3322;
+  --hover-bg:     #332b1f;
 }
 
- ̶/̶*̶ ̶b̶r̶i̶c̶k̶s̶ ̶t̶h̶e̶ ̶U̶I̶ ̶d̶o̶n̶'̶t̶ ̶d̶o̶ ̶t̶h̶i̶s̶ ̶l̶o̶l̶ ̶*̶/̶
- ̶*̶ ̶{̶
- ̶ ̶ ̶d̶i̶s̶p̶l̶a̶y̶:̶ ̶n̶o̶n̶e̶ ̶!̶i̶m̶p̶o̶r̶t̶a̶n̶t̶;̶
- ̶}̶"></textarea>
+̶/̶*̶ ̶b̶r̶i̶c̶k̶s̶ ̶t̶h̶e̶ ̶U̶I̶ ̶d̶o̶n̶'̶t̶ ̶d̶o̶ ̶t̶h̶i̶s̶ ̶l̶o̶l̶ ̶*̶/̶
+̶*̶ ̶{̶
+̶ ̶ ̶d̶i̶s̶p̶l̶a̶y̶:̶ ̶n̶o̶n̶e̶ ̶!̶i̶m̶p̶o̶r̶t̶a̶n̶t̶;̶
+̶}̶"></textarea>
       </div>
     </div>
 
@@ -189,5 +213,6 @@ html {
     </div>
 
     <script type="module" src="/js/options.js"></script>
+    <script type="module" src="/js/shellBackground.js"></script>
   </body>
 </html>
