@@ -385,6 +385,67 @@ This file tracks items that are fully implemented and verified, separate from th
 - **Scroll combos always read `Modifiers+Scroll`.** `formatKeysCombo` now pushes `scrollDir` last (after `others.sort()`), so a captured combo can never appear as `ScrollUp+a`; ordering is consistent on both capture and dispatch.
 - **Lone modifier presses no longer get stuck.** When everything is released but the captured state is modifier-only (no real key/button/double), `updateState` resets `maxKeys`/`maxButtons` and shows `Listening...`, ignoring the press instead of leaving the stale modifier displayed. The next input captures normally. (Dispatch has always ignored bare modifiers — `shortcuts.js` returns early for `Control`/`Shift`/`Alt`/`Meta` keydowns — so this was purely a capture-UX fix.)
 
+### Navigation Trail History
+
+- Added `src/js/navigationHistory.js` as a leaf module (no DOM access, no imports) providing session-only container Back/Forward history: a 100-entry cap, `createHistoryEntry` (directory/archive/drives kinds with `selectedPath`/`selectedName` restoration), `recordNavigation` (`skip`/`replace` options), `goBack`/`goForward`, `canGoBack`/`canGoForward`, and a `quivit-history-changed` CustomEvent.
+- Added Folder-menu Back/Forward commands (`cmd-history-back` / `cmd-history-forward`) defaulting to `Alt+W`/`Alt+A`, `Alt+S`/`Alt+D`, Arrow keys, and `MouseBack`/`MouseForward`; the side buttons were removed from Next/Previous so Back/Forward stay dedicated.
+- `main.js` mutes the Back/Forward menu items (`aria-disabled`) when the corresponding stack is empty; no-op on empty.
+- `recordNavigation` skips same-container navigation (image/page selection within one container never creates history entries) and refresh, so Back/Forward only record real folder/archive/drive changes. `loadHistoryEntry` restores the previously selected entry via sort-aware target paths.
+
+### Refresh & Loading Polish
+
+- Refresh now dispatches `quivit-refresh-start` / `quivit-refresh-end` window events; `filePanel.js` (`setRefreshingVisual`) pulses file-list and favorites rows (`.refreshing` class, `refresh-pulse` keyframes) during refresh.
+- `#viewer-img` now animates its loading `alt` text (`Loading.` / `Loading..` / `Loading...`, ~320 ms cycle) while a new image preloads, then restores the loaded filename or error text once settled; `_currentPreloadSrc` guards stale preloads from overwriting a newer selection.
+
+### Drag-and-Drop Overlay Refinements
+
+- Overlay wording updated (`DEFAULT_DROP_MESSAGE` = "Drop files here, or click to open a folder"); clicking the drop overlay opens the folder picker.
+- Overlay mouse events no longer start viewer panning (mousedown is stopped on the overlay).
+- Unsupported dropped files now show an inline warning ("File type not supported" / "Path not found") for ~1.8 s instead of silently opening their parent directory; path kind validated via the new Rust `get_path_kind` command (directory/file/missing).
+
+### UI Wording, Polish & Simple Toggles
+
+- Portable-mode README wording clarified; Options labels shortened with `title` tooltips; language flag enlarged; View dropdown checkmarks track state (`cmd-toggle-filelist`, `cmd-toggle-menubar`, `cmd-toggle-statusbar`, `cmd-fullscreen`).
+- Opaque Canvas (`cmd-toggle-transparent`) exposed in the Options Keys list.
+
+### No-Image Flicker Fix
+
+- `clearDisplayedImage()` in `viewer.js` clears the displayed image (`#viewer-img.src` removed, `_currentPreloadSrc` nulled) when entering the drag/drop screen or selecting folders/`..`, preventing stale-image flash before the next viewed image loads.
+
+### Shell/Window Polish
+
+- The main Tauri window background is set at startup from the saved theme (`apply_shell_background` in `lib.rs`): `frontend_data.theme` dark/light → `Color(37,37,38,255)` / `Color(255,255,255,255)` — the `--surface` values from `main.css`, since the shell mirrors the dominant visible page background (not the `--bg` backdrop) — with "system" resolved from the native window theme. `tauri.conf.json` sets the main window `backgroundColor`.
+- Options window initial/min sizes already implemented.
+
+### Directory Sort Limit
+
+- Per-directory sort preferences are capped at 100 entries in `directoryPrefs.js`; the oldest key is dropped (FIFO) once the cap is reached.
+
+### Dynamic Shell Background Sync
+
+- Added `src/js/shellBackground.js`, a self-contained leaf module (IIFE, no deps) included on every page (`index.html`, `options.html`) that keeps the native window background in sync with the page's `--surface` color (the dominant visible page background — not the `--bg` backdrop). Reads the computed `--surface` via a hidden probe element (robust to hex/rgb/named colors and `var()` indirection), debounced, and re-syncs automatically through a MutationObserver on the `data-theme` attribute and `document.head` (catches `#custom-css` style changes), plus a `quivit:shell-sync` event for manual triggers. No-ops outside Tauri. Any new page that includes it gets shell sync for free.
+- **Upstream API bug worked around**: the official `@tauri-apps/api` `Window#setBackgroundColor` wrapper invokes `plugin:window|set_background_color` with `{ color }`, but the backend command parameter is named `value` (an `Option<Color>`). Tauri's IPC silently deserializes a missing key to `None` (`deserialize_option`), so the wrapper actually *reset* the background to default (black) with no error. `shellBackground.js` bypasses the wrapper with `window.__TAURI__.core.invoke('plugin:window|set_background_color', { value: {...} })`; the mismatch is documented in both `shellBackground.js` and `lib.rs`.
+- Added `core:window:allow-set-background-color` to `src-tauri/capabilities/default.json`.
+- Debug scaffolding removed after verification: `SHELL_SYNC_ENABLED` flag, `syncShellBackground()` call sites in `main.js`, and the DEBUG-ONLY `transform: scale(0.95)` page-shrink rule in `main.css`.
+
+### Custom CSS Cascade Priority
+
+- The inline theme/custom-CSS head script in `index.html` and `options.html` now sits below the `<link rel="stylesheet">` tags, so the injected `#custom-css` `<style>` lands last in the head and wins the cascade. Because the script is still inline in the head (blocks parsing), it executes before first paint — no theme flicker.
+
+### CSS Token Decoupling (`--bg` → `--field-bg`)
+
+- `--bg` was overloaded: it served as both the page backdrop *and* component surfaces (menubar, inputs, tags, buttons), so customizing the backdrop unintentionally recolored controls. Decoupled:
+  - Added a general `--field-bg` control-surface token to all three theme blocks of `main.css` (light `#f0f0f0` / dark `#1e1e1e` ×2) and to `matcha-latte.css` (`#f2ede4` / `#241c15` ×2), seeded with the old `--bg` values so the default look is preserved.
+  - Moved `.flex-row input[type="text"]`, `.keybind-tag`, `.scroll-mode-btn`, and `textarea` onto `--field-bg`. The `textarea` previously referenced an undefined `--input-bg` (flicker/unstyled); fixed. `#menubar` uses the dedicated `--menu-bg`.
+  - `--bg` now covers only real backdrops: `html/body`, `#viewport.empty`, and `#drop-overlay` (incl. the drag-over tint).
+- `matcha-latte.css` ships at the repo root as the custom-CSS example.
+
+### Theme/CSS Preview Persistence
+
+- Previewing a theme or custom CSS in Options was silently wiped by the config file watcher: any main-window state persistence (`last_active_image`, statusbar/menubar toggles) rewrites `quivit_config.json`, the Rust watcher (`lib.rs`, 500ms debounce) emits `config-changed`, and both windows reload the *saved* theme/CSS — discarding the preview.
+- `main.js` now tracks `previewTheme`/`previewCss` from the `theme-preview`/`css-preview` events and re-applies them on every config reload (`quivit-config-loaded`); they are cleared only on Options Apply (`config-updated`). Plain `config-changed` reloads keep the preview.
+- `options.js` tracks a `previewing` flag (set on theme click / CSS preview; cleared on Apply, Close, and the emergency reset) that gates `refreshLiveConfigState()` so reloads don't revert the preview. Previews now persist until Apply or close-without-Apply.
+
 ## Verified Commands Used
 
 ```powershell

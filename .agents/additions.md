@@ -18,6 +18,7 @@
 - `viewer.js` — image rendering, zoom, pan, fit modes.
 - `filePanel.js` — file list, favorites, sorting UI, column resizing.
 - `fsUtils.js` — filesystem interactions, archive loading, sibling navigation.
+- `navigationHistory.js` — session-only container Back/Forward history.
 - `directoryPrefs.js` — per-directory sort/grouping logic.
 - `main.js` — DOM wiring, action dispatch, event listeners.
 - `options.js` — Options window logic.
@@ -31,27 +32,21 @@
 - `models.rs` — shared structs (`FileEntry`, etc.).
 - `utils.rs` — path helpers, hidden-file detection.
 
+## Recently Completed In Current Session
+
+> Ported to `.agents/implemented.md` (see "Navigation Trail History" through "Directory Sort Limit") after verification pass. Working tree still contains these uncommitted changes pending the user's `make push`.
+
 ## Work Plan
 
 *The easiest and least invasive fixes are at the top to allow rapid checking off. Slices progress into more complex logical and visual changes.*
 
-### UI Wording, Polish & Simple Toggles (Easy)
-- **Portable Mode README Clarification:** The README's Portable Mode section (the "Options → Save config data locally" wording) should mention that only one of the config variants (split roaming files vs. single `quivit_config.json`) exists at a time, to prevent stale data usage/mismatches. Verify if the current function actually acts this way first.
-- **Label Shortening:** Shorten the wording for "Hide menu bar and status bar when entering fullscreen" and "Automatically open the first image in a directory". Use the `title=""` attribute for the full description.
-- **Language Flags:** Make the language flags a bit larger.
-- **View Dropdown Checkmarks:** Add checkmarks to the View dropdown for toggles like Menu Bar, Status Bar, and Fullscreen based on their active state. Consolidate into a helper function if handled individually.
-- **Opaque Canvas Keybind:** Add the 'View > Opaque canvas' option as a configurable keybind in the options (no default key needed).
-
 ### File Navigation & Core Behavior Fixes (Medium Logic)
-- **Drag-and-Drop Overlay Refinements:** Rework the drag-and-drop overlay: update wording, keep the css cursors untouched (since they already correct), and make the overlay clickable to open a folder picker. Prevent panning on the canvas element behind the overlay. Display "file type not supported" warning instead of opening the directory if dropping an unsupported file.
 - **Image Navigation Clamping:** If the first or last item in the file list is an image (or if there is only a single image file and no other folders/archives), navigating past them should clamp the selection to that image instead of booting out to the empty drag-and-drop screen.
 - **File Deletion Fallbacks:** When an active archive or folder is deleted while viewing, boot the user back appropriately. For images, go to the previous file (or none if empty). Ensure "Continue from last opened directory/image" falls back gracefully if the target doesn't exist at startup.
 - **Archive Interruption Fix:** Prevent active image interruptions inside an archive. Currently, when new files are created in the archive's working directory, the user is booted back to the first image. Whilst folders don't have any image data to be viewed, still make sure the selection is not interrupted when new files are added.
-- **Navigation Trail History:** Keep track of the session's navigation trail (Need feedback: since it's only for the session, is there a need to cap the size?). Add keybinds for Forward and Back navigation (Defaults: Alt+A, Alt+W, MouseBack for back; Alt+D, Alt+S, MouseForward for forward, plus Alt+Arrow variations). Add these to their relevant menu bar folder dropdown section.
 - **'This PC' Directory Bug:** Fix open directory behavior where selecting 'This PC' does not work. See if Tauri can route this to drive selection for the filelist.
 - **Character Encoding Compatibility:** Support full character encoding file paths (emojis, JP, CN, KR, etc.) so no filenames or paths crash or present a 404 displayed image.
 - **Hidden File Config:** Add a hidden true/false config inside the portable config file. Dynamically change and listen to the Windows/System hidden state of the file and appropriate sync.
-- **Directory Sort Limit:** Determine if we are capping out the number of items for `directory_sort`.
 
 ### View, Rendering & Window Enhancements (Visuals/Features)
 - **HTML Flickering & Image Navigation:** Optimize image navigation to prevent HTML flickering. 
@@ -60,8 +55,6 @@
   - Fix the issue where the opaque canvas appears first and then the image; they should always appear at the same time.
   - Consider keeping a session cache of files inside archives, prevents decompressing them again in the same session. Discuss adding a cache limit in the options (though leaning towards being against putting it in options).
 - **Initial HTML Loading (LCP):** Completely remove the blank page time on initial loading of both HTML pages before the main UI renders. It's currently acting this way because we are optimizing for LCP on the flickering of themes. Refer to the way LCP is handled on `E:\Projects\PixiJS Live2D Spine (Springfield)` for reference.
-- **Shell Resize Background:** Match the default application shell background color to the system/active theme as closely as possible. Currently, this default color becomes visibly exposed when the browser shell dynamically resizes to catch up with the application shell during window resizing.
-- **Initial Window Sizes:** Adjust the initial and minimum window sizes of the Tauri windows. Consider a fixed 560x630 initial size for Options, or auto-fit to tabs for width, and auto-fit to Options page for height.
 - **Responsive Keyboard Panning:** Audit the keyboard pan pipeline (debounce/delay). Make panning apply immediately per key press and support fast multi-directional spam. Currently the performance is just not up to par with the original Quivi application.
 - **Pan Lengths & Smooth Panning:** Add individual pan lengths for scroll vs shortcuts (copying original Quivi defaults). Try implementing a smooth panning option and test to see if that feels nice and responsive, if not just revert.
 - ** Zoom Smoothing** Same as the above, try out -> decide.

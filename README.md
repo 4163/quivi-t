@@ -20,7 +20,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Broad Format Support**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `svg`, `bmp`, `ico`, `avif`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
 - **Archive Integration**: Reads compressed files directly, treating them as standard folders. Supports seamless image navigation within and across archives.
 - **High-Performance Caching**: Instant archive listing via header-only reads. Hybrid caching strategy uses an in-memory LRU cache with background prefetch for ZIP/CBZ, and non-blocking asynchronous disk extraction for solid archives (7Z/RAR).
-- **Advanced Navigation**: Browse siblings with keyboard or mouse. Jump seamlessly to previous/next directories, archives, and root drives following the active sort order. Parent directory navigation (`..`) natively supported.
+- **Advanced Navigation**: Browse siblings with keyboard or mouse. Jump seamlessly to previous/next directories, archives, and root drives following the active sort order. Parent directory navigation (`..`) and session-only Back/Forward history are natively supported.
 - **Customizable Controls**: High-quality zooming, panning, rotation, and flipping. Includes scroll-wheel panning with `Ctrl`+wheel zoom (manga-friendly), plus a sticky-Ctrl toggle mode.
 - **Advanced Shortcuts**: Fully customizable keybindings supporting multi-key combos, native mouse inputs, double-click gestures, and scroll-wheel capture with conflict highlighting.
 - **Persistent States**: Configurable favorites system, single-instance handoff, optional auto-open first image, and restoration of the last active image.
@@ -44,8 +44,10 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Open directory... | `Ctrl+O` |
 | Open file/archive... | `Ctrl+Shift+O` |
 | Open next/previous directory | `Ctrl+X` / `Ctrl+Z` |
-| Next item | `Shift+D` / `Shift+Right` / `MouseForward` / `Shift+S` / `Shift+Down` |
-| Previous item | `Shift+A` / `Shift+Left` / `MouseBack` / `Shift+W` / `Shift+Up` |
+| History back | `Alt+A` / `Alt+W` / `Alt+ArrowLeft` / `Alt+ArrowUp` / `MouseBack` |
+| History forward | `Alt+D` / `Alt+S` / `Alt+ArrowRight` / `Alt+ArrowDown` / `MouseForward` |
+| Next item | `Shift+D` / `Shift+Right` / `Shift+S` / `Shift+Down` |
+| Previous item | `Shift+A` / `Shift+Left` / `Shift+W` / `Shift+Up` |
 | Pan up / down | `ScrollUp` / `ScrollDown` |
 | Zoom in / out | `Ctrl+ScrollUp` / `Ctrl+ScrollDown` |
 | Zoom in / out (Keys) | `C` / `Z` |
@@ -83,6 +85,8 @@ html {
 
 **Developer Tools:** Inspect Element is intentionally left enabled in release builds to help create and debug custom CSS.
 
+> Since the shell behind the webview mirrors `--surface`, overriding it also updates the native window background to match.
+
 > [!TIP]
 > If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` in any QuiviT window. This emergency reset instantly removes the custom CSS and reloads the interface safely.
 
@@ -97,6 +101,8 @@ The following system defaults are used:
 - **Keyboard Pan Step:** `VIEWER_KEYBOARD_PAN_STEP` (100px).
 - **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`) in Options.
 - **Archive Caching (ZIP/CBZ):** In-memory LRU cache holds up to 20 images. Background prefetch loads 7 images ahead and 3 images behind the current position.
+- **Per-Directory Sort Cache:** Sort column/direction preferences are kept for up to 100 directories (oldest dropped first).
+- **History Trail:** Folder menu **Back/Forward** (and `Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only — opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
 - **Single Instance:** Enabled by default. External file opens are handed off to the active session.
 
 ### Configuration & Persistence
@@ -116,13 +122,14 @@ Data is split across four files:
 - `quivit-theme` / `quivit-custom-css` — Pre-paint mirrors of config so the theme and custom CSS apply before first render (prevents flicker)
 - `options-active-tab` — Session-only; cleared on each app start
 
-**Portable Mode** can be enabled via **Options → Save config data locally**. When enabled, QuiviT folds all four roaming files into a single self-contained `quivit_config.json` next to the executable. When disabled, the file is split back into the roaming directory.
+**Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth.
 
 ### Architecture
 
 The frontend is intentionally split into small, decoupled ES modules:
 - `core.js` — Single source of truth for app state and configuration
 - `fsUtils.js` — Filesystem and backend interaction
+- `navigationHistory.js` — Session-only container Back/Forward history
 - `viewer.js` — Image viewport logic (zoom, pan, fit, rotation, flips)
 - `shortcuts.js` / `keybinds.js` — Input normalization and action dispatch
 - `filePanel.js` / `menubar.js` / `options.js` — UI component wiring
@@ -207,6 +214,7 @@ QuiviT/
 │     ├─ keybindUi.js         # Keybind configuration grid and conflicts
 │     ├─ main.js              # DOM wiring for the main window
 │     ├─ menubar.js           # Main window menu bar DOM wiring
+│     ├─ navigationHistory.js # Session-only container Back/Forward stacks
 │     ├─ options.js           # Options window DOM wiring
 │     ├─ shortcuts.js         # Shortcut matching and keyboard dispatch
 │     └─ viewer.js            # Image viewport, zoom, fit, pan, rotation, flips
