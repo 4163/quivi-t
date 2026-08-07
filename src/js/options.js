@@ -17,6 +17,9 @@ let keybindUiInstance = null;
 // True once the user has previewed a theme or custom CSS. While set, config
 // reloads (config-changed from the file watcher) must not revert the preview.
 let previewing = false;
+// Set once the native close is being carried out by this window, so the
+// close-requested handler does not intercept its own re-close.
+let forceClose = false;
 
 // Emergency CSS Reset (Ctrl+Shift+Alt+C)
 window.addEventListener('keydown', (e) => {
@@ -229,9 +232,45 @@ document.querySelectorAll('.theme-btn').forEach((btn, index, NodeList) => {
 makeListNavigable(document.querySelectorAll('.theme-btn'), { horizontal: true, vertical: false });
 
 async function closeOptionsWindow() {
+  forceClose = true;
   const currentWindow = tauri.window?.getCurrentWindow?.();
   if (currentWindow) await currentWindow.close();
   else window.close();
+}
+
+async function revertPreviewChanges() {
+  // Revert theme/css previews if they were not saved. Previews never mutate
+  // `config`, so it still holds the last saved theme/CSS.
+  previewing = false;
+  const savedTheme = config?.frontend_data?.theme || 'system';
+  const savedCss = config?.frontend_data?.custom_css || '';
+  if (emit) {
+    await Promise.all([emit('theme-preview', savedTheme), emit('css-preview', savedCss)]);
+  }
+  try {
+    // Keep the pre-paint cache in sync so the next window open does not flash
+    // the previewed theme/CSS before the config is loaded.
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      localStorage.setItem('quivit-theme', savedTheme);
+    } else {
+      localStorage.removeItem('quivit-theme');
+    }
+    if (savedCss) localStorage.setItem('quivit-custom-css', savedCss);
+    else localStorage.removeItem('quivit-custom-css');
+  } catch (e) {}
+}
+
+// Native window close (X button) must behave like the Close button: any
+// unsaved theme/CSS previews are reverted before the window actually closes.
+// Do NOT call event.preventDefault() here — Tauri's onCloseRequested wrapper
+// awaits this handler and then destroys the window itself, so preventing the
+// default and manually re-closing would leave the window stuck.
+const optionsWindow = tauri.window?.getCurrentWindow?.();
+if (optionsWindow?.onCloseRequested) {
+  optionsWindow.onCloseRequested(async () => {
+    if (forceClose || !previewing) return;
+    await revertPreviewChanges();
+  });
 }
 
 // --- Import / Export CSS ---
@@ -327,18 +366,7 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
 });
 
 document.getElementById('btn-cancel').addEventListener('click', async () => {
-  // Revert theme/css previews if they were not saved
-  previewing = false;
-  try {
-    const loaded = await invoke('load_config');
-    const loadedTheme = loaded.frontend_data.theme || 'system';
-    const loadedCss = loaded.frontend_data.custom_css || '';
-    emit?.('theme-preview', loadedTheme);
-    emit?.('css-preview', loadedCss);
-    if (loadedCss) localStorage.setItem('quivit-custom-css', loadedCss);
-    else localStorage.removeItem('quivit-custom-css');
-  } catch (e) {}
-
+  await revertPreviewChanges();
   await closeOptionsWindow();
 });
 
