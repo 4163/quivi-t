@@ -51,6 +51,7 @@
 - **Hidden File Config:** Add a hidden true/false config inside the portable config file. Dynamically change and listen to the Windows/System hidden state of the file and appropriate sync.
 
 ### View, Rendering & Window Enhancements (Visuals/Features)
+- **Initial Window Sizes:** Adjust the initial and minimum window sizes of the Tauri windows. Explore and see if auto-fit to tabs for width, and auto-fit to Options page for height feels intuitive.
 - **HTML Flickering & Image Navigation:** Optimize image navigation to prevent HTML flickering. 
   - *Context:* Whilst the processing has already been improved to be identical to the original Quivi behavior (show previous image until new one is ready), there's still inherent flickering caused by the presentation: `click/active > load image > present image`. This can easily be fixed by improving the html/js functions (caching/preloading).
   - This additionally fixes the lag when holding down a key and switching images really fast.
