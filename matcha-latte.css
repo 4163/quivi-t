@@ -41,6 +41,9 @@
     --checker-a:    #3d3225;
     --checker-b:    #302819;
   }
+  #options-status {
+    color: #b8860b;
+  }
 }
 
 :root[data-theme="dark"] {
@@ -62,4 +65,7 @@
   --menu-shadow:  0 2px 10px rgba(0,0,0,0.5);
   --checker-a:    #3d3225;
   --checker-b:    #302819;
+}
+:root[data-theme="dark"] #options-status {
+  color: #b8860b;
 }
