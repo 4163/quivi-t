@@ -10,6 +10,7 @@
 - `mergeConfig()` in `keybinds.js` spreads saved data over defaults — missing keys get filled in, extra keys pass through.
 - Persistence policy is documented in `core.js` header and `keybinds.js`. Roaming files are the source of truth; `localStorage` is only a pre-paint cache.
 - Split files: `quivit_config.json` (preferences), `quivit_state.json` (runtime state), `quivit_directory_sort.json`, `quivit_favorites.json`. Portable mode folds all into one file.
+- Theme/CSS previews are ephemeral: `options.js` tracks a `previewing` flag and `main.js` keeps `previewTheme`/`previewCss` so in-progress previews survive config reloads (file watcher), clearing only on Options Apply. Closing Options without Apply reverts the preview and resyncs the `quivit-theme` / `quivit-custom-css` pre-paint caches (prevents a flash on next open).
 
 **JS Module Structure:**
 - `core.js` — state machine, no DOM access. Communicates via callbacks.
@@ -20,21 +21,22 @@
 - `fsUtils.js` — filesystem interactions, archive loading, sibling navigation.
 - `navigationHistory.js` — session-only container Back/Forward history.
 - `directoryPrefs.js` — per-directory sort/grouping logic.
+- `menubar.js` — menu bar open/close, state, fullscreen chrome handling.
+- `keyboardNav.js` — generic list/tab keyboard navigation (arrow keys, Home/End).
+- `shellBackground.js` — leaf module (included on both pages) mirroring `--surface` into the native window background; re-syncs on theme/custom-CSS changes.
 - `main.js` — DOM wiring, action dispatch, event listeners.
-- `options.js` — Options window logic.
+- `options.js` — Options window logic (theme/CSS previews, revert on close).
 - `keybindUi.js` — keybind capture/conflict UI (Options).
+- `associationsUi.js` — file-type association UI (Options).
 
 **Rust Module Structure:**
-- `config.rs` — `AppConfig`, load/save, split-file helpers, portable detection.
-- `commands.rs` — Tauri commands (directory listing, file ops, sibling nav).
+- `lib.rs` — app entry, window/event setup, shell background sync at startup.
+- `config.rs` — `AppConfig`, load/save, split-file helpers, portable detection, `open_options` window management.
+- `commands.rs` — Tauri commands (directory listing, file ops, sibling nav, `get_path_kind`).
 - `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants).
 - `ico.rs` — ICO spritesheet processing.
 - `models.rs` — shared structs (`FileEntry`, etc.).
 - `utils.rs` — path helpers, hidden-file detection.
-
-## Recently Completed In Current Session
-
-> Ported to `.agents/implemented.md` (see "Navigation Trail History" through "Directory Sort Limit") after verification pass. Working tree still contains these uncommitted changes pending the user's `make push`.
 
 ## Work Plan
 
