@@ -67,14 +67,37 @@ QuiviT supports injecting custom CSS rules to fully theme the application (avail
 
 **Example:**
 ```css
-:root {
-  --surface: #dfe0df !important;
-  --accent: #00ad95 !important;
-  --accent-hover: #007662 !important;
-}
-
 html {
-  font-size: 20px !important;
+  font-size: 20px;
+}
+:root {
+  --bg:           #f4ecdc;
+  --surface:      #faf5e9;
+  --text:         #4a3826;
+  --accent:       #7a5c3e;
+  --accent-hover: #634a32;
+  --selected-bg:  #e6d9bd;
+  --hover-bg:     #eee2c9;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:           #241e17;
+    --surface:      #2e261c;
+    --text:         #e8dcc4;
+    --accent:       #c9a870;
+    --accent-hover: #d9bc88;
+    --selected-bg:  #3d3322;
+    --hover-bg:     #332b1f;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:           #241e17;
+  --surface:      #2e261c;
+  --text:         #e8dcc4;
+  --accent:       #c9a870;
+  --accent-hover: #d9bc88;
+  --selected-bg:  #3d3322;
+  --hover-bg:     #332b1f;
 }
 
  ̶/̶*̶ ̶b̶r̶i̶c̶k̶s̶ ̶t̶h̶e̶ ̶U̶I̶ ̶d̶o̶n̶'̶t̶ ̶d̶o̶ ̶t̶h̶i̶s̶ ̶l̶o̶l̶ ̶*̶/̶
@@ -85,7 +108,7 @@ html {
 
 **Developer Tools:** Inspect Element is intentionally left enabled in release builds to help create and debug custom CSS.
 
-> Since the shell behind the webview mirrors `--surface`, overriding it also updates the native window background to match.
+**Example theme:** A `matcha-latte.css` example theme is included — Import it from the Customization tab.
 
 > [!TIP]
 > If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` in any QuiviT window. This emergency reset instantly removes the custom CSS and reloads the interface safely.
@@ -103,6 +126,7 @@ The following system defaults are used:
 - **Archive Caching (ZIP/CBZ):** In-memory LRU cache holds up to 20 images. Background prefetch loads 7 images ahead and 3 images behind the current position.
 - **Per-Directory Sort Cache:** Sort column/direction preferences are kept for up to 100 directories (oldest dropped first).
 - **History Trail:** Folder menu **Back/Forward** (and `Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only — opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
+- **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
 - **Single Instance:** Enabled by default. External file opens are handed off to the active session.
 
 ### Configuration & Persistence
