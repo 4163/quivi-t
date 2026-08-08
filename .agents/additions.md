@@ -21,6 +21,8 @@
 - `fsUtils.js` — filesystem interactions, archive loading, sibling navigation.
 - `navigationHistory.js` — session-only container Back/Forward history.
 - `directoryPrefs.js` — per-directory sort/grouping logic.
+- `metadata.js` — XML parsing logic for `ComicInfo.xml`, `CoMet.xml`, and `metadata.opf`.
+- `metadata-window.js` — UI controller for the standalone metadata window (live sync, DOM).
 - `menubar.js` — menu bar open/close, state, fullscreen chrome handling.
 - `keyboardNav.js` — generic list/tab keyboard navigation (arrow keys, Home/End).
 - `shellBackground.js` — leaf module (included on both pages) mirroring `--surface` into the native window background; re-syncs on theme/custom-CSS changes.

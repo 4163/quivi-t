@@ -6,6 +6,13 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ## Fully Implemented
 
+### Archive Metadata Window
+- **Dedicated UI:** Extracted comic/archive metadata (`ComicInfo.xml`, `CoMet.xml`, `metadata.opf`) into a standalone window (`metadata.html`), decoupled from the main UI, accessed via a new status-bar badge / `ⓘ` button in `file-panel-actions`.
+- **Isolated File List:** Filtered `*.xml` and `*.opf` metadata files from the archive listing in `fsUtils.js` (`archiveMetadataFiles`) so they no longer appear as broken images in the main viewer.
+- **Progressive JPEG Flicker Fix:** The main window now pre-generates a compact base64 thumbnail of the cover image and caches it in `localStorage`, allowing the metadata window to render the cover instantly upon opening without a slow protocol fetch or scanline rendering.
+- **Cross-Window Synchronization:** The metadata window mirrors live theme/CSS previews (via Tauri events), syncs permanently applied settings (via native JS `storage` events), and utilizes `shellBackground.js` to avoid resize flashes. The window is also explicitly closed when the main viewer closes via `on_window_event`.
+- **Optimized Test Data:** Modified `generate_cbz.py` to create a `metadata-test.cbz` fixture with authentic Bakemonogatari metadata and dynamically downscaled secondary pages to minimize repository bloat.
+
 ### File Navigation & Core Behavior Fixes
 - **Image Navigation Clamping:** Navigating past the first or last image in the file list clamps the selection to that image (preserving it on the preview canvas) instead of booting out to the drag-and-drop screen. The actual file list highlight continues wrapping to `..` or folders normally. This logic is ignored if there is only a single image in the directory (legacy wrap).
 - **File Deletion Fallbacks:** When an active archive or folder is deleted while viewing, the user is properly booted back. Deleting a directory falls back to its parent; deleting an archive falls back to its parent directory. Ensure "Continue from last opened directory/image" falls back gracefully by recursively walking up the directory tree using `parentOf()` if the target doesn't exist at startup, until it stabilizes at the root and ultimately falls back to the Drives view.

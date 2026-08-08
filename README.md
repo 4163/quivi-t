@@ -19,6 +19,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 
 - **Broad Format Support**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `svg`, `bmp`, `ico`, `avif`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
 - **Archive Integration**: Reads compressed files directly, treating them as standard folders. Supports seamless image navigation within and across archives.
+- **Archive Metadata**: Detects and parses `ComicInfo.xml`, `CoMet.xml`, and `metadata.opf` files within archives, displaying them in a dedicated secondary window without cluttering the image list.
 - **High-Performance Caching**: Instant archive listing via header-only reads. Hybrid caching strategy uses an in-memory LRU cache with background prefetch for ZIP/CBZ, and non-blocking asynchronous disk extraction for solid archives (7Z/RAR).
 - **Advanced Navigation**: Browse siblings with keyboard or mouse. Jump seamlessly to previous/next directories, archives, and root drives following the active sort order. Parent directory navigation (`..`) and session-only Back/Forward history are natively supported.
 - **Customizable Controls**: High-quality zooming, panning, rotation, and flipping. Includes scroll-wheel panning with `Ctrl`+wheel zoom (manga-friendly), plus a sticky-Ctrl toggle mode.
