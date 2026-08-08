@@ -308,7 +308,7 @@ textarea:focus {
 #options-status {
   flex: 1;
   min-width: 0;
-  color: #b00020;
+  color: var(--text-status);
   font-size: var(--fs-11);
   overflow: hidden;
   text-overflow: ellipsis;

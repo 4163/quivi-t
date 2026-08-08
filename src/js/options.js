@@ -8,6 +8,7 @@ const invoke = tauri.core?.invoke?.bind(tauri.core);
 const emit = tauri.event?.emit?.bind(tauri.event);
 const listen = tauri.event?.listen?.bind(tauri.event);
 const open = tauri.dialog?.open?.bind(tauri.dialog);
+const tauriConfirm = tauri.dialog?.confirm?.bind(tauri.dialog);
 
 let config = mergeConfig({});
 const statusEl = document.getElementById('options-status');
@@ -176,11 +177,9 @@ const _savedTab = localStorage.getItem('options-active-tab');
 if (_savedTab && document.getElementById(_savedTab)) switchTab(_savedTab);
 
 document.getElementById('btn-reset-keybinds').addEventListener('click', () => {
-  if (confirm('Reset all keybinds to defaults?')) {
-    config.frontend_data.keybinds = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
-    if (keybindUiInstance) keybindUiInstance.renderKeybinds();
-    showStatus('Keybindings reset to defaults.');
-  }
+  config.frontend_data.keybinds = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
+  if (keybindUiInstance) keybindUiInstance.renderKeybinds();
+  showStatus('Keybindings reset to defaults.');
 });
 
 // --- Browse Start Dir ---
@@ -278,7 +277,7 @@ document.getElementById('btn-import-css').addEventListener('click', async () => 
   if (!open) return;
   const path = await open({
     multiple: false,
-    filters: [{ name: 'CSS Files', extensions: ['css'] }]
+    filters: [{ name: 'CSS/Text Files', extensions: ['css', 'txt'] }]
   });
   if (path) {
     try {
@@ -297,7 +296,7 @@ document.getElementById('btn-export-css').addEventListener('click', async () => 
   const css = document.getElementById('opt-custom-css').value;
   const path = await tauri.dialog.save({
     defaultPath: 'quivit-theme.css',
-    filters: [{ name: 'CSS Files', extensions: ['css'] }]
+    filters: [{ name: 'CSS/Text Files', extensions: ['css', 'txt'] }]
   });
   if (path) {
     try {
@@ -345,8 +344,8 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   if (!config.frontend_data.continue_last) {
     delete config.frontend_data.last_opened_path;
   }
-  config = mergeConfig(config);
-  
+  const merged = mergeConfig(config);
+  Object.assign(config, merged);
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
     await invoke('save_config', { config });
