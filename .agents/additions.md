@@ -43,11 +43,6 @@
 *The easiest and least invasive fixes are at the top to allow rapid checking off. Slices progress into more complex logical and visual changes.*
 
 ### File Navigation & Core Behavior Fixes (Medium Logic)
-- **Image Navigation Clamping:** If the first or last item in the file list is an image (or if there is only a single image file and no other folders/archives), navigating past them should clamp the selection to that image instead of booting out to the empty drag-and-drop screen.
-- **File Deletion Fallbacks:** When an active archive or folder is deleted while viewing, boot the user back appropriately. For images, go to the previous file (or none if empty). Ensure "Continue from last opened directory/image" falls back gracefully if the target doesn't exist at startup.
-- **Archive Interruption Fix:** Prevent active image interruptions inside an archive. Currently, when new files are created in the archive's working directory, the user is booted back to the first image. Whilst folders don't have any image data to be viewed, still make sure the selection is not interrupted when new files are added.
-- **'This PC' Directory Bug:** Fix open directory behavior where selecting 'This PC' does not work. See if Tauri can route this to drive selection for the filelist.
-- **Character Encoding Compatibility:** Support full character encoding file paths (emojis, JP, CN, KR, etc.) so no filenames or paths crash or present a 404 displayed image.
 - **Hidden File Config:** Add a hidden true/false config inside the portable config file. Dynamically change and listen to the Windows/System hidden state of the file and appropriate sync.
 
 ### View, Rendering & Window Enhancements (Visuals/Features)
@@ -121,9 +116,9 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 4. Runtime-verify each change made after the last remote push: exercise the new behavior in the app and confirm it works as intended.
 5. Manually review that the project remains coherently decoupled, with features in their own JS files where warranted. Keep or improve the current split (`core.js`, `viewer.js`, `filePanel.js`, `shortcuts.js`, `keybinds.js`, `options.js`, `main.js`).
 6. Update the **"Current Architecture State"** section at the top of this file to accurately document any new, deleted, or repurposed JS/Rust modules and configuration behavior.
-7. Verify every config-backed feature meets both global and portable-mode requirements.
+7. Verify every config-backed or persistent feature meets both global and portable-mode requirements.
 8. Port the completed items from this file into `.agents/implemented.md`, including any additions and fixes made during the pass that were not originally listed here.
-9. Update `README.md` with new shortcuts, config behavior, archive behavior, module structure, and any relevant changes.
+9. Update `README.md` with new shortcuts, config behavior, archive behavior, module structure, and any relevant changes. Especially look out for things that should be inlcuded in the **"Documentation"** section.
 10. Add a new entry to `.agents/sessions-index.md`.
 11. Repeat static and runtime verifications as needed.
 12. Leave the repository ready for the user to run the push pipeline: final `git diff` matches the verified change set, nothing extra staged, no secrets, no private paths.
@@ -136,7 +131,7 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 
 ### File List Relocation, Detach & Drag-and-Drop
 - Add a way to change the location of the file list (left default, top, bottom, right). Detached as well? Maybe drag-and-droppable — how practical would the implementation be?
-- Using a JS library sounds ideal; this has been done before on a smaller scale at `E:\Projects\x4163-apps\dither-app` (not sure if it's the best/most-used library — performance-first). Prioritize clean user interaction with no jank.
+- Using a JS library sounds ideal; this has been done before on a smaller scale at `E:\Projects\x4163-apps\dither-app` (not sure if it's the best/most-used library — performance-first). Prioritize clean/snappy user interaction with no jank.
 - Partial implementation via UI buttons (detach + move location) is acceptable pre-release; drag-and-drop capabilities should be implemented after release.
 
 ### Double Page View (Manga Spread)

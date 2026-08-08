@@ -6,6 +6,13 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ## Fully Implemented
 
+### File Navigation & Core Behavior Fixes
+- **Image Navigation Clamping:** Navigating past the first or last image in the file list clamps the selection to that image (preserving it on the preview canvas) instead of booting out to the drag-and-drop screen. The actual file list highlight continues wrapping to `..` or folders normally. This logic is ignored if there is only a single image in the directory (legacy wrap).
+- **File Deletion Fallbacks:** When an active archive or folder is deleted while viewing, the user is properly booted back. Deleting a directory falls back to its parent; deleting an archive falls back to its parent directory. Ensure "Continue from last opened directory/image" falls back gracefully to the Drives view if the target doesn't exist at startup.
+  - **Archive Interruption Fix:** Prevent active image interruptions inside an archive. Directory-change events on the background archive no longer boot the user back to the first image; the viewer preserves the active image page while silently refreshing the underlying file list.
+- **Folder CUT Handling:** Improved the file watcher by adding a parent directory watcher. This ensures that folder CUT (move) operations, which previously bypassed the internal watcher silently, correctly boot the user back to the parent directory just like a folder deletion.
+- **'This PC' Dialog Limitation:** Investigated and verified that the native Windows folder picker in Tauri cannot return a path for the virtual "This PC" shell folder, as it simply cancels the dialog. This is documented as a native OS limitation.
+
 ### Viewer & UI Enhancements (Grill, Menubar, Options)
 - **Opaque Canvas Precision:** Refactored `#img-grill` and `#img-grill-border` out of JavaScript subpixel measurement. Using CSS `inset: 0`, CSS variables (`--zoom-scale`), and `box-shadow`, the grill mathematically resists parent `scale()` transforms and achieves perfect visual thickness across zoom levels.
 - **Grill Customization:** Added `--grill-spacing-px` and `--grill-thickness-px` to CSS `:root` for subpixel precision control, adjusted default colors for high contrast across dark and light themes, and updated the external `matcha-latte.css` with an earthy olive-green grill palette. Defaulted `transparent_bg` to `false` (opaque grill ON by default).

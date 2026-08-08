@@ -48,12 +48,12 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | History forward | `Alt+D` / `Alt+S` / `Alt+ArrowRight` / `Alt+ArrowDown` / `MouseForward` |
 | Next item | `Shift+D` / `Shift+ArrowRight` / `Shift+S` / `Shift+ArrowDown` |
 | Previous item | `Shift+A` / `Shift+ArrowLeft` / `Shift+W` / `Shift+ArrowUp` |
-| Pan up / down | `ScrollUp` / `ScrollDown` |
 | Zoom in / out | `Ctrl+ScrollUp` / `Ctrl+ScrollDown` |
 | Zoom in / out (Keys) | `C` / `Z` |
 | Zoom 100% | `X` |
 | Fit width / height if larger | `Q` / `E` |
-| Pan (Up/Left/Down/Right) | `W` / `A` / `S` / `D` or Arrow Keys |
+| Pan (Up/Left/Down/Right) | `W` / `A` / `S` / `D` / `ArrowUp` / `ArrowLeft` / `ArrowDown` / `ArrowRight` |
+| Pan up / down | `ScrollUp` / `ScrollDown` |
 | Rotate counter-clockwise/clockwise | `G` / `H` |
 | Flip horizontal/vertical | `V` / `B` |
 | Fit none | `R` / `DoubleClick` |
@@ -63,7 +63,7 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 
 ## Custom CSS
 
-QuiviT supports injecting custom CSS rules to fully theme the application (available in the Options menu under Customization). You can instantly save and apply these rules using `Ctrl+S` while editing.
+QuiviT supports injecting custom CSS rules to fully theme the application via **Options → Customization → Custom CSS**. Changes can be previewed by clicking `Apply` or pressing `Ctrl+S` while editing.
 
 **Example:**
 ```css
