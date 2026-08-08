@@ -32,7 +32,7 @@
 **Rust Module Structure:**
 - `lib.rs` — app entry, window/event setup, shell background sync at startup.
 - `config.rs` — `AppConfig`, load/save, split-file helpers, portable detection, `open_options` window management.
-- `commands.rs` — Tauri commands (directory listing, file ops, sibling nav, `get_path_kind`).
+- `commands.rs` — Tauri commands (directory listing, file ops, sibling nav, directory watcher, `get_path_kind`).
 - `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants).
 - `ico.rs` — ICO spritesheet processing.
 - `models.rs` — shared structs (`FileEntry`, etc.).
