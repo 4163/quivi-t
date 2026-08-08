@@ -66,15 +66,15 @@ export const FsUtils = {
   },
 
   async buildFileSrc(filePath) {
+    if (filePath.startsWith('blob:')) return filePath;
     if (filePath.toLowerCase().endsWith('.ico') && window.__TAURI__) {
       try {
         return await invoke('get_ico_frames', { path: filePath });
       } catch (e) {
         console.error('Failed to extract ICO frames:', e);
-        return convertFileSrc(filePath);
       }
     }
-    return convertFileSrc(filePath);
+    return window.__TAURI__.core.convertFileSrc(filePath);
   },
 
   formatEntry(entry) {
@@ -235,6 +235,10 @@ export const FsUtils = {
 
       if (targetPath) {
         preferredIndex = files.findIndex(f => f.path === targetPath);
+        // Also try matching by entry name (used by refresh/targetName)
+        if (preferredIndex === -1) {
+          preferredIndex = files.findIndex(f => f.name === targetPath);
+        }
       }
 
       if (preferredIndex === -1 && options?.restoreLastImage && fd.remember_last_image && fd.last_active_image && fd.last_active_image.container === result.archive_path) {
@@ -267,7 +271,11 @@ export const FsUtils = {
 
       return;
     } catch (err) {
-      console.error('[Core] Error loading archive:', err);
+      if (options.isStartup) {
+        console.error('[Core] Startup loadArchive failed, falling back to Drives:', err);
+        return this.loadFile('__DRIVES__', options);
+      }
+      throw err;
     }
   },
 
@@ -282,7 +290,12 @@ export const FsUtils = {
     const name = typeof pathStr === 'string'
       ? pathStr.replace(/\\/g, '/').split('/').pop()
       : pathStr.name || '';
-    const path = typeof pathStr === 'string' ? pathStr : (pathStr.path || pathStr.name);
+    let path = typeof pathStr === 'string' ? pathStr : (pathStr.path || pathStr.name);
+
+    // Windows CLSID paths (e.g. 'This PC') → route to drive list
+    if (path && path.startsWith('::{')) {
+      path = '__DRIVES__';
+    }
     
     if (path === '__DRIVES__') {
       try {
@@ -316,17 +329,19 @@ export const FsUtils = {
 
     try {
       if (SUPPORTED_ARCHIVES.has(ext)) {
-        await this.loadArchive(path, '', options);
-        return;
+        return this.loadArchive(path, options.targetName || options.targetPath || '', options);
+      } else {
+        const result = await invoke('read_directory', { path, showHidden: this.showHidden(), targetName: options.targetName });
+        if (!_isCurrentGeneration(options.generation)) return;
+        this.applyDirectoryResult(result, options);
+        this.persistLastOpened(result.directory);
       }
-
-      const result = await invoke('read_directory', { path, showHidden: this.showHidden() });
-      if (!_isCurrentGeneration(options.generation)) return;
-      this.applyDirectoryResult(result, options);
-      this.persistLastOpened(result.directory);
-
     } catch (err) {
-      console.error('[Core] Error loading file:', err);
+      if (options.isStartup) {
+        console.error('[Core] Startup loadFile failed, falling back to Drives:', err);
+        return this.loadFile('__DRIVES__', options);
+      }
+      throw err;
     }
   },
 
@@ -510,14 +525,15 @@ export const FsUtils = {
     window.dispatchEvent(new CustomEvent('quivit-refresh-start'));
     try {
       if (state.mode === 'archive' && state.archivePath) {
-        await this.loadFile(state.archivePath, { generation, history: 'skip' });
+        await this.loadFile(state.archivePath, { generation, history: 'skip', targetName: state.filename });
       } else if (state.directory) {
-        const result = await invoke('read_directory', { path: state.directory, showHidden: this.showHidden() });
+        const result = await invoke('read_directory', { path: state.directory, showHidden: this.showHidden(), targetName: state.filename });
         if (!_isCurrentGeneration(generation)) return;
         this.applyDirectoryResult(result, { preserveFilename: true, generation, history: 'skip' });
       }
     } catch (err) {
-      console.error('[Core] refresh error:', err);
+      console.error('[Core] refresh error, navigating to parent:', err);
+      this.openParent();
     } finally {
       window.dispatchEvent(new CustomEvent('quivit-refresh-end'));
     }

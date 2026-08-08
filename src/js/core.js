@@ -103,7 +103,7 @@ async function _persistConfig() {
   }
 }
 
-async function _selectEntry(index, activate = false) {
+async function _selectEntry(index, activate = false, clampPreview = false) {
   if (index === -1) {
     _state.index = -1;
     _state.filename = '';
@@ -129,7 +129,7 @@ async function _selectEntry(index, activate = false) {
 
   let newSrc = '';
   if (file.is_dir || file.is_parent || FsUtils.isArchiveEntry(file) || !FsUtils.isImageEntry(file)) {
-    newSrc = '';
+    newSrc = clampPreview ? _state.src : '';
   } else if (_state.mode === 'archive') {
     newSrc = FsUtils.buildArchiveSrc(_state.archivePath, file.name);
   } else {
@@ -217,8 +217,30 @@ export const Core = {
    */
   navigate(delta) {
     if (_state.list.length <= 1) return;
+
+    let clampPreview = false;
+    let firstImgIdx = FsUtils.firstImageIndex(_state.list, 0);
+    let lastImgIdx = -1;
+    for (let i = _state.list.length - 1; i >= 0; i--) {
+      if (FsUtils.isImageEntry(_state.list[i])) {
+        lastImgIdx = i;
+        break;
+      }
+    }
+
+    if (firstImgIdx !== -1 && firstImgIdx !== lastImgIdx) {
+      // "if the first and last item is an image"
+      const firstItemIsImage = FsUtils.isImageEntry(_state.list[_state.list[0]?.name === '..' ? 1 : 0]);
+      const lastItemIsImage = FsUtils.isImageEntry(_state.list[_state.list.length - 1]);
+      
+      if (firstItemIsImage && lastItemIsImage) {
+        if (delta > 0 && _state.index === lastImgIdx) clampPreview = true;
+        if (delta < 0 && _state.index === firstImgIdx) clampPreview = true;
+      }
+    }
+
     const next = (_state.index + delta + _state.list.length) % _state.list.length;
-    _selectEntry(next);
+    _selectEntry(next, false, clampPreview);
   },
 
   /**
@@ -322,6 +344,7 @@ export const Core = {
       FsUtils.loadFile(startPath, {
         restoreLastImage: !explicitOpen,
         preferInitial: explicitOpen,
+        isStartup: true,
       });
     }
     

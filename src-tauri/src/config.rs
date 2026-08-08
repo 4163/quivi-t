@@ -33,7 +33,7 @@ pub fn get_exe_dir() -> PathBuf {
 
 pub fn is_portable() -> bool {
     let exe_dir = get_exe_dir();
-    exe_dir.join(".portable").exists() || exe_dir.join("quivit_config.json").exists()
+    exe_dir.join("quivit_config.json").exists()
 }
 
 pub fn roaming_dir_path(app_handle: &tauri::AppHandle) -> PathBuf {
@@ -184,7 +184,6 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
         // first, then drop the roaming copies so exactly one location stays active.
         let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
         fs::write(exe_dir.join("quivit_config.json"), data).map_err(|e| e.to_string())?;
-        let _ = fs::write(exe_dir.join(".portable"), "");
 
         remove_roaming_files(&roaming_dir_path(&app_handle));
     } else {
@@ -215,7 +214,6 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
         )
         .map_err(|e| e.to_string())?;
 
-        let _ = fs::remove_file(exe_dir.join(".portable"));
         let _ = fs::remove_file(exe_dir.join("quivit_config.json"));
     }
     Ok(())

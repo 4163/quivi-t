@@ -17,11 +17,12 @@ use crate::archives::*;
 
 pub struct WatcherState {
     pub watcher: Option<RecommendedWatcher>,
+    pub parent_watcher: Option<RecommendedWatcher>,
 }
 
 impl WatcherState {
     pub fn new() -> Self {
-        Self { watcher: None }
+        Self { watcher: None, parent_watcher: None }
     }
 }
 
@@ -162,8 +163,8 @@ pub fn read_directory_impl(
 }
 
 #[tauri::command]
-pub fn read_directory(path: &str, show_hidden: Option<bool>) -> Result<DirectoryReadResult, String> {
-    read_directory_impl(path, show_hidden.unwrap_or(false), None)
+pub fn read_directory(path: &str, show_hidden: Option<bool>, target_name: Option<String>) -> Result<DirectoryReadResult, String> {
+    read_directory_impl(path, show_hidden.unwrap_or(false), target_name.as_deref())
 }
 
 #[tauri::command]
@@ -449,16 +450,14 @@ pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String
     let state = app.state::<Mutex<WatcherState>>();
     let mut state = state.lock().unwrap();
     
-    // Drop existing watcher to stop tracking the old directory
+    // Drop existing watchers to stop tracking the old directory
     state.watcher = None;
+    state.parent_watcher = None;
     
+    // Main watcher: fires on any change inside the directory
     let app_clone = app.clone();
-    let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
-        if let Ok(event) = res {
-            if event.kind.is_create() || event.kind.is_remove() || event.kind.is_modify() {
-                let _ = app_clone.emit("directory-changed", ());
-            }
-        }
+    let mut watcher = notify::recommended_watcher(move |_res: notify::Result<Event>| {
+        let _ = app_clone.emit("directory-changed", ());
     }).map_err(|e| format!("Failed to create watcher: {}", e))?;
     
     watcher
@@ -466,6 +465,25 @@ pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String
         .map_err(|e| format!("Failed to watch directory: {}", e))?;
         
     state.watcher = Some(watcher);
+
+    // Parent watcher: detects when the directory itself is moved/renamed/deleted
+    // from the outside. Only emits if our directory no longer exists at its path.
+    let dir_path = PathBuf::from(&path);
+    if let Some(parent) = dir_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            let app_clone2 = app.clone();
+            let child_path = dir_path.clone();
+            let mut parent_watcher = notify::recommended_watcher(move |_res: notify::Result<Event>| {
+                if !child_path.exists() {
+                    let _ = app_clone2.emit("directory-changed", ());
+                }
+            }).map_err(|e| format!("Failed to create parent watcher: {}", e))?;
+            
+            let _ = parent_watcher.watch(parent, RecursiveMode::NonRecursive);
+            state.parent_watcher = Some(parent_watcher);
+        }
+    }
+
     Ok(())
 }
 
