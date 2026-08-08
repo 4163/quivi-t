@@ -6,6 +6,13 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ## Fully Implemented
 
+### Viewer & UI Enhancements (Grill, Menubar, Options)
+- **Opaque Canvas Precision:** Refactored `#img-grill` and `#img-grill-border` out of JavaScript subpixel measurement. Using CSS `inset: 0`, CSS variables (`--zoom-scale`), and `box-shadow`, the grill mathematically resists parent `scale()` transforms and achieves perfect visual thickness across zoom levels.
+- **Grill Customization:** Added `--grill-spacing-px` and `--grill-thickness-px` to CSS `:root` for subpixel precision control, adjusted default colors for high contrast across dark and light themes, and updated the external `matcha-latte.css` with an earthy olive-green grill palette. Defaulted `transparent_bg` to `false` (opaque grill ON by default).
+- **Menubar Overflow:** Fixed menubar and statusbar overflow issues ensuring layout doesn't break on narrow window widths. Restored menu items hover hitboxes.
+- **Options Window Polish:** Removed the disruptive "Are you sure?" confirmation dialog when closing Options. Clarified button wording ("Apply" vs "Save").
+- **License Update:** Removed obsolete `pyfreeimage` and FreeImage license text from the legacy Python/C++ Quivi days.
+
 ### Documentation & Developer Polish
 - **README Overhaul:** Updated the README to document every stack/functionality elegantly.
   - Added a features section modeled after the original Quivi page but cleaner.

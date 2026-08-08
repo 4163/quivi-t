@@ -62,6 +62,7 @@
 - **Pan Lengths & Smooth Panning:** Add individual pan lengths for scroll vs shortcuts (copying original Quivi defaults). Try implementing a smooth panning option and test to see if that feels nice and responsive, if not just revert.
 - ** Zoom Smoothing** Same as the above, try out -> decide.
 - **Scaling Modes (Bicubic vs Lanczos):** Implement a proper way to scale via Bicubic and Lanczos (using external API or JS library if CSS doesn't support Lanczos). Doing this should also  provide us the initial entry for using more advanced custom scaling methods.
+  - This also means we need to make each scaling methods available as a settable keybinbd.
 - **SVG Rendering & Bounds:** Audit SVG elements behavior of hitbox/dimensions going over the canvas edge. The calculations for SVG images that have a WxH of 100% compared to a set WxH act differently and break the border/edge calculations on the canvas and/or image.
   - *Key examples:* `test-files/gfl-spinner.svg` works as expected, while `icons/quivi-t_moe-2.svg` does not. 
   - *Visual insight on SVGs that have a WxH of 100%:* the bounds/edge of the image seems to visually be the **center of the image** instead of the **very edges**. 
@@ -119,12 +120,13 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 3. Static checks. `node --check` on every touched JS module and `cargo check` in `src-tauri`.
 4. Runtime-verify each change made after the last remote push: exercise the new behavior in the app and confirm it works as intended.
 5. Manually review that the project remains coherently decoupled, with features in their own JS files where warranted. Keep or improve the current split (`core.js`, `viewer.js`, `filePanel.js`, `shortcuts.js`, `keybinds.js`, `options.js`, `main.js`).
-6. Verify every config-backed feature meets both global and portable-mode requirements.
-7. Port the completed items from this file into `.agents/implemented.md`, including any additions and fixes made during the pass that were not originally listed here.
-8. Update `README.md` with new shortcuts, config behavior, archive behavior, module structure, and any relevant changes.
-9. Add a new entry to `.agents/sessions-index.md`.
-10. Repeat static and runtime verifications as needed.
-11. Leave the repository ready for the user to run the push pipeline: final `git diff` matches the verified change set, nothing extra staged, no secrets, no private paths.
+6. Update the **"Current Architecture State"** section at the top of this file to accurately document any new, deleted, or repurposed JS/Rust modules and configuration behavior.
+7. Verify every config-backed feature meets both global and portable-mode requirements.
+8. Port the completed items from this file into `.agents/implemented.md`, including any additions and fixes made during the pass that were not originally listed here.
+9. Update `README.md` with new shortcuts, config behavior, archive behavior, module structure, and any relevant changes.
+10. Add a new entry to `.agents/sessions-index.md`.
+11. Repeat static and runtime verifications as needed.
+12. Leave the repository ready for the user to run the push pipeline: final `git diff` matches the verified change set, nothing extra staged, no secrets, no private paths.
 
 ---
 

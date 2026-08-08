@@ -6,7 +6,7 @@
   <img src="icons/quivi-t_moe-mascot.svg" alt="QuiviT mascot" width="25%" />
 </p>
 
-A modern standalone (performance-first) port of Quivi, built with Tauri and Vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
+A lightweight standalone (performance-first) port of Quivi, built with Tauri and Vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
 
 ## Quivi
 
@@ -46,8 +46,8 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Open next/previous directory | `Ctrl+X` / `Ctrl+Z` |
 | History back | `Alt+A` / `Alt+W` / `Alt+ArrowLeft` / `Alt+ArrowUp` / `MouseBack` |
 | History forward | `Alt+D` / `Alt+S` / `Alt+ArrowRight` / `Alt+ArrowDown` / `MouseForward` |
-| Next item | `Shift+D` / `Shift+Right` / `Shift+S` / `Shift+Down` |
-| Previous item | `Shift+A` / `Shift+Left` / `Shift+W` / `Shift+Up` |
+| Next item | `Shift+D` / `Shift+ArrowRight` / `Shift+S` / `Shift+ArrowDown` |
+| Previous item | `Shift+A` / `Shift+ArrowLeft` / `Shift+W` / `Shift+ArrowUp` |
 | Pan up / down | `ScrollUp` / `ScrollDown` |
 | Zoom in / out | `Ctrl+ScrollUp` / `Ctrl+ScrollDown` |
 | Zoom in / out (Keys) | `C` / `Z` |
@@ -110,7 +110,6 @@ html {
 
 **Example theme:** A `matcha-latte.css` example theme is included — Import it from the Customization tab.
 
-> [!TIP]
 > If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` in any QuiviT window. This emergency reset instantly removes the custom CSS and reloads the interface safely.
 
 ## Documentation
@@ -131,7 +130,7 @@ The following system defaults are used:
 
 ### Configuration & Persistence
 
-QuiviT persists data through two separate mechanisms:
+QuiviT manages data across three distinct tiers depending on lifecycle and scope:
 
 **Roaming files (source of truth)** — stored in Tauri's app config directory:
 `C:\Users\<user>\AppData\Roaming\com.x4163.quivit`
@@ -145,6 +144,11 @@ Data is split across four files:
 **WebView2 localStorage** — never the source of truth; used only as a fast cache layer:
 - `quivit-theme` / `quivit-custom-css` — Pre-paint mirrors of config so the theme and custom CSS apply before first render (prevents flicker)
 - `options-active-tab` — Session-only; cleared on each app start
+
+**In-memory state** — session-only; reset on app exit:
+- `navigationHistory` — Container-level Back/Forward history trail (capped at 100 entries)
+- `archives` LRU cache — ZIP/CBZ in-memory image cache (20 items) and background prefetch queue (7-ahead / 3-behind)
+- `previewTheme` / `previewCss` — Options window live theme and custom CSS previews (persisting across config reloads until Apply or Close)
 
 **Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth.
 
