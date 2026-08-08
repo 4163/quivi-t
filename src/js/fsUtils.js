@@ -213,6 +213,22 @@ export const FsUtils = {
     }
   },
 
+  async loadFallbackAncestor(path, options = {}) {
+    let current = path;
+    while (true) {
+      const parent = parentOf(current);
+      if (parent === current) {
+        return this.loadFile('__DRIVES__', options);
+      }
+      try {
+        return await this.loadFile(parent, options);
+      } catch (err) {
+        console.error(`[Core] Fallback load failed for ${parent}, walking up...`, err);
+        current = parent;
+      }
+    }
+  },
+
   async loadArchive(archivePath, targetPath = '', options = {}) {
     if (options.generation === undefined) {
       options = { ...options, generation: _nextNavigationGeneration() };
@@ -272,8 +288,8 @@ export const FsUtils = {
       return;
     } catch (err) {
       if (options.isStartup) {
-        console.error('[Core] Startup loadArchive failed, falling back to Drives:', err);
-        return this.loadFile('__DRIVES__', options);
+        console.error(`[Core] Startup loadArchive failed for ${archivePath}, falling back:`, err);
+        return this.loadFallbackAncestor(archivePath, options);
       }
       throw err;
     }
@@ -338,8 +354,8 @@ export const FsUtils = {
       }
     } catch (err) {
       if (options.isStartup) {
-        console.error('[Core] Startup loadFile failed, falling back to Drives:', err);
-        return this.loadFile('__DRIVES__', options);
+        console.error(`[Core] Startup loadFile failed for ${path}, falling back:`, err);
+        return this.loadFallbackAncestor(path, options);
       }
       throw err;
     }
@@ -383,25 +399,8 @@ export const FsUtils = {
         }
         this.persistLastOpened(result.directory);
       } catch (err) {
-        // The archive may have been deleted or moved while open — fall back to its
-        // parent folder, or to the drives list if that's unreachable too.
-        console.error('[Core] openParent archive error:', err);
-        try {
-          const result = await invoke('read_directory', { path: parentOf(state.archivePath), showHidden: this.showHidden() });
-          if (!_isCurrentGeneration(generation)) return;
-          this.applyDirectoryResult(result, { generation, previousEntry });
-          this.persistLastOpened(result.directory);
-        } catch (parentErr) {
-          console.error('[Core] openParent archive parent fallback error:', parentErr);
-          const drives = await invoke('get_drives');
-          if (!_isCurrentGeneration(generation)) return;
-          this.applyDirectoryResult({
-            directory: 'Drives',
-            parent_directory: null,
-            initial_index: 0,
-            files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
-          }, { generation, previousEntry });
-        }
+        console.error('[Core] openParent archive error, falling back:', err);
+        await this.loadFallbackAncestor(state.archivePath, { generation, previousEntry });
       }
       return;
     }
@@ -416,21 +415,10 @@ export const FsUtils = {
       this.persistLastOpened(result.directory);
     } catch (err) {
       if (err === 'Already at root') {
-        try {
-          const drives = await invoke('get_drives');
-          if (!_isCurrentGeneration(generation)) return;
-          const drivesResult = {
-            directory: 'Drives',
-            parent_directory: null,
-            initial_index: 0,
-            files: drives.map(d => ({ name: d, path: d, ext: '', date: '', is_dir: true, is_drive: true }))
-          };
-          this.applyDirectoryResult(drivesResult, { generation, previousEntry });
-        } catch (driveErr) {
-          console.error('[Core] Error fetching drives:', driveErr);
-        }
+        await this.loadFile('__DRIVES__', { generation, previousEntry });
       } else {
-        console.error('[Core] openParent error:', err);
+        console.error('[Core] openParent error, falling back:', err);
+        await this.loadFallbackAncestor(state.directory, { generation, previousEntry });
       }
     }
   },
