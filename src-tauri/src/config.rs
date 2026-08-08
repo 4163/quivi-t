@@ -253,6 +253,9 @@ pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
     .closable(true)
     .maximizable(false)
     .visible(true)
+    // Architectural Standard: We intentionally enable devtools in release builds for all windows.
+    // This allows the user to right-click -> "Inspect Element" to easily write and debug Custom CSS.
+    // Note: This only ALLOWS devtools to be opened; it does not force-open them on launch.
     .devtools(true);
 
     if let Some(pos) = position {
@@ -299,6 +302,9 @@ pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
     .closable(true)
     .maximizable(true)
     .visible(true)
+    // Architectural Standard: We intentionally enable devtools in release builds for all windows.
+    // This allows the user to right-click -> "Inspect Element" to easily write and debug Custom CSS.
+    // Note: This only ALLOWS devtools to be opened; it does not force-open them on launch.
     .devtools(true);
 
     if let Some(pos) = position {
