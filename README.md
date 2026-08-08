@@ -109,7 +109,7 @@ html {
 
 **Developer Tools:** Inspect Element is intentionally left enabled in release builds to help create and debug custom CSS.
 
-**Example theme:** A `matcha-latte.css` example theme is included — Import it from the Customization tab.
+**Example theme:** A `matcha-latte.css` and `sage-mint.css` example themes is included — Import it from the Customization tab.
 
 > If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` in any QuiviT window. This emergency reset instantly removes the custom CSS and reloads the interface safely.
 
