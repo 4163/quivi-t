@@ -140,7 +140,7 @@ function _updateLatchIndicator() {
 // The wheel should never hijack scrolling over UI chrome or the file list.
 function isWheelOverUI(e) {
   const el = e.target;
-  return !!(el.closest?.('#file-panel, .menubar, .dropdown-menu, #statusbar'));
+  return !!(el.closest?.('#file-panel, #menubar, .menu-dropdown, #statusbar'));
 }
 
 export function bindKeyboardShortcuts({ Core, dispatchAction }) {
