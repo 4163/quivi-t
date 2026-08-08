@@ -25,9 +25,9 @@
   --menu-bg:      #ffffff;
   --menu-shadow:  0 2px 8px rgba(0,0,0,0.18);
   --drag-resize: #deb76c;
-  --grill-bg:    rgba(180, 230, 235, 0.45);
-  --opaque-line: rgba(20, 130, 140, 0.7);
-  --grill-border: rgba(60, 180, 190, 0.7);
+  --grill-bg:      rgba(120, 180, 160, 0.4);
+  --grill-lines:   rgba(20, 90, 75, 0.65);
+  --grill-border:  rgba(20, 90, 75, 0.7);
 
   /* Viewport / checkerboard */
   --checker-a:    #c8c8c8;
@@ -96,9 +96,9 @@
     --menu-shadow:  0 2px 10px rgba(0,0,0,0.5);
     --checker-a:    #3a3a3a;
     --checker-b:    #2e2e2e;
-    --grill-bg:     rgba(15, 55, 65, 0.75);
-    --opaque-line:  rgba(45, 140, 150, 0.6);
-    --grill-border: rgba(45, 140, 150, 0.6);
+    --grill-bg:      rgba(20, 60, 50, 0.75);
+    --grill-lines:   rgba(60, 200, 170, 0.6);
+    --grill-border:  rgba(60, 200, 170, 0.6);
   }
 }
 
@@ -123,9 +123,9 @@
   --menu-shadow:  0 2px 10px rgba(0,0,0,0.5);
   --checker-a:    #3a3a3a;
   --checker-b:    #2e2e2e;
-  --grill-bg:     rgba(15, 55, 65, 0.75);
-  --opaque-line:  rgba(45, 140, 150, 0.6);
-  --grill-border: rgba(45, 140, 150, 0.6);
+  --grill-bg:      rgba(20, 60, 50, 0.75);
+  --grill-lines:   rgba(60, 200, 170, 0.6);
+  --grill-border:  rgba(60, 200, 170, 0.6);
 }
 
 /* --- Reset -------------------------------------------------- */
@@ -814,12 +814,12 @@ li:hover > .fav-remove,
   background-image: linear-gradient(-45deg,
     transparent 0,
     transparent calc(25% - var(--grill-thickness-pct) / 2),
-    var(--opaque-line) 0,
-    var(--opaque-line) calc(25% + var(--grill-thickness-pct) / 2),
+    var(--grill-lines) 0,
+    var(--grill-lines) calc(25% + var(--grill-thickness-pct) / 2),
     transparent 0,
     transparent calc(75% - var(--grill-thickness-pct) / 2),
-    var(--opaque-line) 0,
-    var(--opaque-line) calc(75% + var(--grill-thickness-pct) / 2),
+    var(--grill-lines) 0,
+    var(--grill-lines) calc(75% + var(--grill-thickness-pct) / 2),
     transparent 0,
     transparent 100%);
   background-size: calc(var(--grill-spacing) / var(--zoom-scale, 1)) calc(var(--grill-spacing) / var(--zoom-scale, 1));

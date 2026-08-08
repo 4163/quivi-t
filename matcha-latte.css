@@ -19,7 +19,7 @@
   --checker-a:     #ded2bd;
   --checker-b:     #cabfa8;
   --grill-bg:      rgba(200, 215, 175, 0.45);
-  --opaque-line:   rgba(85, 110, 50, 0.6);
+  --grill-lines:    rgba(85, 110, 50, 0.6);
   --grill-border:  rgba(85, 110, 50, 0.7);
 }
 
@@ -44,7 +44,7 @@
     --checker-a:     #3d3225;
     --checker-b:     #302819;
     --grill-bg:      rgba(30, 45, 20, 0.75);
-    --opaque-line:   rgba(100, 140, 60, 0.6);
+    --grill-lines:    rgba(100, 140, 60, 0.6);
     --grill-border:  rgba(100, 140, 60, 0.6);
   }
   #options-status {
@@ -72,7 +72,7 @@
   --checker-a:     #3d3225;
   --checker-b:     #302819;
   --grill-bg:      rgba(30, 45, 20, 0.75);
-  --opaque-line:   rgba(100, 140, 60, 0.6);
+  --grill-lines:    rgba(100, 140, 60, 0.6);
   --grill-border:  rgba(100, 140, 60, 0.6);
 }
 :root[data-theme="dark"] #options-status {

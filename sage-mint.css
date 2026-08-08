@@ -1,0 +1,77 @@
+:root {
+  --bg:            #e3e8e1;
+  --surface:       #f6f9f2;
+  --surface-alt:   #edf1e6;
+  --field-bg:      #e3e8e1;
+  --border:        #9fb08a;
+  --border-light:  #c3d1ae;
+  --text:          #1f2e1a;
+  --text-muted:    #5c7050;
+  --text-dim:      #8fa17e;
+  --text-status:   #9c5c30;
+  --accent:        #1f7a6c;
+  --accent-hover:  #175f54;
+  --selected-bg:   #c9e4d8;
+  --selected-text: #0f3d34;
+  --hover-bg:      #dcead9;
+  --menu-bg:       #f6f9f2;
+  --menu-shadow:   0 2px 8px rgba(31,46,26,0.18);
+  --drag-resize:   #d4a13c;
+  --checker-a:     #ccd9bf;
+  --checker-b:     #b3c4a1;
+  --grill-bg:      rgba(185, 140, 165, 0.18);
+  --grill-lines:    rgba(115, 65, 95, 0.45);
+  --grill-border:  rgba(115, 65, 95, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:            #0d1a17;
+    --surface:       #142722;
+    --surface-alt:   #1a322b;
+    --field-bg:      #0d1a17;
+    --border:        #2e4a41;
+    --border-light:  #253c34;
+    --text:          #d8ece2;
+    --text-muted:    #8fb3a3;
+    --text-dim:      #567569;
+    --text-status:   #d29868;
+    --accent:        #35c4a8;
+    --accent-hover:  #55dcc0;
+    --selected-bg:   #1f4a3c;
+    --selected-text: #7fe8c8;
+    --hover-bg:      #1c342c;
+    --menu-bg:       #142722;
+    --menu-shadow:   0 2px 12px rgba(0,0,0,0.6);
+    --checker-a:     #1c342c;
+    --checker-b:     #122720;
+    --grill-bg:      rgba(115, 65, 95, 0.2);
+    --grill-lines:    rgba(210, 150, 180, 0.42);
+    --grill-border:  rgba(210, 150, 180, 0.42);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:            #0d1a17;
+  --surface:       #142722;
+  --surface-alt:   #1a322b;
+  --field-bg:      #0d1a17;
+  --border:        #2e4a41;
+  --border-light:  #253c34;
+  --text:          #d8ece2;
+  --text-muted:    #8fb3a3;
+  --text-dim:      #567569;
+  --text-status:   #d29868;
+  --accent:        #35c4a8;
+  --accent-hover:  #55dcc0;
+  --selected-bg:   #1f4a3c;
+  --selected-text: #7fe8c8;
+  --hover-bg:      #1c342c;
+  --menu-bg:       #142722;
+  --menu-shadow:   0 2px 12px rgba(0,0,0,0.6);
+  --checker-a:     #1c342c;
+  --checker-b:     #122720;
+  --grill-bg:      rgba(115, 65, 95, 0.2);
+  --grill-lines:    rgba(210, 150, 180, 0.42);
+  --grill-border:  rgba(210, 150, 180, 0.42);
+}
