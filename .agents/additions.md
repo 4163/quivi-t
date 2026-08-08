@@ -180,3 +180,7 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 ### Windows Thumbnails (APNG/WebP)
 - Add working Windows thumbnails (including preview pane) for APNG and animated WebP.
   - Antigravity IDE actually adds multiple things that Windows doesn't natively have, SVG thumbnails, code and MD files for the preview pane/animated thumbnail/icons. It would be great if we can support APNG/WebP files in a similar way that's practical to the project scope.
+
+### Additional Metadata Formats
+- Add support for parsing `comicinfo.json` and reading embedded EXIF/Acme tags directly from image binaries.
+- Currently deferred because `ComicInfo.xml` and `metadata.opf` cover 99.9% of use-cases. If requested by users, this can be easily slotted in thanks to the decoupled metadata architecture.
