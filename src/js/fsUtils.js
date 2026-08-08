@@ -238,7 +238,10 @@ export const FsUtils = {
       const result = await invoke('list_archive', { archivePath });
       if (!_isCurrentGeneration(options.generation)) return;
 
-      let files = this.buildArchiveList(result);
+      const metaFiles = result.files.filter(f => /\.(xml|opf)$/i.test(f.name)).map(f => f.name);
+      const imgFiles = result.files.filter(f => !/\.(xml|opf)$/i.test(f.name));
+
+      let files = this.buildArchiveList({ ...result, files: imgFiles });
       const prefs = DirectoryPrefs.getSortPrefs(result.archive_path);
       files = DirectoryPrefs.applySort(files, prefs.col, prefs.desc);
 
@@ -273,6 +276,7 @@ export const FsUtils = {
         list: files,
         index,
         archivePath: result.archive_path,
+        archiveMetadataFiles: metaFiles,
         directory: '',
         parentDirectory: result.archive_path.replace(/[\\/][^\\/]*$/, ''),
         filename: files[index]?.name || '',

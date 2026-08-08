@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Condvar};
 
-use crate::utils::is_image_ext;
+use crate::utils::{is_image_ext, is_metadata_ext};
 use crate::models::FileEntry;
 
 // ── Archive cache (thread-safe) ──────────────────────────────────────────────
@@ -45,7 +45,7 @@ pub fn list_zip_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
         let name = entry.name().to_string();
         if entry.is_dir() { continue; }
         let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-        if !is_image_ext(&ext) { continue; }
+        if !is_image_ext(&ext) && !is_metadata_ext(&ext) { continue; }
 
         files.push(FileEntry {
             name: name.clone(),
@@ -87,7 +87,7 @@ pub fn list_rar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
                 let name = entry.filename.to_string_lossy().to_string();
                 if !entry.is_directory() {
                     let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-                    if is_image_ext(&ext) {
+                    if is_image_ext(&ext) || is_metadata_ext(&ext) {
                         files.push(FileEntry {
                             name: name.clone(),
                             path: format!("{}|{}", archive_path, name),
@@ -245,7 +245,7 @@ pub fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
             continue;
         }
         let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-        if !is_image_ext(&ext) {
+        if !is_image_ext(&ext) && !is_metadata_ext(&ext) {
             continue;
         }
 

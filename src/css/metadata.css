@@ -1,0 +1,106 @@
+body {
+  background-color: var(--surface);
+  color: var(--text);
+  margin: 0;
+  height: 100vh;
+  overflow-y: auto;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+#metadata-root {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+#metadata-top {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+#metadata-cover-wrap {
+  flex-shrink: 0;
+  width: 120px;
+  background-color: var(--field-bg);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#metadata-cover-img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+#metadata-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0; /* allows text truncation if needed */
+}
+
+#metadata-title {
+  font-size: var(--fs-18);
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+#metadata-series {
+  font-size: var(--fs-13);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+#metadata-summary {
+  margin-top: 8px;
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+  line-height: 1.5;
+  white-space: pre-wrap; /* Preserve line breaks from XML */
+}
+
+/* ── Grid details ── */
+
+#metadata-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  row-gap: 8px;
+  column-gap: 16px;
+  font-size: var(--fs-13);
+  background-color: var(--surface-alt);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.meta-label {
+  color: var(--text-dim);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: var(--fs-11);
+  letter-spacing: 0.5px;
+  padding-top: 2px;
+}
+
+.meta-value {
+  color: var(--text);
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+/* ── Empty state ── */
+
+#metadata-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--fs-14);
+  padding: 40px 0;
+}

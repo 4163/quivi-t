@@ -135,6 +135,7 @@ pub fn run() {
             open_local_data_dir,
             save_config,
             open_options,
+            open_metadata_window,
             get_drives,
             watch_directory,
             open_in_explorer,
@@ -305,9 +306,15 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Architectural Standard: The 'main' window acts as the primary process lifecycle controller.
+                // If the user closes the main viewer window, all secondary/child windows (Options, Metadata, etc.)
+                // MUST be explicitly closed here to ensure the Tauri app exits cleanly rather than leaving orphans running.
                 if window.label() == "main" {
                     if let Some(options_window) = window.app_handle().get_webview_window("options") {
                         let _ = options_window.close();
+                    }
+                    if let Some(metadata_window) = window.app_handle().get_webview_window("metadata") {
+                        let _ = metadata_window.close();
                     }
                 }
             }

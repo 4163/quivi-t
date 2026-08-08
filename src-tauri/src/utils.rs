@@ -48,6 +48,11 @@ pub fn is_image_ext(ext: &str) -> bool {
     SUPPORTED_FORMATS.iter().any(|f| f.category == "Image" && f.ext == lower)
 }
 
+pub fn is_metadata_ext(ext: &str) -> bool {
+    let lower = ext.to_lowercase();
+    matches!(lower.as_str(), "xml" | "opf")
+}
+
 pub fn is_archive_ext(ext: &str) -> bool {
     let lower = ext.to_lowercase();
     SUPPORTED_FORMATS.iter().any(|f| f.category == "Archive" && f.ext == lower)

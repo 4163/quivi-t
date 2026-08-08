@@ -253,9 +253,9 @@ pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
     .closable(true)
     .maximizable(false)
     .visible(true)
-    .devtools(cfg!(debug_assertions));
+    .devtools(true);
 
-    let window = if let Some(pos) = position {
+    if let Some(pos) = position {
         builder.position(pos.x as f64, pos.y as f64)
     } else {
         builder.center()
@@ -263,8 +263,53 @@ pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
     .build()
     .map_err(|e| format!("Failed to open options window: {e}"))?;
 
-    window.show().map_err(|e| format!("Failed to show options window: {e}"))?;
-    window.set_focus().map_err(|e| format!("Failed to focus options window: {e}"))
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("metadata") {
+        window.show().map_err(|e| format!("Failed to show metadata window: {e}"))?;
+        window.set_focus().map_err(|e| format!("Failed to focus metadata window: {e}"))?;
+        return Ok(());
+    }
+
+    const WIN_W: f64 = 400.0;
+    const WIN_H: f64 = 600.0;
+
+    let position: Option<tauri::PhysicalPosition<i32>> = (|| {
+        let main = app.get_webview_window("main")?;
+        let pos  = main.outer_position().ok()?;
+        let size = main.outer_size().ok()?;
+        let scale = main.scale_factor().ok()?;
+        let x = pos.x + (size.width  as i32 - (WIN_W * scale) as i32) / 2;
+        let y = pos.y + (size.height as i32 - (WIN_H * scale) as i32) / 2;
+        Some(tauri::PhysicalPosition::new(x, y))
+    })();
+
+    let builder = tauri::WebviewWindowBuilder::new(
+        &app,
+        "metadata",
+        tauri::WebviewUrl::App("metadata.html".into())
+    )
+    .title("Archive Info")
+    .inner_size(WIN_W, WIN_H)
+    .min_inner_size(300.0, 400.0)
+    .resizable(true)
+    .closable(true)
+    .maximizable(true)
+    .visible(true)
+    .devtools(true);
+
+    if let Some(pos) = position {
+        builder.position(pos.x as f64, pos.y as f64)
+    } else {
+        builder.center()
+    }
+    .build()
+    .map_err(|e| format!("Failed to open metadata window: {e}"))?;
+
+    Ok(())
 }
 
 #[cfg(test)]

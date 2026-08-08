@@ -19,6 +19,7 @@ import {
   setPreFullscreenState,
   saveUIState
 } from './menubar.js';
+import { fetchMetadata, findMetadataEntry } from './metadata.js';
 
 // Reset the options tab state on app startup so it defaults to General per session
 localStorage.removeItem('options-active-tab');
@@ -80,6 +81,7 @@ const filePanel = document.getElementById('file-panel');
 const filePanelBreadcrumb = document.getElementById('file-panel-breadcrumb');
 const fileListUl = document.getElementById('file-list');
 const resizeHandle = document.getElementById('panel-resize-handle');
+const metadataBadge = document.getElementById('status-metadata-badge');
 
 let activeScaling = '';
 let statusBarVisible = true; // updated from config when loaded
@@ -87,6 +89,76 @@ let _uiInitialized = false;
 let fullscreenActive = false;
 let dropMessageTimer = null;
 const DEFAULT_DROP_MESSAGE = 'Drop files here, or click to open a folder';
+
+// Metadata window state
+let _lastMetadataArchive = null; // archive path we last fetched for
+let _currentMeta = null;         // last fetched ComicMeta (or null)
+
+async function _loadMetadataForArchive(archivePath, metaFiles, fileList) {
+  if (archivePath === _lastMetadataArchive) return; // already loaded
+  _lastMetadataArchive = archivePath;
+  _currentMeta = null;
+  metadataBadge.classList.add('hidden');
+
+  const meta = await fetchMetadata(archivePath, metaFiles);
+  if (_lastMetadataArchive !== archivePath) return; // navigated away
+
+  _currentMeta = meta;
+  if (meta) {
+    metadataBadge.classList.remove('hidden');
+    const firstImage = fileList.find(f => f && !f.is_dir && /\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(f.name));
+    const coverSrc = firstImage ? FsUtils.buildArchiveSrc(archivePath, firstImage.name) : null;
+
+    // Generate a small thumbnail data URL so the metadata window doesn't
+    // need to re-extract from the archive (avoids progressive decode flicker).
+    let coverDataUrl = null;
+    if (coverSrc) {
+      try {
+        coverDataUrl = await _generateCoverThumbnail(coverSrc);
+      } catch (_) {}
+    }
+    const payload = { meta, coverSrc: coverDataUrl || coverSrc };
+    // Cache for when the metadata window opens later
+    try { localStorage.setItem('quivit-metadata-current', JSON.stringify(payload)); } catch (_) {}
+    // Push live update to already-open metadata window
+    if (window.__TAURI__) {
+      window.__TAURI__.event.emit('metadata-data', payload).catch(() => {});
+    }
+  } else {
+    // No metadata — clear localStorage and badge
+    try { localStorage.removeItem('quivit-metadata-current'); } catch (_) {}
+  }
+}
+
+/**
+ * Loads the cover image, draws it to a small canvas, and returns a data URL.
+ * Keeps the thumbnail compact (~20-40KB) so localStorage doesn't bloat.
+ */
+function _generateCoverThumbnail(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const MAX_H = 300;
+      const scale = Math.min(1, MAX_H / img.naturalHeight);
+      const w = Math.round(img.naturalWidth * scale);
+      const h = Math.round(img.naturalHeight * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function openMetadataWindow() {
+  if (!_currentMeta || !window.__TAURI__) return;
+  await window.__TAURI__.core.invoke('open_metadata_window').catch(console.error);
+}
 
 function updateScalingMenu() {
   document.querySelectorAll('[data-scaling]').forEach(item => {
@@ -723,11 +795,26 @@ Core.onStateChange((state) => {
   updateViewToggleMenu(state);
 
   renderFilePanel(state);
+
+  // Auto-fetch ComicInfo metadata when entering a new archive.
+  if (state.mode === 'archive' && state.archivePath) {
+    _loadMetadataForArchive(state.archivePath, state.archiveMetadataFiles || [], state.list).catch(console.error);
+  } else if (state.mode !== 'archive') {
+    // Left the archive — clear badge
+    _lastMetadataArchive = null;
+    _currentMeta = null;
+    metadataBadge.classList.add('hidden');
+    try { localStorage.removeItem('quivit-metadata-current'); } catch (_) {}
+  }
 });
 
 window.addEventListener('quivit-history-changed', () => {
   updateHistoryMenu();
 });
+
+// Badge opens the metadata window
+metadataBadge.addEventListener('click', () => openMetadataWindow());
+metadataBadge.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMetadataWindow(); } });
 
 initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, Viewer, FsUtils });
 initMenuBar();

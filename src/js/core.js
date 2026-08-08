@@ -63,6 +63,9 @@ const _state = {
   /** If mode === 'archive', the path to the archive */
   archivePath: '',
 
+  /** If mode === 'archive', the filenames of any metadata files found */
+  archiveMetadataFiles: [],
+
   /** UI State: Is the file list panel visible? */
   fileListVisible: true,
 

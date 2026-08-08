@@ -860,8 +860,15 @@ li:hover > .fav-remove,
 
 #statusbar.hidden { display: none; }
 
-.status-filename {
+.status-filename-container {
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.status-filename {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

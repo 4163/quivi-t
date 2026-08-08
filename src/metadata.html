@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Archive Info</title>
+    <link rel="stylesheet" href="/css/main.css" />
+    <link rel="stylesheet" href="/css/metadata.css" />
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('quivit-theme');
+          if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+          var c = localStorage.getItem('quivit-custom-css');
+          if (c) {
+            var s = document.createElement('style');
+            s.id = 'custom-css';
+            s.textContent = c;
+            document.head.appendChild(s);
+          }
+        } catch(e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="metadata-root">
+      <div id="metadata-top">
+        <div id="metadata-cover-wrap">
+          <img id="metadata-cover-img" src="" alt="Cover" draggable="false" />
+        </div>
+        <div id="metadata-title-block">
+          <p id="metadata-title"></p>
+          <p id="metadata-series"></p>
+          <p id="metadata-summary"></p>
+        </div>
+      </div>
+      <div id="metadata-grid">
+        <!-- Populated by metadata-window.js -->
+      </div>
+      <p id="metadata-empty" class="hidden">No metadata found in this archive.</p>
+    </div>
+    <script type="module" src="/js/metadata-window.js"></script>
+    <script src="/js/shellBackground.js"></script>
+  </body>
+</html>
