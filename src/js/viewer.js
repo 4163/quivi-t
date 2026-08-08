@@ -10,6 +10,9 @@ import { Core } from './core.js';
 import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from './keybinds.js';
 
 const img = document.getElementById('viewer-img');
+const imgWrapper = document.getElementById('viewer-img-wrapper');
+const imgGrill = document.getElementById('img-grill');
+const grillBorder = document.getElementById('img-grill-border');
 const statusZoom = document.querySelector('.status-zoom');
 const statusDims = document.querySelector('.status-dims');
 const statusName = document.querySelector('.status-filename');
@@ -60,7 +63,15 @@ function _clampPan() {
 
 function _applyTransform() {
   _clampPan();
-  img.style.transform = `translate(calc(-50% + ${_tx}px), calc(-50% + ${_ty}px)) rotate(${_rotation}deg) scale(${_flipX * _scale}, ${_flipY * _scale})`;
+  const transform = `translate(calc(-50% + ${_tx}px), calc(-50% + ${_ty}px)) rotate(${_rotation}deg) scale(${_flipX * _scale}, ${_flipY * _scale})`;
+  
+  if (imgWrapper) {
+    imgWrapper.style.transform = transform;
+    // Pass the zoom scale down to CSS so the grill and border can counter-scale
+    // their subpixel dimensions natively without needing manual JS positioning.
+    imgWrapper.style.setProperty('--zoom-scale', _scale);
+  }
+  
   if (statusZoom) statusZoom.textContent = `${Math.round(_scale * 100)}%`;
 }
 

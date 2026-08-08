@@ -682,10 +682,12 @@ Core.onStateChange((state) => {
 
   if (state.config && state.config.frontend_data) {
     const isTransparent = !!state.config.frontend_data.transparent_bg;
-    const imgEl = document.getElementById('viewer-img');
+    const grillEl = document.getElementById('img-grill');
+    const grillBorderEl = document.getElementById('img-grill-border');
     const toggleEl = document.getElementById('cmd-toggle-transparent');
     
-    imgEl.classList.toggle('opaque-bg', !isTransparent);
+    if (grillEl) grillEl.classList.toggle('active', !isTransparent);
+    if (grillBorderEl) grillBorderEl.classList.toggle('active', !isTransparent);
     if (toggleEl) {
       toggleEl.classList.toggle('checked', !isTransparent);
     }

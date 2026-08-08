@@ -16,6 +16,7 @@
   --text:         #1a1a1a;
   --text-muted:   #666666;
   --text-dim:     #999999;
+  --text-status:    #b00020;
   --accent:       #0078d4;
   --accent-hover: #106ebe;
   --selected-bg:  #cce4f7;
@@ -24,6 +25,9 @@
   --menu-bg:      #ffffff;
   --menu-shadow:  0 2px 8px rgba(0,0,0,0.18);
   --drag-resize: #deb76c;
+  --grill-bg:    rgba(180, 230, 235, 0.45);
+  --opaque-line: rgba(20, 130, 140, 0.7);
+  --grill-border: rgba(60, 180, 190, 0.7);
 
   /* Viewport / checkerboard */
   --checker-a:    #c8c8c8;
@@ -60,6 +64,15 @@
   --fs-23: 1.4375rem;
   --fs-24: 1.5rem;
   --fs-40: 2.5rem;
+
+  /* Opaque grill layout */
+  --grill-spacing-px: 8;
+  --grill-thickness-px: 1;
+  
+  --grill-spacing: calc(var(--grill-spacing-px) * 1px);
+  /* The diagonal length of a square tile is spacing * sqrt(2) (approx 1.4142).
+     We calculate the thickness as a percentage of the diagonal gradient line. */
+  --grill-thickness-pct: calc((var(--grill-thickness-px) / (var(--grill-spacing-px) * 1.4142)) * 100%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -73,6 +86,7 @@
     --text:         #e8e8e8;
     --text-muted:   #aaaaaa;
     --text-dim:     #666666;
+    --text-status:  #ff4d7a;
     --accent:       #4ea4f7;
     --accent-hover: #3a8ee0;
     --selected-bg:  #1e3a5f;
@@ -82,6 +96,9 @@
     --menu-shadow:  0 2px 10px rgba(0,0,0,0.5);
     --checker-a:    #3a3a3a;
     --checker-b:    #2e2e2e;
+    --grill-bg:     rgba(15, 55, 65, 0.75);
+    --opaque-line:  rgba(45, 140, 150, 0.6);
+    --grill-border: rgba(45, 140, 150, 0.6);
   }
 }
 
@@ -96,6 +113,7 @@
   --text:         #e8e8e8;
   --text-muted:   #aaaaaa;
   --text-dim:     #666666;
+  --text-status:  #ff4d7a;
   --accent:       #4ea4f7;
   --accent-hover: #3a8ee0;
   --selected-bg:  #1e3a5f;
@@ -105,6 +123,9 @@
   --menu-shadow:  0 2px 10px rgba(0,0,0,0.5);
   --checker-a:    #3a3a3a;
   --checker-b:    #2e2e2e;
+  --grill-bg:     rgba(15, 55, 65, 0.75);
+  --opaque-line:  rgba(45, 140, 150, 0.6);
+  --grill-border: rgba(45, 140, 150, 0.6);
 }
 
 /* --- Reset -------------------------------------------------- */
@@ -207,7 +228,7 @@ button {
   align-items: center;
   height: 100%;
   padding: 0 10px;
-  margin:1.3045px 0;
+  margin: 1.3045px 0;
   font: inherit;
   color: var(--text);
   cursor: default;
@@ -231,6 +252,8 @@ button {
   top: 100%;
   left: 0;
   min-width: 200px;
+  max-height: calc(100vh - 28px);
+  overflow-y: auto;
   background: var(--menu-bg);
   border: 1px solid var(--border);
   box-shadow: var(--menu-shadow);
@@ -511,12 +534,16 @@ li:hover > .fav-remove,
   display: grid;
   grid-template-columns: var(--col-name-w) var(--col-ext-w) var(--col-date-w);
   align-items: stretch;
-  padding: 6.609px 0;
   background: var(--surface-alt);
   border-bottom: 1px solid var(--border);
   font-size: var(--fs-11);
   color: var(--text-muted);
   flex-shrink: 0;
+}
+
+#file-panel-header > div {
+  padding-top: 2.15625px;
+  padding-bottom: 2.15625px;
 }
 
 .header-cell {
@@ -751,34 +778,78 @@ li:hover > .fav-remove,
 .drop-hint p   { font-size: 0.95rem; font-weight: 500; text-align: center; }
 .drop-hint span{ font-size: 0.75rem; opacity: 0.5; letter-spacing: 0.04em; text-align: center; }
 
-/* --- Viewer image ----------------------------------------- */
-#viewer-img {
+/* --- Viewer image wrapper --------------------------------- */
+/* The wrapper is the positioned/transformed element. Both the
+   image and the overlay live inside so CSS aligns them for free. */
+#viewer-img-wrapper {
   position: absolute;
   top: 50%;
   left: 50%;
   transform-origin: center center;
   transform: translate(-50%, -50%);
-  max-width: none;
-  display: block;
   pointer-events: none;
 }
 
-#viewer-img.opaque-bg {
-  background-color: #FFFFFF40;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.08);
+/* --- Viewer image ----------------------------------------- */
+/* position: relative puts it in the same stacking layer as #img-grill
+   (position: absolute), so DOM order determines paint order and the
+   image (second in DOM) naturally renders on top of the grill. */
+#viewer-img {
+  display: block;
+  max-width: none;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-[data-theme="dark"] #viewer-img.opaque-bg {
-  background-color: #00000040;
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.08);
+/* --- Opaque image grill ----------------------------------- */
+#img-grill {
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Solid base hides the viewport checkerboard; stripes are drawn over it */
+  background-color: var(--grill-bg);
+  /* Absolute pixel stops mixed with percentages guarantee perfect thickness */
+  background-image: linear-gradient(-45deg,
+    transparent 0,
+    transparent calc(25% - var(--grill-thickness-pct) / 2),
+    var(--opaque-line) 0,
+    var(--opaque-line) calc(25% + var(--grill-thickness-pct) / 2),
+    transparent 0,
+    transparent calc(75% - var(--grill-thickness-pct) / 2),
+    var(--opaque-line) 0,
+    var(--opaque-line) calc(75% + var(--grill-thickness-pct) / 2),
+    transparent 0,
+    transparent 100%);
+  background-size: calc(var(--grill-spacing) / var(--zoom-scale, 1)) calc(var(--grill-spacing) / var(--zoom-scale, 1));
+  background-repeat: repeat;
+}
+
+#img-grill.active {
+  display: block;
+}
+
+/* Border around the grill */
+#img-grill-border {
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Use box-shadow because outline width doesn't support subpixels reliably across browsers */
+  box-shadow: inset 0 0 0 calc(var(--grill-thickness-px) * 1px / var(--zoom-scale, 1)) var(--grill-border);
+  z-index: 2;
+}
+
+#img-grill-border.active {
+  display: block;
 }
 
 /* --- Status bar ------------------------------------------- */
 #statusbar {
   display: flex;
   align-items: center;
-  padding: 2.453px;
-  padding: 0 8px;
+  padding: 2.453px 8px;
   gap: 12px;
   background: var(--surface-alt);
   border-top: 1px solid var(--border);

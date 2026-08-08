@@ -164,8 +164,13 @@
           </div>
         </div>
 
-        <!-- The image element -->
-        <img id="viewer-img" src="" alt="" draggable="false" decoding="async" />
+        <!-- Image wrapper: contains the image, grill, and border.
+             The wrapper is the transformed element. CSS handles their sizing automatically. -->
+        <div id="viewer-img-wrapper">
+          <div id="img-grill"></div>
+          <div id="img-grill-border"></div>
+          <img id="viewer-img" src="" alt="" draggable="false" decoding="async" />
+        </div>
       </div>
 
     </div>

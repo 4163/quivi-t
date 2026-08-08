@@ -18,6 +18,9 @@
   --drag-resize:   #deb76c;
   --checker-a:     #ded2bd;
   --checker-b:     #cabfa8;
+  --grill-bg:      rgba(200, 215, 175, 0.45);
+  --opaque-line:   rgba(85, 110, 50, 0.6);
+  --grill-border:  rgba(85, 110, 50, 0.7);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,6 +43,9 @@
     --menu-shadow:   0 2px 10px rgba(0,0,0,0.5);
     --checker-a:     #3d3225;
     --checker-b:     #302819;
+    --grill-bg:      rgba(30, 45, 20, 0.75);
+    --opaque-line:   rgba(100, 140, 60, 0.6);
+    --grill-border:  rgba(100, 140, 60, 0.6);
   }
   #options-status {
     color: #b8860b;
@@ -65,6 +71,9 @@
   --menu-shadow:   0 2px 10px rgba(0,0,0,0.5);
   --checker-a:     #3d3225;
   --checker-b:     #302819;
+  --grill-bg:      rgba(30, 45, 20, 0.75);
+  --opaque-line:   rgba(100, 140, 60, 0.6);
+  --grill-border:  rgba(100, 140, 60, 0.6);
 }
 :root[data-theme="dark"] #options-status {
   color: #b8860b;
