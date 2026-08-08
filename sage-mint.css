@@ -20,7 +20,7 @@
   --checker-a:     #ccd9bf;
   --checker-b:     #b3c4a1;
   --grill-bg:      rgba(185, 140, 165, 0.18);
-  --grill-lines:    rgba(115, 65, 95, 0.45);
+  --grill-lines:   rgba(115, 65, 95, 0.45);
   --grill-border:  rgba(115, 65, 95, 0.5);
 }
 
@@ -46,7 +46,7 @@
     --checker-a:     #1c342c;
     --checker-b:     #122720;
     --grill-bg:      rgba(115, 65, 95, 0.2);
-    --grill-lines:    rgba(210, 150, 180, 0.42);
+    --grill-lines:   rgba(210, 150, 180, 0.42);
     --grill-border:  rgba(210, 150, 180, 0.42);
   }
 }
@@ -72,6 +72,6 @@
   --checker-a:     #1c342c;
   --checker-b:     #122720;
   --grill-bg:      rgba(115, 65, 95, 0.2);
-  --grill-lines:    rgba(210, 150, 180, 0.42);
+  --grill-lines:   rgba(210, 150, 180, 0.42);
   --grill-border:  rgba(210, 150, 180, 0.42);
 }

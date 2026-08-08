@@ -7,24 +7,24 @@
 /* --- System font stack (zero external requests → best LCP) -- */
 :root {
   /* Light theme tokens */
-  --bg:           #f0f0f0;
-  --surface:      #ffffff;
-  --surface-alt:  #fafafa;
-  --field-bg:     #f0f0f0;
-  --border:       #d4d4d4;
-  --border-light: #e8e8e8;
-  --text:         #1a1a1a;
-  --text-muted:   #666666;
-  --text-dim:     #999999;
-  --text-status:    #b00020;
-  --accent:       #0078d4;
-  --accent-hover: #106ebe;
-  --selected-bg:  #cce4f7;
-  --selected-text:#003f7f;
-  --hover-bg:     #e8f0f8;
-  --menu-bg:      #ffffff;
-  --menu-shadow:  0 2px 8px rgba(0,0,0,0.18);
-  --drag-resize: #deb76c;
+  --bg:            #f0f0f0;
+  --surface:       #ffffff;
+  --surface-alt:   #fafafa;
+  --field-bg:      #f0f0f0;
+  --border:        #d4d4d4;
+  --border-light:  #e8e8e8;
+  --text:          #1a1a1a;
+  --text-muted:    #666666;
+  --text-dim:      #999999;
+  --text-status:   #b00020;
+  --accent:        #0078d4;
+  --accent-hover:  #106ebe;
+  --selected-bg:   #cce4f7;
+  --selected-text: #003f7f;
+  --hover-bg:      #e8f0f8;
+  --menu-bg:       #ffffff;
+  --menu-shadow:   0 2px 8px rgba(0,0,0,0.18);
+  --drag-resize:   #deb76c;
   --grill-bg:      rgba(120, 180, 160, 0.4);
   --grill-lines:   rgba(20, 90, 75, 0.65);
   --grill-border:  rgba(20, 90, 75, 0.7);
@@ -35,35 +35,35 @@
   --checker-size: 14px;
 
   /* Layout */
-  --panel-w:      260px;
-  --panel-min-w:  120px;
-  --panel-max-w:  480px;
+  --panel-w:         260px;
+  --panel-min-w:     120px;
+  --panel-max-w:     480px;
   --resize-handle-w: 4px;
-  --col-name-w:   134px;
-  --col-ext-w:    46px;
-  --col-date-w:   92px;
+  --col-name-w:      134px;
+  --col-ext-w:       46px;
+  --col-date-w:      92px;
 
   color-scheme: light dark;
 
   /* Font sizes in px (rem = px ÷ 16) */
-  --fs-9: 0.5625rem;
-  --fs-10: 0.625rem;
-  --fs-11: 0.6875rem;
+  --fs-9:    0.5625rem;
+  --fs-10:   0.625rem;
+  --fs-11:   0.6875rem;
   --fs-11-5: 0.71875rem; /* 11.5 */
-  --fs-12: 0.75rem;
-  --fs-13: 0.8125rem;
-  --fs-14: 0.875rem;
-  --fs-15: 0.9375rem;
-  --fs-16: 1rem;
-  --fs-17: 1.0625rem;
-  --fs-18: 1.125rem;
-  --fs-19: 1.1875rem;
-  --fs-20: 1.25rem;
-  --fs-21: 1.3125rem;
-  --fs-22: 1.375rem;
-  --fs-23: 1.4375rem;
-  --fs-24: 1.5rem;
-  --fs-40: 2.5rem;
+  --fs-12:   0.75rem;
+  --fs-13:   0.8125rem;
+  --fs-14:   0.875rem;
+  --fs-15:   0.9375rem;
+  --fs-16:   1rem;
+  --fs-17:   1.0625rem;
+  --fs-18:   1.125rem;
+  --fs-19:   1.1875rem;
+  --fs-20:   1.25rem;
+  --fs-21:   1.3125rem;
+  --fs-22:   1.375rem;
+  --fs-23:   1.4375rem;
+  --fs-24:   1.5rem;
+  --fs-40:   2.5rem;
 
   /* Opaque grill layout */
   --grill-spacing-px: 8;
@@ -96,9 +96,9 @@
     --menu-shadow:  0 2px 10px rgba(0,0,0,0.5);
     --checker-a:    #3a3a3a;
     --checker-b:    #2e2e2e;
-    --grill-bg:      rgba(20, 60, 50, 0.75);
-    --grill-lines:   rgba(60, 200, 170, 0.6);
-    --grill-border:  rgba(60, 200, 170, 0.6);
+    --grill-bg:     rgba(20, 60, 50, 0.75);
+    --grill-lines:  rgba(60, 200, 170, 0.6);
+    --grill-border: rgba(60, 200, 170, 0.6);
   }
 }
 
@@ -123,9 +123,9 @@
   --menu-shadow:  0 2px 10px rgba(0,0,0,0.5);
   --checker-a:    #3a3a3a;
   --checker-b:    #2e2e2e;
-  --grill-bg:      rgba(20, 60, 50, 0.75);
-  --grill-lines:   rgba(60, 200, 170, 0.6);
-  --grill-border:  rgba(60, 200, 170, 0.6);
+  --grill-bg:     rgba(20, 60, 50, 0.75);
+  --grill-lines:  rgba(60, 200, 170, 0.6);
+  --grill-border: rgba(60, 200, 170, 0.6);
 }
 
 /* --- Reset -------------------------------------------------- */
