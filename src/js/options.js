@@ -369,4 +369,50 @@ document.getElementById('btn-cancel').addEventListener('click', async () => {
   await closeOptionsWindow();
 });
 
-init();
+// --- Width auto-fit ---
+// The window opens hidden (config.rs) and is initially sized to the tab bar's
+// natural width before being shown, so it never flickers. Fits are serialized
+// so out-of-order invokes can't leave a stale narrow size.
+// Cap for the auto-fit width — must match OPTIONS_MAX_W in config.rs.
+const OPTIONS_MAX_INITIAL_W = 560;
+let fitTail = Promise.resolve();
+function fitContentWidth() {
+  if (!invoke) return Promise.resolve();
+  fitTail = fitTail.then(() => new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      // Measure the .tabs bar at fit-content as the initial width. Measuring
+      // tab content is unreliable (e.g. the Customization textarea's long
+      // placeholder lines inflate max-content past the clamp). fit-content here
+      // is only for measurement — tabs still stretch to fill the window.
+      // Add the body's horizontal padding (read from CSS, not hardcoded) so the
+      // content isn't clipped once the window is sized to the tabs width.
+      const tabs = document.querySelector('.tabs');
+      let width = OPTIONS_MAX_INITIAL_W;
+      if (tabs) {
+        const prev = tabs.style.width;
+        tabs.style.width = 'fit-content';
+        width = tabs.getBoundingClientRect().width;
+        tabs.style.width = prev;
+        const pad = getComputedStyle(document.body);
+        width += parseFloat(pad.paddingLeft || 0) + parseFloat(pad.paddingRight || 0);
+        // getBoundingClientRect() returns subpixel floats (font metrics are
+        // fractional), so rounding down could size the window a hair narrower
+        // than the content and clip 1px. Always round up to be safe.
+        width = Math.ceil(width);
+      }
+      invoke('fit_options_window', { width: Math.min(width, OPTIONS_MAX_INITIAL_W) }).then(resolve, resolve);
+    });
+  }));
+  return fitTail;
+}
+
+let windowShown = false;
+function showOptionsWindow() {
+  if (windowShown || !tauri.window?.getCurrentWindow) return;
+  windowShown = true;
+  tauri.window.getCurrentWindow().show().catch(() => {});
+}
+
+init()
+  .then(() => fitContentWidth().then(showOptionsWindow))
+  .catch(() => showOptionsWindow());

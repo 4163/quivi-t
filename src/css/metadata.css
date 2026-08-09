@@ -1,8 +1,12 @@
+html, body {
+  height: 100%;
+  background-color: var(--surface);
+}
+
 body {
   background-color: var(--surface);
   color: var(--text);
   margin: 0;
-  height: 100vh;
   overflow-y: auto;
   font-family: 'Segoe UI', system-ui, sans-serif;
 }

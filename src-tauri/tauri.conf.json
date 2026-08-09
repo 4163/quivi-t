@@ -1,25 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "QuiviT",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.x4163.quivit",
   "build": {
     "frontendDist": "../src"
   },
   "app": {
     "withGlobalTauri": true,
-    "windows": [
-      {
-        "title": "QuiviT",
-        "width": 900,
-        "height": 650,
-        "minWidth": 400,
-        "minHeight": 300,
-        "backgroundColor": "#f0f0f0",
-        "visible": false,
-        "devtools": true
-      }
-    ],
     "security": {
       "csp": null,
       "assetProtocol": {

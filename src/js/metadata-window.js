@@ -14,6 +14,7 @@ const summaryEl  = document.getElementById('metadata-summary');
 const gridEl     = document.getElementById('metadata-grid');
 const emptyEl    = document.getElementById('metadata-empty');
 const coverWrap  = document.getElementById('metadata-cover-wrap');
+const rootEl     = document.getElementById('metadata-root');
 
 function render(payload) {
   const { meta, coverSrc } = payload || {};
@@ -33,8 +34,11 @@ function render(payload) {
   // Cover image — keep hidden until fully decoded to avoid progressive JPEG scan-line rendering
   if (coverSrc) {
     coverWrap.classList.add('hidden');
-    coverImg.onload = () => coverWrap.classList.remove('hidden');
-    coverImg.onerror = () => { coverWrap.classList.add('hidden'); coverImg.src = ''; };
+    coverImg.onload = () => {
+      coverWrap.classList.remove('hidden');
+      fitContentHeight().then(showWindow);
+    };
+    coverImg.onerror = () => { coverWrap.classList.add('hidden'); coverImg.src = ''; showWindow(); };
     coverImg.src = coverSrc;
   } else {
     coverWrap.classList.add('hidden');
@@ -103,15 +107,76 @@ function render(payload) {
 }
 
 // Render from localStorage immediately (data written before window opened)
+// The window opens hidden; show it once the content-fit settles.
 try {
   const stored = localStorage.getItem('quivit-metadata-current');
-  if (stored) render(JSON.parse(stored));
-} catch (e) {}
+  if (stored) {
+    const payload = JSON.parse(stored);
+    render(payload);
+    // With a cover, render()'s onload shows the window after the re-fit;
+    // without one, show after the initial fit.
+    if (!payload || !payload.coverSrc) {
+      fitContentHeight().then(showWindow);
+    }
+  } else {
+    render(null);
+    fitContentHeight().then(showWindow);
+  }
+} catch (e) { showWindow(); }
+
+// Cap for the initial content-fit height — must match META_MAX_H in config.rs
+const META_MAX_INITIAL_H = 600;
+
+/**
+ * Resize the window height to fit the rendered content, capped at META_MAX_INITIAL_H,
+ * and center it over the main window.
+ *
+ * Fits are SERIALIZED through a promise chain: multiple triggers can fire in
+ * quick succession (initial render, cover image decode via render()'s onload,
+ * live `metadata-data` updates), and each issues an async `fit_metadata_window`
+ * IPC invoke. Without serialization those invokes can complete out of order,
+ * letting a stale short measurement (taken while the cover was still hidden)
+ * land last and leave the window too short. Each queued measurement re-reads
+ * the CURRENT layout, so the final applied value is always the freshest.
+ */
+let fitTail = Promise.resolve();
+function fitContentHeight() {
+  if (!window.__TAURI__?.core?.invoke) return Promise.resolve();
+  fitTail = fitTail.then(() => new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      // Measure the content root, NOT documentElement.scrollHeight — the latter
+      // is clamped to the viewport height, so it can never report a value smaller
+      // than the window and the auto-fit would never shrink.
+      const contentH = rootEl.scrollHeight;
+      const targetH = Math.min(contentH, META_MAX_INITIAL_H);
+      // Rust-side fit_metadata_window sets the size AND re-centers over the
+      // main window using this exact height — dynamic centering instead of
+      // assuming a fixed pre-fit height.
+      window.__TAURI__.core.invoke('fit_metadata_window', {
+        height: targetH
+      }).then(resolve, resolve);
+    });
+  }));
+  return fitTail;
+}
+
+// The window is built hidden (config.rs) so it never paints at the pre-fit
+// height. Show it only after the content-fit settles — avoids the visible
+// shrink flicker. Guarded so live updates don't re-trigger it.
+let windowShown = false;
+function showWindow() {
+  if (windowShown || !window.__TAURI__) return;
+  windowShown = true;
+  window.__TAURI__.window.getCurrentWindow().show().catch(() => {});
+}
 
 // Stay live: update when the main window changes archive
 if (window.__TAURI__) {
   window.__TAURI__.event.listen('metadata-data', (e) => {
     render(e.payload);
+    // Re-fit to the new content height (render() also re-fits after the cover
+    // decodes, but the window should shrink immediately even without a cover).
+    fitContentHeight();
     // Keep localStorage in sync so re-opens don't need to wait for an event
     try { localStorage.setItem('quivit-metadata-current', JSON.stringify(e.payload)); } catch (_) {}
   }).catch(console.error);

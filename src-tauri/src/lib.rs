@@ -81,9 +81,23 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
-            if let Some(main_window) = app.get_webview_window("main") {
-                apply_shell_background(&main_window, &config);
-            }
+            // The 'main' window is built here in Rust (not declared in
+            // tauri.conf.json) so all windows share a single construction path
+            // in config.rs and the shell background is applied before first paint.
+            let main_window = tauri::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::App("index.html".into()),
+            )
+            .title("QuiviT")
+            .inner_size(MAIN_INITIAL_W, MAIN_INITIAL_H)
+            .min_inner_size(MAIN_MIN_W, MAIN_MIN_H)
+            .visible(false)
+            .devtools(true)
+            .build()
+            .expect("failed to build main window");
+
+            apply_shell_background(&main_window, &config);
 
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
@@ -135,7 +149,9 @@ pub fn run() {
             open_local_data_dir,
             save_config,
             open_options,
+            fit_options_window,
             open_metadata_window,
+            fit_metadata_window,
             get_drives,
             watch_directory,
             open_in_explorer,
