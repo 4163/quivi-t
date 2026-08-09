@@ -27,13 +27,17 @@
 - `keyboardNav.js` — generic list/tab keyboard navigation (arrow keys, Home/End).
 - `shellBackground.js` — leaf module (included on both pages) mirroring `--surface` into the native window background; re-syncs on theme/custom-CSS changes.
 - `main.js` — DOM wiring, action dispatch, event listeners.
-- `options.js` — Options window logic (theme/CSS previews, revert on close).
+- `options.js` — Options window logic (theme/CSS previews, revert on close, width auto-fit).
 - `keybindUi.js` — keybind capture/conflict UI (Options).
 - `associationsUi.js` — file-type association UI (Options).
 
+**Window Sizing:**
+- Main window is built in Rust (`lib.rs` setup) so all windows share one construction path. Size constants live in `config.rs` (single source of truth), mirrored by JS caps (`OPTIONS_MAX_INITIAL_W`, `META_MAX_INITIAL_H`).
+- Options/metadata windows open hidden, then JS measures content and calls `fit_*_window` (size + re-center) before `.show()` — no size flicker.
+
 **Rust Module Structure:**
-- `lib.rs` — app entry, window/event setup, shell background sync at startup.
-- `config.rs` — `AppConfig`, load/save, split-file helpers, portable detection, `open_options` window management.
+- `lib.rs` — app entry, main-window construction, event setup, shell background sync at startup.
+- `config.rs` — `AppConfig`, load/save, split-file helpers, portable detection, window size constants, options/metadata window lifecycle + fit/center commands.
 - `commands.rs` — Tauri commands (directory listing, file ops, sibling nav, directory watcher, `get_path_kind`).
 - `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants).
 - `ico.rs` — ICO spritesheet processing.
@@ -48,7 +52,6 @@
 - **Hidden File Config:** Add a hidden true/false config inside the portable config file. Dynamically change and listen to the Windows/System hidden state of the file and appropriate sync.
 
 ### View, Rendering & Window Enhancements (Visuals/Features)
-- **Initial Window Sizes:** Adjust the initial and minimum window sizes of the Tauri windows. Explore and see if auto-fit to tabs for width, and auto-fit to Options page for height feels intuitive.
 - **HTML Flickering & Image Navigation:** Optimize image navigation to prevent HTML flickering. 
   - *Context:* Whilst the processing has already been improved to be identical to the original Quivi behavior (show previous image until new one is ready), there's still inherent flickering caused by the presentation: `click/active > load image > present image`. This can easily be fixed by improving the html/js functions (caching/preloading).
   - This additionally fixes the lag when holding down a key and switching images really fast.
@@ -93,7 +96,6 @@
 ### Documentation & GitHub (Project Health)
 
 - **Contributing Section:** Add a contributing section to the github page, for general contributions to the project, but more on documenting how new languages should be created for the language settings.
-- **Update Availability Indicator:** Add a lightweight GitHub releases check that surfaces an unobtrusive notice on the menubar's existing GitHub button when a newer version is available. No auto-download or auto-install — this intentionally avoids an auto-update system, which is out of scope and conflicts with the portable-first goals. Fail silently when offline or rate-limited.
 
 ---
 
@@ -116,7 +118,7 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 2. Confirm `.gitignore` coverage (do not track generated runtime config, portable config, build output, or personal directory-sort metadata). If portable mode writes personal paths next to the executable, ensure those files are ignored.
 3. Static checks. `node --check` on every touched JS module and `cargo check` in `src-tauri`.
 4. Runtime-verify each change made after the last remote push: exercise the new behavior in the app and confirm it works as intended.
-5. Manually review that the project remains coherently decoupled, with features in their own JS files where warranted. Keep or improve the current split (`core.js`, `viewer.js`, `filePanel.js`, `shortcuts.js`, `keybinds.js`, `options.js`, `main.js`).
+5. Manually review that the project remains coherently decoupled, with features in their own JS/Rust files where warranted. Keep or improve the current split on both sides (`core.js`, `viewer.js`, `filePanel.js`, `shortcuts.js`, `keybinds.js`, `options.js`, `main.js` for the frontend; `lib.rs`, `config.rs`, `commands.rs`, `archives.rs`, `models.rs`, `utils.rs` for the backend).
 6. Update the **"Current Architecture State"** section at the top of this file to accurately document any new, deleted, or repurposed JS/Rust modules and configuration behavior.
 7. Verify every config-backed or persistent feature meets both global and portable-mode requirements.
 8. Port the completed items from this file into `.agents/implemented.md`, including any additions and fixes made during the pass that were not originally listed here.
@@ -186,3 +188,10 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 ### Additional Metadata Formats
 - Add support for parsing `comicinfo.json` and reading embedded EXIF/Acme tags directly from image binaries.
 - Currently deferred because `ComicInfo.xml` and `metadata.opf` cover 99.9% of use-cases. If requested by users, this can be easily slotted in thanks to the decoupled metadata architecture.
+
+### Update Availability Indicator
+- Add a lightweight GitHub releases check on startup that displays an update notice in the `.menubar-spacer` area (right-aligned, pointing toward the GitHub button).
+- When an update is available: show a sentence like "Version X.Y.Z is available — you are X versions behind" inside the menubar spacer. Temporarily reroute the GitHub button to the releases page for that session.
+- No auto-download or auto-install — this intentionally avoids an auto-update system, which is out of scope and conflicts with the portable-first goals.
+- Fail silently when offline or rate-limited.
+- **Important:** Must be implemented and tested after the first actual release is published on GitHub, otherwise there's nothing to compare against.

@@ -6,6 +6,15 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ## Fully Implemented
 
+### Window Auto-Fit & Sizing
+- **Centralized size constants:** Main/options/metadata initial + min window sizes moved to `config.rs` (`MAIN_INITIAL_W/H`, `OPTIONS_INITIAL_W/H`, `META_INITIAL_W/H`, etc.), with JS caps mirrored (`OPTIONS_MAX_INITIAL_W` in `options.js`, `META_MAX_INITIAL_H` in `metadata-window.js`).
+- **Main window built in Rust:** The main window is now constructed in `lib.rs` setup (was declared in `tauri.conf.json`) so all windows share one construction path and the shell background applies before first paint. Initial 1280×720, min 640×400.
+- **Options window auto-fit width:** Opens hidden, JS measures the `.tabs` bar at `fit-content` (unreliable to measure tab content — the Customization textarea's long placeholder lines inflate max-content past the clamp), adds the body's horizontal padding read from computed CSS, and calls `fit_options_window` (size + re-center over the main window) before showing. No size flicker.
+- **Metadata window auto-fit height:** Opens hidden, JS measures the content root's `scrollHeight` (not `documentElement.scrollHeight`, which is clamped to viewport and would never shrink), capped at 600, and calls `fit_metadata_window` before showing. Re-fits live on `metadata-data` updates and cover decode.
+- **Subpixel rounding:** `getBoundingClientRect()` returns fractional widths (font metrics), so the options width is `Math.ceil`'d — rounding down could size the window 1px too narrow and clip content. No hardcoded +1.
+- **Serialized fits:** Both windows serialize fits through a promise chain so out-of-order IPC invokes (initial render, cover decode, live updates) can't leave a stale short measurement as the final size.
+- **Version statusbar:** Added a `v1.0.0` version badge (`.status-version`) to the statusbar; app version bumped to 1.0.0 across `package.json`, `package-lock.json`, `Cargo.toml`, and `tauri.conf.json`. Added `core:window:allow-show` capability for the JS-side `.show()` calls.
+
 ### Archive Metadata Window
 - **Dedicated UI:** Extracted comic/archive metadata (`ComicInfo.xml`, `CoMet.xml`, `metadata.opf`) into a standalone window (`metadata.html`), decoupled from the main UI, accessed via a new status-bar badge / `ⓘ` button in `file-panel-actions`.
 - **Isolated File List:** Filtered `*.xml` and `*.opf` metadata files from the archive listing in `fsUtils.js` (`archiveMetadataFiles`) so they no longer appear as broken images in the main viewer.

@@ -28,6 +28,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **System Integration**: Uses native Windows file/folder icons (with opacity for hidden items). Registers file associations per-user, appearing natively in Windows Default Apps.
 - **Configuration Modes**: Supports global (least-privileged user) or portable (single config) configuration storage.
 - **Custom Theming**: Inject and live-reload custom CSS rules to fully theme the application.
+- **Auto-Fit Windows**: Secondary windows (Options, Archive Info) open hidden, auto-size to their content, and center over the main window — no size flicker.
 
 ## Shortcuts & Controls
 
@@ -231,33 +232,38 @@ QuiviT/
 ├─ src/
 │  ├─ index.html              # Main viewer window
 │  ├─ options.html            # Options window
+│  ├─ metadata.html           # Archive metadata window
 │  ├─ css/
 │  │  ├─ main.css             # Viewer layout and shared theme tokens
-│  │  └─ options.css          # Options window layout
+│  │  ├─ options.css          # Options window layout
+│  │  └─ metadata.css         # Metadata window layout
 │  └─ js/
+│     ├─ associationsUi.js    # File-type association UI (Options)
 │     ├─ core.js              # Central app state and config management
 │     ├─ directoryPrefs.js    # Persistent per-directory grouping and sorting
 │     ├─ filePanel.js         # File list rendering, sorting UI, resizing, favorites
 │     ├─ fsUtils.js           # Filesystem and Rust backend interaction
 │     ├─ keyboardNav.js       # Accessible keyboard navigation (Tab/Home/End)
-│     ├─ keybinds.js          # Default shortcuts and config merge helpers
 │     ├─ keybindUi.js         # Keybind configuration grid and conflicts
+│     ├─ keybinds.js          # Default shortcuts and config merge helpers
 │     ├─ main.js              # DOM wiring for the main window
 │     ├─ menubar.js           # Main window menu bar DOM wiring
+│     ├─ metadata-window.js   # Metadata window live-sync controller
 │     ├─ navigationHistory.js # Session-only container Back/Forward stacks
-│     ├─ options.js           # Options window DOM wiring
+│     ├─ options.js           # Options window DOM wiring and width auto-fit
+│     ├─ shellBackground.js   # Mirrors --surface into the native window background
 │     ├─ shortcuts.js         # Shortcut matching and keyboard dispatch
 │     └─ viewer.js            # Image viewport, zoom, fit, pan, rotation, flips
 ├─ src-tauri/
 │  ├─ capabilities/
-│  │  └─ default.json         # Tauri permissions for main/options windows
+│  │  └─ default.json         # Tauri permissions for main/options/metadata windows
 │  ├─ icons/                  # Application icons
 │  ├─ src/
 │  │  ├─ archives.rs          # Archive extraction and caching
 │  │  ├─ commands.rs          # Tauri commands and directory watcher
-│  │  ├─ config.rs            # Configuration state and app settings
+│  │  ├─ config.rs            # Configuration state, window sizes, window fit/center commands
 │  │  ├─ ico.rs               # ICO frame extraction and spritesheet
-│  │  ├─ lib.rs               # Module definitions and app entry point
+│  │  ├─ lib.rs               # Module definitions, app entry, main-window construction
 │  │  ├─ main.rs              # Native executable entry point
 │  │  ├─ models.rs            # Data structures and structs
 │  │  └─ utils.rs             # Supported formats and helpers
