@@ -513,6 +513,11 @@ li:hover > .fav-remove,
   height: var(--fs-16);
 }
 
+#i-icon {
+  width: var(--fs-14);
+  height: var(--fs-14);
+}
+
 .icon-btn {
   background: transparent;
   border: none;

@@ -255,8 +255,13 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
 #[tauri::command]
 pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("options") {
-        window.show().map_err(|e| format!("Failed to show options window: {e}"))?;
-        window.set_focus().map_err(|e| format!("Failed to focus options window: {e}"))?;
+        // If the window already exists but is still hidden (mid auto-fit), don't
+        // force-show it — the JS side reveals it via showOptionsWindow() once the
+        // fit settles. Force-showing now would paint the pre-fit width and cause
+        // a visible flicker, which spam-clicking would otherwise trigger.
+        if window.is_visible().map_err(|e| format!("Failed to check options window: {e}"))? {
+            window.set_focus().map_err(|e| format!("Failed to focus options window: {e}"))?;
+        }
         return Ok(());
     }
 
@@ -318,8 +323,13 @@ pub async fn fit_options_window(app: tauri::AppHandle, width: f64) -> Result<(),
 #[tauri::command]
 pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("metadata") {
-        window.show().map_err(|e| format!("Failed to show metadata window: {e}"))?;
-        window.set_focus().map_err(|e| format!("Failed to focus metadata window: {e}"))?;
+        // If the window already exists but is still hidden (mid auto-fit), don't
+        // force-show it — the JS side reveals it via showWindow() once the fit
+        // settles. Force-showing now would paint the pre-fit height and cause a
+        // visible flicker, which spam-clicking the badge would otherwise trigger.
+        if window.is_visible().map_err(|e| format!("Failed to check metadata window: {e}"))? {
+            window.set_focus().map_err(|e| format!("Failed to focus metadata window: {e}"))?;
+        }
         return Ok(());
     }
 

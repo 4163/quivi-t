@@ -12,10 +12,10 @@ body {
 }
 
 #metadata-root {
-  padding: 20px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 #metadata-top {
@@ -81,8 +81,8 @@ body {
   font-size: var(--fs-13);
   background-color: var(--surface-alt);
   border: 1px solid var(--border-light);
-  border-radius: 6px;
-  padding: 16px;
+  border-radius: 4px;
+  padding: 8px;
 }
 
 .meta-label {

@@ -20,6 +20,7 @@ export const DEFAULT_KEYBINDS = {
   'cmd-open-explorer': [],
   'cmd-open-folder': [],
   'cmd-toggle-favorite': [],
+  'cmd-open-metadata': [],
   'cmd-parent': 'Backspace',
   'cmd-toggle-filelist': '1',
   'cmd-toggle-menubar': '2',

@@ -340,6 +340,9 @@ function dispatchAction(actionId, payload) {
     case 'cmd-toggle-favorite':
       toggleFavoriteCurrent();
       break;
+    case 'cmd-open-metadata':
+      openMetadataWindow();
+      break;
     case 'cmd-fullscreen':
       toggleFullscreen();
       break;
