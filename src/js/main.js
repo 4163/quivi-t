@@ -719,7 +719,43 @@ function bindDragDrop() {
   });
 }
 
+// --- Window title ----------------------------------------------------------
+// Title reflects the currently displayed image: `filename.ext (current/total)
+// ◦ container ◦ QuiviT`. Only images get a title; nothing/folder/.. /archive
+// selections fall back to "QuiviT". Page count is image-only, natural ascending
+// order, independent of the active sort. setTitle only fires on actual change.
+let _lastTitle = '';
+function updateWindowTitle(state) {
+  if (!window.__TAURI__) return;
+  const win = window.__TAURI__.window?.getCurrentWindow?.();
+  if (!win?.setTitle) return;
+
+  let title = 'QuiviT';
+  if (state.mode !== 'empty' && state.src) {
+    const pos = FsUtils.naturalPagePosition(state.list, state.filename);
+    const page = pos && pos.total > 1 ? ` (${pos.current}/${pos.total})` : '';
+    if (state.mode === 'archive' && state.archivePath) {
+      const name = _basename(state.archivePath);
+      if (name) title = `${state.filename}${page} ◦ ${name} ◦ QuiviT`;
+    } else {
+      title = `${state.filename}${page} ◦ QuiviT`;
+    }
+  }
+
+  if (title !== _lastTitle) {
+    _lastTitle = title;
+    win.setTitle(title).catch(() => {});
+  }
+}
+
+function _basename(path) {
+  if (!path) return '';
+  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+}
+
 Core.onStateChange((state) => {
+  updateWindowTitle(state);
+
   if (!_uiInitialized && state.config?.frontend_data) {
     const fd = state.config.frontend_data;
     if (fd.menu_visible !== undefined) {
@@ -770,7 +806,7 @@ Core.onStateChange((state) => {
   const imgEl2 = document.getElementById('viewer-img');
   if (!state.src || imgEl2.src === state.src) {
     statusName.textContent = state.filename;
-    statusIndex.textContent = state.list.length > 1 ? `${state.index + 1} / ${state.list.length}` : '';
+    statusIndex.textContent = FsUtils.formatStatusIndex(state);
   }
 
   // Items that aren't images (folders, archives, `..`, drives) have no

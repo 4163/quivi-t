@@ -123,6 +123,30 @@ export const FsUtils = {
     return next === -1 ? 0 : next;
   },
 
+  // Sort-independent page position of an image: among images only, in natural
+  // ascending filename order (matching the app's default Name sort), regardless
+  // of the active sort column/direction. Returns { current, total } (1-based)
+  // or null when the filename isn't an image / isn't in the list.
+  naturalPagePosition(list, filename) {
+    if (!Array.isArray(list) || !filename) return null;
+    const images = list.filter(e => this.isImageEntry(e));
+    if (!images.length) return null;
+    const sorted = [...images].sort((a, b) =>
+      DirectoryPrefs.naturalCompare(a.name.toLowerCase(), b.name.toLowerCase()));
+    const idx = sorted.findIndex(e => e.name === filename);
+    if (idx === -1) return null;
+    return { current: idx + 1, total: sorted.length };
+  },
+
+  // Statusbar index — legacy counting (folders/archives/files all count) with
+  // the '..' parent row excluded from both numerator and denominator. '..' is
+  // always list[0] when present.
+  formatStatusIndex(state) {
+    if (!state || !Array.isArray(state.list) || state.list.length < 2) return '';
+    const hasParent = state.list[0]?.name === '..' ? 1 : 0;
+    return `${state.index + 1 - hasParent} / ${state.list.length - hasParent}`;
+  },
+
   showHidden() {
     const state = Core.getState();
     return state.config.frontend_data?.show_hidden === true;

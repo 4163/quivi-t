@@ -7,6 +7,7 @@
  */
 
 import { Core } from './core.js';
+import { FsUtils } from './fsUtils.js';
 import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from './keybinds.js';
 
 const img = document.getElementById('viewer-img');
@@ -334,7 +335,7 @@ Core.onStateChange((state) => {
         _flipY = 1;
         // Restore filename and index now that the image is ready
         if (statusName) statusName.textContent = state.filename;
-        if (statusIndex) statusIndex.textContent = state.list && state.list.length > 1 ? `${state.index + 1} / ${state.list.length}` : '';
+        if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
       }
     };
     preloader.onerror = () => {
@@ -345,7 +346,7 @@ Core.onStateChange((state) => {
         if (statusName) statusName.textContent = state.filename;
         if (statusDims) statusDims.textContent = 'Error';
         if (statusZoom) statusZoom.textContent = 'N/A';
-        if (statusIndex) statusIndex.textContent = state.list && state.list.length > 1 ? `${state.index + 1} / ${state.list.length}` : '';
+        if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
       }
     };
     preloader.src = state.src;

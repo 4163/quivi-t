@@ -48,7 +48,7 @@ export const DirectoryPrefs = {
     Core.setListAndIndex(sortedList, newIdx);
   },
 
-  _naturalCompare(a, b) {
+  naturalCompare(a, b) {
     const ax = [], bx = [];
     a.replace(/(\d+)|(\D+)/g, function (_, $1, $2) { ax.push([$1 || Infinity, $2 || ""]); });
     b.replace(/(\d+)|(\D+)/g, function (_, $1, $2) { bx.push([$1 || Infinity, $2 || ""]); });
@@ -94,7 +94,7 @@ export const DirectoryPrefs = {
       }
 
       if (col === 'name' || (col === 'ext' && a.ext.toLowerCase() === b.ext.toLowerCase()) || (col === 'date' && a.rawDate === b.rawDate)) {
-        const cmp = this._naturalCompare(valA, valB);
+        const cmp = this.naturalCompare(valA, valB);
         return desc ? -cmp : cmp;
       }
 
