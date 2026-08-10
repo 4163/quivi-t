@@ -17,6 +17,7 @@ export const DirectoryPrefs = {
   },
 
   setSortPrefs(directoryPath, col, desc) {
+    if (!directoryPath) return; // Global default is config-file-only, not UI-set
     const state = Core.getState();
     if (!state || !state.config || !state.config.frontend_data) return;
     
@@ -39,6 +40,7 @@ export const DirectoryPrefs = {
   },
 
   sortCurrentState(directoryPath, col, desc) {
+    if (!directoryPath) return; // No active directory — nothing to sort/persist
     this.setSortPrefs(directoryPath, col, desc);
     const state = Core.getState();
     const sortedList = this.applySort(state.list, col, desc);
