@@ -6,6 +6,38 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ## Fully Implemented
 
+### Window Title & Statusbar Index
+- **Dynamic window title:** The OS title bar reflects the currently displayed image via `updateWindowTitle()` in `main.js`: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages (separator is `◦` U+25E6, per user preference). Non-image selections (`..`, folders, archives, drives) fall back to just `QuiviT`. `setTitle` only fires on actual change (`_lastTitle` guard); requires the `core:window:allow-set-title` capability.
+- **Image-only page count:** `FsUtils.naturalPagePosition(list, filename)` counts only image entries in natural ascending filename order (via `DirectoryPrefs.naturalCompare`), independent of the active sort column/direction. The `(current/total)` suffix appears only when `total > 1`.
+- **Statusbar index fix:** `FsUtils.formatStatusIndex(state)` replaces the inline `index+1 / length` math in `main.js`/`viewer.js` — the `..` parent row is excluded from both numerator and denominator (it is always `list[0]` when present). Single-entry lists render nothing.
+- **Verification:** 20/20 Node harness checks pass for `formatStatusIndex`, `naturalPagePosition`, and `naturalCompare`; runtime-confirmed in-app (title format for archive/folder pages, page count independent of sort).
+
+### Global Default Sort Guard
+- Root-caused the "sort suddenly descending" bug: an empty-state column-header click was persisting `default_sort: { col, desc: true }` into the global `quivit_config.json`. The comparator was never broken.
+- `sortCurrentState` and `setSortPrefs` in `directoryPrefs.js` now early-return when `directoryPath` is falsy, so header clicks outside a real directory can no longer write the global default. The global default remains config-file-only (documented in the README System Defaults and `additions.md`); per-directory overrides still go to `quivit_directory_sort.json`.
+- `_naturalCompare` renamed to the exported `naturalCompare` so `fsUtils.js` can reuse it.
+
+### Metadata Window Keybind & Spam-Flicker Fix
+- Added `cmd-open-metadata` ("Open Archive Info") to `DEFAULT_KEYBINDS` (unbound by default, like `cmd-open-explorer`/`cmd-open-folder`), to the Options Keys → File Operations list in `keybindUi.js`, and to the `dispatchAction` switch in `main.js`.
+- `open_options` and `open_metadata_window` in `config.rs` now only `set_focus()` when the window is already visible. A hidden (mid auto-fit) window is revealed by the JS side once the fit settles, so spam-clicking the Archive Info badge or the Options button can no longer paint a pre-fit width/height (flicker).
+
+### Shift+Scroll Pan Defaults
+- `cmd-pan-left` defaults to `['a', 'ArrowLeft', 'Shift+ScrollUp']` and `cmd-pan-right` to `['d', 'ArrowRight', 'Shift+ScrollDown']`, so Shift+scroll pans horizontally for manga reading. Both remain fully remappable through the keybind table.
+
+### Scroll-Modifier Status Indicator
+- Replaced the toggle-only `_updateLatchIndicator` with `_updateScrollIndicator(config)` in `shortcuts.js`, backed by `getScrollModifierKeys(config, ids)` which derives bound modifiers from the zoom (`cmd-zoom-in`/`cmd-zoom-out`) and pan (`cmd-pan-*`) groups so rebinding to Alt/Meta updates the badge.
+- **Hold mode:** shows any physically held bound scroll modifier — `Ctrl — Held`, `Shift — Held`, `Ctrl+Shift — Held` — updated on modifier keydown/keyup.
+- **Toggle mode:** while latched shows `Scroll Zoom — Toggled`; when unlatched it shows held **pan** modifiers only (`Shift — Held`), because Ctrl is the toggle key and does nothing to the wheel unlatched (it is stripped from the combo). Ctrl never renders as a held badge in toggle mode.
+- Indicator cleared on reset; both states are mutually exclusive and gated on the configured modifier mode. CSS: `#statusbar.zoom-held .status-scroll-zoom` alongside the existing `zoom-latched` rule; the statusbar span is now JS-owned (empty in `index.html`).
+
+### Example Theme Bundling
+- `tauri.conf.json` now bundles `matcha-latte.css` and `sage-mint.css` as release resources so the shipped app can import the example themes from Options → Customization.
+- Metadata window padding/gap polish (`metadata.css`) and portable-mode warning wording (`options.html`).
+
+### Documentation & Verification Pass
+- README reorganized: Auto-Fit Windows moved from Features to System Defaults, added the Default Sort bullet, Changelog section, example-theme wording, and theme files in the project tree.
+- Full additions.md verification pass executed: change set confirmed (15 files vs last push `515edb4`), `.gitignore` coverage confirmed, `node --check` on all 7 touched JS modules + `cargo check` clean, 20/20 Node harness checks, and 8/8 runtime checks user-confirmed (window title, page count vs sort, metadata keybind, spam flicker, Shift+scroll pan, hold/toggle indicator, sort guard).
+
 ### Window Auto-Fit & Sizing
 - **Centralized size constants:** Main/options/metadata initial + min window sizes moved to `config.rs` (`MAIN_INITIAL_W/H`, `OPTIONS_INITIAL_W/H`, `META_INITIAL_W/H`, etc.), with JS caps mirrored (`OPTIONS_MAX_INITIAL_W` in `options.js`, `META_MAX_INITIAL_H` in `metadata-window.js`).
 - **Main window built in Rust:** The main window is now constructed in `lib.rs` setup (was declared in `tauri.conf.json`) so all windows share one construction path and the shell background applies before first paint. Initial 1280×720, min 640×400.

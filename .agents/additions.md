@@ -11,6 +11,7 @@
 - Persistence policy is documented in `core.js` header and `keybinds.js`. Roaming files are the source of truth; `localStorage` is only a pre-paint cache.
 - Split files: `quivit_config.json` (preferences), `quivit_state.json` (runtime state), `quivit_directory_sort.json`, `quivit_favorites.json`. Portable mode folds all into one file.
 - Theme/CSS previews are ephemeral: `options.js` tracks a `previewing` flag and `main.js` keeps `previewTheme`/`previewCss` so in-progress previews survive config reloads (file watcher), clearing only on Options Apply. Closing Options without Apply reverts the preview and resyncs the `quivit-theme` / `quivit-custom-css` pre-paint caches (prevents a flash on next open).
+- The global `default_sort` lives in `quivit_config.json` (`frontend_data`) and is config-file-only; the UI writes only per-directory sort prefs (`quivit_directory_sort.json`).
 
 **JS Module Structure:**
 - `core.js` — state machine, no DOM access. Communicates via callbacks.
@@ -18,9 +19,9 @@
 - `shortcuts.js` — keyboard/mouse/scroll dispatch, combo normalization.
 - `viewer.js` — image rendering, zoom, pan, fit modes.
 - `filePanel.js` — file list, favorites, sorting UI, column resizing.
-- `fsUtils.js` — filesystem interactions, archive loading, sibling navigation.
+- `fsUtils.js` — filesystem interactions, archive loading, sibling navigation, statusbar index / page-position formatting.
 - `navigationHistory.js` — session-only container Back/Forward history.
-- `directoryPrefs.js` — per-directory sort/grouping logic.
+- `directoryPrefs.js` — per-directory sort/grouping logic; exports `naturalCompare` (consumed by `fsUtils`).
 - `metadata.js` — XML parsing logic for `ComicInfo.xml`, `CoMet.xml`, and `metadata.opf`.
 - `metadata-window.js` — UI controller for the standalone metadata window (live sync, DOM).
 - `menubar.js` — menu bar open/close, state, fullscreen chrome handling.

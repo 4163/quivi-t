@@ -28,7 +28,6 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **System Integration**: Uses native Windows file/folder icons (with opacity for hidden items). Registers file associations per-user, appearing natively in Windows Default Apps.
 - **Configuration Modes**: Supports global (least-privileged user) or portable (single config) configuration storage.
 - **Custom Theming**: Inject and live-reload custom CSS rules to fully theme the application.
-- **Auto-Fit Windows**: Secondary windows (Options, Archive Info) open hidden, auto-size to their content, and center over the main window — no size flicker.
 
 ## Shortcuts & Controls
 
@@ -56,6 +55,7 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Fit width / height if larger | `Q` / `E` |
 | Pan (Up/Left/Down/Right) | `W` / `A` / `S` / `D` / `ArrowUp` / `ArrowLeft` / `ArrowDown` / `ArrowRight` |
 | Pan up / down | `ScrollUp` / `ScrollDown` |
+| Pan left / right (scroll) | `Shift+ScrollUp` / `Shift+ScrollDown` |
 | Rotate counter-clockwise/clockwise | `G` / `H` |
 | Flip horizontal/vertical | `V` / `B` |
 | Fit none | `R` / `DoubleClick` |
@@ -108,11 +108,15 @@ html {
 ̶}̶
 ```
 
-**Developer Tools:** Inspect Element is intentionally left enabled in release builds to help create and debug custom CSS.
+**Developer Tools:** Inspect Element is intentionally left enabled to help users create and debug custom CSS.
 
-**Example theme:** A `matcha-latte.css` and `sage-mint.css` example themes is included — Import it from the Customization tab.
+**Example themes:** Try the included `matcha-latte.css` and `sage-mint.css` example themes — import them from **Options → Customization** to restyle the app without writing any CSS.
 
 > If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` in any QuiviT window. This emergency reset instantly removes the custom CSS and reloads the interface safely.
+
+## Changelog
+
+See the [Releases](../../releases) page for version history and release notes.
 
 ## Documentation
 
@@ -123,13 +127,15 @@ The following system defaults are used:
 - **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
 - **Scaling Mode:** `bicubic`
 - **Keyboard Pan Step:** `VIEWER_KEYBOARD_PAN_STEP` (100px).
-- **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`) in Options.
-- **Archive Caching (ZIP/CBZ):** In-memory LRU cache holds up to 20 images. Background prefetch loads 7 images ahead and 3 images behind the current position.
-- **Per-Directory Sort Cache:** Sort column/direction preferences are kept for up to 100 directories (oldest dropped first).
+- **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`) in Options. A status-bar badge reflects the active state — `Scroll Zoom — Toggled` while latched in toggle mode, or the bound modifier(s) you're holding (`Ctrl — Held`, `Shift — Held`, `Ctrl+Shift — Held`) when they change scroll behavior.
+- **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
+- **Default Sort:** `name` ascending. Per-directory preferences are cached for up to 100 directories, with the oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort` (`col`: `name`, `ext`, or `date`; `desc`: `false` = ascending, `true` = descending). Directories without a saved preference in `quivit_directory_sort.json` fall back to it.
 - **History Trail:** Folder menu **Back/Forward** (and `Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only — opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
 - **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
-- **Single Instance:** Enabled by default. External file opens are handed off to the active session.
+- **Auto-Fit Windows:** Secondary windows (Options, Archive Info) open hidden, auto-size to their content, and center over the main window — no size flicker.
 - **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor — or the Drives view at the root.
+- **Single Instance:** Enabled by default. External file opens are handed off to the active session.
+- **Archive Caching (ZIP/CBZ):** In-memory LRU cache holds up to 20 images. Background prefetch loads 7 images ahead and 3 images behind the current position.
 
 ### Configuration & Persistence
 
@@ -139,7 +145,7 @@ QuiviT manages data across three distinct tiers depending on lifecycle and scope
 `C:\Users\<user>\AppData\Roaming\com.x4163.quivit`
 
 Data is split across four files:
-- `quivit_config.json` — User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, custom CSS, options)
+- `quivit_config.json` — User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, default sort, custom CSS, options)
 - `quivit_state.json` — Runtime state (`last_opened_path`, `last_active_image`, `scroll_zoom_latched`)
 - `quivit_directory_sort.json` — Per-directory sort column/direction
 - `quivit_favorites.json` — Favorited folders/files and collapsed state
@@ -182,9 +188,6 @@ QuiviT accepts paths passed via the command line. When single-instance mode is e
 ```bash
 quivit.exe "C:\Path\To\Archive.cbz"
 ```
-
-## Changelog
-See the [Releases](../../releases) page for version history and release notes.
 
 ## Development & Installation
 
@@ -269,6 +272,8 @@ QuiviT/
 │  │  └─ utils.rs             # Supported formats and helpers
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json
+├─ matcha-latte.css           # Example theme (bundled with the release)
+├─ sage-mint.css              # Example theme (bundled with the release)
 ├─ package.json
 └─ README.md
 ```
