@@ -43,9 +43,9 @@ export const DEFAULT_KEYBINDS = {
   'cmd-flip-horizontal': 'v',
   'cmd-flip-vertical': 'b',
   'cmd-pan-up': ['w', 'ArrowUp', 'ScrollUp'],
-  'cmd-pan-left': ['a', 'ArrowLeft'],
+  'cmd-pan-left': ['a', 'ArrowLeft', 'Shift+ScrollUp'],
   'cmd-pan-down': ['s', 'ArrowDown', 'ScrollDown'],
-  'cmd-pan-right': ['d', 'ArrowRight'],
+  'cmd-pan-right': ['d', 'ArrowRight', 'Shift+ScrollDown'],
 };
 
 // Pixel distance moved by keyboard pan commands. Increase/decrease this to tune
