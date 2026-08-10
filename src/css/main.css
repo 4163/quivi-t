@@ -908,6 +908,7 @@ li:hover > .fav-remove,
   white-space: nowrap;
 }
 
+#statusbar.zoom-held .status-scroll-zoom,
 #statusbar.zoom-latched .status-scroll-zoom {
   display: inline-block;
 }

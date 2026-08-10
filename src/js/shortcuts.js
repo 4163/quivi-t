@@ -117,7 +117,7 @@ export function resetScrollLatch() {
   ctrlLatched = false;
   ctrlKeyDown = false;
   ctrlChordBroken = false;
-  _updateLatchIndicator();
+  _updateScrollIndicator();
 }
 
 // Re-read the persisted latch after config loads (startup or Options Apply &
@@ -125,16 +125,74 @@ export function resetScrollLatch() {
 // latch must not show the badge or latch zoom.
 export function syncScrollLatch(config) {
   ctrlLatched = isToggleModifier(config) && config?.frontend_data?.scroll_zoom_latched === true;
-  _updateLatchIndicator();
+  _updateScrollIndicator(config);
 }
 
 function isToggleModifier(config) {
   return config?.frontend_data?.scroll_zoom_modifier === 'toggle';
 }
 
-function _updateLatchIndicator() {
+// The modifier keys bound to the scroll-wheel combos (Ctrl + Shift by default),
+// derived from config so rebinding zoom/pan to e.g. Alt+ScrollUp updates the
+// indicator. Deduplicated, in no particular order. ids lets callers scope the
+// lookup to the zoom or pan groups.
+const _SCROLL_ZOOM_IDS = ['cmd-zoom-in', 'cmd-zoom-out'];
+const _SCROLL_PAN_IDS = ['cmd-pan-up', 'cmd-pan-down', 'cmd-pan-left', 'cmd-pan-right'];
+const _SCROLL_ALL_IDS = [..._SCROLL_ZOOM_IDS, ..._SCROLL_PAN_IDS];
+const _MODIFIER_LOWER = { Ctrl: 'control', Alt: 'alt', Shift: 'shift', Meta: 'meta' };
+function getScrollModifierKeys(config, ids = _SCROLL_ALL_IDS) {
+  const binds = config?.frontend_data?.keybinds || {};
+  const found = new Set();
+  for (const id of ids) {
+    const combo = binds[id];
+    const list = Array.isArray(combo) ? combo : (combo ? [combo] : []);
+    for (const c of list) {
+      if (typeof c === 'string' && /Scroll(Up|Down)$/.test(c)) {
+        const token = c.split('+').find(t => _MODIFIER_LOWER[t] !== undefined);
+        if (token) found.add(token);
+      }
+    }
+  }
+  return Array.from(found);
+}
+
+// Status-bar indicator for the scroll-wheel modifier. In hold mode a physically
+// held bound modifier changes scroll behavior, so it shows e.g. "Ctrl+Shift — Held".
+// In toggle mode the sticky latch is the zoom switch, so while latched it shows
+// "Scroll Zoom — Toggled"; when unlatched Ctrl does nothing and only a held pan
+// modifier (Shift by default) changes behavior, so that is shown as "— Held".
+// The two states are mutually exclusive — gated on the configured modifier mode.
+function _updateScrollIndicator(config) {
   const bar = document.getElementById('statusbar');
-  if (bar) bar.classList.toggle('zoom-latched', ctrlLatched);
+  const el = document.querySelector('.status-scroll-zoom');
+  if (!bar || !el) return;
+
+  if (isToggleModifier(config)) {
+    const latched = ctrlLatched;
+    el.textContent = latched ? 'Scroll Zoom — Toggled' : '';
+    bar.classList.toggle('zoom-latched', latched);
+    if (latched) {
+      bar.classList.toggle('zoom-held', false);
+      return;
+    }
+    // Unlatched: Ctrl is the toggle key, so holding it does nothing to the
+    // wheel. Only physically held pan modifiers (Shift by default) matter.
+    const mods = getScrollModifierKeys(config, _SCROLL_PAN_IDS)
+      .filter(m => m !== 'Ctrl')
+      .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
+    const held = mods.length > 0;
+    el.textContent = held ? `${mods.join('+')} — Held` : '';
+    bar.classList.toggle('zoom-held', held);
+    return;
+  }
+
+  // Hold mode: show any bound scroll modifier that's physically held.
+  const mods = getScrollModifierKeys(config)
+    .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
+  const held = mods.length > 0;
+  el.textContent = held ? `${mods.join('+')} — Held` : '';
+  bar.classList.toggle('zoom-held', held);
+  bar.classList.toggle('zoom-latched', false);
 }
 
 // The wheel should never hijack scrolling over UI chrome or the file list.
@@ -211,6 +269,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
 
     activeKeys.add(e.key.toLowerCase());
     handleShortcut(e);
+    if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(Core.getState().config);
   });
 
   window.addEventListener('keyup', (e) => {
@@ -219,7 +278,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
       // sticky zoom latch in 'toggle' mode.
       if (ctrlKeyDown && !ctrlChordBroken && isToggleModifier(Core.getState().config)) {
         ctrlLatched = !ctrlLatched;
-        _updateLatchIndicator();
+        _updateScrollIndicator(Core.getState().config);
         const config = Core.getState().config;
         config.frontend_data.scroll_zoom_latched = ctrlLatched;
         Core.persistConfig();
@@ -228,6 +287,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
       ctrlChordBroken = false;
     }
     activeKeys.delete(e.key.toLowerCase());
+    if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(Core.getState().config);
   });
 
   window.addEventListener('mousedown', (e) => {
