@@ -46,6 +46,7 @@ export const DEFAULT_KEYBINDS = {
   'cmd-pan-left': ['a', 'ArrowLeft', 'Shift+ScrollUp'],
   'cmd-pan-down': ['s', 'ArrowDown', 'ScrollDown'],
   'cmd-pan-right': ['d', 'ArrowRight', 'Shift+ScrollDown'],
+  'cmd-pan-drag': ['MouseLeft', 'MouseMiddle', 'Space'],
 };
 
 // Pixel distance moved by keyboard pan commands. Increase/decrease this to tune

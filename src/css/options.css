@@ -154,6 +154,7 @@ body > * {
 }
 
 .keybinds-header {
+  flex-direction: column;
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: 8px;
@@ -164,6 +165,7 @@ body > * {
 }
 
 #btn-reset-keybinds {
+  align-self: end;
   padding: 4px 8px;
   font-size: var(--fs-11);
   white-space: nowrap;

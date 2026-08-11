@@ -1,4 +1,4 @@
-import { formatKeysCombo } from './shortcuts.js';
+import { formatKeysCombo, normalizeCombo } from './shortcuts.js';
 
 const CATEGORIES = [
   {
@@ -38,6 +38,7 @@ const CATEGORIES = [
   {
     name: 'Pan',
     actions: [
+      { id: 'cmd-pan-drag', label: 'Pan (Drag)' },
       { id: 'cmd-pan-up', label: 'Pan Up' },
       { id: 'cmd-pan-left', label: 'Pan Left' },
       { id: 'cmd-pan-down', label: 'Pan Down' },
@@ -130,6 +131,7 @@ export function initKeybindUi(containerId, config, showStatus) {
   function captureKeybind(actionId, index, element, initiatingEvent) {
     if (isCapturing) return;
     isCapturing = true;
+    const singleOnly = actionId === 'cmd-pan-drag';
   
     element.classList.add('capturing');
     element.textContent = 'Listening...';
@@ -152,7 +154,7 @@ export function initKeybindUi(containerId, config, showStatus) {
     // The click that started capture (on the tag / + button) counts as the
     // first press of a double-click gesture, so clicking a tag then clicking
     // once more within the window captures DoubleClick naturally.
-    if (initiatingEvent && initiatingEvent.button === 0) {
+    if (initiatingEvent && initiatingEvent.button === 0 && !singleOnly) {
       mousePress = {
         button: 0,
         x: initiatingEvent.clientX,
@@ -197,7 +199,7 @@ export function initKeybindUi(containerId, config, showStatus) {
             currentBinds.splice(index, 1);
           }
         } else {
-          currentBinds[index] = finalCombo;
+          currentBinds[index] = normalizeCombo(finalCombo);
         }
         
         binds[actionId] = currentBinds;
@@ -230,6 +232,13 @@ export function initKeybindUi(containerId, config, showStatus) {
       
       const maxCombo = formatKeysCombo(maxKeys, maxButtons);
       element.textContent = doubleCombo || maxCombo || 'Listening...';
+
+      if (singleOnly) {
+        if (activeKeys.size === 0 && activeButtons.size === 0 && maxCombo) {
+          finish(maxCombo);
+        }
+        return;
+      }
       
       if (activeKeys.size === 0 && activeButtons.size === 0 && (maxCombo || doubleCombo)) {
         const hasNonModifier = Array.from(maxKeys).some(k => !['control', 'shift', 'alt', 'meta'].includes(k)) 
@@ -275,6 +284,14 @@ export function initKeybindUi(containerId, config, showStatus) {
         finish('Delete');
         return;
       }
+      if (singleOnly) {
+        const mods = ['control', 'shift', 'alt', 'meta'];
+        if (mods.includes(e.key.toLowerCase())) return;
+        if (activeKeys.size + activeButtons.size > 0) return;
+        activeKeys.add(e.key.toLowerCase());
+        updateState();
+        return;
+      }
       activeKeys.add(e.key.toLowerCase());
       updateState();
     };
@@ -289,6 +306,12 @@ export function initKeybindUi(containerId, config, showStatus) {
     const onMouseDown = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (singleOnly) {
+        if (activeKeys.size + activeButtons.size > 0) return;
+        activeButtons.add(e.button);
+        updateState();
+        return;
+      }
       if (e.button === 0 || e.button === 2) {
         const now = Date.now();
         const isDouble = mousePress && mousePress.button === e.button
@@ -327,6 +350,7 @@ export function initKeybindUi(containerId, config, showStatus) {
       e.preventDefault();
       e.stopPropagation();
       if (isFinalizing) return;
+      if (singleOnly) return;
       const scrollDir = e.deltaY < 0 ? 'ScrollUp' : 'ScrollDown';
       // Only modifier keys combine with the scroll direction — non-modifier
       // keys and mouse buttons are ignored so scroll combos stay consistent

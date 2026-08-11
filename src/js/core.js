@@ -24,11 +24,16 @@
  *                                      first paint (prevents flicker)
  *   options-active-tab               → session-only; cleared each app start
  *
+ * In-memory state — session-only; reset on app exit:
+ *   navigationHistory                → Container-level Back/Forward history
+ *   archives LRU cache               → ZIP/CBZ in-memory image cache and prefetch
+ *   previewTheme / previewCss        → Options window live previews (until Apply/Close)
+ *
  * Decision guide:
  *   user chose it explicitly       → quivit_config.json (frontend_data)
  *   "last-known" runtime state     → quivit_state.json (STATE_KEYS in lib.rs)
  *   only needed before first paint → localStorage cache of config
- *   ephemeral within a session     → localStorage + cleared on startup
+ *   ephemeral within a session     → in-memory state (or cleared localStorage)
  */
 
 import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, mergeConfig } from './keybinds.js';

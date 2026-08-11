@@ -34,7 +34,19 @@ const SPECIAL_KEY_MAP = {
   scrolldown: 'ScrollDown',
   doubleclick: 'DoubleClick',
   doublerightclick: 'DoubleRightClick',
+  ' ': 'Space',
+  space: 'Space',
+  mouseleft: 'MouseLeft',
+  mousemiddle: 'MouseMiddle',
+  mouseright: 'MouseRight',
+  mouseback: 'MouseBack',
+  mouseforward: 'MouseForward',
 };
+
+// Native mouse button number → canonical keybind name. Single source of truth
+// shared by formatKeysCombo (dispatch), keybindUi (capture), and the viewer pan
+// key lookup — keep the three in sync by using this one table.
+export const MOUSE_BUTTON_NAMES = { 0: 'MouseLeft', 1: 'MouseMiddle', 2: 'MouseRight', 3: 'MouseBack', 4: 'MouseForward' };
 
 export function formatKeyName(key) {
   const k = key.toLowerCase();
@@ -66,8 +78,7 @@ export function formatKeysCombo(keysSet, buttonsSet, scrollDir) {
   }
 
   for (const b of buttonsSet) {
-    const buttons = { 0: 'MouseLeft', 1: 'MouseMiddle', 2: 'MouseRight', 3: 'MouseBack', 4: 'MouseForward' };
-    others.push(buttons[b] || `Mouse${b}`);
+    others.push(MOUSE_BUTTON_NAMES[b] || `Mouse${b}`);
   }
 
   others.sort();
