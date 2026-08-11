@@ -53,9 +53,10 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Zoom in / out (Keys) | `C` / `Z` |
 | Zoom 100% | `X` |
 | Fit width / height if larger | `Q` / `E` |
+| Pan (Drag) | `MouseLeft` / `MouseMiddle` / `Space` |
 | Pan (Up/Left/Down/Right) | `W` / `A` / `S` / `D` / `ArrowUp` / `ArrowLeft` / `ArrowDown` / `ArrowRight` |
 | Pan up / down | `ScrollUp` / `ScrollDown` |
-| Pan left / right (scroll) | `Shift+ScrollUp` / `Shift+ScrollDown` |
+| Pan left / right | `Shift+ScrollUp` / `Shift+ScrollDown` |
 | Rotate counter-clockwise/clockwise | `G` / `H` |
 | Flip horizontal/vertical | `V` / `B` |
 | Fit none | `R` / `DoubleClick` |
@@ -126,7 +127,7 @@ The following system defaults are used:
 
 - **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
 - **Scaling Mode:** `bicubic`
-- **Keyboard Pan Step:** `VIEWER_KEYBOARD_PAN_STEP` (100px).
+- **Keyboard Pan Step:** `VIEWER_KEYBOARD_PAN_STEP` (72px). Wheel panning uses a separate `VIEWER_WHEEL_PAN_STEP` (120px).
 - **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`) in Options. A status-bar badge reflects the active state — `Scroll Zoom — Toggled` while latched in toggle mode, or the bound modifier(s) you're holding (`Ctrl — Held`, `Shift — Held`, `Ctrl+Shift — Held`) when they change scroll behavior.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
 - **Default Sort:** `name` ascending. Per-directory preferences are cached for up to 100 directories, with the oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort` (`col`: `name`, `ext`, or `date`; `desc`: `false` = ascending, `true` = descending). Directories without a saved preference in `quivit_directory_sort.json` fall back to it.
@@ -134,7 +135,7 @@ The following system defaults are used:
 - **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
 - **Auto-Fit Windows:** Secondary windows (Options, Archive Info) open hidden, auto-size to their content, and center over the main window — no size flicker.
 - **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor — or the Drives view at the root.
-- **Single Instance:** Enabled by default. External file opens are handed off to the active session.
+- **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting in Options requires an app restart to take effect.
 - **Archive Caching (ZIP/CBZ):** In-memory LRU cache holds up to 20 images. Background prefetch loads 7 images ahead and 3 images behind the current position.
 
 ### Configuration & Persistence
@@ -183,7 +184,7 @@ Checkboxes reflect whether QuiviT is the active default handler for each format,
 
 ### Command-Line Interface
 
-QuiviT accepts paths passed via the command line. When single-instance mode is enabled (default), secondary launches hand off their arguments to the primary instance.
+QuiviT accepts paths passed via the command line. When single-instance mode is enabled (default), secondary launches hand off their arguments to the primary instance. Toggling single-instance in Options requires a restart to take effect.
 
 ```bash
 quivit.exe "C:\Path\To\Archive.cbz"

@@ -25,11 +25,11 @@ dist-ssr
 
 .agents/*
 !.agents/additions.md
+!.agents/AGENTS.md
 !.agents/implemented.md
 !.agents/7z_implementation.md
 
 # Runtime/portable user config; may contain personal paths
-.portable
 quivit_config.json
 
 # Registry-debug scratch file produced during file-association development
