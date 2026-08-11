@@ -51,37 +51,65 @@
 *The easiest and least invasive fixes are at the top to allow rapid checking off. Slices progress into more complex logical and visual changes.*
 
 ### File Navigation & Core Behavior Fixes (Medium Logic)
+- **Character Encoding Compatibility:** Support full character encoding in file paths and filenames (emojis, JP, CN, KR, etc.) so no filenames or paths crash or present a 404 displayed image. **Note: This has not been encountered for a long time — Tauri v2 natively handles CJK paths robustly. Re-validate before implementing.**
 - **Hidden File Config:** Add a hidden true/false config inside the portable config file. Dynamically change and listen to the Windows/System hidden state of the file and appropriate sync.
+- **Corrupted / Incomplete Archive Pre-Validation:** Prevent application freezes or wasteful processing when opening invalid, corrupted, or incomplete archives.
+  - **Technical Discussion & Best Approach:**
+    1. *Magic Byte Pre-Check:* Read initial bytes (`O(1)`, 32-byte read) for format signatures (`PK\x03\x04` for ZIP, `7z\xBC\xAF\x27\x1C` for 7Z, `Rar!\x1A\x07` for RAR). Instantly rejects renamed non-archive files or empty/junk files.
+    2. *Header & EOCD Structure Validation (Combined Best Path):* For ZIP files, completeness depends on the End of Central Directory (EOCD) record at the end of the file. Native Rust archive loaders (`zip::ZipArchive::new`, `sevenz_rust2`, etc.) check headers and EOCD upon opening.
+    3. *Non-Blocking Rust Evaluation:* Offload archive validation to non-blocking background threads (`tokio::spawn_blocking`). If Rust returns an `Err(ZipError::InvalidArchive)` or header error, fail fast and present an "Unsupported or Corrupted Archive" notification without freezing the UI or main thread.
+- **Large Directory / Archive DOM Rendering Performance:** Optimize file list rendering in `filePanel.js` when opening folders or archives containing thousands of files (e.g. `C:\Users\x4163\Pictures\Steam Screenshots`) (User note: I approve of this personal path appearing in our docs, it's fine).
+  - **Root Cause:** Currently `renderFilePanel()` synchronously creates and appends tens of thousands of `<li>` DOM nodes and event listeners at once, freezing the main thread during DOM construction, styling, and layout reflow. (Backend processing may also be another cause for this, validate and see what costs performance dip and proceed from there)
+  - **Proposed Solutions & Comparison:**
+    1. *Incremental Batching (`CONFIG.batchSize` pattern from `E:\Projects\snap\snap - multi-page_json\html\snap-script.js`):* Renders the first 50–100 items instantly and schedules remaining items in background batches (`requestAnimationFrame` / `setTimeout`). Keeps the initial UI interactive, but eventually populates all DOM nodes, leaving layout/scroll performance degraded for huge lists.
+    2. *DOM Virtualization / Windowing (Recommended - Performance-First):* Only render the visible rows (~30–50 `<li>` elements) plus a small buffer padding based on `scrollTop` and row height. Total DOM elements remain constant (~50 nodes) whether a directory has 10 files or 100,000 files. Delivers instant load times, zero scroll lag, and virtually zero memory growth.
+    3. Discuss other available paths and options, aligning with the project's performance-first approach.
 
 ### View, Rendering & Window Enhancements (Visuals/Features)
+- **Fullscreen Focus & Shortcut Loss Fix:** Fix bug where shortcut keys (including `Escape` / `F11`) occasionally stop functioning while in fullscreen mode (e.g., when switching focus to another monitor or Alt-Tabbing away and back).
+  - **Investigation Needed:** The exact trigger and root cause are unconfirmed. Candidates to test during implementation include `activeKeys` remaining latched due to missed `keyup` events during window focus switches, WebView2 losing document focus to window chrome, or Tauri fullscreen event listeners.
+  - **Target Outcome:** Ensure keyboard shortcuts and `Escape` always work reliably in fullscreen mode across multi-monitor setups and focus changes.
+- **Window & Panel Resize Transform Snap Fix:** Fix issue where dragging `.panel-resize-handle` or resizing the main app window causes active zoom level and pan position to unexpectedly snap/reset.
+  - **Fix:** Preserve relative zoom scale and pan offset relative to container viewport bounds during panel and window resize events in `viewer.js`.
+- **Idle Cursor Auto-Hide (Canvas Only):** Hide mouse cursor after `X` seconds of inactivity when hovering over the viewport/canvas.
+  - **Configurable Delay:** Settable in Options under Interface (`hide_cursor_delay_sec`, e.g., default `2s` or `3s`).
+  - **Semantics of `0`:** `0` = Disabled (cursor never auto-hides). This prevents cursor disappearance during active hover/use.
+  - **Keybind Support (`cmd-toggle-cursor-autohide`):** Add a configurable keybind to toggle the auto-hide feature on/off or force-hide the cursor immediately until mouse movement. IMPORTANT: Discuss what is the most intuitive behaviour for best user experience.
+  - **Edge Cases & Panning:** Panning or dragging triggers `mousemove` / input events which naturally reset the idle timer, keeping the cursor visible throughout active panning and hiding only after panning stops and the mouse remains still for `X` seconds. `mouseleave` or UI chrome hover restores standard cursor styling.
+  - **Performance First (Zero-Overhead):** Bypassed entirely when `0` (Disabled). During active movement, use a lightweight debounced single-timer reset without dynamic allocations or garbage collection churn in the `mousemove` hot path.
+- **Emergency Boss Key:** Add an "Emergency Button" to hide the application into the system tray, with a configurable keybind.
+- **Helium Exit-Fullscreen:** Copy Helium browser's exit-fullscreen functionality (hold to exit, and a top exit button offscreen that slides down via hover). (https://github.com/imputnet/helium) 
+- **Pan Lengths & Smooth Panning:** Add individual pan lengths for scroll vs shortcuts (copying original Quivi defaults). Try implementing a smooth panning option and test to see if that feels nice and responsive, if not just revert.
+- **Zoom Smoothing:** Same as the above, try out -> decide.
+- **Responsive Keyboard Panning:** Audit the keyboard pan pipeline (debounce/delay). Make panning apply immediately per key press and support fast multi-directional spam. Currently the performance is just not up to par with the original Quivi application.
 - **HTML Flickering & Image Navigation:** Optimize image navigation to prevent HTML flickering. 
   - *Context:* Whilst the processing has already been improved to be identical to the original Quivi behavior (show previous image until new one is ready), there's still inherent flickering caused by the presentation: `click/active > load image > present image`. This can easily be fixed by improving the html/js functions (caching/preloading).
   - This additionally fixes the lag when holding down a key and switching images really fast.
   - Fix the issue where the opaque canvas appears first and then the image; they should always appear at the same time.
   - Consider keeping a session cache of files inside archives, prevents decompressing them again in the same session. Discuss adding a cache limit in the options (though leaning towards being against putting it in options).
+  - **Manhwa Mode (Continuous Vertical Strip):** Automatically append pages together vertically on the same canvas page.
+    - Build the preloading and image caching infrastructure specifically with intent to serve both fast single-page transitions and continuous Manhwa rendering.
+    - **Active Item Synchronization:** As the user scrolls vertically through the continuous strip, dynamically track the currently visible image and keep the active item selection in the file list and status bar perfectly in sync.
 - **Initial HTML Loading (LCP):** Completely remove the blank page time on initial loading of both HTML pages before the main UI renders. It's currently acting this way because we are optimizing for LCP on the flickering of themes. Refer to the way LCP is handled on `E:\Projects\PixiJS Live2D Spine (Springfield)` for reference.
-- **Responsive Keyboard Panning:** Audit the keyboard pan pipeline (debounce/delay). Make panning apply immediately per key press and support fast multi-directional spam. Currently the performance is just not up to par with the original Quivi application.
-- **Pan Lengths & Smooth Panning:** Add individual pan lengths for scroll vs shortcuts (copying original Quivi defaults). Try implementing a smooth panning option and test to see if that feels nice and responsive, if not just revert.
-- ** Zoom Smoothing** Same as the above, try out -> decide.
-- **Scaling Modes (Bicubic vs Lanczos):** Implement a proper way to scale via Bicubic and Lanczos (using external API or JS library if CSS doesn't support Lanczos). Doing this should also  provide us the initial entry for using more advanced custom scaling methods.
-  - This also means we need to make each scaling methods available as a settable keybinbd.
 - **SVG Rendering & Bounds:** Audit SVG elements behavior of hitbox/dimensions going over the canvas edge. The calculations for SVG images that have a WxH of 100% compared to a set WxH act differently and break the border/edge calculations on the canvas and/or image.
   - *Key examples:* `test-files/gfl-spinner.svg` works as expected, while `icons/quivi-t_moe-2.svg` does not. 
   - *Visual insight on SVGs that have a WxH of 100%:* the bounds/edge of the image seems to visually be the **center of the image** instead of the **very edges**. 
   - "very edges" = `0x, 0y, widthX, heightY` (left, top, right, bottom) of the displayed image element. 
   - "center of the image" = `(widthX / 2)x, (heightY / 2)y, (widthX / 2)x, (heightY / 2)y` (left, top, right, bottom) of the displayed image element.
-- **Emergency Boss Key:** Add an "Emergency Button" to hide the application into the system tray, with a configurable keybind.
-- **Helium Exit-Fullscreen:** Copy Helium browser's exit-fullscreen functionality (hold to exit, and a top exit button offscreen that slides down via hover). (https://github.com/imputnet/helium) 
+- **Scaling Modes (Bicubic vs Lanczos):** Implement a proper way to scale via Bicubic and Lanczos (using external API or JS library if CSS doesn't support Lanczos). Doing this should also provide us the initial entry for using more advanced custom scaling methods.
+  - This also means we need to make each scaling method available as a settable keybind.
 
 ### CSS, Styling & Code Structure (Refactoring)
+- **Persistent Root Column Sizes:** Treat CSS root column sizes as persistent data saved via WebView2. Add a reset column sizes button in the options (under General).
+- **Syntax Highlighting:** Add syntax highlighting to the Custom CSS field in Customization using an available font (fonts that have syntax highlighting) or a small library.
+- **Custom CSS Persistence Bugs:** Fix custom CSS persistence. Fix the bug where it sometimes doesn't apply on restart, or applies even when it was removed. **Note: Unsure if this bug still exists, as it has not been encountered since the major syncing refactor.**
+- **Tab Navigation Extraction:** Move a huge portion of the tab navigation logic into its own JS file (e.g., `keyboardNav.js`) using state callbacks to decouple and reduce clutter. Manually style active tab navigation items into their own CSS file.
 - **CSS Decoupling:** Clean up CSS. Create a `global.css` for root vars, global resets, and general rules. Allow individual HTML pages to have specific CSS files to reduce clutter.
 - **JS DOM Decoupling:** Move DOM interaction/manipulation to its own file and communicate between files via state callbacks. Refer to the `E:\Projects\PixiJS Live2D Spine (Springfield)` project structure.
-- **Tab Navigation Extraction:** Move a huge portion of the tab navigation logic into its own JS file (e.g., `keyboardNav.js`) using state callbacks to decouple and reduce clutter. Manually style active tab navigation items into their own CSS file.
-- **Persistent Root Column Sizes:** Treat CSS root column sizes as persistent data saved via WebView2. Add a reset column sizes button in the options (under General).
-- **Custom CSS Persistence Bugs:** Fix custom CSS persistence. Fix the bug where it sometimes doesn't apply on restart, or applies even when it was removed. **Note: Unsure if this bug still exists, as it has not been encountered since the major syncing refactor.**
-- **Syntax Highlighting:** Add syntax highlighting to the Custom CSS field in Customization using an available font (fonts that have syntax highlighting) or a small library.
 
 ### Supported Formats & Advanced Icons (Complex)
+- **File Association Prompt:** Add a prompt notification at the center of the screen pointing users to the File Associations tab (reminding them that they can and should set file associations).
+- **Missing .ico Spritesheets:** Fix bug where certain ICO files (like `test-files/endfield.ico`) do not get the spritesheet treatment.
 - **Advanced .ico Processing:** Improve .ico processing (performance-first). Change the .ico processing and rendering spec:
   1. Add a 'ICO Spritesheet' to the view dropdown under 'opaque canvas' (make sure this is configurable in the keybinds option). Default: ON.
   2. OFF: .ico files should not be processed at all and should just act as a legacy image file. ON: .ico files should be processed.
@@ -90,13 +118,10 @@
   5. The largest ico size is the single source of truth; this element should be the only element that has canvas bounding calculations.
   6. The remaining smaller sizes are just a shadow of the main ico element, layed out (with space between them) in the spritesheet order. This means that it follows the main ico file whilst not having any hitbox/bounding calculations.
   7. Render out the 'opaque canvas' option for every ico element.
-- **Missing .ico Spritesheets:** Fix bug where certain ICO files (like `test-files/endfield.ico`) do not get the spritesheet treatment.
 - **Extended Format Support:** Support PSD, XCF, and PDF files (decide whether to process via JS or backend, performance-first).
 - **Password-Protected Archives:** Add support for password-protected archives.
-- **File Association Prompt:** Add a prompt notification at the center of the screen pointing users to the File Associations tab (reminding them that they can and should and can set file associations).
 
 ### Documentation & GitHub (Project Health)
-
 - **Contributing Section:** Add a contributing section to the github page, for general contributions to the project, but more on documenting how new languages should be created for the language settings.
 
 ---
@@ -147,8 +172,15 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 - **Placement TBD:** the toggle-button location is unresolved — `.file-panel-actions` (the bottom action strip holding Open Explorer / Open Folder / Favorite / metadata badge) feels iffy. Alternatives to explore: a view-mode control in the file-panel header (above the column-header row), a View-menu item, or a `cmd-*` keybind like the existing view toggles.
 - **Performance-first:** only load thumbnails for visible rows (lazy/virtualized), never decode full-size images for the preview, and no overhead in the normal list mode.
 
-### Double Page View (Manga Spread)
-- Low priority, implement after initial release. Imagine split window esque.
+### Double Page View & Manga Spread Mode
+- **Reading Orientation (LTR / RTL):**
+  - Ability to set reading mode to Left-to-Right (LTR) or Right-to-Left (RTL).
+  - Alignment control for `Fit None` (currently defaults to top-center; support top-left or top-right positioning based on reading direction for manga/comics).
+- **Spread Page Viewing (Half-Width Fit-to-Width):**
+  - When enabled and an image is wider than it is tall (`width > height`), calculate Fit-to-Width using half of the image width (`width / 2`) instead of full width. This maintains a consistent zoom level across single pages and 2-page spread images.
+- **Implementation Challenges & Considerations:**
+  1. **Reading Direction Sync:** Must align with the active LTR / RTL setting to determine which side of the spread to display first (e.g. top-right start for RTL manga spread, top-left start for LTR comic spread).
+  2. **Visual Spread Indicator:** Provide a clear visual indicator/badge (both in the status bar and in fullscreen overlay) showing that the active image is a spread page rendered in half-width mode, so the user knows they are viewing a zoomed-in spread section.
 
 ### Detach Image Window
 - Add the ability to pop the currently viewed image out into its own standalone window, separate from the main QuiviT UI.
