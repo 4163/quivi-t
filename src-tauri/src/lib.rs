@@ -58,7 +58,7 @@ fn apply_shell_background(window: &tauri::WebviewWindow, config: &AppConfig) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let config = crate::config::load_config_early();
+    let config = crate::config::apply_pending_config();
     // Single instance defaults to true if not explicitly set to false
     let single_instance = config.frontend_data.get("single_instance").and_then(|v| v.as_bool()).unwrap_or(true);
 

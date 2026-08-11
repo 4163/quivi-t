@@ -117,6 +117,35 @@ pub fn load_config_early() -> AppConfig {
     }
 }
 
+// Startup-only settings are persisted as a "pending" value so they only take
+// effect after a restart (matching the Options "Takes effect after restarting
+// QuiviT." hint). Options writes `pending_single_instance`; the effective
+// `single_instance` is never written by the UI. On the next launch, promote the
+// pending value into `single_instance`, drop the pending key, and persist the
+// file — before any startup logic (single-instance plugin gate) reads it.
+pub fn apply_pending_to_config(config: &mut AppConfig) {
+    if let Some(pending) = config.frontend_data.get("pending_single_instance").cloned() {
+        if pending.is_boolean() {
+            config.frontend_data["single_instance"] = pending;
+        }
+        if let Some(obj) = config.frontend_data.as_object_mut() {
+            obj.remove("pending_single_instance");
+        }
+    }
+}
+
+pub fn apply_pending_config() -> AppConfig {
+    let mut config = load_config_early();
+    let had_pending = config.frontend_data.get("pending_single_instance").is_some();
+    apply_pending_to_config(&mut config);
+    if had_pending {
+        if let Ok(data) = serde_json::to_string_pretty(&config) {
+            let _ = fs::write(get_config_path(), data);
+        }
+    }
+    config
+}
+
 // ── Config split helpers ──────────────────────────────────────────────────────
 // Runtime state (last-opened location, remembered images), per-directory
 // sort prefs, and favorites are persisted as their own files so the roaming
@@ -411,5 +440,47 @@ mod tests {
         let config: AppConfig = serde_json::from_str(json_str).unwrap();
         assert_eq!(config.portable_mode, true);
         assert!(config.frontend_data.is_object());
+    }
+
+    #[test]
+    fn test_apply_pending_config_disable_promotion() {
+        // Disable staged: pending false promotes over the effective true.
+        let mut config: AppConfig = serde_json::from_str(r#"{
+            "frontend_data": { "single_instance": true, "pending_single_instance": false }
+        }"#).unwrap();
+        apply_pending_to_config(&mut config);
+        assert_eq!(config.frontend_data["single_instance"], false);
+        assert!(config.frontend_data.get("pending_single_instance").is_none());
+    }
+
+    #[test]
+    fn test_apply_pending_config_enable_promotion() {
+        // Enable staged: pending true promotes over the effective false.
+        let mut config: AppConfig = serde_json::from_str(r#"{
+            "frontend_data": { "single_instance": false, "pending_single_instance": true }
+        }"#).unwrap();
+        apply_pending_to_config(&mut config);
+        assert_eq!(config.frontend_data["single_instance"], true);
+        assert!(config.frontend_data.get("pending_single_instance").is_none());
+    }
+
+    #[test]
+    fn test_apply_pending_config_noop_without_pending() {
+        let mut config: AppConfig = serde_json::from_str(r#"{
+            "frontend_data": { "single_instance": true }
+        }"#).unwrap();
+        apply_pending_to_config(&mut config);
+        assert_eq!(config.frontend_data["single_instance"], true);
+    }
+
+    #[test]
+    fn test_apply_pending_config_non_bool_dropped() {
+        // Non-boolean pending is invalid: dropped without promoting.
+        let mut config: AppConfig = serde_json::from_str(r#"{
+            "frontend_data": { "single_instance": true, "pending_single_instance": "yes" }
+        }"#).unwrap();
+        apply_pending_to_config(&mut config);
+        assert_eq!(config.frontend_data["single_instance"], true);
+        assert!(config.frontend_data.get("pending_single_instance").is_none());
     }
 }
