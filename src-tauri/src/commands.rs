@@ -162,20 +162,20 @@ pub fn read_directory_impl(
     })
 }
 
-#[tauri::command]
-pub fn read_directory(path: &str, show_hidden: Option<bool>, target_name: Option<String>) -> Result<DirectoryReadResult, String> {
-    read_directory_impl(path, show_hidden.unwrap_or(false), target_name.as_deref())
+#[tauri::command(async)]
+pub fn read_directory(path: String, show_hidden: Option<bool>, target_name: Option<String>) -> Result<DirectoryReadResult, String> {
+    read_directory_impl(&path, show_hidden.unwrap_or(false), target_name.as_deref())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_archive(
-    archive_path: &str,
+    archive_path: String,
     state: tauri::State<'_, Mutex<ArchiveCache>>,
 ) -> Result<ArchiveReadResult, String> {
     let mut cache = state.lock().map_err(|e| e.to_string())?;
 
-    if cache.active_path.as_deref() != Some(archive_path) {
-        cache.active_path = Some(archive_path.to_string());
+    if cache.active_path.as_deref() != Some(archive_path.as_str()) {
+        cache.active_path = Some(archive_path.clone());
         cache.zip_entries.clear();
         cache.zip_lru.clear();
         cache.zip_archive = None;
@@ -189,7 +189,7 @@ pub fn list_archive(
 
         let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
         if ext == "rar" || ext == "cbr" || ext == "7z" || ext == "cb7" {
-            let hash = format!("{:x}", md5::compute(archive_path));
+            let hash = format!("{:x}", md5::compute(&archive_path));
             let temp_dir = std::env::temp_dir().join("QuiviT").join(hash);
             fs::create_dir_all(&temp_dir).ok();
             cache.extract_temp_dir = Some(temp_dir.clone());
@@ -206,7 +206,7 @@ pub fn list_archive(
             });
         } else if ext == "zip" || ext == "cbz" {
             if let Ok(file) = fs::File::open(&archive_path) {
-                if let Ok(archive) = zip::ZipArchive::new(file) {
+                if let Ok(archive) = zip::ZipArchive::new(std::io::BufReader::new(file)) {
                     cache.zip_archive = Some(archive);
                 }
             }
@@ -215,16 +215,16 @@ pub fn list_archive(
 
     let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
     let files = match ext.as_str() {
-        "zip" | "cbz" => list_zip_entries(archive_path)?,
-        "rar" | "cbr" => list_rar_entries(archive_path)?,
-        "7z" | "cb7" => list_7z_entries(archive_path)?,
-        "cbt" | "tar" => list_tar_entries(archive_path)?,
+        "zip" | "cbz" => list_zip_entries(&archive_path)?,
+        "rar" | "cbr" => list_rar_entries(&archive_path)?,
+        "7z" | "cb7" => list_7z_entries(&archive_path)?,
+        "cbt" | "tar" => list_tar_entries(&archive_path)?,
         _ => return Err(format!("Unsupported archive format: {ext}")),
     };
 
     Ok(ArchiveReadResult {
         files,
-        archive_path: archive_path.to_string(),
+        archive_path,
     })
 }
 

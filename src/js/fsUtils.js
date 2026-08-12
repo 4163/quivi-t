@@ -437,9 +437,8 @@ export const FsUtils = {
     try {
       const result = await invoke('open_parent', { currentDir: state.directory, showHidden: this.showHidden() });
       if (!_isCurrentGeneration(generation)) return;
-      // Config handled inside applyDirectoryResult: open_first_image (ON) opens
-      // the first image, OFF (default) highlights the folder we came from.
-      this.applyDirectoryResult(result, { generation, previousEntry });
+      // Highlight the folder we came from (same behavior as archives)
+      this.applyDirectoryResult(result, { preferInitial: true, generation, previousEntry });
       this.persistLastOpened(result.directory);
     } catch (err) {
       if (err === 'Already at root') {
@@ -487,9 +486,27 @@ export const FsUtils = {
         return;
       }
 
-      const newIdx = ((currentIdx + delta) % sorted.length + sorted.length) % sorted.length;
       if (!_isCurrentGeneration(generation)) return;
-      await this.loadFile(sorted[newIdx].path, { generation });
+
+      let attempts = 0;
+      let currentIndexToCheck = currentIdx;
+
+      while (attempts < sorted.length) {
+        currentIndexToCheck = ((currentIndexToCheck + delta) % sorted.length + sorted.length) % sorted.length;
+        
+        // If we wrapped all the way back to the current item, there are no valid alternatives.
+        if (currentIndexToCheck === currentIdx) break;
+
+        try {
+          await this.loadFile(sorted[currentIndexToCheck].path, { generation });
+          return; // Successfully loaded a sibling, exit loop
+        } catch (err) {
+          console.error(`[Core] Skipping inaccessible sibling container: ${sorted[currentIndexToCheck].path}`, err);
+          attempts++;
+        }
+      }
+
+      console.error('[Core] openSibling error: All other sibling containers are inaccessible or corrupted.');
     } catch (err) {
       console.error('[Core] openSibling error:', err);
     }

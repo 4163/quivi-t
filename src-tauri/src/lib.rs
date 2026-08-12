@@ -240,12 +240,8 @@ pub fn run() {
                             let mut cache = state.lock().unwrap();
                             if cache.active_path.as_deref() == Some(archive_path.as_str()) {
                                 if let Some(archive) = cache.zip_archive.as_mut() {
-                                    if let Ok(mut entry) = archive.by_name(&entry_name) {
-                                        let mut d = Vec::with_capacity(entry.size() as usize);
-                                        if std::io::Read::read_to_end(&mut entry, &mut d).is_ok() {
-                                            Some(d)
-                                        } else { None }
-                                    } else { None }
+                                    // Try direct lookup first (UTF-8 ZIPs) and fallback scan if needed
+                                    crate::archives::read_zip_entry_by_decoded_name(archive, &entry_name).ok()
                                 } else { None }
                             } else { None }
                         };

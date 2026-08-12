@@ -15,7 +15,7 @@ pub struct ArchiveCache {
     pub zip_lru: VecDeque<String>,
     pub zip_capacity: usize,
     pub extract_temp_dir: Option<PathBuf>,
-    pub zip_archive: Option<zip::ZipArchive<std::fs::File>>,
+    pub zip_archive: Option<zip::ZipArchive<std::io::BufReader<std::fs::File>>>,
     pub extract_notify: Arc<(Mutex<HashSet<String>>, Condvar)>,
 }
 
@@ -35,40 +35,143 @@ impl ArchiveCache {
 
 // ── ZIP reading ──────────────────────────────────────────────────────────────
 
+/// Decodes a ZIP entry name, handling legacy Shift-JIS encoding.
+/// 
+/// ZIP archives created on Japanese Windows systems often use Shift-JIS (CP932)
+/// encoding for filenames without setting the UTF-8 flag (bit 11 in the general
+/// purpose bit flag). The `zip` crate's `.name()` method returns a UTF-8 string,
+/// but when the original bytes are Shift-JIS, this produces mojibake (garbled text).
+/// 
+/// This function detects when `.name()` contains replacement characters (�, U+FFFD)
+/// and attempts to re-decode the raw filename bytes as Shift-JIS.
+fn decode_zip_entry_name<R: std::io::Read + std::io::Seek>(entry: &zip::read::ZipFile<'_, R>) -> String {
+    let name = entry.name();
+    
+    // Fast path: if the name is valid UTF-8 without replacement characters, use it directly
+    if !name.contains('\u{FFFD}') {
+        return name.to_string();
+    }
+    
+    // Slow path: the name contains replacement characters, likely due to non-UTF-8 encoding
+    let raw_bytes = entry.name_raw();
+    
+    // Try Shift-JIS (Japanese)
+    let (decoded, _, had_errors) = encoding_rs::SHIFT_JIS.decode(raw_bytes);
+    if !had_errors {
+        return decoded.into_owned();
+    }
+    
+    // Try GB18030 (Chinese)
+    let (decoded, _, had_errors) = encoding_rs::GB18030.decode(raw_bytes);
+    if !had_errors {
+        return decoded.into_owned();
+    }
+    
+    // Try EUC-KR (Korean)
+    let (decoded, _, had_errors) = encoding_rs::EUC_KR.decode(raw_bytes);
+    if !had_errors {
+        return decoded.into_owned();
+    }
+    
+    // Fallback: return the mojibake name as-is
+    name.to_string()
+}
+
 pub fn list_zip_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
     let file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid ZIP archive: {e}"))?;
+    let mut archive = zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(|e| format!("Invalid ZIP archive: {e}"))?;
+    
+    // First pass: collect all entry names from the central directory.
+    // This allows us to list corrupt entries even when their local headers are invalid.
+    let all_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
+    
     let mut files = Vec::new();
+    let mut skipped_count = 0;
 
-    for i in 0..archive.len() {
-        let entry = archive.by_index(i).map_err(|e| format!("Error reading ZIP entry: {e}"))?;
-        let name = entry.name().to_string();
-        if entry.is_dir() { continue; }
-        let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-        if !is_image_ext(&ext) && !is_metadata_ext(&ext) { continue; }
+    for (i, name) in all_names.iter().enumerate() {
+        // Try to read the entry to check if it's accessible
+        match archive.by_index(i) {
+            Ok(entry) => {
+                let decoded_name = decode_zip_entry_name(&entry);
+                if entry.is_dir() { continue; }
+                let ext = decoded_name.rsplit('.').next().unwrap_or("").to_lowercase();
+                if !is_image_ext(&ext) && !is_metadata_ext(&ext) { continue; }
 
-        files.push(FileEntry {
-            name: name.clone(),
-            path: format!("{}|{}", archive_path, name),
-            ext: ext.to_uppercase(),
-            date: "".to_string(),
-            is_dir: false,
-            is_hidden: false,
-        });
+                files.push(FileEntry {
+                    name: decoded_name.clone(),
+                    path: format!("{}|{}", archive_path, decoded_name),
+                    ext: ext.to_uppercase(),
+                    date: "".to_string(),
+                    is_dir: false,
+                    is_hidden: false,
+                });
+            }
+            Err(_) => {
+                // Entry has a corrupt local file header but exists in central directory.
+                // List it anyway so users see it exists (will show "Failed to load" in UI).
+                let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
+                if is_image_ext(&ext) || is_metadata_ext(&ext) {
+                    files.push(FileEntry {
+                        name: name.clone(),
+                        path: format!("{}|{}", archive_path, name),
+                        ext: ext.to_uppercase(),
+                        date: "".to_string(),
+                        is_dir: false,
+                        is_hidden: false,
+                    });
+                }
+                skipped_count += 1;
+            }
+        }
+    }
+    
+    if skipped_count > 0 {
+        eprintln!("Warning: {} ZIP entry(ies) have corrupt local headers and may fail to load", skipped_count);
     }
     
     files.sort_by(|a, b| natord::compare(&a.name, &b.name));
     Ok(files)
 }
 
+pub fn read_zip_entry_by_decoded_name<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    entry_name: &str
+) -> Result<Vec<u8>, String> {
+    // Try direct lookup first (handles UTF-8 encoded ZIPs)
+    if let Ok(mut entry) = archive.by_name(entry_name) {
+        let mut buf = Vec::with_capacity(entry.size() as usize);
+        if std::io::Read::read_to_end(&mut entry, &mut buf).is_ok() {
+            return Ok(buf);
+        }
+    }
+    
+    // Fallback: scan all entries and match by decoded name (handles Shift-JIS/GBK/EUC-KR ZIPs)
+    let mut matching_index = None;
+    for i in 0..archive.len() {
+        if let Ok(entry) = archive.by_index(i) {
+            let decoded_name = decode_zip_entry_name(&entry);
+            if decoded_name == entry_name {
+                matching_index = Some(i);
+                break;
+            }
+        }
+    }
+    
+    // Then extract by index if found
+    if let Some(index) = matching_index {
+        let mut entry = archive.by_index(index).map_err(|e| format!("Error reading ZIP entry: {e}"))?;
+        let mut buf = Vec::with_capacity(entry.size() as usize);
+        std::io::Read::read_to_end(&mut entry, &mut buf).map_err(|e| format!("Error reading entry: {e}"))?;
+        return Ok(buf);
+    }
+    
+    Err(format!("Cannot find ZIP entry: {}", entry_name))
+}
+
 pub fn extract_zip_entry(archive_path: &str, entry_name: &str) -> Result<Vec<u8>, String> {
     let file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("Invalid ZIP archive: {e}"))?;
-    
-    let mut entry = archive.by_name(entry_name).map_err(|e| format!("Cannot find ZIP entry {}: {}", entry_name, e))?;
-    let mut buf = Vec::with_capacity(entry.size() as usize);
-    std::io::Read::read_to_end(&mut entry, &mut buf).map_err(|e| format!("Error reading entry: {e}"))?;
-    Ok(buf)
+    let mut archive = zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(|e| format!("Invalid ZIP archive: {e}"))?;
+    read_zip_entry_by_decoded_name(&mut archive, entry_name)
 }
 
 // ── RAR reading ──────────────────────────────────────────────────────────────
