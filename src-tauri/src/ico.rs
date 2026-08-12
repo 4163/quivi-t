@@ -57,25 +57,30 @@ pub fn get_ico_frames(path: String) -> Result<String, String> {
         
         let frame_data = &data[offset..offset + size];
         
-        // Try to decode as PNG first (modern ICOs embed PNG), then as BMP
-        let img = if frame_data.starts_with(b"\x89PNG") {
-            image::load_from_memory_with_format(frame_data, image::ImageFormat::Png)
-                .map_err(|e| format!("Failed to decode PNG frame: {e}"))
+        // Try to decode as PNG first (modern ICOs embed PNG)
+        if frame_data.starts_with(b"\x89PNG") {
+            match image::load_from_memory_with_format(frame_data, image::ImageFormat::Png) {
+                Ok(image) => {
+                    frames.push(image);
+                }
+                Err(_) => continue,
+            }
         } else {
-            // BMP frame in ICO: needs ICO-specific BMP handling
-            // Fallback: use image::load_from_memory with the full ICO
-            image::load_from_memory_with_format(&data, image::ImageFormat::Ico)
-                .map_err(|e| format!("Failed to decode ICO: {e}"))
-        };
-        
-        match img {
-            Ok(image) => frames.push(image),
-            Err(_) => continue,
-        }
-        
-        // For BMP frames we only use the whole-ICO fallback once
-        if !frame_data.starts_with(b"\x89PNG") {
-            break;
+            // BMP frame - try to decode by creating a synthetic single-entry ICO
+            // Create a minimal ICO file with just this one BMP entry
+            let mut synthetic_ico = Vec::new();
+            synthetic_ico.extend_from_slice(&[0, 0, 1, 0, 1, 0]); // ICO header with count=1
+            synthetic_ico.extend_from_slice(&data[entry_offset..entry_offset + 12]); // Copy directory entry (width, height, etc.)
+            // Adjust offset to point right after the 6+16 byte header
+            synthetic_ico.extend_from_slice(&[22, 0, 0, 0]); // New offset = 22
+            synthetic_ico.extend_from_slice(frame_data); // Append the BMP data
+            
+            match image::load_from_memory_with_format(&synthetic_ico, image::ImageFormat::Ico) {
+                Ok(image) => {
+                    frames.push(image);
+                }
+                Err(_) => continue,
+            }
         }
     }
     
