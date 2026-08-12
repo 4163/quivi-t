@@ -242,10 +242,12 @@ pub fn run() {
                     {
                         if let Some(single) = cache.archives.get(&archive_path) {
                             if let Some(temp_dir) = &single.extract_temp_dir {
-                                let safe_name = entry_name.replace('\\', "/");
-                                let file_path = temp_dir.join(&safe_name);
-                                if let Ok(bytes) = fs::read(&file_path) {
-                                    data = Some(bytes);
+                                if let Some(file_path) =
+                                    crate::archives::archive_entry_temp_path(temp_dir, &entry_name)
+                                {
+                                    if let Ok(bytes) = fs::read(&file_path) {
+                                        data = Some(bytes);
+                                    }
                                 }
                             }
                         }
@@ -305,23 +307,24 @@ pub fn run() {
                             }
                         };
                         if let Some(temp_dir) = temp_dir_opt {
-                            let safe_name = entry_name.replace('\\', "/");
-                            let file_path = temp_dir.join(&safe_name);
-
-                            if let Ok(bytes) = fs::read(&file_path) {
-                                data = Some(bytes);
-                            } else if let Some(notify) = notify_opt {
-                                let (lock, cvar) = &*notify;
-                                let set = lock.lock().unwrap();
-                                let timeout = std::time::Duration::from_secs(30);
-                                let _ = cvar
-                                    .wait_timeout_while(set, timeout, |pending| {
-                                        !pending.contains(&entry_name)
-                                    })
-                                    .unwrap();
-
+                            if let Some(file_path) =
+                                crate::archives::archive_entry_temp_path(&temp_dir, &entry_name)
+                            {
                                 if let Ok(bytes) = fs::read(&file_path) {
                                     data = Some(bytes);
+                                } else if let Some(notify) = notify_opt {
+                                    let (lock, cvar) = &*notify;
+                                    let set = lock.lock().unwrap();
+                                    let timeout = std::time::Duration::from_secs(30);
+                                    let _ = cvar
+                                        .wait_timeout_while(set, timeout, |pending| {
+                                            !pending.contains(&entry_name)
+                                        })
+                                        .unwrap();
+
+                                    if let Ok(bytes) = fs::read(&file_path) {
+                                        data = Some(bytes);
+                                    }
                                 }
                             }
                         }
@@ -655,6 +658,58 @@ mod archive_tests {
         assert!(root.exists(), "root TAR entry not extracted");
         assert!(nested.exists(), "nested TAR entry not extracted");
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn archive_entry_temp_path_rejects_escape_paths() {
+        let temp_dir = std::env::temp_dir().join("QuiviT-test-path-safety");
+
+        assert!(archive_entry_temp_path(&temp_dir, "folder/page.jpg").is_some());
+        assert!(archive_entry_temp_path(&temp_dir, "folder\\page.jpg").is_some());
+        assert!(archive_entry_temp_path(&temp_dir, "../page.jpg").is_none());
+        assert!(archive_entry_temp_path(&temp_dir, "folder/../../page.jpg").is_none());
+        assert!(archive_entry_temp_path(&temp_dir, "/absolute/page.jpg").is_none());
+        assert!(archive_entry_temp_path(&temp_dir, "").is_none());
+    }
+
+    #[test]
+    fn tar_temp_extraction_includes_metadata() {
+        let temp_root = std::env::temp_dir().join("QuiviT-test-tar-metadata");
+        let _ = fs::remove_dir_all(&temp_root);
+        fs::create_dir_all(&temp_root).ok();
+
+        let cbt = temp_root.join("metadata.cbt");
+        let mut builder = tar::Builder::new(fs::File::create(&cbt).expect("create cbt"));
+        let entries = [
+            ("page.jpg", b"image".as_slice()),
+            ("ComicInfo.xml", b"<ComicInfo />".as_slice()),
+        ];
+        for (name, bytes) in entries {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_mtime(0);
+            builder
+                .append_data(&mut header, name, bytes)
+                .expect("append tar entry");
+        }
+        builder.finish().expect("finish cbt");
+
+        let extract_dir = temp_root.join("extract");
+        fs::create_dir_all(&extract_dir).ok();
+        let notify = std::sync::Arc::new((
+            std::sync::Mutex::new(std::collections::HashSet::new()),
+            std::sync::Condvar::new(),
+        ));
+        extract_tar_to_temp(
+            cbt.to_string_lossy().into_owned(),
+            extract_dir.clone(),
+            notify,
+        );
+
+        assert!(extract_dir.join("page.jpg").exists());
+        assert!(extract_dir.join("ComicInfo.xml").exists());
+        let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[test]

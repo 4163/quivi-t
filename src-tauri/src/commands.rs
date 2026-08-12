@@ -348,8 +348,8 @@ pub fn get_archive_ico_frames(
             let temp_dir = temp_dir_opt.ok_or_else(|| {
                 format!("Archive is not prepared for temporary extraction: {archive_path}")
             })?;
-            let safe_name = entry_name.replace('\\', "/");
-            let file_path = temp_dir.join(&safe_name);
+            let file_path = archive_entry_temp_path(&temp_dir, &entry_name)
+                .ok_or_else(|| format!("Unsafe archive entry path: {entry_name}"))?;
 
             if let Ok(bytes) = fs::read(&file_path) {
                 bytes

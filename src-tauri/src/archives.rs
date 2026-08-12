@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 
 use crate::models::FileEntry;
@@ -137,6 +137,49 @@ impl Drop for SingleArchiveCache {
             let _ = fs::remove_dir_all(dir);
         }
     }
+}
+
+pub fn archive_entry_temp_path(temp_dir: &Path, entry_name: &str) -> Option<PathBuf> {
+    let normalized = entry_name.replace('\\', "/");
+    let mut relative = PathBuf::new();
+
+    for component in Path::new(&normalized).components() {
+        match component {
+            Component::Normal(part) => relative.push(part),
+            Component::CurDir => {}
+            _ => return None,
+        }
+    }
+
+    if relative.as_os_str().is_empty() {
+        return None;
+    }
+
+    Some(temp_dir.join(relative))
+}
+
+fn write_temp_entry(
+    temp_dir: &Path,
+    entry_name: &str,
+    write: impl FnOnce(&Path) -> std::io::Result<()>,
+) -> Option<PathBuf> {
+    let out_path = archive_entry_temp_path(temp_dir, entry_name)?;
+    if let Some(parent) = out_path.parent() {
+        fs::create_dir_all(parent).ok()?;
+    }
+
+    let file_name = out_path.file_name()?.to_string_lossy();
+    let tmp_path = out_path.with_file_name(format!("{file_name}.tmp"));
+    write(&tmp_path).ok()?;
+    fs::rename(&tmp_path, &out_path).ok()?;
+    Some(out_path)
+}
+
+fn notify_extracted(notify: &Arc<(Mutex<HashSet<String>>, Condvar)>, entry_name: &str) {
+    let (lock, cvar) = &**notify;
+    let mut set = lock.lock().unwrap();
+    set.insert(entry_name.to_string());
+    cvar.notify_all();
 }
 
 // ── ZIP reading ──────────────────────────────────────────────────────────────
@@ -345,21 +388,12 @@ pub fn extract_rar_to_temp(
                     let name = entry.filename.to_string_lossy().to_string();
                     if !entry.is_directory() {
                         let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-                        if is_image_ext(&ext) {
+                        if is_image_ext(&ext) || is_metadata_ext(&ext) {
                             if let Ok((data, next)) = header.read() {
-                                let safe_name = name.replace('\\', "/");
-                                let out_path = temp_dir.join(&safe_name);
-                                if let Some(parent) = out_path.parent() {
-                                    fs::create_dir_all(parent).ok();
-                                }
-                                let tmp_path = temp_dir.join(format!("{}.tmp", safe_name));
-                                if fs::write(&tmp_path, &data).is_ok() {
-                                    if fs::rename(&tmp_path, &out_path).is_ok() {
-                                        let (lock, cvar) = &*notify;
-                                        let mut set = lock.lock().unwrap();
-                                        set.insert(name.clone());
-                                        cvar.notify_all();
-                                    }
+                                if write_temp_entry(&temp_dir, &name, |path| fs::write(path, &data))
+                                    .is_some()
+                                {
+                                    notify_extracted(&notify, &name);
                                 }
                                 iter = next;
                                 continue;
@@ -433,25 +467,17 @@ pub fn extract_7z_to_temp(
         }
         let name = entry.name().to_string();
         let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-        if !is_image_ext(&ext) {
+        if !is_image_ext(&ext) && !is_metadata_ext(&ext) {
             return Ok(true);
         }
-        let safe_name = name.replace('\\', "/");
-        let out_path = temp_dir.join(&safe_name);
-        if let Some(parent) = out_path.parent() {
-            fs::create_dir_all(parent).ok();
-        }
-        let tmp_path = temp_dir.join(format!("{}.tmp", safe_name));
-        if let Ok(mut file) = fs::File::create(&tmp_path) {
-            if std::io::copy(data, &mut file).is_ok() {
-                drop(file);
-                if fs::rename(&tmp_path, &out_path).is_ok() {
-                    let (lock, cvar) = &*notify;
-                    let mut set = lock.lock().unwrap();
-                    set.insert(name.clone());
-                    cvar.notify_all();
-                }
-            }
+        if write_temp_entry(&temp_dir, &name, |path| {
+            let mut file = fs::File::create(path)?;
+            std::io::copy(data, &mut file)?;
+            Ok(())
+        })
+        .is_some()
+        {
+            notify_extracted(&notify, &name);
         }
         Ok(true)
     });
@@ -550,25 +576,18 @@ pub fn extract_tar_to_temp(
         }
 
         let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-        if !is_image_ext(&ext) {
+        if !is_image_ext(&ext) && !is_metadata_ext(&ext) {
             continue;
         }
 
-        let out_path = temp_dir.join(&name);
-        if let Some(parent) = out_path.parent() {
-            fs::create_dir_all(parent).ok();
-        }
-        let tmp_path = temp_dir.join(format!("{}.tmp", name));
-        if let Ok(mut file) = fs::File::create(&tmp_path) {
-            if std::io::copy(&mut entry, &mut file).is_ok() {
-                drop(file);
-                if fs::rename(&tmp_path, &out_path).is_ok() {
-                    let (lock, cvar) = &*notify;
-                    let mut set = lock.lock().unwrap();
-                    set.insert(name.clone());
-                    cvar.notify_all();
-                }
-            }
+        if write_temp_entry(&temp_dir, &name, |path| {
+            let mut file = fs::File::create(path)?;
+            std::io::copy(&mut entry, &mut file)?;
+            Ok(())
+        })
+        .is_some()
+        {
+            notify_extracted(&notify, &name);
         }
     }
 }
