@@ -543,6 +543,7 @@ function _attachLoadHandler(el) {
   el.addEventListener('load', () => {
     if (el !== img) return; // Only process if this is the active image
     if (!el.src) return; // Placeholder node shown without a resource
+    const state = Core.getState();
     if (el.naturalWidth > 0) {
       _naturalW = el.naturalWidth;
       _naturalH = el.naturalHeight;
@@ -552,7 +553,10 @@ function _attachLoadHandler(el) {
       _naturalW = el.clientWidth  || 1000;
       _naturalH = el.clientHeight || 1000;
     }
+    el.classList.add('active');
     _applyScaling();
+    if (statusName) statusName.textContent = state.filename || '';
+    if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
     if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
     applyFitMode();
   });
@@ -674,7 +678,7 @@ Core.onStateChange((state) => {
   // ── Activate the current image ──
   const activeEl = _activeNodes.get(state.src);
   const activeChanged = activeEl && activeEl !== img;
-  const hasPreviousBridge = !!img;
+  const hasPreviousBridge = !!(img && img !== activeEl && img.dataset.decoded === 'true');
   if (activeEl && hasPreviousBridge) {
     _loadPoolNode(activeEl, state.src);
   }
@@ -684,9 +688,14 @@ Core.onStateChange((state) => {
     if (statusName) statusName.textContent = 'Loading...';
     _setElementLoadingLabel(activeEl, LOADING_LABEL);
 
-    if (!img) {
+    if (!hasPreviousBridge) {
+      if (img && img !== activeEl) {
+        img.style.display = 'none';
+        img.classList.remove('active');
+      }
       img = activeEl;
       img.style.display = 'block';
+      img.classList.add('active');
     }
     _loadPoolNode(activeEl, state.src);
 

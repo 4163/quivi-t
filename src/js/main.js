@@ -810,7 +810,7 @@ Core.onStateChange((state) => {
   // The pool node may already carry the target src while still fetching.
   // viewer.js marks the decoded visible node explicitly.
   const imgEl2 = document.querySelector('.viewer-img.active[data-decoded="true"]');
-  const loaded = imgEl2 && imgEl2.src === state.src && imgEl2.complete;
+  const loaded = imgEl2 && imgEl2.dataset.poolSrc === state.src && imgEl2.complete;
   if (!state.src || loaded) {
     statusName.textContent = state.filename;
     statusIndex.textContent = FsUtils.formatStatusIndex(state);
