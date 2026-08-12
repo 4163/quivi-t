@@ -137,15 +137,20 @@ function applyFitMode() {
       break;
   }
 
-  _tx = 0;
-  if (['none', 'width', 'width-if-larger'].includes(_currentFitMode)) {
-    // Top-aligned modes: pin the image's top edge to the viewport top so tall
-    // pages start at the top and you scroll down. Images that fit vertically
-    // stay centered. The offset matches _clampPan()'s maxY bound exactly.
-    const { height } = _visualSize();
-    _ty = height > vh ? (height - vh) / 2 : 0;
-  } else {
-    _ty = 0;
+  // When fit mode is 'none', preserve the user's manual pan position across
+  // resizes and only re-clamp to the new viewport bounds. Other fit modes reset
+  // the pan to their default alignment (top-aligned or centered).
+  if (_currentFitMode !== 'none') {
+    _tx = 0;
+    if (['width', 'width-if-larger'].includes(_currentFitMode)) {
+      // Top-aligned modes: pin the image's top edge to the viewport top so tall
+      // pages start at the top and you scroll down. Images that fit vertically
+      // stay centered. The offset matches _clampPan()'s maxY bound exactly.
+      const { height } = _visualSize();
+      _ty = height > vh ? (height - vh) / 2 : 0;
+    } else {
+      _ty = 0;
+    }
   }
   _scheduleTransform();
 }
@@ -267,7 +272,7 @@ function _startPan(clientX, clientY) {
   _panStartY = clientY;
   _panOriginTx = _tx;
   _panOriginTy = _ty;
-  document.body.style.cursor = 'grabbing';
+  document.body.style.cursor = 'move';
   if (_keyPanHeld(null)) _startCursorPoll();
 }
 
