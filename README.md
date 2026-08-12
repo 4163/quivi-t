@@ -230,7 +230,10 @@ node --check src/js/options.js
 | **File Watching** | `notify` | Directory watcher for auto-refresh |
 | **ICO Extraction** | `image` | Multi-frame ICO spritesheet generation |
 | **Hashing** | `md5` | Deterministic temp directory naming |
+| **Data URIs** | `base64` | Base64 encoding for generated image payloads |
+| **Windows APIs** | `windows` / `winreg` | Native icons, file attributes, shell notifications, and per-user file associations |
 | **Tauri Plugins** | `opener`, `dialog`, `single-instance` | System integration (explorer, pickers, handoff) |
+| **Frontend Tauri API** | `@tauri-apps/api` / `@tauri-apps/plugin-dialog` | Browser-side IPC, asset URLs, and native file dialogs |
 
 ## Project Structure
 
