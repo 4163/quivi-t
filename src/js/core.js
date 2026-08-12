@@ -111,7 +111,7 @@ async function _persistConfig() {
   }
 }
 
-async function _selectEntry(index, activate = false, clampPreview = false) {
+async function _selectEntry(index, activate = false, clampPreview = false, direction = 1) {
   if (index === -1) {
     _state.index = -1;
     _state.filename = '';
@@ -161,7 +161,7 @@ async function _selectEntry(index, activate = false, clampPreview = false) {
   _notify();
 
   if (_state.mode === 'archive') {
-    FsUtils.prefetchAhead(_state.archivePath, index, 1);
+    FsUtils.prefetchAhead(_state.archivePath, index, direction);
   }
 }
 
@@ -248,7 +248,7 @@ export const Core = {
     }
 
     const next = (_state.index + delta + _state.list.length) % _state.list.length;
-    _selectEntry(next, false, clampPreview);
+    _selectEntry(next, false, clampPreview, Math.sign(delta) || 1);
   },
 
   /**

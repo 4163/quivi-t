@@ -636,11 +636,6 @@ export const FsUtils = {
 
     const indicesToPrefetch = [];
     
-    // Warm current entry
-    if (currentIndex >= 0 && currentIndex < files.length && this.isImageEntry(files[currentIndex])) {
-      indicesToPrefetch.push(files[currentIndex].name);
-    }
-
     // ── Symmetric window: 7 ahead, 7 behind ──
     const PREFETCH_HALF = 7;
     for (let i = 1; i <= PREFETCH_HALF; i++) {

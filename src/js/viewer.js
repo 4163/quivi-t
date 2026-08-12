@@ -12,6 +12,7 @@ import { activeKeys, MOUSE_BUTTON_NAMES } from './shortcuts.js';
 import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from './keybinds.js';
 
 const PRELOAD_HALF = 7;
+const TARGET_LOAD_DEBOUNCE_MS = 45;
 const _activeNodes = new Map();
 const _freeNodes = [];
 
@@ -97,6 +98,10 @@ const LOADING_LABEL = 'Loading...';
 
 function _setElementLoadingLabel(el, label) {
   el.alt = label;
+}
+
+function _isVisibleImage(el) {
+  return !!(el && el.src && el.style.display !== 'none');
 }
 
 let img = null;
@@ -566,8 +571,15 @@ function _attachLoadHandler(el) {
 
 let _poolGeneration = 0;
 let _activationGeneration = 0;
+let _targetLoadTimer = null;
 const _preloadTimers = [];
 const _preloadImages = [];
+
+function _clearTargetLoadTimer() {
+  if (!_targetLoadTimer) return;
+  clearTimeout(_targetLoadTimer);
+  _targetLoadTimer = null;
+}
 
 function _clearScheduledPreloads() {
   while (_preloadTimers.length > 0) {
@@ -604,6 +616,7 @@ function _schedulePoolPreloads(srcs, generation) {
 function clearDisplayedImage() {
   _poolGeneration += 1;
   _activationGeneration += 1;
+  _clearTargetLoadTimer();
   _clearScheduledPreloads();
   _naturalW = 0;
   _naturalH = 0;
@@ -617,6 +630,7 @@ function clearDisplayedImage() {
 Core.onStateChange((state) => {
   const generation = ++_poolGeneration;
   _activationGeneration += 1;
+  _clearTargetLoadTimer();
   _clearScheduledPreloads();
 
   if (state.mode === 'empty') {
@@ -649,9 +663,9 @@ Core.onStateChange((state) => {
   // visual bridge. Neighbor loading happens only after the target settles.
   desiredSrcs.add(state.src);
 
-  // Keep the previous image only if it is decoded and usable as a visual bridge.
-  // If it is still fetching, let pruning abort it so the newest target wins.
-  if (img && img.src && img.dataset.decoded === 'true') desiredSrcs.add(img.src);
+  // Keep whatever is currently visible until the new target decodes. This is
+  // the zero-flicker contract; stale hidden targets may still be pruned.
+  if (_isVisibleImage(img)) desiredSrcs.add(img.src);
 
   const neighborSrcs = [];
   for (let i = 1; i <= PRELOAD_HALF; i++) {
@@ -678,10 +692,7 @@ Core.onStateChange((state) => {
   // ── Activate the current image ──
   const activeEl = _activeNodes.get(state.src);
   const activeChanged = activeEl && activeEl !== img;
-  const hasPreviousBridge = !!(img && img !== activeEl && img.dataset.decoded === 'true');
-  if (activeEl && hasPreviousBridge) {
-    _loadPoolNode(activeEl, state.src);
-  }
+  const hasPreviousBridge = !!(img && img !== activeEl && _isVisibleImage(img));
 
   if (activeChanged) {
     const activation = _activationGeneration;
@@ -697,21 +708,32 @@ Core.onStateChange((state) => {
       img.style.display = 'block';
       img.classList.add('active');
     }
-    _loadPoolNode(activeEl, state.src);
 
-    const ready = activeEl.complete && (activeEl.naturalWidth > 0 || state.src.toLowerCase().endsWith('.svg'));
-    const decodePromise = ready || !activeEl.decode ? Promise.resolve() : activeEl.decode();
-    decodePromise.then(() => {
+    const loadTarget = () => {
       if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
-      _activatePoolNode(activeEl, state.filename, state);
-      _schedulePoolPreloads(neighborSrcs, generation);
-    }).catch(() => {
-      if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
-      _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
-      if (statusDims) statusDims.textContent = 'Error';
-      if (statusZoom) statusZoom.textContent = 'N/A';
-      _schedulePoolPreloads(neighborSrcs, generation);
-    });
+      _targetLoadTimer = null;
+      _loadPoolNode(activeEl, state.src);
+
+      const ready = activeEl.complete && (activeEl.naturalWidth > 0 || state.src.toLowerCase().endsWith('.svg'));
+      const decodePromise = ready || !activeEl.decode ? Promise.resolve() : activeEl.decode();
+      decodePromise.then(() => {
+        if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+        _activatePoolNode(activeEl, state.filename, state);
+        _schedulePoolPreloads(neighborSrcs, generation);
+      }).catch(() => {
+        if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+        _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
+        if (statusDims) statusDims.textContent = 'Error';
+        if (statusZoom) statusZoom.textContent = 'N/A';
+        _schedulePoolPreloads(neighborSrcs, generation);
+      });
+    };
+
+    if (hasPreviousBridge) {
+      _targetLoadTimer = setTimeout(loadTarget, TARGET_LOAD_DEBOUNCE_MS);
+    } else {
+      loadTarget();
+    }
   } else {
     _schedulePoolPreloads(neighborSrcs, generation);
   }
