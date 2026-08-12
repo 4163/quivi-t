@@ -137,7 +137,7 @@ The following system defaults are used:
 - **Auto-Fit Windows:** Secondary windows (Options, Archive Info) open hidden, auto-size to their content, and center over the main window — no size flicker.
 - **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor — or the Drives view at the root.
 - **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting in Options requires an app restart to take effect.
-- **Archive Caching (ZIP/CBZ):** A byte-budgeted LRU cache (default 512 MB, configurable as top-level `archive_cache_mb` in `quivit_config.json`) holds decoded ZIP/CBZ entries across *all* archives opened this session and evicts the least-recently-used entries globally when the budget is exceeded. Background prefetch fills a symmetric window of 7 images ahead and 7 behind the current position. The DOM viewer uses a two-image bridge while nearby pages warm after navigation settles.
+- **Archive Caching (ZIP/CBZ):** A byte-budgeted LRU cache (default 512 MB, configurable as top-level `archive_cache_mb` in `quivit_config.json`) holds decoded ZIP/CBZ entries across recently opened archives and evicts the least-recently-used entries globally when the budget is exceeded. Archive handles/temp extraction state is also bounded to the recent working set. Background prefetch fills a symmetric window of 7 images ahead and 7 behind the current position. The DOM viewer uses a two-image bridge while nearby pages warm after navigation settles.
 
 ### Configuration & Persistence
 

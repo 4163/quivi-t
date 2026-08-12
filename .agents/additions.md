@@ -42,7 +42,7 @@
 - `lib.rs` — app entry, main-window construction, event setup, shell background sync at startup.
 - `config.rs` — `AppConfig`, load/save, split-file helpers, portable detection, window size constants, options/metadata window lifecycle + fit/center commands.
 - `commands.rs` — Tauri commands (directory listing, file ops, sibling nav, directory watcher, `get_path_kind`, `get_archive_ico_frames`). Utilizes `#[tauri::command(async)]` for heavy I/O (`list_archive`, `read_directory`, archive ICO frame extraction) to offload to background threads.
-- `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants). `ArchiveCache` holds per-archive `SingleArchiveCache` state plus a global byte-budgeted LRU (default 512 MB via `archive_cache_mb`) so decoded ZIP/CBZ entries across all opened archives share one eviction pool.
+- `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants). `ArchiveCache` holds a bounded recent set of per-archive `SingleArchiveCache` state plus a global byte-budgeted LRU (default 512 MB via `archive_cache_mb`) so decoded ZIP/CBZ entries across recent archives share one eviction pool.
 - `ico.rs` — ICO spritesheet processing shared by loose-file `get_ico_frames` and archived-entry `get_archive_ico_frames` via `ico_frames_from_bytes`.
 - `models.rs` — shared structs (`FileEntry`, etc.).
 - `utils.rs` — path helpers, hidden-file detection.
