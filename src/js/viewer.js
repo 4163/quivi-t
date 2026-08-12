@@ -21,11 +21,14 @@ const imgWrapper = document.getElementById('viewer-img-wrapper');
 if (imgWrapper) {
   const oldImg = document.getElementById('viewer-img');
   if (oldImg) oldImg.remove();
-  
+
   const existingNodes = Array.from(document.querySelectorAll('.viewer-img'));
   existingNodes.slice(POOL_SIZE).forEach(el => el.remove());
-  existingNodes.slice(0, POOL_SIZE).forEach(el => _freeNodes.push(el));
-  
+  existingNodes.slice(0, POOL_SIZE).forEach(el => {
+    el.classList.remove('active');
+    _freeNodes.push(el);
+  });
+
   for (let i = _freeNodes.length; i < POOL_SIZE; i++) {
     const el = document.createElement('img');
     el.className = 'viewer-img';
@@ -67,6 +70,7 @@ function _recyclePoolNode(src) {
     el.removeAttribute('src');
     el.removeAttribute('data-pool-src');
     el.removeAttribute('data-decoded');
+    el.classList.remove('active');
     if (el === img) img = null;
     _activeNodes.delete(src);
     _freeNodes.push(el);
@@ -507,10 +511,12 @@ function setScaling(mode) {
 function _activatePoolNode(el, filename, state) {
   if (img && img !== el) {
     img.style.display = 'none';
+    img.classList.remove('active');
   }
 
   img = el;
   img.style.display = 'block';
+  img.classList.add('active');
   img.alt = filename || '';
   img.title = filename || '';
   img.dataset.decoded = 'true';

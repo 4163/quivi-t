@@ -807,9 +807,9 @@ Core.onStateChange((state) => {
 
   // Only update filename/index if the image is actually displayed and decoded;
   // otherwise viewer.js is showing "Loading..." and we don't want to overwrite it.
-  // The pool node may already carry the target src while still fetching, so a
-  // src comparison alone is not enough — the node must have completed loading.
-  const imgEl2 = document.querySelector('.viewer-img[style*="display: block"]');
+  // The pool node may already carry the target src while still fetching.
+  // viewer.js marks the decoded visible node explicitly.
+  const imgEl2 = document.querySelector('.viewer-img.active[data-decoded="true"]');
   const loaded = imgEl2 && imgEl2.src === state.src && imgEl2.complete;
   if (!state.src || loaded) {
     statusName.textContent = state.filename;
