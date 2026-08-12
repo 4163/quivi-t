@@ -50,6 +50,10 @@ function _base64Encode(str) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function _basename(path) {
+  return String(path || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+}
+
 export const FsUtils = {
   isArchive(name) { return SUPPORTED_ARCHIVES.has(_ext(name)); },
   isImage(name) { return SUPPORTED_IMAGES.has(_ext(name)); },
@@ -344,6 +348,15 @@ export const FsUtils = {
       if (options.isStartup) {
         console.error(`[Core] Startup loadArchive failed for ${archivePath}, falling back:`, err);
         return this.loadFallbackAncestor(archivePath, options);
+      }
+      if (_isCurrentGeneration(options.generation)) {
+        const state = Core.getState();
+        this.revokeIfObjectURL(state.src);
+        Core.setState({
+          mode: state.mode === 'empty' ? 'image' : state.mode,
+          src: '',
+          filename: `Failed to open archive: ${_basename(archivePath) || archivePath}`,
+        });
       }
       throw err;
     }
