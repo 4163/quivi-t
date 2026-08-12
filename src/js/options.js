@@ -130,6 +130,8 @@ async function init() {
     document.getElementById('opt-single-instance').checked = config.frontend_data.single_instance !== false;
     document.getElementById('opt-show-hidden').checked = config.frontend_data.show_hidden === true;
     document.getElementById('opt-hide-chrome-fullscreen').checked = config.frontend_data.hide_chrome_on_fullscreen !== false;
+    document.getElementById('opt-keyboard-pan-step').value = config.frontend_data.keyboard_pan_step || 72;
+    document.getElementById('opt-wheel-pan-step').value = config.frontend_data.wheel_pan_step || 120;
     document.getElementById('opt-start-dir').value = config.frontend_data.start_dir || '';
 
     // Theme & Custom CSS
@@ -331,12 +333,16 @@ document.getElementById('opt-custom-css').addEventListener('keydown', (e) => {
 document.getElementById('btn-save-options').addEventListener('click', async () => {
   await applyAssociations(showStatus);
   config.portable_mode = document.getElementById('opt-portable-mode').checked;
+  // Preserve the hidden field if it exists (config-file-only, no UI)
+  // config.hidden is already set from load_config and should be preserved
   config.frontend_data.continue_last = document.getElementById('opt-continue-last').checked;
   config.frontend_data.remember_last_image = document.getElementById('opt-remember-last-image').checked;
   config.frontend_data.open_first_image = document.getElementById('opt-open-first-image').checked;
   config.frontend_data.pending_single_instance = document.getElementById('opt-single-instance').checked;
   config.frontend_data.show_hidden = document.getElementById('opt-show-hidden').checked;
   config.frontend_data.hide_chrome_on_fullscreen = document.getElementById('opt-hide-chrome-fullscreen').checked;
+  config.frontend_data.keyboard_pan_step = parseInt(document.getElementById('opt-keyboard-pan-step').value, 10);
+  config.frontend_data.wheel_pan_step = parseInt(document.getElementById('opt-wheel-pan-step').value, 10);
   config.frontend_data.start_dir = document.getElementById('opt-start-dir').value;
   config.frontend_data.theme = currentTheme;
   config.frontend_data.custom_css = document.getElementById('opt-custom-css').value;
@@ -344,8 +350,11 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   if (!config.frontend_data.continue_last) {
     delete config.frontend_data.last_opened_path;
   }
+  console.log('[Options Save] Before mergeConfig:', JSON.stringify(config, null, 2));
   const merged = mergeConfig(config);
+  console.log('[Options Save] After mergeConfig:', JSON.stringify(merged, null, 2));
   Object.assign(config, merged);
+  console.log('[Options Save] After Object.assign:', JSON.stringify(config, null, 2));
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
     await invoke('save_config', { config });

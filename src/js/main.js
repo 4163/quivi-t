@@ -7,7 +7,6 @@ import { FsUtils } from './fsUtils.js';
 import { Viewer } from './viewer.js';
 import * as NavigationHistory from './navigationHistory.js';
 import { initFilePanel, renderFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite } from './filePanel.js';
-import { VIEWER_KEYBOARD_PAN_STEP, VIEWER_WHEEL_PAN_STEP } from './keybinds.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from './shortcuts.js';
 import {
   initMenuBar,
@@ -315,7 +314,9 @@ function dispatchAction(actionId, payload) {
      // If it's a top level menu we could toggle it, but for actions we just execute them below
   }
 
-  const wheelStep = payload?.wheel ? VIEWER_WHEEL_PAN_STEP : VIEWER_KEYBOARD_PAN_STEP;
+  const state = Core.getState();
+  const config = state.config?.frontend_data || {};
+  const wheelStep = payload?.wheel ? (config.wheel_pan_step || 120) : (config.keyboard_pan_step || 72);
 
   switch (actionId) {
     case 'cmd-open-dir':

@@ -191,7 +191,8 @@ textarea:focus {
   border-color: var(--accent);
 }
 
-.flex-row input[type="text"] {
+.flex-row input[type="text"],
+.flex-row input[type="number"] {
   flex: 1;
   padding: 6px 8px;
   border: 1px solid var(--border);
@@ -199,6 +200,11 @@ textarea:focus {
   background: var(--field-bg);
   color: var(--text);
   font: inherit;
+}
+
+.flex-row input[type="number"] {
+  flex: none;
+  width: 80px;
 }
 
 .flex-row input[type="text"][readonly] {

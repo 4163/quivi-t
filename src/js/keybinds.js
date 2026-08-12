@@ -49,12 +49,14 @@ export const DEFAULT_KEYBINDS = {
   'cmd-pan-drag': ['MouseLeft', 'MouseMiddle', 'Space'],
 };
 
-// Pixel distance moved by keyboard pan commands. Increase/decrease this to tune
-// W/A/S/D and arrow-key panning without touching the command dispatch code.
-export const VIEWER_KEYBOARD_PAN_STEP = 72;
+// Pixel distance moved by keyboard pan commands (W/A/S/D and arrow keys).
+// Default: 72px. Configurable via Options → Interface.
+export const DEFAULT_KEYBOARD_PAN_STEP = 72;
 
 // Pixel distance moved per scroll-wheel notch when the wheel is bound to pan.
-export const VIEWER_WHEEL_PAN_STEP = 120;
+// Default: 120px. Configurable via Options → Interface.
+export const DEFAULT_WHEEL_PAN_STEP = 120;
+
 export const DEFAULT_FIT_MODE = 'height-if-larger';
 export const DEFAULT_SCALING_MODE = 'bicubic';
 
@@ -67,8 +69,12 @@ export function mergeConfig(loaded) {
     ? loaded.frontend_data
     : {};
 
-  return {
+  console.log('[mergeConfig] Input loaded:', JSON.stringify(loaded, null, 2));
+  console.log('[mergeConfig] Input fd:', JSON.stringify(fd, null, 2));
+
+  const result = {
     portable_mode: !!loaded?.portable_mode,
+    hidden: loaded?.hidden === true, // Preserve hidden field (config-file-only)
     frontend_data: {
       ...fd,
       continue_last: fd.continue_last !== false,
@@ -77,10 +83,14 @@ export function mergeConfig(loaded) {
       single_instance: fd.single_instance !== false,
       transparent_bg: fd.transparent_bg === true,
       start_dir: fd.start_dir || '',
+      theme: fd.theme || 'system', // Explicitly preserve theme
+      custom_css: fd.custom_css || '', // Explicitly preserve custom CSS
       scroll_zoom_modifier: fd.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold',
       scroll_zoom_latched: fd.scroll_zoom_latched === true,
       fit_mode: fd.fit_mode || DEFAULT_FIT_MODE,
       scaling_mode: fd.scaling_mode || DEFAULT_SCALING_MODE,
+      keyboard_pan_step: typeof fd.keyboard_pan_step === 'number' ? fd.keyboard_pan_step : DEFAULT_KEYBOARD_PAN_STEP,
+      wheel_pan_step: typeof fd.wheel_pan_step === 'number' ? fd.wheel_pan_step : DEFAULT_WHEEL_PAN_STEP,
       show_hidden: fd.show_hidden === true,
       hide_chrome_on_fullscreen: fd.hide_chrome_on_fullscreen !== false,
       menu_visible: fd.menu_visible !== false,
@@ -96,4 +106,7 @@ export function mergeConfig(loaded) {
       })(),
     },
   };
+
+  console.log('[mergeConfig] Output result:', JSON.stringify(result, null, 2));
+  return result;
 }

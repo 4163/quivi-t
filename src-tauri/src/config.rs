@@ -44,6 +44,7 @@ const META_MAX_H: f64 = 600.0;
 #[serde(default)]
 pub struct AppConfig {
     pub portable_mode: bool,
+    pub hidden: bool,
     pub frontend_data: JsonValue,
 }
 
@@ -51,6 +52,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             portable_mode: false,
+            hidden: false,
             frontend_data: serde_json::json!({}),
         }
     }
@@ -84,6 +86,7 @@ pub const ROAMING_FILES: &[&str] = &[
     "quivit_state.json",
     "quivit_directory_sort.json",
     "quivit_favorites.json",
+    "custom_css.css",
 ];
 
 pub fn remove_roaming_files(dir: &Path) {
@@ -200,6 +203,13 @@ pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
     merge_file_into(&dir.join("quivit_state.json"), &mut config.frontend_data);
     merge_file_into(&dir.join("quivit_directory_sort.json"), &mut config.frontend_data);
     merge_file_into(&dir.join("quivit_favorites.json"), &mut config.frontend_data);
+    
+    // Load custom CSS from separate file in roaming mode
+    let css_path = dir.join("custom_css.css");
+    if let Ok(custom_css) = fs::read_to_string(&css_path) {
+        config.frontend_data["custom_css"] = serde_json::json!(custom_css);
+    }
+    
     config
 }
 
@@ -245,9 +255,16 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
         // Portable: write the single self-contained file beside the executable
         // first, then drop the roaming copies so exactly one location stays active.
         let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-        fs::write(exe_dir.join("quivit_config.json"), data).map_err(|e| e.to_string())?;
+        let config_path = exe_dir.join("quivit_config.json");
+        fs::write(&config_path, data).map_err(|e| e.to_string())?;
+
+        // Apply hidden attribute to the portable config file only
+        crate::utils::set_hidden_attribute(&config_path, config.hidden)?;
 
         remove_roaming_files(&roaming_dir_path(&app_handle));
+        
+        // Remove roaming custom_css.css if it exists
+        let _ = fs::remove_file(roaming_dir(&app_handle).join("custom_css.css"));
     } else {
         // Roaming: write the split files first, then remove portable leftovers so
         // a failed write never loses the config.
@@ -255,6 +272,11 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
         let state = extract_keys(&mut fd, STATE_KEYS);
         let sort = extract_keys(&mut fd, SORT_KEYS);
         let favorites = extract_keys(&mut fd, FAVORITES_KEYS);
+        
+        // Extract custom_css and save it as a separate file
+        let custom_css = fd.get("custom_css").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        fd.as_object_mut().map(|obj| obj.remove("custom_css"));
+        
         config.frontend_data = fd;
 
         let dir = roaming_dir(&app_handle);
@@ -275,6 +297,9 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
             serde_json::to_string_pretty(&favorites).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
+        
+        // Write custom CSS as a separate file
+        fs::write(dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())?;
 
         let _ = fs::remove_file(exe_dir.join("quivit_config.json"));
     }
