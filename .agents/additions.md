@@ -40,7 +40,7 @@
 **Rust Module Structure:**
 - `lib.rs` — app entry, main-window construction, event setup, shell background sync at startup.
 - `config.rs` — `AppConfig`, load/save, split-file helpers, portable detection, window size constants, options/metadata window lifecycle + fit/center commands.
-- `commands.rs` — Tauri commands (directory listing, file ops, sibling nav, directory watcher, `get_path_kind`).
+- `commands.rs` — Tauri commands (directory listing, file ops, sibling nav, directory watcher, `get_path_kind`). Utilizes `#[tauri::command(async)]` for heavy I/O (`list_archive`, `read_directory`) to offload to background threads.
 - `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants).
 - `ico.rs` — ICO spritesheet processing.
 - `models.rs` — shared structs (`FileEntry`, etc.).
@@ -51,13 +51,6 @@
 *The easiest and least invasive fixes are at the top to allow rapid checking off. Slices progress into more complex logical and visual changes.*
 
 ### File Navigation & Core Behavior Fixes (Medium Logic)
-- **Character Encoding Compatibility:** Support full character encoding in file paths and filenames (emojis, JP, CN, KR, etc.) so no filenames or paths crash or present a 404 displayed image. **Note: This has not been encountered for a long time — Tauri v2 natively handles CJK paths robustly. Re-validate before implementing.**
-- **Hidden File Config:** Add a hidden true/false config inside the portable config file. Dynamically change and listen to the Windows/System hidden state of the file and appropriate sync.
-- **Corrupted / Incomplete Archive Pre-Validation:** Prevent application freezes or wasteful processing when opening invalid, corrupted, or incomplete archives.
-  - **Technical Discussion & Best Approach:**
-    1. *Magic Byte Pre-Check:* Read initial bytes (`O(1)`, 32-byte read) for format signatures (`PK\x03\x04` for ZIP, `7z\xBC\xAF\x27\x1C` for 7Z, `Rar!\x1A\x07` for RAR). Instantly rejects renamed non-archive files or empty/junk files.
-    2. *Header & EOCD Structure Validation (Combined Best Path):* For ZIP files, completeness depends on the End of Central Directory (EOCD) record at the end of the file. Native Rust archive loaders (`zip::ZipArchive::new`, `sevenz_rust2`, etc.) check headers and EOCD upon opening.
-    3. *Non-Blocking Rust Evaluation:* Offload archive validation to non-blocking background threads (`tokio::spawn_blocking`). If Rust returns an `Err(ZipError::InvalidArchive)` or header error, fail fast and present an "Unsupported or Corrupted Archive" notification without freezing the UI or main thread.
 - **Large Directory / Archive DOM Rendering Performance:** Optimize file list rendering in `filePanel.js` when opening folders or archives containing thousands of files (e.g. `C:\Users\x4163\Pictures\Steam Screenshots`) (User note: I approve of this personal path appearing in our docs, it's fine).
   - **Root Cause:** Currently `renderFilePanel()` synchronously creates and appends tens of thousands of `<li>` DOM nodes and event listeners at once, freezing the main thread during DOM construction, styling, and layout reflow. (Backend processing may also be another cause for this, validate and see what costs performance dip and proceed from there)
   - **Proposed Solutions & Comparison:**

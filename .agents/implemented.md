@@ -6,6 +6,17 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ## Fully Implemented
 
+### Zero-Freeze Archive Loading & Recursive Skipping
+- **Non-Blocking Background Offload:** Migrated `read_directory` and `list_archive` in `commands.rs` to Tauri's internal `tokio::spawn_blocking` async runtime via `#[tauri::command(async)]`. This prevents UI freezes and dropped frames by offloading the heavy synchronous I/O parsing of huge or corrupted archives.
+- **O(1) `BufReader` ZIP Optimization:** Wrapped `fs::File` with `std::io::BufReader::new(file)` when passing files to `zip::ZipArchive::new()`. This buffers the tiny backward-seeking syscalls it performs when looking for the End of Central Directory (EOCD), drastically accelerating `O(1)` file corruption detection for ZIPs.
+- **Recursive Container Skipping:** Enhanced `openSibling()` in `fsUtils.js` with a recursive `while` loop that automatically intercepts rejected file promises. If the user navigates into a folder or archive that throws an unreadable error, it silently logs a warning and recursively skips forward to the *next* available sibling without throwing them back to the drives view.
+- **Options UI CSS Fix:** Corrected `.flex-row` wrappers on pan step settings in `options.html` so `input[type="number"]` properly adopts the standard UI widths and spacing.
+- **Git Tracking Fix:** Fixed `.gitignore` which was incorrectly ignoring newly created `.agents` documentation (like `.agents/sessions-index.md`). Added explicit exceptions so agent workflow logs are correctly tracked by version control.
+
+### Easy-Win Features (Shift-JIS ZIPs, Hidden Config)
+- **Shift-JIS ZIP Support (2026-08-11):** Fixed legacy ZIP archives created on Japanese Windows systems that use Shift-JIS (CP932) encoding for filenames without the UTF-8 flag. Added `decode_zip_entry_name()` helper in `archives.rs` that detects mojibake (replacement character `` / U+FFFD) in entry names and re-decodes the raw bytes as Shift-JIS using the `encoding_rs` crate. Updated `list_zip_entries()` and `extract_zip_entry()` to use the decoder, fixing 404 errors for archives with Japanese characters in filenames/folder names (e.g., `無` was appearing as `û│`). The fix is transparent and automatic - no user configuration needed.
+- **Hidden File Config (2026-08-11):** Added `hidden: true/false` top-level config option (config-file-only, no UI exposure). When set to `true` in the portable `quivit_config.json` file (beside the executable), applies the Windows `FILE_ATTRIBUTE_HIDDEN` flag to the config file on save. The file remains accessible to the app but hidden from Explorer unless "Show hidden files" is enabled. Only applies in portable mode - roaming config files are never hidden. Implemented via `set_hidden_attribute()` helper in `utils.rs` using Windows `SetFileAttributesW` API. Defaults to `false`. The hidden attribute automatically syncs whenever config is saved.
+
 ### Verification & Performance Polish
 - **Pan Key Hot-Path Optimization:** Removed dynamic string allocation from `_isMousePanKey` and `_keyPanHeld` in `viewer.js`. Pan keys are now parsed into `O(1)` memory Sets (`_panMouseButtons`, `_panKeyboardKeys`) once during the `quivit-config-loaded` event instead of dynamically mapping strings per `mousemove`.
 - **Persistence Policy Documentation:** Explicitly documented the third persistence tier, "In-memory state", in `core.js` to match the exact behavior detailed in `README.md`.

@@ -18,9 +18,9 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 ## Features
 
 - **Broad Format Support**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `svg`, `bmp`, `ico`, `avif`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
-- **Archive Integration**: Reads compressed files directly, treating them as standard folders. Supports seamless image navigation within and across archives.
+- **Archive Integration**: Reads compressed files directly, treating them as standard folders. Supports seamless image navigation within and across archives, automatically skipping corrupted or inaccessible formats without freezing. Automatically handles legacy ZIP archives with Shift-JIS (CP932) encoded filenames from Japanese systems.
 - **Archive Metadata**: Detects and parses `ComicInfo.xml`, `CoMet.xml`, and `metadata.opf` files within archives, displaying them in a dedicated secondary window without cluttering the image list.
-- **High-Performance Caching**: Instant archive listing via header-only reads. Hybrid caching strategy uses an in-memory LRU cache with background prefetch for ZIP/CBZ, and non-blocking asynchronous disk extraction for solid archives (7Z/RAR).
+- **High-Performance Caching**: Instant archive listing via header-only reads. Hybrid caching strategy uses an in-memory LRU cache with background prefetch for ZIP/CBZ (accelerated by `O(1)` buffered EOCD scanning), and non-blocking asynchronous disk extraction for solid archives (7Z/RAR). All heavy archive parsing is offloaded to background threads to guarantee zero UI freezes.
 - **Advanced Navigation**: Browse siblings with keyboard or mouse. Jump seamlessly to previous/next directories, archives, and root drives following the active sort order. Parent directory navigation (`..`) and session-only Back/Forward history are natively supported.
 - **Customizable Controls**: High-quality zooming, panning, rotation, and flipping. Includes scroll-wheel panning with `Ctrl`+wheel zoom (manga-friendly), plus a sticky-Ctrl toggle mode.
 - **Advanced Shortcuts**: Fully customizable keybindings supporting multi-key combos, native mouse inputs, double-click gestures, and scroll-wheel capture with conflict highlighting.
@@ -49,16 +49,16 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | History forward | `Alt+D` / `Alt+S` / `Alt+ArrowRight` / `Alt+ArrowDown` / `MouseForward` |
 | Next item | `Shift+D` / `Shift+ArrowRight` / `Shift+S` / `Shift+ArrowDown` |
 | Previous item | `Shift+A` / `Shift+ArrowLeft` / `Shift+W` / `Shift+ArrowUp` |
-| Zoom in / out | `Ctrl+ScrollUp` / `Ctrl+ScrollDown` |
-| Zoom in / out (Keys) | `C` / `Z` |
+| Zoom in / out | `C` / `Z` |
+| Zoom in / out (Scroll) | `Ctrl+ScrollUp` / `Ctrl+ScrollDown` |
 | Zoom 100% | `X` |
 | Fit width / height if larger | `Q` / `E` |
 | Pan (Drag) | `MouseLeft` / `MouseMiddle` / `Space` |
-| Pan (Up/Left/Down/Right) | `W` / `A` / `S` / `D` / `ArrowUp` / `ArrowLeft` / `ArrowDown` / `ArrowRight` |
+| Pan (Up / Left / Down / Right) | `W` / `A` / `S` / `D` / `ArrowUp` / `ArrowLeft` / `ArrowDown` / `ArrowRight` |
 | Pan up / down | `ScrollUp` / `ScrollDown` |
 | Pan left / right | `Shift+ScrollUp` / `Shift+ScrollDown` |
-| Rotate counter-clockwise/clockwise | `G` / `H` |
-| Flip horizontal/vertical | `V` / `B` |
+| Rotate counter-clockwise / clockwise | `G` / `H` |
+| Flip horizontal / vertical | `V` / `B` |
 | Fit none | `R` / `DoubleClick` |
 | Fit width / height | `T` / `Y` |
 | Auto fit | `F` |
@@ -222,6 +222,7 @@ node --check src/js/options.js
 | **Archives (RAR/CBR)** | `unrar` | Legacy archive support |
 | **Archives (7Z/CB7)** | `sevenz-rust2` | Solid LZMA archive support |
 | **Archives (TAR/CBT)** | `tar` | Uncompressed archive reading |
+| **Character Encoding** | `encoding_rs` | Shift-JIS/CP932 decoding for legacy ZIP filenames |
 | **Sorting** | `natord` | Natural alphanumeric sorting |
 | **Config** | `serde` / `serde_json` | Configuration serialization |
 | **File Watching** | `notify` | Directory watcher for auto-refresh |
