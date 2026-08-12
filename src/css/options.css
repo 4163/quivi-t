@@ -140,11 +140,50 @@ body > * {
   margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
 }
 
 .continue-last-label {
   margin-top: 12px;
+}
+
+.pan-step-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+}
+
+.pan-step-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pan-step-col label {
+  margin-bottom: 0;
+  cursor: default;
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+}
+
+.pan-step-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pan-step-row input[type="number"] {
+  width: 72px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--field-bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.pan-step-unit {
+  font-size: var(--fs-11);
+  color: var(--text-dim);
 }
 
 .flex-row {

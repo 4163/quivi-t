@@ -45,6 +45,7 @@ const META_MAX_H: f64 = 600.0;
 pub struct AppConfig {
     pub portable_mode: bool,
     pub hidden: bool,
+    pub archive_cache_mb: Option<usize>,
     pub frontend_data: JsonValue,
 }
 
@@ -53,6 +54,7 @@ impl Default for AppConfig {
         Self {
             portable_mode: false,
             hidden: false,
+            archive_cache_mb: None,
             frontend_data: serde_json::json!({}),
         }
     }

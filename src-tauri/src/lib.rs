@@ -1,19 +1,19 @@
-pub mod utils;
-pub mod config;
-pub mod models;
 pub mod archives;
 pub mod commands;
+pub mod config;
 pub mod ico;
+pub mod models;
+pub mod utils;
 
 use std::fs;
 use std::sync::Mutex;
 use tauri::http::Response;
 use tauri::window::Color;
-use tauri::{Manager, Emitter};
+use tauri::{Emitter, Manager};
 
-use config::*;
 use archives::*;
 use commands::*;
+use config::*;
 use ico::*;
 
 // ── App entry point ──────────────────────────────────────────────────────────
@@ -43,7 +43,10 @@ fn apply_shell_background(window: &tauri::WebviewWindow, config: &AppConfig) {
     let dark = match theme {
         "dark" => true,
         "light" => false,
-        _ => window.theme().map(|theme| theme == tauri::Theme::Dark).unwrap_or(false),
+        _ => window
+            .theme()
+            .map(|theme| theme == tauri::Theme::Dark)
+            .unwrap_or(false),
     };
 
     // --surface (light) / --surface (dark)
@@ -60,10 +63,15 @@ fn apply_shell_background(window: &tauri::WebviewWindow, config: &AppConfig) {
 pub fn run() {
     let config = crate::config::apply_pending_config();
     // Single instance defaults to true if not explicitly set to false
-    let single_instance = config.frontend_data.get("single_instance").and_then(|v| v.as_bool()).unwrap_or(true);
+    let single_instance = config
+        .frontend_data
+        .get("single_instance")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let cache_mb = config.archive_cache_mb.unwrap_or(512);
 
     let mut builder = tauri::Builder::default();
-    
+
     if single_instance {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(main_window) = app.get_webview_window("main") {
@@ -101,29 +109,33 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
-                use notify::{Watcher, RecursiveMode, EventKind};
+                use notify::{EventKind, RecursiveMode, Watcher};
                 use std::time::Duration;
-                
+
                 let config_path = crate::config::get_config_path();
                 if let Some(parent) = config_path.parent() {
                     let (tx, rx) = std::sync::mpsc::channel();
                     let mut watcher = notify::recommended_watcher(tx).unwrap();
                     let _ = watcher.watch(parent, RecursiveMode::NonRecursive);
-                    
+
                     let mut last_emit = std::time::Instant::now();
-                    
+
                     for res in rx {
                         match res {
                             Ok(event) => {
                                 if let EventKind::Modify(_) = event.kind {
-                                    if event.paths.iter().any(|p| p.file_name() == config_path.file_name()) {
+                                    if event
+                                        .paths
+                                        .iter()
+                                        .any(|p| p.file_name() == config_path.file_name())
+                                    {
                                         if last_emit.elapsed() > Duration::from_millis(500) {
                                             last_emit = std::time::Instant::now();
                                             let _ = app_handle.emit("config-changed", ());
                                         }
                                     }
                                 }
-                            },
+                            }
                             Err(_) => {}
                         }
                     }
@@ -133,7 +145,7 @@ pub fn run() {
         });
 
     builder
-        .manage(Mutex::new(ArchiveCache::new()))
+        .manage(Mutex::new(ArchiveCache::new(cache_mb)))
         .manage(Mutex::new(WatcherState::new()))
         .invoke_handler(tauri::generate_handler![
             read_directory,
@@ -160,6 +172,7 @@ pub fn run() {
             write_text_file,
             get_default_dir,
             get_ico_frames,
+            get_archive_ico_frames,
             get_native_icon,
             get_format_status,
             register_associations,
@@ -207,92 +220,113 @@ pub fn run() {
 
             // URL-decode the entry name (handles %20, etc.)
             let entry_name = urlencoding_decode(path_parts[1]);
-            
+
             let app_handle = ctx.app_handle().clone();
 
             std::thread::spawn(move || {
                 let mut data = None;
                 let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
-                
+
                 {
                     let state = app_handle.state::<Mutex<ArchiveCache>>();
-                    let cache = state.lock().unwrap();
-                    
+                    let mut cache = state.lock().unwrap();
+
                     if ext == "zip" || ext == "cbz" {
-                        if let Some(cached_data) = cache.zip_entries.get(&entry_name) {
-                            data = Some(cached_data.clone());
-                        }
-                    } else if ext == "rar" || ext == "cbr" || ext == "7z" || ext == "cb7" {
-                        if let Some(temp_dir) = &cache.extract_temp_dir {
-                            let safe_name = entry_name.replace('\\', "/");
-                            let file_path = temp_dir.join(&safe_name);
-                            if let Ok(bytes) = fs::read(&file_path) {
-                                data = Some(bytes);
+                        data = cache.get_zip_entry(&archive_path, &entry_name);
+                    } else if ext == "rar"
+                        || ext == "cbr"
+                        || ext == "7z"
+                        || ext == "cb7"
+                        || ext == "cbt"
+                        || ext == "tar"
+                    {
+                        if let Some(single) = cache.archives.get(&archive_path) {
+                            if let Some(temp_dir) = &single.extract_temp_dir {
+                                if let Some(file_path) =
+                                    crate::archives::archive_entry_temp_path(temp_dir, &entry_name)
+                                {
+                                    if let Ok(bytes) = fs::read(&file_path) {
+                                        data = Some(bytes);
+                                    }
+                                }
                             }
                         }
                     }
                 }
-                
+
                 if data.is_none() {
                     if ext == "zip" || ext == "cbz" {
                         let extracted = {
                             let state = app_handle.state::<Mutex<ArchiveCache>>();
                             let mut cache = state.lock().unwrap();
-                            if cache.active_path.as_deref() == Some(archive_path.as_str()) {
-                                if let Some(archive) = cache.zip_archive.as_mut() {
+                            if let Some(single) = cache.archives.get_mut(&archive_path) {
+                                if let Some(archive) = single.zip_archive.as_mut() {
                                     // Try direct lookup first (UTF-8 ZIPs) and fallback scan if needed
-                                    crate::archives::read_zip_entry_by_decoded_name(archive, &entry_name).ok()
-                                } else { None }
-                            } else { None }
+                                    crate::archives::read_zip_entry_by_decoded_name(
+                                        archive,
+                                        &entry_name,
+                                    )
+                                    .ok()
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
                         };
-                        
-                        let d = if let Some(d) = extracted { d } else {
+
+                        let d = if let Some(d) = extracted {
+                            d
+                        } else {
                             extract_zip_entry(&archive_path, &entry_name).unwrap_or_default()
                         };
-                        
+
                         if !d.is_empty() {
                             data = Some(d.clone());
                             let state = app_handle.state::<Mutex<ArchiveCache>>();
                             let mut cache = state.lock().unwrap();
-                            if cache.active_path.as_deref() == Some(archive_path.as_str()) {
-                                cache.zip_capacity = 20;
-                                if cache.zip_lru.len() >= cache.zip_capacity {
-                                    if let Some(oldest) = cache.zip_lru.pop_front() {
-                                        cache.zip_entries.remove(&oldest);
-                                    }
-                                }
-                                cache.zip_entries.insert(entry_name.clone(), d);
-                                cache.zip_lru.push_back(entry_name.clone());
-                            }
+                            cache.insert_zip_entry(&archive_path, &entry_name, d);
                         }
-                    } else if ext == "rar" || ext == "cbr" || ext == "7z" || ext == "cb7" {
+                    } else if ext == "rar"
+                        || ext == "cbr"
+                        || ext == "7z"
+                        || ext == "cb7"
+                        || ext == "cbt"
+                        || ext == "tar"
+                    {
                         let (temp_dir_opt, notify_opt) = {
                             let state = app_handle.state::<Mutex<ArchiveCache>>();
                             let cache = state.lock().unwrap();
-                            (cache.extract_temp_dir.clone(), Some(cache.extract_notify.clone()))
+                            if let Some(single) = cache.archives.get(&archive_path) {
+                                (
+                                    single.extract_temp_dir.clone(),
+                                    Some(single.extract_notify.clone()),
+                                )
+                            } else {
+                                (None, None)
+                            }
                         };
                         if let Some(temp_dir) = temp_dir_opt {
-                            let safe_name = entry_name.replace('\\', "/");
-                            let file_path = temp_dir.join(&safe_name);
-                            
-                            if let Ok(bytes) = fs::read(&file_path) {
-                                data = Some(bytes);
-                            } else if let Some(notify) = notify_opt {
-                                let (lock, cvar) = &*notify;
-                                let set = lock.lock().unwrap();
-                                let timeout = std::time::Duration::from_secs(30);
-                                let _ = cvar.wait_timeout_while(set, timeout, |pending| {
-                                    !pending.contains(&entry_name)
-                                }).unwrap();
-                                
+                            if let Some(file_path) =
+                                crate::archives::archive_entry_temp_path(&temp_dir, &entry_name)
+                            {
                                 if let Ok(bytes) = fs::read(&file_path) {
                                     data = Some(bytes);
+                                } else if let Some(notify) = notify_opt {
+                                    let (lock, cvar) = &*notify;
+                                    let set = lock.lock().unwrap();
+                                    let timeout = std::time::Duration::from_secs(30);
+                                    let _ = cvar
+                                        .wait_timeout_while(set, timeout, |pending| {
+                                            !pending.contains(&entry_name)
+                                        })
+                                        .unwrap();
+
+                                    if let Ok(bytes) = fs::read(&file_path) {
+                                        data = Some(bytes);
+                                    }
                                 }
                             }
-                        }
-                    } else if ext == "cbt" || ext == "tar" {
-                        if let Ok(extracted) = extract_tar_entry(&archive_path, &entry_name) {
-                            data = Some(extracted);
                         }
                     }
                 }
@@ -322,10 +356,13 @@ pub fn run() {
                 // If the user closes the main viewer window, all secondary/child windows (Options, Metadata, etc.)
                 // MUST be explicitly closed here to ensure the Tauri app exits cleanly rather than leaving orphans running.
                 if window.label() == "main" {
-                    if let Some(options_window) = window.app_handle().get_webview_window("options") {
+                    if let Some(options_window) = window.app_handle().get_webview_window("options")
+                    {
                         let _ = options_window.close();
                     }
-                    if let Some(metadata_window) = window.app_handle().get_webview_window("metadata") {
+                    if let Some(metadata_window) =
+                        window.app_handle().get_webview_window("metadata")
+                    {
                         let _ = metadata_window.close();
                     }
                 }
@@ -349,15 +386,13 @@ fn base64_decode_bytes(input: &str) -> Option<Vec<u8>> {
     let padded = format!("{}{}", input, "=".repeat(padding));
 
     let table: Vec<u8> = (0..256)
-        .map(|i| {
-            match i as u8 as char {
-                'A'..='Z' => (i - 65) as u8,
-                'a'..='z' => (i - 97 + 26) as u8,
-                '0'..='9' => (i - 48 + 52) as u8,
-                '+' => 62,
-                '/' => 63,
-                _ => 255,
-            }
+        .map(|i| match i as u8 as char {
+            'A'..='Z' => (i - 65) as u8,
+            'a'..='z' => (i - 97 + 26) as u8,
+            '0'..='9' => (i - 48 + 52) as u8,
+            '+' => 62,
+            '/' => 63,
+            _ => 255,
         })
         .collect();
 
@@ -369,7 +404,10 @@ fn base64_decode_bytes(input: &str) -> Option<Vec<u8>> {
             break;
         }
         let vals: Vec<u8> = chunk.iter().map(|&b| table[b as usize]).collect();
-        if vals.iter().any(|&v| v == 255 && chunk[vals.iter().position(|&x| x == 255).unwrap()] != b'=') {
+        if vals
+            .iter()
+            .any(|&v| v == 255 && chunk[vals.iter().position(|&x| x == 255).unwrap()] != b'=')
+        {
             return None;
         }
 
@@ -428,7 +466,13 @@ fn get_default_dir() -> String {
 }
 
 fn guess_mime(name: &str) -> &'static str {
-    match name.rsplit('.').next().unwrap_or("").to_lowercase().as_str() {
+    match name
+        .rsplit('.')
+        .next()
+        .unwrap_or("")
+        .to_lowercase()
+        .as_str()
+    {
         "jpg" | "jpeg" => "image/jpeg",
         "png" => "image/png",
         "gif" => "image/gif",
@@ -476,7 +520,10 @@ mod archive_tests {
         let hash = format!("{:x}", md5::compute(seven.to_str().unwrap()));
         let scratch = std::env::temp_dir().join("QuiviT-test-cbt").join(hash);
         let _ = fs::remove_dir_all(&scratch);
-        let notify = std::sync::Arc::new((std::sync::Mutex::new(std::collections::HashSet::new()), std::sync::Condvar::new()));
+        let notify = std::sync::Arc::new((
+            std::sync::Mutex::new(std::collections::HashSet::new()),
+            std::sync::Condvar::new(),
+        ));
         extract_7z_to_temp(seven.to_str().unwrap().to_string(), scratch.clone(), notify);
 
         let mut builder = tar::Builder::new(fs::File::create(&cbt).expect("create cbt"));
@@ -516,7 +563,11 @@ mod archive_tests {
     fn lists_solid_7z_with_nested_folders() {
         let path = test_file("7z.7z");
         let files = list_7z_entries(path.to_str().unwrap()).expect("list 7z");
-        assert!(files.len() >= 12, "expected >=12 image entries, got {}", files.len());
+        assert!(
+            files.len() >= 12,
+            "expected >=12 image entries, got {}",
+            files.len()
+        );
         // Composite archive|entry paths, nested folder preserved
         assert!(files.iter().any(|f| f.path.contains('|')));
         assert!(files.iter().any(|f| f.name.contains('/')));
@@ -533,7 +584,10 @@ mod archive_tests {
         let hash = format!("{:x}", md5::compute(path.to_str().unwrap()));
         let temp_dir = std::env::temp_dir().join("QuiviT-test-extract").join(hash);
         let _ = fs::remove_dir_all(&temp_dir);
-        let notify = std::sync::Arc::new((std::sync::Mutex::new(std::collections::HashSet::new()), std::sync::Condvar::new()));
+        let notify = std::sync::Arc::new((
+            std::sync::Mutex::new(std::collections::HashSet::new()),
+            std::sync::Condvar::new(),
+        ));
         extract_7z_to_temp(path.to_str().unwrap().to_string(), temp_dir.clone(), notify);
 
         // A nested entry must exist and match the same-named root entry
@@ -555,7 +609,11 @@ mod archive_tests {
     fn lists_and_reads_tar() {
         let cbt = ensure_cbt();
         let files = list_tar_entries(cbt.to_str().unwrap()).expect("list tar");
-        assert!(files.len() >= 12, "expected >=12 entries, got {}", files.len());
+        assert!(
+            files.len() >= 12,
+            "expected >=12 entries, got {}",
+            files.len()
+        );
         let names: Vec<String> = files.iter().map(|f| f.name.clone()).collect();
         assert!(names.iter().any(|n| n.contains("gfl-spinner.svg")));
         assert!(names.iter().any(|n| n.contains("Mine_(Idol)_S2_09.webp")));
@@ -569,11 +627,89 @@ mod archive_tests {
         let hash = format!("{:x}", md5::compute(seven.to_str().unwrap()));
         let scratch = std::env::temp_dir().join("QuiviT-test-cbt").join(hash);
         let _ = fs::remove_dir_all(&scratch);
-        let notify = std::sync::Arc::new((std::sync::Mutex::new(std::collections::HashSet::new()), std::sync::Condvar::new()));
+        let notify = std::sync::Arc::new((
+            std::sync::Mutex::new(std::collections::HashSet::new()),
+            std::sync::Condvar::new(),
+        ));
         extract_7z_to_temp(seven.to_str().unwrap().to_string(), scratch.clone(), notify);
         let original = fs::read(scratch.join("export_1785518878919.png")).unwrap();
         assert_eq!(data.len(), original.len());
         let _ = fs::remove_dir_all(&scratch);
+    }
+
+    #[test]
+    fn extracts_tar_to_temp() {
+        let cbt = ensure_cbt();
+        let hash = format!("{:x}", md5::compute(cbt.to_str().unwrap()));
+        let temp_dir = std::env::temp_dir()
+            .join("QuiviT-test-tar-extract")
+            .join(hash);
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).ok();
+        let notify = std::sync::Arc::new((
+            std::sync::Mutex::new(std::collections::HashSet::new()),
+            std::sync::Condvar::new(),
+        ));
+
+        extract_tar_to_temp(cbt.to_str().unwrap().to_string(), temp_dir.clone(), notify);
+
+        let root = temp_dir.join("export_1785518878919.png");
+        let nested = temp_dir.join("New folder/export_1785518859589.webp");
+        assert!(root.exists(), "root TAR entry not extracted");
+        assert!(nested.exists(), "nested TAR entry not extracted");
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn archive_entry_temp_path_rejects_escape_paths() {
+        let temp_dir = std::env::temp_dir().join("QuiviT-test-path-safety");
+
+        assert!(archive_entry_temp_path(&temp_dir, "folder/page.jpg").is_some());
+        assert!(archive_entry_temp_path(&temp_dir, "folder\\page.jpg").is_some());
+        assert!(archive_entry_temp_path(&temp_dir, "../page.jpg").is_none());
+        assert!(archive_entry_temp_path(&temp_dir, "folder/../../page.jpg").is_none());
+        assert!(archive_entry_temp_path(&temp_dir, "/absolute/page.jpg").is_none());
+        assert!(archive_entry_temp_path(&temp_dir, "").is_none());
+    }
+
+    #[test]
+    fn tar_temp_extraction_includes_metadata() {
+        let temp_root = std::env::temp_dir().join("QuiviT-test-tar-metadata");
+        let _ = fs::remove_dir_all(&temp_root);
+        fs::create_dir_all(&temp_root).ok();
+
+        let cbt = temp_root.join("metadata.cbt");
+        let mut builder = tar::Builder::new(fs::File::create(&cbt).expect("create cbt"));
+        let entries = [
+            ("page.jpg", b"image".as_slice()),
+            ("ComicInfo.xml", b"<ComicInfo />".as_slice()),
+        ];
+        for (name, bytes) in entries {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_mtime(0);
+            builder
+                .append_data(&mut header, name, bytes)
+                .expect("append tar entry");
+        }
+        builder.finish().expect("finish cbt");
+
+        let extract_dir = temp_root.join("extract");
+        fs::create_dir_all(&extract_dir).ok();
+        let notify = std::sync::Arc::new((
+            std::sync::Mutex::new(std::collections::HashSet::new()),
+            std::sync::Condvar::new(),
+        ));
+        extract_tar_to_temp(
+            cbt.to_string_lossy().into_owned(),
+            extract_dir.clone(),
+            notify,
+        );
+
+        assert!(extract_dir.join("page.jpg").exists());
+        assert!(extract_dir.join("ComicInfo.xml").exists());
+        let _ = fs::remove_dir_all(&temp_root);
     }
 
     #[test]
@@ -587,7 +723,11 @@ mod archive_tests {
     fn lists_rar5_cbr() {
         let path = test_file("cbr.cbr");
         let files = list_rar_entries(path.to_str().unwrap()).expect("list cbr");
-        assert!(files.len() >= 7, "expected >=7 image entries, got {}", files.len());
+        assert!(
+            files.len() >= 7,
+            "expected >=7 image entries, got {}",
+            files.len()
+        );
         assert!(files.iter().any(|f| f.name.contains("BDレーベル.bmp")));
     }
 
@@ -595,7 +735,9 @@ mod archive_tests {
     fn lists_cb7_like_7z() {
         // cb7 is the comic-book extension for 7z — same codec, must route the same.
         let src = test_file("7z.7z");
-        let cb7 = std::env::temp_dir().join("QuiviT-test-extract").join("sample.cb7");
+        let cb7 = std::env::temp_dir()
+            .join("QuiviT-test-extract")
+            .join("sample.cb7");
         let _ = fs::remove_file(&cb7);
         fs::copy(&src, &cb7).expect("copy 7z to cb7");
         let files = list_7z_entries(cb7.to_str().unwrap()).expect("list cb7");
@@ -620,10 +762,9 @@ mod archive_tests {
 
     #[test]
     fn protocol_serve_timing_simulation() {
-        // Mirrors the protocol handler serving path (lib.rs ~1190-1253):
-        //  - rar/cbr/7z/cb7: served from extract_temp_dir, poll up to 3s (30x100ms)
+        // Mirrors the protocol handler serving path:
+        //  - rar/cbr/7z/cb7/cbt/tar: served from extract_temp_dir
         //  - zip/cbz: on-demand extract_zip_entry
-        //  - cbt/tar: on-demand extract_tar_entry
         // Simulates the FIRST image request arriving right after list_archive
         // spawns the background extractor, then reports how long the first
         // entry takes to become servable and whether the 3s poll would 404.
@@ -651,14 +792,21 @@ mod archive_tests {
         // Spawn background extraction exactly like list_archive does.
         let seven_path = seven.to_str().unwrap().to_string();
         let td = temp_dir.clone();
-        let notify = std::sync::Arc::new((std::sync::Mutex::new(std::collections::HashSet::new()), std::sync::Condvar::new()));
+        let notify = std::sync::Arc::new((
+            std::sync::Mutex::new(std::collections::HashSet::new()),
+            std::sync::Condvar::new(),
+        ));
         std::thread::spawn(move || extract_7z_to_temp(seven_path, td, notify));
 
         // First sorted entry is BAKEMONOGATARI...jpg. Poll it like the handler would.
-        let first = "BAKEMONOGATARI - c013 (v03) - p002 [Kodansha Comics] [Digital] [1r0n] {HQ}.jpg";
+        let first =
+            "BAKEMONOGATARI - c013 (v03) - p002 [Kodansha Comics] [Digital] [1r0n] {HQ}.jpg";
         let (found, elapsed) = poll_temp(&temp_dir, first, 30000);
         eprintln!("7z first entry poll: found={found} elapsed={:?}", elapsed);
-        assert!(found, "first 7z entry never became available within 30s poll -> 404");
+        assert!(
+            found,
+            "first 7z entry never became available within 30s poll -> 404"
+        );
 
         // Now the large BMP: how long until IT is extractable from the temp dir?
         let bmp = "BDレーベル.bmp";
@@ -666,20 +814,151 @@ mod archive_tests {
         eprintln!("7z BMP poll: found={found_bmp} elapsed={:?}", elapsed_bmp);
 
         // On-demand paths (cbz/tar) must serve the first image synchronously.
-        let zip_first = extract_zip_entry(
-            test_file("cbz.cbz").to_str().unwrap(),
-            first,
+        let zip_first = extract_zip_entry(test_file("cbz.cbz").to_str().unwrap(), first);
+        eprintln!(
+            "cbz on-demand first entry: {}",
+            zip_first
+                .as_ref()
+                .map(|d| format!("{} bytes", d.len()))
+                .unwrap_or_else(|e| format!("ERR {e}"))
         );
-        eprintln!("cbz on-demand first entry: {}", zip_first.as_ref().map(|d| format!("{} bytes", d.len())).unwrap_or_else(|e| format!("ERR {e}")));
-        assert!(zip_first.is_ok(), "cbz on-demand extraction failed: {:?}", zip_first.err());
+        assert!(
+            zip_first.is_ok(),
+            "cbz on-demand extraction failed: {:?}",
+            zip_first.err()
+        );
 
-        let tar_first = extract_tar_entry(
-            test_file("cbt.cbt").to_str().unwrap(),
-            first,
+        let cbt = ensure_cbt();
+        let cbt_hash = format!("{:x}", md5::compute(cbt.to_str().unwrap()));
+        let tar_temp_dir = std::env::temp_dir()
+            .join("QuiviT-test-serve-tar")
+            .join(cbt_hash);
+        let _ = fs::remove_dir_all(&tar_temp_dir);
+        fs::create_dir_all(&tar_temp_dir).ok();
+        let tar_notify = std::sync::Arc::new((
+            std::sync::Mutex::new(std::collections::HashSet::new()),
+            std::sync::Condvar::new(),
+        ));
+        extract_tar_to_temp(
+            cbt.to_str().unwrap().to_string(),
+            tar_temp_dir.clone(),
+            tar_notify,
         );
-        eprintln!("cbt on-demand first entry: {}", tar_first.as_ref().map(|d| format!("{} bytes", d.len())).unwrap_or_else(|e| format!("ERR {e}")));
-        assert!(tar_first.is_ok(), "cbt on-demand extraction failed: {:?}", tar_first.err());
+        let tar_first = fs::read(tar_temp_dir.join(first));
+        eprintln!(
+            "cbt temp first entry: {}",
+            tar_first
+                .as_ref()
+                .map(|d| format!("{} bytes", d.len()))
+                .unwrap_or_else(|e| format!("ERR {e}"))
+        );
+        assert!(
+            tar_first.is_ok(),
+            "cbt on-demand extraction failed: {:?}",
+            tar_first.err()
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::remove_dir_all(&tar_temp_dir);
+    }
+
+    #[test]
+    fn archive_cache_byte_budget_evicts_globally() {
+        // Verifies the multi-archive LRU from archives.rs without touching the
+        // protocol/Tauri layers. A cache hit refreshes recency, and a single
+        // entry larger than the whole budget must still be inserted.
+        let mut cache = ArchiveCache::new(2); // 2 MB budget
+
+        // Mirrors list_archive: each opened archive first registers a slot.
+        let register = |cache: &mut ArchiveCache, archive: &str| {
+            cache.register_archive(
+                archive.to_string(),
+                SingleArchiveCache {
+                    zip_entries: std::collections::HashMap::new(),
+                    zip_archive: None,
+                    extract_temp_dir: None,
+                    extract_notify: std::sync::Arc::new((
+                        std::sync::Mutex::new(std::collections::HashSet::new()),
+                        std::sync::Condvar::new(),
+                    )),
+                },
+            );
+        };
+        register(&mut cache, "a.cbz");
+        register(&mut cache, "b.cbz");
+
+        let insert = |cache: &mut ArchiveCache, archive: &str, entry: &str, bytes: usize| {
+            let data = vec![0u8; bytes];
+            cache.insert_zip_entry(archive, entry, data);
+        };
+
+        // 1 MB entries
+        let mb1 = 1024 * 1024;
+        insert(&mut cache, "a.cbz", "p1", mb1);
+        insert(&mut cache, "a.cbz", "p2", mb1); // 2 MB total — at budget
+        assert_eq!(cache.current_zip_bytes, 2 * mb1);
+        assert!(cache.archives["a.cbz"].zip_entries.contains_key("p1"));
+
+        // Touch p1, then insert p3. p2 is now least-recently-used and leaves.
+        assert!(cache.get_zip_entry("a.cbz", "p1").is_some());
+        insert(&mut cache, "a.cbz", "p3", mb1);
+        assert!(cache.archives["a.cbz"].zip_entries.contains_key("p1"));
+        assert!(!cache.archives["a.cbz"].zip_entries.contains_key("p2"));
+        assert!(cache.archives["a.cbz"].zip_entries.contains_key("p3"));
+        assert_eq!(cache.current_zip_bytes, 2 * mb1);
+
+        // An entry in a second archive shares the same global budget.
+        insert(&mut cache, "b.cbz", "q1", mb1);
+        // Now 3 MB owed against 2 MB budget: p1 leaves first, then p3.
+        insert(&mut cache, "b.cbz", "q2", mb1);
+        assert!(!cache.archives["a.cbz"].zip_entries.contains_key("p1"));
+        assert!(!cache.archives["a.cbz"].zip_entries.contains_key("p3"));
+        assert!(cache.archives["b.cbz"].zip_entries.contains_key("q1"));
+        assert!(cache.archives["b.cbz"].zip_entries.contains_key("q2"));
+        assert_eq!(cache.current_zip_bytes, 2 * mb1);
+
+        // Oversized single entry still lands even though it alone exceeds budget.
+        insert(&mut cache, "b.cbz", "huge", 4 * mb1);
+        assert!(cache.archives["b.cbz"].zip_entries.contains_key("huge"));
+        assert_eq!(cache.current_zip_bytes, 4 * mb1);
+
+        // Re-insertion of an already-cached key is a no-op (byte count stable).
+        let before = cache.current_zip_bytes;
+        insert(&mut cache, "b.cbz", "huge", 4 * mb1);
+        assert_eq!(cache.current_zip_bytes, before);
+
+        cache.insert_zip_entry("missing.cbz", "ghost", vec![0u8; mb1]);
+        assert_eq!(cache.current_zip_bytes, before);
+    }
+
+    #[test]
+    fn archive_cache_bounds_open_archive_state() {
+        let mut cache = ArchiveCache::new(2);
+        cache.max_open_archives = 2;
+
+        let register = |cache: &mut ArchiveCache, archive: &str| {
+            cache.register_archive(
+                archive.to_string(),
+                SingleArchiveCache {
+                    zip_entries: std::collections::HashMap::new(),
+                    zip_archive: None,
+                    extract_temp_dir: None,
+                    extract_notify: std::sync::Arc::new((
+                        std::sync::Mutex::new(std::collections::HashSet::new()),
+                        std::sync::Condvar::new(),
+                    )),
+                },
+            );
+        };
+
+        register(&mut cache, "a.cbz");
+        cache.insert_zip_entry("a.cbz", "p1", vec![0u8; 1024]);
+        register(&mut cache, "b.cbz");
+        register(&mut cache, "c.cbz");
+
+        assert!(!cache.archives.contains_key("a.cbz"));
+        assert!(cache.archives.contains_key("b.cbz"));
+        assert!(cache.archives.contains_key("c.cbz"));
+        assert_eq!(cache.current_zip_bytes, 0);
     }
 }

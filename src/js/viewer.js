@@ -1,9 +1,9 @@
 /**
  * viewer.js — QuiviT
  *
- * Viewport rendering: fit-to-screen, zoom, and pan.
+ * Viewport rendering: fit-to-screen, zoom, and pan, over a sliding DOM image
+ * pool of .viewer-img nodes inside #viewer-img-wrapper.
  * Communicates with core.js via state callbacks.
- * All DOM writes are confined to the #viewport and #viewer-img elements.
  */
 
 import { Core } from './core.js';
@@ -11,8 +11,100 @@ import { FsUtils } from './fsUtils.js';
 import { activeKeys, MOUSE_BUTTON_NAMES } from './shortcuts.js';
 import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from './keybinds.js';
 
-const img = document.getElementById('viewer-img');
+const PRELOAD_HALF = 7;
+const TARGET_LOAD_DEBOUNCE_MS = 45;
+const _activeNodes = new Map();
+const _freeNodes = [];
+
+const POOL_SIZE = 2; // visible bridge + pending target; idle warming uses off-DOM Image objects
+
 const imgWrapper = document.getElementById('viewer-img-wrapper');
+if (imgWrapper) {
+  const oldImg = document.getElementById('viewer-img');
+  if (oldImg) oldImg.remove();
+
+  const existingNodes = Array.from(document.querySelectorAll('.viewer-img'));
+  existingNodes.slice(POOL_SIZE).forEach(el => el.remove());
+  existingNodes.slice(0, POOL_SIZE).forEach(el => {
+    el.classList.remove('active');
+    _freeNodes.push(el);
+  });
+
+  for (let i = _freeNodes.length; i < POOL_SIZE; i++) {
+    const el = document.createElement('img');
+    el.className = 'viewer-img';
+    el.draggable = false;
+    el.decoding = 'async';
+    el.style.display = 'none';
+    imgWrapper.appendChild(el);
+    _freeNodes.push(el);
+  }
+}
+
+function _getPoolNode(src) {
+  let el = _activeNodes.get(src);
+  if (el) return el;
+  if (_freeNodes.length > 0) {
+    el = _freeNodes.pop();
+  } else {
+    // Fallback if current + bridge are both in use and a stale node has not
+    // recycled yet. It is immediately folded back into the two-node pool.
+    el = document.createElement('img');
+    el.className = 'viewer-img';
+    el.draggable = false;
+    el.decoding = 'async';
+    imgWrapper.appendChild(el);
+  }
+  el.alt = '';
+  el.style.display = 'none';
+  el.dataset.poolSrc = src;
+  el.removeAttribute('src');
+  el.removeAttribute('data-decoded');
+  _activeNodes.set(src, el);
+  return el;
+}
+
+function _recyclePoolNode(src) {
+  const el = _activeNodes.get(src);
+  if (el) {
+    el.style.display = 'none';
+    el.removeAttribute('src');
+    el.removeAttribute('data-pool-src');
+    el.removeAttribute('data-decoded');
+    el.classList.remove('active');
+    if (el === img) img = null;
+    _activeNodes.delete(src);
+    _freeNodes.push(el);
+    FsUtils.revokeIfObjectURL(src);
+    _dropExtraPoolNodes();
+  }
+}
+
+function _dropExtraPoolNodes() {
+  while (_freeNodes.length > POOL_SIZE) {
+    _freeNodes.pop()?.remove();
+  }
+}
+
+function _loadPoolNode(el, src) {
+  if (!el || !src) return;
+  el.dataset.poolSrc = src;
+  if (el.getAttribute('src') === src || el.src === src) return;
+  el.removeAttribute('data-decoded');
+  el.src = src;
+}
+
+const LOADING_LABEL = 'Loading...';
+
+function _setElementLoadingLabel(el, label) {
+  el.alt = label;
+}
+
+function _isVisibleImage(el) {
+  return !!(el && el.src && el.style.display !== 'none');
+}
+
+let img = null;
 const imgGrill = document.getElementById('img-grill');
 const grillBorder = document.getElementById('img-grill-border');
 const statusZoom = document.querySelector('.status-zoom');
@@ -33,6 +125,7 @@ let _flipY = 1;
 let _scaling = DEFAULT_SCALING_MODE;
 
 function _applyScaling() {
+  if (!img) return;
   img.dataset.scaling = _scaling;
   img.style.imageRendering = _scaling === 'none' ? 'pixelated' : 'auto';
 }
@@ -98,14 +191,16 @@ function applyFitMode() {
   // In that case img.clientWidth reflects the current layout size; dividing by the
   // previous _scale recovers the true intrinsic size so _visualSize() and _clampPan()
   // compute correct bounds.  Fall back to viewport size if scale is 0 or client dims unknown.
-  if (img.naturalWidth > 0) {
+  if (img && img.naturalWidth > 0) {
     _naturalW = img.naturalWidth;
     _naturalH = img.naturalHeight;
-  } else {
+  } else if (img) {
     const prevScale = _scale || 1;
     _naturalW = img.clientWidth  ? img.clientWidth  / prevScale : vw;
     _naturalH = img.clientHeight ? img.clientHeight / prevScale : vh;
   }
+
+  if (!_naturalW || !_naturalH) return;
 
   const padding = 0;
 
@@ -414,56 +509,130 @@ function setScaling(mode) {
 
 // --- Image load ---------------------------------------------------------------
 
-img.addEventListener('load', () => {
+/**
+ * Activate a pool node: hide the old active img, show the new one,
+ * read its dimensions, and refit.
+ */
+function _activatePoolNode(el, filename, state) {
+  if (img && img !== el) {
+    img.style.display = 'none';
+    img.classList.remove('active');
+  }
+
+  img = el;
+  img.style.display = 'block';
+  img.classList.add('active');
+  img.alt = filename || '';
+  img.title = filename || '';
+  img.dataset.decoded = 'true';
+  _applyScaling();
+
+  _rotation = 0;
+  _flipX = 1;
+  _flipY = 1;
+
   if (img.naturalWidth > 0) {
     _naturalW = img.naturalWidth;
     _naturalH = img.naturalHeight;
-  } else {
-    // SVG with percentage dimensions — reset scale to 1 first so clientWidth
-    // equals the intrinsic size, then applyFitMode will compute the correct scale.
-    _scale = 1;
-    _naturalW = img.clientWidth  || 1000;
-    _naturalH = img.clientHeight || 1000;
+    if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
+    applyFitMode();
   }
-  _applyScaling();
-  
-  if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
-  applyFitMode();
-});
+
+  if (statusName) statusName.textContent = filename || '';
+  if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
+}
+
+// Attach a load handler to every pool node so we pick up dimensions
+// when the active image finishes decoding.
+function _attachLoadHandler(el) {
+  el.addEventListener('load', () => {
+    if (el !== img) return; // Only process if this is the active image
+    if (!el.src) return; // Placeholder node shown without a resource
+    const state = Core.getState();
+    if (el.naturalWidth > 0) {
+      _naturalW = el.naturalWidth;
+      _naturalH = el.naturalHeight;
+      el.dataset.decoded = 'true';
+    } else {
+      _scale = 1;
+      _naturalW = el.clientWidth  || 1000;
+      _naturalH = el.clientHeight || 1000;
+    }
+    el.classList.add('active');
+    _applyScaling();
+    if (statusName) statusName.textContent = state.filename || '';
+    if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
+    if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
+    applyFitMode();
+  });
+}
 
 // --- State subscription -------------------------------------------------------
 
-let _currentPreloadSrc = null;
-let _loadingAltTimer = null;
+let _poolGeneration = 0;
+let _activationGeneration = 0;
+let _targetLoadTimer = null;
+const _preloadTimers = [];
+const _preloadImages = [];
 
-function stopLoadingAltAnimation() {
-  if (_loadingAltTimer) {
-    clearInterval(_loadingAltTimer);
-    _loadingAltTimer = null;
+function _clearTargetLoadTimer() {
+  if (!_targetLoadTimer) return;
+  clearTimeout(_targetLoadTimer);
+  _targetLoadTimer = null;
+}
+
+function _clearScheduledPreloads() {
+  while (_preloadTimers.length > 0) {
+    clearTimeout(_preloadTimers.pop());
+  }
+  while (_preloadImages.length > 0) {
+    const preloader = _preloadImages.pop();
+    preloader.onload = null;
+    preloader.onerror = null;
+    preloader.removeAttribute('src');
   }
 }
 
-function startLoadingAltAnimation() {
-  stopLoadingAltAnimation();
-  let frame = 0;
-  const labels = ['Loading.', 'Loading..', 'Loading...'];
-  img.alt = labels[frame];
-  _loadingAltTimer = setInterval(() => {
-    frame = (frame + 1) % labels.length;
-    img.alt = labels[frame];
-  }, 320);
+function _schedulePoolPreloads(srcs, generation) {
+  _clearScheduledPreloads();
+  srcs.forEach((src, index) => {
+    const timer = setTimeout(() => {
+      if (generation !== _poolGeneration) return;
+      const preloader = new Image();
+      preloader.decoding = 'async';
+      _preloadImages.push(preloader);
+      preloader.onload = () => {
+        const idx = _preloadImages.indexOf(preloader);
+        if (idx !== -1) _preloadImages.splice(idx, 1);
+      };
+      preloader.onerror = preloader.onload;
+      preloader.src = src;
+      if (preloader.decode) preloader.decode().catch(() => {});
+    }, 100 + index * 45);
+    _preloadTimers.push(timer);
+  });
 }
 
 function clearDisplayedImage() {
-  stopLoadingAltAnimation();
-  _currentPreloadSrc = null;
+  _poolGeneration += 1;
+  _activationGeneration += 1;
+  _clearTargetLoadTimer();
+  _clearScheduledPreloads();
   _naturalW = 0;
   _naturalH = 0;
-  img.removeAttribute('src');
-  img.alt = '';
+
+  for (const src of _activeNodes.keys()) {
+    _recyclePoolNode(src);
+  }
+  img = null;
 }
 
 Core.onStateChange((state) => {
+  const generation = ++_poolGeneration;
+  _activationGeneration += 1;
+  _clearTargetLoadTimer();
+  _clearScheduledPreloads();
+
   if (state.mode === 'empty') {
     clearDisplayedImage();
     return;
@@ -474,43 +643,99 @@ Core.onStateChange((state) => {
     return;
   }
 
-  // Seamless loading: show the previous image until the new one is ready.
-  // This effectively acts as the "spinner" and eliminates flickering.
-  if (img.src !== state.src && _currentPreloadSrc !== state.src) {
-    _currentPreloadSrc = state.src;
-    
-    // Show loading state in statusbar while the image is being fetched
-    startLoadingAltAnimation();
-    if (statusName) statusName.textContent = 'Loading...';
-    if (statusDims) statusDims.textContent = 'Loading...';
-    if (statusZoom) statusZoom.textContent = 'Loading...';
+  const listLen = state.list ? state.list.length : 0;
+  if (listLen === 0) return;
 
-    const preloader = new Image();
-    preloader.onload = () => {
-      if (_currentPreloadSrc === state.src) {
-        stopLoadingAltAnimation();
-        img.src = state.src;
-        img.alt = state.filename;
-        _rotation = 0;
-        _flipX = 1;
-        _flipY = 1;
-        // Restore filename and index now that the image is ready
-        if (statusName) statusName.textContent = state.filename;
-        if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
+  const desiredSrcs = new Set();
+
+  function entrySrcAt(index) {
+    const entry = state.list[index];
+    if (!entry || entry.is_dir || entry.is_parent || !FsUtils.isImageEntry(entry)) return null;
+
+    if (state.mode === 'archive') {
+      if (FsUtils.isIco(entry.name)) return null;
+      return FsUtils.buildArchiveSrc(state.archivePath, entry.name);
+    }
+    return FsUtils.isIco(entry.path) ? null : FsUtils.buildFileSrcSync(entry.path);
+  }
+
+  // Active path: current target plus, at most, one decoded previous image as a
+  // visual bridge. Neighbor loading happens only after the target settles.
+  desiredSrcs.add(state.src);
+
+  // Keep whatever is currently visible until the new target decodes. This is
+  // the zero-flicker contract; stale hidden targets may still be pruned.
+  if (_isVisibleImage(img)) desiredSrcs.add(img.src);
+
+  const neighborSrcs = [];
+  for (let i = 1; i <= PRELOAD_HALF; i++) {
+    const ahead = entrySrcAt(state.index + i);
+    if (ahead && ahead !== state.src) neighborSrcs.push(ahead);
+    const behind = entrySrcAt(state.index - i);
+    if (behind && behind !== state.src) neighborSrcs.push(behind);
+  }
+
+  // ── Prune out-of-bounds nodes ──
+  for (const src of _activeNodes.keys()) {
+    if (!desiredSrcs.has(src)) _recyclePoolNode(src);
+  }
+
+  // ── Ensure nodes exist for all desired srcs ──
+  for (const src of desiredSrcs) {
+    const el = _getPoolNode(src);
+    if (!el._quivitLoadAttached) {
+      _attachLoadHandler(el);
+      el._quivitLoadAttached = true;
+    }
+  }
+
+  // ── Activate the current image ──
+  const activeEl = _activeNodes.get(state.src);
+  const activeChanged = activeEl && activeEl !== img;
+  const hasPreviousBridge = !!(img && img !== activeEl && _isVisibleImage(img));
+
+  if (activeChanged) {
+    const activation = _activationGeneration;
+    if (statusName) statusName.textContent = 'Loading...';
+    _setElementLoadingLabel(activeEl, LOADING_LABEL);
+
+    if (!hasPreviousBridge) {
+      if (img && img !== activeEl) {
+        img.style.display = 'none';
+        img.classList.remove('active');
       }
-    };
-    preloader.onerror = () => {
-      if (_currentPreloadSrc === state.src) {
-        stopLoadingAltAnimation();
-        img.src = state.src; // Fallback so main img shows error state
-        img.alt = state.filename ? `Failed to load ${state.filename}` : 'Failed to load image';
-        if (statusName) statusName.textContent = state.filename;
+      img = activeEl;
+      img.style.display = 'block';
+      img.classList.add('active');
+    }
+
+    const loadTarget = () => {
+      if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+      _targetLoadTimer = null;
+      _loadPoolNode(activeEl, state.src);
+
+      const ready = activeEl.complete && (activeEl.naturalWidth > 0 || state.src.toLowerCase().endsWith('.svg'));
+      const decodePromise = ready || !activeEl.decode ? Promise.resolve() : activeEl.decode();
+      decodePromise.then(() => {
+        if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+        _activatePoolNode(activeEl, state.filename, state);
+        _schedulePoolPreloads(neighborSrcs, generation);
+      }).catch(() => {
+        if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+        _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
         if (statusDims) statusDims.textContent = 'Error';
         if (statusZoom) statusZoom.textContent = 'N/A';
-        if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
-      }
+        _schedulePoolPreloads(neighborSrcs, generation);
+      });
     };
-    preloader.src = state.src;
+
+    if (hasPreviousBridge) {
+      _targetLoadTimer = setTimeout(loadTarget, TARGET_LOAD_DEBOUNCE_MS);
+    } else {
+      loadTarget();
+    }
+  } else {
+    _schedulePoolPreloads(neighborSrcs, generation);
   }
 
   if (_currentFitMode !== state.fitMode) {

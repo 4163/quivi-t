@@ -15,6 +15,8 @@ function _ext(name) {
 }
 
 let _navigationGeneration = 0;
+let _archivePrefetchTimer = null;
+let _archivePrefetchSeq = 0;
 
 function _nextNavigationGeneration() {
   _navigationGeneration += 1;
@@ -48,9 +50,14 @@ function _base64Encode(str) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function _basename(path) {
+  return String(path || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+}
+
 export const FsUtils = {
   isArchive(name) { return SUPPORTED_ARCHIVES.has(_ext(name)); },
   isImage(name) { return SUPPORTED_IMAGES.has(_ext(name)); },
+  isIco(name) { return _ext(name) === 'ico'; },
   isArchiveEntry(entry) { return entry && !entry.is_dir && this.isArchive(entry.name); },
   isImageEntry(entry) { return entry && !entry.is_dir && this.isImage(entry.name); },
 
@@ -65,15 +72,33 @@ export const FsUtils = {
     return `${base}/archive/${encoded}/${encodeURIComponent(entryName)}`;
   },
 
+  async buildArchiveEntrySrc(archivePath, entryName) {
+    if (this.isIco(entryName) && window.__TAURI__) {
+      try {
+        return await invoke('get_archive_ico_frames', { archivePath, entryName });
+      } catch (e) {
+        console.error('Failed to extract archive ICO frames:', e);
+      }
+    }
+    return this.buildArchiveSrc(archivePath, entryName);
+  },
+
   async buildFileSrc(filePath) {
     if (filePath.startsWith('blob:')) return filePath;
-    if (filePath.toLowerCase().endsWith('.ico') && window.__TAURI__) {
+    if (this.isIco(filePath) && window.__TAURI__) {
       try {
         return await invoke('get_ico_frames', { path: filePath });
       } catch (e) {
         console.error('Failed to extract ICO frames:', e);
       }
     }
+    return window.__TAURI__.core.convertFileSrc(filePath);
+  },
+
+  // Synchronous variant for the DOM image pool; ICO files need async
+  // processing so they are excluded and handled via the async path.
+  buildFileSrcSync(filePath) {
+    if (filePath.startsWith('blob:')) return filePath;
     return window.__TAURI__.core.convertFileSrc(filePath);
   },
 
@@ -295,6 +320,11 @@ export const FsUtils = {
         index = this.firstImageIndex(files, 1);
       }
 
+      const selectedSrc = this.isImageEntry(files[index])
+        ? await this.buildArchiveEntrySrc(result.archive_path, files[index].name)
+        : '';
+      if (!_isCurrentGeneration(options.generation)) return;
+
       Core.setState({
         mode: 'archive',
         list: files,
@@ -304,7 +334,7 @@ export const FsUtils = {
         directory: '',
         parentDirectory: result.archive_path.replace(/[\\/][^\\/]*$/, ''),
         filename: files[index]?.name || '',
-        src: this.isImageEntry(files[index]) ? this.buildArchiveSrc(result.archive_path, files[index].name) : ''
+        src: selectedSrc
       });
       recordNavigation(options.previousEntry, Core.getState(), options);
       if (!_isCurrentGeneration(options.generation)) return;
@@ -318,6 +348,15 @@ export const FsUtils = {
       if (options.isStartup) {
         console.error(`[Core] Startup loadArchive failed for ${archivePath}, falling back:`, err);
         return this.loadFallbackAncestor(archivePath, options);
+      }
+      if (_isCurrentGeneration(options.generation)) {
+        const state = Core.getState();
+        this.revokeIfObjectURL(state.src);
+        Core.setState({
+          mode: state.mode === 'empty' ? 'image' : state.mode,
+          src: '',
+          filename: `Failed to open archive: ${_basename(archivePath) || archivePath}`,
+        });
       }
       throw err;
     }
@@ -597,31 +636,38 @@ export const FsUtils = {
 
     const indicesToPrefetch = [];
     
-    // Warm current entry
-    if (currentIndex >= 0 && currentIndex < files.length && this.isImageEntry(files[currentIndex])) {
-      indicesToPrefetch.push(files[currentIndex].name);
-    }
-
-    // 7 ahead
-    for (let i = 1; i <= 7; i++) {
-      let idx = currentIndex + (direction * i);
-      if (idx >= 0 && idx < files.length && this.isImageEntry(files[idx])) {
-        indicesToPrefetch.push(files[idx].name);
+    // ── Symmetric window: 7 ahead, 7 behind ──
+    const PREFETCH_HALF = 7;
+    for (let i = 1; i <= PREFETCH_HALF; i++) {
+      const ahead = currentIndex + (direction * i);
+      if (ahead >= 0 && ahead < files.length && this.isImageEntry(files[ahead])) {
+        indicesToPrefetch.push(files[ahead].name);
       }
-    }
-    // 3 behind
-    for (let i = 1; i <= 3; i++) {
-      let idx = currentIndex - (direction * i);
-      if (idx >= 0 && idx < files.length && this.isImageEntry(files[idx])) {
-        indicesToPrefetch.push(files[idx].name);
+      const behind = currentIndex - (direction * i);
+      if (behind >= 0 && behind < files.length && this.isImageEntry(files[behind])) {
+        indicesToPrefetch.push(files[behind].name);
       }
     }
 
     if (indicesToPrefetch.length > 0) {
-      invoke('prefetch_archive_entries', { 
-        archivePath: archivePath, 
-        entries: indicesToPrefetch 
-      }).catch(err => console.warn('[Prefetch] Error:', err));
+      const seq = ++_archivePrefetchSeq;
+      clearTimeout(_archivePrefetchTimer);
+      _archivePrefetchTimer = setTimeout(() => {
+        const latest = Core.getState();
+        if (
+          seq !== _archivePrefetchSeq ||
+          latest.mode !== 'archive' ||
+          latest.archivePath !== archivePath ||
+          latest.index !== currentIndex
+        ) {
+          return;
+        }
+
+        invoke('prefetch_archive_entries', {
+          archivePath: archivePath,
+          entries: indicesToPrefetch,
+        }).catch(err => console.warn('[Prefetch] Error:', err));
+      }, 75);
     }
   }
 };

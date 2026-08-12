@@ -111,7 +111,7 @@ async function _persistConfig() {
   }
 }
 
-async function _selectEntry(index, activate = false, clampPreview = false) {
+async function _selectEntry(index, activate = false, clampPreview = false, direction = 1) {
   if (index === -1) {
     _state.index = -1;
     _state.filename = '';
@@ -139,7 +139,7 @@ async function _selectEntry(index, activate = false, clampPreview = false) {
   if (file.is_dir || file.is_parent || FsUtils.isArchiveEntry(file) || !FsUtils.isImageEntry(file)) {
     newSrc = clampPreview ? _state.src : '';
   } else if (_state.mode === 'archive') {
-    newSrc = FsUtils.buildArchiveSrc(_state.archivePath, file.name);
+    newSrc = await FsUtils.buildArchiveEntrySrc(_state.archivePath, file.name);
   } else {
     newSrc = await FsUtils.buildFileSrc(file.path);
   }
@@ -158,11 +158,11 @@ async function _selectEntry(index, activate = false, clampPreview = false) {
     }
   }
 
-  if (_state.mode === 'archive') {
-    FsUtils.prefetchAhead(_state.archivePath, index, 1);
-  }
-
   _notify();
+
+  if (_state.mode === 'archive') {
+    FsUtils.prefetchAhead(_state.archivePath, index, direction);
+  }
 }
 
 // --- Public API ---------------------------------------------------------------
@@ -248,7 +248,7 @@ export const Core = {
     }
 
     const next = (_state.index + delta + _state.list.length) % _state.list.length;
-    _selectEntry(next, false, clampPreview);
+    _selectEntry(next, false, clampPreview, Math.sign(delta) || 1);
   },
 
   /**

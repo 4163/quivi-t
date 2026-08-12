@@ -6,7 +6,7 @@
   <img src="icons/quivi-t_moe-mascot.svg" alt="QuiviT mascot" width="25%" />
 </p>
 
-A lightweight standalone (performance-first) port of Quivi, built with Tauri and Vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
+A lightweight standalone (performance-first*) port of Quivi, built with Tauri and Vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
 
 ## Quivi
 
@@ -17,17 +17,16 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 
 ## Features
 
-- **Broad Format Support**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `svg`, `bmp`, `ico`, `avif`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
-- **Archive Integration**: Reads compressed files directly, treating them as standard folders. Supports seamless image navigation within and across archives, automatically skipping corrupted or inaccessible formats without freezing. Automatically handles legacy ZIP archives with Shift-JIS (CP932) encoded filenames from Japanese systems.
-- **Archive Metadata**: Detects and parses `ComicInfo.xml`, `CoMet.xml`, and `metadata.opf` files within archives, displaying them in a dedicated secondary window without cluttering the image list.
-- **High-Performance Caching**: Instant archive listing via header-only reads. Hybrid caching strategy uses an in-memory LRU cache with background prefetch for ZIP/CBZ (accelerated by `O(1)` buffered EOCD scanning), and non-blocking asynchronous disk extraction for solid archives (7Z/RAR). All heavy archive parsing is offloaded to background threads to guarantee zero UI freezes.
-- **Advanced Navigation**: Browse siblings with keyboard or mouse. Jump seamlessly to previous/next directories, archives, and root drives following the active sort order. Parent directory navigation (`..`) and session-only Back/Forward history are natively supported.
-- **Customizable Controls**: High-quality zooming, panning, rotation, and flipping. Includes scroll-wheel panning with `Ctrl`+wheel zoom (manga-friendly), plus a sticky-Ctrl toggle mode.
-- **Advanced Shortcuts**: Fully customizable keybindings supporting multi-key combos, native mouse inputs, double-click gestures, and scroll-wheel capture with conflict highlighting.
-- **Persistent States**: Configurable favorites system, single-instance handoff, optional auto-open first image, and restoration of the last active image.
-- **System Integration**: Uses native Windows file/folder icons (with opacity for hidden items). Registers file associations per-user, appearing natively in Windows Default Apps.
-- **Configuration Modes**: Supports global (least-privileged user) or portable (single config) configuration storage.
-- **Custom Theming**: Inject and live-reload custom CSS rules to fully theme the application.
+- **Formats**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `svg`, `bmp`, `ico`, `avif`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
+- **Archives**: Read compressed files directly as folders, including image navigation and archive metadata.
+- **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
+- **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Ctrl`+wheel.
+- **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
+- **Persistent State**: Persists favorites, single-instance handoff, optional auto-open behavior, and the last opened image.
+- **Windows Integration**: Use native file/folder icons and register file associations per-user for Windows Default Apps.
+- **Configuration**: Choose roaming user config or portable config stored next to the executable.
+- **Custom Theming**: Inject and live-reload custom CSS rules.
+- **ICO Spritesheets**: Render multi-frame `.ico` files as generated spritesheets.
 
 ## Shortcuts & Controls
 
@@ -127,16 +126,17 @@ The following system defaults are used:
 
 - **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
 - **Scaling Mode:** `bicubic`
-- **Keyboard Pan Step:** `VIEWER_KEYBOARD_PAN_STEP` (72px). Wheel panning uses a separate `VIEWER_WHEEL_PAN_STEP` (120px).
-- **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`) in Options. A status-bar badge reflects the active state — `Scroll Zoom — Toggled` while latched in toggle mode, or the bound modifier(s) you're holding (`Ctrl — Held`, `Shift — Held`, `Ctrl+Shift — Held`) when they change scroll behavior.
+- **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step.
+- **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge reflects the active state — `Scroll Zoom — Toggled` while latched in toggle mode, or the bound modifier(s) you're holding (`Ctrl — Held`, `Shift — Held`, `Ctrl+Shift — Held`) when they change scroll behavior.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
 - **Default Sort:** `name` ascending. Per-directory preferences are cached for up to 100 directories, with the oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort` (`col`: `name`, `ext`, or `date`; `desc`: `false` = ascending, `true` = descending). Directories without a saved preference in `quivit_directory_sort.json` fall back to it.
-- **History Trail:** Folder menu **Back/Forward** (and `Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only — opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
+- **History Trail:** Menu bar **Folder → Back / Forward** (`Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only — opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
 - **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
-- **Auto-Fit Windows:** Secondary windows (Options, Archive Info) open hidden, auto-size to their content, and center over the main window — no size flicker.
+- **Secondary Windows:** Options and Archive Info windows size to their content and open centered over the main window.
 - **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor — or the Drives view at the root.
-- **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting in Options requires an app restart to take effect.
-- **Archive Caching (ZIP/CBZ):** In-memory LRU cache holds up to 20 images. Background prefetch loads 7 images ahead and 3 images behind the current position.
+- **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting on or off requires an app restart to take effect.
+- **Image Swap Buffer:** The DOM viewer keeps a decoded previous image visible while the next target image loads, then waits for a short 45ms settled-navigation window before committing the swap. This is an intentional WebView2/HTML `<img>` tradeoff: it slightly delays final activation during rapid navigation, but prevents visible blank-frame flicker that can occur when very large images are decoded, uploaded, or repainted by the browser.
+- **Archive Resilience:** Corrupted or inaccessible archives are reported without freezing the viewer, and navigation skips unsupported archive entries when they cannot be opened. Legacy ZIP filename encodings are decoded for regional archives, including Shift-JIS (CP932) and other CJK code pages.
 
 ### Configuration & Persistence
 
@@ -145,19 +145,21 @@ QuiviT manages data across three distinct tiers depending on lifecycle and scope
 **Roaming files (source of truth)** — stored in Tauri's app config directory:
 `C:\Users\<user>\AppData\Roaming\com.x4163.quivit`
 
-Data is split across four files:
-- `quivit_config.json` — User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, default sort, custom CSS, options)
+Data is split across five files:
+- `quivit_config.json` — User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, default sort, options)
 - `quivit_state.json` — Runtime state (`last_opened_path`, `last_active_image`, `scroll_zoom_latched`)
 - `quivit_directory_sort.json` — Per-directory sort column/direction
 - `quivit_favorites.json` — Favorited folders/files and collapsed state
+- `custom_css.css` — Custom CSS source text
 
 **WebView2 localStorage** — never the source of truth; used only as a fast cache layer:
-- `quivit-theme` / `quivit-custom-css` — Pre-paint mirrors of config so the theme and custom CSS apply before first render (prevents flicker)
+- `quivit-theme` / `quivit-custom-css` — Pre-paint mirrors so the theme and custom CSS apply before first render (prevents flicker)
 - `options-active-tab` — Session-only; cleared on each app start
 
 **In-memory state** — session-only; reset on app exit:
 - `navigationHistory` — Container-level Back/Forward history trail (capped at 100 entries)
-- `archives` LRU cache — ZIP/CBZ in-memory image cache (20 items) and background prefetch queue (7-ahead / 3-behind)
+- `ArchiveCache` — Recent archive working set. ZIP/CBZ entries use a byte-budgeted in-memory image cache (default 512 MB) and background prefetch queue; RAR/CBR, 7Z/CB7, and TAR/CBT archives keep temporary extraction state for up to 8 recently opened archives.
+- `#viewer-img-wrapper` image bridge — Two reusable DOM images for the current target and decoded previous image; nearby pages warm through off-DOM preloaders after navigation settles behind the 45ms image swap buffer
 - `previewTheme` / `previewCss` — Options window live theme and custom CSS previews (persisting across config reloads until Apply or Close)
 
 **Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth.
@@ -176,11 +178,11 @@ The frontend is intentionally split into small, decoupled ES modules:
 
 ### File Associations (Windows)
 
-Options → File Types registers image and archive formats with QuiviT. Registration is per-user (no admin rights required): it writes `HKCU\Software\Classes` ProgIDs, dumps format icons to the roaming config directory, and registers QuiviT as an app in Windows Settings → Default Apps. The "Open Windows Default Apps Settings" button deep-links straight to QuiviT's entry.
+**Options → File Types** registers image and archive formats with QuiviT. Registration is per-user (no admin rights required): it writes `HKCU\Software\Classes` ProgIDs, dumps format icons to the roaming config directory, and registers QuiviT as an app in Windows Settings → Default Apps. The "Open Windows Default Apps Settings" button deep-links straight to QuiviT's entry.
 
 Checkboxes reflect whether QuiviT is the active default handler for each format, reading the `UserChoice` registry key first and falling back to the `Classes` registration.
 
-> **Note on Windows 10/11 defaults:** A format's active default handler lives in the `UserChoice` registry key, which is hash-protected and cannot be written programmatically. A format with no existing `UserChoice` becomes QuiviT's once registered — double-click opens it directly. For formats already claimed by another program, registering only adds QuiviT as an *available* handler; Windows surfaces it automatically via the "How do you want to open this file?" picker when such a file is opened, and the default can be changed permanently there, via "Open with", or in Windows Settings.
+> **Note on Windows 10/11 defaults:** A format's active default handler lives in the `UserChoice` registry key, which is hash-protected and cannot be written programmatically. A format with no existing `UserChoice` becomes QuiviT's once registered — double-click opens it directly. For formats already claimed by another program, registering only adds QuiviT as an *available* handler; Windows surfaces it automatically via the "How do you want to open this file?" picker when such a file is opened, OR the default can be changed permanently there, via "Open with", or in Windows Settings.
 
 ### Command-Line Interface
 
@@ -228,7 +230,10 @@ node --check src/js/options.js
 | **File Watching** | `notify` | Directory watcher for auto-refresh |
 | **ICO Extraction** | `image` | Multi-frame ICO spritesheet generation |
 | **Hashing** | `md5` | Deterministic temp directory naming |
+| **Data URIs** | `base64` | Base64 encoding for generated image payloads |
+| **Windows APIs** | `windows` / `winreg` | Native icons, file attributes, shell notifications, and per-user file associations |
 | **Tauri Plugins** | `opener`, `dialog`, `single-instance` | System integration (explorer, pickers, handoff) |
+| **Frontend Tauri API** | `@tauri-apps/api` / `@tauri-apps/plugin-dialog` | Browser-side IPC, asset URLs, and native file dialogs |
 
 ## Project Structure
 
@@ -277,7 +282,7 @@ QuiviT/
 ├─ matcha-latte.css           # Example theme (bundled with the release)
 ├─ sage-mint.css              # Example theme (bundled with the release)
 ├─ package.json
-└─ README.md
+└─ README.md                  # Project Overview & Architecture Documentation
 ```
 
 ## Attributions

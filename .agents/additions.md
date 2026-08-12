@@ -10,6 +10,7 @@
 - `mergeConfig()` in `keybinds.js` spreads saved data over defaults — missing keys get filled in, extra keys pass through.
 - Persistence policy is documented in `core.js` header and `keybinds.js`. Roaming files are the source of truth; `localStorage` is only a pre-paint cache, and an explicit third tier exists for ephemeral in-memory state.
 - Split files: `quivit_config.json` (preferences), `quivit_state.json` (runtime state), `quivit_directory_sort.json`, `quivit_favorites.json`. Portable mode folds all into one file.
+- Top-level `archive_cache_mb` (`usize`, default 512) sets the ZIP/CBZ byte budget for the in-memory archive cache; config-file-only, no UI.
 - Theme/CSS previews are ephemeral: `options.js` tracks a `previewing` flag and `main.js` keeps `previewTheme`/`previewCss` so in-progress previews survive config reloads (file watcher), clearing only on Options Apply. Closing Options without Apply reverts the preview and resyncs the `quivit-theme` / `quivit-custom-css` pre-paint caches (prevents a flash on next open).
 - The global `default_sort` lives in `quivit_config.json` (`frontend_data`) and is config-file-only; the UI writes only per-directory sort prefs (`quivit_directory_sort.json`).
 - Restart-gated settings (`single_instance`) are staged as `pending_<key>` by the UI and promoted at startup by `apply_pending_config()` (`config.rs`) — never written live.
@@ -18,9 +19,9 @@
 - `core.js` — state machine, no DOM access. Communicates via callbacks.
 - `keybinds.js` — default bindings, `mergeConfig()`, pan/zoom constants.
 - `shortcuts.js` — keyboard/mouse/scroll dispatch, combo normalization. Exports `MOUSE_BUTTON_NAMES` as the single source of truth for all button mapping.
-- `viewer.js` — image rendering, zoom, pan, fit modes. Implements strict `quivit-config-loaded` caching for hot-path config access (e.g., pan keys) instead of dynamic evaluations.
-- `filePanel.js` — file list, favorites, sorting UI, column resizing.
-- `fsUtils.js` — filesystem interactions, archive loading, sibling navigation, statusbar index / page-position formatting.
+- `viewer.js` — image rendering, zoom, pan, fit modes. Uses a two-image DOM bridge inside `#viewer-img-wrapper` (current target + decoded previous image) while nearby pages warm through cancellable off-DOM `Image()` preloaders after navigation settles. `_updateScrollIndicator`'s idempotent sibling lives in `shortcuts.js`. Implements strict `quivit-config-loaded` caching for hot-path config access (e.g., pan keys) instead of dynamic evaluations.
+- `filePanel.js` — file list, favorites, sorting UI, column resizing. Debounces/cancels hovered image source preloads so list clicks feel instant without keeping stale decodes alive.
+- `fsUtils.js` — filesystem interactions, archive loading, sibling navigation, statusbar index / page-position formatting. Exposes `buildFileSrcSync` (sync `convertFileSrc` for off-DOM/bridge preloads; ICO sources stay async), `buildArchiveEntrySrc` (async archive entry source builder so archived ICO files can use spritesheet extraction), and a symmetric 7-ahead/7-behind prefetch window.
 - `navigationHistory.js` — session-only container Back/Forward history.
 - `directoryPrefs.js` — per-directory sort/grouping logic; exports `naturalCompare` (consumed by `fsUtils`).
 - `metadata.js` — XML parsing logic for `ComicInfo.xml`, `CoMet.xml`, and `metadata.opf`.
@@ -38,11 +39,11 @@
 - Options/metadata windows open hidden, then JS measures content and calls `fit_*_window` (size + re-center) before `.show()` — no size flicker.
 
 **Rust Module Structure:**
-- `lib.rs` — app entry, main-window construction, event setup, shell background sync at startup.
+- `lib.rs` — app entry, main-window construction, `quivit://` archive-entry protocol routing, event setup, shell background sync at startup.
 - `config.rs` — `AppConfig`, load/save, split-file helpers, portable detection, window size constants, options/metadata window lifecycle + fit/center commands.
-- `commands.rs` — Tauri commands (directory listing, file ops, sibling nav, directory watcher, `get_path_kind`). Utilizes `#[tauri::command(async)]` for heavy I/O (`list_archive`, `read_directory`) to offload to background threads.
-- `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants).
-- `ico.rs` — ICO spritesheet processing.
+- `commands.rs` — Tauri commands (directory listing, file ops, sibling nav, directory watcher, `get_path_kind`, `get_archive_ico_frames`). Utilizes `#[tauri::command(async)]` for heavy I/O (`list_archive`, `read_directory`, archive ICO frame extraction) to offload to background threads.
+- `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants), safe temp-path mapping for extracted entries, and archive cache state. `ArchiveCache` holds a bounded recent set of per-archive `SingleArchiveCache` state plus a global byte-budgeted LRU (default 512 MB via `archive_cache_mb`) so decoded ZIP/CBZ entries across recent archives share one eviction pool; RAR/CBR, 7Z/CB7, and TAR/CBT keep temporary image/metadata extraction state for the recent archive working set.
+- `ico.rs` — ICO spritesheet processing shared by loose-file `get_ico_frames` and archived-entry `get_archive_ico_frames` via `ico_frames_from_bytes`.
 - `models.rs` — shared structs (`FileEntry`, etc.).
 - `utils.rs` — path helpers, hidden-file detection.
 
@@ -80,9 +81,6 @@
   - This additionally fixes the lag when holding down a key and switching images really fast.
   - Fix the issue where the opaque canvas appears first and then the image; they should always appear at the same time.
   - Consider keeping a session cache of files inside archives, prevents decompressing them again in the same session. Discuss adding a cache limit in the options (though leaning towards being against putting it in options).
-  - **Manhwa Mode (Continuous Vertical Strip):** Automatically append pages together vertically on the same canvas page.
-    - Build the preloading and image caching infrastructure specifically with intent to serve both fast single-page transitions and continuous Manhwa rendering.
-    - **Active Item Synchronization:** As the user scrolls vertically through the continuous strip, dynamically track the currently visible image and keep the active item selection in the file list and status bar perfectly in sync.
 - **Initial HTML Loading (LCP):** Completely remove the blank page time on initial loading of both HTML pages before the main UI renders. It's currently acting this way because we are optimizing for LCP on the flickering of themes. Refer to the way LCP is handled on `E:\Projects\PixiJS Live2D Spine (Springfield)` for reference.
 - **SVG Rendering & Bounds:** Audit SVG elements behavior of hitbox/dimensions going over the canvas edge. The calculations for SVG images that have a WxH of 100% compared to a set WxH act differently and break the border/edge calculations on the canvas and/or image.
   - *Key examples:* `test-files/gfl-spinner.svg` works as expected, while `icons/quivi-t_moe-2.svg` does not. 
@@ -174,6 +172,11 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 - **Implementation Challenges & Considerations:**
   1. **Reading Direction Sync:** Must align with the active LTR / RTL setting to determine which side of the spread to display first (e.g. top-right start for RTL manga spread, top-left start for LTR comic spread).
   2. **Visual Spread Indicator:** Provide a clear visual indicator/badge (both in the status bar and in fullscreen overlay) showing that the active image is a spread page rendered in half-width mode, so the user knows they are viewing a zoomed-in spread section.
+
+### Manhwa Mode (Continuous Vertical Strip)
+- Automatically append pages together vertically on the same canvas page.
+- Build on the preloading and image caching infrastructure, but treat continuous Manhwa rendering as its own post-release slice.
+- **Active Item Synchronization:** As the user scrolls vertically through the continuous strip, dynamically track the currently visible image and keep the active item selection in the file list and status bar perfectly in sync.
 
 ### Detach Image Window
 - Add the ability to pop the currently viewed image out into its own standalone window, separate from the main QuiviT UI.

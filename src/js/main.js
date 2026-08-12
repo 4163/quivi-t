@@ -805,10 +805,13 @@ Core.onStateChange((state) => {
     }
   }
 
-  // Only update filename/index if the image is already loaded;
+  // Only update filename/index if the image is actually displayed and decoded;
   // otherwise viewer.js is showing "Loading..." and we don't want to overwrite it.
-  const imgEl2 = document.getElementById('viewer-img');
-  if (!state.src || imgEl2.src === state.src) {
+  // The pool node may already carry the target src while still fetching.
+  // viewer.js marks the decoded visible node explicitly.
+  const imgEl2 = document.querySelector('.viewer-img.active[data-decoded="true"]');
+  const loaded = imgEl2 && imgEl2.dataset.poolSrc === state.src && imgEl2.complete;
+  if (!state.src || loaded) {
     statusName.textContent = state.filename;
     statusIndex.textContent = FsUtils.formatStatusIndex(state);
   }

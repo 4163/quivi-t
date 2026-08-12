@@ -69,9 +69,6 @@ export function mergeConfig(loaded) {
     ? loaded.frontend_data
     : {};
 
-  console.log('[mergeConfig] Input loaded:', JSON.stringify(loaded, null, 2));
-  console.log('[mergeConfig] Input fd:', JSON.stringify(fd, null, 2));
-
   const result = {
     portable_mode: !!loaded?.portable_mode,
     hidden: loaded?.hidden === true, // Preserve hidden field (config-file-only)
@@ -107,6 +104,5 @@ export function mergeConfig(loaded) {
     },
   };
 
-  console.log('[mergeConfig] Output result:', JSON.stringify(result, null, 2));
   return result;
 }
