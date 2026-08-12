@@ -21,6 +21,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Archive Integration**: Reads compressed files directly, treating them as standard folders. Supports seamless image navigation within and across archives, automatically skipping corrupted or inaccessible formats without freezing. Automatically handles legacy ZIP archives with Shift-JIS (CP932) encoded filenames from Japanese systems.
 - **Archive Metadata**: Detects and parses `ComicInfo.xml`, `CoMet.xml`, and `metadata.opf` files within archives, displaying them in a dedicated secondary window without cluttering the image list.
 - **High-Performance Caching**: Instant archive listing via header-only reads. Hybrid caching strategy uses an in-memory LRU cache with background prefetch for ZIP/CBZ (accelerated by `O(1)` buffered EOCD scanning), and non-blocking asynchronous disk extraction for solid archives (7Z/RAR). All heavy archive parsing is offloaded to background threads to guarantee zero UI freezes.
+- **ICO Spritesheets**: Multi-frame `.ico` files render as generated spritesheets.
 - **Advanced Navigation**: Browse siblings with keyboard or mouse. Jump seamlessly to previous/next directories, archives, and root drives following the active sort order. Parent directory navigation (`..`) and session-only Back/Forward history are natively supported.
 - **Customizable Controls**: High-quality zooming, panning, rotation, and flipping. Includes scroll-wheel panning with `Ctrl`+wheel zoom (manga-friendly), plus a sticky-Ctrl toggle mode.
 - **Advanced Shortcuts**: Fully customizable keybindings supporting multi-key combos, native mouse inputs, double-click gestures, and scroll-wheel capture with conflict highlighting.
@@ -136,7 +137,7 @@ The following system defaults are used:
 - **Auto-Fit Windows:** Secondary windows (Options, Archive Info) open hidden, auto-size to their content, and center over the main window — no size flicker.
 - **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor — or the Drives view at the root.
 - **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting in Options requires an app restart to take effect.
-- **Archive Caching (ZIP/CBZ):** A byte-budgeted LRU cache (default 500 MB, configurable as top-level `archive_cache_mb` in `quivit_config.json`) holds decoded ZIP/CBZ entries across *all* archives opened this session and evicts the least-recently-used entries globally when the budget is exceeded. Background prefetch fills a symmetric window of 7 images ahead and 7 behind the current position. The DOM viewer mirrors this with a sliding 15-node `<img>` pool so nearby pages decode in advance and seamless navigation never flashes a loading state.
+- **Archive Caching (ZIP/CBZ):** A byte-budgeted LRU cache (default 512 MB, configurable as top-level `archive_cache_mb` in `quivit_config.json`) holds decoded ZIP/CBZ entries across *all* archives opened this session and evicts the least-recently-used entries globally when the budget is exceeded. Background prefetch fills a symmetric window of 7 images ahead and 7 behind the current position. The DOM viewer uses a two-image bridge while nearby pages warm after navigation settles.
 
 ### Configuration & Persistence
 
@@ -157,8 +158,8 @@ Data is split across four files:
 
 **In-memory state** — session-only; reset on app exit:
 - `navigationHistory` — Container-level Back/Forward history trail (capped at 100 entries)
-- `ArchiveCache` — Byte-budgeted ZIP/CBZ image cache shared across all opened archives (default 500 MB) and the background prefetch queue (symmetric 7-ahead / 7-behind window)
-- `#viewer-img-wrapper` pool — Sliding 15-node DOM image pool (`POOL_HALF` in `viewer.js`) that decodes nearby pages ahead of time
+- `ArchiveCache` — Byte-budgeted ZIP/CBZ image cache shared across all opened archives (default 512 MB) and the background prefetch queue (symmetric 7-ahead / 7-behind window)
+- `#viewer-img-wrapper` image bridge — Two reusable DOM images for the current target and decoded previous image; nearby pages warm through off-DOM preloaders after navigation settles
 - `previewTheme` / `previewCss` — Options window live theme and custom CSS previews (persisting across config reloads until Apply or Close)
 
 **Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth.

@@ -61,7 +61,7 @@ pub fn run() {
     let config = crate::config::apply_pending_config();
     // Single instance defaults to true if not explicitly set to false
     let single_instance = config.frontend_data.get("single_instance").and_then(|v| v.as_bool()).unwrap_or(true);
-    let cache_mb = config.archive_cache_mb.unwrap_or(500);
+    let cache_mb = config.archive_cache_mb.unwrap_or(512);
 
     let mut builder = tauri::Builder::default();
     
@@ -161,6 +161,7 @@ pub fn run() {
             write_text_file,
             get_default_dir,
             get_ico_frames,
+            get_archive_ico_frames,
             get_native_icon,
             get_format_status,
             register_associations,
@@ -691,7 +692,7 @@ mod archive_tests {
         let mut cache = ArchiveCache::new(2); // 2 MB budget
 
         // Mirrors list_archive: each opened archive first registers a slot.
-        let mut register = |cache: &mut ArchiveCache, archive: &str| {
+        let register = |cache: &mut ArchiveCache, archive: &str| {
             cache.archives.insert(
                 archive.to_string(),
                 SingleArchiveCache {

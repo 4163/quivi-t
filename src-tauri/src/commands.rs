@@ -12,6 +12,7 @@ use std::os::windows::fs::MetadataExt;
 use crate::utils::*;
 use crate::models::*;
 use crate::archives::*;
+use crate::ico::ico_frames_from_bytes;
 
 // ── Directory Watcher ────────────────────────────────────────────────────────
 
@@ -265,6 +266,90 @@ pub fn prefetch_archive_entries(
     }
     
     Ok(())
+}
+
+#[tauri::command(async)]
+pub fn get_archive_ico_frames(
+    archive_path: String,
+    entry_name: String,
+    state: tauri::State<'_, Mutex<ArchiveCache>>,
+) -> Result<String, String> {
+    let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
+    let data = match ext.as_str() {
+        "zip" | "cbz" => {
+            {
+                let cache = state.lock().map_err(|e| e.to_string())?;
+                if let Some(single) = cache.archives.get(&archive_path) {
+                    if let Some(cached) = single.zip_entries.get(&entry_name) {
+                        return ico_frames_from_bytes(cached);
+                    }
+                }
+            }
+
+            let extracted = {
+                let mut cache = state.lock().map_err(|e| e.to_string())?;
+                if let Some(single) = cache.archives.get_mut(&archive_path) {
+                    if let Some(archive) = single.zip_archive.as_mut() {
+                        crate::archives::read_zip_entry_by_decoded_name(archive, &entry_name).ok()
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            };
+
+            let data = if let Some(data) = extracted {
+                data
+            } else {
+                extract_zip_entry(&archive_path, &entry_name)?
+            };
+
+            {
+                let mut cache = state.lock().map_err(|e| e.to_string())?;
+                cache.insert_zip_entry(&archive_path, &entry_name, data.clone());
+            }
+
+            data
+        }
+        "cbt" | "tar" => extract_tar_entry(&archive_path, &entry_name)?,
+        "rar" | "cbr" | "7z" | "cb7" => {
+            let (temp_dir_opt, notify_opt) = {
+                let cache = state.lock().map_err(|e| e.to_string())?;
+                if let Some(single) = cache.archives.get(&archive_path) {
+                    (single.extract_temp_dir.clone(), Some(single.extract_notify.clone()))
+                } else {
+                    (None, None)
+                }
+            };
+
+            let temp_dir = temp_dir_opt.ok_or_else(|| {
+                format!("Archive is not prepared for temporary extraction: {archive_path}")
+            })?;
+            let safe_name = entry_name.replace('\\', "/");
+            let file_path = temp_dir.join(&safe_name);
+
+            if let Ok(bytes) = fs::read(&file_path) {
+                bytes
+            } else if let Some(notify) = notify_opt {
+                let (lock, cvar) = &*notify;
+                let set = lock.lock().map_err(|e| e.to_string())?;
+                let _ = cvar
+                    .wait_timeout_while(set, std::time::Duration::from_secs(30), |pending| {
+                        !pending.contains(&entry_name)
+                    })
+                    .map_err(|e| e.to_string())?;
+                fs::read(&file_path).map_err(|e| {
+                    format!("Cannot read extracted archive ICO entry {entry_name}: {e}")
+                })?
+            } else {
+                return Err(format!("Archive entry is not extracted yet: {entry_name}"));
+            }
+        }
+        _ => return Err(format!("Unsupported archive format: {ext}")),
+    };
+
+    ico_frames_from_bytes(&data)
 }
 
 #[tauri::command]

@@ -38,6 +38,8 @@ let favLastClickPath = '';
 let favLastClickTime = 0;
 let highlightedFavoritePath = '';
 let refreshPulseTimer = null;
+let hoverPreloadImg = null;
+let hoverPreloadTimer = null;
 
 let columnsInitialized = false;
 
@@ -478,7 +480,9 @@ function renderEntry(item, index, selectedIndex) {
   });
 
   li.addEventListener('click', (e) => {
-    Core.selectIndex(index);
+    if (Core.getState().index !== index) {
+      Core.selectIndex(index);
+    }
     const now = Date.now();
     if (lastClickIndex === index && (now - lastClickTime < 400)) {
       Core.jumpToIndex(index);
@@ -492,20 +496,36 @@ function renderEntry(item, index, selectedIndex) {
 
   // Pre-emptively load the image on hover to make clicks feel instant
   li.addEventListener('mouseenter', () => {
+    clearTimeout(hoverPreloadTimer);
+    if (hoverPreloadImg) {
+      hoverPreloadImg.removeAttribute('src');
+      hoverPreloadImg = null;
+    }
+
     if (!item.is_dir && !item.is_parent && FsUtils.isImageEntry(item)) {
-      const state = Core.getState();
-      let src;
-      if (state.mode === 'archive') {
-        src = FsUtils.buildArchiveSrc(state.archivePath, item.name);
-      } else {
-        src = item.path.toLowerCase().endsWith('.ico') ? null : FsUtils.buildFileSrcSync(item.path);
-      }
-      if (src) {
-        const img = new Image();
-        img.src = src;
-        // Optionally decode it to ensure it's ready in memory
-        if (img.decode) img.decode().catch(() => {});
-      }
+      hoverPreloadTimer = setTimeout(() => {
+        const state = Core.getState();
+        let src;
+        if (state.mode === 'archive') {
+          src = FsUtils.isIco(item.name) ? null : FsUtils.buildArchiveSrc(state.archivePath, item.name);
+        } else {
+          src = FsUtils.isIco(item.path) ? null : FsUtils.buildFileSrcSync(item.path);
+        }
+        if (src && Core.getState().index !== index) {
+          hoverPreloadImg = new Image();
+          hoverPreloadImg.decoding = 'async';
+          hoverPreloadImg.src = src;
+          if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
+        }
+      }, 90);
+    }
+  });
+
+  li.addEventListener('mouseleave', () => {
+    clearTimeout(hoverPreloadTimer);
+    if (hoverPreloadImg) {
+      hoverPreloadImg.removeAttribute('src');
+      hoverPreloadImg = null;
     }
   });
 

@@ -350,11 +350,8 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   if (!config.frontend_data.continue_last) {
     delete config.frontend_data.last_opened_path;
   }
-  console.log('[Options Save] Before mergeConfig:', JSON.stringify(config, null, 2));
   const merged = mergeConfig(config);
-  console.log('[Options Save] After mergeConfig:', JSON.stringify(merged, null, 2));
   Object.assign(config, merged);
-  console.log('[Options Save] After Object.assign:', JSON.stringify(config, null, 2));
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
     await invoke('save_config', { config });

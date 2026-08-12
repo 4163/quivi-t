@@ -21,7 +21,10 @@ use windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_
 #[tauri::command]
 pub fn get_ico_frames(path: String) -> Result<String, String> {
     let data = fs::read(&path).map_err(|e| format!("Cannot read ICO file: {e}"))?;
-    
+    ico_frames_from_bytes(&data)
+}
+
+pub fn ico_frames_from_bytes(data: &[u8]) -> Result<String, String> {
     // Parse the ICO directory header manually to find all image entries,
     // then decode each sub-image individually.
     if data.len() < 6 {

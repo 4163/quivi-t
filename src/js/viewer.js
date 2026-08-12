@@ -11,21 +11,22 @@ import { FsUtils } from './fsUtils.js';
 import { activeKeys, MOUSE_BUTTON_NAMES } from './shortcuts.js';
 import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from './keybinds.js';
 
-const POOL_HALF = 7;
+const PRELOAD_HALF = 7;
 const _activeNodes = new Map();
 const _freeNodes = [];
 
-const POOL_SIZE = POOL_HALF * 2 + 1; // 15
+const POOL_SIZE = 2; // visible bridge + pending target; idle warming uses off-DOM Image objects
 
 const imgWrapper = document.getElementById('viewer-img-wrapper');
 if (imgWrapper) {
   const oldImg = document.getElementById('viewer-img');
   if (oldImg) oldImg.remove();
   
-  const existingNodes = document.querySelectorAll('.viewer-img');
-  existingNodes.forEach(el => _freeNodes.push(el));
+  const existingNodes = Array.from(document.querySelectorAll('.viewer-img'));
+  existingNodes.slice(POOL_SIZE).forEach(el => el.remove());
+  existingNodes.slice(0, POOL_SIZE).forEach(el => _freeNodes.push(el));
   
-  for (let i = existingNodes.length; i < POOL_SIZE; i++) {
+  for (let i = _freeNodes.length; i < POOL_SIZE; i++) {
     const el = document.createElement('img');
     el.className = 'viewer-img';
     el.draggable = false;
@@ -42,7 +43,8 @@ function _getPoolNode(src) {
   if (_freeNodes.length > 0) {
     el = _freeNodes.pop();
   } else {
-    // Fallback if pool is exhausted (should not happen since window size <= POOL_SIZE)
+    // Fallback if current + bridge are both in use and a stale node has not
+    // recycled yet. It is immediately folded back into the two-node pool.
     el = document.createElement('img');
     el.className = 'viewer-img';
     el.draggable = false;
@@ -51,7 +53,9 @@ function _getPoolNode(src) {
   }
   el.alt = '';
   el.style.display = 'none';
-  el.src = src;
+  el.dataset.poolSrc = src;
+  el.removeAttribute('src');
+  el.removeAttribute('data-decoded');
   _activeNodes.set(src, el);
   return el;
 }
@@ -61,23 +65,34 @@ function _recyclePoolNode(src) {
   if (el) {
     el.style.display = 'none';
     el.removeAttribute('src');
+    el.removeAttribute('data-pool-src');
     el.removeAttribute('data-decoded');
-    if (el === _loadingEl) stopLoadingAltAnimation();
+    if (el === img) img = null;
     _activeNodes.delete(src);
     _freeNodes.push(el);
     FsUtils.revokeIfObjectURL(src);
+    _dropExtraPoolNodes();
   }
 }
 
-// Title/alt text shown on the <img> element while a slow image is fetching.
-// With no previous image on screen the node is displayed immediately, so the
-// browser's default broken-image placeholder renders alongside the animated
-// "Loading..." attribute text; once decoded, _activatePoolNode replaces it.
-const LOADING_LABELS = ['Loading.', 'Loading..', 'Loading...'];
+function _dropExtraPoolNodes() {
+  while (_freeNodes.length > POOL_SIZE) {
+    _freeNodes.pop()?.remove();
+  }
+}
+
+function _loadPoolNode(el, src) {
+  if (!el || !src) return;
+  el.dataset.poolSrc = src;
+  if (el.getAttribute('src') === src || el.src === src) return;
+  el.removeAttribute('data-decoded');
+  el.src = src;
+}
+
+const LOADING_LABEL = 'Loading...';
 
 function _setElementLoadingLabel(el, label) {
   el.alt = label;
-  el.title = label;
 }
 
 let img = null;
@@ -490,7 +505,6 @@ function setScaling(mode) {
  * read its dimensions, and refit.
  */
 function _activatePoolNode(el, filename, state) {
-  stopLoadingAltAnimation();
   if (img && img !== el) {
     img.style.display = 'none';
   }
@@ -499,6 +513,7 @@ function _activatePoolNode(el, filename, state) {
   img.style.display = 'block';
   img.alt = filename || '';
   img.title = filename || '';
+  img.dataset.decoded = 'true';
   _applyScaling();
 
   _rotation = 0;
@@ -525,6 +540,7 @@ function _attachLoadHandler(el) {
     if (el.naturalWidth > 0) {
       _naturalW = el.naturalWidth;
       _naturalH = el.naturalHeight;
+      el.dataset.decoded = 'true';
     } else {
       _scale = 1;
       _naturalW = el.clientWidth  || 1000;
@@ -538,36 +554,47 @@ function _attachLoadHandler(el) {
 
 // --- State subscription -------------------------------------------------------
 
-let _loadingAltTimer = null;
-let _loadingEl = null;
+let _poolGeneration = 0;
+let _activationGeneration = 0;
+const _preloadTimers = [];
+const _preloadImages = [];
 
-function stopLoadingAltAnimation() {
-  if (_loadingAltTimer) {
-    clearInterval(_loadingAltTimer);
-    _loadingAltTimer = null;
+function _clearScheduledPreloads() {
+  while (_preloadTimers.length > 0) {
+    clearTimeout(_preloadTimers.pop());
   }
-  _loadingEl = null;
+  while (_preloadImages.length > 0) {
+    const preloader = _preloadImages.pop();
+    preloader.onload = null;
+    preloader.onerror = null;
+    preloader.removeAttribute('src');
+  }
 }
 
-// Animate the "Loading..." text on the given element. In the legacy viewer a
-// single img alternated its alt text while prefetching, so the browser's
-// default 404/broken-image placeholder showed the animation; the pool keeps
-// that behavior but only when there is no previous image to hold meanwhile.
-function startLoadingAltAnimation(el) {
-  stopLoadingAltAnimation();
-  if (!el) return;
-  _loadingEl = el;
-  let frame = 0;
-  _setElementLoadingLabel(el, LOADING_LABELS[frame]);
-  _loadingAltTimer = setInterval(() => {
-    if (!_loadingEl) return;
-    frame = (frame + 1) % LOADING_LABELS.length;
-    _setElementLoadingLabel(_loadingEl, LOADING_LABELS[frame]);
-  }, 320);
+function _schedulePoolPreloads(srcs, generation) {
+  _clearScheduledPreloads();
+  srcs.forEach((src, index) => {
+    const timer = setTimeout(() => {
+      if (generation !== _poolGeneration) return;
+      const preloader = new Image();
+      preloader.decoding = 'async';
+      _preloadImages.push(preloader);
+      preloader.onload = () => {
+        const idx = _preloadImages.indexOf(preloader);
+        if (idx !== -1) _preloadImages.splice(idx, 1);
+      };
+      preloader.onerror = preloader.onload;
+      preloader.src = src;
+      if (preloader.decode) preloader.decode().catch(() => {});
+    }, 100 + index * 45);
+    _preloadTimers.push(timer);
+  });
 }
 
 function clearDisplayedImage() {
-  stopLoadingAltAnimation();
+  _poolGeneration += 1;
+  _activationGeneration += 1;
+  _clearScheduledPreloads();
   _naturalW = 0;
   _naturalH = 0;
 
@@ -578,6 +605,10 @@ function clearDisplayedImage() {
 }
 
 Core.onStateChange((state) => {
+  const generation = ++_poolGeneration;
+  _activationGeneration += 1;
+  _clearScheduledPreloads();
+
   if (state.mode === 'empty') {
     clearDisplayedImage();
     return;
@@ -591,29 +622,34 @@ Core.onStateChange((state) => {
   const listLen = state.list ? state.list.length : 0;
   if (listLen === 0) return;
 
-  const startIndex = Math.max(0, state.index - POOL_HALF);
-  const endIndex = Math.min(listLen - 1, state.index + POOL_HALF);
-
   const desiredSrcs = new Set();
-  
-  // ── Build the sliding window ──
-  for (let i = startIndex; i <= endIndex; i++) {
-    const entry = state.list[i];
-    if (!entry || entry.is_dir || entry.is_parent || !FsUtils.isImageEntry(entry)) continue;
 
-    let src;
+  function entrySrcAt(index) {
+    const entry = state.list[index];
+    if (!entry || entry.is_dir || entry.is_parent || !FsUtils.isImageEntry(entry)) return null;
+
     if (state.mode === 'archive') {
-      src = FsUtils.buildArchiveSrc(state.archivePath, entry.name);
-    } else {
-      src = entry.path.toLowerCase().endsWith('.ico') ? null : FsUtils.buildFileSrcSync(entry.path);
+      if (FsUtils.isIco(entry.name)) return null;
+      return FsUtils.buildArchiveSrc(state.archivePath, entry.name);
     }
-    
-    if (i === state.index) src = state.src;
-    if (src) desiredSrcs.add(src);
+    return FsUtils.isIco(entry.path) ? null : FsUtils.buildFileSrcSync(entry.path);
   }
 
-  // Always include the current active img to prevent recycling it while transitioning
-  if (img && img.src) desiredSrcs.add(img.src);
+  // Active path: current target plus, at most, one decoded previous image as a
+  // visual bridge. Neighbor loading happens only after the target settles.
+  desiredSrcs.add(state.src);
+
+  // Keep the previous image only if it is decoded and usable as a visual bridge.
+  // If it is still fetching, let pruning abort it so the newest target wins.
+  if (img && img.src && img.dataset.decoded === 'true') desiredSrcs.add(img.src);
+
+  const neighborSrcs = [];
+  for (let i = 1; i <= PRELOAD_HALF; i++) {
+    const ahead = entrySrcAt(state.index + i);
+    if (ahead && ahead !== state.src) neighborSrcs.push(ahead);
+    const behind = entrySrcAt(state.index - i);
+    if (behind && behind !== state.src) neighborSrcs.push(behind);
+  }
 
   // ── Prune out-of-bounds nodes ──
   for (const src of _activeNodes.keys()) {
@@ -627,54 +663,42 @@ Core.onStateChange((state) => {
       _attachLoadHandler(el);
       el._quivitLoadAttached = true;
     }
-    if (el.decode) el.decode().catch(() => {});
   }
 
   // ── Activate the current image ──
   const activeEl = _activeNodes.get(state.src);
-  if (activeEl && activeEl !== img) {
-    if (statusName) statusName.textContent = 'Loading...';
+  const activeChanged = activeEl && activeEl !== img;
+  const hasPreviousBridge = !!img;
+  if (activeEl && hasPreviousBridge) {
+    _loadPoolNode(activeEl, state.src);
+  }
 
-    // First display (nothing on screen yet): show the node in the legacy
-    // loading state — no src, animated "Loading..." alt/title text — while
-    // the image is fetched through a hidden preloader; the real src is
-    // attached only when it has decoded. When a previous image is on screen
-    // we hold it instead — no loading feedback is needed there.
+  if (activeChanged) {
+    const activation = _activationGeneration;
+    if (statusName) statusName.textContent = 'Loading...';
+    _setElementLoadingLabel(activeEl, LOADING_LABEL);
+
     if (!img) {
       img = activeEl;
       img.style.display = 'block';
-      img.removeAttribute('src');
-      startLoadingAltAnimation(activeEl);
-
-      const preloader = new Image();
-      preloader.onload = () => {
-        if (Core.getState().src !== state.src) return;
-        stopLoadingAltAnimation();
-        img.src = state.src;
-        _activatePoolNode(activeEl, state.filename, state);
-      };
-      preloader.onerror = () => {
-        if (Core.getState().src !== state.src) return;
-        stopLoadingAltAnimation();
-        img.src = state.src; // keep the (unresolvable) src: browser shows the 404 frame + alt
-        _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
-        if (statusDims) statusDims.textContent = 'Error';
-        if (statusZoom) statusZoom.textContent = 'N/A';
-      };
-      preloader.src = state.src;
-    } else {
-      activeEl.decode().then(() => {
-        if (Core.getState().src === activeEl.src) {
-          _activatePoolNode(activeEl, state.filename, state);
-        }
-      }).catch(() => {
-        if (Core.getState().src === activeEl.src) {
-          _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
-          if (statusDims) statusDims.textContent = 'Error';
-          if (statusZoom) statusZoom.textContent = 'N/A';
-        }
-      });
     }
+    _loadPoolNode(activeEl, state.src);
+
+    const ready = activeEl.complete && (activeEl.naturalWidth > 0 || state.src.toLowerCase().endsWith('.svg'));
+    const decodePromise = ready || !activeEl.decode ? Promise.resolve() : activeEl.decode();
+    decodePromise.then(() => {
+      if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+      _activatePoolNode(activeEl, state.filename, state);
+      _schedulePoolPreloads(neighborSrcs, generation);
+    }).catch(() => {
+      if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+      _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
+      if (statusDims) statusDims.textContent = 'Error';
+      if (statusZoom) statusZoom.textContent = 'N/A';
+      _schedulePoolPreloads(neighborSrcs, generation);
+    });
+  } else {
+    _schedulePoolPreloads(neighborSrcs, generation);
   }
 
   if (_currentFitMode !== state.fitMode) {
