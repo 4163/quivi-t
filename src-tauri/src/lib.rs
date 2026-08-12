@@ -233,7 +233,13 @@ pub fn run() {
 
                     if ext == "zip" || ext == "cbz" {
                         data = cache.get_zip_entry(&archive_path, &entry_name);
-                    } else if ext == "rar" || ext == "cbr" || ext == "7z" || ext == "cb7" {
+                    } else if ext == "rar"
+                        || ext == "cbr"
+                        || ext == "7z"
+                        || ext == "cb7"
+                        || ext == "cbt"
+                        || ext == "tar"
+                    {
                         if let Some(single) = cache.archives.get(&archive_path) {
                             if let Some(temp_dir) = &single.extract_temp_dir {
                                 let safe_name = entry_name.replace('\\', "/");
@@ -279,7 +285,13 @@ pub fn run() {
                             let mut cache = state.lock().unwrap();
                             cache.insert_zip_entry(&archive_path, &entry_name, d);
                         }
-                    } else if ext == "rar" || ext == "cbr" || ext == "7z" || ext == "cb7" {
+                    } else if ext == "rar"
+                        || ext == "cbr"
+                        || ext == "7z"
+                        || ext == "cb7"
+                        || ext == "cbt"
+                        || ext == "tar"
+                    {
                         let (temp_dir_opt, notify_opt) = {
                             let state = app_handle.state::<Mutex<ArchiveCache>>();
                             let cache = state.lock().unwrap();
@@ -312,10 +324,6 @@ pub fn run() {
                                     data = Some(bytes);
                                 }
                             }
-                        }
-                    } else if ext == "cbt" || ext == "tar" {
-                        if let Ok(extracted) = extract_tar_entry(&archive_path, &entry_name) {
-                            data = Some(extracted);
                         }
                     }
                 }
@@ -627,6 +635,29 @@ mod archive_tests {
     }
 
     #[test]
+    fn extracts_tar_to_temp() {
+        let cbt = ensure_cbt();
+        let hash = format!("{:x}", md5::compute(cbt.to_str().unwrap()));
+        let temp_dir = std::env::temp_dir()
+            .join("QuiviT-test-tar-extract")
+            .join(hash);
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).ok();
+        let notify = std::sync::Arc::new((
+            std::sync::Mutex::new(std::collections::HashSet::new()),
+            std::sync::Condvar::new(),
+        ));
+
+        extract_tar_to_temp(cbt.to_str().unwrap().to_string(), temp_dir.clone(), notify);
+
+        let root = temp_dir.join("export_1785518878919.png");
+        let nested = temp_dir.join("New folder/export_1785518859589.webp");
+        assert!(root.exists(), "root TAR entry not extracted");
+        assert!(nested.exists(), "nested TAR entry not extracted");
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
     fn supported_archives_include_new_formats() {
         for ext in ["7z", "cb7", "cbt", "tar"] {
             assert!(is_archive_ext(ext), "{} not recognized as archive", ext);
@@ -676,10 +707,9 @@ mod archive_tests {
 
     #[test]
     fn protocol_serve_timing_simulation() {
-        // Mirrors the protocol handler serving path (lib.rs ~1190-1253):
-        //  - rar/cbr/7z/cb7: served from extract_temp_dir, poll up to 3s (30x100ms)
+        // Mirrors the protocol handler serving path:
+        //  - rar/cbr/7z/cb7/cbt/tar: served from extract_temp_dir
         //  - zip/cbz: on-demand extract_zip_entry
-        //  - cbt/tar: on-demand extract_tar_entry
         // Simulates the FIRST image request arriving right after list_archive
         // spawns the background extractor, then reports how long the first
         // entry takes to become servable and whether the 3s poll would 404.
@@ -743,9 +773,25 @@ mod archive_tests {
             zip_first.err()
         );
 
-        let tar_first = extract_tar_entry(test_file("cbt.cbt").to_str().unwrap(), first);
+        let cbt = ensure_cbt();
+        let cbt_hash = format!("{:x}", md5::compute(cbt.to_str().unwrap()));
+        let tar_temp_dir = std::env::temp_dir()
+            .join("QuiviT-test-serve-tar")
+            .join(cbt_hash);
+        let _ = fs::remove_dir_all(&tar_temp_dir);
+        fs::create_dir_all(&tar_temp_dir).ok();
+        let tar_notify = std::sync::Arc::new((
+            std::sync::Mutex::new(std::collections::HashSet::new()),
+            std::sync::Condvar::new(),
+        ));
+        extract_tar_to_temp(
+            cbt.to_str().unwrap().to_string(),
+            tar_temp_dir.clone(),
+            tar_notify,
+        );
+        let tar_first = fs::read(tar_temp_dir.join(first));
         eprintln!(
-            "cbt on-demand first entry: {}",
+            "cbt temp first entry: {}",
             tar_first
                 .as_ref()
                 .map(|d| format!("{} bytes", d.len()))
@@ -758,6 +804,7 @@ mod archive_tests {
         );
 
         let _ = fs::remove_dir_all(&temp_dir);
+        let _ = fs::remove_dir_all(&tar_temp_dir);
     }
 
     #[test]

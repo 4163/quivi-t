@@ -458,8 +458,9 @@ pub fn extract_7z_to_temp(
 }
 
 // ── TAR reading ─────────────────────────────────────────────────────────────
-// TAR is uncompressed with seekable entries, so individual files can be read
-// on demand with no temp extraction and no in-memory cache.
+// TAR is uncompressed, but random image navigation still pays for repeated
+// archive scans. Extracting images to the same temp-dir pipeline as RAR/7Z
+// keeps active page serving on ordinary file reads after the background pass.
 
 pub fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
     let file = fs::File::open(archive_path).map_err(|e| format!("Cannot open TAR archive: {e}"))?;
@@ -521,4 +522,53 @@ pub fn extract_tar_entry(archive_path: &str, entry_name: &str) -> Result<Vec<u8>
     }
 
     Err(format!("Cannot find TAR entry {}", entry_name))
+}
+
+pub fn extract_tar_to_temp(
+    archive_path: String,
+    temp_dir: PathBuf,
+    notify: Arc<(Mutex<HashSet<String>>, Condvar)>,
+) {
+    let Ok(file) = fs::File::open(&archive_path) else {
+        return;
+    };
+    let mut archive = tar::Archive::new(file);
+    let Ok(entries) = archive.entries() else {
+        return;
+    };
+
+    for entry in entries {
+        let Ok(mut entry) = entry else {
+            continue;
+        };
+        let Ok(path) = entry.path() else {
+            continue;
+        };
+        let name = path.to_string_lossy().replace('\\', "/");
+        if entry.header().entry_type().is_dir() {
+            continue;
+        }
+
+        let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
+        if !is_image_ext(&ext) {
+            continue;
+        }
+
+        let out_path = temp_dir.join(&name);
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent).ok();
+        }
+        let tmp_path = temp_dir.join(format!("{}.tmp", name));
+        if let Ok(mut file) = fs::File::create(&tmp_path) {
+            if std::io::copy(&mut entry, &mut file).is_ok() {
+                drop(file);
+                if fs::rename(&tmp_path, &out_path).is_ok() {
+                    let (lock, cvar) = &*notify;
+                    let mut set = lock.lock().unwrap();
+                    set.insert(name.clone());
+                    cvar.notify_all();
+                }
+            }
+        }
+    }
 }

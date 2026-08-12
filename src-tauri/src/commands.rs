@@ -189,7 +189,13 @@ pub fn list_archive(
         };
 
         let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
-        if ext == "rar" || ext == "cbr" || ext == "7z" || ext == "cb7" {
+        if ext == "rar"
+            || ext == "cbr"
+            || ext == "7z"
+            || ext == "cb7"
+            || ext == "cbt"
+            || ext == "tar"
+        {
             let hash = format!("{:x}", md5::compute(&archive_path));
             let temp_dir = std::env::temp_dir().join("QuiviT").join(hash);
             fs::create_dir_all(&temp_dir).ok();
@@ -200,8 +206,10 @@ pub fn list_archive(
             std::thread::spawn(move || {
                 if ext == "rar" || ext == "cbr" {
                     extract_rar_to_temp(archive_path_clone, temp_dir, notify);
-                } else {
+                } else if ext == "7z" || ext == "cb7" {
                     extract_7z_to_temp(archive_path_clone, temp_dir, notify);
+                } else {
+                    extract_tar_to_temp(archive_path_clone, temp_dir, notify);
                 }
             });
         } else if ext == "zip" || ext == "cbz" {
@@ -324,8 +332,7 @@ pub fn get_archive_ico_frames(
 
             data
         }
-        "cbt" | "tar" => extract_tar_entry(&archive_path, &entry_name)?,
-        "rar" | "cbr" | "7z" | "cb7" => {
+        "rar" | "cbr" | "7z" | "cb7" | "cbt" | "tar" => {
             let (temp_dir_opt, notify_opt) = {
                 let cache = state.lock().map_err(|e| e.to_string())?;
                 if let Some(single) = cache.archives.get(&archive_path) {
