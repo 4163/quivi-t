@@ -1,9 +1,9 @@
 /**
  * viewer.js — QuiviT
  *
- * Viewport rendering: fit-to-screen, zoom, and pan.
+ * Viewport rendering: fit-to-screen, zoom, and pan, over a sliding DOM image
+ * pool of .viewer-img nodes inside #viewer-img-wrapper.
  * Communicates with core.js via state callbacks.
- * All DOM writes are confined to the #viewport and #viewer-img elements.
  */
 
 import { Core } from './core.js';
@@ -11,8 +11,76 @@ import { FsUtils } from './fsUtils.js';
 import { activeKeys, MOUSE_BUTTON_NAMES } from './shortcuts.js';
 import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from './keybinds.js';
 
-const img = document.getElementById('viewer-img');
+const POOL_HALF = 7;
+const _activeNodes = new Map();
+const _freeNodes = [];
+
+const POOL_SIZE = POOL_HALF * 2 + 1; // 15
+
 const imgWrapper = document.getElementById('viewer-img-wrapper');
+if (imgWrapper) {
+  const oldImg = document.getElementById('viewer-img');
+  if (oldImg) oldImg.remove();
+  
+  const existingNodes = document.querySelectorAll('.viewer-img');
+  existingNodes.forEach(el => _freeNodes.push(el));
+  
+  for (let i = existingNodes.length; i < POOL_SIZE; i++) {
+    const el = document.createElement('img');
+    el.className = 'viewer-img';
+    el.draggable = false;
+    el.decoding = 'async';
+    el.style.display = 'none';
+    imgWrapper.appendChild(el);
+    _freeNodes.push(el);
+  }
+}
+
+function _getPoolNode(src) {
+  let el = _activeNodes.get(src);
+  if (el) return el;
+  if (_freeNodes.length > 0) {
+    el = _freeNodes.pop();
+  } else {
+    // Fallback if pool is exhausted (should not happen since window size <= POOL_SIZE)
+    el = document.createElement('img');
+    el.className = 'viewer-img';
+    el.draggable = false;
+    el.decoding = 'async';
+    imgWrapper.appendChild(el);
+  }
+  el.alt = '';
+  el.style.display = 'none';
+  el.src = src;
+  _activeNodes.set(src, el);
+  return el;
+}
+
+function _recyclePoolNode(src) {
+  const el = _activeNodes.get(src);
+  if (el) {
+    el.style.display = 'none';
+    el.removeAttribute('src');
+    el.removeAttribute('data-decoded');
+    if (el === _loadingEl) stopLoadingAltAnimation();
+    _activeNodes.delete(src);
+    _freeNodes.push(el);
+    FsUtils.revokeIfObjectURL(src);
+  }
+}
+
+// Title/alt text shown on the <img> element while a slow image is fetching.
+// With no previous image on screen the node is displayed immediately, so the
+// browser's default broken-image placeholder renders alongside the animated
+// "Loading..." attribute text; once decoded, _activatePoolNode replaces it.
+const LOADING_LABELS = ['Loading.', 'Loading..', 'Loading...'];
+
+function _setElementLoadingLabel(el, label) {
+  el.alt = label;
+  el.title = label;
+}
+
+let img = null;
 const imgGrill = document.getElementById('img-grill');
 const grillBorder = document.getElementById('img-grill-border');
 const statusZoom = document.querySelector('.status-zoom');
@@ -33,6 +101,7 @@ let _flipY = 1;
 let _scaling = DEFAULT_SCALING_MODE;
 
 function _applyScaling() {
+  if (!img) return;
   img.dataset.scaling = _scaling;
   img.style.imageRendering = _scaling === 'none' ? 'pixelated' : 'auto';
 }
@@ -98,14 +167,16 @@ function applyFitMode() {
   // In that case img.clientWidth reflects the current layout size; dividing by the
   // previous _scale recovers the true intrinsic size so _visualSize() and _clampPan()
   // compute correct bounds.  Fall back to viewport size if scale is 0 or client dims unknown.
-  if (img.naturalWidth > 0) {
+  if (img && img.naturalWidth > 0) {
     _naturalW = img.naturalWidth;
     _naturalH = img.naturalHeight;
-  } else {
+  } else if (img) {
     const prevScale = _scale || 1;
     _naturalW = img.clientWidth  ? img.clientWidth  / prevScale : vw;
     _naturalH = img.clientHeight ? img.clientHeight / prevScale : vh;
   }
+
+  if (!_naturalW || !_naturalH) return;
 
   const padding = 0;
 
@@ -414,53 +485,96 @@ function setScaling(mode) {
 
 // --- Image load ---------------------------------------------------------------
 
-img.addEventListener('load', () => {
+/**
+ * Activate a pool node: hide the old active img, show the new one,
+ * read its dimensions, and refit.
+ */
+function _activatePoolNode(el, filename, state) {
+  stopLoadingAltAnimation();
+  if (img && img !== el) {
+    img.style.display = 'none';
+  }
+
+  img = el;
+  img.style.display = 'block';
+  img.alt = filename || '';
+  img.title = filename || '';
+  _applyScaling();
+
+  _rotation = 0;
+  _flipX = 1;
+  _flipY = 1;
+
   if (img.naturalWidth > 0) {
     _naturalW = img.naturalWidth;
     _naturalH = img.naturalHeight;
-  } else {
-    // SVG with percentage dimensions — reset scale to 1 first so clientWidth
-    // equals the intrinsic size, then applyFitMode will compute the correct scale.
-    _scale = 1;
-    _naturalW = img.clientWidth  || 1000;
-    _naturalH = img.clientHeight || 1000;
+    if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
+    applyFitMode();
   }
-  _applyScaling();
-  
-  if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
-  applyFitMode();
-});
+
+  if (statusName) statusName.textContent = filename || '';
+  if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
+}
+
+// Attach a load handler to every pool node so we pick up dimensions
+// when the active image finishes decoding.
+function _attachLoadHandler(el) {
+  el.addEventListener('load', () => {
+    if (el !== img) return; // Only process if this is the active image
+    if (!el.src) return; // Placeholder node shown without a resource
+    if (el.naturalWidth > 0) {
+      _naturalW = el.naturalWidth;
+      _naturalH = el.naturalHeight;
+    } else {
+      _scale = 1;
+      _naturalW = el.clientWidth  || 1000;
+      _naturalH = el.clientHeight || 1000;
+    }
+    _applyScaling();
+    if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
+    applyFitMode();
+  });
+}
 
 // --- State subscription -------------------------------------------------------
 
-let _currentPreloadSrc = null;
 let _loadingAltTimer = null;
+let _loadingEl = null;
 
 function stopLoadingAltAnimation() {
   if (_loadingAltTimer) {
     clearInterval(_loadingAltTimer);
     _loadingAltTimer = null;
   }
+  _loadingEl = null;
 }
 
-function startLoadingAltAnimation() {
+// Animate the "Loading..." text on the given element. In the legacy viewer a
+// single img alternated its alt text while prefetching, so the browser's
+// default 404/broken-image placeholder showed the animation; the pool keeps
+// that behavior but only when there is no previous image to hold meanwhile.
+function startLoadingAltAnimation(el) {
   stopLoadingAltAnimation();
+  if (!el) return;
+  _loadingEl = el;
   let frame = 0;
-  const labels = ['Loading.', 'Loading..', 'Loading...'];
-  img.alt = labels[frame];
+  _setElementLoadingLabel(el, LOADING_LABELS[frame]);
   _loadingAltTimer = setInterval(() => {
-    frame = (frame + 1) % labels.length;
-    img.alt = labels[frame];
+    if (!_loadingEl) return;
+    frame = (frame + 1) % LOADING_LABELS.length;
+    _setElementLoadingLabel(_loadingEl, LOADING_LABELS[frame]);
   }, 320);
 }
 
 function clearDisplayedImage() {
   stopLoadingAltAnimation();
-  _currentPreloadSrc = null;
   _naturalW = 0;
   _naturalH = 0;
-  img.removeAttribute('src');
-  img.alt = '';
+
+  for (const src of _activeNodes.keys()) {
+    _recyclePoolNode(src);
+  }
+  img = null;
 }
 
 Core.onStateChange((state) => {
@@ -474,43 +588,93 @@ Core.onStateChange((state) => {
     return;
   }
 
-  // Seamless loading: show the previous image until the new one is ready.
-  // This effectively acts as the "spinner" and eliminates flickering.
-  if (img.src !== state.src && _currentPreloadSrc !== state.src) {
-    _currentPreloadSrc = state.src;
-    
-    // Show loading state in statusbar while the image is being fetched
-    startLoadingAltAnimation();
-    if (statusName) statusName.textContent = 'Loading...';
-    if (statusDims) statusDims.textContent = 'Loading...';
-    if (statusZoom) statusZoom.textContent = 'Loading...';
+  const listLen = state.list ? state.list.length : 0;
+  if (listLen === 0) return;
 
-    const preloader = new Image();
-    preloader.onload = () => {
-      if (_currentPreloadSrc === state.src) {
+  const startIndex = Math.max(0, state.index - POOL_HALF);
+  const endIndex = Math.min(listLen - 1, state.index + POOL_HALF);
+
+  const desiredSrcs = new Set();
+  
+  // ── Build the sliding window ──
+  for (let i = startIndex; i <= endIndex; i++) {
+    const entry = state.list[i];
+    if (!entry || entry.is_dir || entry.is_parent || !FsUtils.isImageEntry(entry)) continue;
+
+    let src;
+    if (state.mode === 'archive') {
+      src = FsUtils.buildArchiveSrc(state.archivePath, entry.name);
+    } else {
+      src = entry.path.toLowerCase().endsWith('.ico') ? null : FsUtils.buildFileSrcSync(entry.path);
+    }
+    
+    if (i === state.index) src = state.src;
+    if (src) desiredSrcs.add(src);
+  }
+
+  // Always include the current active img to prevent recycling it while transitioning
+  if (img && img.src) desiredSrcs.add(img.src);
+
+  // ── Prune out-of-bounds nodes ──
+  for (const src of _activeNodes.keys()) {
+    if (!desiredSrcs.has(src)) _recyclePoolNode(src);
+  }
+
+  // ── Ensure nodes exist for all desired srcs ──
+  for (const src of desiredSrcs) {
+    const el = _getPoolNode(src);
+    if (!el._quivitLoadAttached) {
+      _attachLoadHandler(el);
+      el._quivitLoadAttached = true;
+    }
+    if (el.decode) el.decode().catch(() => {});
+  }
+
+  // ── Activate the current image ──
+  const activeEl = _activeNodes.get(state.src);
+  if (activeEl && activeEl !== img) {
+    if (statusName) statusName.textContent = 'Loading...';
+
+    // First display (nothing on screen yet): show the node in the legacy
+    // loading state — no src, animated "Loading..." alt/title text — while
+    // the image is fetched through a hidden preloader; the real src is
+    // attached only when it has decoded. When a previous image is on screen
+    // we hold it instead — no loading feedback is needed there.
+    if (!img) {
+      img = activeEl;
+      img.style.display = 'block';
+      img.removeAttribute('src');
+      startLoadingAltAnimation(activeEl);
+
+      const preloader = new Image();
+      preloader.onload = () => {
+        if (Core.getState().src !== state.src) return;
         stopLoadingAltAnimation();
         img.src = state.src;
-        img.alt = state.filename;
-        _rotation = 0;
-        _flipX = 1;
-        _flipY = 1;
-        // Restore filename and index now that the image is ready
-        if (statusName) statusName.textContent = state.filename;
-        if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
-      }
-    };
-    preloader.onerror = () => {
-      if (_currentPreloadSrc === state.src) {
+        _activatePoolNode(activeEl, state.filename, state);
+      };
+      preloader.onerror = () => {
+        if (Core.getState().src !== state.src) return;
         stopLoadingAltAnimation();
-        img.src = state.src; // Fallback so main img shows error state
-        img.alt = state.filename ? `Failed to load ${state.filename}` : 'Failed to load image';
-        if (statusName) statusName.textContent = state.filename;
+        img.src = state.src; // keep the (unresolvable) src: browser shows the 404 frame + alt
+        _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
         if (statusDims) statusDims.textContent = 'Error';
         if (statusZoom) statusZoom.textContent = 'N/A';
-        if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
-      }
-    };
-    preloader.src = state.src;
+      };
+      preloader.src = state.src;
+    } else {
+      activeEl.decode().then(() => {
+        if (Core.getState().src === activeEl.src) {
+          _activatePoolNode(activeEl, state.filename, state);
+        }
+      }).catch(() => {
+        if (Core.getState().src === activeEl.src) {
+          _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
+          if (statusDims) statusDims.textContent = 'Error';
+          if (statusZoom) statusZoom.textContent = 'N/A';
+        }
+      });
+    }
   }
 
   if (_currentFitMode !== state.fitMode) {

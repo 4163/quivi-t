@@ -9,27 +9,68 @@ use crate::models::FileEntry;
 // ── Archive cache (thread-safe) ──────────────────────────────────────────────
 // Caches extracted bytes so we don't re-read the archive for every image.
 
-pub struct ArchiveCache {
-    pub active_path: Option<String>,
+pub struct SingleArchiveCache {
     pub zip_entries: HashMap<String, Vec<u8>>,
-    pub zip_lru: VecDeque<String>,
-    pub zip_capacity: usize,
-    pub extract_temp_dir: Option<PathBuf>,
     pub zip_archive: Option<zip::ZipArchive<std::io::BufReader<std::fs::File>>>,
+    pub extract_temp_dir: Option<PathBuf>,
     pub extract_notify: Arc<(Mutex<HashSet<String>>, Condvar)>,
 }
 
+pub struct ArchiveCache {
+    pub archives: HashMap<String, SingleArchiveCache>,
+
+    // Global LRU for ZIP entries: (archive_path, entry_name)
+    pub global_zip_lru: VecDeque<(String, String)>,
+
+    pub global_zip_capacity_bytes: usize,
+    pub current_zip_bytes: usize,
+}
+
 impl ArchiveCache {
-    pub fn new() -> Self {
+    pub fn new(capacity_mb: usize) -> Self {
         Self {
-            active_path: None,
-            zip_entries: HashMap::new(),
-            zip_lru: VecDeque::new(),
-            zip_capacity: 20, // Keep 20 images in RAM
-            extract_temp_dir: None,
-            zip_archive: None,
-            extract_notify: Arc::new((Mutex::new(HashSet::new()), Condvar::new())),
+            archives: HashMap::new(),
+            global_zip_lru: VecDeque::new(),
+            global_zip_capacity_bytes: capacity_mb.saturating_mul(1024 * 1024),
+            current_zip_bytes: 0,
         }
+    }
+
+    // Evict the least-recently-used (archive, entry) pairs until the incoming
+    // entry fits within the byte budget. A single entry larger than the whole
+    // budget still wins (the LRU drains but the requested image must be
+    // viewable rather than 404-ing).
+    fn evict_until_within_budget(&mut self, incoming_bytes: usize) {
+        while self.current_zip_bytes + incoming_bytes > self.global_zip_capacity_bytes {
+            let Some((old_archive, old_entry)) = self.global_zip_lru.pop_front() else {
+                break;
+            };
+            let removed = self
+                .archives
+                .get_mut(&old_archive)
+                .and_then(|s| s.zip_entries.remove(&old_entry))
+                .map(|d| d.len())
+                .unwrap_or(0);
+            self.current_zip_bytes = self.current_zip_bytes.saturating_sub(removed);
+        }
+    }
+
+    // Cache `data` under (archive_path, entry_name) if it is not already
+    // present, enforcing the global byte budget. No-op (and does not even
+    // evict) when the entry is already cached.
+    pub fn insert_zip_entry(&mut self, archive_path: &str, entry_name: &str, data: Vec<u8>) {
+        if let Some(single) = self.archives.get(archive_path) {
+            if single.zip_entries.contains_key(entry_name) {
+                return;
+            }
+        }
+        self.evict_until_within_budget(data.len());
+        self.current_zip_bytes += data.len();
+        if let Some(single) = self.archives.get_mut(archive_path) {
+            single.zip_entries.insert(entry_name.to_string(), data);
+        }
+        self.global_zip_lru
+            .push_back((archive_path.to_string(), entry_name.to_string()));
     }
 }
 

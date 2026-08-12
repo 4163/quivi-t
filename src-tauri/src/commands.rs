@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Condvar};
@@ -174,28 +174,22 @@ pub fn list_archive(
 ) -> Result<ArchiveReadResult, String> {
     let mut cache = state.lock().map_err(|e| e.to_string())?;
 
-    if cache.active_path.as_deref() != Some(archive_path.as_str()) {
-        cache.active_path = Some(archive_path.clone());
-        cache.zip_entries.clear();
-        cache.zip_lru.clear();
-        cache.zip_archive = None;
-        cache.extract_notify = Arc::new((Mutex::new(HashSet::new()), Condvar::new()));
-        
-        // Cleanup old rar/7z temp dir if exists
-        if let Some(old_dir) = &cache.extract_temp_dir {
-            let _ = fs::remove_dir_all(old_dir);
-        }
-        cache.extract_temp_dir = None;
+    if !cache.archives.contains_key(&archive_path) {
+        let mut single = SingleArchiveCache {
+            zip_entries: HashMap::new(),
+            zip_archive: None,
+            extract_temp_dir: None,
+            extract_notify: Arc::new((Mutex::new(HashSet::new()), Condvar::new())),
+        };
 
         let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
         if ext == "rar" || ext == "cbr" || ext == "7z" || ext == "cb7" {
             let hash = format!("{:x}", md5::compute(&archive_path));
             let temp_dir = std::env::temp_dir().join("QuiviT").join(hash);
             fs::create_dir_all(&temp_dir).ok();
-            cache.extract_temp_dir = Some(temp_dir.clone());
+            single.extract_temp_dir = Some(temp_dir.clone());
             
-            let notify = cache.extract_notify.clone();
-            // Spawn background extractor
+            let notify = single.extract_notify.clone();
             let archive_path_clone = archive_path.to_string();
             std::thread::spawn(move || {
                 if ext == "rar" || ext == "cbr" {
@@ -207,10 +201,12 @@ pub fn list_archive(
         } else if ext == "zip" || ext == "cbz" {
             if let Ok(file) = fs::File::open(&archive_path) {
                 if let Ok(archive) = zip::ZipArchive::new(std::io::BufReader::new(file)) {
-                    cache.zip_archive = Some(archive);
+                    single.zip_archive = Some(archive);
                 }
             }
         }
+        
+        cache.archives.insert(archive_path.clone(), single);
     }
 
     let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
@@ -243,25 +239,19 @@ pub fn prefetch_archive_entries(
         // Skip if already in cache
         {
             let cache = state.lock().unwrap();
-            if cache.active_path.as_deref() != Some(archive_path.as_str()) {
-                break; // archive changed
-            }
-            if cache.zip_entries.contains_key(&entry_name) {
-                continue;
+            if let Some(single) = cache.archives.get(&archive_path) {
+                if single.zip_entries.contains_key(&entry_name) {
+                    continue;
+                }
             }
         }
 
         let extracted = {
             let mut cache = state.lock().unwrap();
-            if cache.active_path.as_deref() != Some(archive_path.as_str()) {
-                break;
-            }
-            if let Some(archive) = cache.zip_archive.as_mut() {
-                if let Ok(mut entry) = archive.by_name(&entry_name) {
-                    let mut data = Vec::with_capacity(entry.size() as usize);
-                    if std::io::Read::read_to_end(&mut entry, &mut data).is_ok() {
-                        Some(data)
-                    } else { None }
+            if let Some(single) = cache.archives.get_mut(&archive_path) {
+                if let Some(archive) = single.zip_archive.as_mut() {
+                    // Try direct lookup first (UTF-8 ZIPs) and fallback scan if needed
+                    crate::archives::read_zip_entry_by_decoded_name(archive, &entry_name).ok()
                 } else { None }
             } else { None }
         };
@@ -271,16 +261,7 @@ pub fn prefetch_archive_entries(
         };
 
         let mut cache = state.lock().unwrap();
-        if cache.active_path.as_deref() == Some(archive_path.as_str()) && !cache.zip_entries.contains_key(&entry_name) {
-            cache.zip_capacity = 20;
-            if cache.zip_lru.len() >= cache.zip_capacity {
-                if let Some(oldest) = cache.zip_lru.pop_front() {
-                    cache.zip_entries.remove(&oldest);
-                }
-            }
-            cache.zip_entries.insert(entry_name.clone(), data);
-            cache.zip_lru.push_back(entry_name);
-        }
+        cache.insert_zip_entry(&archive_path, &entry_name, data);
     }
     
     Ok(())

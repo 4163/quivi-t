@@ -490,6 +490,25 @@ function renderEntry(item, index, selectedIndex) {
     }
   });
 
+  // Pre-emptively load the image on hover to make clicks feel instant
+  li.addEventListener('mouseenter', () => {
+    if (!item.is_dir && !item.is_parent && FsUtils.isImageEntry(item)) {
+      const state = Core.getState();
+      let src;
+      if (state.mode === 'archive') {
+        src = FsUtils.buildArchiveSrc(state.archivePath, item.name);
+      } else {
+        src = item.path.toLowerCase().endsWith('.ico') ? null : FsUtils.buildFileSrcSync(item.path);
+      }
+      if (src) {
+        const img = new Image();
+        img.src = src;
+        // Optionally decode it to ensure it's ready in memory
+        if (img.decode) img.decode().catch(() => {});
+      }
+    }
+  });
+
   return li;
 }
 

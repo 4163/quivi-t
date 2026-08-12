@@ -136,7 +136,7 @@ The following system defaults are used:
 - **Auto-Fit Windows:** Secondary windows (Options, Archive Info) open hidden, auto-size to their content, and center over the main window — no size flicker.
 - **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor — or the Drives view at the root.
 - **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting in Options requires an app restart to take effect.
-- **Archive Caching (ZIP/CBZ):** In-memory LRU cache holds up to 20 images. Background prefetch loads 7 images ahead and 3 images behind the current position.
+- **Archive Caching (ZIP/CBZ):** A byte-budgeted LRU cache (default 500 MB, configurable as top-level `archive_cache_mb` in `quivit_config.json`) holds decoded ZIP/CBZ entries across *all* archives opened this session and evicts the least-recently-used entries globally when the budget is exceeded. Background prefetch fills a symmetric window of 7 images ahead and 7 behind the current position. The DOM viewer mirrors this with a sliding 15-node `<img>` pool so nearby pages decode in advance and seamless navigation never flashes a loading state.
 
 ### Configuration & Persistence
 
@@ -157,7 +157,8 @@ Data is split across four files:
 
 **In-memory state** — session-only; reset on app exit:
 - `navigationHistory` — Container-level Back/Forward history trail (capped at 100 entries)
-- `archives` LRU cache — ZIP/CBZ in-memory image cache (20 items) and background prefetch queue (7-ahead / 3-behind)
+- `ArchiveCache` — Byte-budgeted ZIP/CBZ image cache shared across all opened archives (default 500 MB) and the background prefetch queue (symmetric 7-ahead / 7-behind window)
+- `#viewer-img-wrapper` pool — Sliding 15-node DOM image pool (`POOL_HALF` in `viewer.js`) that decodes nearby pages ahead of time
 - `previewTheme` / `previewCss` — Options window live theme and custom CSS previews (persisting across config reloads until Apply or Close)
 
 **Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth.

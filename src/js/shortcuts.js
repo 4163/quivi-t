@@ -128,7 +128,9 @@ export function resetScrollLatch() {
   ctrlLatched = false;
   ctrlKeyDown = false;
   ctrlChordBroken = false;
-  _updateScrollIndicator();
+  // No DOM write here: this always runs right before Core.loadConfig(), and
+  // syncScrollLatch() (via quivit-config-loaded) is the single writer, so the
+  // latch indicator is not touched on every navigation/config reload.
 }
 
 // Re-read the persisted latch after config loads (startup or Options Apply &
@@ -173,37 +175,43 @@ function getScrollModifierKeys(config, ids = _SCROLL_ALL_IDS) {
 // "Scroll Zoom — Toggled"; when unlatched Ctrl does nothing and only a held pan
 // modifier (Shift by default) changes behavior, so that is shown as "— Held".
 // The two states are mutually exclusive — gated on the configured modifier mode.
+// Idempotent: if the rendered text and classes already match the computed state,
+// the DOM is left completely untouched.
 function _updateScrollIndicator(config) {
   const bar = document.getElementById('statusbar');
   const el = document.querySelector('.status-scroll-zoom');
   if (!bar || !el) return;
 
+  let text = '';
+  let held = false;
+  let latched = false;
+
   if (isToggleModifier(config)) {
-    const latched = ctrlLatched;
-    el.textContent = latched ? 'Scroll Zoom — Toggled' : '';
-    bar.classList.toggle('zoom-latched', latched);
-    if (latched) {
-      bar.classList.toggle('zoom-held', false);
-      return;
+    const isLatched = ctrlLatched;
+    if (isLatched) {
+      text = 'Scroll Zoom — Toggled';
+      latched = true;
+    } else {
+      // Unlatched: Ctrl is the toggle key, so holding it does nothing to the
+      // wheel. Only physically held pan modifiers (Shift by default) matter.
+      const mods = getScrollModifierKeys(config, _SCROLL_PAN_IDS)
+        .filter(m => m !== 'Ctrl')
+        .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
+      held = mods.length > 0;
+      if (held) text = `${mods.join('+')} — Held`;
     }
-    // Unlatched: Ctrl is the toggle key, so holding it does nothing to the
-    // wheel. Only physically held pan modifiers (Shift by default) matter.
-    const mods = getScrollModifierKeys(config, _SCROLL_PAN_IDS)
-      .filter(m => m !== 'Ctrl')
+  } else {
+    // Hold mode: show any bound scroll modifier that's physically held.
+    const mods = getScrollModifierKeys(config)
       .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
-    const held = mods.length > 0;
-    el.textContent = held ? `${mods.join('+')} — Held` : '';
-    bar.classList.toggle('zoom-held', held);
-    return;
+    held = mods.length > 0;
+    if (held) text = `${mods.join('+')} — Held`;
   }
 
-  // Hold mode: show any bound scroll modifier that's physically held.
-  const mods = getScrollModifierKeys(config)
-    .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
-  const held = mods.length > 0;
-  el.textContent = held ? `${mods.join('+')} — Held` : '';
-  bar.classList.toggle('zoom-held', held);
-  bar.classList.toggle('zoom-latched', false);
+  // ── Only write differences ──
+  if (el.textContent !== text) el.textContent = text;
+  if (bar.classList.contains('zoom-held') !== held) bar.classList.toggle('zoom-held', held);
+  if (bar.classList.contains('zoom-latched') !== latched) bar.classList.toggle('zoom-latched', latched);
 }
 
 // The wheel should never hijack scrolling over UI chrome or the file list.

@@ -799,7 +799,7 @@ li:hover > .fav-remove,
 /* position: relative puts it in the same stacking layer as #img-grill
    (position: absolute), so DOM order determines paint order and the
    image (second in DOM) naturally renders on top of the grill. */
-#viewer-img {
+.viewer-img {
   display: block;
   max-width: none;
   position: relative;

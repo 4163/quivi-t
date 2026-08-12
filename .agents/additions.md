@@ -10,6 +10,7 @@
 - `mergeConfig()` in `keybinds.js` spreads saved data over defaults — missing keys get filled in, extra keys pass through.
 - Persistence policy is documented in `core.js` header and `keybinds.js`. Roaming files are the source of truth; `localStorage` is only a pre-paint cache, and an explicit third tier exists for ephemeral in-memory state.
 - Split files: `quivit_config.json` (preferences), `quivit_state.json` (runtime state), `quivit_directory_sort.json`, `quivit_favorites.json`. Portable mode folds all into one file.
+- Top-level `archive_cache_mb` (`usize`, default 500) sets the ZIP/CBZ byte budget for the in-memory archive cache; config-file-only, no UI.
 - Theme/CSS previews are ephemeral: `options.js` tracks a `previewing` flag and `main.js` keeps `previewTheme`/`previewCss` so in-progress previews survive config reloads (file watcher), clearing only on Options Apply. Closing Options without Apply reverts the preview and resyncs the `quivit-theme` / `quivit-custom-css` pre-paint caches (prevents a flash on next open).
 - The global `default_sort` lives in `quivit_config.json` (`frontend_data`) and is config-file-only; the UI writes only per-directory sort prefs (`quivit_directory_sort.json`).
 - Restart-gated settings (`single_instance`) are staged as `pending_<key>` by the UI and promoted at startup by `apply_pending_config()` (`config.rs`) — never written live.
@@ -18,9 +19,9 @@
 - `core.js` — state machine, no DOM access. Communicates via callbacks.
 - `keybinds.js` — default bindings, `mergeConfig()`, pan/zoom constants.
 - `shortcuts.js` — keyboard/mouse/scroll dispatch, combo normalization. Exports `MOUSE_BUTTON_NAMES` as the single source of truth for all button mapping.
-- `viewer.js` — image rendering, zoom, pan, fit modes. Implements strict `quivit-config-loaded` caching for hot-path config access (e.g., pan keys) instead of dynamic evaluations.
-- `filePanel.js` — file list, favorites, sorting UI, column resizing.
-- `fsUtils.js` — filesystem interactions, archive loading, sibling navigation, statusbar index / page-position formatting.
+- `viewer.js` — image rendering, zoom, pan, fit modes. Renders over a sliding 15-node DOM image pool inside `#viewer-img-wrapper` (`POOL_HALF` = 7); a src-less pool node carries the animated `Loading. → Loading.. → Loading...` placeholder only on the first display of an archive/after clear. `_updateScrollIndicator`'s idempotent sibling lives in `shortcuts.js`. Implements strict `quivit-config-loaded` caching for hot-path config access (e.g., pan keys) instead of dynamic evaluations.
+- `filePanel.js` — file list, favorites, sorting UI, column resizing. Preloads a hovered image entry's source so list clicks feel instant and seed the viewer pool cache.
+- `fsUtils.js` — filesystem interactions, archive loading, sibling navigation, statusbar index / page-position formatting. Exposes `buildFileSrcSync` (sync `convertFileSrc` for the pool; ICO sources stay async) and a symmetric 7-ahead/7-behind prefetch window.
 - `navigationHistory.js` — session-only container Back/Forward history.
 - `directoryPrefs.js` — per-directory sort/grouping logic; exports `naturalCompare` (consumed by `fsUtils`).
 - `metadata.js` — XML parsing logic for `ComicInfo.xml`, `CoMet.xml`, and `metadata.opf`.
@@ -41,7 +42,7 @@
 - `lib.rs` — app entry, main-window construction, event setup, shell background sync at startup.
 - `config.rs` — `AppConfig`, load/save, split-file helpers, portable detection, window size constants, options/metadata window lifecycle + fit/center commands.
 - `commands.rs` — Tauri commands (directory listing, file ops, sibling nav, directory watcher, `get_path_kind`). Utilizes `#[tauri::command(async)]` for heavy I/O (`list_archive`, `read_directory`) to offload to background threads.
-- `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants).
+- `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants). `ArchiveCache` holds per-archive `SingleArchiveCache` state plus a global byte-budgeted LRU (default 500 MB via `archive_cache_mb`) so decoded ZIP/CBZ entries across all opened archives share one eviction pool.
 - `ico.rs` — ICO spritesheet processing.
 - `models.rs` — shared structs (`FileEntry`, etc.).
 - `utils.rs` — path helpers, hidden-file detection.

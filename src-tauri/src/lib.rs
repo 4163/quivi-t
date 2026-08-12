@@ -61,6 +61,7 @@ pub fn run() {
     let config = crate::config::apply_pending_config();
     // Single instance defaults to true if not explicitly set to false
     let single_instance = config.frontend_data.get("single_instance").and_then(|v| v.as_bool()).unwrap_or(true);
+    let cache_mb = config.archive_cache_mb.unwrap_or(500);
 
     let mut builder = tauri::Builder::default();
     
@@ -133,7 +134,7 @@ pub fn run() {
         });
 
     builder
-        .manage(Mutex::new(ArchiveCache::new()))
+        .manage(Mutex::new(ArchiveCache::new(cache_mb)))
         .manage(Mutex::new(WatcherState::new()))
         .invoke_handler(tauri::generate_handler![
             read_directory,
@@ -218,16 +219,18 @@ pub fn run() {
                     let state = app_handle.state::<Mutex<ArchiveCache>>();
                     let cache = state.lock().unwrap();
                     
-                    if ext == "zip" || ext == "cbz" {
-                        if let Some(cached_data) = cache.zip_entries.get(&entry_name) {
-                            data = Some(cached_data.clone());
-                        }
-                    } else if ext == "rar" || ext == "cbr" || ext == "7z" || ext == "cb7" {
-                        if let Some(temp_dir) = &cache.extract_temp_dir {
-                            let safe_name = entry_name.replace('\\', "/");
-                            let file_path = temp_dir.join(&safe_name);
-                            if let Ok(bytes) = fs::read(&file_path) {
-                                data = Some(bytes);
+                    if let Some(single) = cache.archives.get(&archive_path) {
+                        if ext == "zip" || ext == "cbz" {
+                            if let Some(cached_data) = single.zip_entries.get(&entry_name) {
+                                data = Some(cached_data.clone());
+                            }
+                        } else if ext == "rar" || ext == "cbr" || ext == "7z" || ext == "cb7" {
+                            if let Some(temp_dir) = &single.extract_temp_dir {
+                                let safe_name = entry_name.replace('\\', "/");
+                                let file_path = temp_dir.join(&safe_name);
+                                if let Ok(bytes) = fs::read(&file_path) {
+                                    data = Some(bytes);
+                                }
                             }
                         }
                     }
@@ -238,8 +241,8 @@ pub fn run() {
                         let extracted = {
                             let state = app_handle.state::<Mutex<ArchiveCache>>();
                             let mut cache = state.lock().unwrap();
-                            if cache.active_path.as_deref() == Some(archive_path.as_str()) {
-                                if let Some(archive) = cache.zip_archive.as_mut() {
+                            if let Some(single) = cache.archives.get_mut(&archive_path) {
+                                if let Some(archive) = single.zip_archive.as_mut() {
                                     // Try direct lookup first (UTF-8 ZIPs) and fallback scan if needed
                                     crate::archives::read_zip_entry_by_decoded_name(archive, &entry_name).ok()
                                 } else { None }
@@ -254,22 +257,17 @@ pub fn run() {
                             data = Some(d.clone());
                             let state = app_handle.state::<Mutex<ArchiveCache>>();
                             let mut cache = state.lock().unwrap();
-                            if cache.active_path.as_deref() == Some(archive_path.as_str()) {
-                                cache.zip_capacity = 20;
-                                if cache.zip_lru.len() >= cache.zip_capacity {
-                                    if let Some(oldest) = cache.zip_lru.pop_front() {
-                                        cache.zip_entries.remove(&oldest);
-                                    }
-                                }
-                                cache.zip_entries.insert(entry_name.clone(), d);
-                                cache.zip_lru.push_back(entry_name.clone());
-                            }
+                            cache.insert_zip_entry(&archive_path, &entry_name, d);
                         }
                     } else if ext == "rar" || ext == "cbr" || ext == "7z" || ext == "cb7" {
                         let (temp_dir_opt, notify_opt) = {
                             let state = app_handle.state::<Mutex<ArchiveCache>>();
                             let cache = state.lock().unwrap();
-                            (cache.extract_temp_dir.clone(), Some(cache.extract_notify.clone()))
+                            if let Some(single) = cache.archives.get(&archive_path) {
+                                (single.extract_temp_dir.clone(), Some(single.extract_notify.clone()))
+                            } else {
+                                (None, None)
+                            }
                         };
                         if let Some(temp_dir) = temp_dir_opt {
                             let safe_name = entry_name.replace('\\', "/");
@@ -681,5 +679,71 @@ mod archive_tests {
         assert!(tar_first.is_ok(), "cbt on-demand extraction failed: {:?}", tar_first.err());
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn archive_cache_byte_budget_evicts_globally() {
+        // Verifies the multi-archive LRU from archives.rs without touching the
+        // protocol/Tauri layers: entries inserted into cache A, then a cache B
+        // hit, evict the oldest entries across archives once the shared byte
+        // budget is exceeded. A single entry larger than the whole budget must
+        // still be inserted (the LRU drains, but the requested image wins).
+        let mut cache = ArchiveCache::new(2); // 2 MB budget
+
+        // Mirrors list_archive: each opened archive first registers a slot.
+        let mut register = |cache: &mut ArchiveCache, archive: &str| {
+            cache.archives.insert(
+                archive.to_string(),
+                SingleArchiveCache {
+                    zip_entries: std::collections::HashMap::new(),
+                    zip_archive: None,
+                    extract_temp_dir: None,
+                    extract_notify: std::sync::Arc::new((
+                        std::sync::Mutex::new(std::collections::HashSet::new()),
+                        std::sync::Condvar::new(),
+                    )),
+                },
+            );
+        };
+        register(&mut cache, "a.cbz");
+        register(&mut cache, "b.cbz");
+
+        let insert = |cache: &mut ArchiveCache, archive: &str, entry: &str, bytes: usize| {
+            let data = vec![0u8; bytes];
+            cache.insert_zip_entry(archive, entry, data);
+        };
+
+        // 1 MB entries
+        let mb1 = 1024 * 1024;
+        insert(&mut cache, "a.cbz", "p1", mb1);
+        insert(&mut cache, "a.cbz", "p2", mb1); // 2 MB total — at budget
+        assert_eq!(cache.current_zip_bytes, 2 * mb1);
+        assert!(cache.archives["a.cbz"].zip_entries.contains_key("p1"));
+
+        // Next insert crosses the budget: p1 (oldest) is evicted, p2 retained.
+        insert(&mut cache, "a.cbz", "p3", mb1);
+        assert!(!cache.archives["a.cbz"].zip_entries.contains_key("p1"));
+        assert!(cache.archives["a.cbz"].zip_entries.contains_key("p2"));
+        assert!(cache.archives["a.cbz"].zip_entries.contains_key("p3"));
+        assert_eq!(cache.current_zip_bytes, 2 * mb1);
+
+        // An entry in a second archive shares the same global budget.
+        insert(&mut cache, "b.cbz", "q1", mb1);
+        // Now 3 MB owed against 2 MB budget → oldest of everything evicted (p2).
+        insert(&mut cache, "b.cbz", "q2", mb1);
+        assert!(!cache.archives["a.cbz"].zip_entries.contains_key("p2"));
+        assert!(cache.archives["b.cbz"].zip_entries.contains_key("q1"));
+        assert!(cache.archives["b.cbz"].zip_entries.contains_key("q2"));
+        assert_eq!(cache.current_zip_bytes, 2 * mb1);
+
+        // Oversized single entry still lands even though it alone exceeds budget.
+        insert(&mut cache, "b.cbz", "huge", 4 * mb1);
+        assert!(cache.archives["b.cbz"].zip_entries.contains_key("huge"));
+        assert_eq!(cache.current_zip_bytes, 4 * mb1);
+
+        // Re-insertion of an already-cached key is a no-op (byte count stable).
+        let before = cache.current_zip_bytes;
+        insert(&mut cache, "b.cbz", "huge", 4 * mb1);
+        assert_eq!(cache.current_zip_bytes, before);
     }
 }

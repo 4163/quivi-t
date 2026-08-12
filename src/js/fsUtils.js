@@ -77,6 +77,13 @@ export const FsUtils = {
     return window.__TAURI__.core.convertFileSrc(filePath);
   },
 
+  // Synchronous variant for the DOM image pool; ICO files need async
+  // processing so they are excluded and handled via the async path.
+  buildFileSrcSync(filePath) {
+    if (filePath.startsWith('blob:')) return filePath;
+    return window.__TAURI__.core.convertFileSrc(filePath);
+  },
+
   formatEntry(entry) {
     return {
       ...entry,
@@ -602,18 +609,16 @@ export const FsUtils = {
       indicesToPrefetch.push(files[currentIndex].name);
     }
 
-    // 7 ahead
-    for (let i = 1; i <= 7; i++) {
-      let idx = currentIndex + (direction * i);
-      if (idx >= 0 && idx < files.length && this.isImageEntry(files[idx])) {
-        indicesToPrefetch.push(files[idx].name);
+    // ── Symmetric window: 7 ahead, 7 behind ──
+    const POOL_HALF = 7;
+    for (let i = 1; i <= POOL_HALF; i++) {
+      const ahead = currentIndex + (direction * i);
+      if (ahead >= 0 && ahead < files.length && this.isImageEntry(files[ahead])) {
+        indicesToPrefetch.push(files[ahead].name);
       }
-    }
-    // 3 behind
-    for (let i = 1; i <= 3; i++) {
-      let idx = currentIndex - (direction * i);
-      if (idx >= 0 && idx < files.length && this.isImageEntry(files[idx])) {
-        indicesToPrefetch.push(files[idx].name);
+      const behind = currentIndex - (direction * i);
+      if (behind >= 0 && behind < files.length && this.isImageEntry(files[behind])) {
+        indicesToPrefetch.push(files[behind].name);
       }
     }
 
