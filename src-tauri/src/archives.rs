@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, Condvar};
+use std::sync::{Arc, Condvar, Mutex};
 
-use crate::utils::{is_image_ext, is_metadata_ext};
 use crate::models::FileEntry;
+use crate::utils::{is_image_ext, is_metadata_ext};
 
 // ── Archive cache (thread-safe) ──────────────────────────────────────────────
 // Caches extracted bytes so we don't re-read the archive for every image.
@@ -21,9 +21,11 @@ pub struct ArchiveCache {
 
     // Global LRU for ZIP entries: (archive_path, entry_name)
     pub global_zip_lru: VecDeque<(String, String)>,
+    pub archive_lru: VecDeque<String>,
 
     pub global_zip_capacity_bytes: usize,
     pub current_zip_bytes: usize,
+    pub max_open_archives: usize,
 }
 
 impl ArchiveCache {
@@ -31,8 +33,45 @@ impl ArchiveCache {
         Self {
             archives: HashMap::new(),
             global_zip_lru: VecDeque::new(),
+            archive_lru: VecDeque::new(),
             global_zip_capacity_bytes: capacity_mb.saturating_mul(1024 * 1024),
             current_zip_bytes: 0,
+            max_open_archives: 8,
+        }
+    }
+
+    pub fn touch_archive(&mut self, archive_path: &str) {
+        self.archive_lru.retain(|p| p != archive_path);
+        self.archive_lru.push_back(archive_path.to_string());
+    }
+
+    fn touch_zip_entry(&mut self, archive_path: &str, entry_name: &str) {
+        let key = (archive_path.to_string(), entry_name.to_string());
+        self.global_zip_lru.retain(|existing| existing != &key);
+        self.global_zip_lru.push_back(key);
+        self.touch_archive(archive_path);
+    }
+
+    fn remove_archive_zip_entries(&mut self, archive_path: &str) {
+        if let Some(single) = self.archives.get_mut(archive_path) {
+            for data in single.zip_entries.drain().map(|(_, data)| data) {
+                self.current_zip_bytes = self.current_zip_bytes.saturating_sub(data.len());
+            }
+        }
+        self.global_zip_lru.retain(|(path, _)| path != archive_path);
+    }
+
+    fn evict_idle_archives(&mut self, keep_path: &str) {
+        while self.archives.len() > self.max_open_archives {
+            let Some(old_archive) = self.archive_lru.pop_front() else {
+                break;
+            };
+            if old_archive == keep_path {
+                self.archive_lru.push_back(old_archive);
+                continue;
+            }
+            self.remove_archive_zip_entries(&old_archive);
+            self.archives.remove(&old_archive);
         }
     }
 
@@ -55,77 +94,106 @@ impl ArchiveCache {
         }
     }
 
-    // Cache `data` under (archive_path, entry_name) if it is not already
-    // present, enforcing the global byte budget. No-op (and does not even
-    // evict) when the entry is already cached.
+    pub fn register_archive(&mut self, archive_path: String, archive: SingleArchiveCache) {
+        self.archives.insert(archive_path.clone(), archive);
+        self.touch_archive(&archive_path);
+        self.evict_idle_archives(&archive_path);
+    }
+
+    pub fn get_zip_entry(&mut self, archive_path: &str, entry_name: &str) -> Option<Vec<u8>> {
+        let data = self
+            .archives
+            .get(archive_path)?
+            .zip_entries
+            .get(entry_name)?
+            .clone();
+        self.touch_zip_entry(archive_path, entry_name);
+        Some(data)
+    }
+
+    // Cache `data` under (archive_path, entry_name), enforcing the global byte
+    // budget. Existing entries are only touched, so a read-hot page remains hot.
     pub fn insert_zip_entry(&mut self, archive_path: &str, entry_name: &str, data: Vec<u8>) {
-        if let Some(single) = self.archives.get(archive_path) {
-            if single.zip_entries.contains_key(entry_name) {
-                return;
-            }
+        let Some(single) = self.archives.get(archive_path) else {
+            return;
+        };
+        if single.zip_entries.contains_key(entry_name) {
+            self.touch_zip_entry(archive_path, entry_name);
+            return;
         }
+
         self.evict_until_within_budget(data.len());
-        self.current_zip_bytes += data.len();
         if let Some(single) = self.archives.get_mut(archive_path) {
+            self.current_zip_bytes += data.len();
             single.zip_entries.insert(entry_name.to_string(), data);
+            self.touch_zip_entry(archive_path, entry_name);
         }
-        self.global_zip_lru
-            .push_back((archive_path.to_string(), entry_name.to_string()));
+    }
+}
+
+impl Drop for SingleArchiveCache {
+    fn drop(&mut self) {
+        if let Some(dir) = &self.extract_temp_dir {
+            let _ = fs::remove_dir_all(dir);
+        }
     }
 }
 
 // ── ZIP reading ──────────────────────────────────────────────────────────────
 
 /// Decodes a ZIP entry name, handling legacy Shift-JIS encoding.
-/// 
+///
 /// ZIP archives created on Japanese Windows systems often use Shift-JIS (CP932)
 /// encoding for filenames without setting the UTF-8 flag (bit 11 in the general
 /// purpose bit flag). The `zip` crate's `.name()` method returns a UTF-8 string,
 /// but when the original bytes are Shift-JIS, this produces mojibake (garbled text).
-/// 
+///
 /// This function detects when `.name()` contains replacement characters (�, U+FFFD)
 /// and attempts to re-decode the raw filename bytes as Shift-JIS.
-fn decode_zip_entry_name<R: std::io::Read + std::io::Seek>(entry: &zip::read::ZipFile<'_, R>) -> String {
+fn decode_zip_entry_name<R: std::io::Read + std::io::Seek>(
+    entry: &zip::read::ZipFile<'_, R>,
+) -> String {
     let name = entry.name();
-    
+
     // Fast path: if the name is valid UTF-8 without replacement characters, use it directly
     if !name.contains('\u{FFFD}') {
         return name.to_string();
     }
-    
+
     // Slow path: the name contains replacement characters, likely due to non-UTF-8 encoding
     let raw_bytes = entry.name_raw();
-    
+
     // Try Shift-JIS (Japanese)
     let (decoded, _, had_errors) = encoding_rs::SHIFT_JIS.decode(raw_bytes);
     if !had_errors {
         return decoded.into_owned();
     }
-    
+
     // Try GB18030 (Chinese)
     let (decoded, _, had_errors) = encoding_rs::GB18030.decode(raw_bytes);
     if !had_errors {
         return decoded.into_owned();
     }
-    
+
     // Try EUC-KR (Korean)
     let (decoded, _, had_errors) = encoding_rs::EUC_KR.decode(raw_bytes);
     if !had_errors {
         return decoded.into_owned();
     }
-    
+
     // Fallback: return the mojibake name as-is
     name.to_string()
 }
 
 pub fn list_zip_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
     let file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
-    let mut archive = zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(|e| format!("Invalid ZIP archive: {e}"))?;
-    
+    let mut archive = zip::ZipArchive::new(std::io::BufReader::new(file))
+        .map_err(|e| format!("Invalid ZIP archive: {e}"))?;
+
     // First pass: collect all entry names from the central directory.
     // This allows us to list corrupt entries even when their local headers are invalid.
     let all_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
-    
+
     let mut files = Vec::new();
     let mut skipped_count = 0;
 
@@ -134,9 +202,13 @@ pub fn list_zip_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
         match archive.by_index(i) {
             Ok(entry) => {
                 let decoded_name = decode_zip_entry_name(&entry);
-                if entry.is_dir() { continue; }
+                if entry.is_dir() {
+                    continue;
+                }
                 let ext = decoded_name.rsplit('.').next().unwrap_or("").to_lowercase();
-                if !is_image_ext(&ext) && !is_metadata_ext(&ext) { continue; }
+                if !is_image_ext(&ext) && !is_metadata_ext(&ext) {
+                    continue;
+                }
 
                 files.push(FileEntry {
                     name: decoded_name.clone(),
@@ -165,18 +237,21 @@ pub fn list_zip_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
             }
         }
     }
-    
+
     if skipped_count > 0 {
-        eprintln!("Warning: {} ZIP entry(ies) have corrupt local headers and may fail to load", skipped_count);
+        eprintln!(
+            "Warning: {} ZIP entry(ies) have corrupt local headers and may fail to load",
+            skipped_count
+        );
     }
-    
+
     files.sort_by(|a, b| natord::compare(&a.name, &b.name));
     Ok(files)
 }
 
 pub fn read_zip_entry_by_decoded_name<R: std::io::Read + std::io::Seek>(
     archive: &mut zip::ZipArchive<R>,
-    entry_name: &str
+    entry_name: &str,
 ) -> Result<Vec<u8>, String> {
     // Try direct lookup first (handles UTF-8 encoded ZIPs)
     if let Ok(mut entry) = archive.by_name(entry_name) {
@@ -185,7 +260,7 @@ pub fn read_zip_entry_by_decoded_name<R: std::io::Read + std::io::Seek>(
             return Ok(buf);
         }
     }
-    
+
     // Fallback: scan all entries and match by decoded name (handles Shift-JIS/GBK/EUC-KR ZIPs)
     let mut matching_index = None;
     for i in 0..archive.len() {
@@ -197,21 +272,25 @@ pub fn read_zip_entry_by_decoded_name<R: std::io::Read + std::io::Seek>(
             }
         }
     }
-    
+
     // Then extract by index if found
     if let Some(index) = matching_index {
-        let mut entry = archive.by_index(index).map_err(|e| format!("Error reading ZIP entry: {e}"))?;
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|e| format!("Error reading ZIP entry: {e}"))?;
         let mut buf = Vec::with_capacity(entry.size() as usize);
-        std::io::Read::read_to_end(&mut entry, &mut buf).map_err(|e| format!("Error reading entry: {e}"))?;
+        std::io::Read::read_to_end(&mut entry, &mut buf)
+            .map_err(|e| format!("Error reading entry: {e}"))?;
         return Ok(buf);
     }
-    
+
     Err(format!("Cannot find ZIP entry: {}", entry_name))
 }
 
 pub fn extract_zip_entry(archive_path: &str, entry_name: &str) -> Result<Vec<u8>, String> {
     let file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
-    let mut archive = zip::ZipArchive::new(std::io::BufReader::new(file)).map_err(|e| format!("Invalid ZIP archive: {e}"))?;
+    let mut archive = zip::ZipArchive::new(std::io::BufReader::new(file))
+        .map_err(|e| format!("Invalid ZIP archive: {e}"))?;
     read_zip_entry_by_decoded_name(&mut archive, entry_name)
 }
 
@@ -252,7 +331,11 @@ pub fn list_rar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
     Ok(files)
 }
 
-pub fn extract_rar_to_temp(archive_path: String, temp_dir: PathBuf, notify: Arc<(Mutex<HashSet<String>>, Condvar)>) {
+pub fn extract_rar_to_temp(
+    archive_path: String,
+    temp_dir: PathBuf,
+    notify: Arc<(Mutex<HashSet<String>>, Condvar)>,
+) {
     if let Ok(archive) = unrar::Archive::new(&archive_path).open_for_processing() {
         let mut iter = archive;
         loop {
@@ -334,8 +417,14 @@ pub fn list_7z_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
     Ok(files)
 }
 
-pub fn extract_7z_to_temp(archive_path: String, temp_dir: PathBuf, notify: Arc<(Mutex<HashSet<String>>, Condvar)>) {
-    let Ok(mut reader) = sevenz_rust2::ArchiveReader::open(&archive_path, sevenz_rust2::Password::empty()) else {
+pub fn extract_7z_to_temp(
+    archive_path: String,
+    temp_dir: PathBuf,
+    notify: Arc<(Mutex<HashSet<String>>, Condvar)>,
+) {
+    let Ok(mut reader) =
+        sevenz_rust2::ArchiveReader::open(&archive_path, sevenz_rust2::Password::empty())
+    else {
         return;
     };
     let _ = reader.for_each_entries(|entry, data| {
@@ -377,7 +466,9 @@ pub fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
     let mut archive = tar::Archive::new(file);
 
     let mut files = Vec::new();
-    let entries = archive.entries().map_err(|e| format!("Cannot read TAR entries: {e}"))?;
+    let entries = archive
+        .entries()
+        .map_err(|e| format!("Cannot read TAR entries: {e}"))?;
     for entry in entries {
         let entry = entry.map_err(|e| format!("Error reading TAR entry: {e}"))?;
         let name = entry
@@ -410,7 +501,9 @@ pub fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
 pub fn extract_tar_entry(archive_path: &str, entry_name: &str) -> Result<Vec<u8>, String> {
     let file = fs::File::open(archive_path).map_err(|e| format!("Cannot open TAR archive: {e}"))?;
     let mut archive = tar::Archive::new(file);
-    let entries = archive.entries().map_err(|e| format!("Cannot read TAR entries: {e}"))?;
+    let entries = archive
+        .entries()
+        .map_err(|e| format!("Cannot read TAR entries: {e}"))?;
 
     for entry in entries {
         let mut entry = entry.map_err(|e| format!("Error reading TAR entry: {e}"))?;
