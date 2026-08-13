@@ -29,6 +29,7 @@ dist-ssr
 !.agents/AGENTS.md
 !.agents/implemented.md
 !.agents/7z_implementation.md
+!.agents/lazy-config-save-plan.md
 
 # Runtime/portable user config; may contain personal paths
 quivit_config.json
