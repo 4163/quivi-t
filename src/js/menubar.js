@@ -22,24 +22,22 @@ export function closeMenus() {
   activeMenu = null;
 }
 
-export function setMenuBarVisible(visible) {
+export function setMenuBarVisible(visible, { persist = false } = {}) {
   menuBarVisible = visible;
   menubarEl.classList.toggle('hidden', !menuBarVisible);
   if (!menuBarVisible) closeMenus();
+  if (persist) saveUIState();
 }
 
-export function toggleMenuBar() {
-  setMenuBarVisible(!menuBarVisible);
-  saveUIState();
+export function toggleMenuBar({ persist = true } = {}) {
+  setMenuBarVisible(!menuBarVisible, { persist });
 }
 
 export function saveUIState() {
   const state = Core.getState();
   if (state.config && state.config.frontend_data) {
     state.config.frontend_data.menu_visible = menuBarVisible;
-    if (window.__TAURI__) {
-      window.__TAURI__.core.invoke('save_config', { config: state.config }).catch(console.error);
-    }
+    if (window.__TAURI__) Core.persistConfig({ debounceMs: 300 });
   }
 }
 

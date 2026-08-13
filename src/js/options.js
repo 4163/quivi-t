@@ -1,6 +1,6 @@
 import { mergeConfig, DEFAULT_KEYBINDS } from './keybinds.js';
 import { makeListNavigable } from './keyboardNav.js';
-import { initKeybindUi } from './keybindUi.js';
+import { initKeybindUi, validateKeybindSafety } from './keybindUi.js';
 import { initAssociationsUi, applyAssociations } from './associationsUi.js';
 
 const tauri = window.__TAURI__ || {};
@@ -331,6 +331,12 @@ document.getElementById('opt-custom-css').addEventListener('keydown', (e) => {
 
 // --- Save ---
 document.getElementById('btn-save-options').addEventListener('click', async () => {
+  const keybindSafety = validateKeybindSafety(config);
+  if (!keybindSafety.ok) {
+    switchTab('tab-keys');
+    showStatus(keybindSafety.message);
+    return;
+  }
   await applyAssociations(showStatus);
   config.portable_mode = document.getElementById('opt-portable-mode').checked;
   // Preserve the hidden field if it exists (config-file-only, no UI)

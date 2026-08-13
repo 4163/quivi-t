@@ -38,6 +38,7 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Toggle menu bar | `2` |
 | Toggle status bar | `3` |
 | Full screen | `4` / `Alt+Enter` |
+| Exit full screen (Hold) | `Escape` |
 | Options | `5` |
 | Refresh | `6` / `Ctrl+R` |
 | Parent directory | `Backspace` |

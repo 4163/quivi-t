@@ -95,6 +95,7 @@ const _state = {
 
 /** @type {Array<(state: typeof _state) => void>} */
 const _listeners = [];
+let _persistTimer = null;
 
 // --- Helpers ------------------------------------------------------------------
 
@@ -104,11 +105,18 @@ function _notify() {
 }
 
 async function _persistConfig() {
+  clearTimeout(_persistTimer);
+  _persistTimer = null;
   try {
     await invoke('save_config', { config: _state.config });
   } catch (err) {
     console.error('[Core] Failed to persist config:', err);
   }
+}
+
+function _schedulePersistConfig(delayMs) {
+  clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(_persistConfig, delayMs);
 }
 
 async function _selectEntry(index, activate = false, clampPreview = false, direction = 1) {
@@ -176,8 +184,13 @@ export const Core = {
     return { ..._state };
   },
 
-  persistConfig() {
-    _persistConfig();
+  persistConfig(options = {}) {
+    const delayMs = Number.isFinite(options.debounceMs) ? options.debounceMs : 0;
+    if (delayMs > 0) {
+      _schedulePersistConfig(delayMs);
+    } else {
+      _persistConfig();
+    }
   },
 
   setListAndIndex(newList, newIndex) {
@@ -191,9 +204,9 @@ export const Core = {
     _notify();
   },
 
-  toggleFileList() {
-    _state.fileListVisible = !_state.fileListVisible;
-    _notify();
+  setFileListVisible(visible, options = {}) {
+    _state.fileListVisible = !!visible;
+    if (options.notify !== false) _notify();
   },
 
   toggleTransparentBg() {

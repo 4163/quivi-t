@@ -16,9 +16,9 @@
 - Restart-gated settings (`single_instance`) are staged as `pending_<key>` by the UI and promoted at startup by `apply_pending_config()` (`config.rs`) — never written live.
 
 **JS Module Structure:**
-- `core.js` — state machine, no DOM access. Communicates via callbacks.
-- `keybinds.js` — default bindings, `mergeConfig()`, pan/zoom constants. Exports `DEFAULT_KEYBOARD_PAN_STEP` (72) / `DEFAULT_WHEEL_PAN_STEP` (120), and `mergeConfig` strips raw pan-step values then re-adds them number-guarded with those defaults.
-- `shortcuts.js` — keyboard/mouse/scroll dispatch, combo normalization. Exports `MOUSE_BUTTON_NAMES` as the single source of truth for all button mapping. Pre-parses keyboard pan keybinds into the `KEYBOARD_PAN_VECTORS` table on config load so `keydown` dispatches panning immediately per press (multi-directional vector sum, stops on keyup/blur) via an injected `dispatchKeyboardPan` callback instead of holding `Viewer` directly.
+- `core.js` — state machine, no DOM access. Communicates via callbacks. Exposes `persistConfig({ debounceMs })` to consolidate and debounce config saves.
+- `keybinds.js` — default bindings, `mergeConfig()`, pan/zoom constants. Exports `DEFAULT_KEYBOARD_PAN_STEP` (72) / `DEFAULT_WHEEL_PAN_STEP` (120), and `mergeConfig` strips raw pan-step values then re-adds them number-guarded with those defaults. Enforces `Escape` presence in `cmd-exit-fullscreen-hold` fallback.
+- `shortcuts.js` — keyboard/mouse/scroll dispatch, combo normalization. Exports `MOUSE_BUTTON_NAMES` as the single source of truth for all button mapping. Pre-parses keyboard pan keybinds into the `KEYBOARD_PAN_VECTORS` table on config load so `keydown` dispatches panning immediately per press. Contains `PASSIVE_ACTIONS` for bindings like hold-to-exit that consume a key without firing standard dispatch.
 - `viewer.js` — image rendering, zoom, pan, fit modes. Uses a two-image DOM bridge inside `#viewer-img-wrapper` (current target + decoded previous image) while nearby pages warm through cancellable off-DOM `Image()` preloaders after navigation settles. `_updateScrollIndicator`'s idempotent sibling lives in `shortcuts.js`. Implements strict `quivit-config-loaded` caching for hot-path config access (e.g., pan keys) instead of dynamic evaluations.
 - `filePanel.js` — file list, favorites, sorting UI, column resizing. Debounces/cancels hovered image source preloads so list clicks feel instant without keeping stale decodes alive.
 - `fsUtils.js` — filesystem interactions, archive loading, sibling navigation, statusbar index / page-position formatting. Exposes `buildFileSrcSync` (sync `convertFileSrc` for off-DOM/bridge preloads; ICO sources stay async), `buildArchiveEntrySrc` (async archive entry source builder so archived ICO files can use spritesheet extraction), and a symmetric 7-ahead/7-behind prefetch window.
@@ -31,7 +31,7 @@
 - `shellBackground.js` — leaf module (included on both pages) mirroring `--surface` into the native window background; re-syncs on theme/custom-CSS changes.
 - `main.js` — DOM wiring, action dispatch, event listeners. Pre-parses the two pan steps into module constants via `updatePanSteps()` on `quivit-config-loaded` (hot-path cached, `Number.isFinite` fallback), and bridges keyboard panning to `Viewer.panBy` through the `dispatchKeyboardPan` callback passed to `bindKeyboardShortcuts`.
 - `options.js` — Options window logic (theme/CSS previews, revert on close, width auto-fit).
-- `keybindUi.js` — keybind capture/conflict UI (Options).
+- `keybindUi.js` — keybind capture/conflict UI (Options). Implements `validateKeybindSafety` and `LOCKED_BINDINGS` to prevent soft-locking the app (e.g. removing the last menu bar shortcut or the Escape fallback).
 - `associationsUi.js` — file-type association UI (Options).
 
 **Window Sizing:**
@@ -85,7 +85,6 @@
   - **Edge Cases & Panning:** Panning or dragging triggers `mousemove` / input events which naturally reset the idle timer, keeping the cursor visible throughout active panning and hiding only after panning stops and the mouse remains still for `X` seconds. `mouseleave` or UI chrome hover restores standard cursor styling.
   - **Performance First (Zero-Overhead):** Bypassed entirely when `0` (Disabled). During active movement, use a lightweight debounced single-timer reset without dynamic allocations or garbage collection churn in the `mousemove` hot path.
 - **Emergency Boss Key:** Add an "Emergency Button" to hide the application into the system tray, with a configurable keybind.
-- **Helium Exit-Fullscreen:** Copy Helium browser's exit-fullscreen functionality (hold to exit, and a top exit button offscreen that slides down via hover). (https://github.com/imputnet/helium)
 - **Initial HTML Loading (LCP):** Completely remove the blank page time on initial loading of both HTML pages before the main UI renders. It's currently acting this way because we are optimizing for LCP on the flickering of themes. Refer to the way LCP is handled on `E:\Projects\PixiJS Live2D Spine (Springfield)` for reference.
 - **SVG Rendering & Bounds:** Audit SVG elements behavior of hitbox/dimensions going over the canvas edge. The calculations for SVG images that have a WxH of 100% compared to a set WxH act differently and break the border/edge calculations on the canvas and/or image.
   - *Key examples:* `test-files/gfl-spinner.svg` works as expected, while `icons/quivi-t_moe-2.svg` does not. 

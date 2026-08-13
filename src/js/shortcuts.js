@@ -6,6 +6,8 @@ function bindingMatches(binding, combo) {
   return Array.isArray(binding) ? binding.includes(combo) : binding === combo;
 }
 
+const PASSIVE_ACTIONS = new Set(['cmd-exit-fullscreen-hold']);
+
 export const activeKeys = new Set();
 export const activeButtons = new Set();
 
@@ -97,9 +99,9 @@ function findAction(config, combo) {
   const lowerCombo = combo.toLowerCase();
   for (const [id, bindCombo] of Object.entries(binds)) {
     if (Array.isArray(bindCombo)) {
-      if (bindCombo.some(b => b.toLowerCase() === lowerCombo)) return id;
+      if (bindCombo.some(b => b.toLowerCase() === lowerCombo)) return PASSIVE_ACTIONS.has(id) ? null : id;
     } else {
-      if (bindCombo.toLowerCase() === lowerCombo) return id;
+      if (bindCombo.toLowerCase() === lowerCombo) return PASSIVE_ACTIONS.has(id) ? null : id;
     }
   }
 

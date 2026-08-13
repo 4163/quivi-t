@@ -6,6 +6,14 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ## Fully Implemented
 
+### Fullscreen Exit UX & Keybind Safety Validation (2026-08-13)
+- **Hold-to-Exit Fullscreen:** Pressing and holding `Escape` (or the configured `cmd-exit-fullscreen-hold` key) for 1.5 seconds exits fullscreen mode. Includes a top-center hint bar that appears on enter and when starting a hold, guiding the user.
+- **Fullscreen Exit Hover Button:** Moving the mouse to the top edge (y ≤ 4px) of the screen while in fullscreen reveals a persistent exit button that slides down. It hides once the mouse moves far enough away (y > 50px).
+- **Keybind Safety Guards:** `validateKeybindSafety` runs on Options Save to prevent soft-locks. `cmd-toggle-menubar` cannot have its last non-conflicting binding removed. `cmd-exit-fullscreen-hold` strictly requires `Escape` to always be bound; `mergeConfig` injects it if missing, and `LOCKED_BINDINGS` prevents the UI from removing it while badging it as "Required binding".
+- **Config Debouncing:** Rapid toggling of UI chrome (like the status bar) no longer spams the disk; `Core.persistConfig({ debounceMs: 300 })` schedules saves using a single shared timer, preventing `save_config` IPC thrash.
+- **Dead Code Removal:** Replaced the orphaned `Core.toggleFileList()` with local `toggleFileList()` mapped to `Core.setFileListVisible`.
+- **Status Bar Index Fix:** Fixed `.status-index` rendering `-1/X` when nothing is highlighted; now correctly clamps to `0/X` via `Math.max(0, ...)`.
+
 ### Responsive Keyboard Panning & Individual Pan Lengths (2026-08-13)
 - **Separate pan lengths (scroll vs keyboard):** `frontend_data.keyboard_pan_step` (default 72) and `frontend_data.wheel_pan_step` (default 120), configurable via Options → General → Panning number inputs (`opt-keyboard-pan-step` / `opt-wheel-pan-step`). Defaults live in `DEFAULT_KEYBOARD_PAN_STEP` / `DEFAULT_WHEEL_PAN_STEP` in `keybinds.js` (matching original Quivi defaults).
 - **`mergeConfig` pan-step normalization (`keybinds.js`):** the raw `keyboard_pan_step`/`wheel_pan_step` values are stripped from the incoming `frontend_data` spread (`fdBase`) and re-added number-guarded with the `DEFAULT_*` fallbacks, so junk/non-number values in saved config can never produce a broken pan step.

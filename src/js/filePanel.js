@@ -570,6 +570,7 @@ function setRefreshingVisual(active) {
 
 export function renderFilePanel(state) {
   filePanel.classList.toggle('hidden', !state.fileListVisible);
+  if (!state.fileListVisible) return;
   renderBreadcrumb(state);
 
   // Update favorite star button for current entry (images and folders; not ..)

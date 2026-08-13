@@ -7,7 +7,7 @@ import { FsUtils } from './fsUtils.js';
 import { Viewer } from './viewer.js';
 import * as NavigationHistory from './navigationHistory.js';
 import { initFilePanel, renderFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite } from './filePanel.js';
-import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from './shortcuts.js';
+import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch, normalizeCombo, formatKeyName } from './shortcuts.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from './keybinds.js';
 import {
   initMenuBar,
@@ -16,8 +16,7 @@ import {
   menuBarVisible,
   setMenuBarVisible,
   getPreFullscreenState,
-  setPreFullscreenState,
-  saveUIState
+  setPreFullscreenState
 } from './menubar.js';
 import { fetchMetadata, findMetadataEntry } from './metadata.js';
 
@@ -82,6 +81,10 @@ const filePanelBreadcrumb = document.getElementById('file-panel-breadcrumb');
 const fileListUl = document.getElementById('file-list');
 const resizeHandle = document.getElementById('panel-resize-handle');
 const metadataBadge = document.getElementById('status-metadata-badge');
+const fullscreenExitHint = document.getElementById('fullscreen-exit-hint');
+const fullscreenExitKey = document.getElementById('fullscreen-exit-key');
+const fullscreenExitRegion = document.getElementById('fullscreen-exit-region');
+const fullscreenExitBtn = document.getElementById('fullscreen-exit-btn');
 
 let activeScaling = '';
 let statusBarVisible = true; // updated from config when loaded
@@ -91,6 +94,16 @@ let dropMessageTimer = null;
 let keyboardPanStep = DEFAULT_KEYBOARD_PAN_STEP;
 let wheelPanStep = DEFAULT_WHEEL_PAN_STEP;
 const DEFAULT_DROP_MESSAGE = 'Drop files here, or click to open a folder';
+const FULLSCREEN_EXIT_HINT_MS = 4000;
+const FULLSCREEN_EXIT_KEY_HOLD_MS = 1500;
+const FULLSCREEN_EXIT_HOLD_FEEDBACK_MS = FULLSCREEN_EXIT_KEY_HOLD_MS / 2;
+const FULLSCREEN_EXIT_TRIGGER_Y = 4;
+const FULLSCREEN_EXIT_BUTTON_BOTTOM_Y = 50;
+let fullscreenExitHintTimer = null;
+let fullscreenExitKeyHoldTimer = null;
+let fullscreenExitHoldFeedbackTimer = null;
+let fullscreenExitHoldFeedbackVisible = false;
+let fullscreenExitHoverVisible = false;
 
 // Metadata window state
 let _lastMetadataArchive = null; // archive path we last fetched for
@@ -212,6 +225,165 @@ function dispatchKeyboardPan(dx, dy) {
   Viewer.panBy(dx * keyboardPanStep, dy * keyboardPanStep);
 }
 
+function getFullscreenExitBindings() {
+  const bind = Core.getState().config?.frontend_data?.keybinds?.['cmd-exit-fullscreen-hold'];
+  return Array.isArray(bind) ? bind.filter(Boolean) : [bind || 'Escape'];
+}
+
+function formatFullscreenExitKeyLabel(combo = getFullscreenExitBindings()[0] || 'Unbound') {
+  return normalizeCombo(combo).replaceAll('Escape', 'Esc');
+}
+
+function updateFullscreenExitKeyLabel() {
+  if (fullscreenExitKey) fullscreenExitKey.textContent = formatFullscreenExitKeyLabel();
+}
+
+function keyEventCombo(e) {
+  const keys = [];
+  if (e.ctrlKey) keys.push('Ctrl');
+  if (e.altKey) keys.push('Alt');
+  if (e.shiftKey) keys.push('Shift');
+
+  const keyName = formatKeyName(e.key);
+  if (!['Control', 'Alt', 'Shift', 'Meta'].includes(keyName)) keys.push(keyName);
+  return keys.join('+');
+}
+
+function isFullscreenExitKey(e) {
+  const combo = keyEventCombo(e).toLowerCase();
+  return getFullscreenExitBindings().some(bind => normalizeCombo(bind).toLowerCase() === combo);
+}
+
+function cancelFullscreenExitKeyHold({ hideFeedback = false } = {}) {
+  clearTimeout(fullscreenExitKeyHoldTimer);
+  clearTimeout(fullscreenExitHoldFeedbackTimer);
+  fullscreenExitKeyHoldTimer = null;
+  fullscreenExitHoldFeedbackTimer = null;
+  if (hideFeedback && fullscreenExitHoldFeedbackVisible) hideFullscreenExitHint();
+  fullscreenExitHoldFeedbackVisible = false;
+}
+
+function hideFullscreenExitHint() {
+  clearTimeout(fullscreenExitHintTimer);
+  fullscreenExitHintTimer = null;
+  fullscreenExitHint?.classList.remove('visible');
+}
+
+function showFullscreenExitHint({ autoHide = true } = {}) {
+  updateFullscreenExitKeyLabel();
+  clearTimeout(fullscreenExitHintTimer);
+  fullscreenExitHint?.classList.add('visible');
+  fullscreenExitHintTimer = autoHide ? setTimeout(hideFullscreenExitHint, FULLSCREEN_EXIT_HINT_MS) : null;
+}
+
+function showFullscreenExitButton() {
+  if (!fullscreenActive || fullscreenExitHoverVisible) return;
+  hideFullscreenExitHint();
+  fullscreenExitHoverVisible = true;
+  document.body.classList.add('fullscreen-exit-visible');
+}
+
+function hideFullscreenExitButton() {
+  if (!fullscreenExitHoverVisible) return;
+  fullscreenExitHoverVisible = false;
+  document.body.classList.remove('fullscreen-exit-visible');
+}
+
+function setFullscreenUiActive(active) {
+  fullscreenActive = active;
+  document.body.classList.toggle('fullscreen-active', active);
+  fullscreenExitRegion?.setAttribute('aria-hidden', active ? 'false' : 'true');
+  fullscreenExitBtn?.toggleAttribute('disabled', !active);
+  cancelFullscreenExitKeyHold();
+  hideFullscreenExitButton();
+  if (active) {
+    showFullscreenExitHint();
+  } else {
+    hideFullscreenExitHint();
+  }
+  updateViewToggleMenu();
+}
+
+function startFullscreenExitKeyHold(e) {
+  if (!fullscreenActive || fullscreenExitKeyHoldTimer !== null || !isFullscreenExitKey(e)) return false;
+  fullscreenExitHoldFeedbackVisible = false;
+  fullscreenExitHoldFeedbackTimer = setTimeout(() => {
+    if (fullscreenActive && fullscreenExitKeyHoldTimer !== null) {
+      fullscreenExitHoldFeedbackVisible = true;
+      showFullscreenExitHint({ autoHide: false });
+    }
+  }, FULLSCREEN_EXIT_HOLD_FEEDBACK_MS);
+  fullscreenExitKeyHoldTimer = setTimeout(() => {
+    cancelFullscreenExitKeyHold();
+    if (fullscreenActive) toggleFullscreen();
+  }, FULLSCREEN_EXIT_KEY_HOLD_MS);
+  return true;
+}
+
+function handleFullscreenExitKeyDown(e) {
+  if (!fullscreenActive || !isFullscreenExitKey(e)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (!e.repeat) startFullscreenExitKeyHold(e);
+}
+
+function handleFullscreenExitKeyUp(e) {
+  if (!fullscreenActive || fullscreenExitKeyHoldTimer === null) return;
+  e.preventDefault();
+  e.stopPropagation();
+  cancelFullscreenExitKeyHold({ hideFeedback: true });
+}
+
+function handleFullscreenExitMouseMove(e) {
+  if (!fullscreenActive) return;
+  const y = e.clientY;
+
+  if (!fullscreenExitHoverVisible) {
+    if (y <= FULLSCREEN_EXIT_TRIGGER_Y) showFullscreenExitButton();
+    return;
+  }
+
+  if (y > FULLSCREEN_EXIT_BUTTON_BOTTOM_Y) hideFullscreenExitButton();
+}
+
+function setStatusBarVisible(visible, { persist = false } = {}) {
+  statusBarVisible = visible;
+  if (Core.getState().mode !== 'empty') {
+    statusbar.classList.toggle('hidden', !statusBarVisible);
+  }
+
+  if (!persist) return;
+  const state = Core.getState();
+  if (state.config && state.config.frontend_data) {
+    state.config.frontend_data.status_visible = statusBarVisible;
+    if (window.__TAURI__) Core.persistConfig({ debounceMs: 300 });
+  }
+}
+
+function setFileListVisible(visible) {
+  Core.setFileListVisible(visible, { notify: false });
+  filePanel.classList.toggle('hidden', !visible);
+  if (visible) requestAnimationFrame(() => renderFilePanel(Core.getState()));
+  updateViewToggleMenu();
+}
+
+function toggleFileList() {
+  setFileListVisible(!Core.getState().fileListVisible);
+}
+
+function setFullscreenChromeVisible(visible) {
+  setMenuBarVisible(visible);
+  setStatusBarVisible(visible);
+}
+
+function restorePreFullscreenChrome() {
+  const pre = getPreFullscreenState();
+  if (!pre) return;
+  setMenuBarVisible(pre.menuBar);
+  setStatusBarVisible(pre.statusBar);
+  setPreFullscreenState(null);
+}
+
 async function toggleFullscreen() {
   const enteringFullscreen = window.__TAURI__
     ? !(await window.__TAURI__.window.getCurrentWindow().isFullscreen())
@@ -223,46 +395,25 @@ async function toggleFullscreen() {
   if (enteringFullscreen) {
     // Snapshot current visibility before hiding
     setPreFullscreenState({ menuBar: menuBarVisible, statusBar: statusBarVisible });
-    if (hideChrome) {
-      if (menuBarVisible) toggleMenuBar();
-      if (statusBarVisible) toggleStatusBar();
-    }
-  } else {
-    // Restore from snapshot if we have one
-    const pre = getPreFullscreenState();
-    if (pre) {
-      if (menuBarVisible !== pre.menuBar) toggleMenuBar();
-      if (statusBarVisible !== pre.statusBar) toggleStatusBar();
-      setPreFullscreenState(null);
-    }
+    if (hideChrome) setFullscreenChromeVisible(false);
   }
+
+  setFullscreenUiActive(enteringFullscreen);
 
   if (window.__TAURI__) {
     const win = window.__TAURI__.window.getCurrentWindow();
-    win.setFullscreen(enteringFullscreen);
+    await win.setFullscreen(enteringFullscreen);
   } else if (enteringFullscreen) {
-    document.documentElement.requestFullscreen();
+    await document.documentElement.requestFullscreen();
   } else {
-    document.exitFullscreen();
+    await document.exitFullscreen();
   }
-  fullscreenActive = enteringFullscreen;
-  updateViewToggleMenu();
+
+  if (!enteringFullscreen) requestAnimationFrame(restorePreFullscreenChrome);
 }
 
 function toggleStatusBar() {
-  statusBarVisible = !statusBarVisible;
-  // If we're in empty mode, it stays hidden regardless of the toggle,
-  // but we still persist the toggle state.
-  if (Core.getState().mode !== 'empty') {
-    statusbar.classList.toggle('hidden', !statusBarVisible);
-  }
-  const state = Core.getState();
-  if (state.config && state.config.frontend_data) {
-    state.config.frontend_data.status_visible = statusBarVisible;
-    if (window.__TAURI__) {
-      window.__TAURI__.core.invoke('save_config', { config: state.config }).catch(console.error);
-    }
-  }
+  setStatusBarVisible(!statusBarVisible, { persist: true });
 }
 
 async function openGithub() {
@@ -449,7 +600,7 @@ function dispatchAction(actionId, payload) {
       updateViewToggleMenu();
       break;
     case 'cmd-toggle-filelist':
-      Core.toggleFileList();
+      toggleFileList();
       break;
     case 'cmd-toggle-transparent':
       Core.toggleTransparentBg();
@@ -509,10 +660,23 @@ function bindMenuCommands() {
   document.getElementById('cmd-flip-vertical').addEventListener('click', () => Viewer.flipVertical());
   document.getElementById('cmd-toggle-transparent').addEventListener('click', () => Core.toggleTransparentBg());
   document.getElementById('cmd-toggle-menubar').addEventListener('click', () => dispatchAction('cmd-toggle-menubar'));
-  document.getElementById('cmd-toggle-filelist').addEventListener('click', () => Core.toggleFileList());
+  document.getElementById('cmd-toggle-filelist').addEventListener('click', () => toggleFileList());
   document.getElementById('cmd-toggle-statusbar').addEventListener('click', () => dispatchAction('cmd-toggle-statusbar'));
   document.getElementById('cmd-github').addEventListener('click', () => {
     openGithub().catch(err => console.error('[GitHub] Failed to open repository:', err));
+  });
+
+  fullscreenExitBtn?.addEventListener('click', (e) => {
+    if (!fullscreenActive) return;
+    e.preventDefault();
+    hideFullscreenExitButton();
+    toggleFullscreen();
+  });
+  fullscreenExitBtn?.addEventListener('keydown', (e) => {
+    if (!fullscreenActive || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    hideFullscreenExitButton();
+    toggleFullscreen();
   });
 
   document.getElementById('cmd-options').addEventListener('click', async () => {
@@ -683,6 +847,7 @@ function bindDragDrop() {
     window.addEventListener('quivit-config-loaded', () => {
       const config = Core.getState().config;
       updatePanSteps(config);
+      updateFullscreenExitKeyLabel();
       syncScrollLatch(config);
       if (previewTheme !== null) {
         applyPreviewTheme(previewTheme);
@@ -867,6 +1032,15 @@ Core.onStateChange((state) => {
 window.addEventListener('quivit-history-changed', () => {
   updateHistoryMenu();
 });
+
+document.addEventListener('fullscreenchange', () => {
+  if (!window.__TAURI__) setFullscreenUiActive(!!document.fullscreenElement);
+});
+
+window.addEventListener('pointermove', handleFullscreenExitMouseMove, { passive: true });
+window.addEventListener('keydown', handleFullscreenExitKeyDown, { capture: true });
+window.addEventListener('keyup', handleFullscreenExitKeyUp, { capture: true });
+window.addEventListener('blur', () => cancelFullscreenExitKeyHold({ hideFeedback: true }));
 
 // Badge opens the metadata window
 metadataBadge.addEventListener('click', () => openMetadataWindow());

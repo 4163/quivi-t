@@ -712,6 +712,103 @@ li:hover > .fav-remove,
   background: var(--bg);
 }
 
+/* --- Fullscreen exit affordance --------------------------- */
+#fullscreen-exit-hint {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 31;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--menu-shadow);
+  color: var(--text);
+  font-size: var(--fs-13);
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity 0.08s linear;
+}
+
+#fullscreen-exit-hint.visible {
+  opacity: 1;
+}
+
+#fullscreen-exit-key {
+  min-width: 24px;
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--text) 58%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--surface-alt) 74%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-12);
+  line-height: 1;
+  text-align: center;
+}
+
+#fullscreen-exit-region {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  z-index: 30;
+  pointer-events: none;
+}
+
+#fullscreen-exit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface-alt) 78%, transparent);
+  box-shadow: var(--menu-shadow);
+  color: var(--text);
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-42px);
+  transition: transform 0.07s ease-in, opacity 0.07s linear, background-color 0.08s;
+}
+
+#fullscreen-exit-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  flex: 0 0 18px;
+}
+
+body.fullscreen-exit-visible #fullscreen-exit-btn {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(14px);
+  transition-duration: 0.1s;
+  transition-timing-function: ease-out;
+}
+
+#fullscreen-exit-btn:hover,
+#fullscreen-exit-btn:focus-visible {
+  background: color-mix(in srgb, var(--surface-alt) 86%, transparent);
+  outline: none;
+}
+
 /* --- Drop overlay ----------------------------------------- */
 #drop-overlay {
   position: absolute;

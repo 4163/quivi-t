@@ -169,7 +169,8 @@ export const FsUtils = {
   formatStatusIndex(state) {
     if (!state || !Array.isArray(state.list) || state.list.length < 2) return '';
     const hasParent = state.list[0]?.name === '..' ? 1 : 0;
-    return `${state.index + 1 - hasParent} / ${state.list.length - hasParent}`;
+    const current = Math.max(0, state.index + 1 - hasParent);
+    return `${current} / ${state.list.length - hasParent}`;
   },
 
   showHidden() {

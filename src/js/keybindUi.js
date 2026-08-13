@@ -62,6 +62,7 @@ const CATEGORIES = [
       { id: 'cmd-toggle-menubar', label: 'Toggle Menu Bar' },
       { id: 'cmd-toggle-statusbar', label: 'Toggle Status Bar' },
       { id: 'cmd-fullscreen', label: 'Toggle Fullscreen' },
+      { id: 'cmd-exit-fullscreen-hold', label: 'Exit Fullscreen (Hold)' },
     ]
   },
   {
@@ -83,13 +84,42 @@ const CATEGORIES = [
   }
 ];
 
+const SINGLE_INPUT_ACTIONS = new Set(['cmd-pan-drag', 'cmd-exit-fullscreen-hold']);
+const LOCKED_BINDINGS = {
+  'cmd-exit-fullscreen-hold': new Set(['Escape']),
+};
+const MENUBAR_ACTION = 'cmd-toggle-menubar';
+
+function keybindList(raw) {
+  return Array.isArray(raw) ? raw : (raw ? [raw] : []);
+}
+
+function comboUsedByOtherAction(binds, ownerActionId, combo) {
+  const normalizedCombo = normalizeCombo(combo);
+  return Object.entries(binds).some(([actionId, raw]) => (
+    actionId !== ownerActionId && keybindList(raw).map(normalizeCombo).includes(normalizedCombo)
+  ));
+}
+
+function hasUsableMenubarBind(binds, candidateBinds = keybindList(binds[MENUBAR_ACTION])) {
+  return candidateBinds.some(bind => !comboUsedByOtherAction(binds, MENUBAR_ACTION, bind));
+}
+
+export function validateKeybindSafety(config) {
+  const binds = config?.frontend_data?.keybinds || {};
+  if (!hasUsableMenubarBind(binds)) {
+    return { ok: false, message: 'Toggle Menu Bar needs at least one non-conflicting binding.' };
+  }
+  return { ok: true, message: '' };
+}
+
 export function initKeybindUi(containerId, config, showStatus) {
   let isCapturing = false;
 
   function getConflictColors(binds) {
     const comboToActions = {};
     for (const [actionId, raw] of Object.entries(binds)) {
-      const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+      const list = keybindList(raw);
       for (const combo of list) {
         if (!comboToActions[combo]) comboToActions[combo] = [];
         comboToActions[combo].push(actionId);
@@ -120,23 +150,36 @@ export function initKeybindUi(containerId, config, showStatus) {
     return { comboToActions, conflictColorMap };
   }
   
-  function canRemoveMenubarBind(bindToRemove, currentBinds) {
-    if (currentBinds.length > 1) return true;
-    const binds = config.frontend_data.keybinds;
-    const { comboToActions } = getConflictColors(binds);
-    const isConflicted = (comboToActions[bindToRemove] || []).length > 1;
-    return isConflicted;
+  function canUseMenubarBinds(candidateBinds) {
+    return hasUsableMenubarBind(config.frontend_data.keybinds, candidateBinds);
+  }
+
+  function isLockedBinding(actionId, bind) {
+    return LOCKED_BINDINGS[actionId]?.has(normalizeCombo(bind)) === true;
+  }
+
+  function showLockedBindingStatus(actionId, bind) {
+    if (actionId === 'cmd-exit-fullscreen-hold' && normalizeCombo(bind) === 'Escape') {
+      showStatus('Fullscreen requires Esc as a fallback.');
+    }
   }
 
   function captureKeybind(actionId, index, element, initiatingEvent) {
     if (isCapturing) return;
+    const binds = config.frontend_data.keybinds;
+    let currentBinds = binds[actionId];
+    if (!Array.isArray(currentBinds)) currentBinds = currentBinds ? [currentBinds] : [];
+    if (isLockedBinding(actionId, currentBinds[index])) {
+      showLockedBindingStatus(actionId, currentBinds[index]);
+      return;
+    }
+
     isCapturing = true;
-    const singleOnly = actionId === 'cmd-pan-drag';
+    const singleOnly = SINGLE_INPUT_ACTIONS.has(actionId);
   
     element.classList.add('capturing');
     element.textContent = 'Listening...';
     
-    const binds = config.frontend_data.keybinds;
     let activeKeys = new Set();
     let activeButtons = new Set();
     let maxKeys = new Set();
@@ -188,18 +231,26 @@ export function initKeybindUi(containerId, config, showStatus) {
       cleanup();
       
       if (finalCombo) {
-        let currentBinds = binds[actionId];
-        if (!Array.isArray(currentBinds)) currentBinds = currentBinds ? [currentBinds] : [];
+        let currentBinds = keybindList(binds[actionId]);
   
         if (finalCombo === 'Delete') {
           const bindToRemove = currentBinds[index];
-          if (actionId === 'cmd-toggle-menubar' && !canRemoveMenubarBind(bindToRemove, currentBinds)) {
-            showStatus('Cannot remove the last uncontested menu bar binding!');
+          const candidateBinds = currentBinds.filter((_, i) => i !== index);
+          if (isLockedBinding(actionId, bindToRemove)) {
+            showLockedBindingStatus(actionId, bindToRemove);
+          } else if (actionId === MENUBAR_ACTION && !canUseMenubarBinds(candidateBinds)) {
+            showStatus('Toggle Menu Bar needs at least one non-conflicting binding.');
           } else {
             currentBinds.splice(index, 1);
           }
         } else {
-          currentBinds[index] = normalizeCombo(finalCombo);
+          const candidateBinds = [...currentBinds];
+          candidateBinds[index] = normalizeCombo(finalCombo);
+          if (actionId === MENUBAR_ACTION && !canUseMenubarBinds(candidateBinds)) {
+            showStatus('Toggle Menu Bar needs at least one non-conflicting binding.');
+          } else {
+            currentBinds = candidateBinds;
+          }
         }
         
         binds[actionId] = currentBinds;
@@ -444,9 +495,7 @@ export function initKeybindUi(containerId, config, showStatus) {
           const { conflictColorMap: newColors } = getConflictColors(config.frontend_data.keybinds);
           tagsContainer.innerHTML = '';
           let currentBinds = binds[action.id];
-          if (!Array.isArray(currentBinds)) {
-            currentBinds = currentBinds ? [currentBinds] : [];
-          }
+          currentBinds = keybindList(currentBinds);
   
           currentBinds.forEach((bind, idx) => {
             const tag = document.createElement('button');
@@ -464,8 +513,13 @@ export function initKeybindUi(containerId, config, showStatus) {
             tag.appendChild(textSpan);
 
             const removeBinding = () => {
-              if (action.id === 'cmd-toggle-menubar' && !canRemoveMenubarBind(bind, currentBinds)) {
-                showStatus('Cannot remove the last uncontested menu bar binding!');
+              if (isLockedBinding(action.id, bind)) {
+                showLockedBindingStatus(action.id, bind);
+                return;
+              }
+              const candidateBinds = currentBinds.filter((_, i) => i !== idx);
+              if (action.id === MENUBAR_ACTION && !canUseMenubarBinds(candidateBinds)) {
+                showStatus('Toggle Menu Bar needs at least one non-conflicting binding.');
                 return;
               }
               currentBinds.splice(idx, 1);
@@ -476,7 +530,7 @@ export function initKeybindUi(containerId, config, showStatus) {
             const xBtn = document.createElement('span');
             xBtn.className = 'remove-btn';
             xBtn.textContent = '×';
-            xBtn.title = 'Remove binding';
+            xBtn.title = isLockedBinding(action.id, bind) ? 'Required binding' : 'Remove binding';
             
             xBtn.addEventListener('click', (e) => {
               e.stopPropagation();

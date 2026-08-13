@@ -26,6 +26,7 @@ export const DEFAULT_KEYBINDS = {
   'cmd-toggle-menubar': '2',
   'cmd-toggle-statusbar': '3',
   'cmd-fullscreen': ['4', 'Alt+Enter'],
+  'cmd-exit-fullscreen-hold': 'Escape',
   'cmd-toggle-transparent': [],
   'cmd-options': '5',
   'cmd-fit-none': ['r', 'DoubleClick'],
@@ -102,6 +103,11 @@ export function mergeConfig(loaded) {
         for (const [actionId, combo] of Object.entries(merged)) {
           merged[actionId] = Array.isArray(combo) ? combo.map(normalizeCombo) : normalizeCombo(combo);
         }
+        const fullscreenExitHold = Array.isArray(merged['cmd-exit-fullscreen-hold'])
+          ? merged['cmd-exit-fullscreen-hold']
+          : [merged['cmd-exit-fullscreen-hold']].filter(Boolean);
+        if (!fullscreenExitHold.includes('Escape')) fullscreenExitHold.unshift('Escape');
+        merged['cmd-exit-fullscreen-hold'] = fullscreenExitHold;
         return merged;
       })(),
     },
