@@ -4,7 +4,7 @@
  * (main window) and options.js (options window).
  */
 
-import { normalizeCombo } from './shortcuts.js';
+import { normalizeCombo, normalizeList } from './services/keyCombo.js';
 
 export const DEFAULT_KEYBINDS = {
   'cmd-next': ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'],
@@ -101,11 +101,9 @@ export function mergeConfig(loaded) {
         const userBinds = fd.keybinds || {};
         const merged = { ...defaultClone, ...userBinds };
         for (const [actionId, combo] of Object.entries(merged)) {
-          merged[actionId] = Array.isArray(combo) ? combo.map(normalizeCombo) : normalizeCombo(combo);
+          merged[actionId] = normalizeList(combo).map(normalizeCombo);
         }
-        const fullscreenExitHold = Array.isArray(merged['cmd-exit-fullscreen-hold'])
-          ? merged['cmd-exit-fullscreen-hold']
-          : [merged['cmd-exit-fullscreen-hold']].filter(Boolean);
+        const fullscreenExitHold = merged['cmd-exit-fullscreen-hold'];
         if (!fullscreenExitHold.includes('Escape')) fullscreenExitHold.push('Escape');
         merged['cmd-exit-fullscreen-hold'] = fullscreenExitHold;
         return merged;

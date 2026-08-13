@@ -2,117 +2,17 @@
  * shortcuts.js - keyboard shortcut matching and command dispatch.
  */
 
-function bindingMatches(binding, combo) {
-  return Array.isArray(binding) ? binding.includes(combo) : binding === combo;
-}
-
-const PASSIVE_ACTIONS = new Set(['cmd-exit-fullscreen-hold']);
+import { formatKeysCombo, PASSIVE_ACTIONS, findAction, normalizeCombo, formatKeyName, MOUSE_BUTTON_NAMES, normalizeList, isModifierKey } from './services/keyCombo.js';
+export { normalizeCombo, formatKeyName, formatKeysCombo, MOUSE_BUTTON_NAMES, normalizeList };
 
 export const activeKeys = new Set();
 export const activeButtons = new Set();
-
-const SPECIAL_KEY_MAP = {
-  backspace: 'Backspace',
-  delete: 'Delete',
-  insert: 'Insert',
-  home: 'Home',
-  end: 'End',
-  enter: 'Enter',
-  tab: 'Tab',
-  escape: 'Escape',
-  arrowup: 'ArrowUp',
-  arrowdown: 'ArrowDown',
-  arrowleft: 'ArrowLeft',
-  arrowright: 'ArrowRight',
-  pageup: 'PageUp',
-  pagedown: 'PageDown',
-  capslock: 'CapsLock',
-  scrolllock: 'ScrollLock',
-  numlock: 'NumLock',
-  printscreen: 'PrintScreen',
-  contextmenu: 'ContextMenu',
-  pause: 'Pause',
-  scrollup: 'ScrollUp',
-  scrolldown: 'ScrollDown',
-  doubleclick: 'DoubleClick',
-  doublerightclick: 'DoubleRightClick',
-  ' ': 'Space',
-  space: 'Space',
-  mouseleft: 'MouseLeft',
-  mousemiddle: 'MouseMiddle',
-  mouseright: 'MouseRight',
-  mouseback: 'MouseBack',
-  mouseforward: 'MouseForward',
-};
-
-// Native mouse button number → canonical keybind name. Single source of truth
-// shared by formatKeysCombo (dispatch), keybindUi (capture), and the viewer pan
-// key lookup — keep the three in sync by using this one table.
-export const MOUSE_BUTTON_NAMES = { 0: 'MouseLeft', 1: 'MouseMiddle', 2: 'MouseRight', 3: 'MouseBack', 4: 'MouseForward' };
-
-export function formatKeyName(key) {
-  const k = key.toLowerCase();
-  if (SPECIAL_KEY_MAP[k]) return SPECIAL_KEY_MAP[k];
-  if (k.length === 1) return k;
-  return k.charAt(0).toUpperCase() + k.slice(1);
-}
-
-export function normalizeCombo(combo) {
-  if (typeof combo !== 'string') return combo;
-  return combo.split('+').map(formatKeyName).join('+');
-}
-
-export function formatKeysCombo(keysSet, buttonsSet, scrollDir) {
-  const combo = [];
-  const lowerKeys = Array.from(keysSet).map(k => k.toLowerCase());
-  
-  if (lowerKeys.includes('control')) combo.push('Ctrl');
-  if (lowerKeys.includes('alt')) combo.push('Alt');
-  if (lowerKeys.includes('shift')) combo.push('Shift');
-
-  const modifiers = ['control', 'alt', 'shift', 'meta'];
-  const others = [];
-
-  for (const k of lowerKeys) {
-    if (!modifiers.includes(k)) {
-      others.push(k === ' ' ? 'Space' : formatKeyName(k));
-    }
-  }
-
-  for (const b of buttonsSet) {
-    others.push(MOUSE_BUTTON_NAMES[b] || `Mouse${b}`);
-  }
-
-  others.sort();
-  if (scrollDir) others.push(scrollDir);
-
-  return combo.concat(others).join('+');
-}
-
-export function formatKeyCombo(e) {
-  return formatKeysCombo(activeKeys, activeButtons);
-}
-
-function findAction(config, combo) {
-  const binds = config?.frontend_data?.keybinds || {};
-
-  const lowerCombo = combo.toLowerCase();
-  for (const [id, bindCombo] of Object.entries(binds)) {
-    if (Array.isArray(bindCombo)) {
-      if (bindCombo.some(b => b.toLowerCase() === lowerCombo)) return PASSIVE_ACTIONS.has(id) ? null : id;
-    } else {
-      if (bindCombo.toLowerCase() === lowerCombo) return PASSIVE_ACTIONS.has(id) ? null : id;
-    }
-  }
-
-  return null;
-}
 
 export function updateMenuShortcuts(config) {
   const binds = config?.frontend_data?.keybinds || {};
   for (const [id, combo] of Object.entries(binds)) {
     const shortcut = document.querySelector(`#${id} .shortcut`);
-    if (shortcut) shortcut.textContent = Array.isArray(combo) ? combo[0] : combo;
+    if (shortcut) shortcut.textContent = normalizeList(combo)[0] || combo;
   }
 }
 
@@ -161,7 +61,7 @@ function getScrollModifierKeys(config, ids = _SCROLL_ALL_IDS) {
   const found = new Set();
   for (const id of ids) {
     const combo = binds[id];
-    const list = Array.isArray(combo) ? combo : (combo ? [combo] : []);
+    const list = normalizeList(combo);
     for (const c of list) {
       if (typeof c === 'string' && /Scroll(Up|Down)$/.test(c)) {
         const token = c.split('+').find(t => _MODIFIER_LOWER[t] !== undefined);
@@ -246,7 +146,7 @@ function updateKeyboardPanBindings(config) {
 
   for (const [actionId, vector] of Object.entries(KEYBOARD_PAN_VECTORS)) {
     const raw = binds[actionId];
-    const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    const list = normalizeList(raw);
     for (const combo of list) {
       if (typeof combo !== 'string') continue;
       const tokens = normalizeCombo(combo).split('+').map(keybindTokenToActiveKey);
@@ -328,14 +228,14 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
   const handleShortcut = (e) => {
     // Ignore bare modifiers for dispatch
-    if (e.type === 'keydown' && ['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+    if (e.type === 'keydown' && isModifierKey(e.key)) return;
 
     if (e.type === 'mousedown') {
       const isUI = e.target.closest('.menu-item, #statusbar, .file-panel-header');
       if (isUI) return;
     }
 
-    const actionId = findAction(Core.getState().config, formatKeyCombo(e));
+    const actionId = findAction(Core.getState().config, formatKeysCombo(activeKeys, activeButtons));
     if (!actionId) return;
 
     e.preventDefault();
@@ -364,10 +264,10 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
     activeKeys.add(e.key.toLowerCase());
     const config = Core.getState().config;
-    const actionId = findAction(config, formatKeyCombo(e));
+    const actionId = findAction(config, formatKeysCombo(activeKeys, activeButtons));
     if (!onInteractive && actionId && !KEYBOARD_PAN_VECTORS[actionId]) {
       handleShortcut(e);
-      if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(config);
+      if (isModifierKey(e.key)) _updateScrollIndicator(config);
       return;
     }
 
@@ -375,12 +275,12 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     if (!onInteractive && (keyboardPanVector.x !== 0 || keyboardPanVector.y !== 0)) {
       e.preventDefault();
       dispatchKeyboardPan?.(keyboardPanVector.x, keyboardPanVector.y);
-      if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(config);
+      if (isModifierKey(e.key)) _updateScrollIndicator(config);
       return;
     }
 
     handleShortcut(e);
-    if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(Core.getState().config);
+    if (isModifierKey(e.key)) _updateScrollIndicator(Core.getState().config);
   });
 
   window.addEventListener('keyup', (e) => {
@@ -398,7 +298,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
       ctrlChordBroken = false;
     }
     activeKeys.delete(e.key.toLowerCase());
-    if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(Core.getState().config);
+    if (isModifierKey(e.key)) _updateScrollIndicator(Core.getState().config);
   });
 
   window.addEventListener('blur', () => {
@@ -470,7 +370,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
       return;
     }
 
-    const combo = formatKeyCombo(e);
+    const combo = formatKeysCombo(activeKeys, activeButtons);
     clearClickTimer();
     clickState = { button, x: e.clientX, y: e.clientY, time: now, timer: null };
     clickState.timer = setTimeout(() => {

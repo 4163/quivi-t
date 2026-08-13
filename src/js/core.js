@@ -301,16 +301,8 @@ export const Core = {
       _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
       _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
       
-      // Apply Theme
-      const theme = _state.config.frontend_data.theme || 'system';
-      document.documentElement.removeAttribute('data-theme');
-      if (theme === 'light' || theme === 'dark') {
-        document.documentElement.setAttribute('data-theme', theme);
-        try { localStorage.setItem('quivit-theme', theme); } catch(e) {}
-      } else {
-        try { localStorage.removeItem('quivit-theme'); } catch(e) {}
-      }
       
+
       // Auto-refresh if show_hidden changed
       if (oldShowHidden !== undefined && oldShowHidden !== _state.config.frontend_data.show_hidden) {
         if (_state.directory || _state.archivePath) {

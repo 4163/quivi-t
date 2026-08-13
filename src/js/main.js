@@ -7,7 +7,9 @@ import { FsUtils } from './fsUtils.js';
 import { Viewer } from './viewer.js';
 import * as NavigationHistory from './navigationHistory.js';
 import { initFilePanel, renderFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite } from './filePanel.js';
-import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch, normalizeCombo, formatKeyName } from './shortcuts.js';
+import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from './shortcuts.js';
+import { normalizeCombo, formatKeyName, normalizeList } from './services/keyCombo.js';
+import { applyTheme, applyCustomCss } from './shared/theme.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from './keybinds.js';
 import {
   initMenuBar,
@@ -204,15 +206,6 @@ function setScaling(mode) {
   Core.setScalingMode(mode, { persist: true });
 }
 
-function applyCustomCss(cssText) {
-  let styleEl = document.getElementById('custom-css');
-  if (!styleEl) {
-    styleEl = document.createElement('style');
-    styleEl.id = 'custom-css';
-    document.head.appendChild(styleEl);
-  }
-  styleEl.textContent = cssText || '';
-}
 
 function updatePanSteps(config = Core.getState().config) {
   const fd = config?.frontend_data || {};
@@ -227,7 +220,8 @@ function dispatchKeyboardPan(dx, dy) {
 
 function getFullscreenExitBindings() {
   const bind = Core.getState().config?.frontend_data?.keybinds?.['cmd-exit-fullscreen-hold'];
-  return Array.isArray(bind) ? bind.filter(Boolean) : [bind || 'Escape'];
+  const list = normalizeList(bind).filter(Boolean);
+  return list.length > 0 ? list : ['Escape'];
 }
 
 function formatFullscreenExitKeyLabel() {
@@ -844,12 +838,7 @@ function bindDragDrop() {
     let previewTheme = null;
     let previewCss = null;
 
-    function applyPreviewTheme(theme) {
-      document.documentElement.removeAttribute('data-theme');
-      if (theme === 'light' || theme === 'dark') {
-        document.documentElement.setAttribute('data-theme', theme);
-      }
-    }
+
 
     listen('config-updated', () => {
       previewTheme = null;
@@ -887,13 +876,26 @@ function bindDragDrop() {
       } else {
         syncFullscreenUi(!!document.fullscreenElement);
       }
+      const theme = config?.frontend_data?.theme || 'system';
+      const customCss = config?.frontend_data?.custom_css || '';
+
+      try {
+        if (theme === 'light' || theme === 'dark') localStorage.setItem('quivit-theme', theme);
+        else localStorage.removeItem('quivit-theme');
+        if (customCss) localStorage.setItem('quivit-custom-css', customCss);
+        else localStorage.removeItem('quivit-custom-css');
+      } catch (e) {}
+
       if (previewTheme !== null) {
-        applyPreviewTheme(previewTheme);
+        applyTheme(previewTheme);
+      } else {
+        applyTheme(theme);
       }
+
       if (previewCss !== null) {
         applyCustomCss(previewCss);
       } else {
-        applyCustomCss(config?.frontend_data?.custom_css || '');
+        applyCustomCss(customCss);
       }
     });
     listen('single-instance-open', (e) => {
@@ -903,7 +905,7 @@ function bindDragDrop() {
     });
     listen('theme-preview', (e) => {
       previewTheme = e.payload;
-      applyPreviewTheme(previewTheme);
+      applyTheme(previewTheme);
     });
     listen('css-preview', (e) => {
       previewCss = e.payload;
@@ -955,7 +957,7 @@ function updateWindowTitle(state) {
     const pos = FsUtils.naturalPagePosition(state.list, state.filename);
     const page = pos && pos.total > 1 ? ` (${pos.current}/${pos.total})` : '';
     if (state.mode === 'archive' && state.archivePath) {
-      const name = _basename(state.archivePath);
+      const name = FsUtils.basename(state.archivePath);
       if (name) title = `${state.filename}${page} ◦ ${name} ◦ QuiviT`;
     } else {
       title = `${state.filename}${page} ◦ QuiviT`;
@@ -968,10 +970,6 @@ function updateWindowTitle(state) {
   }
 }
 
-function _basename(path) {
-  if (!path) return '';
-  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
-}
 
 Core.onStateChange((state) => {
   updateWindowTitle(state);

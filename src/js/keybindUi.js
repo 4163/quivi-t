@@ -1,4 +1,4 @@
-import { formatKeysCombo, normalizeCombo } from './shortcuts.js';
+import { formatKeysCombo, normalizeCombo, normalizeList } from './services/keyCombo.js';
 
 const CATEGORIES = [
   {
@@ -90,18 +90,16 @@ const LOCKED_BINDINGS = {
 };
 const MENUBAR_ACTION = 'cmd-toggle-menubar';
 
-function keybindList(raw) {
-  return Array.isArray(raw) ? raw : (raw ? [raw] : []);
-}
+
 
 function comboUsedByOtherAction(binds, ownerActionId, combo) {
   const normalizedCombo = normalizeCombo(combo);
   return Object.entries(binds).some(([actionId, raw]) => (
-    actionId !== ownerActionId && keybindList(raw).map(normalizeCombo).includes(normalizedCombo)
+    actionId !== ownerActionId && normalizeList(raw).map(normalizeCombo).includes(normalizedCombo)
   ));
 }
 
-function hasUsableMenubarBind(binds, candidateBinds = keybindList(binds[MENUBAR_ACTION])) {
+function hasUsableMenubarBind(binds, candidateBinds = normalizeList(binds[MENUBAR_ACTION])) {
   return candidateBinds.some(bind => !comboUsedByOtherAction(binds, MENUBAR_ACTION, bind));
 }
 
@@ -119,7 +117,7 @@ export function initKeybindUi(containerId, config, showStatus) {
   function getConflictColors(binds) {
     const comboToActions = {};
     for (const [actionId, raw] of Object.entries(binds)) {
-      const list = keybindList(raw);
+      const list = normalizeList(raw);
       for (const combo of list) {
         if (!comboToActions[combo]) comboToActions[combo] = [];
         comboToActions[combo].push(actionId);
@@ -167,8 +165,7 @@ export function initKeybindUi(containerId, config, showStatus) {
   function captureKeybind(actionId, index, element, initiatingEvent) {
     if (isCapturing) return;
     const binds = config.frontend_data.keybinds;
-    let currentBinds = binds[actionId];
-    if (!Array.isArray(currentBinds)) currentBinds = currentBinds ? [currentBinds] : [];
+    let currentBinds = normalizeList(binds[actionId]);
     if (isLockedBinding(actionId, currentBinds[index])) {
       showLockedBindingStatus(actionId, currentBinds[index]);
       return;
@@ -231,7 +228,7 @@ export function initKeybindUi(containerId, config, showStatus) {
       cleanup();
       
       if (finalCombo) {
-        let currentBinds = keybindList(binds[actionId]);
+        let currentBinds = normalizeList(binds[actionId]);
   
         if (finalCombo === 'Delete') {
           const bindToRemove = currentBinds[index];
@@ -495,7 +492,7 @@ export function initKeybindUi(containerId, config, showStatus) {
           const { conflictColorMap: newColors } = getConflictColors(config.frontend_data.keybinds);
           tagsContainer.innerHTML = '';
           let currentBinds = binds[action.id];
-          currentBinds = keybindList(currentBinds);
+          currentBinds = normalizeList(currentBinds);
   
           currentBinds.forEach((bind, idx) => {
             const tag = document.createElement('button');

@@ -36,6 +36,11 @@ function parentOf(path) {
   return /^[A-Za-z]:$/.test(parent) ? parent + '\\' : parent;
 }
 
+function basename(path) {
+  if (!path) return '';
+  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+}
+
 function _formatDate(msStr) {
   if (!msStr) return '';
   const ms = parseInt(msStr, 10);
@@ -55,6 +60,7 @@ function _basename(path) {
 }
 
 export const FsUtils = {
+  basename,
   isArchive(name) { return SUPPORTED_ARCHIVES.has(_ext(name)); },
   isImage(name) { return SUPPORTED_IMAGES.has(_ext(name)); },
   isIco(name) { return _ext(name) === 'ico'; },

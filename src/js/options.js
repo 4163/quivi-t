@@ -1,4 +1,5 @@
 import { mergeConfig, DEFAULT_KEYBINDS } from './keybinds.js';
+import { applyTheme, applyCustomCss } from './shared/theme.js';
 import { makeListNavigable } from './keyboardNav.js';
 import { initKeybindUi, validateKeybindSafety } from './keybindUi.js';
 import { initAssociationsUi, applyAssociations } from './associationsUi.js';
@@ -63,27 +64,7 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-function applyTheme(theme) {
-  // Apply to this (options) window
-  document.documentElement.removeAttribute('data-theme');
-  if (theme === 'light' || theme === 'dark') {
-    document.documentElement.setAttribute('data-theme', theme);
-    try { localStorage.setItem('quivit-theme', theme); } catch(e) {}
-  } else {
-    // 'system' — remove any stored override
-    try { localStorage.removeItem('quivit-theme'); } catch(e) {}
-  }
-}
 
-function applyCustomCss(cssText) {
-  let styleEl = document.getElementById('custom-css');
-  if (!styleEl) {
-    styleEl = document.createElement('style');
-    styleEl.id = 'custom-css';
-    document.head.appendChild(styleEl);
-  }
-  styleEl.textContent = cssText || '';
-}
 
 function showStatus(message) {
   if (statusEl) statusEl.textContent = message || '';

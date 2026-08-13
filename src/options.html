@@ -9,21 +9,7 @@
     <!-- Apply theme and custom CSS after all stylesheets so the injected
          #custom-css style lands last and wins the cascade (inline scripts
          block parsing, so this still runs before first paint). -->
-    <script>
-      (function() {
-        try {
-          var t = localStorage.getItem('quivit-theme');
-          if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
-          var c = localStorage.getItem('quivit-custom-css');
-          if (c) {
-            var s = document.createElement('style');
-            s.id = 'custom-css';
-            s.textContent = c;
-            document.head.appendChild(s);
-          }
-        } catch(e) {}
-      })();
-    </script>
+    <script src="/js/shared/themePrePaint.js"></script>
   </head>
   <body>
     <div class="tabs">
