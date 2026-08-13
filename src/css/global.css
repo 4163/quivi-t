@@ -1,0 +1,196 @@
+/* ============================================================
+   global.css — QuiviT
+   Shared foundation loaded by every page (index, options, metadata).
+   System-theme aware (light default / dark via media query).
+   All design tokens live here as CSS custom properties.
+   ============================================================ */
+
+/* --- System font stack (zero external requests → best LCP) -- */
+:root {
+  /* Light theme tokens */
+  --bg:            #f0f0f0;
+  --surface:       #ffffff;
+  --surface-alt:   #fafafa;
+  --field-bg:      #f0f0f0;
+  --border:        #d4d4d4;
+  --border-light:  #e8e8e8;
+  --text:          #1a1a1a;
+  --text-muted:    #666666;
+  --text-dim:      #999999;
+  --text-status:   #b00020;
+  --accent:        #0078d4;
+  --accent-hover:  #106ebe;
+  --danger:        #e53935;
+  --selected-bg:   #cce4f7;
+  --selected-text: #003f7f;
+  --hover-bg:      #e8f0f8;
+  --menu-bg:       #ffffff;
+  --menu-shadow:   0 2px 8px rgba(0,0,0,0.18);
+  --drag-resize:   #deb76c;
+  --grill-bg:      rgba(120, 180, 160, 0.4);
+  --grill-lines:   rgba(20, 90, 75, 0.65);
+  --grill-border:  rgba(20, 90, 75, 0.7);
+
+  /* Viewport / checkerboard */
+  --checker-a:    #c8c8c8;
+  --checker-b:    #b8b8b8;
+  --checker-size: 14px;
+
+  /* Layout */
+  --panel-w:         260px;
+  --panel-min-w:     120px;
+  --panel-max-w:     480px;
+  --resize-handle-w: 4px;
+  --col-name-w:      134px;
+  --col-ext-w:       46px;
+  --col-date-w:      92px;
+
+  color-scheme: light dark;
+
+  /* Font sizes in px (rem = px ÷ 16) */
+  --fs-8:    0.5rem;
+  --fs-9:    0.5625rem;
+  --fs-10:   0.625rem;
+  --fs-11:   0.6875rem;
+  --fs-11-5: 0.71875rem; /* 11.5 */
+  --fs-12:   0.75rem;
+  --fs-13:   0.8125rem;
+  --fs-14:   0.875rem;
+  --fs-15:   0.9375rem;
+  --fs-16:   1rem;
+  --fs-17:   1.0625rem;
+  --fs-18:   1.125rem;
+  --fs-19:   1.1875rem;
+  --fs-20:   1.25rem;
+  --fs-21:   1.3125rem;
+  --fs-22:   1.375rem;
+  --fs-23:   1.4375rem;
+  --fs-24:   1.5rem;
+  --fs-28:   1.75rem;
+  --fs-36:   2.25rem;
+  --fs-40:   2.5rem;
+  --fs-50:   3.125rem;
+  --fs-64:   4rem;
+
+  /* Opaque grill layout */
+  --grill-spacing-px: 8;
+  --grill-thickness-px: 1;
+  
+  --grill-spacing: calc(var(--grill-spacing-px) * 1px);
+  /* The diagonal length of a square tile is spacing * sqrt(2) (approx 1.4142).
+     We calculate the thickness as a percentage of the diagonal gradient line. */
+  --grill-thickness-pct: calc((var(--grill-thickness-px) / (var(--grill-spacing-px) * 1.4142)) * 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:           #1e1e1e;
+    --surface:      #252526;
+    --surface-alt:  #2d2d2d;
+    --field-bg:     #1e1e1e;
+    --border:       #3c3c3c;
+    --border-light: #333333;
+    --text:         #e8e8e8;
+    --text-muted:   #aaaaaa;
+    --text-dim:     #666666;
+    --text-status:  #ff4d7a;
+    --accent:       #4ea4f7;
+    --accent-hover: #3a8ee0;
+    --danger:       #e53935;
+    --selected-bg:  #1e3a5f;
+    --selected-text:#8fc8ff;
+    --hover-bg:     #2a3545;
+    --menu-bg:      #2d2d2d;
+    --menu-shadow:  0 2px 10px rgba(0,0,0,0.5);
+    --checker-a:    #3a3a3a;
+    --checker-b:    #2e2e2e;
+    --grill-bg:     rgba(20, 60, 50, 0.75);
+    --grill-lines:  rgba(60, 200, 170, 0.6);
+    --grill-border: rgba(60, 200, 170, 0.6);
+  }
+}
+
+/* Explicit dark theme override (ignores system preference) */
+:root[data-theme="dark"] {
+  --bg:           #1e1e1e;
+  --surface:      #252526;
+  --surface-alt:  #2d2d2d;
+  --field-bg:     #1e1e1e;
+  --border:       #3c3c3c;
+  --border-light: #333333;
+  --text:         #e8e8e8;
+  --text-muted:   #aaaaaa;
+  --text-dim:     #666666;
+  --text-status:  #ff4d7a;
+  --accent:       #4ea4f7;
+  --accent-hover: #3a8ee0;
+  --selected-bg:  #1e3a5f;
+  --selected-text:#8fc8ff;
+  --hover-bg:     #2a3545;
+  --menu-bg:      #2d2d2d;
+  --menu-shadow:  0 2px 10px rgba(0,0,0,0.5);
+  --checker-a:    #3a3a3a;
+  --checker-b:    #2e2e2e;
+  --grill-bg:     rgba(20, 60, 50, 0.75);
+  --grill-lines:  rgba(60, 200, 170, 0.6);
+  --grill-border: rgba(60, 200, 170, 0.6);
+}
+
+/* --- Reset -------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* --- Focus-visible: keyboard-only outline ------------------ */
+/* Only shows when navigating with keyboard, not on mouse click */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+html {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 100%;
+  line-height: 1.4;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  /*
+    global of 13px for the font-size
+    really weird implementation;
+    - font sizes are done this way so users can set a default html value via the css section in options.
+    - this isn't inherently bad, as browser preferences cannot be set in tauri applications in the first place.
+  */
+  font-size: var(--fs-13);
+}
+
+button {
+  font-size: inherit;
+}
+
+input {
+  width: var(--fs-13);
+  height: var(--fs-13);
+  cursor: pointer;
+}
+
+/* --- Utilities --------------------------------------------- */
+.hidden { display: none !important; }
+
+/* Scrollbar styling (Webkit) */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* --- Accessibility navigation styles ----------------------- */
