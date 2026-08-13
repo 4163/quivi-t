@@ -68,12 +68,15 @@ export function mergeConfig(loaded) {
   const fd = loaded?.frontend_data && typeof loaded.frontend_data === 'object'
     ? loaded.frontend_data
     : {};
+  const fdBase = { ...fd };
+  delete fdBase.keyboard_pan_step;
+  delete fdBase.wheel_pan_step;
 
   const result = {
     portable_mode: !!loaded?.portable_mode,
     hidden: loaded?.hidden === true, // Preserve hidden field (config-file-only)
     frontend_data: {
-      ...fd,
+      ...fdBase,
       continue_last: fd.continue_last !== false,
       remember_last_image: fd.remember_last_image === true,
       open_first_image: fd.open_first_image === true,

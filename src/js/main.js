@@ -8,6 +8,7 @@ import { Viewer } from './viewer.js';
 import * as NavigationHistory from './navigationHistory.js';
 import { initFilePanel, renderFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite } from './filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from './shortcuts.js';
+import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from './keybinds.js';
 import {
   initMenuBar,
   closeMenus,
@@ -87,6 +88,8 @@ let statusBarVisible = true; // updated from config when loaded
 let _uiInitialized = false;
 let fullscreenActive = false;
 let dropMessageTimer = null;
+let keyboardPanStep = DEFAULT_KEYBOARD_PAN_STEP;
+let wheelPanStep = DEFAULT_WHEEL_PAN_STEP;
 const DEFAULT_DROP_MESSAGE = 'Drop files here, or click to open a folder';
 
 // Metadata window state
@@ -196,6 +199,17 @@ function applyCustomCss(cssText) {
     document.head.appendChild(styleEl);
   }
   styleEl.textContent = cssText || '';
+}
+
+function updatePanSteps(config = Core.getState().config) {
+  const fd = config?.frontend_data || {};
+  keyboardPanStep = Number.isFinite(fd.keyboard_pan_step) ? fd.keyboard_pan_step : DEFAULT_KEYBOARD_PAN_STEP;
+  wheelPanStep = Number.isFinite(fd.wheel_pan_step) ? fd.wheel_pan_step : DEFAULT_WHEEL_PAN_STEP;
+}
+
+function dispatchKeyboardPan(dx, dy) {
+  if (dx === 0 && dy === 0) return;
+  Viewer.panBy(dx * keyboardPanStep, dy * keyboardPanStep);
 }
 
 async function toggleFullscreen() {
@@ -314,9 +328,7 @@ function dispatchAction(actionId, payload) {
      // If it's a top level menu we could toggle it, but for actions we just execute them below
   }
 
-  const state = Core.getState();
-  const config = state.config?.frontend_data || {};
-  const wheelStep = payload?.wheel ? (config.wheel_pan_step || 120) : (config.keyboard_pan_step || 72);
+  const panStep = payload?.wheel ? wheelPanStep : keyboardPanStep;
 
   switch (actionId) {
     case 'cmd-open-dir':
@@ -421,16 +433,16 @@ function dispatchAction(actionId, payload) {
       FsUtils.openSibling(-1);
       break;
     case 'cmd-pan-up':
-      Viewer.panBy(0, wheelStep);
+      Viewer.panBy(0, panStep);
       break;
     case 'cmd-pan-left':
-      Viewer.panBy(wheelStep, 0);
+      Viewer.panBy(panStep, 0);
       break;
     case 'cmd-pan-down':
-      Viewer.panBy(0, -wheelStep);
+      Viewer.panBy(0, -panStep);
       break;
     case 'cmd-pan-right':
-      Viewer.panBy(-wheelStep, 0);
+      Viewer.panBy(-panStep, 0);
       break;
     case 'cmd-toggle-menubar':
       toggleMenuBar();
@@ -670,6 +682,7 @@ function bindDragDrop() {
     // it in-memory first, then this restores the saved toggle state.
     window.addEventListener('quivit-config-loaded', () => {
       const config = Core.getState().config;
+      updatePanSteps(config);
       syncScrollLatch(config);
       if (previewTheme !== null) {
         applyPreviewTheme(previewTheme);
@@ -863,7 +876,7 @@ initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resize
 initMenuBar();
 bindMenuCommands();
 bindDragDrop();
-bindKeyboardShortcuts({ Core, dispatchAction });
+bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPan });
 
 if (window.__TAURI__) {
   let watchTimer = null;

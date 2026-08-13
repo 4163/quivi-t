@@ -153,6 +153,7 @@ const _SCROLL_ZOOM_IDS = ['cmd-zoom-in', 'cmd-zoom-out'];
 const _SCROLL_PAN_IDS = ['cmd-pan-up', 'cmd-pan-down', 'cmd-pan-left', 'cmd-pan-right'];
 const _SCROLL_ALL_IDS = [..._SCROLL_ZOOM_IDS, ..._SCROLL_PAN_IDS];
 const _MODIFIER_LOWER = { Ctrl: 'control', Alt: 'alt', Shift: 'shift', Meta: 'meta' };
+const _MODIFIER_KEYS = new Set(['control', 'alt', 'shift', 'meta']);
 function getScrollModifierKeys(config, ids = _SCROLL_ALL_IDS) {
   const binds = config?.frontend_data?.keybinds || {};
   const found = new Set();
@@ -220,8 +221,82 @@ function isWheelOverUI(e) {
   return !!(el.closest?.('#file-panel, #menubar, .menu-dropdown, #statusbar'));
 }
 
-export function bindKeyboardShortcuts({ Core, dispatchAction }) {
+const KEYBOARD_PAN_VECTORS = {
+  'cmd-pan-up': { x: 0, y: 1 },
+  'cmd-pan-left': { x: 1, y: 0 },
+  'cmd-pan-down': { x: 0, y: -1 },
+  'cmd-pan-right': { x: -1, y: 0 },
+};
+
+let keyboardPanBindings = [];
+
+function keybindTokenToActiveKey(token) {
+  const lower = token.toLowerCase();
+  if (lower === 'ctrl') return 'control';
+  if (lower === 'space') return ' ';
+  if (lower.startsWith('scroll') || lower.startsWith('mouse') || lower.startsWith('double')) return null;
+  return lower;
+}
+
+function updateKeyboardPanBindings(config) {
+  const binds = config?.frontend_data?.keybinds || {};
+  keyboardPanBindings = [];
+
+  for (const [actionId, vector] of Object.entries(KEYBOARD_PAN_VECTORS)) {
+    const raw = binds[actionId];
+    const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    for (const combo of list) {
+      if (typeof combo !== 'string') continue;
+      const tokens = normalizeCombo(combo).split('+').map(keybindTokenToActiveKey);
+      if (tokens.length > 0 && tokens.every(Boolean)) {
+        keyboardPanBindings.push({ actionId, tokens, vector });
+      }
+    }
+  }
+}
+
+function keyboardPanBindingHeld(binding) {
+  for (const token of binding.tokens) {
+    if (!activeKeys.has(token)) return false;
+  }
+  for (const modifier of _MODIFIER_KEYS) {
+    if (activeKeys.has(modifier) && !binding.tokens.includes(modifier)) return false;
+  }
+  return true;
+}
+
+function readKeyboardPanVector() {
+  let x = 0;
+  let y = 0;
+  const activeActions = new Set();
+
+  for (const binding of keyboardPanBindings) {
+    if (activeActions.has(binding.actionId) || !keyboardPanBindingHeld(binding)) continue;
+    activeActions.add(binding.actionId);
+    x += binding.vector.x;
+    y += binding.vector.y;
+  }
+
+  return { x, y };
+}
+
+function isInteractiveKeyTarget(e) {
+  const target = e.target;
+  return !!(target && (
+    target.tagName === 'BUTTON'
+    || target.tagName === 'INPUT'
+    || target.tagName === 'TEXTAREA'
+    || target.tagName === 'SELECT'
+    || target.closest?.('button, input, textarea, select')
+  ));
+}
+
+export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPan }) {
   let lastSideButtonDispatch = { button: null, time: 0 };
+  updateKeyboardPanBindings(Core.getState().config);
+  window.addEventListener('quivit-config-loaded', () => {
+    updateKeyboardPanBindings(Core.getState().config);
+  });
 
   function dispatchMouseButton(button, e) {
     const combo = formatKeysCombo(activeKeys, new Set([button]));
@@ -268,8 +343,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
   window.addEventListener('keydown', (e) => {
     // Don't hijack Space/arrows when an interactive element (e.g. a button)
     // has focus — Space should still activate the button natively.
-    const target = e.target;
-    const onInteractive = target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.closest?.('button, input, textarea, select'));
+    const onInteractive = isInteractiveKeyTarget(e);
 
     if (!onInteractive && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
       e.preventDefault();
@@ -287,6 +361,22 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
     }
 
     activeKeys.add(e.key.toLowerCase());
+    const config = Core.getState().config;
+    const actionId = findAction(config, formatKeyCombo(e));
+    if (!onInteractive && actionId && !KEYBOARD_PAN_VECTORS[actionId]) {
+      handleShortcut(e);
+      if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(config);
+      return;
+    }
+
+    const keyboardPanVector = readKeyboardPanVector();
+    if (!onInteractive && (keyboardPanVector.x !== 0 || keyboardPanVector.y !== 0)) {
+      e.preventDefault();
+      dispatchKeyboardPan?.(keyboardPanVector.x, keyboardPanVector.y);
+      if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(config);
+      return;
+    }
+
     handleShortcut(e);
     if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(Core.getState().config);
   });
@@ -307,6 +397,12 @@ export function bindKeyboardShortcuts({ Core, dispatchAction }) {
     }
     activeKeys.delete(e.key.toLowerCase());
     if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(Core.getState().config);
+  });
+
+  window.addEventListener('blur', () => {
+    activeKeys.clear();
+    activeButtons.clear();
+    _updateScrollIndicator(Core.getState().config);
   });
 
   window.addEventListener('mousedown', (e) => {
