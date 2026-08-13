@@ -25,8 +25,11 @@ dist-ssr
 
 # Note: .agents/sessions-index.md, .agents/session-recovery.md and other .agents/ files are strictly local and intentionally ignored
 .agents/*
+!.agents/decoupling-analysis/
 !.agents/additions.md
 !.agents/AGENTS.md
+!.agents/familiarize.md
+!.agents/js-dom-decoupling-plan.md
 !.agents/implemented.md
 !.agents/7z_implementation.md
 !.agents/lazy-config-save-plan.md
