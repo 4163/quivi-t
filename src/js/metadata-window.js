@@ -1,5 +1,5 @@
 /**
- * metadata-window.js â€” QuiviT
+ * metadata-window.js — QuiviT
  * Receives comic metadata from the main window via Tauri event and renders it.
  *
  * The main window stores the serialised ComicMeta object in localStorage under
@@ -33,7 +33,7 @@ function render(payload) {
 
   emptyEl.classList.add('hidden');
 
-  // Cover image â€” keep hidden until fully decoded to avoid progressive JPEG scan-line rendering
+  // Cover image — keep hidden until fully decoded to avoid progressive JPEG scan-line rendering
   if (coverSrc) {
     coverWrap.classList.add('hidden');
     coverImg.onload = () => {
@@ -57,7 +57,7 @@ function render(payload) {
     seriesLine = meta.series;
     if (meta.number) seriesLine += ` #${meta.number}`;
     if (meta.count)  seriesLine += ` of ${meta.count}`;
-    if (meta.volume) seriesLine += ` Â· Vol. ${meta.volume}`;
+    if (meta.volume) seriesLine += ` · Vol. ${meta.volume}`;
   }
   seriesEl.textContent = seriesLine;
   summaryEl.textContent = meta.summary || '';
@@ -78,14 +78,14 @@ function render(payload) {
 
   // Credits
   const credits = [];
-  if (meta.writer)      credits.push(`âœ ${meta.writer}`);
-  if (meta.penciller)   credits.push(`âœ ${meta.penciller}`);
-  if (meta.inker)       credits.push(`ðŸ–Š ${meta.inker}`);
-  if (meta.colorist)    credits.push(`ðŸŽ¨ ${meta.colorist}`);
-  if (meta.letterer)    credits.push(`ðŸ”  ${meta.letterer}`);
-  if (meta.coverArtist) credits.push(`ðŸ–¼ ${meta.coverArtist}`);
-  if (meta.editor)      credits.push(`ðŸ“ ${meta.editor}`);
-  if (credits.length)   addRow('Credits', credits.join(' Â· '));
+  if (meta.writer)      credits.push(`✍ ${meta.writer}`);
+  if (meta.penciller)   credits.push(`✏ ${meta.penciller}`);
+  if (meta.inker)       credits.push(`🖊 ${meta.inker}`);
+  if (meta.colorist)    credits.push(`🎨 ${meta.colorist}`);
+  if (meta.letterer)    credits.push(`🔠 ${meta.letterer}`);
+  if (meta.coverArtist) credits.push(`🖼 ${meta.coverArtist}`);
+  if (meta.editor)      credits.push(`📝 ${meta.editor}`);
+  if (credits.length)   addRow('Credits', credits.join(' · '));
 
   if (meta.publisher) addRow('Publisher', meta.publisher);
   if (meta.genre)     addRow('Genre', meta.genre);
@@ -108,7 +108,7 @@ function render(payload) {
   gridEl.replaceChildren(...rows);
 }
 
-// Cap for the initial content-fit height â€” must match META_MAX_H in config.rs
+// Cap for the initial content-fit height — must match META_MAX_H in config.rs
 const META_MAX_INITIAL_H = 600;
 
 // Render from localStorage immediately (data written before window opened)
@@ -145,14 +145,14 @@ let fitTail = Promise.resolve();
 function fitContentHeight() {
   if (!window.__TAURI__?.core?.invoke) return Promise.resolve();
   fitTail = fitTail.then(() => new Promise((resolve) => {
-    // Do NOT use requestAnimationFrame here â€” the window is created hidden,
+    // Do NOT use requestAnimationFrame here — the window is created hidden,
     // and Chromium pauses rAF for hidden windows, causing a deadlock where
     // showWindow is never called.
     // Reading scrollHeight synchronously forces a layout recalculation anyway.
     const contentH = rootEl.scrollHeight;
     const targetH = Math.min(contentH, META_MAX_INITIAL_H);
     // Rust-side fit_metadata_window sets the size AND re-centers over the
-    // main window using this exact height â€” dynamic centering instead of
+    // main window using this exact height — dynamic centering instead of
     // assuming a fixed pre-fit height.
     window.__TAURI__.core.invoke('fit_metadata_window', {
       height: targetH
@@ -162,7 +162,7 @@ function fitContentHeight() {
 }
 
 // The window is built hidden (config.rs) so it never paints at the pre-fit
-// height. Show it only after the content-fit settles â€” avoids the visible
+// height. Show it only after the content-fit settles — avoids the visible
 // shrink flicker. Guarded so live updates don't re-trigger it.
 let windowShown = false;
 function showWindow() {
