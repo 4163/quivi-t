@@ -172,7 +172,8 @@ body > * {
 }
 
 .pan-step-row input[type="number"] {
-  width: 72px;
+  width: auto;
+  height: unset;
   padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -249,6 +250,10 @@ textarea:focus {
 .flex-row input[type="text"][readonly] {
   background: var(--surface-alt);
   color: var(--text-muted);
+}
+
+#opt-start-dir {
+  height: unset;
 }
 
 .keybinds-list {

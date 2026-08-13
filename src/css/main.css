@@ -46,6 +46,7 @@
   color-scheme: light dark;
 
   /* Font sizes in px (rem = px ÷ 16) */
+  --fs-8:    0.5rem;
   --fs-9:    0.5625rem;
   --fs-10:   0.625rem;
   --fs-11:   0.6875rem;
@@ -63,7 +64,11 @@
   --fs-22:   1.375rem;
   --fs-23:   1.4375rem;
   --fs-24:   1.5rem;
+  --fs-28:   1.75rem;
+  --fs-36:   2.25rem;
   --fs-40:   2.5rem;
+  --fs-50:   3.125rem;
+  --fs-64:   4rem;
 
   /* Opaque grill layout */
   --grill-spacing-px: 8;
@@ -175,6 +180,11 @@ button {
   font-size: inherit;
 }
 
+input {
+  width: var(--fs-13);
+  height: var(--fs-13);
+}
+
 /* --- Menu bar --------------------------------------------- */
 #menubar {
   display: flex;
@@ -252,7 +262,7 @@ button {
   top: 100%;
   left: 0;
   min-width: 200px;
-  max-height: calc(100vh - 28px);
+  max-height: calc(100vh - var(--fs-28));
   overflow-y: auto;
   background: var(--menu-bg);
   border: 1px solid var(--border);
@@ -278,10 +288,14 @@ button {
   color: var(--text);
 }
 
+#menu-view .menu-dropdown li[role="menuitem"] {
+  padding-left: var(--fs-24);
+}
+
 .menu-dropdown li[role="menuitem"].checked::before {
   content: '✓';
   position: absolute;
-  left: 8px;
+  left: var(--fs-8);
 }
 
 .menu-dropdown li[role="menuitem"]:hover,
@@ -758,7 +772,7 @@ li:hover > .fav-remove,
   top: 0;
   left: 0;
   right: 0;
-  height: 64px;
+  height: var(--fs-64);
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -770,8 +784,8 @@ li:hover > .fav-remove,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: var(--fs-36);
+  height: var(--fs-36);
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -786,13 +800,12 @@ li:hover > .fav-remove,
 }
 
 #fullscreen-exit-btn svg {
-  width: 18px;
-  height: 18px;
+  width: var(--fs-18);
+  height: var(--fs-18);
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
-  flex: 0 0 18px;
 }
 
 body.fullscreen-exit-visible #fullscreen-exit-btn {

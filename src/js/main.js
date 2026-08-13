@@ -97,8 +97,8 @@ const DEFAULT_DROP_MESSAGE = 'Drop files here, or click to open a folder';
 const FULLSCREEN_EXIT_HINT_MS = 4000;
 const FULLSCREEN_EXIT_KEY_HOLD_MS = 1500;
 const FULLSCREEN_EXIT_HOLD_FEEDBACK_MS = FULLSCREEN_EXIT_KEY_HOLD_MS / 2;
-const FULLSCREEN_EXIT_TRIGGER_Y = 4;
-const FULLSCREEN_EXIT_BUTTON_BOTTOM_Y = 50;
+const FULLSCREEN_EXIT_TRIGGER_Y = 5;
+let fullscreenExitHideY = 50;
 let fullscreenExitHintTimer = null;
 let fullscreenExitKeyHoldTimer = null;
 let fullscreenExitHoldFeedbackTimer = null;
@@ -230,12 +230,31 @@ function getFullscreenExitBindings() {
   return Array.isArray(bind) ? bind.filter(Boolean) : [bind || 'Escape'];
 }
 
-function formatFullscreenExitKeyLabel(combo = getFullscreenExitBindings()[0] || 'Unbound') {
+function formatFullscreenExitKeyLabel() {
+  const bindings = getFullscreenExitBindings();
+  const combo = bindings.find(b => normalizeCombo(b) !== 'Escape') || bindings[0] || 'Unbound';
   return normalizeCombo(combo).replaceAll('Escape', 'Esc');
 }
 
 function updateFullscreenExitKeyLabel() {
   if (fullscreenExitKey) fullscreenExitKey.textContent = formatFullscreenExitKeyLabel();
+}
+
+let fullscreenExitHideProbe = null;
+
+function initFullscreenExitHideProbe() {
+  if (fullscreenExitHideProbe) return;
+  const probe = document.createElement('div');
+  probe.style.cssText =
+    'position:absolute;left:-9999px;top:-9999px;width:var(--fs-50);height:1px;visibility:hidden;';
+  document.body.appendChild(probe);
+  fullscreenExitHideProbe = probe;
+
+  const sync = () => {
+    fullscreenExitHideY = probe.getBoundingClientRect().width;
+  };
+  sync();
+  new ResizeObserver(sync).observe(probe);
 }
 
 function keyEventCombo(e) {
@@ -343,7 +362,7 @@ function handleFullscreenExitMouseMove(e) {
     return;
   }
 
-  if (y > FULLSCREEN_EXIT_BUTTON_BOTTOM_Y) hideFullscreenExitButton();
+  if (y > fullscreenExitHideY) hideFullscreenExitButton();
 }
 
 function setStatusBarVisible(visible, { persist = false } = {}) {
@@ -1041,6 +1060,7 @@ window.addEventListener('pointermove', handleFullscreenExitMouseMove, { passive:
 window.addEventListener('keydown', handleFullscreenExitKeyDown, { capture: true });
 window.addEventListener('keyup', handleFullscreenExitKeyUp, { capture: true });
 window.addEventListener('blur', () => cancelFullscreenExitKeyHold({ hideFeedback: true }));
+initFullscreenExitHideProbe();
 
 // Badge opens the metadata window
 metadataBadge.addEventListener('click', () => openMetadataWindow());

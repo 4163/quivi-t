@@ -142,6 +142,7 @@
 
 ### HTML-First Rendering: Prefer Static Elements over Dynamic Injection
 - Prefer directly embedding elements into the HTML rather than injecting them dynamically, for elements that don't need it — this avoids LCP issues and makes the UI feel snappier and more responsive.
+- Make use of CSS styles via classes or inline CSS instead of removing DOM elements.
 - Dynamically inserted elements cannot always be avoided; in those cases a placeholder element is best practice — e.g. a "Loading..." placeholder, or (as in keybinds where a key is already set) render the known/final value in place up front instead of inserting the element at the last moment.
 
 ### Instrumentation System: Decoupled Performance Benchmarking (AHK + Python)

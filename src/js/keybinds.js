@@ -106,7 +106,7 @@ export function mergeConfig(loaded) {
         const fullscreenExitHold = Array.isArray(merged['cmd-exit-fullscreen-hold'])
           ? merged['cmd-exit-fullscreen-hold']
           : [merged['cmd-exit-fullscreen-hold']].filter(Boolean);
-        if (!fullscreenExitHold.includes('Escape')) fullscreenExitHold.unshift('Escape');
+        if (!fullscreenExitHold.includes('Escape')) fullscreenExitHold.push('Escape');
         merged['cmd-exit-fullscreen-hold'] = fullscreenExitHold;
         return merged;
       })(),
