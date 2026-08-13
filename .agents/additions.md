@@ -17,8 +17,8 @@
 
 **JS Module Structure:**
 - `core.js` — state machine, no DOM access. Communicates via callbacks.
-- `keybinds.js` — default bindings, `mergeConfig()`, pan/zoom constants.
-- `shortcuts.js` — keyboard/mouse/scroll dispatch, combo normalization. Exports `MOUSE_BUTTON_NAMES` as the single source of truth for all button mapping.
+- `keybinds.js` — default bindings, `mergeConfig()`, pan/zoom constants. Exports `DEFAULT_KEYBOARD_PAN_STEP` (72) / `DEFAULT_WHEEL_PAN_STEP` (120), and `mergeConfig` strips raw pan-step values then re-adds them number-guarded with those defaults.
+- `shortcuts.js` — keyboard/mouse/scroll dispatch, combo normalization. Exports `MOUSE_BUTTON_NAMES` as the single source of truth for all button mapping. Pre-parses keyboard pan keybinds into the `KEYBOARD_PAN_VECTORS` table on config load so `keydown` dispatches panning immediately per press (multi-directional vector sum, stops on keyup/blur) via an injected `dispatchKeyboardPan` callback instead of holding `Viewer` directly.
 - `viewer.js` — image rendering, zoom, pan, fit modes. Uses a two-image DOM bridge inside `#viewer-img-wrapper` (current target + decoded previous image) while nearby pages warm through cancellable off-DOM `Image()` preloaders after navigation settles. `_updateScrollIndicator`'s idempotent sibling lives in `shortcuts.js`. Implements strict `quivit-config-loaded` caching for hot-path config access (e.g., pan keys) instead of dynamic evaluations.
 - `filePanel.js` — file list, favorites, sorting UI, column resizing. Debounces/cancels hovered image source preloads so list clicks feel instant without keeping stale decodes alive.
 - `fsUtils.js` — filesystem interactions, archive loading, sibling navigation, statusbar index / page-position formatting. Exposes `buildFileSrcSync` (sync `convertFileSrc` for off-DOM/bridge preloads; ICO sources stay async), `buildArchiveEntrySrc` (async archive entry source builder so archived ICO files can use spritesheet extraction), and a symmetric 7-ahead/7-behind prefetch window.
@@ -29,7 +29,7 @@
 - `menubar.js` — menu bar open/close, state, fullscreen chrome handling.
 - `keyboardNav.js` — generic list/tab keyboard navigation (arrow keys, Home/End).
 - `shellBackground.js` — leaf module (included on both pages) mirroring `--surface` into the native window background; re-syncs on theme/custom-CSS changes.
-- `main.js` — DOM wiring, action dispatch, event listeners.
+- `main.js` — DOM wiring, action dispatch, event listeners. Pre-parses the two pan steps into module constants via `updatePanSteps()` on `quivit-config-loaded` (hot-path cached, `Number.isFinite` fallback), and bridges keyboard panning to `Viewer.panBy` through the `dispatchKeyboardPan` callback passed to `bindKeyboardShortcuts`.
 - `options.js` — Options window logic (theme/CSS previews, revert on close, width auto-fit).
 - `keybindUi.js` — keybind capture/conflict UI (Options).
 - `associationsUi.js` — file-type association UI (Options).
@@ -51,13 +51,26 @@
 
 *The easiest and least invasive fixes are at the top to allow rapid checking off. Slices progress into more complex logical and visual changes.*
 
+### Animated "Loading..." Broken-Image Feedback on Image Load
+- Re-introduce the animated `alt="Loading..."` broken-image visual whenever an image is in the loading state — i.e. when `.status-filename` shows `Loading...` (viewer.js already writes that on `activeChanged`).
+- Currently `_setElementLoadingLabel` sets only a static `alt = 'Loading...'`, and the broken-image frame is only actually visible on the first-display placeholder; seamless swaps (previous image held as a bridge) show no loading feedback at all.
+- Easy emulation: create an `img` element whose `src` purposefully points at a non-existent target (or a broken base64-encoded image) so the browser renders its built-in broken-image frame, and animate its `alt` text (`Loading. → Loading.. → Loading...`, reuse/restore the earlier `startLoadingAltAnimation`-style helper in `viewer.js`) while loading.
+
 ### File Navigation & Core Behavior Fixes (Medium Logic)
 - **Large Directory / Archive DOM Rendering Performance:** Optimize file list rendering in `filePanel.js` when opening folders or archives containing thousands of files (e.g. `C:\Users\x4163\Pictures\Steam Screenshots`) (User note: I approve of this personal path appearing in our docs, it's fine).
   - **Root Cause:** Currently `renderFilePanel()` synchronously creates and appends tens of thousands of `<li>` DOM nodes and event listeners at once, freezing the main thread during DOM construction, styling, and layout reflow. (Backend processing may also be another cause for this, validate and see what costs performance dip and proceed from there)
   - **Proposed Solutions & Comparison:**
     1. *Incremental Batching (`CONFIG.batchSize` pattern from `E:\Projects\snap\snap - multi-page_json\html\snap-script.js`):* Renders the first 50–100 items instantly and schedules remaining items in background batches (`requestAnimationFrame` / `setTimeout`). Keeps the initial UI interactive, but eventually populates all DOM nodes, leaving layout/scroll performance degraded for huge lists.
-    2. *DOM Virtualization / Windowing (Recommended - Performance-First):* Only render the visible rows (~30–50 `<li>` elements) plus a small buffer padding based on `scrollTop` and row height. Total DOM elements remain constant (~50 nodes) whether a directory has 10 files or 100,000 files. Delivers instant load times, zero scroll lag, and virtually zero memory growth.
-    3. Discuss other available paths and options, aligning with the project's performance-first approach.
+    2. IMPORTANT: Discuss other available paths and options, aligning with the project's performance-first approach. No. 1 was is just one of many possible solutions that ended up working on earlier projects.
+
+### Favorites & Bookmarks System (Medium Logic)
+- **From clipboard notes (2026-08-13):**
+  - Middle-click removes a favorite directly — intentionally NOT mappable to a keybind; just document it in the README Features section where favorites is covered.
+  - Ordering: implement the advanced favorites next, but FIRST rename the current favorites names in JS/HTML/CSS (functions, classes, IDs) to "bookmark".
+  - README: document the favorites system under Features; afterwards place the bookmark (legacy favorites) system entry under it, described simply as a bookmark that works similarly to favorites.
+  - Favorites file-list remove-button (X) visibility: currently an active/highlighted item makes its X button visible; it should only be visible on hover, or when focused via Tab keyboard navigation — not merely because the item is the active selection.
+- **Improve favorites system:** add a Favorites dropdown under the menu bar to load/save favorites. Consider an input for titles, only if the styling/intuitiveness of the dropdown interaction is good.
+- **Separate bookmarks system (legacy favorites):** placed under the favorites section, acting like the old favorites. The JS names across both can be consolidated into the same thing — the only difference is saving/loading favorites as a favorites list.
 
 ### View, Rendering & Window Enhancements (Visuals/Features)
 - **Fullscreen Focus & Shortcut Loss Fix:** Fix bug where shortcut keys (including `Escape` / `F11`) occasionally stop functioning while in fullscreen mode (e.g., when switching focus to another monitor or Alt-Tabbing away and back).
@@ -72,15 +85,7 @@
   - **Edge Cases & Panning:** Panning or dragging triggers `mousemove` / input events which naturally reset the idle timer, keeping the cursor visible throughout active panning and hiding only after panning stops and the mouse remains still for `X` seconds. `mouseleave` or UI chrome hover restores standard cursor styling.
   - **Performance First (Zero-Overhead):** Bypassed entirely when `0` (Disabled). During active movement, use a lightweight debounced single-timer reset without dynamic allocations or garbage collection churn in the `mousemove` hot path.
 - **Emergency Boss Key:** Add an "Emergency Button" to hide the application into the system tray, with a configurable keybind.
-- **Helium Exit-Fullscreen:** Copy Helium browser's exit-fullscreen functionality (hold to exit, and a top exit button offscreen that slides down via hover). (https://github.com/imputnet/helium) 
-- **Pan Lengths & Smooth Panning:** Add individual pan lengths for scroll vs shortcuts (copying original Quivi defaults). Try implementing a smooth panning option and test to see if that feels nice and responsive, if not just revert.
-- **Zoom Smoothing:** Same as the above, try out -> decide.
-- **Responsive Keyboard Panning:** Audit the keyboard pan pipeline (debounce/delay). Make panning apply immediately per key press and support fast multi-directional spam. Currently the performance is just not up to par with the original Quivi application.
-- **HTML Flickering & Image Navigation:** Optimize image navigation to prevent HTML flickering. 
-  - *Context:* Whilst the processing has already been improved to be identical to the original Quivi behavior (show previous image until new one is ready), there's still inherent flickering caused by the presentation: `click/active > load image > present image`. This can easily be fixed by improving the html/js functions (caching/preloading).
-  - This additionally fixes the lag when holding down a key and switching images really fast.
-  - Fix the issue where the opaque canvas appears first and then the image; they should always appear at the same time.
-  - Consider keeping a session cache of files inside archives, prevents decompressing them again in the same session. Discuss adding a cache limit in the options (though leaning towards being against putting it in options).
+- **Helium Exit-Fullscreen:** Copy Helium browser's exit-fullscreen functionality (hold to exit, and a top exit button offscreen that slides down via hover). (https://github.com/imputnet/helium)
 - **Initial HTML Loading (LCP):** Completely remove the blank page time on initial loading of both HTML pages before the main UI renders. It's currently acting this way because we are optimizing for LCP on the flickering of themes. Refer to the way LCP is handled on `E:\Projects\PixiJS Live2D Spine (Springfield)` for reference.
 - **SVG Rendering & Bounds:** Audit SVG elements behavior of hitbox/dimensions going over the canvas edge. The calculations for SVG images that have a WxH of 100% compared to a set WxH act differently and break the border/edge calculations on the canvas and/or image.
   - *Key examples:* `test-files/gfl-spinner.svg` works as expected, while `icons/quivi-t_moe-2.svg` does not. 
@@ -95,8 +100,6 @@
 - **Syntax Highlighting:** Add syntax highlighting to the Custom CSS field in Customization using an available font (fonts that have syntax highlighting) or a small library.
 - **Custom CSS Persistence Bugs:** Fix custom CSS persistence. Fix the bug where it sometimes doesn't apply on restart, or applies even when it was removed. **Note: Unsure if this bug still exists, as it has not been encountered since the major syncing refactor.**
 - **Tab Navigation Extraction:** Move a huge portion of the tab navigation logic into its own JS file (e.g., `keyboardNav.js`) using state callbacks to decouple and reduce clutter. Manually style active tab navigation items into their own CSS file.
-- **CSS Decoupling:** Clean up CSS. Create a `global.css` for root vars, global resets, and general rules. Allow individual HTML pages to have specific CSS files to reduce clutter.
-- **JS DOM Decoupling:** Move DOM interaction/manipulation to its own file and communicate between files via state callbacks. Refer to the `E:\Projects\PixiJS Live2D Spine (Springfield)` project structure.
 
 ### Supported Formats & Advanced Icons (Complex)
 - **File Association Prompt:** Add a prompt notification at the center of the screen pointing users to the File Associations tab (reminding them that they can and should set file associations).
@@ -114,6 +117,37 @@
 
 ### Documentation & GitHub (Project Health)
 - **Contributing Section:** Add a contributing section to the github page, for general contributions to the project, but more on documenting how new languages should be created for the language settings.
+
+### CSS Decoupling (Refactoring)
+- Clean up CSS. Create a `global.css` for root vars, global resets, and general rules. Allow individual HTML pages to have specific CSS files to reduce clutter.
+
+### JS DOM Decoupling (Refactoring)
+- Move DOM interaction/manipulation to its own file and communicate between files via state callbacks. Refer to the `E:\Projects\PixiJS Live2D Spine (Springfield)` project structure.
+
+### Rust Decoupling (Refactoring)
+- **Current state:** the Rust backend is `src-tauri/src/` — `lib.rs` (964 ln: bootstrap + inline `quivit://` protocol handler + config watcher + main-window build + the entire `archive_tests` suite), `commands.rs` (846 ln: six unrelated command families — directory browsing, drives/path-kind, archive commands, directory watcher, text file ops, registry/associations + `dump_icons` + embedded `ICON_*` assets, shell commands), `config.rs` (513 ln: `AppConfig`/persistence/portable mixed with window constants + options/metadata window lifecycle/fit commands), `archives.rs` (593 ln: archive cache + per-format readers — cleanest file), `ico.rs` (305 ln: ICO spritesheets + hand-rolled `base64_encode` + Win32/GDI `get_native_icon`), `utils.rs` (116 ln: hidden-attribute util mixed with the format registry), `models.rs` (28 ln, clean). Half the crate lives in `lib.rs` + `commands.rs`.
+- **Problems:** the `quivit://` handler (~170 ln) is an inline closure reaching into `ArchiveCache`/`SingleArchiveCache` public fields across the module boundary; the ~475-line `archive_tests` module is stranded in `lib.rs` (see test decoupling below); three base64 implementations across two files; `notify` dependency duplicated (lib.rs config watcher + commands.rs directory watcher); all exposure is plain `pub` with glob imports (no `pub(crate)` discipline); dead constants (`OPTIONS_MAX_W`, `META_MAX_H`).
+- **Proposed split (lib.rs → pure bootstrap):**
+  1. `windows.rs` — from `config.rs`: `open_options`, `open_metadata_window`, `fit_options_window`, `fit_metadata_window` + all `*_W/H` size constants; from `lib.rs`: main-window `WebviewWindowBuilder` (`build_main_window`), `apply_shell_background`, `on_window_event` orphan-window close.
+  2. `protocol.rs` — from `lib.rs`: the `quivit://` async scheme handler + `base64_decode`, `base64_decode_bytes`, `urlencoding_decode`, `guess_mime` (lib.rs keeps a one-line registration).
+  3. `watchers.rs` — from `commands.rs`: `WatcherState`, `watch_directory`; from `lib.rs`: config-file watcher thread (`spawn_config_file_watcher`). Consolidates all `notify` usage.
+  4. `registry.rs` — from `commands.rs`: `get_format_status`, `register_associations`, `unregister_associations`, `FormatStatus`, `dump_icons`, `ICON_*` assets.
+  5. `directory.rs` — from `commands.rs`: `read_directory(_impl)`, `open_parent`, `open_sibling`, `open_sibling_container`, `get_drives`, `get_path_kind`, `read_text_file`, `write_text_file`, `is_hidden_path`.
+  6. `archive_commands.rs` — from `commands.rs`: `list_archive`, `prefetch_archive_entries`, `get_archive_ico_frames`.
+  7. `shell.rs` — from `lib.rs`: `open_in_explorer`, `get_default_dir`; from `commands.rs`: `get_initial_args`, `show_window`.
+  8. `formats.rs` — from `utils.rs`: `FileFormat`, `image!`/`archive!` macros, `SUPPORTED_FORMATS`, `is_image_ext`/`is_metadata_ext`/`is_archive_ext`.
+- **Slim-downs:** `commands.rs` dissolved; `config.rs` becomes pure config (paths/portable/pending/split-file + config-dir commands); `lib.rs` shrinks to mod declarations + `run()` bootstrap; `utils.rs` consolidates all base64 (or swap in the `base64` crate already in Cargo.toml); drop the dead window constants.
+- **Test decoupling (`src/tests/` via `#[path]`, no pub churn):** move `archive_tests` (lib.rs:489-963) and `tests` (config.rs:447-513) into dedicated files `src/tests/archive_tests.rs` and `src/tests/config_tests.rs`, wired as `#[cfg(test)] #[path = "tests/archive_tests.rs"] mod archive_tests;` in `lib.rs` and `#[cfg(test)] #[path = "../tests/config_tests.rs"] mod tests;` in `config.rs`. This keeps full private access (`urlencoding_decode`, `apply_pending_to_config`, and the `ArchiveCache`/`SingleArchiveCache` field reach-in) without exposing anything `pub` — integration tests in `src-tauri/tests/` would force exactly that exposure, so they're the fallback only if privacy isn't needed. As the split lands, tests follow their modules: `url_decode_roundtrips_utf8_entry_names` + `protocol_serve_timing_simulation` → `protocol.rs`, the cache/LRU tests → `archives.rs`, config tests → `config.rs`.
+- **Cross-cutting:** add command-facing `ArchiveCache` methods (`prepare_archive` / `read_entry_bytes` / `get_temp_extraction`) so the protocol handler and archive commands stop mutating cache fields from outside; replace glob imports (`use archives::*`) with narrow `use` to surface the real dependency edges.
+- Approx post-split sizes: lib.rs ~150, config.rs ~330, directory.rs ~330, protocol.rs ~230, windows.rs ~260, registry.rs ~240, archives.rs ~600 + tests.
+
+### HTML-First Rendering: Prefer Static Elements over Dynamic Injection
+- Prefer directly embedding elements into the HTML rather than injecting them dynamically, for elements that don't need it — this avoids LCP issues and makes the UI feel snappier and more responsive.
+- Dynamically inserted elements cannot always be avoided; in those cases a placeholder element is best practice — e.g. a "Loading..." placeholder, or (as in keybinds where a key is already set) render the known/final value in place up front instead of inserting the element at the last moment.
+
+### Instrumentation System: Decoupled Performance Benchmarking (AHK + Python)
+- After all the HTML/CSS/JS and Rust refactors are done, implement a decoupled backend instrumentation system to debug and test performance benchmarks on archive/file back-end and front-end processing.
+- Connected driving system via AutoHotkey (.ahk) and Python, where the JS and Rust files automatically log data in ms about processing timings and excessive function calls (hot spots / call counts) for benchmark analysis.
 
 ---
 
@@ -178,6 +212,11 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 - Build on the preloading and image caching infrastructure, but treat continuous Manhwa rendering as its own post-release slice.
 - **Active Item Synchronization:** As the user scrolls vertically through the continuous strip, dynamically track the currently visible image and keep the active item selection in the file list and status bar perfectly in sync.
 
+### Web Fetching (Manga/Manwha)
+- Add a webfetch capability via a standalone JS script (maybe into their own dir to keep decoupled — but only if each website needs complex fetch parsing); manga/manwha websites, etc.
+- If an API exists for the target site, use it.
+- Entry point: goes into the menubar File dropdown.
+
 ### Detach Image Window
 - Add the ability to pop the currently viewed image out into its own standalone window, separate from the main QuiviT UI.
 - Relevant alongside Double Page View and File List Detach/Drag-and-Drop as they share the same "detach" interaction paradigm.
@@ -199,11 +238,6 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 - Needs a toggle in the Options menu to disable sounds for users who prefer a silent experience.
 - Provide a volume slider or rely on system volume.
 - Audio assets should be small and fast-loading, or even script-generated (e.g. 8-bit style SFX).
-
-### Advanced Favorites System
-- Improve favorites system: add a Favorites dropdown under the menu bar to load/save favorites. Consider an input for titles, only if the styling/intuitiveness of the dropdown interaction is good.
-- Consider a separate bookmarks thing acting like legacy favorites, placed under favorites.
-- The JS names can just be consolidated and changed into the same thing; the only difference for favorites is saving and loading it as a favorites list.
 
 ### Native 7-Zip Sidecar Extraction (7Z/CB7 speed)
 - Replace the pure-Rust `sevenz-rust2` extraction with the native 7-Zip engine (`7zr.exe` bundled as a Tauri sidecar) for 2-5x faster LZMA2 extraction.

@@ -126,7 +126,7 @@ The following system defaults are used:
 
 - **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
 - **Scaling Mode:** `bicubic`
-- **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step.
+- **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in Options → General → Panning.
 - **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge reflects the active state — `Scroll Zoom — Toggled` while latched in toggle mode, or the bound modifier(s) you're holding (`Ctrl — Held`, `Shift — Held`, `Ctrl+Shift — Held`) when they change scroll behavior.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
 - **Default Sort:** `name` ascending. Per-directory preferences are cached for up to 100 directories, with the oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort` (`col`: `name`, `ext`, or `date`; `desc`: `false` = ascending, `true` = descending). Directories without a saved preference in `quivit_directory_sort.json` fall back to it.
@@ -162,7 +162,7 @@ Data is split across five files:
 - `#viewer-img-wrapper` image bridge — Two reusable DOM images for the current target and decoded previous image; nearby pages warm through off-DOM preloaders after navigation settles behind the 45ms image swap buffer
 - `previewTheme` / `previewCss` — Options window live theme and custom CSS previews (persisting across config reloads until Apply or Close)
 
-**Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth.
+**Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth. In portable mode, the top-level `hidden` flag controls the Windows hidden attribute on that local `quivit_config.json`: `true` hides it, and `false` leaves it visible.
 
 ### Architecture
 
@@ -282,7 +282,7 @@ QuiviT/
 ├─ matcha-latte.css           # Example theme (bundled with the release)
 ├─ sage-mint.css              # Example theme (bundled with the release)
 ├─ package.json
-└─ README.md                  # Project Overview & Architecture Documentation
+└─ README.md                  # Project overview & architecture documentation
 ```
 
 ## Attributions
