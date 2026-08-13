@@ -392,7 +392,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
         _updateScrollIndicator(Core.getState().config);
         const config = Core.getState().config;
         config.frontend_data.scroll_zoom_latched = ctrlLatched;
-        Core.persistConfig();
+        Core.persistConfig({ debounceMs: 1500 });
       }
       ctrlKeyDown = false;
       ctrlChordBroken = false;

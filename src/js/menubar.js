@@ -37,7 +37,7 @@ export function saveUIState() {
   const state = Core.getState();
   if (state.config && state.config.frontend_data) {
     state.config.frontend_data.menu_visible = menuBarVisible;
-    if (window.__TAURI__) Core.persistConfig({ debounceMs: 300 });
+    if (window.__TAURI__) Core.persistConfig({ debounceMs: 1500 });
   }
 }
 

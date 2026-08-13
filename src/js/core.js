@@ -95,6 +95,7 @@ const _state = {
 
 /** @type {Array<(state: typeof _state) => void>} */
 const _listeners = [];
+let _configDirty = false;
 let _persistTimer = null;
 
 // --- Helpers ------------------------------------------------------------------
@@ -107,6 +108,7 @@ function _notify() {
 async function _persistConfig() {
   clearTimeout(_persistTimer);
   _persistTimer = null;
+  _configDirty = false;
   try {
     await invoke('save_config', { config: _state.config });
   } catch (err) {
@@ -114,9 +116,15 @@ async function _persistConfig() {
   }
 }
 
-function _schedulePersistConfig(delayMs) {
+async function _flushConfig() {
+  if (!_configDirty) return;
+  await _persistConfig();
+}
+
+function _scheduleConfigFlush(delayMs = 1500) {
+  _configDirty = true;
   clearTimeout(_persistTimer);
-  _persistTimer = setTimeout(_persistConfig, delayMs);
+  _persistTimer = setTimeout(_flushConfig, delayMs);
 }
 
 async function _selectEntry(index, activate = false, clampPreview = false, direction = 1) {
@@ -185,12 +193,12 @@ export const Core = {
   },
 
   persistConfig(options = {}) {
-    const delayMs = Number.isFinite(options.debounceMs) ? options.debounceMs : 0;
-    if (delayMs > 0) {
-      _schedulePersistConfig(delayMs);
-    } else {
-      _persistConfig();
-    }
+    if (options.immediate) return _persistConfig();
+    _scheduleConfigFlush(Number.isFinite(options.debounceMs) ? options.debounceMs : 1500);
+  },
+
+  flushConfig() {
+    return _flushConfig();
   },
 
   setListAndIndex(newList, newIndex) {
@@ -211,7 +219,7 @@ export const Core = {
 
   toggleTransparentBg() {
     _state.config.frontend_data.transparent_bg = !_state.config.frontend_data.transparent_bg;
-    _persistConfig();
+    _scheduleConfigFlush(1500);
     _notify();
   },
 
@@ -219,7 +227,7 @@ export const Core = {
     _state.fitMode = mode;
     if (options.persist) {
       _state.config.frontend_data.fit_mode = mode;
-      _persistConfig();
+      _scheduleConfigFlush(1500);
     }
     _notify();
   },
@@ -228,7 +236,7 @@ export const Core = {
     _state.scalingMode = mode;
     if (options.persist) {
       _state.config.frontend_data.scaling_mode = mode;
-      _persistConfig();
+      _scheduleConfigFlush(1500);
     }
     _notify();
   },

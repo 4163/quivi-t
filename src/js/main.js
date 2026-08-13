@@ -375,7 +375,7 @@ function setStatusBarVisible(visible, { persist = false } = {}) {
   const state = Core.getState();
   if (state.config && state.config.frontend_data) {
     state.config.frontend_data.status_visible = statusBarVisible;
-    if (window.__TAURI__) Core.persistConfig({ debounceMs: 300 });
+    if (window.__TAURI__) Core.persistConfig({ debounceMs: 1500 });
   }
 }
 
@@ -491,7 +491,7 @@ async function loadDroppedPath(path) {
   FsUtils.loadFile(path, { preferInitial: true, restoreLastImage: false });
 }
 
-function dispatchAction(actionId, payload) {
+async function dispatchAction(actionId, payload) {
   // Try to find the button just to provide visual feedback if needed, but don't rely on it for execution
   const btn = document.getElementById(actionId);
   if (btn && btn.classList.contains('menu-trigger')) {
@@ -632,8 +632,10 @@ function dispatchAction(actionId, payload) {
       if (window.__TAURI__) window.__TAURI__.core.invoke('open_options').catch(console.error);
       break;
     case 'cmd-quit':
-      if (window.__TAURI__) window.__TAURI__.core.invoke('plugin:process|exit');
-      else window.close();
+      if (window.__TAURI__) {
+        await Core.flushConfig();
+        window.__TAURI__.core.invoke('plugin:process|exit');
+      } else window.close();
       break;
     case 'cmd-cycle-scaling':
     case 'cmd-cycle-scaling-back': {
@@ -707,9 +709,11 @@ function bindMenuCommands() {
     }
   });
 
-  document.getElementById('cmd-quit').addEventListener('click', () => {
-    if (window.__TAURI__) window.__TAURI__.core.invoke('plugin:process|exit');
-    else window.close();
+  document.getElementById('cmd-quit').addEventListener('click', async () => {
+    if (window.__TAURI__) {
+      await Core.flushConfig();
+      window.__TAURI__.core.invoke('plugin:process|exit');
+    } else window.close();
   });
 
   // --- File panel action buttons ---
@@ -868,6 +872,21 @@ function bindDragDrop() {
       updatePanSteps(config);
       updateFullscreenExitKeyLabel();
       syncScrollLatch(config);
+
+      const syncFullscreenUi = (isFullscreen) => {
+        if (isFullscreen && !fullscreenActive) {
+          setPreFullscreenState({ menuBar: menuBarVisible, statusBar: statusBarVisible });
+          setFullscreenUiActive(true);
+          const hideChrome = config?.frontend_data?.hide_chrome_on_fullscreen !== false;
+          if (hideChrome) setFullscreenChromeVisible(false);
+        }
+      };
+
+      if (window.__TAURI__) {
+        window.__TAURI__.window.getCurrentWindow().isFullscreen().then(syncFullscreenUi).catch(console.error);
+      } else {
+        syncFullscreenUi(!!document.fullscreenElement);
+      }
       if (previewTheme !== null) {
         applyPreviewTheme(previewTheme);
       }
@@ -1080,6 +1099,20 @@ if (window.__TAURI__) {
       FsUtils.refresh();
     }, 500);
   }).catch(console.error);
+
+  const mainWindow = window.__TAURI__.window.getCurrentWindow();
+  let closingAfterFlush = false;
+  mainWindow.onCloseRequested(async (event) => {
+    if (closingAfterFlush) return;
+    event.preventDefault();
+    try {
+      await Core.flushConfig();
+    } catch (err) {
+      console.error('[Main] Failed to flush config on exit:', err);
+    }
+    closingAfterFlush = true;
+    await mainWindow.close();
+  });
 }
 
 Core.init();

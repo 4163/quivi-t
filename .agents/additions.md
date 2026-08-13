@@ -16,7 +16,7 @@
 - Restart-gated settings (`single_instance`) are staged as `pending_<key>` by the UI and promoted at startup by `apply_pending_config()` (`config.rs`) — never written live.
 
 **JS Module Structure:**
-- `core.js` — state machine, no DOM access. Communicates via callbacks. Exposes `persistConfig({ debounceMs })` to consolidate and debounce config saves.
+- `core.js` — state machine, no DOM access. Communicates via callbacks. Exposes `persistConfig({ debounceMs, immediate })` and `flushConfig()`. Uses a dirty-flag (`_configDirty`) with a single centralized `_scheduleConfigFlush(delayMs)` scheduler: preference mutations mark state dirty and schedule a debounced disk write (1500 ms), while `flushConfig()` forces an immediate write if dirty — called on exit to prevent data loss.
 - `keybinds.js` — default bindings, `mergeConfig()`, pan/zoom constants. Exports `DEFAULT_KEYBOARD_PAN_STEP` (72) / `DEFAULT_WHEEL_PAN_STEP` (120), and `mergeConfig` strips raw pan-step values then re-adds them number-guarded with those defaults. Enforces `Escape` presence in `cmd-exit-fullscreen-hold` fallback.
 - `shortcuts.js` — keyboard/mouse/scroll dispatch, combo normalization. Exports `MOUSE_BUTTON_NAMES` as the single source of truth for all button mapping. Pre-parses keyboard pan keybinds into the `KEYBOARD_PAN_VECTORS` table on config load so `keydown` dispatches panning immediately per press. Contains `PASSIVE_ACTIONS` for bindings like hold-to-exit that consume a key without firing standard dispatch.
 - `viewer.js` — image rendering, zoom, pan, fit modes. Uses a two-image DOM bridge inside `#viewer-img-wrapper` (current target + decoded previous image) while nearby pages warm through cancellable off-DOM `Image()` preloaders after navigation settles. `_updateScrollIndicator`'s idempotent sibling lives in `shortcuts.js`. Implements strict `quivit-config-loaded` caching for hot-path config access (e.g., pan keys) instead of dynamic evaluations.
@@ -29,7 +29,7 @@
 - `menubar.js` — menu bar open/close, state, fullscreen chrome handling.
 - `keyboardNav.js` — generic list/tab keyboard navigation (arrow keys, Home/End).
 - `shellBackground.js` — leaf module (included on both pages) mirroring `--surface` into the native window background; re-syncs on theme/custom-CSS changes.
-- `main.js` — DOM wiring, action dispatch, event listeners. Pre-parses the two pan steps into module constants via `updatePanSteps()` on `quivit-config-loaded` (hot-path cached, `Number.isFinite` fallback), and bridges keyboard panning to `Viewer.panBy` through the `dispatchKeyboardPan` callback passed to `bindKeyboardShortcuts`.
+- `main.js` — DOM wiring, action dispatch, event listeners. Pre-parses the two pan steps into module constants via `updatePanSteps()` on `quivit-config-loaded` (hot-path cached, `Number.isFinite` fallback), and bridges keyboard panning to `Viewer.panBy` through the `dispatchKeyboardPan` callback passed to `bindKeyboardShortcuts`. On startup, syncs JS fullscreen UI state with the actual OS window state (handles reload-while-fullscreen). Registers `onCloseRequested` to await `Core.flushConfig()` before the window closes, guaranteeing lazy config changes are not lost on normal exit.
 - `options.js` — Options window logic (theme/CSS previews, revert on close, width auto-fit).
 - `keybindUi.js` — keybind capture/conflict UI (Options). Implements `validateKeybindSafety` and `LOCKED_BINDINGS` to prevent soft-locking the app (e.g. removing the last menu bar shortcut or the Escape fallback).
 - `associationsUi.js` — file-type association UI (Options).
@@ -171,13 +171,14 @@ unless the user states otherwise (e.g., they request to emulate and go through t
 3. Static checks. `node --check` on every touched JS module and `cargo check` in `src-tauri`.
 4. Runtime-verify each change made after the last remote push: exercise the new behavior in the app and confirm it works as intended.
 5. Manually review that the project remains coherently decoupled, with features in their own JS/Rust files where warranted. Keep or improve the current split on both sides (`core.js`, `viewer.js`, `filePanel.js`, `shortcuts.js`, `keybinds.js`, `options.js`, `main.js` for the frontend; `lib.rs`, `config.rs`, `commands.rs`, `archives.rs`, `models.rs`, `utils.rs` for the backend).
-6. Update the **"Current Architecture State"** section at the top of this file to accurately document any new, deleted, or repurposed JS/Rust modules and configuration behavior.
-7. Verify every config-backed or persistent feature meets both global and portable-mode requirements.
-8. Port the completed items from this file into `.agents/implemented.md`, including any additions and fixes made during the pass that were not originally listed here.
-9. Update `README.md` with new shortcuts, config behavior, archive behavior, module structure, and any relevant changes. Especially look out for things that should be inlcuded in the **"Documentation"** section.
-10. Add a new entry to `.agents/sessions-index.md`.
-11. Repeat static and runtime verifications as needed.
-12. Leave the repository ready for the user to run the push pipeline: final `git diff` matches the verified change set, nothing extra staged, no secrets, no private paths.
+6. Validate that the code changes made (and their structure) fully embody and meet the quality and strict standards of the `.agents/AGENTS.md` guidelines.
+7. Update the **"Current Architecture State"** section at the top of this file to accurately document any new, deleted, or repurposed JS/Rust modules and configuration behavior.
+8. Verify every config-backed or persistent feature meets both global and portable-mode requirements.
+9. Port the completed items from this file into `.agents/implemented.md`, including any additions and fixes made during the pass that were not originally listed here.
+10. Update `README.md` with new shortcuts, config behavior, archive behavior, module structure, and any relevant changes. Especially look out for things that should be inlcuded in the **"Documentation"** section.
+11. Add a new entry to `.agents/sessions-index.md`.
+12. Repeat static and runtime verifications as needed.
+13. Leave the repository ready for the user to run the push pipeline: final `git diff` matches the verified change set, nothing extra staged, no secrets, no private paths.
 
 ---
 

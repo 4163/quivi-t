@@ -6,6 +6,12 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ## Fully Implemented
 
+### Lazy Config Save, Exit Flush & Fullscreen State Sync on Reload (2026-08-13)
+- **Lazy Config Save (Performance):** Replaced all immediate `_persistConfig()` calls for UI preference mutations with a centralized dirty-flag debouncer (`_scheduleConfigFlush(1500)`). Preference toggles (transparent background, fit mode, scaling mode, scroll zoom latch, menu/status bar visibility) now mark config as dirty in memory, update the UI immediately, and schedule a single debounced disk write 1500 ms after the last interaction. Eliminates frame drops and `save_config` IPC thrash during rapid UI toggling.
+- **Exit Flush:** `Core.flushConfig()` is exposed on the public API. The main window's `onCloseRequested` event is intercepted to await `Core.flushConfig()` before closing (using the prevent/re-close guard pattern to handle async work correctly). The `cmd-quit` action and its menu button listener also await `Core.flushConfig()` before invoking `plugin:process|exit`, ensuring lazy changes are persisted on all graceful exit paths.
+- **Fullscreen State Sync on Reload:** `main.js` now queries the actual OS window fullscreen state on `quivit-config-loaded` (startup / Ctrl+R reload). If the native window is already fullscreen but the JS environment has reset, it re-activates `setFullscreenUiActive(true)` and hides chrome, fixing the bug where Ctrl+Shift+R in fullscreen left the hover-exit button and hold-to-exit shortcut non-functional.
+- **Bug Fix (syntax):** Restored missing closing `}` for the `if (previewTheme !== null)` block in `main.js` that was accidentally removed during a prior indentation fix.
+
 ### Fullscreen Exit UX & Keybind Safety Validation (2026-08-13)
 - **Hold-to-Exit Fullscreen:** Pressing and holding `Escape` (or the configured `cmd-exit-fullscreen-hold` key) for 1.5 seconds exits fullscreen mode. Includes a top-center hint bar that appears on enter and when starting a hold, guiding the user.
 - **Fullscreen Exit Hover Button:** Moving the mouse to the top edge (y ≤ 4px) of the screen while in fullscreen reveals a persistent exit button that slides down. It hides once the mouse moves far enough away (y > 50px).
