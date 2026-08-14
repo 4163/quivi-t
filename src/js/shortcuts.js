@@ -28,6 +28,8 @@ export function updateMenuShortcuts(config) {
 let _toggleLatched = false;
 let _toggleKeyDown = false;
 let _toggleChordBroken = false;
+let _cachedToggleKeys = ['Control'];
+let _cachedToggleKeysLower = ['control'];
 
 export function resetScrollLatch() {
   _toggleLatched = false;
@@ -43,6 +45,8 @@ export function resetScrollLatch() {
 // latch must not show the badge or latch zoom.
 export function syncScrollLatch(config) {
   _toggleLatched = isToggleModifier(config) && config?.frontend_data?.scroll_zoom_latched === true;
+  _cachedToggleKeys = _getToggleEventKeys(config);
+  _cachedToggleKeysLower = _cachedToggleKeys.map(k => k.toLowerCase());
   _updateScrollIndicator(config);
 }
 
@@ -263,9 +267,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
     // Track a clean toggle-key tap so 'toggle' mode can latch zoom without
     // being triggered by ordinary shortcuts like Ctrl+X.
-    const config = Core.getState().config;
-    const toggleKeys = _getToggleEventKeys(config);
-    if (toggleKeys.includes(e.key)) {
+    if (_cachedToggleKeys.includes(e.key)) {
       if (!e.repeat) {
         _toggleKeyDown = true;
         _toggleChordBroken = false;
@@ -296,8 +298,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
   window.addEventListener('keyup', (e) => {
     const config = Core.getState().config;
-    const toggleKeys = _getToggleEventKeys(config);
-    if (toggleKeys.includes(e.key)) {
+    if (_cachedToggleKeys.includes(e.key)) {
       // A standalone toggle-key press/release (no other key in between)
       // toggles the sticky zoom latch in 'toggle' mode.
       if (_toggleKeyDown && !_toggleChordBroken && isToggleModifier(config)) {
@@ -405,17 +406,16 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     const scrollDir = e.deltaY < 0 ? 'ScrollUp' : 'ScrollDown';
 
     if (toggleMode) {
-      const toggleActiveKeys = _getToggleEventKeys(config).map(k => k.toLowerCase());
       // Synthesize the primary toggle key to satisfy the bind matching.
-      const primaryActiveKey = toggleActiveKeys[0] || 'control';
+      const primaryActiveKey = _cachedToggleKeysLower[0] || 'control';
       if (_toggleLatched) {
         keys.add(primaryActiveKey);
       } else {
-        toggleActiveKeys.forEach(k => keys.delete(k));
+        _cachedToggleKeysLower.forEach(k => keys.delete(k));
       }
       // A wheel event while a toggle key is held means the press wasn't a
       // clean tap, so releasing it must not toggle the latch.
-      if (toggleActiveKeys.some(k => activeKeys.has(k))) _toggleChordBroken = true;
+      if (_cachedToggleKeysLower.some(k => activeKeys.has(k))) _toggleChordBroken = true;
     }
 
     const combo = formatKeysCombo(keys, activeButtons, scrollDir);
