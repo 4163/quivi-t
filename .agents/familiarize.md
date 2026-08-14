@@ -11,7 +11,7 @@ read '.agents/familiarize.md' and follow its guidance.
 - Identify the architecture: languages and frameworks in use, how modules/services/layers are separated, where the entry points are (main files, routers, config), and how data and control flow through the system.
 - Read the package manifest(s) (`package.json`, `requirements.txt`, `Cargo.toml`, etc.), build/config files, and any existing README or architecture docs.
 - Note the conventions already in place — naming, folder layout, testing patterns, style — so new work fits the codebase instead of fighting it.
-- **Most importantly, read and strictly adhere to the quality standards and rules outlined in the `.agents/AGENTS.md` guidelines.**
+- **Most importantly, read and strictly adhere to the quality standards and rules outlined in the `.agents/AGENTS.md` guidelines**, and explicitly confirm to the user that these guidelines have been fully taken in and embodied.
 
 ## 2. Gather context from past agent sessions
 
