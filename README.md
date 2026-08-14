@@ -32,7 +32,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 
 The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`), native mouse inputs (`MouseMiddle`, `MouseForward`), double-click gestures (`DoubleClick`), and scroll-wheel capture with modifiers (`Ctrl+ScrollUp`). All keybinds can be configured dynamically in the Options menu with built-in conflict highlighting.
 
-| Action | Default Shortcut |
+| Action | Default Shortcut(s) |
 |---|---|
 | Toggle file list | `1` |
 | Toggle menu bar | `2` |
