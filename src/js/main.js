@@ -11,6 +11,7 @@ import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrol
 import { normalizeCombo, formatKeyName, normalizeList } from './services/keyCombo.js';
 import { applyTheme, applyCustomCss } from './shared/theme.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from './keybinds.js';
+import { Statusbar } from './menubar/statusbar.js';
 import {
   initMenuBar,
   closeMenus,
@@ -72,11 +73,6 @@ const dropOverlay = document.getElementById('drop-overlay');
 const menubar = document.getElementById('menubar');
 const viewport = document.getElementById('viewport');
 const statusbar = document.getElementById('statusbar');
-const statusName = document.querySelector('.status-filename');
-const statusDims = document.querySelector('.status-dims');
-const statusIndex = document.querySelector('.status-index');
-const statusZoom = document.querySelector('.status-zoom');
-const statusFit = document.querySelector('.status-fit');
 
 const filePanel = document.getElementById('file-panel');
 const filePanelBreadcrumb = document.getElementById('file-panel-breadcrumb');
@@ -1019,28 +1015,8 @@ Core.onStateChange((state) => {
     }
   }
 
-  // Only update filename/index if the image is actually displayed and decoded;
-  // otherwise viewer.js is showing "Loading..." and we don't want to overwrite it.
-  // The pool node may already carry the target src while still fetching.
-  // viewer.js marks the decoded visible node explicitly.
-  const imgEl2 = document.querySelector('.viewer-img.active[data-decoded="true"]');
-  const loaded = imgEl2 && imgEl2.dataset.poolSrc === state.src && imgEl2.complete;
-  if (!state.src || loaded) {
-    statusName.textContent = state.filename;
-    statusIndex.textContent = FsUtils.formatStatusIndex(state);
-  }
-
-  // Items that aren't images (folders, archives, `..`, drives) have no
-  // dimensions or zoom level; show N/A instead of stale image metrics.
-  const currentEntry = state.list[state.index];
-  const isImage = !!currentEntry && FsUtils.isImageEntry(currentEntry) && state.src;
-  if (!isImage) {
-    statusDims.textContent = 'N/A';
-    statusZoom.textContent = 'N/A';
-  }
-
-  const fitDisplay = state.fitMode.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  statusFit.textContent = `Fit: ${fitDisplay}`;
+  // Auto-update standard statusbar fields (fit mode, index, empty state)
+  Statusbar.update(state);
 
   if (state.scalingMode !== activeScaling) {
     activeScaling = state.scalingMode;
@@ -1083,6 +1059,7 @@ initFullscreenExitHideProbe();
 metadataBadge.addEventListener('click', () => openMetadataWindow());
 metadataBadge.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMetadataWindow(); } });
 
+Statusbar.init();
 initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, Viewer, FsUtils });
 initMenuBar();
 bindMenuCommands();

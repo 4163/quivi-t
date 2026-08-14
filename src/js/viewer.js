@@ -10,6 +10,7 @@ import { Core } from './core.js';
 import { FsUtils } from './fsUtils.js';
 import { activeKeys, MOUSE_BUTTON_NAMES } from './shortcuts.js';
 import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from './keybinds.js';
+import { Statusbar } from './menubar/statusbar.js';
 
 const PRELOAD_HALF = 7;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
@@ -107,10 +108,6 @@ function _isVisibleImage(el) {
 let img = null;
 const imgGrill = document.getElementById('img-grill');
 const grillBorder = document.getElementById('img-grill-border');
-const statusZoom = document.querySelector('.status-zoom');
-const statusDims = document.querySelector('.status-dims');
-const statusName = document.querySelector('.status-filename');
-const statusIndex = document.querySelector('.status-index');
 
 let _scale  = 1;
 let _tx     = 0;
@@ -167,7 +164,7 @@ function _applyTransform() {
     imgWrapper.style.setProperty('--zoom-scale', _scale);
   }
   
-  if (statusZoom) statusZoom.textContent = `${Math.round(_scale * 100)}%`;
+  Statusbar.setZoom(_scale);
 }
 
 function _scheduleTransform() {
@@ -534,12 +531,11 @@ function _activatePoolNode(el, filename, state) {
   if (img.naturalWidth > 0) {
     _naturalW = img.naturalWidth;
     _naturalH = img.naturalHeight;
-    if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
+    Statusbar.setImage({ filename: filename || '', dims: `${_naturalW} × ${_naturalH}`, zoom: _scale });
     applyFitMode();
+  } else {
+    Statusbar.setImage({ filename: filename || '' });
   }
-
-  if (statusName) statusName.textContent = filename || '';
-  if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
 }
 
 // Attach a load handler to every pool node so we pick up dimensions
@@ -560,9 +556,7 @@ function _attachLoadHandler(el) {
     }
     el.classList.add('active');
     _applyScaling();
-    if (statusName) statusName.textContent = state.filename || '';
-    if (statusIndex) statusIndex.textContent = FsUtils.formatStatusIndex(state);
-    if (statusDims) statusDims.textContent = `${_naturalW} × ${_naturalH}`;
+    Statusbar.setImage({ filename: state.filename || '', dims: `${_naturalW} × ${_naturalH}`, zoom: _scale });
     applyFitMode();
   });
 }
@@ -696,7 +690,7 @@ Core.onStateChange((state) => {
 
   if (activeChanged) {
     const activation = _activationGeneration;
-    if (statusName) statusName.textContent = 'Loading...';
+    Statusbar.setImage({ isLoading: true });
     _setElementLoadingLabel(activeEl, LOADING_LABEL);
 
     if (!hasPreviousBridge) {
@@ -723,8 +717,7 @@ Core.onStateChange((state) => {
       }).catch(() => {
         if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
         _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
-        if (statusDims) statusDims.textContent = 'Error';
-        if (statusZoom) statusZoom.textContent = 'N/A';
+        Statusbar.setImage({ isError: true });
         _schedulePoolPreloads(neighborSrcs, generation);
       });
     };

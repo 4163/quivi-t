@@ -3,6 +3,7 @@
  */
 
 import { formatKeysCombo, PASSIVE_ACTIONS, findAction, normalizeCombo, formatKeyName, MOUSE_BUTTON_NAMES, normalizeList, isModifierKey } from './services/keyCombo.js';
+import { Statusbar } from './menubar/statusbar.js';
 export { normalizeCombo, formatKeyName, formatKeysCombo, MOUSE_BUTTON_NAMES, normalizeList };
 
 export const activeKeys = new Set();
@@ -81,9 +82,6 @@ function getScrollModifierKeys(config, ids = _SCROLL_ALL_IDS) {
 // Idempotent: if the rendered text and classes already match the computed state,
 // the DOM is left completely untouched.
 function _updateScrollIndicator(config) {
-  const bar = document.getElementById('statusbar');
-  const el = document.querySelector('.status-scroll-zoom');
-  if (!bar || !el) return;
 
   let text = '';
   let held = false;
@@ -104,17 +102,18 @@ function _updateScrollIndicator(config) {
       if (held) text = `${mods.join('+')} — Held`;
     }
   } else {
-    // Hold mode: show any bound scroll modifier that's physically held.
+    // Hold mode: show any bound scroll modifier that's physically held,
+    // but only if the resulting combo actually resolves to a dispatchable
+    // scroll action (e.g. Ctrl+Shift has no binding, so suppress it).
     const mods = getScrollModifierKeys(config)
       .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
-    held = mods.length > 0;
-    if (held) text = `${mods.join('+')} — Held`;
+    if (mods.length > 0 && findAction(config, [...mods, 'ScrollUp'].join('+'))) {
+      held = true;
+      text = `${mods.join('+')} — Held`;
+    }
   }
 
-  // ── Only write differences ──
-  if (el.textContent !== text) el.textContent = text;
-  if (bar.classList.contains('zoom-held') !== held) bar.classList.toggle('zoom-held', held);
-  if (bar.classList.contains('zoom-latched') !== latched) bar.classList.toggle('zoom-latched', latched);
+  Statusbar.setScrollIndicatorState(text, held, latched);
 }
 
 // The wheel should never hijack scrolling over UI chrome or the file list.

@@ -13,6 +13,7 @@ This branch (`refactor/decoupling`) already carries the CSS Decoupling slice (gl
 
 ## Ground rules
 
+- **Read the analysis first.** Before implementing any slice, the active agent MUST read the relevant decoupling analysis reports for the affected modules in `.agents/decoupling-analysis/` (e.g., `01-main.js.md`, `02-viewer.js.md`) to ensure full architectural context is understood.
 - **Work in logical slices.** Each slice is an independent commit on `refactor/decoupling`, leaves the app functional, and is verified (`node --check` + manual smoke) before moving on (per `AGENTS.md` "Work in logical slices" and additions.md User Verification Gates).
 - **Folders as a byproduct of splitting, not a separate pass.** A file moves into a feature folder *only when* a slice creates a sibling for it. Single-file features stay flat in `src/js/`. No pure reorganization commits.
 - **Pure modules first.** Extract DOM-free logic into `services/` (no DOM, unit-testable). UI modules import pure modules; never the reverse.
@@ -317,6 +318,11 @@ After each slice, the active agent MUST follow this handoff protocol:
 - **Key Pattern:** Centralized array wrapping idiom into `normalizeList()` and modifier checks into `isModifierKey()`. Downstream consumers now reliably expect arrays for keybinds.
 - **Theme Injection:** Extracted inline head scripts into `shared/themePrePaint.js` (loaded synchronously via `<script>`). Centralized `applyTheme` / `applyCustomCss` into `shared/theme.js`. `core.js` no longer touches DOM for themes; `main.js` now listens to `quivit-config-loaded` to apply themes and persist them to `localStorage`.
 - **Path Helpers:** Extracted `parentOf` (internal) and added `basename` as a method on the `FsUtils` object (`FsUtils.basename`). Main and metadata windows now use this unified helper.
+
+### Slice 2 — Statusbar single-owner
+- Extracted `#statusbar` DOM writes from `main.js`, `viewer.js`, and `shortcuts.js` into a new `menubar/statusbar.js` module.
+- **Key Pattern:** Used `Statusbar.update(state)` within `main.js` to handle list/empty states, and `Statusbar.setImage(metrics)` to handle explicit reporting from the `Viewer` when an image finishes loading (eliminating the fragile `data-decoded` heuristic).
+- **Idempotency:** Migrated the scroll-zoom indicator idempotency logic entirely into the DOM writer (`Statusbar.setScrollIndicatorState`), leaving `shortcuts.js` focused on input dispatch.
 
 ---
 
