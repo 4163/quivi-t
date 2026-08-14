@@ -15,12 +15,8 @@ import { Statusbar } from './menubar/statusbar.js';
 import {
   initMenuBar,
   closeMenus,
-  toggleMenuBar,
-  menuBarVisible,
-  setMenuBarVisible,
-  getPreFullscreenState,
-  setPreFullscreenState
 } from './menubar.js';
+import * as Chrome from './menubar/chrome.js';
 import { fetchMetadata, findMetadataEntry } from './metadata.js';
 
 // Reset the options tab state on app startup so it defaults to General per session
@@ -85,7 +81,6 @@ const fullscreenExitRegion = document.getElementById('fullscreen-exit-region');
 const fullscreenExitBtn = document.getElementById('fullscreen-exit-btn');
 
 let activeScaling = '';
-let statusBarVisible = true; // updated from config when loaded
 let _uiInitialized = false;
 let fullscreenActive = false;
 let dropMessageTimer = null;
@@ -191,12 +186,7 @@ function updateHistoryMenu() {
   setMenuItemMuted('cmd-history-forward', !NavigationHistory.canGoForward());
 }
 
-function updateViewToggleMenu(state = Core.getState()) {
-  document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!state.fileListVisible);
-  document.getElementById('cmd-toggle-menubar')?.classList.toggle('checked', menuBarVisible);
-  document.getElementById('cmd-toggle-statusbar')?.classList.toggle('checked', statusBarVisible);
-  document.getElementById('cmd-fullscreen')?.classList.toggle('checked', fullscreenActive);
-}
+
 
 function setScaling(mode) {
   Core.setScalingMode(mode, { persist: true });
@@ -310,7 +300,7 @@ function setFullscreenUiActive(active) {
   } else {
     hideFullscreenExitHint();
   }
-  updateViewToggleMenu();
+  document.getElementById('cmd-fullscreen')?.classList.toggle('checked', active);
 }
 
 function startFullscreenExitKeyHold(e) {
@@ -355,43 +345,20 @@ function handleFullscreenExitMouseMove(e) {
   if (y > fullscreenExitHideY) hideFullscreenExitButton();
 }
 
-function setStatusBarVisible(visible, { persist = false } = {}) {
-  statusBarVisible = visible;
-  if (Core.getState().mode !== 'empty') {
-    statusbar.classList.toggle('hidden', !statusBarVisible);
-  }
 
-  if (!persist) return;
-  const state = Core.getState();
-  if (state.config && state.config.frontend_data) {
-    state.config.frontend_data.status_visible = statusBarVisible;
-    if (window.__TAURI__) Core.persistConfig({ debounceMs: 1500 });
-  }
-}
 
 function setFileListVisible(visible) {
   Core.setFileListVisible(visible, { notify: false });
   filePanel.classList.toggle('hidden', !visible);
   if (visible) requestAnimationFrame(() => renderFilePanel(Core.getState()));
-  updateViewToggleMenu();
+  document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!visible);
 }
 
 function toggleFileList() {
   setFileListVisible(!Core.getState().fileListVisible);
 }
 
-function setFullscreenChromeVisible(visible) {
-  setMenuBarVisible(visible);
-  setStatusBarVisible(visible);
-}
 
-function restorePreFullscreenChrome() {
-  const pre = getPreFullscreenState();
-  if (!pre) return;
-  setMenuBarVisible(pre.menuBar);
-  setStatusBarVisible(pre.statusBar);
-  setPreFullscreenState(null);
-}
 
 async function toggleFullscreen() {
   const enteringFullscreen = window.__TAURI__
@@ -403,8 +370,8 @@ async function toggleFullscreen() {
 
   if (enteringFullscreen) {
     // Snapshot current visibility before hiding
-    setPreFullscreenState({ menuBar: menuBarVisible, statusBar: statusBarVisible });
-    if (hideChrome) setFullscreenChromeVisible(false);
+    Chrome.snapshotPreFullscreenChrome();
+    if (hideChrome) Chrome.setFullscreenChromeVisible(false);
   }
 
   setFullscreenUiActive(enteringFullscreen);
@@ -418,11 +385,7 @@ async function toggleFullscreen() {
     await document.exitFullscreen();
   }
 
-  if (!enteringFullscreen) requestAnimationFrame(restorePreFullscreenChrome);
-}
-
-function toggleStatusBar() {
-  setStatusBarVisible(!statusBarVisible, { persist: true });
+  if (!enteringFullscreen) requestAnimationFrame(Chrome.restorePreFullscreenChrome);
 }
 
 async function openGithub() {
@@ -605,8 +568,7 @@ async function dispatchAction(actionId, payload) {
       Viewer.panBy(-panStep, 0);
       break;
     case 'cmd-toggle-menubar':
-      toggleMenuBar();
-      updateViewToggleMenu();
+      Chrome.toggleMenuBar();
       break;
     case 'cmd-toggle-filelist':
       toggleFileList();
@@ -615,8 +577,7 @@ async function dispatchAction(actionId, payload) {
       Core.toggleTransparentBg();
       break;
     case 'cmd-toggle-statusbar':
-      toggleStatusBar();
-      updateViewToggleMenu();
+      Chrome.toggleStatusBar();
       break;
     case 'cmd-options':
       if (window.__TAURI__) window.__TAURI__.core.invoke('open_options').catch(console.error);
@@ -794,7 +755,6 @@ function bindMenuCommands() {
 
   updateScalingMenu();
   updateHistoryMenu();
-  updateViewToggleMenu();
 }
 
 function bindDragDrop() {
@@ -860,10 +820,10 @@ function bindDragDrop() {
 
       const syncFullscreenUi = (isFullscreen) => {
         if (isFullscreen && !fullscreenActive) {
-          setPreFullscreenState({ menuBar: menuBarVisible, statusBar: statusBarVisible });
+          Chrome.snapshotPreFullscreenChrome();
           setFullscreenUiActive(true);
           const hideChrome = config?.frontend_data?.hide_chrome_on_fullscreen !== false;
-          if (hideChrome) setFullscreenChromeVisible(false);
+          if (hideChrome) Chrome.setFullscreenChromeVisible(false);
         }
       };
 
@@ -973,11 +933,16 @@ Core.onStateChange((state) => {
   if (!_uiInitialized && state.config?.frontend_data) {
     const fd = state.config.frontend_data;
     if (fd.menu_visible !== undefined) {
-      setMenuBarVisible(fd.menu_visible);
+      Chrome.setMenuBarVisible(fd.menu_visible);
     }
     if (fd.status_visible !== undefined) {
-      statusBarVisible = fd.status_visible;
+      Chrome.setStatusBarVisible(fd.status_visible);
     }
+    
+    // Explicitly sync checkmarks that rely on state on startup
+    document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!state.fileListVisible);
+    document.getElementById('cmd-fullscreen')?.classList.toggle('checked', fullscreenActive);
+    
     _uiInitialized = true;
   }
 
@@ -998,9 +963,8 @@ Core.onStateChange((state) => {
     viewport.classList.remove('empty');
   }
 
-  // Show statusbar only if the user hasn't hidden it
-  if (statusBarVisible) statusbar.classList.remove('hidden');
-  else statusbar.classList.add('hidden');
+  // Apply statusbar visibility
+  Chrome.applyStatusBarVisibility();
 
   if (state.config && state.config.frontend_data) {
     const isTransparent = !!state.config.frontend_data.transparent_bg;
@@ -1025,7 +989,7 @@ Core.onStateChange((state) => {
   }
 
   updateHistoryMenu();
-  updateViewToggleMenu(state);
+
 
   renderFilePanel(state);
 

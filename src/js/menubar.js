@@ -3,14 +3,7 @@
  * Handles the top menubar logic, dropdowns, and fullscreen visibility toggles.
  */
 
-import { Core } from './core.js';
-import { Viewer } from './viewer.js';
-
 let activeMenu = null;
-export let menuBarVisible = true;
-
-let _preFullscreenState = null;
-const menubarEl = document.getElementById('menubar');
 
 export function initMenuBar() {
   bindMenus();
@@ -22,32 +15,6 @@ export function closeMenus() {
   activeMenu = null;
 }
 
-export function setMenuBarVisible(visible, { persist = false } = {}) {
-  menuBarVisible = visible;
-  menubarEl.classList.toggle('hidden', !menuBarVisible);
-  if (!menuBarVisible) closeMenus();
-  if (persist) saveUIState();
-}
-
-export function toggleMenuBar({ persist = true } = {}) {
-  setMenuBarVisible(!menuBarVisible, { persist });
-}
-
-export function saveUIState() {
-  const state = Core.getState();
-  if (state.config && state.config.frontend_data) {
-    state.config.frontend_data.menu_visible = menuBarVisible;
-    if (window.__TAURI__) Core.persistConfig({ debounceMs: 1500 });
-  }
-}
-
-export function getPreFullscreenState() {
-  return _preFullscreenState;
-}
-
-export function setPreFullscreenState(state) {
-  _preFullscreenState = state;
-}
 
 function bindMenus() {
   document.querySelectorAll('.menu-item').forEach(menu => {

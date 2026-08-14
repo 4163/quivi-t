@@ -324,6 +324,11 @@ After each slice, the active agent MUST follow this handoff protocol:
 - **Key Pattern:** Used `Statusbar.update(state)` within `main.js` to handle list/empty states, and `Statusbar.setImage(metrics)` to handle explicit reporting from the `Viewer` when an image finishes loading (eliminating the fragile `data-decoded` heuristic).
 - **Idempotency:** Migrated the scroll-zoom indicator idempotency logic entirely into the DOM writer (`Statusbar.setScrollIndicatorState`), leaving `shortcuts.js` focused on input dispatch.
 - **Bugfixes:** Fixed regressions from initial refactoring (statusbar formatting) and fixed the legacy hardcoded Ctrl latch bug in `shortcuts.js` (made it fully dynamic against bound modifiers, handled the Windows Alt-menu focus bug, and handled multiple bindings).
+### Slice 3 — Chrome/visibility consolidation
+- Extracted chrome state (`menuBarVisible`, `statusBarVisible`) and DOM `.hidden` toggles from `main.js` and `menubar.js` into a new `menubar/chrome.js` module.
+- **Checkmark Syncing:** Split `updateViewToggleMenu` so each module handles its own menu checkmarks (`chrome.js` syncs chrome, `main.js` syncs fullscreen, and `filePanel` handles the file list), removing the monolithic checkmark updater.
+- **Persistence Consolidation:** Merged the two competing debounce timers for menu and statusbar persistence into a single `saveChromeState` call inside `chrome.js`.
+- **Fullscreen Abstraction:** Moved pre-fullscreen snapshotting directly into `chrome.js`, abstracting the complexity away from `main.js`'s toggle handler.
 
 ---
 
