@@ -1,3 +1,8 @@
+user note for initial slice:
+"
+refer to '.agents/js-dom-decoupling-plan.md' and begin planning and discussion for next refactor/decoupling slice.
+"
+
 # JS DOM Decoupling — Implementation Plan
 
 Scope: the `.agents/additions.md` **JS DOM Decoupling (Refactoring)** item — move DOM interaction/manipulation into cohesive modules communicating via state callbacks, and remove clutter debt across the frontend. Based on the per-file analysis in `.agents/decoupling-analysis/` (7 subagent reports).
@@ -297,7 +302,21 @@ Flat files stay put until a slice gives them a sibling. `metadata/` folder creat
 8. `slice8: Actions registry + menu collapse`
 9. `slice9: main.js thinning + polish`
 
-After each slice: commit + summary of changed files + note what was verified; ask for user verification before the next slice per additions.md User Verification Gates.
+After each slice, the active agent MUST follow this handoff protocol:
+1. Append a brief summary to the **Completed Slices Log** at the bottom of this file, detailing key architectural choices, new helpers created, and any deferred quirks so the next agent has continuity.
+2. Provide a comprehensive summary of the changed files and the verification steps taken in the chat.
+3. Tell the user to commit the slice to the `refactor/decoupling` branch.
+4. Explicitly instruct the user to **start a new agent session** for the next slice to maintain context hygiene.
+
+---
+
+## Completed Slices Log
+
+### Slice 1 — Foundation
+- Extracted key/mouse utilities into `services/keyCombo.js`.
+- **Key Pattern:** Centralized array wrapping idiom into `normalizeList()` and modifier checks into `isModifierKey()`. Downstream consumers now reliably expect arrays for keybinds.
+- **Theme Injection:** Extracted inline head scripts into `shared/themePrePaint.js` (loaded synchronously via `<script>`). Centralized `applyTheme` / `applyCustomCss` into `shared/theme.js`. `core.js` no longer touches DOM for themes; `main.js` now listens to `quivit-config-loaded` to apply themes and persist them to `localStorage`.
+- **Path Helpers:** Extracted `parentOf` (internal) and added `basename` as a method on the `FsUtils` object (`FsUtils.basename`). Main and metadata windows now use this unified helper.
 
 ---
 
