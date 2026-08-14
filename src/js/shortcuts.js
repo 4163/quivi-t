@@ -257,6 +257,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   };
 
   window.addEventListener('keydown', (e) => {
+    const config = Core.getState().config;
     // Don't hijack Space/arrows when an interactive element (e.g. a button)
     // has focus — Space should still activate the button natively.
     const onInteractive = isInteractiveKeyTarget(e);
