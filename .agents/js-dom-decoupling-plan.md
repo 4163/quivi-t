@@ -364,6 +364,15 @@ After each slice, the active agent MUST follow this handoff protocol:
 - **Directory sort deduplication:** `directoryPrefs.setSortPrefs` now deletes entries from `directory_sort` when they match `default_sort`, so the persisted map only stores deviations.
 - **Bugfixes during review:** Added missing `MENUBAR_ACTION` import to `keybindUi.js`; fixed `canUseMenubarBinds` call sites passing wrong arity (1 arg instead of 2).
 
+### Slice 8 — Actions registry + menu collapse
+- Created `src/js/services/actions.js` as the single source of truth (`ACTION_REGISTRY`) defining action IDs, user-facing labels, categories, default keybindings, and executable handlers.
+- **Context Injection:** `dispatch(actionId, payload, ctx)` receives injected application dependencies (`Core`, `FsUtils`, `Viewer`, `Chrome`, `NavigationHistory`, etc.) from `main.js`, keeping `actions.js` pure and free of circular UI dependencies.
+- **Menu Wiring Collapse:** Replaced the ~150-line `bindMenuCommands` block in `main.js` with a dynamic loop iterating over `ACTION_REGISTRY` to bind matching element click listeners directly.
+- **Switch Elimination:** Deleted the ~160-line `dispatchAction` switch block in `main.js`, replacing it with `dispatch(id, payload, actionCtx)` for shortcuts and menu commands.
+- **Derived Configs:** `DEFAULT_KEYBINDS` in `src/js/keybinds.js` and `CATEGORIES` in `src/js/services/keybindDomain.js` are now dynamically derived from `ACTION_REGISTRY`, eliminating duplicate lists across the codebase.
+- **HTML-First Adherence:** Retained static HTML menu items in `index.html` without dynamic DOM injection.
+- **Dead Code Cleanup & Fixes:** Removed dead functions (`openGithub`, `setScaling`, `toggleFileList`) from `main.js`. Fixed `cmd-quit` by routing through `window.getCurrentWindow().close()` to properly trigger the existing `onCloseRequested` graceful flush flow instead of calling the unregistered `plugin:process|exit`. Added `cmd-quit` back to `Window & UI` keybind category while keeping `cmd-github` unbindable (no category).
+
 ---
 
 ## References
