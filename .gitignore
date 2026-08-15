@@ -26,6 +26,7 @@ dist-ssr
 # Note: .agents/sessions-index.md, .agents/session-recovery.md and other .agents/ files are strictly local and intentionally ignored
 .agents/*
 !.agents/decoupling-analysis/
+!.agents/legacy-reports/
 !.agents/additions.md
 !.agents/AGENTS.md
 !.agents/familiarize.md
