@@ -347,6 +347,12 @@ After each slice, the active agent MUST follow this handoff protocol:
 - **`index.html`:** Removed the stale `<script src="/js/viewer.js">` tag (now pulled in by `main.js` import).
 - **Bugfixes:** Fixed infinite-recursion crash caused by `Core.setState({ decodedSrc })` inside `onStateChange` (added `_inStateChange` re-entrancy guard); fixed the guard's early-return path not resetting the flag.
 
+### Slice 6 — filePanel decouple + favorites store
+- Extracted `filepanel/favoritesStore.js` — pure favorites data layer communicating with `Core` for persistence (zero DOM).
+- Moved `filePanel.js` into `filepanel/` directory. Self-subscribes to `Core.onStateChange` — `main.js` no longer calls `renderFilePanel`.
+- **Event Delegation:** Refactored `keyboardNav.js` to add `makeContainerNavigable` — a single delegated `keydown` listener on the parent `<ul>`. Two 60-line inline `switch(e.key)` blocks in filePanel replaced with clean `makeContainerNavigable` calls.
+- **Panel Resize Decoupling:** Replaced the direct `Viewer.applyFitMode()` call during panel drag-resize with a `quivit-panel-resized` custom event. `viewer.js` subscribes globally, completely severing the filePanel→Viewer dependency.
+
 ---
 
 ## References
