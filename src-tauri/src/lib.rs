@@ -61,7 +61,7 @@ fn apply_shell_background(window: &tauri::WebviewWindow, config: &AppConfig) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let config = crate::config::apply_pending_config();
+    let config = crate::config::load_config_early();
     // Single instance defaults to true if not explicitly set to false
     let single_instance = config
         .frontend_data
@@ -368,8 +368,13 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                crate::config::apply_pending_config_to_disk();
+            }
+        });
 }
 
 // ── Utility functions ────────────────────────────────────────────────────────

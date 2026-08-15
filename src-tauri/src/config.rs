@@ -139,7 +139,7 @@ pub fn apply_pending_to_config(config: &mut AppConfig) {
     }
 }
 
-pub fn apply_pending_config() -> AppConfig {
+pub fn apply_pending_config_to_disk() {
     let mut config = load_config_early();
     let had_pending = config.frontend_data.get("pending_single_instance").is_some();
     apply_pending_to_config(&mut config);
@@ -148,7 +148,6 @@ pub fn apply_pending_config() -> AppConfig {
             let _ = fs::write(get_config_path(), data);
         }
     }
-    config
 }
 
 // ── Config split helpers ──────────────────────────────────────────────────────

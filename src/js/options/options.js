@@ -74,7 +74,8 @@ async function init() {
     document.getElementById('opt-continue-last').checked = config.frontend_data.continue_last !== false;
     document.getElementById('opt-remember-last-image').checked = config.frontend_data.remember_last_image === true;
     document.getElementById('opt-open-first-image').checked = config.frontend_data.open_first_image === true;
-    document.getElementById('opt-single-instance').checked = config.frontend_data.single_instance !== false;
+    const singleInstanceValue = config.frontend_data.pending_single_instance ?? config.frontend_data.single_instance;
+    document.getElementById('opt-single-instance').checked = singleInstanceValue !== false;
     document.getElementById('opt-show-hidden').checked = config.frontend_data.show_hidden === true;
     document.getElementById('opt-hide-chrome-fullscreen').checked = config.frontend_data.hide_chrome_on_fullscreen !== false;
     document.getElementById('opt-keyboard-pan-step').value = config.frontend_data.keyboard_pan_step || 72;
