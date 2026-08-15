@@ -1,5 +1,6 @@
 import { Core } from './core.js';
 import { DirectoryPrefs } from './directoryPrefs.js';
+import { naturalCompare, applySort } from './services/sorting.js';
 import { createHistoryEntry, recordNavigation } from './navigationHistory.js';
 
 const { invoke, convertFileSrc } = window.__TAURI__.core;
@@ -186,7 +187,7 @@ export const FsUtils = {
     const images = list.filter(e => this.isImageEntry(e));
     if (!images.length) return null;
     const sorted = [...images].sort((a, b) =>
-      DirectoryPrefs.naturalCompare(a.name.toLowerCase(), b.name.toLowerCase()));
+      naturalCompare(a.name.toLowerCase(), b.name.toLowerCase()));
     const idx = sorted.findIndex(e => e.name === filename);
     if (idx === -1) return null;
     return { current: idx + 1, total: sorted.length };
@@ -219,7 +220,7 @@ export const FsUtils = {
 
     let files = this.buildDirectoryList(result);
     const prefs = DirectoryPrefs.getSortPrefs(result.directory);
-    files = DirectoryPrefs.applySort(files, prefs.col, prefs.desc);
+    files = applySort(files, prefs.col, prefs.desc);
 
     const state = Core.getState();
     let index = 0;
@@ -322,7 +323,7 @@ export const FsUtils = {
 
       let files = this.buildArchiveList({ ...result, files: imgFiles });
       const prefs = DirectoryPrefs.getSortPrefs(result.archive_path);
-      files = DirectoryPrefs.applySort(files, prefs.col, prefs.desc);
+      files = applySort(files, prefs.col, prefs.desc);
 
       const state = Core.getState();
       this.revokeIfObjectURL(state.src);
@@ -547,7 +548,7 @@ export const FsUtils = {
       }
 
       const prefs = DirectoryPrefs.getSortPrefs(prefsPath);
-      const sorted = DirectoryPrefs.applySort(containers, prefs.col, prefs.desc);
+      const sorted = applySort(containers, prefs.col, prefs.desc);
 
       const currentIdx = sorted.findIndex(f => f.path === currentPath);
       if (currentIdx === -1) {

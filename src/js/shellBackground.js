@@ -59,16 +59,14 @@
 
   sync();
 
-  const observer = new MutationObserver(sync);
-  observer.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ['data-theme'],
-  });
-  observer.observe(document.head, {
-    childList: true,
-    characterData: true,
-    subtree: true,
-  });
+  if (window.__TAURI__) {
+    window.__TAURI__.event.listen('theme-preview', sync).catch(console.error);
+    window.__TAURI__.event.listen('css-preview', sync).catch(console.error);
+  }
 
-  document.addEventListener('quivit:shell-sync', sync);
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'quivit-theme' || e.key === 'quivit-custom-css') {
+      sync();
+    }
+  });
 })();
