@@ -53,12 +53,14 @@
           <li role="menuitem" id="cmd-zoom-out" tabindex="0">Zoom out<span class="shortcut">Z</span></li>
           <li role="menuitem" id="cmd-zoom-100" tabindex="0">Zoom 100%<span class="shortcut">X</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-fit-none" tabindex="0">Fit: None<span class="shortcut">R</span></li>
-          <li role="menuitem" id="cmd-fit-width" tabindex="0">Fit width<span class="shortcut">T</span></li>
-          <li role="menuitem" id="cmd-fit-height" tabindex="0">Fit height<span class="shortcut">Y</span></li>
-          <li role="menuitem" id="cmd-fit-width-if-larger" tabindex="0">Fit width if larger<span class="shortcut">Q</span></li>
-          <li role="menuitem" id="cmd-fit-height-if-larger" tabindex="0">Fit height if larger<span class="shortcut">E</span></li>
-          <li role="menuitem" id="cmd-fit-best" tabindex="0" title="">Auto fit<span class="shortcut">F</span></li>
+          <li role="menuitem" id="cmd-fit-none" tabindex="0" title="Display at original size (1:1 pixels)">Fit: None<span class="shortcut">R</span></li>
+          <li role="menuitem" id="cmd-fit-width" tabindex="0" title="Scale to fill viewport width, stretching small images">Fit width<span class="shortcut">Shift+Q</span></li>
+          <li role="menuitem" id="cmd-fit-height" tabindex="0" title="Scale to fill viewport height, stretching small images">Fit height<span class="shortcut">Shift+E</span></li>
+          <li role="menuitem" id="cmd-fit-best" tabindex="0" title="Scale to fit entirely within the viewport, stretching small images">Fit window<span class="shortcut">Shift+F</span></li>
+          <li class="separator"></li>
+          <li role="menuitem" id="cmd-fit-width-if-larger" tabindex="0" title="Shrink to viewport width, but never enlarge small images">Fit width if larger<span class="shortcut">Q</span></li>
+          <li role="menuitem" id="cmd-fit-height-if-larger" tabindex="0" title="Shrink to viewport height, but never enlarge small images">Fit height if larger<span class="shortcut">E</span></li>
+          <li role="menuitem" id="cmd-fit-window-if-larger" tabindex="0" title="Shrink to fit the viewport, but never enlarge small images">Fit window if larger<span class="shortcut">F</span></li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none" title="Cycle Through Modes: ] / [">Scaling: None</li>
           <li role="menuitem" id="cmd-scale-bicubic" tabindex="0" data-scaling="bicubic" title="Cycle Through Modes: ] / [">Scaling: Bicubic</li>
@@ -119,7 +121,6 @@
           </div>
         </div>
         <ul id="file-list" role="listbox" aria-label="Images in current directory">
-          <!-- populated by core.js -->
         </ul>
         <div class="file-panel-actions">
           <button id="cmd-open-explorer" class="icon-btn" title="Open in File Explorer">
@@ -200,7 +201,6 @@
 
 
     <!-- Scripts: decoupled load order -->
-    <script type="module" src="/js/core.js"></script>
     <script type="module" src="/js/main/main.js"></script>
     <script type="module" src="/js/shellBackground.js"></script>
   </body>

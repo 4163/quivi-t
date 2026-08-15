@@ -23,14 +23,19 @@ window.addEventListener('quivit-panel-resized', () => {
   viewportState.applyFitMode();
 });
 
+function _getViewportCenter() {
+  const vp = document.getElementById('viewport');
+  if (!vp) return null;
+  const rect = vp.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
 export const Viewer = { 
   applyFitMode: (mode) => viewportState.applyFitMode(mode),
   zoomAt: viewportState.zoomAt,
   zoomCenter: (delta) => {
-    const vp = document.getElementById('viewport');
-    if (!vp) return;
-    const rect = vp.getBoundingClientRect();
-    viewportState.zoomAt(delta, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    const c = _getViewportCenter();
+    if (c) viewportState.zoomAt(delta, c.x, c.y);
   },
   panBy: viewportState.panBy,
   rotate: viewportState.rotate,
@@ -38,10 +43,9 @@ export const Viewer = {
   flipVertical: () => viewportState.flip('y'),
   setScaling: viewportState.setScaling,
   setZoom: (exactScale) => {
-    const vp = document.getElementById('viewport');
-    if (!vp) return;
-    const rect = vp.getBoundingClientRect();
+    const c = _getViewportCenter();
+    if (!c) return;
     viewportState.applyFitMode('none');
-    viewportState.zoomTo(exactScale, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    viewportState.zoomTo(exactScale, c.x, c.y);
   }
 };

@@ -1,7 +1,8 @@
 import { mergeConfig, DEFAULT_KEYBINDS } from '../keybinds.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { makeListNavigable, handleTabJump } from '../keyboardNav.js';
-import { initKeybindUi, validateKeybindSafety } from './keybindUi.js';
+import { initKeybindUi } from './keybindUi.js';
+import { validateKeybindSafety } from '../services/keybindDomain.js';
 import { initAssociationsUi, applyAssociations } from './associationsUi.js';
 import { previewing, setPreviewing, revertPreviewChanges as _revertPreviewChanges, previewTheme, previewCss, emergencyCssReset } from '../shared/configPreview.js';
 import { fitContentWidth } from '../shared/windowFit.js';
@@ -11,9 +12,9 @@ const invoke = tauri.core?.invoke?.bind(tauri.core);
 const emit = tauri.event?.emit?.bind(tauri.event);
 const listen = tauri.event?.listen?.bind(tauri.event);
 const open = tauri.dialog?.open?.bind(tauri.dialog);
-const tauriConfirm = tauri.dialog?.confirm?.bind(tauri.dialog);
 
 let config = mergeConfig({});
+let currentTheme = 'system';
 const statusEl = document.getElementById('options-status');
 const configDirLabel = document.getElementById('config-dir-label');
 const localDataDirLabel = document.getElementById('local-data-dir-label');
@@ -117,7 +118,7 @@ function switchTab(targetId) {
   localStorage.setItem('options-active-tab', targetId);
 }
 
-document.querySelectorAll('.tab-btn').forEach((btn, index, NodeList) => {
+document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => switchTab(btn.dataset.target));
 });
 makeListNavigable(document.querySelectorAll('.tab-btn'), { horizontal: false, vertical: true });
@@ -165,8 +166,7 @@ document.getElementById('btn-open-local-data-dir').addEventListener('click', asy
 });
 
 // --- Theme Buttons ---
-let currentTheme = 'system';
-document.querySelectorAll('.theme-btn').forEach((btn, index, NodeList) => {
+document.querySelectorAll('.theme-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     currentTheme = btn.dataset.theme;
     document.querySelectorAll('.theme-btn').forEach(b => {
@@ -237,7 +237,7 @@ document.getElementById('btn-export-css').addEventListener('click', async () => 
   });
   if (path) {
     try {
-      await invoke('write_text_file', { path, content: css }); // We will implement this
+      await invoke('write_text_file', { path, content: css });
       showStatus('CSS exported successfully.');
     } catch (err) {
       console.error('Failed to export CSS:', err);

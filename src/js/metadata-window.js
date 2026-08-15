@@ -8,6 +8,7 @@
  */
 
 import { applyTheme, applyCustomCss } from './shared/theme.js';
+import { fitContentHeight } from './shared/windowFit.js';
 
 const coverImg   = document.getElementById('metadata-cover-img');
 const titleEl    = document.getElementById('metadata-title');
@@ -15,7 +16,6 @@ const seriesEl   = document.getElementById('metadata-series');
 const summaryEl  = document.getElementById('metadata-summary');
 const gridEl     = document.getElementById('metadata-grid');
 const coverWrap  = document.getElementById('metadata-cover-wrap');
-const rootEl     = document.getElementById('metadata-root');
 
 function render(payload) {
   const { meta, coverSrc } = payload || {};
@@ -97,7 +97,6 @@ function render(payload) {
   gridEl.replaceChildren(...rows);
 }
 
-import { fitContentHeight } from './shared/windowFit.js';
 
 // Render from localStorage immediately (data written before window opened)
 // The window opens hidden; show it once the content-fit settles.

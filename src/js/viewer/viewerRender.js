@@ -40,7 +40,6 @@ export function createViewerRenderer(viewportState) {
   const _preloadTimers = [];
   const _preloadImages = [];
   let _lastFitModeGen = -1;
-  let _inStateChange = false;
 
   function _applyTransform() {
     if (imgWrapper) {
@@ -91,8 +90,6 @@ export function createViewerRenderer(viewportState) {
       }
       el.classList.add('active');
       _applyScaling();
-      
-      if (!_inStateChange) Core.setState({ decodedSrc: state.src });
       Statusbar.setImage({ filename: state.filename || '', dims: `${natW} × ${natH}`, zoom: viewportState.getScale() });
       
       viewportState.applyFitMode(state.fitMode, natW, natH, el.clientWidth, el.clientHeight);
@@ -161,7 +158,6 @@ export function createViewerRenderer(viewportState) {
     img.alt = filename || '';
     img.title = filename || '';
     
-    if (!_inStateChange) Core.setState({ decodedSrc: state.src });
     _applyScaling();
     viewportState.resetGeometry();
 
@@ -218,8 +214,6 @@ export function createViewerRenderer(viewportState) {
   }
 
   Core.onStateChange((state) => {
-    if (_inStateChange) return;
-    _inStateChange = true;
     const generation = ++_poolGeneration;
     _activationGeneration += 1;
     _clearTargetLoadTimer();
@@ -227,7 +221,6 @@ export function createViewerRenderer(viewportState) {
 
     if (state.mode === 'empty' || !state.src || !state.list || state.list.length === 0) {
       clearDisplayedImage();
-      _inStateChange = false;
       return;
     }
 
@@ -298,7 +291,6 @@ export function createViewerRenderer(viewportState) {
       _lastFitModeGen = state.fitModeGen;
       if (img) viewportState.applyFitMode(state.fitMode, img.naturalWidth, img.naturalHeight, img.clientWidth, img.clientHeight);
     }
-    _inStateChange = false;
   });
 
   window.addEventListener('resize', () => {

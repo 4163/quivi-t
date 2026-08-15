@@ -3,7 +3,7 @@ import { DirectoryPrefs } from './directoryPrefs.js';
 import { naturalCompare, applySort } from './services/sorting.js';
 import { createHistoryEntry, recordNavigation } from './navigationHistory.js';
 
-const { invoke, convertFileSrc } = window.__TAURI__.core;
+const { invoke } = window.__TAURI__.core;
 
 export const SUPPORTED_IMAGES = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'apng', 'svg', 'bmp', 'ico', 'avif',
@@ -56,9 +56,7 @@ function _base64Encode(str) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function _basename(path) {
-  return String(path || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
-}
+
 
 export const FsUtils = {
   basename,
@@ -279,7 +277,6 @@ export const FsUtils = {
       list: files,
       index,
       directory: result.directory,
-      parentDirectory: result.parent_directory || '',
       archivePath: '',
       filename: files[index]?.name || '',
       src: selectedSrc,
@@ -363,7 +360,6 @@ export const FsUtils = {
         archivePath: result.archive_path,
         archiveMetadataFiles: metaFiles,
         directory: '',
-        parentDirectory: result.archive_path.replace(/[\\/][^\\/]*$/, ''),
         filename: files[index]?.name || '',
         src: selectedSrc
       });
@@ -386,7 +382,7 @@ export const FsUtils = {
         Core.setState({
           mode: state.mode === 'empty' ? 'image' : state.mode,
           src: '',
-          filename: `Failed to open archive: ${_basename(archivePath) || archivePath}`,
+          filename: `Failed to open archive: ${basename(archivePath) || archivePath}`,
         });
       }
       throw err;
@@ -459,24 +455,6 @@ export const FsUtils = {
     }
   },
 
-  async openContainer(delta) {
-    const generation = _nextNavigationGeneration();
-    const state = Core.getState();
-    const currentPath = state.mode === 'archive' ? state.archivePath : state.directory;
-    if (!currentPath) return;
-
-    try {
-      const path = await invoke('open_sibling_container', {
-        currentPath,
-        delta,
-        showHidden: this.showHidden(),
-      });
-      if (!_isCurrentGeneration(generation)) return;
-      await this.loadFile(path, { generation });
-    } catch (err) {
-      console.error('[Core] openContainer error:', err);
-    }
-  },
 
   async openParent() {
     const generation = _nextNavigationGeneration();

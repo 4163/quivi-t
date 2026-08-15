@@ -1,5 +1,6 @@
 import { Core } from '../core.js';
-import { activeKeys, MOUSE_BUTTON_NAMES } from '../shortcuts.js';
+import { activeKeys } from '../shortcuts.js';
+import { MOUSE_BUTTON_NAMES } from '../services/keyCombo.js';
 
 export function createViewerGestures(viewportState) {
   let _isPanning = false;
@@ -37,6 +38,7 @@ export function createViewerGestures(viewportState) {
     }
   }
   window.addEventListener('quivit-config-loaded', _updatePanKeysCache);
+  _updatePanKeysCache();
 
   function _keyPanHeld(exceptKey) {
     for (const held of _panKeyboardKeys) {
@@ -161,7 +163,7 @@ export function createViewerGestures(viewportState) {
       return;
     }
     if (!_isPanning) {
-      if (_panButtonsDown.size === 0 && e.target.closest?.('#file-panel, .menubar, .dropdown-menu, #statusbar')) return;
+      if (_panButtonsDown.size === 0 && e.target.closest?.('#file-panel, #menubar, .menu-dropdown, #statusbar')) return;
       _startPan(e.clientX, e.clientY);
     }
     _updatePan(e.clientX, e.clientY);

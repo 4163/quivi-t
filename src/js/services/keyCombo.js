@@ -85,14 +85,23 @@ export function formatKeysCombo(keysSet, buttonsSet, scrollDir) {
   return combo.concat(others).join('+');
 }
 
-export function findAction(config, combo) {
-  const binds = config?.frontend_data?.keybinds || {};
+// ── Cached keybind lookup (rebuilt on config load) ──
+let _bindMap = new Map();
 
-  const lowerCombo = combo.toLowerCase();
+export function rebuildBindMap(config) {
+  _bindMap = new Map();
+  const binds = config?.frontend_data?.keybinds || {};
   for (const [id, bindCombo] of Object.entries(binds)) {
     const arr = normalizeList(bindCombo);
-    if (arr.some(b => b.toLowerCase() === lowerCombo)) return PASSIVE_ACTIONS.has(id) ? null : id;
+    for (const b of arr) {
+      const key = b.toLowerCase();
+      if (!_bindMap.has(key)) _bindMap.set(key, id);
+    }
   }
+}
 
-  return null;
+export function findAction(config, combo) {
+  const id = _bindMap.get(combo.toLowerCase());
+  if (!id) return null;
+  return PASSIVE_ACTIONS.has(id) ? null : id;
 }

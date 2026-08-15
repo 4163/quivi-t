@@ -37,7 +37,7 @@ async function _loadMetadataForArchive(archivePath, metaFiles, fileList, FsUtils
   _currentMeta = meta;
   if (meta) {
     if (_badgeEl) _badgeEl.classList.remove('hidden');
-    const firstImage = fileList.find(f => f && !f.is_dir && /\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(f.name));
+    const firstImage = fileList.find(f => FsUtils.isImageEntry(f));
     const coverSrc = firstImage ? FsUtils.buildArchiveSrc(archivePath, firstImage.name) : null;
 
     let coverDataUrl = null;

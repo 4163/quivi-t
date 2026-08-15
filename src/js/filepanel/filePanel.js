@@ -4,7 +4,6 @@
 import { DirectoryPrefs } from '../directoryPrefs.js';
 import { makeContainerNavigable } from '../keyboardNav.js';
 import {
-  initFavoritesStore,
   getFavorites,
   getFavoritesCollapsed,
   saveFavoritesCollapsed,
@@ -12,6 +11,8 @@ import {
   toggleFavorite,
   saveFavorites
 } from './favoritesStore.js';
+import { Core } from '../core.js';
+import { FsUtils } from '../fsUtils.js';
 
 const MIN_COL_WIDTHS = {
   name: 64,
@@ -23,7 +24,6 @@ let filePanel = null;
 let breadcrumbEl = null;
 let fileListUl = null;
 let resizeHandle = null;
-let Core = null;
 
 let isResizingPanel = false;
 let resizingCol = null;
@@ -41,7 +41,6 @@ let favoritesExpanded = false;
 let favoritesBtnEl = null;
 let favoritesListUl = null;
 let favoritesHeaderEl = null;
-let FsUtils = null;
 let favLastClickPath = '';
 let favLastClickTime = 0;
 let highlightedFavoritePath = '';
@@ -50,6 +49,17 @@ let hoverPreloadImg = null;
 let hoverPreloadTimer = null;
 
 let columnsInitialized = false;
+
+// True while the user is navigating the panel with the keyboard.
+// Prevents the viewport's image-load cycle from stealing focus away.
+let panelKeyboardActive = false;
+
+// Forces focus to jump to the main file list when a favorite is loaded.
+// UX Design Note: We intentionally force focus to the main list because most users 
+// open a favorite to immediately navigate its neighbors with arrow keys. 
+// Without this, mouse clicks wouldn't transfer focus, and keyboard users would 
+// have to manually tab out of the favorites list to browse the new directory.
+let focusMainListOnNextRender = false;
 
 function setColumnWidth(col, width) {
   document.documentElement.style.setProperty(`--col-${col}-w`, `${Math.round(width)}px`);
@@ -167,15 +177,7 @@ export function toggleFavoriteCurrent() {
 
 const iconCache = new Map();
 
-function escapeAttr(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+
 
 function fetchNativeIcon(ext) {
   if (iconCache.has(ext)) return;
@@ -183,10 +185,10 @@ function fetchNativeIcon(ext) {
 
   if (window.__TAURI__) {
     const extArg = ext === '__folder__' ? ext : '.' + ext;
-    window.__TAURI__.core.invoke('get_native_icon', { ext: extArg })
+      window.__TAURI__.core.invoke('get_native_icon', { ext: extArg })
       .then(src => {
         iconCache.set(ext, src || '');
-        document.querySelectorAll(`img[data-ext="${escapeAttr(ext)}"]`).forEach(img => {
+        document.querySelectorAll(`img[data-ext="${CSS.escape(ext)}"]`).forEach(img => {
           if (src) {
             img.src = src;
             img.style.imageRendering = 'pixelated';
@@ -224,19 +226,20 @@ function getIconHtml(item) {
   if (iconCache.has(ext)) {
     const src = iconCache.get(ext);
     if (src === 'pending') {
-      return `<img data-ext="${escapeAttr(ext)}" width="14" height="14" style="object-fit:contain;image-rendering:auto" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
+      return `<img data-ext="${CSS.escape(ext)}" width="14" height="14" style="object-fit:contain;image-rendering:auto" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
     }
     if (src) {
-      return `<img src="${escapeAttr(src)}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false">`;
+      return `<img src="${src}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false">`;
     }
     return fallbackSvg;
   }
 
   fetchNativeIcon(ext);
-  return `<img data-ext="${escapeAttr(ext)}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
+  return `<img data-ext="${CSS.escape(ext)}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
 }
 
 function openFavorite(fav) {
+  focusMainListOnNextRender = true;
   if (FsUtils) {
     FsUtils.loadFile(fav.path).catch(console.error);
   }
@@ -511,6 +514,9 @@ function renderEntry(item, index, selectedIndex) {
 }
 
 function updateSelection(selectedIndex) {
+  const forceFocus = focusMainListOnNextRender;
+  focusMainListOnNextRender = false;
+
   if (selectedIndex < 0 || selectedIndex >= fileListUl.children.length) {
     const previous = fileListUl.querySelector('.selected');
     if (previous) previous.classList.remove('selected');
@@ -518,7 +524,13 @@ function updateSelection(selectedIndex) {
   }
   
   const li = fileListUl.children[selectedIndex];
-  if (li.classList.contains('selected')) return;
+  const wasFocused = panelKeyboardActive || forceFocus ||
+    (document.activeElement && fileListUl.contains(document.activeElement));
+
+  if (li.classList.contains('selected')) {
+    if (forceFocus) li.focus({ preventScroll: true });
+    return;
+  }
   
   const previous = fileListUl.querySelector('.selected');
   if (previous) previous.classList.remove('selected');
@@ -526,7 +538,6 @@ function updateSelection(selectedIndex) {
   li.classList.add('selected');
   li.scrollIntoView({ block: 'nearest' });
   
-  const wasFocused = document.activeElement && fileListUl.contains(document.activeElement);
   if (wasFocused) {
     li.focus({ preventScroll: true });
   }
@@ -588,7 +599,11 @@ function renderFilePanel(state) {
   }
   lastRenderedList = state.list;
 
-  const wasFocused = document.activeElement && fileListUl.contains(document.activeElement);
+  const forceFocus = focusMainListOnNextRender;
+  focusMainListOnNextRender = false;
+
+  const wasFocused = panelKeyboardActive || forceFocus ||
+    (document.activeElement && fileListUl.contains(document.activeElement));
 
   fileListUl.innerHTML = '';
   state.list.forEach((item, index) => {
@@ -605,10 +620,17 @@ function renderFilePanel(state) {
 }
 
 export function initFilePanel(deps) {
-  ({ filePanel, breadcrumbEl, fileListUl, resizeHandle, Core, FsUtils } = deps);
+  ({ filePanel, breadcrumbEl, fileListUl, resizeHandle } = deps);
 
-  initFavoritesStore(Core);
   Core.onStateChange(() => renderFilePanel(Core.getState()));
+
+  // When focus leaves the file panel entirely (e.g. user clicks the viewport),
+  // surrender keyboard ownership so arrow keys revert to the viewer.
+  filePanel.addEventListener('focusout', (e) => {
+    if (!filePanel.contains(e.relatedTarget)) {
+      panelKeyboardActive = false;
+    }
+  });
 
   // Wire favorites UI
   favoritesBtnEl = document.getElementById('btn-favorite-current');
@@ -635,9 +657,10 @@ export function initFilePanel(deps) {
       loop: false,
       onAction: (index, item, e) => {
         const fav = getFavorites().find(f => f.path === item.dataset.path);
-        if (fav) openFavorite(fav);
+        if (fav) { panelKeyboardActive = true; openFavorite(fav); }
       },
       onCancel: () => {
+        panelKeyboardActive = false;
         highlightFavoriteByPath('');
         if (document.activeElement && favoritesListUl.contains(document.activeElement)) {
           document.activeElement.blur();
@@ -679,9 +702,11 @@ export function initFilePanel(deps) {
     horizontal: false,
     loop: false,
     onAction: (index, item, e) => {
+      panelKeyboardActive = true;
       Core.jumpToIndex(index);
     },
     onCancel: () => {
+      panelKeyboardActive = false;
       Core.selectIndex(-1);
       if (document.activeElement && fileListUl.contains(document.activeElement)) {
         document.activeElement.blur();

@@ -103,11 +103,7 @@ export async function initAssociationsUi(containerId, statusCallback) {
   const deselectAll = document.getElementById('btn-assoc-deselect-all');
   if (deselectAll) deselectAll.onclick = () => document.querySelectorAll('.assoc-checkbox').forEach(cb => cb.checked = false);
 
-  // Hide the redundant apply button since we hook into the shared Options Apply.
-  const applyBtn = document.getElementById('btn-assoc-apply');
-  if (applyBtn) {
-    applyBtn.style.display = 'none';
-  }
+
 
   const settingsBtn = document.getElementById('btn-assoc-settings');
   if (settingsBtn) {

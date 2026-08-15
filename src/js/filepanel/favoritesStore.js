@@ -3,15 +3,12 @@
  * Communicates with Core for persistence.
  */
 
-let Core = null;
-let configLoaded = false;
+import { Core } from '../core.js';
 
-export function initFavoritesStore(coreDep) {
-  Core = coreDep;
-  window.addEventListener('quivit-config-loaded', () => {
-    configLoaded = true;
-  });
-}
+let configLoaded = false;
+window.addEventListener('quivit-config-loaded', () => {
+  configLoaded = true;
+});
 
 export function getFavorites() {
   const favs = Core.getState().config?.frontend_data?.favorites;

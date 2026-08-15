@@ -1,6 +1,6 @@
 /**
  * menubar.js
- * Handles the top menubar logic, dropdowns, and fullscreen visibility toggles.
+ * Handles the top menubar logic and dropdown menus.
  */
 
 let activeMenu = null;

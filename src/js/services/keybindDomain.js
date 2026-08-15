@@ -63,9 +63,6 @@ export function getConflictColors(binds) {
   return { comboToActions, conflictColorMap };
 }
 
-export function canUseMenubarBinds(binds, candidateBinds) {
-  return hasUsableMenubarBind(binds, candidateBinds);
-}
 
 export function isLockedBinding(actionId, bind) {
   return LOCKED_BINDINGS[actionId]?.has(normalizeCombo(bind)) === true;

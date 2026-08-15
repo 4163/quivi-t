@@ -4,7 +4,7 @@ import {
   SINGLE_INPUT_ACTIONS,
   validateKeybindSafety,
   getConflictColors,
-  canUseMenubarBinds,
+  hasUsableMenubarBind,
   isLockedBinding,
   MENUBAR_ACTION,
 } from '../services/keybindDomain.js';
@@ -93,7 +93,7 @@ export function initKeybindUi(containerId, config, showStatus) {
           const candidateBinds = currentBinds.filter((_, i) => i !== index);
           if (isLockedBinding(actionId, bindToRemove)) {
             showLockedBindingStatus(actionId, bindToRemove);
-          } else if (actionId === MENUBAR_ACTION && !canUseMenubarBinds(binds, candidateBinds)) {
+          } else if (actionId === MENUBAR_ACTION && !hasUsableMenubarBind(binds, candidateBinds)) {
             showStatus('Toggle Menu Bar needs at least one non-conflicting binding.');
           } else {
             currentBinds.splice(index, 1);
@@ -101,7 +101,7 @@ export function initKeybindUi(containerId, config, showStatus) {
         } else {
           const candidateBinds = [...currentBinds];
           candidateBinds[index] = normalizeCombo(finalCombo);
-          if (actionId === MENUBAR_ACTION && !canUseMenubarBinds(binds, candidateBinds)) {
+          if (actionId === MENUBAR_ACTION && !hasUsableMenubarBind(binds, candidateBinds)) {
             showStatus('Toggle Menu Bar needs at least one non-conflicting binding.');
           } else {
             currentBinds = candidateBinds;
@@ -327,7 +327,6 @@ export function initKeybindUi(containerId, config, showStatus) {
     container.innerHTML = '';
     
     const binds = config.frontend_data.keybinds;
-    const { comboToActions, conflictColorMap } = getConflictColors(binds);
     
     CATEGORIES.forEach(category => {
       const header = document.createElement('h3');
@@ -373,7 +372,7 @@ export function initKeybindUi(containerId, config, showStatus) {
                 return;
               }
               const candidateBinds = currentBinds.filter((_, i) => i !== idx);
-              if (action.id === MENUBAR_ACTION && !canUseMenubarBinds(binds, candidateBinds)) {
+              if (action.id === MENUBAR_ACTION && !hasUsableMenubarBind(binds, candidateBinds)) {
                 showStatus('Toggle Menu Bar needs at least one non-conflicting binding.');
                 return;
               }

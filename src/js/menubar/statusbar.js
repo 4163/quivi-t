@@ -1,5 +1,14 @@
 import { FsUtils } from '../fsUtils.js';
 
+const FIT_LABELS = Object.freeze({
+  'window': 'Window',
+  'width': 'Width',
+  'height': 'Height',
+  'none': 'None',
+  'width-if-larger': 'Width if larger',
+  'height-if-larger': 'Height if larger',
+  'window-if-larger': 'Window if larger'
+});
 let statusbar;
 let statusName;
 let statusDims;
@@ -26,14 +35,8 @@ export const Statusbar = {
     if (!statusbar) return;
 
     if (statusFit) {
-      const mode = state.fitMode ?? 'fit-window';
-      const fitMap = {
-        'fit-window': 'Window',
-        'fit-width': 'Width',
-        'fit-height': 'Height',
-        'fit-none': 'None'
-      };
-      const text = `Fit: ${fitMap[mode] || mode}`;
+      const mode = state.fitMode ?? 'window';
+      const text = `Fit: ${FIT_LABELS[mode] || mode}`;
       if (statusFit.textContent !== text) statusFit.textContent = text;
     }
 

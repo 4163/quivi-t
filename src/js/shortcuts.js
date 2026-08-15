@@ -2,10 +2,8 @@
  * shortcuts.js - keyboard shortcut matching and command dispatch.
  */
 
-import { formatKeysCombo, PASSIVE_ACTIONS, findAction, normalizeCombo, formatKeyName, MOUSE_BUTTON_NAMES, normalizeList, isModifierKey } from './services/keyCombo.js';
+import { formatKeysCombo, findAction, rebuildBindMap, normalizeCombo, formatKeyName, normalizeList, isModifierKey } from './services/keyCombo.js';
 import { Statusbar } from './menubar/statusbar.js';
-export { normalizeCombo, formatKeyName, formatKeysCombo, MOUSE_BUTTON_NAMES, normalizeList };
-
 export const activeKeys = new Set();
 export const activeButtons = new Set();
 
@@ -210,8 +208,11 @@ function isInteractiveKeyTarget(e) {
 export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPan }) {
   let lastSideButtonDispatch = { button: null, time: 0 };
   updateKeyboardPanBindings(Core.getState().config);
+  rebuildBindMap(Core.getState().config);
   window.addEventListener('quivit-config-loaded', () => {
-    updateKeyboardPanBindings(Core.getState().config);
+    const config = Core.getState().config;
+    updateKeyboardPanBindings(config);
+    rebuildBindMap(config);
   });
 
   function dispatchMouseButton(button, e) {
@@ -326,7 +327,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
     // Mouse/double-click gestures are viewport actions — never over the file
     // panel, menubar/dropdowns, or status bar (which handle their own clicks).
-    const isUI = e.target.closest('#file-panel, .menubar, .dropdown-menu, #statusbar');
+    const isUI = e.target.closest('#file-panel, #menubar, .menu-dropdown, #statusbar');
     if (isUI) return;
 
     activeButtons.add(e.button);

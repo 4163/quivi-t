@@ -2,9 +2,7 @@ let dropMessageTimer = null;
 const DEFAULT_DROP_MESSAGE = 'Drop files here, or click to open a folder';
 let _dropOverlay = null;
 
-function pathBasename(path) {
-  return String(path || '').replace(/\\/g, '/').split('/').pop() || '';
-}
+
 
 function showDropMessage(message, tone = 'default') {
   if (!_dropOverlay) return;
@@ -30,7 +28,7 @@ async function loadDroppedPath(path, FsUtils) {
   if (window.__TAURI__) {
     const kind = await window.__TAURI__.core.invoke('get_path_kind', { path }).catch(() => 'missing');
     if (kind === 'file') {
-      const name = pathBasename(path);
+      const name = FsUtils.basename(path);
       if (!FsUtils.isImage(name) && !FsUtils.isArchive(name)) {
         showDropMessage('File type not supported', 'error');
         return;
@@ -40,7 +38,7 @@ async function loadDroppedPath(path, FsUtils) {
       return;
     }
   } else {
-    const name = pathBasename(path);
+    const name = FsUtils.basename(path);
     if (name.includes('.') && !FsUtils.isImage(name) && !FsUtils.isArchive(name)) {
       showDropMessage('File type not supported', 'error');
       return;

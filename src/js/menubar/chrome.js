@@ -15,13 +15,7 @@ const statusbarEl = document.getElementById('statusbar');
 
 // --- Visibility Getters / Setters ---
 
-export function isMenuBarVisible() {
-  return menuBarVisible;
-}
 
-export function isStatusBarVisible() {
-  return statusBarVisible;
-}
 
 export function setMenuBarVisible(visible, { persist = false } = {}) {
   menuBarVisible = !!visible;
@@ -66,7 +60,7 @@ export function toggleStatusBar({ persist = true } = {}) {
 
 // --- Persistence ---
 
-export function saveChromeState() {
+function saveChromeState() {
   const state = Core.getState();
   if (state.config && state.config.frontend_data) {
     state.config.frontend_data.menu_visible = menuBarVisible;

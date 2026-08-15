@@ -91,6 +91,7 @@ const actionCtx = {
   get navigateHighlightedFavorite() { return navigateHighlightedFavorite; },
   get openMetadataWindow() { return openMetadataWindow; },
   get toggleFullscreen() { return toggleFullscreen; },
+  isFavoritesFocused: () => !!document.activeElement?.closest('#favorites-list'),
   get keyboardPanStep() { return keyboardPanStep; },
   get wheelPanStep() { return wheelPanStep; }
 };
@@ -183,12 +184,12 @@ initDropZone({ dropOverlay, FsUtils });
 initMetadataBadge({ Core, FsUtils, badgeEl: metadataBadgeEl });
 initLifecycle({ Core, FsUtils });
 
+let previewTheme = null;
+let previewCss = null;
+
 bindKeyboardShortcuts({ Core, dispatchAction: (id, payload) => dispatch(id, payload, actionCtx), dispatchKeyboardPan });
 
 if (window.__TAURI__) {
-  let previewTheme = null;
-  let previewCss = null;
-
   const { listen } = window.__TAURI__.event;
 
   listen('config-updated', () => {
@@ -212,54 +213,32 @@ if (window.__TAURI__) {
     previewCss = e.payload;
     applyCustomCss(previewCss);
   });
-
-  window.addEventListener('quivit-config-loaded', () => {
-    const config = Core.getState().config;
-    updatePanSteps(config);
-    syncKeyLabel();
-    syncScrollLatch(config);
-
-    if (window.__TAURI__) {
-      window.__TAURI__.window.getCurrentWindow().isFullscreen().then(syncFullscreenState).catch(console.error);
-    } else {
-      syncFullscreenState(!!document.fullscreenElement);
-    }
-    const theme = config?.frontend_data?.theme || 'system';
-    const customCss = config?.frontend_data?.custom_css || '';
-
-    try {
-      if (theme === 'light' || theme === 'dark') localStorage.setItem('quivit-theme', theme);
-      else localStorage.removeItem('quivit-theme');
-      if (customCss) localStorage.setItem('quivit-custom-css', customCss);
-      else localStorage.removeItem('quivit-custom-css');
-    } catch (e) {}
-
-    if (previewTheme !== null) {
-      applyTheme(previewTheme);
-    } else {
-      applyTheme(theme);
-    }
-
-    if (previewCss !== null) {
-      applyCustomCss(previewCss);
-    } else {
-      applyCustomCss(customCss);
-    }
-  });
-} else {
-  window.addEventListener('quivit-config-loaded', () => {
-    const config = Core.getState().config;
-    updatePanSteps(config);
-    syncKeyLabel();
-    syncScrollLatch(config);
-    syncFullscreenState(!!document.fullscreenElement);
-
-    const theme = config?.frontend_data?.theme || 'system';
-    const customCss = config?.frontend_data?.custom_css || '';
-    
-    applyTheme(theme);
-    applyCustomCss(customCss);
-  });
 }
+
+window.addEventListener('quivit-config-loaded', () => {
+  const config = Core.getState().config;
+  updatePanSteps(config);
+  syncKeyLabel();
+  syncScrollLatch(config);
+
+  if (window.__TAURI__) {
+    window.__TAURI__.window.getCurrentWindow().isFullscreen().then(syncFullscreenState).catch(console.error);
+  } else {
+    syncFullscreenState(!!document.fullscreenElement);
+  }
+
+  const theme = config?.frontend_data?.theme || 'system';
+  const customCss = config?.frontend_data?.custom_css || '';
+
+  try {
+    if (theme === 'light' || theme === 'dark') localStorage.setItem('quivit-theme', theme);
+    else localStorage.removeItem('quivit-theme');
+    if (customCss) localStorage.setItem('quivit-custom-css', customCss);
+    else localStorage.removeItem('quivit-custom-css');
+  } catch (e) {}
+
+  applyTheme(previewTheme !== null ? previewTheme : theme);
+  applyCustomCss(previewCss !== null ? previewCss : customCss);
+});
 
 Core.init();

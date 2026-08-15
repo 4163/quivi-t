@@ -39,7 +39,7 @@
 import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, mergeConfig } from './keybinds.js';
 import { FsUtils } from './fsUtils.js';
 
-const { invoke } = window.__TAURI__.core;
+const invoke = window.__TAURI__?.core?.invoke;
 
 // --- Internal state -----------------------------------------------------------
 
@@ -49,9 +49,6 @@ const _state = {
 
   /** Currently displayed image src (asset:// URL or quivit:// URL) */
   src: '',
-
-  /** The src of the currently decoded and visible image, set by viewer Render */
-  decodedSrc: '',
 
   /** File name of the currently displayed image */
   filename: '',
@@ -64,9 +61,6 @@ const _state = {
 
   /** Current directory path (for sibling navigation) */
   directory: '',
-
-  /** Parent directory path for the visible directory, if any */
-  parentDirectory: '',
 
   /** If mode === 'archive', the path to the archive */
   archivePath: '',
@@ -176,7 +170,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     const container = _state.mode === 'archive' ? _state.archivePath : _state.directory;
     if (container) {
       _state.config.frontend_data.last_active_image = { container, path: file.path };
-      _persistConfig();
+      _scheduleConfigFlush(1500);
     }
   }
 
@@ -324,24 +318,6 @@ export const Core = {
     }
   },
 
-  /**
-   * Save the application configuration to Rust backend.
-   */
-  async saveConfig(portable_mode, frontend_data) {
-    try {
-      _state.config = mergeConfig({ portable_mode, frontend_data });
-      if (_state.config.frontend_data.continue_last === false) {
-        delete _state.config.frontend_data.last_opened_path;
-      }
-      _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
-      _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
-      await invoke('save_config', { config: _state.config });
-      _notify();
-    } catch (err) {
-      console.error('[Core] Failed to save config:', err);
-    }
-  },
-  
   /**
    * Run initial setup (called by main.js)
    */

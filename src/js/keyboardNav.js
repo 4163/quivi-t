@@ -96,19 +96,13 @@ export function makeContainerNavigable(containerEl, itemSelector, options = {}) 
       case 'Enter':
       case ' ':
         if (onAction && currentIndex !== -1) {
-          // Only trigger onAction if the key isn't being caught by an interactive child element like a button
-          if (!document.activeElement.matches('button, input, [role="button"]')) {
-            e.preventDefault();
-            e.stopPropagation();
-            onAction(currentIndex, items[currentIndex], e);
-          } else if (document.activeElement.matches('button.fav-remove')) {
-            // Special case for our fav-remove button: let it handle its own click
-            // but we don't preventDefault so the browser triggers the click.
-          } else {
-             e.preventDefault();
-             e.stopPropagation();
-             onAction(currentIndex, items[currentIndex], e);
+          // If focus is on a child button/input, let it handle its own Enter keypress naturally
+          if (document.activeElement !== items[currentIndex] && document.activeElement.matches('button, input, [role="button"]')) {
+            break;
           }
+          e.preventDefault();
+          e.stopPropagation();
+          onAction(currentIndex, items[currentIndex], e);
         }
         break;
       case 'Escape':

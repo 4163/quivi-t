@@ -2,10 +2,6 @@ export function applyTheme(theme) {
   document.documentElement.removeAttribute('data-theme');
   if (theme === 'light' || theme === 'dark') {
     document.documentElement.setAttribute('data-theme', theme);
-    try { localStorage.setItem('quivit-theme', theme); } catch(e) {}
-  } else {
-    // 'system' — remove any stored override
-    try { localStorage.removeItem('quivit-theme'); } catch(e) {}
   }
 }
 

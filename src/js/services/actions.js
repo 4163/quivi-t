@@ -6,13 +6,13 @@ export const ACTION_REGISTRY = [
   // Navigation
   { id: 'cmd-next', label: 'Next Item', defaultBinds: ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'], category: 'Navigation',
     run: (ctx) => {
-      if (document.activeElement?.closest('#favorites-list')) ctx.navigateHighlightedFavorite(1);
+      if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(1);
       else ctx.Core.navigate(1);
     }
   },
   { id: 'cmd-prev', label: 'Previous Item', defaultBinds: ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'], category: 'Navigation',
     run: (ctx) => {
-      if (document.activeElement?.closest('#favorites-list')) ctx.navigateHighlightedFavorite(-1);
+      if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(-1);
       else ctx.Core.navigate(-1);
     }
   },
@@ -42,11 +42,14 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-fit-none', label: 'Fit None', defaultBinds: ['r', 'DoubleClick'], category: 'View',
     run: (ctx) => ctx.Core.setFitMode('none', { persist: true })
   },
-  { id: 'cmd-fit-width', label: 'Fit Width', defaultBinds: 't', category: 'View',
+  { id: 'cmd-fit-width', label: 'Fit Width', defaultBinds: 'Shift+q', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('width', { persist: true })
   },
-  { id: 'cmd-fit-height', label: 'Fit Height', defaultBinds: 'y', category: 'View',
+  { id: 'cmd-fit-height', label: 'Fit Height', defaultBinds: 'Shift+e', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('height', { persist: true })
+  },
+  { id: 'cmd-fit-best', label: 'Fit Window', defaultBinds: 'Shift+f', category: 'View',
+    run: (ctx) => ctx.Core.setFitMode('window', { persist: true })
   },
   { id: 'cmd-fit-width-if-larger', label: 'Fit Width If Larger', defaultBinds: 'q', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('width-if-larger', { persist: true })
@@ -54,8 +57,8 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-fit-height-if-larger', label: 'Fit Height If Larger', defaultBinds: 'e', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('height-if-larger', { persist: true })
   },
-  { id: 'cmd-fit-best', label: 'Auto Fit', defaultBinds: 'f', category: 'View',
-    run: (ctx) => ctx.Core.setFitMode('window', { persist: true })
+  { id: 'cmd-fit-window-if-larger', label: 'Fit Window If Larger', defaultBinds: 'f', category: 'View',
+    run: (ctx) => ctx.Core.setFitMode('window-if-larger', { persist: true })
   },
   { id: 'cmd-scale-none', label: 'Scale None', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.setScalingMode('none', { persist: true })
@@ -289,13 +292,11 @@ export const ACTION_REGISTRY = [
 export const CATEGORIES = [];
 export const DEFAULT_KEYBINDS = {};
 
-// Build the CATEGORIES and DEFAULT_KEYBINDS derived from ACTION_REGISTRY
+// Build the CATEGORIES, DEFAULT_KEYBINDS, and O(1) dispatch map from ACTION_REGISTRY
 const categoryMap = {};
 for (const action of ACTION_REGISTRY) {
-  // Populate DEFAULT_KEYBINDS
   DEFAULT_KEYBINDS[action.id] = Array.isArray(action.defaultBinds) ? action.defaultBinds : [action.defaultBinds];
 
-  // Populate CATEGORIES map
   if (action.category) {
     if (!categoryMap[action.category]) {
       categoryMap[action.category] = { name: action.category, actions: [] };
@@ -304,6 +305,7 @@ for (const action of ACTION_REGISTRY) {
     categoryMap[action.category].actions.push({ id: action.id, label: action.label });
   }
 }
+const ACTION_MAP = new Map(ACTION_REGISTRY.map(a => [a.id, a]));
 
 /**
  * Dispatches an action by ID, looking it up in the registry.
@@ -312,8 +314,6 @@ for (const action of ACTION_REGISTRY) {
  * @param {Object} ctx Dependencies injected from main.js
  */
 export async function dispatch(actionId, payload, ctx) {
-  const action = ACTION_REGISTRY.find(a => a.id === actionId);
-  if (action && action.run) {
-    await action.run(ctx, payload);
-  }
+  const action = ACTION_MAP.get(actionId);
+  if (action?.run) await action.run(ctx, payload);
 }
