@@ -178,8 +178,6 @@ Flat files stay put until a slice gives them a sibling. `metadata/` folder creat
 
 **Outcome:** menu/status visibility, persistence, and fullscreen snapshot owned by one module; no parallel implementations.
 
-**Verify:** toggling menu/status bars persists once and restores on reload; `node --check`.
-
 ---
 
 ### Slice 4 — Fullscreen extraction
@@ -324,11 +322,18 @@ After each slice, the active agent MUST follow this handoff protocol:
 - **Key Pattern:** Used `Statusbar.update(state)` within `main.js` to handle list/empty states, and `Statusbar.setImage(metrics)` to handle explicit reporting from the `Viewer` when an image finishes loading (eliminating the fragile `data-decoded` heuristic).
 - **Idempotency:** Migrated the scroll-zoom indicator idempotency logic entirely into the DOM writer (`Statusbar.setScrollIndicatorState`), leaving `shortcuts.js` focused on input dispatch.
 - **Bugfixes:** Fixed regressions from initial refactoring (statusbar formatting) and fixed the legacy hardcoded Ctrl latch bug in `shortcuts.js` (made it fully dynamic against bound modifiers, handled the Windows Alt-menu focus bug, and handled multiple bindings).
+
 ### Slice 3 — Chrome/visibility consolidation
 - Extracted chrome state (`menuBarVisible`, `statusBarVisible`) and DOM `.hidden` toggles from `main.js` and `menubar.js` into a new `menubar/chrome.js` module.
 - **Checkmark Syncing:** Split `updateViewToggleMenu` so each module handles its own menu checkmarks (`chrome.js` syncs chrome, `main.js` syncs fullscreen, and `filePanel` handles the file list), removing the monolithic checkmark updater.
 - **Persistence Consolidation:** Merged the two competing debounce timers for menu and statusbar persistence into a single `saveChromeState` call inside `chrome.js`.
 - **Fullscreen Abstraction:** Moved pre-fullscreen snapshotting directly into `chrome.js`, abstracting the complexity away from `main.js`'s toggle handler.
+
+### Slice 4 — Fullscreen extraction
+- Extracted fullscreen state, hold-to-exit UX, hide-probe, exit button/hint, and pointer/key/blur listeners into `src/js/main/fullscreen.js`.
+- **Key Pattern:** Exported `initFullscreen()`, `toggleFullscreen()`, `syncFullscreenState(isFullscreen)`, `isFullscreenActive()`, and `syncKeyLabel()`. `main.js` retains zero fullscreen DOM queries, timers, or inline key/pointer listeners.
+- **OS State Resynchronization:** Added `syncFullscreenState()` called on `quivit-config-loaded` to reliably reconcile window state with OS fullscreen on startup or reload (Ctrl+Shift+R) without race conditions.
+- **Chrome Decoupling:** Routed fullscreen chrome hide/restore purely through `menubar/chrome.js` (`snapshotPreFullscreenChrome`, `setFullscreenChromeVisible`, `restorePreFullscreenChrome`), reading `hide_chrome_on_fullscreen` from `Core.getState().config`.
 
 ---
 
