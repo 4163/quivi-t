@@ -4,7 +4,7 @@
 
 import { Core } from './core.js';
 import { FsUtils } from './fsUtils.js';
-import { Viewer } from './viewer.js';
+import { Viewer } from './viewer/viewer.js';
 import * as NavigationHistory from './navigationHistory.js';
 import { initFilePanel, renderFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite } from './filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from './shortcuts.js';
@@ -319,27 +319,21 @@ async function dispatchAction(actionId, payload) {
       break;
     case 'cmd-fit-none':
       Core.setFitMode('none', { persist: true });
-      Viewer.applyFitMode();
       break;
     case 'cmd-fit-width':
       Core.setFitMode('width', { persist: true });
-      Viewer.applyFitMode();
       break;
     case 'cmd-fit-height':
       Core.setFitMode('height', { persist: true });
-      Viewer.applyFitMode();
       break;
     case 'cmd-fit-width-if-larger':
       Core.setFitMode('width-if-larger', { persist: true });
-      Viewer.applyFitMode();
       break;
     case 'cmd-fit-height-if-larger':
       Core.setFitMode('height-if-larger', { persist: true });
-      Viewer.applyFitMode();
       break;
     case 'cmd-fit-best':
       Core.setFitMode('window', { persist: true });
-      Viewer.applyFitMode();
       break;
     case 'cmd-scale-none':
       setScaling('none');

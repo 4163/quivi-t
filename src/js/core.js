@@ -50,6 +50,9 @@ const _state = {
   /** Currently displayed image src (asset:// URL or quivit:// URL) */
   src: '',
 
+  /** The src of the currently decoded and visible image, set by viewer Render */
+  decodedSrc: '',
+
   /** File name of the currently displayed image */
   filename: '',
 
@@ -76,6 +79,9 @@ const _state = {
 
   /** View State: How to fit the image */
   fitMode: DEFAULT_FIT_MODE,
+
+  /** Monotonic counter bumped on every setFitMode call (even same-mode) */
+  fitModeGen: 0,
 
   /** View State: Which image scaling mode to use */
   scalingMode: DEFAULT_SCALING_MODE,
@@ -225,6 +231,7 @@ export const Core = {
 
   setFitMode(mode, options = {}) {
     _state.fitMode = mode;
+    _state.fitModeGen++;
     if (options.persist) {
       _state.config.frontend_data.fit_mode = mode;
       _scheduleConfigFlush(1500);

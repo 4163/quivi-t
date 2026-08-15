@@ -335,6 +335,18 @@ After each slice, the active agent MUST follow this handoff protocol:
 - **OS State Resynchronization:** Added `syncFullscreenState()` called on `quivit-config-loaded` to reliably reconcile window state with OS fullscreen on startup or reload (Ctrl+Shift+R) without race conditions.
 - **Chrome Decoupling:** Routed fullscreen chrome hide/restore purely through `menubar/chrome.js` (`snapshotPreFullscreenChrome`, `setFullscreenChromeVisible`, `restorePreFullscreenChrome`), reading `hide_chrome_on_fullscreen` from `Core.getState().config`.
 
+### Slice 5 — Viewer split (math / render / gestures)
+- Deleted the monolithic `src/js/viewer.js` and replaced it with three cohesive modules under `src/js/viewer/` plus a pure-math service.
+- **`services/viewerMath.js`:** DOM-free `createViewportState()` factory owning all zoom, pan, rotation, flip, and fit-mode geometry. Viewport dimensions injected via a `getViewport` callback; notifies subscribers on every mutation.
+- **`viewer/viewerRender.js`:** Owns the `<img class="viewer-img">` pool lifecycle inside `#viewer-img-wrapper`. Subscribes to `viewerMath` state changes and applies CSS transforms on `requestAnimationFrame`. Reports image load progress and dimensions to `Statusbar`. Writes `Core.setState({ decodedSrc })` on successful decode, eliminating the fragile `.viewer-img.active[data-decoded="true"]` DOM probe.
+- **`viewer/viewerGestures.js`:** Handles mouse-drag panning, configurable pan buttons/keys, and Tauri `cursorPosition()` polling for unbounded out-of-window panning. Routes all input into `viewportState.panTo()` / `panBy()`.
+- **`viewer/viewer.js`:** Thin facade that instantiates the three layers and re-exports the exact same `Viewer` API (`applyFitMode`, `zoomAt`, `zoomCenter`, `panBy`, `rotate`, `flipHorizontal`, `flipVertical`, `setScaling`, `setZoom`), keeping `main.js` and `filePanel.js` unchanged.
+- **Preload Consolidation (`fsUtils.js`):** Added `FsUtils.neighborEntries(state, index, half)` — a shared ±N sliding-window helper used by `viewerRender` for `<img>` preloads, replacing duplicated inline filtering.
+- **Reactive Fit Mode:** Removed explicit `Viewer.applyFitMode()` calls from `main.js` fit-key handlers; `Core.setFitMode()` now bumps a monotonic `fitModeGen` counter and `viewerRender`'s `onStateChange` gate detects every generation change (including same-mode re-presses), restoring the legacy "fit-none re-press = reset to 100%" invariant.
+- **`core.js`:** Added `decodedSrc` (viewer-written) and `fitModeGen` (monotonic counter) to `_state`.
+- **`index.html`:** Removed the stale `<script src="/js/viewer.js">` tag (now pulled in by `main.js` import).
+- **Bugfixes:** Fixed infinite-recursion crash caused by `Core.setState({ decodedSrc })` inside `onStateChange` (added `_inStateChange` re-entrancy guard); fixed the guard's early-return path not resetting the flag.
+
 ---
 
 ## References
