@@ -227,5 +227,11 @@ export function initFullscreen() {
       hideFullscreenExitButton();
       toggleFullscreen();
     });
+    fullscreenExitBtn.addEventListener('focus', () => {
+      if (fullscreenActive) showFullscreenExitButton();
+    });
+    fullscreenExitBtn.addEventListener('blur', () => {
+      if (fullscreenActive) hideFullscreenExitButton();
+    });
   }
 }
