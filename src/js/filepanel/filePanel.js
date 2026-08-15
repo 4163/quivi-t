@@ -511,18 +511,24 @@ function renderEntry(item, index, selectedIndex) {
 }
 
 function updateSelection(selectedIndex) {
+  if (selectedIndex < 0 || selectedIndex >= fileListUl.children.length) {
+    const previous = fileListUl.querySelector('.selected');
+    if (previous) previous.classList.remove('selected');
+    return;
+  }
+  
+  const li = fileListUl.children[selectedIndex];
+  if (li.classList.contains('selected')) return;
+  
   const previous = fileListUl.querySelector('.selected');
   if (previous) previous.classList.remove('selected');
   
-  if (selectedIndex >= 0 && selectedIndex < fileListUl.children.length) {
-    const li = fileListUl.children[selectedIndex];
-    li.classList.add('selected');
-    li.scrollIntoView({ block: 'nearest' });
-    
-    const wasFocused = document.activeElement && fileListUl.contains(document.activeElement);
-    if (wasFocused) {
-      li.focus({ preventScroll: true });
-    }
+  li.classList.add('selected');
+  li.scrollIntoView({ block: 'nearest' });
+  
+  const wasFocused = document.activeElement && fileListUl.contains(document.activeElement);
+  if (wasFocused) {
+    li.focus({ preventScroll: true });
   }
 }
 
