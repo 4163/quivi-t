@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/css/global.css" />
     <link rel="stylesheet" href="/css/metadata.css" />
     <script src="/js/shared/themePrePaint.js"></script>
+    <style id="custom-css"></style>
   </head>
   <body>
     <div id="metadata-root">
@@ -21,9 +22,22 @@
         </div>
       </div>
       <div id="metadata-grid">
-        <!-- Populated by metadata-window.js -->
+        <span class="meta-label hidden" data-key="credits">Credits</span><span class="meta-value hidden" data-key="credits"></span>
+        <span class="meta-label hidden" data-key="publisher">Publisher</span><span class="meta-value hidden" data-key="publisher"></span>
+        <span class="meta-label hidden" data-key="genre">Genre</span><span class="meta-value hidden" data-key="genre"></span>
+        <span class="meta-label hidden" data-key="tags">Tags</span><span class="meta-value hidden" data-key="tags"></span>
+        <span class="meta-label hidden" data-key="date">Date</span><span class="meta-value hidden" data-key="date"></span>
+        <span class="meta-label hidden" data-key="pages">Pages</span><span class="meta-value hidden" data-key="pages"></span>
+        <span class="meta-label hidden" data-key="language">Language</span><span class="meta-value hidden" data-key="language"></span>
+        <span class="meta-label hidden" data-key="rating">Rating</span><span class="meta-value hidden" data-key="rating"></span>
+        <span class="meta-label hidden" data-key="reading">Reading</span><span class="meta-value hidden" data-key="reading"></span>
+        <span class="meta-label hidden" data-key="notes">Notes</span><span class="meta-value hidden" data-key="notes"></span>
       </div>
     </div>
+    
+    <!-- Measurement probe for native shell background matching -->
+    <div id="measure-probe" class="measure-probe" aria-hidden="true"></div>
+    
     <script type="module" src="/js/metadata-window.js"></script>
     <script type="module" src="/js/shellBackground.js"></script>
   </body>

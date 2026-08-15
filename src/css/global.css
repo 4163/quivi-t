@@ -70,7 +70,6 @@
   --fs-36:   2.25rem;
   --fs-40:   2.5rem;
   --fs-50:   3.125rem;
-  --fs-64:   4rem;
 
   /* Opaque grill layout */
   --grill-spacing-px: 8;
@@ -192,5 +191,20 @@ input {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* --- Measurement & Placeholder ----------------------------- */
+.measure-probe {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  visibility: hidden;
+  background: var(--surface);
+}
+
+.viewer-img.is-placeholder {
+  display: none;
+}
 
 /* --- Accessibility navigation styles ----------------------- */

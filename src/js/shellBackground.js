@@ -18,16 +18,9 @@
   if (!window.__TAURI__?.core?.invoke) return;
 
   let timer = null;
-  let probe = null;
-
   function surfaceColor() {
-    if (!probe) {
-      probe = document.createElement('div');
-      probe.style.cssText =
-        'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;visibility:hidden;';
-      probe.style.background = 'var(--surface)';
-      document.body.appendChild(probe);
-    }
+    const probe = document.getElementById('measure-probe');
+    if (!probe) return null;
     const bg = getComputedStyle(probe).backgroundColor;
     const m = bg.match(
       /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/

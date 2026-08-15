@@ -11,6 +11,7 @@
          #custom-css style lands last and wins the cascade (inline scripts
          block parsing, so this still runs before first paint). -->
     <script src="/js/shared/themePrePaint.js"></script>
+    <style id="custom-css"></style>
   </head>
 
   <body>
@@ -160,6 +161,7 @@
         <!-- Image wrapper: contains the image, grill, and border.
              The wrapper is the transformed element. CSS handles their sizing automatically. -->
         <div id="viewer-img-wrapper">
+          <img id="viewer-loading-frame" class="viewer-img is-placeholder" decoding="async" alt="Loading..." draggable="false">
           <div id="img-grill"></div>
           <div id="img-grill-border"></div>
           <img class="viewer-img" decoding="async" alt="" draggable="false">

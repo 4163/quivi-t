@@ -324,117 +324,85 @@ export function initKeybindUi(containerId, config, showStatus) {
   function renderKeybinds() {
     const container = document.getElementById(containerId);
     if (!container) return;
-    container.innerHTML = '';
+    
+    // The structural markup (category headers, action labels, container slots) 
+    // is fully pre-rendered in options.html for zero layout shift on load/update. 
+    // This creates a tight coupling: if an action is added to CATEGORIES in actions.js, 
+    // its corresponding markup MUST be added to options.html.
     
     const binds = config.frontend_data.keybinds;
+    const slots = container.querySelectorAll('.keybind-tags[data-action]');
     
-    CATEGORIES.forEach(category => {
-      const header = document.createElement('h3');
-      header.textContent = category.name;
-      header.className = 'keybind-category-header';
-      container.appendChild(header);
-  
-      category.actions.forEach(action => {
-        const row = document.createElement('div');
-        row.className = 'keybind-item';
-        
-        const label = document.createElement('span');
-        label.className = 'keybind-name';
-        label.textContent = action.label;
-        if (action.description) label.title = action.description;
-        
-        const tagsContainer = document.createElement('div');
-        tagsContainer.className = 'keybind-tags';
-  
-        const renderTags = () => {
-          const { conflictColorMap: newColors } = getConflictColors(config.frontend_data.keybinds);
-          tagsContainer.innerHTML = '';
-          let currentBinds = binds[action.id];
-          currentBinds = normalizeList(currentBinds);
-  
-          currentBinds.forEach((bind, idx) => {
-            const tag = document.createElement('button');
-            tag.className = 'keybind-tag';
+    slots.forEach(tagsContainer => {
+      const actionId = tagsContainer.dataset.action;
+      const { conflictColorMap: newColors } = getConflictColors(config.frontend_data.keybinds);
+      
+      tagsContainer.innerHTML = '';
+      let currentBinds = normalizeList(binds[actionId] || []);
 
-            const conflictColor = newColors[bind];
-            if (conflictColor) {
-              tag.style.color = conflictColor;
-              tag.style.borderColor = conflictColor;
-            }
-            
-            const textSpan = document.createElement('span');
-            textSpan.textContent = bind;
-            tag.appendChild(textSpan);
+      currentBinds.forEach((bind, idx) => {
+        const tag = document.createElement('button');
+        tag.className = 'keybind-tag';
 
-            const removeBinding = () => {
-              if (isLockedBinding(action.id, bind)) {
-                showLockedBindingStatus(action.id, bind);
-                return;
-              }
-              const candidateBinds = currentBinds.filter((_, i) => i !== idx);
-              if (action.id === MENUBAR_ACTION && !hasUsableMenubarBind(binds, candidateBinds)) {
-                showStatus('Toggle Menu Bar needs at least one non-conflicting binding.');
-                return;
-              }
-              currentBinds.splice(idx, 1);
-              binds[action.id] = currentBinds;
-              renderKeybinds();
-            };
-            
-            const xBtn = document.createElement('span');
-            xBtn.className = 'remove-btn';
-            xBtn.textContent = '×';
-            if (isLockedBinding(action.id, bind)) {
-              xBtn.title = 'Required binding';
-            }
-            
-            xBtn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              removeBinding();
-            });
-            
-            // Middle-click on a tag also removes that binding (alternative to ×).
-            // preventDefault on the middle mousedown blocks the browser's native
-            // autoscroll (which would otherwise swallow the click); removal
-            // happens on mouseup. During keybind capture the window capture-phase
-            // listener stopPropagates these events, so middle mouse stays bindable.
-            tag.addEventListener('mousedown', (e) => {
-              if (e.button !== 1) return;
-              e.preventDefault();
-              e.stopPropagation();
-            });
-            tag.addEventListener('mouseup', (e) => {
-              if (e.button !== 1 || isCapturing) return;
-              e.preventDefault();
-              e.stopPropagation();
-              removeBinding();
-            });
-            
-            tag.appendChild(xBtn);
-            tag.addEventListener('click', (e) => captureKeybind(action.id, idx, tag, e));
-            tagsContainer.appendChild(tag);
-          });
-  
-          const addBtn = document.createElement('button');
-          addBtn.className = 'keybind-tag add-btn';
-          addBtn.textContent = '+';
-          addBtn.addEventListener('click', (e) => captureKeybind(action.id, currentBinds.length, addBtn, e));
-          tagsContainer.appendChild(addBtn);
+        const conflictColor = newColors[bind];
+        if (conflictColor) {
+          tag.style.color = conflictColor;
+          tag.style.borderColor = conflictColor;
+        }
+        
+        const textSpan = document.createElement('span');
+        textSpan.textContent = bind;
+        tag.appendChild(textSpan);
+
+        const removeBinding = () => {
+          if (isLockedBinding(actionId, bind)) {
+            showLockedBindingStatus(actionId, bind);
+            return;
+          }
+          const candidateBinds = currentBinds.filter((_, i) => i !== idx);
+          if (actionId === MENUBAR_ACTION && !hasUsableMenubarBind(binds, candidateBinds)) {
+            showStatus('Toggle Menu Bar needs at least one non-conflicting binding.');
+            return;
+          }
+          currentBinds.splice(idx, 1);
+          binds[actionId] = currentBinds;
+          renderKeybinds();
         };
-  
-        renderTags();
-        row.appendChild(label);
-        row.appendChild(tagsContainer);
-        container.appendChild(row);
+        
+        const xBtn = document.createElement('span');
+        xBtn.className = 'remove-btn';
+        xBtn.textContent = '×';
+        if (isLockedBinding(actionId, bind)) {
+          xBtn.title = 'Required binding';
+        }
+        
+        xBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          removeBinding();
+        });
+        
+        tag.addEventListener('mousedown', (e) => {
+          if (e.button !== 1) return;
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        tag.addEventListener('mouseup', (e) => {
+          if (e.button !== 1 || isCapturing) return;
+          e.preventDefault();
+          e.stopPropagation();
+          removeBinding();
+        });
+        
+        tag.appendChild(xBtn);
+        tag.addEventListener('click', (e) => captureKeybind(actionId, idx, tag, e));
+        tagsContainer.appendChild(tag);
       });
 
-      if (category.name === 'Pan') {
-        const scrollHeader = document.createElement('h3');
-        scrollHeader.textContent = 'Wheel Behaviour';
-        scrollHeader.className = 'keybind-category-header';
-        container.appendChild(scrollHeader);
-        container.appendChild(createScrollModeToggle());
-      }
+      const addBtn = document.createElement('button');
+      addBtn.className = 'keybind-tag add-btn';
+      addBtn.textContent = '+';
+      addBtn.addEventListener('click', (e) => captureKeybind(actionId, currentBinds.length, addBtn, e));
+      tagsContainer.appendChild(addBtn);
     });
   }
 

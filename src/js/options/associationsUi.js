@@ -42,59 +42,24 @@ export async function initAssociationsUi(containerId, statusCallback) {
 
   try {
     const formats = await invoke('get_format_status');
+    const registeredSet = new Set(formats.filter(f => f.registered).map(f => f.ext));
     
-    const grouped = {};
-    for (const f of formats) {
-      if (!grouped[f.category]) grouped[f.category] = [];
-      grouped[f.category].push(f);
-    }
-
-    container.innerHTML = '';
-    
-    for (const [category, items] of Object.entries(grouped)) {
-      const header = document.createElement('h4');
-      header.textContent = `${category}s`;
-      header.className = 'assoc-header';
-      container.appendChild(header);
-
-      const grid = document.createElement('div');
-      grid.className = 'assoc-grid';
+    document.querySelectorAll('.assoc-checkbox').forEach(checkbox => {
+      const ext = checkbox.dataset.ext;
+      const isRegistered = registeredSet.has(ext);
+      checkbox.checked = isRegistered;
+      initialState[ext] = isRegistered;
       
-      for (const item of items) {
-        const label = document.createElement('label');
-        label.className = 'checkbox-label assoc-label';
-        
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'assoc-checkbox';
-        checkbox.dataset.ext = item.ext;
-        checkbox.checked = item.registered;
-        initialState[item.ext] = item.registered;
-        checkbox.title = 'Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.';
-        
-        const img = document.createElement('img');
-        const pngIcon = item.icon.replace('.ico', '.png');
-        img.src = '/assets/icons/' + pngIcon;
-        img.alt = item.ext;
-        img.className = 'assoc-icon';
-        
-        const text = document.createElement('span');
-        text.textContent = '.' + item.ext + ' (' + item.name + ')';
-        text.className = 'assoc-text';
-        text.title = item.registered
-          ? 'QuiviT is registered for this format.'
+      const textSpan = checkbox.closest('label').querySelector('.assoc-text');
+      if (textSpan) {
+        textSpan.title = isRegistered 
+          ? 'QuiviT is registered for this format.' 
           : 'QuiviT is not registered for this format.';
-        
-        label.appendChild(checkbox);
-        label.appendChild(img);
-        label.appendChild(text);
-        
-        grid.appendChild(label);
       }
-      container.appendChild(grid);
-    }
+    });
   } catch (err) {
-    container.innerHTML = '<p style="color:var(--error)">Error loading formats: ' + err + '</p>';
+    console.error('[Assoc] Error loading formats:', err);
+    container.classList.add('is-error');
   }
 
   const selectAll = document.getElementById('btn-assoc-select-all');

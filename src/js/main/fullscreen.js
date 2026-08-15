@@ -13,7 +13,6 @@ let fullscreenExitKeyHoldTimer = null;
 let fullscreenExitHoldFeedbackTimer = null;
 let fullscreenExitHoldFeedbackVisible = false;
 let fullscreenExitHoverVisible = false;
-let fullscreenExitHideProbe = null;
 
 const fullscreenExitHint = document.getElementById('fullscreen-exit-hint');
 const fullscreenExitKey = document.getElementById('fullscreen-exit-key');
@@ -37,18 +36,13 @@ export function syncKeyLabel() {
 }
 
 function initFullscreenExitHideProbe() {
-  if (fullscreenExitHideProbe) return;
-  const probe = document.createElement('div');
-  probe.style.cssText =
-    'position:absolute;left:-9999px;top:-9999px;width:var(--fs-50);height:1px;visibility:hidden;';
-  document.body.appendChild(probe);
-  fullscreenExitHideProbe = probe;
-
+  if (!fullscreenExitRegion) return;
   const sync = () => {
-    fullscreenExitHideY = probe.getBoundingClientRect().width;
+    fullscreenExitHideY = fullscreenExitRegion.getBoundingClientRect().height || 64;
   };
   sync();
-  new ResizeObserver(sync).observe(probe);
+
+  new ResizeObserver(sync).observe(fullscreenExitRegion);
 }
 
 function keyEventCombo(e) {

@@ -6,11 +6,8 @@ export function applyTheme(theme) {
 }
 
 export function applyCustomCss(cssText) {
-  let styleEl = document.getElementById('custom-css');
-  if (!styleEl) {
-    styleEl = document.createElement('style');
-    styleEl.id = 'custom-css';
-    document.head.appendChild(styleEl);
+  const styleEl = document.getElementById('custom-css');
+  if (styleEl) {
+    styleEl.textContent = cssText || '';
   }
-  styleEl.textContent = cssText || '';
 }

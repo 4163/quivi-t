@@ -15,7 +15,7 @@ export function createViewerRenderer(viewportState) {
   if (imgWrapper) {
     const oldImg = document.getElementById('viewer-img');
     if (oldImg) oldImg.remove();
-    const existingNodes = Array.from(document.querySelectorAll('.viewer-img'));
+    const existingNodes = Array.from(document.querySelectorAll('.viewer-img:not(.is-placeholder)'));
     existingNodes.slice(POOL_SIZE).forEach(el => el.remove());
     existingNodes.slice(0, POOL_SIZE).forEach(el => {
       el.classList.remove('active');

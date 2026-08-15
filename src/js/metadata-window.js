@@ -52,17 +52,21 @@ function render(payload) {
   summaryEl.textContent = meta.summary || '';
 
   // Detail grid
-  const rows = [];
-  const addRow = (label, value) => {
-    if (!value) return;
-    const lbl = document.createElement('span');
-    lbl.className = 'meta-label';
-    lbl.textContent = label;
-    const val = document.createElement('span');
-    val.className = 'meta-value';
-    val.textContent = value;
-    val.title = value;
-    rows.push(lbl, val);
+  const applyValue = (key, value) => {
+    const lbl = gridEl.querySelector(`.meta-label[data-key="${key}"]`);
+    const val = gridEl.querySelector(`.meta-value[data-key="${key}"]`);
+    if (!lbl || !val) return;
+    if (value) {
+      val.textContent = value;
+      val.title = value;
+      lbl.classList.remove('hidden');
+      val.classList.remove('hidden');
+    } else {
+      val.textContent = '';
+      val.title = '';
+      lbl.classList.add('hidden');
+      val.classList.add('hidden');
+    }
   };
 
   // Credits
@@ -74,27 +78,28 @@ function render(payload) {
   if (meta.letterer)    credits.push(`🔠 ${meta.letterer}`);
   if (meta.coverArtist) credits.push(`🖼 ${meta.coverArtist}`);
   if (meta.editor)      credits.push(`📝 ${meta.editor}`);
-  if (credits.length)   addRow('Credits', credits.join(' · '));
+  applyValue('credits', credits.length ? credits.join(' · ') : null);
 
-  if (meta.publisher) addRow('Publisher', meta.publisher);
-  if (meta.genre)     addRow('Genre', meta.genre);
-  if (meta.tags)      addRow('Tags', meta.tags);
+  applyValue('publisher', meta.publisher);
+  applyValue('genre', meta.genre);
+  applyValue('tags', meta.tags);
 
   let dateStr = '';
   if (meta.year) {
     dateStr = String(meta.year);
     if (meta.month) dateStr += `-${String(meta.month).padStart(2, '0')}`;
   }
-  if (dateStr) addRow('Date', dateStr);
-  if (meta.pageCount)   addRow('Pages', String(meta.pageCount));
-  if (meta.languageISO) addRow('Language', meta.languageISO.toUpperCase());
-  if (meta.rating)      addRow('Rating', meta.rating);
+  applyValue('date', dateStr || null);
+  applyValue('pages', meta.pageCount ? String(meta.pageCount) : null);
+  applyValue('language', meta.languageISO ? meta.languageISO.toUpperCase() : null);
+  applyValue('rating', meta.rating);
+  
+  let readingStr = null;
   if (meta.manga && meta.manga !== 'No') {
-    addRow('Reading', meta.manga === 'YesAndRightToLeft' ? 'Right-to-Left' : 'Manga');
+    readingStr = meta.manga === 'YesAndRightToLeft' ? 'Right-to-Left' : 'Manga';
   }
-  if (meta.notes) addRow('Notes', meta.notes);
-
-  gridEl.replaceChildren(...rows);
+  applyValue('reading', readingStr);
+  applyValue('notes', meta.notes);
 }
 
 
