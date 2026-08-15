@@ -26,7 +26,6 @@ export function createViewerRenderer(viewportState) {
       el.className = 'viewer-img';
       el.draggable = false;
       el.decoding = 'async';
-      el.style.display = 'none';
       imgWrapper.appendChild(el);
       _freeNodes.push(el);
     }
@@ -71,7 +70,6 @@ export function createViewerRenderer(viewportState) {
     if (!img) return;
     const scaling = viewportState.getScaling();
     img.dataset.scaling = scaling;
-    img.style.imageRendering = scaling === 'none' ? 'pixelated' : 'auto';
   }
 
   function _attachLoadHandler(el) {
@@ -109,7 +107,6 @@ export function createViewerRenderer(viewportState) {
       imgWrapper.appendChild(el);
     }
     el.alt = '';
-    el.style.display = 'none';
     el.dataset.poolSrc = src;
     el.removeAttribute('src');
     _activeNodes.set(src, el);
@@ -124,7 +121,6 @@ export function createViewerRenderer(viewportState) {
   function _recyclePoolNode(src) {
     const el = _activeNodes.get(src);
     if (el) {
-      el.style.display = 'none';
       el.removeAttribute('src');
       el.removeAttribute('data-pool-src');
       el.classList.remove('active');
@@ -144,16 +140,14 @@ export function createViewerRenderer(viewportState) {
   }
 
   function _isVisibleImage(el) {
-    return !!(el && el.src && el.style.display !== 'none');
+    return !!(el && el.src && el.classList.contains('active'));
   }
 
   function _activatePoolNode(el, filename, state) {
     if (img && img !== el) {
-      img.style.display = 'none';
       img.classList.remove('active');
     }
     img = el;
-    img.style.display = 'block';
     img.classList.add('active');
     img.alt = filename || '';
     img.title = filename || '';
@@ -248,12 +242,10 @@ export function createViewerRenderer(viewportState) {
 
       if (!hasPreviousBridge) {
         if (img && img !== activeEl) {
-          img.style.display = 'none';
           img.classList.remove('active');
         }
         if (activeEl) {
           img = activeEl;
-          img.style.display = 'block';
           img.classList.add('active');
         }
       }

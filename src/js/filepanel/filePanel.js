@@ -226,16 +226,16 @@ function getIconHtml(item) {
   if (iconCache.has(ext)) {
     const src = iconCache.get(ext);
     if (src === 'pending') {
-      return `<img data-ext="${CSS.escape(ext)}" width="14" height="14" style="object-fit:contain;image-rendering:auto" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
+      return `<img data-ext="${CSS.escape(ext)}" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
     }
     if (src) {
-      return `<img src="${src}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false">`;
+      return `<img src="${src}" draggable="false">`;
     }
     return fallbackSvg;
   }
 
   fetchNativeIcon(ext);
-  return `<img data-ext="${CSS.escape(ext)}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
+  return `<img data-ext="${CSS.escape(ext)}" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
 }
 
 function openFavorite(fav) {
@@ -720,7 +720,7 @@ export function initFilePanel(deps) {
   resizeHandle.addEventListener('mousedown', (e) => {
     isResizingPanel = true;
     resizeHandle.classList.add('dragging');
-    document.body.style.cursor = 'ew-resize';
+    document.body.classList.toggle('resizing-panel', true);
     e.preventDefault();
   });
 
@@ -757,7 +757,7 @@ export function initFilePanel(deps) {
       startWidth = resizingCol.offsetWidth;
       columnResizeMoved = false;
       resizer.classList.add('dragging');
-      document.body.style.cursor = 'col-resize';
+      document.body.classList.toggle('resizing-col', true);
       e.preventDefault();
       e.stopPropagation();
     });
@@ -767,7 +767,7 @@ export function initFilePanel(deps) {
     if (isResizingPanel) {
       const oldWidth = filePanel.getBoundingClientRect().width;
       const newWidth = Math.min(480, Math.max(120, e.clientX));
-      filePanel.style.width = `${newWidth}px`;
+      document.documentElement.style.setProperty('--panel-w', `${newWidth}px`);
       normalizeColumnWidths('name', getColumnWidth('name') + (newWidth - oldWidth));
       window.dispatchEvent(new CustomEvent('quivit-panel-resized'));
     }
@@ -790,13 +790,13 @@ export function initFilePanel(deps) {
     if (isResizingPanel) {
       isResizingPanel = false;
       resizeHandle.classList.remove('dragging');
-      document.body.style.cursor = '';
+      document.body.classList.toggle('resizing-panel', false);
     }
 
     if (resizingCol) {
       resizingCol.querySelector('.col-resizer').classList.remove('dragging');
       resizingCol = null;
-      document.body.style.cursor = '';
+      document.body.classList.toggle('resizing-col', false);
     }
   });
 }

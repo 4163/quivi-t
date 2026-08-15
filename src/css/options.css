@@ -433,6 +433,10 @@ button.primary:hover {
 }
 
 /* --- Associations UI --- */
+.assoc-actions {
+  margin-bottom: 10px;
+}
+
 .assoc-header {
   margin-top: 10px;
 }

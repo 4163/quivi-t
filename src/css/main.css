@@ -11,6 +11,9 @@ body {
   display: flex;
   flex-direction: column;
 }
+body.cursor-move { cursor: move !important; }
+body.resizing-panel { cursor: ew-resize !important; }
+body.resizing-col { cursor: col-resize !important; }
 
 /* --- Menu bar --------------------------------------------- */
 #menubar {
@@ -374,6 +377,14 @@ li:hover > .fav-remove,
   color: var(--text);
 }
 
+#status-metadata-badge {
+  display: none;
+}
+
+#status-metadata-badge.is-visible {
+  display: flex;
+}
+
 #file-panel-header {
   display: grid;
   grid-template-columns: var(--col-name-w) var(--col-ext-w) var(--col-date-w);
@@ -505,7 +516,7 @@ li:hover > .fav-remove,
 
 #file-list .item-name, #favorites-list .item-name { min-width: 0; overflow: hidden; padding-left: 8px; display: flex; align-items: center; gap: 4px; }
 #file-list .item-name > svg, #favorites-list .item-name > svg,
-#file-list .item-name > img, #favorites-list .item-name > img { width: var(--fs-14); height: var(--fs-14); flex: 0 0 var(--fs-14); }
+#file-list .item-name > img, #favorites-list .item-name > img { width: var(--fs-14); height: var(--fs-14); flex: 0 0 var(--fs-14); object-fit: contain; image-rendering: pixelated; }
 #file-list .item-label, #favorites-list .item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #file-list .item-ext, #favorites-list .item-ext  { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); padding-left: 8px; }
 #file-list .item-date, #favorites-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-10); color: var(--text-dim); padding-left: 8px; }
@@ -737,11 +748,19 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
    (position: absolute), so DOM order determines paint order and the
    image (second in DOM) naturally renders on top of the grill. */
 .viewer-img {
-  display: block;
+  display: none;
   max-width: none;
   position: relative;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.viewer-img.active {
+  display: block;
+}
+
+.viewer-img[data-scaling="none"] {
+  image-rendering: pixelated;
 }
 
 /* --- Opaque image grill ----------------------------------- */

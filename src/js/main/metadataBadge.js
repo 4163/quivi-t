@@ -29,14 +29,14 @@ async function _loadMetadataForArchive(archivePath, metaFiles, fileList, FsUtils
   if (archivePath === _lastMetadataArchive) return;
   _lastMetadataArchive = archivePath;
   _currentMeta = null;
-  if (_badgeEl) _badgeEl.classList.add('hidden');
+  if (_badgeEl) _badgeEl.classList.toggle('is-visible', false);
 
   const meta = await fetchMetadata(archivePath, metaFiles);
   if (_lastMetadataArchive !== archivePath) return;
 
   _currentMeta = meta;
   if (meta) {
-    if (_badgeEl) _badgeEl.classList.remove('hidden');
+    if (_badgeEl) _badgeEl.classList.toggle('is-visible', true);
     const firstImage = fileList.find(f => FsUtils.isImageEntry(f));
     const coverSrc = firstImage ? FsUtils.buildArchiveSrc(archivePath, firstImage.name) : null;
 
@@ -80,7 +80,7 @@ export function initMetadataBadge({ Core, FsUtils, badgeEl }) {
     } else if (state.mode !== 'archive') {
       _lastMetadataArchive = null;
       _currentMeta = null;
-      if (_badgeEl) _badgeEl.classList.add('hidden');
+      if (_badgeEl) _badgeEl.classList.toggle('is-visible', false);
       try { localStorage.removeItem('quivit-metadata-current'); } catch (_) {}
     }
   });

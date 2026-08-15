@@ -61,7 +61,7 @@ export function createViewerGestures(viewportState) {
     _panStartY = clientY;
     _panOriginTx = viewportState.getTx();
     _panOriginTy = viewportState.getTy();
-    document.body.style.cursor = 'move';
+    document.body.classList.toggle('cursor-move', true);
     if (_keyPanHeld(null)) _startCursorPoll();
   }
 
@@ -69,7 +69,7 @@ export function createViewerGestures(viewportState) {
     _isPanning = false;
     _panButtonsDown.clear();
     _stopCursorPoll();
-    document.body.style.cursor = '';
+    document.body.classList.toggle('cursor-move', false);
   }
 
   let _cursorPolling = false;
@@ -157,13 +157,18 @@ export function createViewerGestures(viewportState) {
     _startPan(e.clientX, e.clientY);
   }
 
+  let _lastMouseX = 0;
+  let _lastMouseY = 0;
+
   function _onMouseMove(e) {
+    _lastMouseX = e.clientX;
+    _lastMouseY = e.clientY;
+
     if (!_panActive()) {
       if (_isPanning) _stopPan();
       return;
     }
     if (!_isPanning) {
-      if (_panButtonsDown.size === 0 && e.target.closest?.('#file-panel, #menubar, .menu-dropdown, #statusbar')) return;
       _startPan(e.clientX, e.clientY);
     }
     _updatePan(e.clientX, e.clientY);
@@ -183,6 +188,15 @@ export function createViewerGestures(viewportState) {
   }
   window.addEventListener('mousemove', _onMouseMove);
   window.addEventListener('mouseup', _onMouseUp);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    setTimeout(() => {
+      if (!_isPanning && _panButtonsDown.size === 0 && _keyPanHeld(null)) {
+        _startPan(_lastMouseX, _lastMouseY);
+      }
+    }, 0);
+  });
 
   window.addEventListener('keyup', (e) => {
     const released = e.key.toLowerCase();
