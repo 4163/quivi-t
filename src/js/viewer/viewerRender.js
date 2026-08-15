@@ -47,7 +47,11 @@ export function createViewerRenderer(viewportState) {
       imgWrapper.style.transform = viewportState.getTransform();
       imgWrapper.style.setProperty('--zoom-scale', viewportState.getScale());
     }
-    Statusbar.setZoom(viewportState.getScale());
+    // Only report zoom when an image is actually active — prevents the
+    // "100%" flash on startup before any image is displayed.
+    if (img && img.src) {
+      Statusbar.setZoom(viewportState.getScale());
+    }
   }
 
   function _scheduleTransform() {

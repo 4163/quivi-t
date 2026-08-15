@@ -6,7 +6,7 @@ import { Core } from './core.js';
 import { FsUtils } from './fsUtils.js';
 import { Viewer } from './viewer/viewer.js';
 import * as NavigationHistory from './navigationHistory.js';
-import { initFilePanel, renderFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite } from './filePanel.js';
+import { initFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite } from './filepanel/filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from './shortcuts.js';
 import { normalizeCombo, formatKeyName, normalizeList } from './services/keyCombo.js';
 import { applyTheme, applyCustomCss } from './shared/theme.js';
@@ -191,9 +191,7 @@ function dispatchKeyboardPan(dx, dy) {
 }
 
 function setFileListVisible(visible) {
-  Core.setFileListVisible(visible, { notify: false });
-  filePanel.classList.toggle('hidden', !visible);
-  if (visible) requestAnimationFrame(() => renderFilePanel(Core.getState()));
+  Core.setFileListVisible(visible);
   document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!visible);
 }
 
@@ -777,7 +775,7 @@ Core.onStateChange((state) => {
   updateHistoryMenu();
 
 
-  renderFilePanel(state);
+
 
   // Auto-fetch ComicInfo metadata when entering a new archive.
   if (state.mode === 'archive' && state.archivePath) {
@@ -803,7 +801,7 @@ metadataBadge.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.ke
 
 Statusbar.init();
 initFullscreen();
-initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, Viewer, FsUtils });
+initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, FsUtils });
 initMenuBar();
 bindMenuCommands();
 bindDragDrop();

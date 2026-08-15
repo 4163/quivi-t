@@ -19,6 +19,10 @@ const viewportState = createViewportState({
 createViewerRenderer(viewportState);
 createViewerGestures(viewportState);
 
+window.addEventListener('quivit-panel-resized', () => {
+  viewportState.applyFitMode();
+});
+
 export const Viewer = { 
   applyFitMode: (mode) => viewportState.applyFitMode(mode),
   zoomAt: viewportState.zoomAt,

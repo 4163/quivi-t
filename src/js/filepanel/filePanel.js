@@ -1,7 +1,17 @@
 /**
  * filePanel.js - file list rendering, sorting, and column resizing.
  */
-import { DirectoryPrefs } from './directoryPrefs.js';
+import { DirectoryPrefs } from '../directoryPrefs.js';
+import { makeContainerNavigable } from '../keyboardNav.js';
+import {
+  initFavoritesStore,
+  getFavorites,
+  getFavoritesCollapsed,
+  saveFavoritesCollapsed,
+  isFavorite,
+  toggleFavorite,
+  saveFavorites
+} from './favoritesStore.js';
 
 const MIN_COL_WIDTHS = {
   name: 64,
@@ -14,7 +24,6 @@ let breadcrumbEl = null;
 let fileListUl = null;
 let resizeHandle = null;
 let Core = null;
-let Viewer = null;
 
 let isResizingPanel = false;
 let resizingCol = null;
@@ -29,7 +38,6 @@ let currentPath = '';
 
 // Favorites
 let favoritesExpanded = false;
-let configLoaded = false;
 let favoritesBtnEl = null;
 let favoritesListUl = null;
 let favoritesHeaderEl = null;
@@ -130,45 +138,7 @@ function renderBreadcrumb(state) {
   breadcrumbEl.title = path || '';
 }
 
-// --- Favorites helpers ---
-// persistence: favorites + collapsed state live in config (split into
-// quivit_favorites.json by the backend), NOT WebView2 localStorage. See the
-// persistence policy in core.js.
-
-function getFavorites() {
-  const favs = Core.getState().config?.frontend_data?.favorites;
-  return Array.isArray(favs) ? favs : [];
-}
-
-function saveFavorites(favs) {
-  Core.getState().config.frontend_data.favorites = favs;
-  if (configLoaded) Core.persistConfig();
-}
-
-function getFavoritesCollapsed() {
-  return Core.getState().config?.frontend_data?.favorites_collapsed === true;
-}
-
-function saveFavoritesCollapsed(collapsed) {
-  Core.getState().config.frontend_data.favorites_collapsed = collapsed;
-  if (configLoaded) Core.persistConfig();
-}
-
-function isFavorite(path) {
-  return getFavorites().some(f => f.path === path);
-}
-
-function toggleFavorite(entry) {
-  let favs = getFavorites();
-  const idx = favs.findIndex(f => f.path === entry.path);
-  if (idx === -1) {
-    favs.push({ path: entry.path, name: entry.name, is_dir: entry.is_dir, is_drive: entry.is_drive, ext: entry.ext });
-  } else {
-    favs.splice(idx, 1);
-  }
-  saveFavorites(favs);
-  return idx === -1;
-}
+// --- Favorites rendering ---
 
 function updateFavoriteBtn(path) {
   if (!favoritesBtnEl) return;
@@ -197,6 +167,16 @@ export function toggleFavoriteCurrent() {
 
 const iconCache = new Map();
 
+function escapeAttr(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function fetchNativeIcon(ext) {
   if (iconCache.has(ext)) return;
   iconCache.set(ext, 'pending'); // mark as pending
@@ -206,7 +186,7 @@ function fetchNativeIcon(ext) {
     window.__TAURI__.core.invoke('get_native_icon', { ext: extArg })
       .then(src => {
         iconCache.set(ext, src || '');
-        document.querySelectorAll(`img[data-ext="${ext}"]`).forEach(img => {
+        document.querySelectorAll(`img[data-ext="${escapeAttr(ext)}"]`).forEach(img => {
           if (src) {
             img.src = src;
             img.style.imageRendering = 'pixelated';
@@ -244,23 +224,21 @@ function getIconHtml(item) {
   if (iconCache.has(ext)) {
     const src = iconCache.get(ext);
     if (src === 'pending') {
-      return `<img data-ext="${ext}" width="14" height="14" style="object-fit:contain;image-rendering:auto" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
+      return `<img data-ext="${escapeAttr(ext)}" width="14" height="14" style="object-fit:contain;image-rendering:auto" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
     }
     if (src) {
-      return `<img src="${src}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false">`;
+      return `<img src="${escapeAttr(src)}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false">`;
     }
     return fallbackSvg;
   }
 
   fetchNativeIcon(ext);
-  return `<img data-ext="${ext}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
+  return `<img data-ext="${escapeAttr(ext)}" width="14" height="14" style="object-fit:contain;image-rendering:pixelated" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
 }
 
 function openFavorite(fav) {
   if (FsUtils) {
     FsUtils.loadFile(fav.path).catch(console.error);
-  } else if (window.__TAURI__) {
-    window.dispatchEvent(new CustomEvent('quivit-load-file', { detail: fav.path }));
   }
 }
 
@@ -568,7 +546,7 @@ function setRefreshingVisual(active) {
   }, 60);
 }
 
-export function renderFilePanel(state) {
+function renderFilePanel(state) {
   filePanel.classList.toggle('hidden', !state.fileListVisible);
   if (!state.fileListVisible) return;
   renderBreadcrumb(state);
@@ -621,7 +599,10 @@ export function renderFilePanel(state) {
 }
 
 export function initFilePanel(deps) {
-  ({ filePanel, breadcrumbEl, fileListUl, resizeHandle, Core, Viewer, FsUtils } = deps);
+  ({ filePanel, breadcrumbEl, fileListUl, resizeHandle, Core, FsUtils } = deps);
+
+  initFavoritesStore(Core);
+  Core.onStateChange(() => renderFilePanel(Core.getState()));
 
   // Wire favorites UI
   favoritesBtnEl = document.getElementById('btn-favorite-current');
@@ -642,61 +623,19 @@ export function initFilePanel(deps) {
 
   // Composite widget keyboard navigation (mirrors the file list below)
   if (favoritesListUl) {
-    favoritesListUl.addEventListener('keydown', (e) => {
-      const items = Array.from(favoritesListUl.children);
-      if (!items.length) return;
-
-      const activeRow = document.activeElement && document.activeElement.closest('li');
-      const currentIndex = activeRow && favoritesListUl.contains(activeRow) ? items.indexOf(activeRow) : -1;
-      const onRemoveBtn = document.activeElement && document.activeElement.classList.contains('fav-remove');
-      let nextIndex = null;
-
-      switch (e.key) {
-        case 'ArrowDown': {
-          e.preventDefault();
-          e.stopPropagation();
-          nextIndex = currentIndex === -1 ? 0 : Math.min(currentIndex + 1, items.length - 1);
-          break;
+    makeContainerNavigable(favoritesListUl, 'li', {
+      vertical: true,
+      horizontal: false,
+      loop: false,
+      onAction: (index, item, e) => {
+        const fav = getFavorites().find(f => f.path === item.dataset.path);
+        if (fav) openFavorite(fav);
+      },
+      onCancel: () => {
+        highlightFavoriteByPath('');
+        if (document.activeElement && favoritesListUl.contains(document.activeElement)) {
+          document.activeElement.blur();
         }
-        case 'ArrowUp': {
-          e.preventDefault();
-          e.stopPropagation();
-          nextIndex = currentIndex === -1 ? items.length - 1 : Math.max(currentIndex - 1, 0);
-          break;
-        }
-        case 'Home': {
-          e.preventDefault();
-          nextIndex = 0;
-          break;
-        }
-        case 'End': {
-          e.preventDefault();
-          nextIndex = items.length - 1;
-          break;
-        }
-        case 'Enter':
-        case ' ': {
-          if (!onRemoveBtn && currentIndex !== -1) {
-            e.preventDefault();
-            const fav = getFavorites().find(f => f.path === items[currentIndex].dataset.path);
-            if (fav) openFavorite(fav);
-          }
-          break;
-        }
-        case 'Escape': {
-          e.preventDefault();
-          highlightFavoriteByPath('');
-          if (document.activeElement && favoritesListUl.contains(document.activeElement)) {
-            document.activeElement.blur();
-          }
-          break;
-        }
-        default:
-          break;
-      }
-
-      if (nextIndex !== null) {
-        items[nextIndex].focus();
       }
     });
   }
@@ -706,14 +645,8 @@ export function initFilePanel(deps) {
   favoritesExpanded = !getFavoritesCollapsed();
   renderFavorites();
   window.addEventListener('quivit-config-loaded', () => {
-    configLoaded = true;
     favoritesExpanded = !getFavoritesCollapsed();
     renderFavorites();
-  });
-
-  // Allow favorites entries to load files via custom event
-  window.addEventListener('quivit-load-file', (e) => {
-    if (FsUtils) FsUtils.loadFile(e.detail).catch(console.error);
   });
 
   window.addEventListener('quivit-refresh-start', () => setRefreshingVisual(true));
@@ -735,57 +668,21 @@ export function initFilePanel(deps) {
   });
 
   // Composite widget keyboard navigation
-  fileListUl.addEventListener('keydown', (e) => {
-    const state = Core.getState();
-    const list = state.list;
-    if (!list.length) return;
-
-    const currentIndex = state.index;
-
-    switch (e.key) {
-      case 'ArrowDown': {
-        e.preventDefault();
-        e.stopPropagation();
-        const next = currentIndex === -1 ? 0 : Math.min(currentIndex + 1, list.length - 1);
-        Core.selectIndex(next);
-        break;
+  makeContainerNavigable(fileListUl, 'li', {
+    vertical: true,
+    horizontal: false,
+    loop: false,
+    onAction: (index, item, e) => {
+      Core.jumpToIndex(index);
+    },
+    onCancel: () => {
+      Core.selectIndex(-1);
+      if (document.activeElement && fileListUl.contains(document.activeElement)) {
+        document.activeElement.blur();
       }
-      case 'ArrowUp': {
-        e.preventDefault();
-        e.stopPropagation();
-        const prev = currentIndex === -1 ? list.length - 1 : Math.max(currentIndex - 1, 0);
-        Core.selectIndex(prev);
-        break;
-      }
-      case 'Home': {
-        e.preventDefault();
-        Core.selectIndex(0);
-        break;
-      }
-      case 'End': {
-        e.preventDefault();
-        Core.selectIndex(list.length - 1);
-        break;
-      }
-      case 'Enter':
-      case ' ': {
-        if (currentIndex !== -1) {
-          e.preventDefault();
-          Core.jumpToIndex(currentIndex);
-        }
-        break;
-      }
-      case 'Escape': {
-        e.preventDefault();
-        Core.selectIndex(-1);
-        // Blurring the active li
-        if (document.activeElement && fileListUl.contains(document.activeElement)) {
-          document.activeElement.blur();
-        }
-        break;
-      }
-      default:
-        break;
+    },
+    onSelectionChange: (nextIndex, nextItem) => {
+      Core.selectIndex(nextIndex);
     }
   });
 
@@ -841,7 +738,7 @@ export function initFilePanel(deps) {
       const newWidth = Math.min(480, Math.max(120, e.clientX));
       filePanel.style.width = `${newWidth}px`;
       normalizeColumnWidths('name', getColumnWidth('name') + (newWidth - oldWidth));
-      Viewer.applyFitMode();
+      window.dispatchEvent(new CustomEvent('quivit-panel-resized'));
     }
 
     if (resizingCol) {
