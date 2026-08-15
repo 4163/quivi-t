@@ -56,12 +56,6 @@
 - Currently `_setElementLoadingLabel` sets only a static `alt = 'Loading...'`, and the broken-image frame is only actually visible on the first-display placeholder; seamless swaps (previous image held as a bridge) show no loading feedback at all.
 - Easy emulation: create an `img` element whose `src` purposefully points at a non-existent target (or a broken base64-encoded image) so the browser renders its built-in broken-image frame, and animate its `alt` text (`Loading. → Loading.. → Loading...`, reuse/restore the earlier `startLoadingAltAnimation`-style helper in `viewer.js`) while loading.
 
-### File Navigation & Core Behavior Fixes (Medium Logic)
-- **Large Directory / Archive DOM Rendering Performance:** Optimize file list rendering in `filePanel.js` when opening folders or archives containing thousands of files (e.g. `C:\Users\x4163\Pictures\Steam Screenshots`) (User note: I approve of this personal path appearing in our docs, it's fine).
-  - **Root Cause:** Currently `renderFilePanel()` synchronously creates and appends tens of thousands of `<li>` DOM nodes and event listeners at once, freezing the main thread during DOM construction, styling, and layout reflow. (Backend processing may also be another cause for this, validate and see what costs performance dip and proceed from there)
-  - **Proposed Solutions & Comparison:**
-    1. *Incremental Batching (`CONFIG.batchSize` pattern from `E:\Projects\snap\snap - multi-page_json\html\snap-script.js`):* Renders the first 50–100 items instantly and schedules remaining items in background batches (`requestAnimationFrame` / `setTimeout`). Keeps the initial UI interactive, but eventually populates all DOM nodes, leaving layout/scroll performance degraded for huge lists.
-    2. IMPORTANT: Discuss other available paths and options, aligning with the project's performance-first approach. No. 1 was is just one of many possible solutions that ended up working on earlier projects.
 
 ### Favorites & Bookmarks System (Medium Logic)
 - **From clipboard notes (2026-08-13):**

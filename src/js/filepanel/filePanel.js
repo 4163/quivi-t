@@ -36,6 +36,12 @@ let lastClickTime = 0;
 let lastClickIndex = -1;
 let currentPath = '';
 
+// Virtualization
+let domPool = [];
+let scrollSpacer = null;
+let ROW_HEIGHT = 0;
+let POOL_SIZE = 0;
+
 // Favorites
 let favoritesExpanded = false;
 let favoritesBtnEl = null;
@@ -418,128 +424,228 @@ export function navigateHighlightedFavorite(delta) {
   items[nextIndex].focus();
 }
 
-function renderEntry(item, index, selectedIndex) {
-  const li = document.createElement('li');
-  if (index === selectedIndex) li.classList.add('selected');
-  if (item.name !== '..') {
-    li.title = item.name;
-  }
+function measureRowHeight() {
+  const dummy = document.createElement('li');
+  dummy.style.position = 'relative';
+  dummy.style.visibility = 'hidden';
 
   const itemName = document.createElement('span');
   itemName.className = 'item-name';
+  itemName.innerHTML = '<svg></svg>';
 
+  const itemLabel = document.createElement('span');
+  itemLabel.className = 'item-label';
+  itemLabel.textContent = 'Test';
+  itemName.appendChild(itemLabel);
+
+  const itemExt = document.createElement('span');
+  itemExt.className = 'item-ext';
+  itemExt.textContent = '.ext';
+
+  const itemDate = document.createElement('span');
+  itemDate.className = 'item-date';
+  itemDate.textContent = 'Date';
+
+  dummy.appendChild(itemName);
+  dummy.appendChild(itemExt);
+  dummy.appendChild(itemDate);
+
+  fileListUl.appendChild(dummy);
+  ROW_HEIGHT = dummy.getBoundingClientRect().height || 22;
+  fileListUl.removeChild(dummy);
+}
+
+function initDomPool() {
+  // Clear existing pool elements in case of a config reload
+  domPool.forEach(li => li.remove());
+  domPool = [];
+  if (scrollSpacer) {
+    scrollSpacer.remove();
+    scrollSpacer = null;
+  }
+
+  POOL_SIZE = Math.ceil(window.screen.height / ROW_HEIGHT) + 20;
+  
+  for (let i = 0; i < POOL_SIZE; i++) {
+    const li = document.createElement('li');
+    li.style.display = 'none';
+    
+    const itemName = document.createElement('span');
+    itemName.className = 'item-name';
+    
+    const itemLabel = document.createElement('span');
+    itemLabel.className = 'item-label';
+    itemName.appendChild(itemLabel);
+    
+    const itemExt = document.createElement('span');
+    itemExt.className = 'item-ext';
+    
+    const itemDate = document.createElement('span');
+    itemDate.className = 'item-date';
+    
+    li.appendChild(itemName);
+    li.appendChild(itemExt);
+    li.appendChild(itemDate);
+    
+    li.setAttribute('role', 'option');
+    li.setAttribute('tabindex', '0');
+    
+    li.addEventListener('focus', () => {
+      const idxStr = li.dataset.index;
+      if (!idxStr) return;
+      const index = parseInt(idxStr, 10);
+      if (Core.getState().index !== index) {
+        Core.selectIndex(index);
+      }
+    });
+
+    li.addEventListener('click', (e) => {
+      const idxStr = li.dataset.index;
+      if (!idxStr) return;
+      const index = parseInt(idxStr, 10);
+      
+      if (Core.getState().index !== index) {
+        Core.selectIndex(index);
+      }
+      const now = Date.now();
+      if (lastClickIndex === index && (now - lastClickTime < 400)) {
+        Core.jumpToIndex(index);
+        lastClickTime = 0;
+        lastClickIndex = -1;
+      } else {
+        lastClickTime = now;
+        lastClickIndex = index;
+      }
+    });
+
+    li.addEventListener('mouseenter', () => {
+      clearTimeout(hoverPreloadTimer);
+      if (hoverPreloadImg) {
+        hoverPreloadImg.removeAttribute('src');
+        hoverPreloadImg = null;
+      }
+      
+      const idxStr = li.dataset.index;
+      if (!idxStr) return;
+      const index = parseInt(idxStr, 10);
+      const state = Core.getState();
+      const item = state.list[index];
+
+      if (item && !item.is_dir && !item.is_parent && FsUtils.isImageEntry(item)) {
+        hoverPreloadTimer = setTimeout(() => {
+          let src;
+          if (state.mode === 'archive') {
+            src = FsUtils.isIco(item.name) ? null : FsUtils.buildArchiveSrc(state.archivePath, item.name);
+          } else {
+            src = FsUtils.isIco(item.path) ? null : FsUtils.buildFileSrcSync(item.path);
+          }
+          if (src && Core.getState().index !== index) {
+            hoverPreloadImg = new Image();
+            hoverPreloadImg.decoding = 'async';
+            hoverPreloadImg.src = src;
+            if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
+          }
+        }, 90);
+      }
+    });
+
+    li.addEventListener('mouseleave', () => {
+      clearTimeout(hoverPreloadTimer);
+      if (hoverPreloadImg) {
+        hoverPreloadImg.removeAttribute('src');
+        hoverPreloadImg = null;
+      }
+    });
+
+    domPool.push(li);
+    fileListUl.appendChild(li);
+  }
+  
+  scrollSpacer = document.createElement('div');
+  scrollSpacer.className = 'scroll-spacer';
+  fileListUl.appendChild(scrollSpacer);
+}
+
+function updateEntry(li, item, index, selectedIndex) {
+  li.dataset.index = index;
+  li.classList.toggle('selected', index === selectedIndex);
+  li.title = item.name !== '..' ? item.name : '';
+  
+  const itemName = li.querySelector('.item-name');
   itemName.innerHTML = getIconHtml(item);
   if (item.is_hidden) {
     const icon = itemName.firstElementChild;
     if (icon) icon.style.opacity = '0.65';
   }
-
+  
   const itemLabel = document.createElement('span');
   itemLabel.className = 'item-label';
   itemLabel.textContent = item.name;
   itemName.appendChild(itemLabel);
-
-  const itemExt = document.createElement('span');
-  itemExt.className = 'item-ext';
-  itemExt.textContent = item.ext || '';
-
-  const itemDate = document.createElement('span');
-  itemDate.className = 'item-date';
-  itemDate.textContent = item.date || '';
-
-  li.appendChild(itemName);
-  li.appendChild(itemExt);
-  li.appendChild(itemDate);
   
-  li.setAttribute('role', 'option');
-  li.setAttribute('tabindex', '0');
-
-  li.addEventListener('focus', () => {
-    if (Core.getState().index !== index) {
-      Core.selectIndex(index);
-    }
-  });
-
-  li.addEventListener('click', (e) => {
-    if (Core.getState().index !== index) {
-      Core.selectIndex(index);
-    }
-    const now = Date.now();
-    if (lastClickIndex === index && (now - lastClickTime < 400)) {
-      Core.jumpToIndex(index);
-      lastClickTime = 0;
-      lastClickIndex = -1;
-    } else {
-      lastClickTime = now;
-      lastClickIndex = index;
-    }
-  });
-
-  // Pre-emptively load the image on hover to make clicks feel instant
-  li.addEventListener('mouseenter', () => {
-    clearTimeout(hoverPreloadTimer);
-    if (hoverPreloadImg) {
-      hoverPreloadImg.removeAttribute('src');
-      hoverPreloadImg = null;
-    }
-
-    if (!item.is_dir && !item.is_parent && FsUtils.isImageEntry(item)) {
-      hoverPreloadTimer = setTimeout(() => {
-        const state = Core.getState();
-        let src;
-        if (state.mode === 'archive') {
-          src = FsUtils.isIco(item.name) ? null : FsUtils.buildArchiveSrc(state.archivePath, item.name);
-        } else {
-          src = FsUtils.isIco(item.path) ? null : FsUtils.buildFileSrcSync(item.path);
-        }
-        if (src && Core.getState().index !== index) {
-          hoverPreloadImg = new Image();
-          hoverPreloadImg.decoding = 'async';
-          hoverPreloadImg.src = src;
-          if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
-        }
-      }, 90);
-    }
-  });
-
-  li.addEventListener('mouseleave', () => {
-    clearTimeout(hoverPreloadTimer);
-    if (hoverPreloadImg) {
-      hoverPreloadImg.removeAttribute('src');
-      hoverPreloadImg = null;
-    }
-  });
-
-  return li;
+  li.querySelector('.item-ext').textContent = item.ext || '';
+  li.querySelector('.item-date').textContent = item.date || '';
+  
+  li.style.transform = `translateY(${index * ROW_HEIGHT}px)`;
+  li.style.display = 'grid';
 }
 
-function updateSelection(selectedIndex) {
-  const forceFocus = focusMainListOnNextRender;
-  focusMainListOnNextRender = false;
-
-  if (selectedIndex < 0 || selectedIndex >= fileListUl.children.length) {
-    const previous = fileListUl.querySelector('.selected');
-    if (previous) previous.classList.remove('selected');
+function renderVisibleSlice() {
+  if (!lastRenderedList || lastRenderedList.length === 0) {
+    domPool.forEach(li => li.style.display = 'none');
+    if (scrollSpacer) scrollSpacer.style.height = '0px';
     return;
   }
   
-  const li = fileListUl.children[selectedIndex];
-  const wasFocused = panelKeyboardActive || forceFocus ||
+  const state = Core.getState();
+  const list = state.list;
+  
+  if (scrollSpacer) {
+    scrollSpacer.style.height = `${list.length * ROW_HEIGHT}px`;
+  }
+  
+  const scrollTop = fileListUl.scrollTop;
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - 5);
+  
+  for (let i = 0; i < POOL_SIZE; i++) {
+    const dataIndex = startIndex + i;
+    const li = domPool[i];
+    
+    if (dataIndex >= 0 && dataIndex < list.length) {
+      updateEntry(li, list[dataIndex], dataIndex, state.index);
+    } else {
+      li.style.display = 'none';
+      li.dataset.index = '';
+    }
+  }
+}
+
+function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) {
+  if (!lastRenderedList) return;
+
+  wasFocused = wasFocused || panelKeyboardActive || forceFocus ||
     (document.activeElement && fileListUl.contains(document.activeElement));
 
-  if (li.classList.contains('selected')) {
-    if (forceFocus) li.focus({ preventScroll: true });
-    return;
+  if (selectedIndex >= 0 && selectedIndex < lastRenderedList.length) {
+    const itemTop = selectedIndex * ROW_HEIGHT;
+    const itemBottom = itemTop + ROW_HEIGHT;
+    const viewTop = fileListUl.scrollTop;
+    const viewBottom = viewTop + fileListUl.clientHeight;
+    
+    if (itemTop < viewTop) {
+      fileListUl.scrollTop = itemTop;
+    } else if (itemBottom > viewBottom) {
+      fileListUl.scrollTop = itemBottom - fileListUl.clientHeight;
+    }
   }
   
-  const previous = fileListUl.querySelector('.selected');
-  if (previous) previous.classList.remove('selected');
+  renderVisibleSlice();
   
-  li.classList.add('selected');
-  li.scrollIntoView({ block: 'nearest' });
-  
-  if (wasFocused) {
-    li.focus({ preventScroll: true });
+  if (wasFocused && selectedIndex >= 0) {
+    const activeLi = domPool.find(li => li.dataset.index === String(selectedIndex));
+    if (activeLi && forceFocus) {
+      activeLi.focus({ preventScroll: true });
+    }
   }
 }
 
@@ -593,6 +699,11 @@ function renderFilePanel(state) {
     updateSortIcons();
   }
 
+  if (!ROW_HEIGHT) {
+    measureRowHeight();
+    initDomPool();
+  }
+
   if (lastRenderedList === state.list) {
     updateSelection(state.index);
     return;
@@ -601,26 +712,22 @@ function renderFilePanel(state) {
 
   const forceFocus = focusMainListOnNextRender;
   focusMainListOnNextRender = false;
-
   const wasFocused = panelKeyboardActive || forceFocus ||
     (document.activeElement && fileListUl.contains(document.activeElement));
 
-  fileListUl.innerHTML = '';
-  state.list.forEach((item, index) => {
-    const li = renderEntry(item, index, state.index);
-    fileListUl.appendChild(li);
+  renderVisibleSlice();
 
-    if (index === state.index) {
-      li.scrollIntoView({ block: 'nearest' });
-      if (wasFocused) {
-        li.focus({ preventScroll: true });
-      }
-    }
-  });
+  if (state.index >= 0) {
+    updateSelection(state.index, forceFocus, wasFocused);
+  }
 }
 
 export function initFilePanel(deps) {
   ({ filePanel, breadcrumbEl, fileListUl, resizeHandle } = deps);
+
+  fileListUl.addEventListener('scroll', () => {
+    if (ROW_HEIGHT) renderVisibleSlice();
+  });
 
   Core.onStateChange(() => renderFilePanel(Core.getState()));
 
@@ -676,6 +783,15 @@ export function initFilePanel(deps) {
   window.addEventListener('quivit-config-loaded', () => {
     favoritesExpanded = !getFavoritesCollapsed();
     renderFavorites();
+    // Invalidate row height so custom CSS font sizes take effect
+    ROW_HEIGHT = 0;
+    if (Core) renderFilePanel(Core.getState());
+  });
+
+  window.addEventListener('quivit-css-applied', () => {
+    // Invalidate row height for live CSS previews in the options dialog
+    ROW_HEIGHT = 0;
+    if (Core) renderFilePanel(Core.getState());
   });
 
   window.addEventListener('quivit-refresh-start', () => setRefreshingVisual(true));

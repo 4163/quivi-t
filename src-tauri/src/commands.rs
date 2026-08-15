@@ -32,7 +32,7 @@ impl WatcherState {
 
 // ── Tauri commands ───────────────────────────────────────────────────────────
 
-pub fn is_hidden_path(path: &Path, name: &str) -> bool {
+pub fn is_hidden_path(name: &str, metadata: Option<&fs::Metadata>) -> bool {
     if name.starts_with('.') {
         return true;
     }
@@ -40,8 +40,8 @@ pub fn is_hidden_path(path: &Path, name: &str) -> bool {
     #[cfg(windows)]
     {
         const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
-        if let Ok(metadata) = fs::metadata(path) {
-            return metadata.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0;
+        if let Some(meta) = metadata {
+            return meta.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0;
         }
     }
 
@@ -80,8 +80,9 @@ pub fn read_directory_impl(
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            let is_dir = path.is_dir();
-            let is_file = path.is_file();
+            let file_type = if let Ok(ft) = entry.file_type() { ft } else { continue; };
+            let is_dir = file_type.is_dir();
+            let is_file = file_type.is_file();
 
             if is_dir || is_file {
                 let mut include = false;
@@ -103,11 +104,14 @@ pub fn read_directory_impl(
                         .and_then(|n| n.to_str())
                         .unwrap_or("")
                         .to_string();
-                    if !show_hidden && is_hidden_path(&path, &name) {
+                    let metadata_res = entry.metadata();
+                    let is_hidden = is_hidden_path(&name, metadata_res.as_ref().ok());
+                    
+                    if !show_hidden && is_hidden {
                         continue;
                     }
 
-                    let date = if let Ok(metadata) = path.metadata() {
+                    let date = if let Ok(metadata) = &metadata_res {
                         if let Ok(modified) = metadata.modified() {
                             if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
                                 duration.as_millis().to_string()
@@ -127,7 +131,7 @@ pub fn read_directory_impl(
                         ext: ext_upper,
                         date,
                         is_dir,
-                        is_hidden: is_hidden_path(&path, &name),
+                        is_hidden,
                     });
                 }
             }
@@ -406,10 +410,12 @@ pub fn open_sibling(
     let mut siblings: Vec<PathBuf> = Vec::new();
     if let Ok(entries) = fs::read_dir(parent) {
         for entry in entries.flatten() {
-            let p = entry.path();
-            if p.is_dir() {
+            let file_type = if let Ok(ft) = entry.file_type() { ft } else { continue; };
+            if file_type.is_dir() {
+                let p = entry.path();
                 let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if !show_hidden && is_hidden_path(&p, name) {
+                let metadata_res = entry.metadata();
+                if !show_hidden && is_hidden_path(name, metadata_res.as_ref().ok()) {
                     continue;
                 }
                 siblings.push(p);
@@ -469,16 +475,21 @@ pub fn open_sibling_container(
     if let Ok(entries) = fs::read_dir(parent) {
         for entry in entries.flatten() {
             let p = entry.path();
-            let is_dir = p.is_dir();
-            let is_archive = p
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(is_archive_ext)
-                .unwrap_or(false);
+            let file_type = if let Ok(ft) = entry.file_type() { ft } else { continue; };
+            let is_dir = file_type.is_dir();
+            let is_archive = if file_type.is_file() {
+                p.extension()
+                    .and_then(|e| e.to_str())
+                    .map(is_archive_ext)
+                    .unwrap_or(false)
+            } else {
+                false
+            };
 
             if is_dir || is_archive {
                 let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if !show_hidden && is_hidden_path(&p, name) {
+                let metadata_res = entry.metadata();
+                if !show_hidden && is_hidden_path(name, metadata_res.as_ref().ok()) {
                     continue;
                 }
                 siblings.push(p);

@@ -455,6 +455,15 @@ li:hover > .fav-remove,
   padding: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+  position: relative;
+}
+
+#file-list .scroll-spacer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  pointer-events: none;
 }
 
 /* File list composite widget — show ring on the container, not items */
@@ -475,6 +484,14 @@ li:hover > .fav-remove,
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
+}
+
+#file-list li {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 #favorites-list li {

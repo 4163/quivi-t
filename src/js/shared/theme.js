@@ -9,5 +9,6 @@ export function applyCustomCss(cssText) {
   const styleEl = document.getElementById('custom-css');
   if (styleEl) {
     styleEl.textContent = cssText || '';
+    window.dispatchEvent(new CustomEvent('quivit-css-applied'));
   }
 }
