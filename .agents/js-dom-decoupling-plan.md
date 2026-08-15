@@ -353,6 +353,17 @@ After each slice, the active agent MUST follow this handoff protocol:
 - **Event Delegation:** Refactored `keyboardNav.js` to add `makeContainerNavigable` — a single delegated `keydown` listener on the parent `<ul>`. Two 60-line inline `switch(e.key)` blocks in filePanel replaced with clean `makeContainerNavigable` calls.
 - **Panel Resize Decoupling:** Replaced the direct `Viewer.applyFitMode()` call during panel drag-resize with a `quivit-panel-resized` custom event. `viewer.js` subscribes globally, completely severing the filePanel→Viewer dependency.
 
+### Slice 7 — Keybind UI + Options decoupling
+- Created `src/js/options/` feature folder. Moved `options.js`, `associationsUi.js`, and `keybindUi.js` into it; updated `options.html` script path.
+- **`services/keybindDomain.js`:** Extracted all pure keybind domain logic (`CATEGORIES`, `MENUBAR_ACTION`, `LOCKED_BINDINGS`, `SINGLE_INPUT_ACTIONS`, `validateKeybindSafety`, `getConflictColors`, `canUseMenubarBinds`, `isLockedBinding`) out of `keybindUi.js`. Zero DOM dependencies — fully testable.
+- **`shared/configPreview.js`:** Centralised the `previewing` state flag, `previewTheme`/`previewCss` emitters, `revertPreviewChanges`, `resetPreviewCss`, and `emergencyCssReset(config)`. Both `main.js` and `options.js` now import the shared emergency reset instead of duplicating the Ctrl+Shift+Alt+C handler.
+- **`shared/windowFit.js`:** Centralised `fitContentWidth` (OPTIONS_MAX_INITIAL_W = 560) and `fitContentHeight` (META_MAX_INITIAL_H = 600) with serialised promise chains. `metadata-window.js` now imports `fitContentHeight` from here, removing 30+ lines of inline fit logic. Updated `config.rs` comments to point at `shared/windowFit.js`.
+- **`main.js` cleanup:** Imported `handleTabJump` from `keyboardNav.js` and `emergencyCssReset` from `shared/configPreview.js`, replacing ~45 lines of inlined emergency-reset and Home/End tab-jump logic.
+- **`associationsUi.js` CSS migration:** Replaced all inline style mutations (`grid.style.gridTemplateColumns`, icon `width`/`height`, header `marginTop`) with CSS classes (`assoc-grid`, `assoc-header`, `assoc-label`, `assoc-icon`, `assoc-text`) and added corresponding rules to `options.css`.
+- **Metadata window simplification:** Removed the empty-state UI (`#metadata-empty` element, CSS, and JS toggle logic). The window now keeps its last rendered content when navigating away; null-meta payloads are a no-op early return.
+- **Directory sort deduplication:** `directoryPrefs.setSortPrefs` now deletes entries from `directory_sort` when they match `default_sort`, so the persisted map only stores deviations.
+- **Bugfixes during review:** Added missing `MENUBAR_ACTION` import to `keybindUi.js`; fixed `canUseMenubarBinds` call sites passing wrong arity (1 arg instead of 2).
+
 ---
 
 ## References
