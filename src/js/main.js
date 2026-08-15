@@ -20,6 +20,9 @@ import * as Chrome from './menubar/chrome.js';
 import { fetchMetadata, findMetadataEntry } from './metadata.js';
 import { initFullscreen, toggleFullscreen, syncFullscreenState, isFullscreenActive, syncKeyLabel } from './main/fullscreen.js';
 
+import { handleTabJump } from './keyboardNav.js';
+import { emergencyCssReset } from './shared/configPreview.js';
+
 // Reset the options tab state on app startup so it defaults to General per session
 localStorage.removeItem('options-active-tab');
 
@@ -27,43 +30,11 @@ localStorage.removeItem('options-active-tab');
 window.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.shiftKey && e.altKey && e.key.toLowerCase() === 'c') {
     e.preventDefault();
-    localStorage.removeItem('quivit-custom-css');
-    if (window.__TAURI__) {
-      window.__TAURI__.event.emit('css-preview', '');
-    }
-    const state = Core.getState();
-    if (state.config && state.config.frontend_data) {
-      state.config.frontend_data.custom_css = "";
-      if (window.__TAURI__) {
-        window.__TAURI__.core.invoke('save_config', { config: state.config })
-          .then(() => {
-            window.__TAURI__.event.emit('config-updated');
-            window.location.reload();
-          })
-          .catch(err => {
-            console.error('Failed emergency reset save:', err);
-            window.location.reload();
-          });
-      }
-    } else {
-      window.location.reload();
-    }
+    emergencyCssReset(Core.getState().config);
   }
 
   // Global Tab Navigation Jump (Home/End)
-  if (!['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && (e.key === 'Home' || e.key === 'End')) {
-    const tabbables = Array.from(document.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
-      .filter(el => el.offsetWidth > 0 && el.offsetHeight > 0 && window.getComputedStyle(el).visibility !== 'hidden');
-    if (tabbables.length > 0) {
-      if (e.key === 'Home') {
-        e.preventDefault();
-        tabbables[0].focus();
-      } else if (e.key === 'End') {
-        e.preventDefault();
-        tabbables[tabbables.length - 1].focus();
-      }
-    }
-  }
+  handleTabJump(e);
 });
 
 const dropOverlay = document.getElementById('drop-overlay');

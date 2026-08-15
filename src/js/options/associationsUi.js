@@ -54,20 +54,15 @@ export async function initAssociationsUi(containerId, statusCallback) {
     for (const [category, items] of Object.entries(grouped)) {
       const header = document.createElement('h4');
       header.textContent = `${category}s`;
-      header.style.marginTop = '10px';
+      header.className = 'assoc-header';
       container.appendChild(header);
 
       const grid = document.createElement('div');
-      grid.style.display = 'grid';
-      grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
-      grid.style.gap = '8px';
+      grid.className = 'assoc-grid';
       
       for (const item of items) {
         const label = document.createElement('label');
-        label.className = 'checkbox-label';
-        label.style.display = 'flex';
-        label.style.alignItems = 'center';
-        label.style.gap = '8px';
+        label.className = 'checkbox-label assoc-label';
         
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
@@ -81,13 +76,11 @@ export async function initAssociationsUi(containerId, statusCallback) {
         const pngIcon = item.icon.replace('.ico', '.png');
         img.src = '/assets/icons/' + pngIcon;
         img.alt = item.ext;
-        img.style.width = 'var(--fs-24)';
-        img.style.height = 'var(--fs-24)';
-        img.style.objectFit = 'contain';
+        img.className = 'assoc-icon';
         
         const text = document.createElement('span');
         text.textContent = '.' + item.ext + ' (' + item.name + ')';
-        text.style.fontSize = '0.9em';
+        text.className = 'assoc-text';
         text.title = item.registered
           ? 'QuiviT is registered for this format.'
           : 'QuiviT is not registered for this format.';

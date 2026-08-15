@@ -1,8 +1,10 @@
-import { mergeConfig, DEFAULT_KEYBINDS } from './keybinds.js';
-import { applyTheme, applyCustomCss } from './shared/theme.js';
-import { makeListNavigable } from './keyboardNav.js';
+import { mergeConfig, DEFAULT_KEYBINDS } from '../keybinds.js';
+import { applyTheme, applyCustomCss } from '../shared/theme.js';
+import { makeListNavigable, handleTabJump } from '../keyboardNav.js';
 import { initKeybindUi, validateKeybindSafety } from './keybindUi.js';
 import { initAssociationsUi, applyAssociations } from './associationsUi.js';
+import { previewing, setPreviewing, revertPreviewChanges as _revertPreviewChanges, previewTheme, previewCss, emergencyCssReset } from '../shared/configPreview.js';
+import { fitContentWidth } from '../shared/windowFit.js';
 
 const tauri = window.__TAURI__ || {};
 const invoke = tauri.core?.invoke?.bind(tauri.core);
@@ -16,52 +18,16 @@ const statusEl = document.getElementById('options-status');
 const configDirLabel = document.getElementById('config-dir-label');
 const localDataDirLabel = document.getElementById('local-data-dir-label');
 let keybindUiInstance = null;
-// True once the user has previewed a theme or custom CSS. While set, config
-// reloads (config-changed from the file watcher) must not revert the preview.
-let previewing = false;
-// Set once the native close is being carried out by this window, so the
-// close-requested handler does not intercept its own re-close.
 let forceClose = false;
 
 // Emergency CSS Reset (Ctrl+Shift+Alt+C)
 window.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.shiftKey && e.altKey && e.key.toLowerCase() === 'c') {
     e.preventDefault();
-    previewing = false;
-    localStorage.removeItem('quivit-custom-css');
-    emit?.('css-preview', ''); // Immediately clear main window CSS
-    if (config && config.frontend_data) {
-      config.frontend_data.custom_css = "";
-      if (invoke) {
-        invoke('save_config', { config })
-          .then(() => {
-            emit?.('config-updated');
-            window.location.reload();
-          })
-          .catch(err => {
-            console.error('Failed emergency reset save:', err);
-            window.location.reload();
-          });
-      }
-    } else {
-      window.location.reload();
-    }
+    emergencyCssReset(config);
   }
   
-  // Global Tab Navigation Jump (Home/End)
-  if (!['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && (e.key === 'Home' || e.key === 'End')) {
-    const tabbables = Array.from(document.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
-      .filter(el => el.offsetWidth > 0 && el.offsetHeight > 0 && window.getComputedStyle(el).visibility !== 'hidden');
-    if (tabbables.length > 0) {
-      if (e.key === 'Home') {
-        e.preventDefault();
-        tabbables[0].focus();
-      } else if (e.key === 'End') {
-        e.preventDefault();
-        tabbables[tabbables.length - 1].focus();
-      }
-    }
-  }
+  handleTabJump(e);
 });
 
 
@@ -207,8 +173,7 @@ document.querySelectorAll('.theme-btn').forEach((btn, index, NodeList) => {
       b.classList.toggle('secondary', b.dataset.theme !== currentTheme);
     });
     applyTheme(currentTheme);
-    previewing = true;
-    emit?.('theme-preview', currentTheme);
+    previewTheme(currentTheme);
   });
 });
 makeListNavigable(document.querySelectorAll('.theme-btn'), { horizontal: true, vertical: false });
@@ -221,17 +186,10 @@ async function closeOptionsWindow() {
 }
 
 async function revertPreviewChanges() {
-  // Revert theme/css previews if they were not saved. Previews never mutate
-  // `config`, so it still holds the last saved theme/CSS.
-  previewing = false;
   const savedTheme = config?.frontend_data?.theme || 'system';
   const savedCss = config?.frontend_data?.custom_css || '';
-  if (emit) {
-    await Promise.all([emit('theme-preview', savedTheme), emit('css-preview', savedCss)]);
-  }
+  await _revertPreviewChanges(savedTheme, savedCss);
   try {
-    // Keep the pre-paint cache in sync so the next window open does not flash
-    // the previewed theme/CSS before the config is loaded.
     if (savedTheme === 'light' || savedTheme === 'dark') {
       localStorage.setItem('quivit-theme', savedTheme);
     } else {
@@ -242,11 +200,6 @@ async function revertPreviewChanges() {
   } catch (e) {}
 }
 
-// Native window close (X button) must behave like the Close button: any
-// unsaved theme/CSS previews are reverted before the window actually closes.
-// Do NOT call event.preventDefault() here — Tauri's onCloseRequested wrapper
-// awaits this handler and then destroys the window itself, so preventing the
-// default and manually re-closing would leave the window stuck.
 const optionsWindow = tauri.window?.getCurrentWindow?.();
 if (optionsWindow?.onCloseRequested) {
   optionsWindow.onCloseRequested(async () => {
@@ -292,25 +245,45 @@ document.getElementById('btn-export-css').addEventListener('click', async () => 
   }
 });
 
-async function previewCss() {
+async function localPreviewCss() {
   const css = document.getElementById('opt-custom-css').value;
   try { localStorage.setItem('quivit-custom-css', css); } catch(e) {}
   applyCustomCss(css);
-  previewing = true;
-  emit?.('css-preview', css);
+  previewCss(css);
   showStatus('CSS previewed locally (Click Apply to save).');
 }
 
-document.getElementById('btn-save-apply-css').addEventListener('click', previewCss);
+document.getElementById('btn-save-apply-css').addEventListener('click', localPreviewCss);
 
 document.getElementById('opt-custom-css').addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key.toLowerCase() === 's') {
     e.preventDefault();
-    previewCss();
+    localPreviewCss();
   }
 });
 
 // --- Save ---
+function buildConfigFromForm(baseConfig) {
+  const newConfig = { ...baseConfig };
+  newConfig.portable_mode = document.getElementById('opt-portable-mode').checked;
+  newConfig.frontend_data.continue_last = document.getElementById('opt-continue-last').checked;
+  newConfig.frontend_data.remember_last_image = document.getElementById('opt-remember-last-image').checked;
+  newConfig.frontend_data.open_first_image = document.getElementById('opt-open-first-image').checked;
+  newConfig.frontend_data.pending_single_instance = document.getElementById('opt-single-instance').checked;
+  newConfig.frontend_data.show_hidden = document.getElementById('opt-show-hidden').checked;
+  newConfig.frontend_data.hide_chrome_on_fullscreen = document.getElementById('opt-hide-chrome-fullscreen').checked;
+  newConfig.frontend_data.keyboard_pan_step = parseInt(document.getElementById('opt-keyboard-pan-step').value, 10);
+  newConfig.frontend_data.wheel_pan_step = parseInt(document.getElementById('opt-wheel-pan-step').value, 10);
+  newConfig.frontend_data.start_dir = document.getElementById('opt-start-dir').value;
+  newConfig.frontend_data.theme = currentTheme;
+  newConfig.frontend_data.custom_css = document.getElementById('opt-custom-css').value;
+  
+  if (!newConfig.frontend_data.continue_last) {
+    delete newConfig.frontend_data.last_opened_path;
+  }
+  return newConfig;
+}
+
 document.getElementById('btn-save-options').addEventListener('click', async () => {
   const keybindSafety = validateKeybindSafety(config);
   if (!keybindSafety.ok) {
@@ -319,32 +292,19 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
     return;
   }
   await applyAssociations(showStatus);
-  config.portable_mode = document.getElementById('opt-portable-mode').checked;
-  // Preserve the hidden field if it exists (config-file-only, no UI)
-  // config.hidden is already set from load_config and should be preserved
-  config.frontend_data.continue_last = document.getElementById('opt-continue-last').checked;
-  config.frontend_data.remember_last_image = document.getElementById('opt-remember-last-image').checked;
-  config.frontend_data.open_first_image = document.getElementById('opt-open-first-image').checked;
-  config.frontend_data.pending_single_instance = document.getElementById('opt-single-instance').checked;
-  config.frontend_data.show_hidden = document.getElementById('opt-show-hidden').checked;
-  config.frontend_data.hide_chrome_on_fullscreen = document.getElementById('opt-hide-chrome-fullscreen').checked;
-  config.frontend_data.keyboard_pan_step = parseInt(document.getElementById('opt-keyboard-pan-step').value, 10);
-  config.frontend_data.wheel_pan_step = parseInt(document.getElementById('opt-wheel-pan-step').value, 10);
-  config.frontend_data.start_dir = document.getElementById('opt-start-dir').value;
-  config.frontend_data.theme = currentTheme;
-  config.frontend_data.custom_css = document.getElementById('opt-custom-css').value;
-  try { localStorage.setItem('quivit-custom-css', config.frontend_data.custom_css); } catch(e) {}
-  if (!config.frontend_data.continue_last) {
-    delete config.frontend_data.last_opened_path;
-  }
-  const merged = mergeConfig(config);
+  
+  const formConfig = buildConfigFromForm(config);
+  try { localStorage.setItem('quivit-custom-css', formConfig.frontend_data.custom_css); } catch(e) {}
+  
+  const merged = mergeConfig(formConfig);
   Object.assign(config, merged);
+  
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
     await invoke('save_config', { config });
-    previewing = false;
-    // Tell the main window to reload config
+    setPreviewing(false);
     await emit?.('config-updated');
+    
     const currentStatus = statusEl ? statusEl.textContent : '';
     if (currentStatus.toLowerCase().includes('failed') || currentStatus.toLowerCase().includes('error')) {
       showStatus('Options applied, but some operations failed (see above logs).');
@@ -361,43 +321,6 @@ document.getElementById('btn-cancel').addEventListener('click', async () => {
   await revertPreviewChanges();
   await closeOptionsWindow();
 });
-
-// --- Width auto-fit ---
-// The window opens hidden (config.rs) and is initially sized to the tab bar's
-// natural width before being shown, so it never flickers. Fits are serialized
-// so out-of-order invokes can't leave a stale narrow size.
-// Cap for the auto-fit width — must match OPTIONS_MAX_W in config.rs.
-const OPTIONS_MAX_INITIAL_W = 560;
-let fitTail = Promise.resolve();
-function fitContentWidth() {
-  if (!invoke) return Promise.resolve();
-  fitTail = fitTail.then(() => new Promise((resolve) => {
-    requestAnimationFrame(() => {
-      // Measure the .tabs bar at fit-content as the initial width. Measuring
-      // tab content is unreliable (e.g. the Customization textarea's long
-      // placeholder lines inflate max-content past the clamp). fit-content here
-      // is only for measurement — tabs still stretch to fill the window.
-      // Add the body's horizontal padding (read from CSS, not hardcoded) so the
-      // content isn't clipped once the window is sized to the tabs width.
-      const tabs = document.querySelector('.tabs');
-      let width = OPTIONS_MAX_INITIAL_W;
-      if (tabs) {
-        const prev = tabs.style.width;
-        tabs.style.width = 'fit-content';
-        width = tabs.getBoundingClientRect().width;
-        tabs.style.width = prev;
-        const pad = getComputedStyle(document.body);
-        width += parseFloat(pad.paddingLeft || 0) + parseFloat(pad.paddingRight || 0);
-        // getBoundingClientRect() returns subpixel floats (font metrics are
-        // fractional), so rounding down could size the window a hair narrower
-        // than the content and clip 1px. Always round up to be safe.
-        width = Math.ceil(width);
-      }
-      invoke('fit_options_window', { width: Math.min(width, OPTIONS_MAX_INITIAL_W) }).then(resolve, resolve);
-    });
-  }));
-  return fitTail;
-}
 
 let windowShown = false;
 function showOptionsWindow() {

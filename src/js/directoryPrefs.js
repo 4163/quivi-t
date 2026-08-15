@@ -25,8 +25,9 @@ export const DirectoryPrefs = {
     if (!fd.default_sort) fd.default_sort = { col: 'name', desc: false };
     if (!fd.directory_sort) fd.directory_sort = {};
 
-    if (!directoryPath) {
-      fd.default_sort = { col, desc };
+    // Only store deviations from the default; remove redundant entries
+    if (col === fd.default_sort.col && desc === fd.default_sort.desc) {
+      delete fd.directory_sort[directoryPath];
     } else {
       fd.directory_sort[directoryPath] = { col, desc };
       

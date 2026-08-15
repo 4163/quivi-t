@@ -24,7 +24,7 @@ const OPTIONS_INITIAL_W: f64 = AUTO_FIT_INITIAL_W;
 const OPTIONS_INITIAL_H: f64 = 620.0;
 const OPTIONS_MIN_W: f64 = 400.0;
 const OPTIONS_MIN_H: f64 = 360.0;
-// Auto-fit clamp for the width; mirrored by OPTIONS_MAX_INITIAL_W in options.js.
+// Auto-fit clamp for the width; mirrored by OPTIONS_MAX_INITIAL_W in shared/windowFit.js.
 #[allow(dead_code)] // Single source of truth for the cap; enforced in JS.
 const OPTIONS_MAX_W: f64 = 560.0;
 
@@ -34,7 +34,7 @@ const META_INITIAL_W: f64 = 400.0;
 const META_INITIAL_H: f64 = AUTO_FIT_INITIAL_H;
 const META_MIN_W: f64 = 320.0;
 const META_MIN_H: f64 = 280.0;
-// Auto-fit clamp; mirrored by META_MAX_INITIAL_H in metadata-window.js.
+// Auto-fit clamp; mirrored by META_MAX_INITIAL_H in shared/windowFit.js.
 #[allow(dead_code)] // Single source of truth for the cap; enforced in JS.
 const META_MAX_H: f64 = 600.0;
 

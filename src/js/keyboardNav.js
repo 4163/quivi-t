@@ -129,3 +129,19 @@ export function makeContainerNavigable(containerEl, itemSelector, options = {}) 
     }
   });
 }
+
+export function handleTabJump(e) {
+  if (!['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && (e.key === 'Home' || e.key === 'End')) {
+    const tabbables = Array.from(document.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+      .filter(el => el.offsetWidth > 0 && el.offsetHeight > 0 && window.getComputedStyle(el).visibility !== 'hidden');
+    if (tabbables.length > 0) {
+      if (e.key === 'Home') {
+        e.preventDefault();
+        tabbables[0].focus();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        tabbables[tabbables.length - 1].focus();
+      }
+    }
+  }
+}

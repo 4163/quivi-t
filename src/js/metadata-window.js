@@ -14,24 +14,13 @@ const titleEl    = document.getElementById('metadata-title');
 const seriesEl   = document.getElementById('metadata-series');
 const summaryEl  = document.getElementById('metadata-summary');
 const gridEl     = document.getElementById('metadata-grid');
-const emptyEl    = document.getElementById('metadata-empty');
 const coverWrap  = document.getElementById('metadata-cover-wrap');
 const rootEl     = document.getElementById('metadata-root');
 
 function render(payload) {
   const { meta, coverSrc } = payload || {};
 
-  if (!meta) {
-    emptyEl.classList.remove('hidden');
-    coverWrap.classList.add('hidden');
-    titleEl.textContent = '';
-    seriesEl.textContent = '';
-    summaryEl.textContent = '';
-    gridEl.innerHTML = '';
-    return;
-  }
-
-  emptyEl.classList.add('hidden');
+  if (!meta) return;
 
   // Cover image — keep hidden until fully decoded to avoid progressive JPEG scan-line rendering
   if (coverSrc) {
@@ -108,8 +97,7 @@ function render(payload) {
   gridEl.replaceChildren(...rows);
 }
 
-// Cap for the initial content-fit height — must match META_MAX_H in config.rs
-const META_MAX_INITIAL_H = 600;
+import { fitContentHeight } from './shared/windowFit.js';
 
 // Render from localStorage immediately (data written before window opened)
 // The window opens hidden; show it once the content-fit settles.
@@ -128,38 +116,6 @@ try {
     fitContentHeight().then(showWindow);
   }
 } catch (e) { showWindow(); }
-
-/**
- * Resize the window height to fit the rendered content, capped at META_MAX_INITIAL_H,
- * and center it over the main window.
- *
- * Fits are SERIALIZED through a promise chain: multiple triggers can fire in
- * quick succession (initial render, cover image decode via render()'s onload,
- * live `metadata-data` updates), and each issues an async `fit_metadata_window`
- * IPC invoke. Without serialization those invokes can complete out of order,
- * letting a stale short measurement (taken while the cover was still hidden)
- * land last and leave the window too short. Each queued measurement re-reads
- * the CURRENT layout, so the final applied value is always the freshest.
- */
-let fitTail = Promise.resolve();
-function fitContentHeight() {
-  if (!window.__TAURI__?.core?.invoke) return Promise.resolve();
-  fitTail = fitTail.then(() => new Promise((resolve) => {
-    // Do NOT use requestAnimationFrame here — the window is created hidden,
-    // and Chromium pauses rAF for hidden windows, causing a deadlock where
-    // showWindow is never called.
-    // Reading scrollHeight synchronously forces a layout recalculation anyway.
-    const contentH = rootEl.scrollHeight;
-    const targetH = Math.min(contentH, META_MAX_INITIAL_H);
-    // Rust-side fit_metadata_window sets the size AND re-centers over the
-    // main window using this exact height — dynamic centering instead of
-    // assuming a fixed pre-fit height.
-    window.__TAURI__.core.invoke('fit_metadata_window', {
-      height: targetH
-    }).then(resolve, resolve);
-  }));
-  return fitTail;
-}
 
 // The window is built hidden (config.rs) so it never paints at the pre-fit
 // height. Show it only after the content-fit settles — avoids the visible

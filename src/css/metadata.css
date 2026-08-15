@@ -91,12 +91,4 @@ body {
   word-break: break-word;
   line-height: 1.4;
 }
-
-/* ── Empty state ── */
-
-#metadata-empty {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: var(--fs-14);
-  padding: 40px 0;
-}
+

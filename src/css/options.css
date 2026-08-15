@@ -431,3 +431,30 @@ button.primary {
 button.primary:hover {
   background: var(--accent-hover);
 }
+
+/* --- Associations UI --- */
+.assoc-header {
+  margin-top: 10px;
+}
+
+.assoc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.assoc-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.assoc-icon {
+  width: var(--fs-24);
+  height: var(--fs-24);
+  object-fit: contain;
+}
+
+.assoc-text {
+  font-size: 0.9em;
+}
