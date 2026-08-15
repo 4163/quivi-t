@@ -9,6 +9,11 @@ const FIT_LABELS = Object.freeze({
   'height-if-larger': 'Height if larger',
   'window-if-larger': 'Window if larger'
 });
+
+const FIT_TITLES = Object.freeze({
+  'window': 'Scale to fit entirely within the viewport, stretching small images',
+  'window-if-larger': 'Shrink to fit the viewport, but never enlarge small images'
+});
 let statusbar;
 let statusName;
 let statusDims;
@@ -37,7 +42,10 @@ export const Statusbar = {
     if (statusFit) {
       const mode = state.fitMode ?? 'window';
       const text = `Fit: ${FIT_LABELS[mode] || mode}`;
-      if (statusFit.textContent !== text) statusFit.textContent = text;
+      if (statusFit.textContent !== text) {
+        statusFit.textContent = text;
+        statusFit.title = FIT_TITLES[mode] || '';
+      }
     }
 
     if (statusIndex) {

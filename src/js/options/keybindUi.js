@@ -341,6 +341,7 @@ export function initKeybindUi(containerId, config, showStatus) {
         const label = document.createElement('span');
         label.className = 'keybind-name';
         label.textContent = action.label;
+        if (action.description) label.title = action.description;
         
         const tagsContainer = document.createElement('div');
         tagsContainer.className = 'keybind-tags';
@@ -354,8 +355,7 @@ export function initKeybindUi(containerId, config, showStatus) {
           currentBinds.forEach((bind, idx) => {
             const tag = document.createElement('button');
             tag.className = 'keybind-tag';
-            tag.title = 'Click to rebind';
-  
+
             const conflictColor = newColors[bind];
             if (conflictColor) {
               tag.style.color = conflictColor;
@@ -384,7 +384,9 @@ export function initKeybindUi(containerId, config, showStatus) {
             const xBtn = document.createElement('span');
             xBtn.className = 'remove-btn';
             xBtn.textContent = '×';
-            xBtn.title = isLockedBinding(action.id, bind) ? 'Required binding' : 'Remove binding';
+            if (isLockedBinding(action.id, bind)) {
+              xBtn.title = 'Required binding';
+            }
             
             xBtn.addEventListener('click', (e) => {
               e.stopPropagation();
@@ -416,7 +418,6 @@ export function initKeybindUi(containerId, config, showStatus) {
           const addBtn = document.createElement('button');
           addBtn.className = 'keybind-tag add-btn';
           addBtn.textContent = '+';
-          addBtn.title = currentBinds.length > 0 ? 'Add alternative keybind' : 'Add keybind';
           addBtn.addEventListener('click', (e) => captureKeybind(action.id, currentBinds.length, addBtn, e));
           tagsContainer.appendChild(addBtn);
         };

@@ -48,7 +48,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-fit-height', label: 'Fit Height', defaultBinds: 'Shift+e', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('height', { persist: true })
   },
-  { id: 'cmd-fit-best', label: 'Fit Window', defaultBinds: 'Shift+f', category: 'View',
+  { id: 'cmd-fit-best', label: 'Fit Window', description: 'Scale to fit entirely within the viewport, stretching small images', defaultBinds: 'Shift+f', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('window', { persist: true })
   },
   { id: 'cmd-fit-width-if-larger', label: 'Fit Width If Larger', defaultBinds: 'q', category: 'View',
@@ -57,7 +57,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-fit-height-if-larger', label: 'Fit Height If Larger', defaultBinds: 'e', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('height-if-larger', { persist: true })
   },
-  { id: 'cmd-fit-window-if-larger', label: 'Fit Window If Larger', defaultBinds: 'f', category: 'View',
+  { id: 'cmd-fit-window-if-larger', label: 'Fit Window If Larger', description: 'Shrink to fit the viewport, but never enlarge small images', defaultBinds: 'f', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('window-if-larger', { persist: true })
   },
   { id: 'cmd-scale-none', label: 'Scale None', defaultBinds: [], category: 'View',
@@ -302,7 +302,7 @@ for (const action of ACTION_REGISTRY) {
       categoryMap[action.category] = { name: action.category, actions: [] };
       CATEGORIES.push(categoryMap[action.category]);
     }
-    categoryMap[action.category].actions.push({ id: action.id, label: action.label });
+    categoryMap[action.category].actions.push({ id: action.id, label: action.label, description: action.description });
   }
 }
 const ACTION_MAP = new Map(ACTION_REGISTRY.map(a => [a.id, a]));
