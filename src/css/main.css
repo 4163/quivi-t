@@ -633,7 +633,8 @@ li:hover > .fav-remove,
   stroke-linecap: round;
 }
 
-body.fullscreen-exit-visible #fullscreen-exit-btn {
+body.fullscreen-exit-visible #fullscreen-exit-btn,
+body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(14px);

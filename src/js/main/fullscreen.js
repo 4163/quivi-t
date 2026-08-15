@@ -105,7 +105,10 @@ function setFullscreenUiActive(active) {
   fullscreenActive = active;
   document.body.classList.toggle('fullscreen-active', active);
   fullscreenExitRegion?.setAttribute('aria-hidden', active ? 'false' : 'true');
-  fullscreenExitBtn?.toggleAttribute('disabled', !active);
+  if (fullscreenExitBtn) {
+    fullscreenExitBtn.toggleAttribute('disabled', !active);
+    fullscreenExitBtn.tabIndex = active ? 0 : -1;
+  }
   cancelFullscreenExitKeyHold();
   hideFullscreenExitButton();
   if (active) {
