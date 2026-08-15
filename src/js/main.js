@@ -22,6 +22,7 @@ import { initFullscreen, toggleFullscreen, syncFullscreenState, isFullscreenActi
 
 import { handleTabJump } from './keyboardNav.js';
 import { emergencyCssReset } from './shared/configPreview.js';
+import { ACTION_REGISTRY, dispatch } from './services/actions.js';
 
 // Reset the options tab state on app startup so it defaults to General per session
 localStorage.removeItem('options-active-tab');
@@ -145,11 +146,6 @@ function updateHistoryMenu() {
 
 
 
-function setScaling(mode) {
-  Core.setScalingMode(mode, { persist: true });
-}
-
-
 function updatePanSteps(config = Core.getState().config) {
   const fd = config?.frontend_data || {};
   keyboardPanStep = Number.isFinite(fd.keyboard_pan_step) ? fd.keyboard_pan_step : DEFAULT_KEYBOARD_PAN_STEP;
@@ -164,19 +160,6 @@ function dispatchKeyboardPan(dx, dy) {
 function setFileListVisible(visible) {
   Core.setFileListVisible(visible);
   document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!visible);
-}
-
-function toggleFileList() {
-  setFileListVisible(!Core.getState().fileListVisible);
-}
-
-async function openGithub() {
-  const url = 'https://github.com/4163/quivi-t';
-  if (window.__TAURI__?.opener?.openUrl) {
-    await window.__TAURI__.opener.openUrl(url);
-  } else {
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
 }
 
 function pathBasename(path) {
@@ -226,295 +209,27 @@ async function loadDroppedPath(path) {
   FsUtils.loadFile(path, { preferInitial: true, restoreLastImage: false });
 }
 
-async function dispatchAction(actionId, payload) {
-  // Try to find the button just to provide visual feedback if needed, but don't rely on it for execution
-  const btn = document.getElementById(actionId);
-  if (btn && btn.classList.contains('menu-trigger')) {
-     // If it's a top level menu we could toggle it, but for actions we just execute them below
-  }
-
-  const panStep = payload?.wheel ? wheelPanStep : keyboardPanStep;
-
-  switch (actionId) {
-    case 'cmd-open-dir':
-      FsUtils.openDirectoryDialog();
-      break;
-    case 'cmd-open-file':
-      FsUtils.openFileDialog();
-      break;
-    case 'cmd-refresh':
-      FsUtils.refresh();
-      break;
-    case 'cmd-history-back': {
-      const entry = NavigationHistory.goBack(Core.getState());
-      if (entry) FsUtils.loadHistoryEntry(entry).catch(console.error);
-      break;
-    }
-    case 'cmd-history-forward': {
-      const entry = NavigationHistory.goForward(Core.getState());
-      if (entry) FsUtils.loadHistoryEntry(entry).catch(console.error);
-      break;
-    }
-    case 'cmd-toggle-favorite':
-      toggleFavoriteCurrent();
-      break;
-    case 'cmd-open-metadata':
-      openMetadataWindow();
-      break;
-    case 'cmd-fullscreen':
-      toggleFullscreen();
-      break;
-    case 'cmd-parent':
-      FsUtils.openParent();
-      break;
-    case 'cmd-next':
-      if (document.activeElement?.closest('#favorites-list')) navigateHighlightedFavorite(1);
-      else Core.navigate(1);
-      break;
-    case 'cmd-prev':
-      if (document.activeElement?.closest('#favorites-list')) navigateHighlightedFavorite(-1);
-      else Core.navigate(-1);
-      break;
-    case 'cmd-zoom-in':
-      if (payload?.wheel) Viewer.zoomAt(1, payload.clientX, payload.clientY);
-      else Viewer.zoomCenter(1);
-      break;
-    case 'cmd-zoom-out':
-      if (payload?.wheel) Viewer.zoomAt(-1, payload.clientX, payload.clientY);
-      else Viewer.zoomCenter(-1);
-      break;
-    case 'cmd-zoom-100':
-      Viewer.setZoom(1);
-      break;
-    case 'cmd-fit-none':
-      Core.setFitMode('none', { persist: true });
-      break;
-    case 'cmd-fit-width':
-      Core.setFitMode('width', { persist: true });
-      break;
-    case 'cmd-fit-height':
-      Core.setFitMode('height', { persist: true });
-      break;
-    case 'cmd-fit-width-if-larger':
-      Core.setFitMode('width-if-larger', { persist: true });
-      break;
-    case 'cmd-fit-height-if-larger':
-      Core.setFitMode('height-if-larger', { persist: true });
-      break;
-    case 'cmd-fit-best':
-      Core.setFitMode('window', { persist: true });
-      break;
-    case 'cmd-scale-none':
-      setScaling('none');
-      break;
-    case 'cmd-scale-bicubic':
-      setScaling('bicubic');
-      break;
-    case 'cmd-scale-lanczos':
-      setScaling('lanczos');
-      break;
-    case 'cmd-rotate-ccw':
-      Viewer.rotate(-90);
-      break;
-    case 'cmd-rotate-cw':
-      Viewer.rotate(90);
-      break;
-    case 'cmd-flip-horizontal':
-      Viewer.flipHorizontal();
-      break;
-    case 'cmd-flip-vertical':
-      Viewer.flipVertical();
-      break;
-    case 'cmd-open-next-container':
-      FsUtils.openSibling(1);
-      break;
-    case 'cmd-open-prev-container':
-      FsUtils.openSibling(-1);
-      break;
-    case 'cmd-pan-up':
-      Viewer.panBy(0, panStep);
-      break;
-    case 'cmd-pan-left':
-      Viewer.panBy(panStep, 0);
-      break;
-    case 'cmd-pan-down':
-      Viewer.panBy(0, -panStep);
-      break;
-    case 'cmd-pan-right':
-      Viewer.panBy(-panStep, 0);
-      break;
-    case 'cmd-toggle-menubar':
-      Chrome.toggleMenuBar();
-      break;
-    case 'cmd-toggle-filelist':
-      toggleFileList();
-      break;
-    case 'cmd-toggle-transparent':
-      Core.toggleTransparentBg();
-      break;
-    case 'cmd-toggle-statusbar':
-      Chrome.toggleStatusBar();
-      break;
-    case 'cmd-options':
-      if (window.__TAURI__) window.__TAURI__.core.invoke('open_options').catch(console.error);
-      break;
-    case 'cmd-quit':
-      if (window.__TAURI__) {
-        await Core.flushConfig();
-        window.__TAURI__.core.invoke('plugin:process|exit');
-      } else window.close();
-      break;
-    case 'cmd-cycle-scaling':
-    case 'cmd-cycle-scaling-back': {
-      const modes = ['none', 'bicubic', 'lanczos'];
-      const current = Core.getState().scalingMode;
-      const delta = actionId === 'cmd-cycle-scaling-back' ? -1 : 1;
-      const next = modes[(modes.indexOf(current) + delta + modes.length) % modes.length];
-      setScaling(next);
-      break;
-    }
-    default:
-      break;
-  }
-}
+const actionCtx = {
+  get Core() { return Core; },
+  get FsUtils() { return FsUtils; },
+  get Viewer() { return Viewer; },
+  get NavigationHistory() { return NavigationHistory; },
+  get Chrome() { return Chrome; },
+  get toggleFavoriteCurrent() { return toggleFavoriteCurrent; },
+  get getHighlightedFavorite() { return getHighlightedFavorite; },
+  get navigateHighlightedFavorite() { return navigateHighlightedFavorite; },
+  get openMetadataWindow() { return openMetadataWindow; },
+  get toggleFullscreen() { return toggleFullscreen; },
+  get keyboardPanStep() { return keyboardPanStep; },
+  get wheelPanStep() { return wheelPanStep; }
+};
 
 function bindMenuCommands() {
-  document.getElementById('cmd-open-dir').addEventListener('click', () => FsUtils.openDirectoryDialog());
-  document.getElementById('cmd-open-file').addEventListener('click', () => FsUtils.openFileDialog());
-  document.getElementById('cmd-refresh').addEventListener('click', () => FsUtils.refresh());
-  document.getElementById('cmd-history-back').addEventListener('click', () => dispatchAction('cmd-history-back'));
-  document.getElementById('cmd-history-forward').addEventListener('click', () => dispatchAction('cmd-history-forward'));
-  document.getElementById('cmd-fullscreen').addEventListener('click', () => toggleFullscreen());
-  document.getElementById('cmd-parent').addEventListener('click', () => FsUtils.openParent());
-  document.getElementById('cmd-next').addEventListener('click', () => Core.navigate(1));
-  document.getElementById('cmd-prev').addEventListener('click', () => Core.navigate(-1));
-  document.getElementById('cmd-open-next-container').addEventListener('click', () => FsUtils.openSibling(1));
-  document.getElementById('cmd-open-prev-container').addEventListener('click', () => FsUtils.openSibling(-1));
-  document.getElementById('cmd-zoom-in').addEventListener('click', () => Viewer.zoomCenter(1));
-  document.getElementById('cmd-zoom-out').addEventListener('click', () => Viewer.zoomCenter(-1));
-  document.getElementById('cmd-zoom-100').addEventListener('click', () => Viewer.setZoom(1));
-  document.getElementById('cmd-fit-none').addEventListener('click', () => Core.setFitMode('none', { persist: true }));
-  document.getElementById('cmd-fit-width').addEventListener('click', () => Core.setFitMode('width', { persist: true }));
-  document.getElementById('cmd-fit-height').addEventListener('click', () => Core.setFitMode('height', { persist: true }));
-  document.getElementById('cmd-fit-width-if-larger').addEventListener('click', () => Core.setFitMode('width-if-larger', { persist: true }));
-  document.getElementById('cmd-fit-height-if-larger').addEventListener('click', () => Core.setFitMode('height-if-larger', { persist: true }));
-  document.getElementById('cmd-fit-best').addEventListener('click', () => Core.setFitMode('window', { persist: true }));
-  document.getElementById('cmd-scale-none').addEventListener('click', () => setScaling('none'));
-  document.getElementById('cmd-scale-bicubic').addEventListener('click', () => setScaling('bicubic'));
-  document.getElementById('cmd-scale-lanczos').addEventListener('click', () => setScaling('lanczos'));
-  document.getElementById('cmd-rotate-cw').addEventListener('click', () => Viewer.rotate(90));
-  document.getElementById('cmd-rotate-ccw').addEventListener('click', () => Viewer.rotate(-90));
-  document.getElementById('cmd-flip-horizontal').addEventListener('click', () => Viewer.flipHorizontal());
-  document.getElementById('cmd-flip-vertical').addEventListener('click', () => Viewer.flipVertical());
-  document.getElementById('cmd-toggle-transparent').addEventListener('click', () => Core.toggleTransparentBg());
-  document.getElementById('cmd-toggle-menubar').addEventListener('click', () => dispatchAction('cmd-toggle-menubar'));
-  document.getElementById('cmd-toggle-filelist').addEventListener('click', () => toggleFileList());
-  document.getElementById('cmd-toggle-statusbar').addEventListener('click', () => dispatchAction('cmd-toggle-statusbar'));
-  document.getElementById('cmd-github').addEventListener('click', () => {
-    openGithub().catch(err => console.error('[GitHub] Failed to open repository:', err));
-  });
-
-
-  document.getElementById('cmd-options').addEventListener('click', async () => {
-    if (!window.__TAURI__) return;
-    try {
-      await window.__TAURI__.core.invoke('open_options');
-    } catch (err) {
-      console.error('[Options] Failed to open options window:', err);
+  for (const action of ACTION_REGISTRY) {
+    const el = document.getElementById(action.id);
+    if (el) {
+      el.addEventListener('click', (e) => dispatch(action.id, e, actionCtx));
     }
-  });
-
-  document.getElementById('cmd-quit').addEventListener('click', async () => {
-    if (window.__TAURI__) {
-      await Core.flushConfig();
-      window.__TAURI__.core.invoke('plugin:process|exit');
-    } else window.close();
-  });
-
-  // --- File panel action buttons ---
-  // Favorites for images inside archives store composite "archive|entry" paths.
-  // These helpers resolve the real archive path / its containing folder so the
-  // OS-explorer actions work.
-  function archiveEntryRealPath(favPath) {
-    const sep = favPath.indexOf('|');
-    return sep === -1 ? favPath : favPath.slice(0, sep);
-  }
-  function archiveEntryContainerPath(favPath) {
-    return archiveEntryRealPath(favPath).replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '');
-  }
-
-  const btnOpenExplorer = document.getElementById('cmd-open-explorer');
-  if (btnOpenExplorer) {
-    btnOpenExplorer.addEventListener('click', async () => {
-      const state = Core.getState();
-      if (!window.__TAURI__) return;
-      const favorite = getHighlightedFavorite();
-      if (favorite) {
-        try {
-          if (favorite.is_drive) {
-            await window.__TAURI__.core.invoke('open_in_explorer', { path: favorite.path });
-          } else {
-            await window.__TAURI__.opener.revealItemInDir(favorite.path.includes('|') ? archiveEntryRealPath(favorite.path) : favorite.path);
-          }
-        } catch (err) {
-          console.error('[Action] Failed to open explorer:', err);
-        }
-        return;
-      }
-      const entry = state.list[state.index];
-      if (!entry) return;
-      try {
-        if (entry.is_parent) {
-          await window.__TAURI__.core.invoke('open_in_explorer', { path: state.directory });
-        } else if (entry.path.includes('|')) {
-          await window.__TAURI__.opener.revealItemInDir(archiveEntryRealPath(entry.path));
-        } else {
-          await window.__TAURI__.opener.revealItemInDir(entry.path);
-        }
-      } catch (err) {
-        console.error('[Action] Failed to open explorer:', err);
-      }
-    });
-  }
-
-  const btnOpenFolder = document.getElementById('cmd-open-folder');
-  if (btnOpenFolder) {
-    btnOpenFolder.addEventListener('click', async () => {
-      const state = Core.getState();
-      if (!window.__TAURI__) return;
-      const favorite = getHighlightedFavorite();
-      if (favorite) {
-        try {
-          let targetPath;
-          if (favorite.is_dir || favorite.is_drive) {
-            targetPath = favorite.path;
-          } else if (favorite.path.includes('|')) {
-            targetPath = archiveEntryContainerPath(favorite.path);
-          } else {
-            targetPath = favorite.path.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '');
-          }
-          await window.__TAURI__.core.invoke('open_in_explorer', { path: targetPath });
-        } catch (err) {
-          console.error('[Action] Failed to open folder:', err);
-        }
-        return;
-      }
-      const entry = state.list[state.index];
-      let targetPath = state.directory;
-
-      if (entry) {
-        if (entry.is_dir || entry.is_parent) {
-          targetPath = entry.path;
-        } else if (entry.path.includes('|')) {
-          targetPath = archiveEntryContainerPath(entry.path);
-        }
-      }
-      try {
-        await window.__TAURI__.core.invoke('open_in_explorer', { path: targetPath });
-      } catch (err) {
-        console.error('[Action] Failed to open folder:', err);
-      }
-    });
   }
 
   updateScalingMenu();
@@ -776,7 +491,7 @@ initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resize
 initMenuBar();
 bindMenuCommands();
 bindDragDrop();
-bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPan });
+bindKeyboardShortcuts({ Core, dispatchAction: (id, payload) => dispatch(id, payload, actionCtx), dispatchKeyboardPan });
 
 if (window.__TAURI__) {
   let watchTimer = null;
