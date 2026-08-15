@@ -373,6 +373,14 @@ After each slice, the active agent MUST follow this handoff protocol:
 - **HTML-First Adherence:** Retained static HTML menu items in `index.html` without dynamic DOM injection.
 - **Dead Code Cleanup & Fixes:** Removed dead functions (`openGithub`, `setScaling`, `toggleFileList`) from `main.js`. Fixed `cmd-quit` by routing through `window.getCurrentWindow().close()` to properly trigger the existing `onCloseRequested` graceful flush flow instead of calling the unregistered `plugin:process|exit`. Added `cmd-quit` back to `Window & UI` keybind category while keeping `cmd-github` unbindable (no category).
 
+### Slice 9 — Final thinning + small-module polish
+- Extracted sorting math (`naturalCompare`, `applySort`) from `directoryPrefs.js` into `services/sorting.js` as pure functions.
+- Moved `main.js` to `main/main.js` and stripped extracted code, updating `index.html` to point to the new location.
+- Extracted `main/lifecycle.js`: handles window title updates, directory-changed debounce, single instance open, and onCloseRequested graceful flush.
+- Extracted `main/metadataBadge.js`: handles metadata fetching, cover thumbnail generation, and metadata window interactions via state change subscription.
+- Extracted `main/dropzone.js`: manages drag-and-drop events and loading dropped paths.
+- Cleaned up small modules: removed dead `history: 'replace'` logic from `navigationHistory.js`, switched `shellBackground.js` from `<head>` mutation observer to clean `theme-preview`/`css-preview` and native JS `storage` event listeners matching the architecture standard.
+
 ---
 
 ## References
