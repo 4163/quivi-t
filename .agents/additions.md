@@ -1,61 +1,16 @@
 # QuiviT Implementation Plan
 
-## Current Architecture State
-
-> **Keep this section updated after every structural change.** Stale information here CAN result in duplicated work, broken patterns, regressions, and clutter debt that compounds.
-
-**Config & Persistence (Verified):**
-- Rust `AppConfig` uses `#[serde(default)]` — missing top-level fields won't brick the config file.
-- `frontend_data` is an untyped `JsonValue` — unknown/future keys round-trip safely without being dropped.
-- `mergeConfig()` in `keybinds.js` spreads saved data over defaults — missing keys get filled in, extra keys pass through.
-- Persistence policy is documented in `core.js` header and `keybinds.js`. Roaming files are the source of truth; `localStorage` is only a pre-paint cache, and an explicit third tier exists for ephemeral in-memory state.
-- Split files: `quivit_config.json` (preferences), `quivit_state.json` (runtime state), `quivit_directory_sort.json`, `quivit_favorites.json`. Portable mode folds all into one file.
-- Top-level `archive_cache_mb` (`usize`, default 512) sets the ZIP/CBZ byte budget for the in-memory archive cache; config-file-only, no UI.
-- Theme/CSS previews are ephemeral: `options.js` tracks a `previewing` flag and `main.js` keeps `previewTheme`/`previewCss` so in-progress previews survive config reloads (file watcher), clearing only on Options Apply. Closing Options without Apply reverts the preview and resyncs the `quivit-theme` / `quivit-custom-css` pre-paint caches (prevents a flash on next open).
-- The global `default_sort` lives in `quivit_config.json` (`frontend_data`) and is config-file-only; the UI writes only per-directory sort prefs (`quivit_directory_sort.json`).
-- Restart-gated settings (`single_instance`) are staged as `pending_<key>` by the UI and promoted at startup by `apply_pending_config()` (`config.rs`) — never written live.
-
-**JS Module Structure:**
-- `core.js` — state machine, no DOM access. Communicates via callbacks. Exposes `persistConfig({ debounceMs, immediate })` and `flushConfig()`. Uses a dirty-flag (`_configDirty`) with a single centralized `_scheduleConfigFlush(delayMs)` scheduler: preference mutations mark state dirty and schedule a debounced disk write (1500 ms), while `flushConfig()` forces an immediate write if dirty — called on exit to prevent data loss.
-- `keybinds.js` — default bindings, `mergeConfig()`, pan/zoom constants. Exports `DEFAULT_KEYBOARD_PAN_STEP` (72) / `DEFAULT_WHEEL_PAN_STEP` (120), and `mergeConfig` strips raw pan-step values then re-adds them number-guarded with those defaults. Enforces `Escape` presence in `cmd-exit-fullscreen-hold` fallback.
-- `shortcuts.js` — keyboard/mouse/scroll dispatch, combo normalization. Exports `MOUSE_BUTTON_NAMES` as the single source of truth for all button mapping. Pre-parses keyboard pan keybinds into the `KEYBOARD_PAN_VECTORS` table on config load so `keydown` dispatches panning immediately per press. Contains `PASSIVE_ACTIONS` for bindings like hold-to-exit that consume a key without firing standard dispatch.
-- `viewer.js` — image rendering, zoom, pan, fit modes. Uses a two-image DOM bridge inside `#viewer-img-wrapper` (current target + decoded previous image) while nearby pages warm through cancellable off-DOM `Image()` preloaders after navigation settles. `_updateScrollIndicator`'s idempotent sibling lives in `shortcuts.js`. Implements strict `quivit-config-loaded` caching for hot-path config access (e.g., pan keys) instead of dynamic evaluations.
-- `filePanel.js` — file list, favorites, sorting UI, column resizing. Debounces/cancels hovered image source preloads so list clicks feel instant without keeping stale decodes alive.
-- `fsUtils.js` — filesystem interactions, archive loading, sibling navigation, statusbar index / page-position formatting. Exposes `buildFileSrcSync` (sync `convertFileSrc` for off-DOM/bridge preloads; ICO sources stay async), `buildArchiveEntrySrc` (async archive entry source builder so archived ICO files can use spritesheet extraction), and a symmetric 7-ahead/7-behind prefetch window.
-- `navigationHistory.js` — session-only container Back/Forward history.
-- `directoryPrefs.js` — per-directory sort/grouping logic; exports `naturalCompare` (consumed by `fsUtils`).
-- `metadata.js` — XML parsing logic for `ComicInfo.xml`, `CoMet.xml`, and `metadata.opf`.
-- `metadata-window.js` — UI controller for the standalone metadata window (live sync, DOM).
-- `menubar.js` — menu bar open/close, state, fullscreen chrome handling.
-- `keyboardNav.js` — generic list/tab keyboard navigation (arrow keys, Home/End).
-- `shellBackground.js` — leaf module (included on both pages) mirroring `--surface` into the native window background; re-syncs on theme/custom-CSS changes.
-- `main.js` — DOM wiring, action dispatch, event listeners. Pre-parses the two pan steps into module constants via `updatePanSteps()` on `quivit-config-loaded` (hot-path cached, `Number.isFinite` fallback), and bridges keyboard panning to `Viewer.panBy` through the `dispatchKeyboardPan` callback passed to `bindKeyboardShortcuts`. On startup, syncs JS fullscreen UI state with the actual OS window state (handles reload-while-fullscreen). Registers `onCloseRequested` to await `Core.flushConfig()` before the window closes, guaranteeing lazy config changes are not lost on normal exit.
-- `options.js` — Options window logic (theme/CSS previews, revert on close, width auto-fit).
-- `keybindUi.js` — keybind capture/conflict UI (Options). Implements `validateKeybindSafety` and `LOCKED_BINDINGS` to prevent soft-locking the app (e.g. removing the last menu bar shortcut or the Escape fallback).
-- `associationsUi.js` — file-type association UI (Options).
-
-**Window Sizing:**
-- Main window is built in Rust (`lib.rs` setup) so all windows share one construction path. Size constants live in `config.rs` (single source of truth), mirrored by JS caps (`OPTIONS_MAX_INITIAL_W`, `META_MAX_INITIAL_H`).
-- Options/metadata windows open hidden, then JS measures content and calls `fit_*_window` (size + re-center) before `.show()` — no size flicker.
-
-**Rust Module Structure:**
-- `lib.rs` — app entry, main-window construction, `quivit://` archive-entry protocol routing, event setup, shell background sync at startup.
-- `config.rs` — `AppConfig`, load/save, split-file helpers, portable detection, window size constants, options/metadata window lifecycle + fit/center commands.
-- `commands.rs` — Tauri commands (directory listing, file ops, sibling nav, directory watcher, `get_path_kind`, `get_archive_ico_frames`). Utilizes `#[tauri::command(async)]` for heavy I/O (`list_archive`, `read_directory`, archive ICO frame extraction) to offload to background threads.
-- `archives.rs` — archive listing/extraction (ZIP, RAR, 7Z, TAR + comic variants), safe temp-path mapping for extracted entries, and archive cache state. `ArchiveCache` holds a bounded recent set of per-archive `SingleArchiveCache` state plus a global byte-budgeted LRU (default 512 MB via `archive_cache_mb`) so decoded ZIP/CBZ entries across recent archives share one eviction pool; RAR/CBR, 7Z/CB7, and TAR/CBT keep temporary image/metadata extraction state for the recent archive working set.
-- `ico.rs` — ICO spritesheet processing shared by loose-file `get_ico_frames` and archived-entry `get_archive_ico_frames` via `ico_frames_from_bytes`.
-- `models.rs` — shared structs (`FileEntry`, etc.).
-- `utils.rs` — path helpers, hidden-file detection.
+- `.agents/architecture-state.md` — current module map and verification checklist.
+- `.agents/implemented.md` — shipped, verified work. Port completed slices there when they leave this plan.
 
 ## Work Plan
 
-*The easiest and least invasive fixes are at the top to allow rapid checking off. Slices progress into more complex logical and visual changes.*
+*Easiest and least invasive first.*
 
 ### Animated "Loading..." Broken-Image Feedback on Image Load
-- Re-introduce the animated `alt="Loading..."` broken-image visual whenever an image is in the loading state — i.e. when `.status-filename` shows `Loading...` (viewer.js already writes that on `activeChanged`).
+- Re-introduce the animated `alt="Loading..."` broken-image visual whenever an image is in the loading state — i.e. when `.status-filename` shows `Loading...` (`viewerRender.js` already writes that on `activeChanged`).
 - Currently `_setElementLoadingLabel` sets only a static `alt = 'Loading...'`, and the broken-image frame is only actually visible on the first-display placeholder; seamless swaps (previous image held as a bridge) show no loading feedback at all.
-- Easy emulation: create an `img` element whose `src` purposefully points at a non-existent target (or a broken base64-encoded image) so the browser renders its built-in broken-image frame, and animate its `alt` text (`Loading. → Loading.. → Loading...`, reuse/restore the earlier `startLoadingAltAnimation`-style helper in `viewer.js`) while loading.
-
+- Easy emulation: create an `img` element whose `src` purposefully points at a non-existent target (or a broken base64-encoded image) so the browser renders its built-in broken-image frame, and animate its `alt` text (`Loading. → Loading.. → Loading...`, reuse/restore the earlier `startLoadingAltAnimation`-style helper in `viewerRender.js`) while loading.
 
 ### Favorites & Bookmarks System (Medium Logic)
 - **From clipboard notes (2026-08-13):**
@@ -71,7 +26,7 @@
   - **Investigation Needed:** The exact trigger and root cause are unconfirmed. Candidates to test during implementation include `activeKeys` remaining latched due to missed `keyup` events during window focus switches, WebView2 losing document focus to window chrome, or Tauri fullscreen event listeners.
   - **Target Outcome:** Ensure keyboard shortcuts and `Escape` always work reliably in fullscreen mode across multi-monitor setups and focus changes.
 - **Window & Panel Resize Transform Snap Fix:** Fix issue where dragging `.panel-resize-handle` or resizing the main app window causes active zoom level and pan position to unexpectedly snap/reset.
-  - **Fix:** Preserve relative zoom scale and pan offset relative to container viewport bounds during panel and window resize events in `viewer.js`.
+  - **Fix:** Preserve relative zoom scale and pan offset relative to container viewport bounds during panel and window resize events in `viewerMath.js` / `viewerRender.js`.
 - **Idle Cursor Auto-Hide (Canvas Only):** Hide mouse cursor after `X` seconds of inactivity when hovering over the viewport/canvas.
   - **Configurable Delay:** Settable in Options under Interface (`hide_cursor_delay_sec`, e.g., default `2s` or `3s`).
   - **Semantics of `0`:** `0` = Disabled (cursor never auto-hides). This prevents cursor disappearance during active hover/use.
@@ -88,11 +43,11 @@
 - **Scaling Modes (Bicubic vs Lanczos):** Implement a proper way to scale via Bicubic and Lanczos (using external API or JS library if CSS doesn't support Lanczos). Doing this should also provide us the initial entry for using more advanced custom scaling methods.
   - This also means we need to make each scaling method available as a settable keybind.
   - https://canvasui.dev/ esque. html in canvas?
+
 ### CSS, Styling & Code Structure (Refactoring)
 - **Persistent Root Column Sizes:** Treat CSS root column sizes as persistent data saved via WebView2. Add a reset column sizes button in the options (under General).
 - **Syntax Highlighting:** Add syntax highlighting to the Custom CSS field in Customization using an available font (fonts that have syntax highlighting) or a small library.
 - **Custom CSS Persistence Bugs:** Fix custom CSS persistence. Fix the bug where it sometimes doesn't apply on restart, or applies even when it was removed. **Note: Unsure if this bug still exists, as it has not been encountered since the major syncing refactor.**
-- **Tab Navigation Extraction:** Move a huge portion of the tab navigation logic into its own JS file (e.g., `keyboardNav.js`) using state callbacks to decouple and reduce clutter. Manually style active tab navigation items into their own CSS file.
 
 ### Supported Formats & Advanced Icons (Complex)
 - **File Association Prompt:** Add a prompt notification at the center of the screen pointing users to the File Associations tab (reminding them that they can and should set file associations).
@@ -111,71 +66,13 @@
 ### Documentation & GitHub (Project Health)
 - **Contributing Section:** Add a contributing section to the github page, for general contributions to the project, but more on documenting how new languages should be created for the language settings.
 
-### CSS Decoupling (Refactoring)
-- Clean up CSS. Create a `global.css` for root vars, global resets, and general rules. Allow individual HTML pages to have specific CSS files to reduce clutter.
-
-### JS DOM Decoupling (Refactoring)
-- Move DOM interaction/manipulation to its own file and communicate between files via state callbacks. Refer to the `E:\Projects\PixiJS Live2D Spine (Springfield)` project structure.
-
 ### Rust Decoupling (Refactoring)
-- **Current state:** the Rust backend is `src-tauri/src/` — `lib.rs` (964 ln: bootstrap + inline `quivit://` protocol handler + config watcher + main-window build + the entire `archive_tests` suite), `commands.rs` (846 ln: six unrelated command families — directory browsing, drives/path-kind, archive commands, directory watcher, text file ops, registry/associations + `dump_icons` + embedded `ICON_*` assets, shell commands), `config.rs` (513 ln: `AppConfig`/persistence/portable mixed with window constants + options/metadata window lifecycle/fit commands), `archives.rs` (593 ln: archive cache + per-format readers — cleanest file), `ico.rs` (305 ln: ICO spritesheets + hand-rolled `base64_encode` + Win32/GDI `get_native_icon`), `utils.rs` (116 ln: hidden-attribute util mixed with the format registry), `models.rs` (28 ln, clean). Half the crate lives in `lib.rs` + `commands.rs`.
-- **Problems:** the `quivit://` handler (~170 ln) is an inline closure reaching into `ArchiveCache`/`SingleArchiveCache` public fields across the module boundary; the ~475-line `archive_tests` module is stranded in `lib.rs` (see test decoupling below); three base64 implementations across two files; `notify` dependency duplicated (lib.rs config watcher + commands.rs directory watcher); all exposure is plain `pub` with glob imports (no `pub(crate)` discipline); dead constants (`OPTIONS_MAX_W`, `META_MAX_H`).
-- **Proposed split (lib.rs → pure bootstrap):**
-  1. `windows.rs` — from `config.rs`: `open_options`, `open_metadata_window`, `fit_options_window`, `fit_metadata_window` + all `*_W/H` size constants; from `lib.rs`: main-window `WebviewWindowBuilder` (`build_main_window`), `apply_shell_background`, `on_window_event` orphan-window close.
-  2. `protocol.rs` — from `lib.rs`: the `quivit://` async scheme handler + `base64_decode`, `base64_decode_bytes`, `urlencoding_decode`, `guess_mime` (lib.rs keeps a one-line registration).
-  3. `watchers.rs` — from `commands.rs`: `WatcherState`, `watch_directory`; from `lib.rs`: config-file watcher thread (`spawn_config_file_watcher`). Consolidates all `notify` usage.
-  4. `registry.rs` — from `commands.rs`: `get_format_status`, `register_associations`, `unregister_associations`, `FormatStatus`, `dump_icons`, `ICON_*` assets.
-  5. `directory.rs` — from `commands.rs`: `read_directory(_impl)`, `open_parent`, `open_sibling`, `open_sibling_container`, `get_drives`, `get_path_kind`, `read_text_file`, `write_text_file`, `is_hidden_path`.
-  6. `archive_commands.rs` — from `commands.rs`: `list_archive`, `prefetch_archive_entries`, `get_archive_ico_frames`.
-  7. `shell.rs` — from `lib.rs`: `open_in_explorer`, `get_default_dir`; from `commands.rs`: `get_initial_args`, `show_window`.
-  8. `formats.rs` — from `utils.rs`: `FileFormat`, `image!`/`archive!` macros, `SUPPORTED_FORMATS`, `is_image_ext`/`is_metadata_ext`/`is_archive_ext`.
-- **Slim-downs:** `commands.rs` dissolved; `config.rs` becomes pure config (paths/portable/pending/split-file + config-dir commands); `lib.rs` shrinks to mod declarations + `run()` bootstrap; `utils.rs` consolidates all base64 (or swap in the `base64` crate already in Cargo.toml); drop the dead window constants.
-- **Test decoupling (`src/tests/` via `#[path]`, no pub churn):** move `archive_tests` (lib.rs:489-963) and `tests` (config.rs:447-513) into dedicated files `src/tests/archive_tests.rs` and `src/tests/config_tests.rs`, wired as `#[cfg(test)] #[path = "tests/archive_tests.rs"] mod archive_tests;` in `lib.rs` and `#[cfg(test)] #[path = "../tests/config_tests.rs"] mod tests;` in `config.rs`. This keeps full private access (`urlencoding_decode`, `apply_pending_to_config`, and the `ArchiveCache`/`SingleArchiveCache` field reach-in) without exposing anything `pub` — integration tests in `src-tauri/tests/` would force exactly that exposure, so they're the fallback only if privacy isn't needed. As the split lands, tests follow their modules: `url_decode_roundtrips_utf8_entry_names` + `protocol_serve_timing_simulation` → `protocol.rs`, the cache/LRU tests → `archives.rs`, config tests → `config.rs`.
-- **Cross-cutting:** add command-facing `ArchiveCache` methods (`prepare_archive` / `read_entry_bytes` / `get_temp_extraction`) so the protocol handler and archive commands stop mutating cache fields from outside; replace glob imports (`use archives::*`) with narrow `use` to surface the real dependency edges.
-- Approx post-split sizes: lib.rs ~150, config.rs ~330, directory.rs ~330, protocol.rs ~230, windows.rs ~260, registry.rs ~240, archives.rs ~600 + tests.
-
-### HTML-First Rendering: Prefer Static Elements over Dynamic Injection
-- Prefer directly embedding elements into the HTML rather than injecting them dynamically, for elements that don't need it — this avoids LCP issues and makes the UI feel snappier and more responsive.
-- Make use of CSS styles via classes or inline CSS instead of removing DOM elements.
-- Dynamically inserted elements cannot always be avoided; in those cases a placeholder element is best practice — e.g. a "Loading..." placeholder, or (as in keybinds where a key is already set) render the known/final value in place up front instead of inserting the element at the last moment.
-- **IMPORTANT:** Make sure any intrinsict element value (width, height, style, etc.) that has any visual changes for the application is NEVER set. The source of truth must always be inside their respective CSS files.
+- Planned. Backend is still a crate-root monolith.
+- Implement `.agents/rust-decoupling-plan.md`.
 
 ### Instrumentation System: Decoupled Performance Benchmarking (AHK + Python)
 - After all the HTML/CSS/JS and Rust refactors are done, implement a decoupled backend instrumentation system to debug and test performance benchmarks on archive/file back-end and front-end processing.
 - Connected driving system via AutoHotkey (.ahk) and Python, where the JS and Rust files automatically log data in ms about processing timings and excessive function calls (hot spots / call counts) for benchmark analysis.
-
----
-
-## User Verification Gates
-
-After each slice:
-
-- Summarize changed files.
-- State what was verified.
-- Ask for user verification before moving to the next larger behavioral slice when needed.
-
-## Verification Steps
-
-Scope:
-every/all changes made after the last remote push. The last remote push is the most recent commit present on `origin/master`;
-everything in the working tree on top of it is what this pass must verify before the manual `make push` pipeline —
-unless the user states otherwise (e.g., they request to emulate and go through the `make push` pipeline instead, since the active session already has most of the context).
-
-1. Confirm the change set. `git status` must show only the intended files; reconcile anything unexpected before continuing.
-2. Confirm `.gitignore` coverage (do not track generated runtime config, portable config, build output, or personal directory-sort metadata). If portable mode writes personal paths next to the executable, ensure those files are ignored.
-3. Static checks. `node --check` on every touched JS module and `cargo check` in `src-tauri`.
-4. Runtime-verify each change made after the last remote push: exercise the new behavior in the app and confirm it works as intended.
-5. Manually review that the project remains coherently decoupled, with features in their own JS/Rust files where warranted. Keep or improve the current split on both sides (`core.js`, `viewer.js`, `filePanel.js`, `shortcuts.js`, `keybinds.js`, `options.js`, `main.js` for the frontend; `lib.rs`, `config.rs`, `commands.rs`, `archives.rs`, `models.rs`, `utils.rs` for the backend).
-6. Validate that the code changes made (and their structure) fully embody and meet the quality and strict standards of the `.agents/AGENTS.md` guidelines.
-7. Update the **"Current Architecture State"** section at the top of this file to accurately document any new, deleted, or repurposed JS/Rust modules and configuration behavior.
-8. Verify every config-backed or persistent feature meets both global and portable-mode requirements.
-9. Port the completed items from this file into `.agents/implemented.md`, including any additions and fixes made during the pass that were not originally listed here.
-10. Update `README.md` with new shortcuts, config behavior, archive behavior, module structure, and any relevant changes. Especially look out for things that should be inlcuded in the **"Documentation"** section.
-11. Add a new entry to `.agents/sessions-index.md`.
-12. Repeat static and runtime verifications as needed.
-13. Leave the repository ready for the user to run the push pipeline: final `git diff` matches the verified change set, nothing extra staged, no secrets, no private paths.
-
----
 
 ## Post-Release Backlog (Future Considerations)
 

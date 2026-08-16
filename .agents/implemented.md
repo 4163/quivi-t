@@ -2,9 +2,17 @@
 
 Date started: 2026-08-01
 
-This file tracks items that are fully implemented and verified, separate from the active implementation plan.
+Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
+
+### CSS / JS Decoupling & HTML-First Specs (landed on `refactor/decoupling`)
+- **CSS decoupling:** `src/css/global.css` holds tokens, resets, and shared rules. `main.css`, `options.css`, and `metadata.css` are page-only. Every HTML page loads `global.css` first.
+- **JS DOM decoupling (9 slices):** frontend split into `core.js` (no DOM), `services/` (pure), `shared/` (theme / preview / window fit), `viewer/`, `filepanel/`, `menubar/`, `main/`, and `options/`. UI modules self-subscribe to `Core.onStateChange`. `ACTION_REGISTRY` is the single `cmd-*` source. Statusbar and chrome each have one writer. File panel self-renders; `main.js` is bootstrap only.
+- **HTML-first (incremental):** static probes/skeletons where they help (e.g. `#file-list-sentinel`), CSS classes for presentation state (`.is-hidden-entry`, body resize/cursor classes), `--panel-w` / `--col-*-w` instead of inline widths. File-panel row pool stays JS-allocated and sized to the viewport — a hardcoded static skeleton is not required.
+
+### Tab Navigation Extraction
+- List and tab keyboard navigation live in `keyboardNav.js` (`makeContainerNavigable`, Home/End tab jump). File panel and favorites reuse it; Options tabs use the same helper. No inline `switch (e.key)` blocks remain in those UIs.
 
 ### Lazy Config Save, Exit Flush & Fullscreen State Sync on Reload (2026-08-13)
 - **Lazy Config Save (Performance):** Replaced all immediate `_persistConfig()` calls for UI preference mutations with a centralized dirty-flag debouncer (`_scheduleConfigFlush(1500)`). Preference toggles (transparent background, fit mode, scaling mode, scroll zoom latch, menu/status bar visibility) now mark config as dirty in memory, update the UI immediately, and schedule a single debounced disk write 1500 ms after the last interaction. Eliminates frame drops and `save_config` IPC thrash during rapid UI toggling.

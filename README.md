@@ -167,15 +167,24 @@ Data is split across five files:
 
 ### Architecture
 
-The frontend is intentionally split into small, decoupled ES modules:
-- `core.js` — Single source of truth for app state and configuration
-- `fsUtils.js` — Filesystem and backend interaction
-- `navigationHistory.js` — Session-only container Back/Forward history
-- `viewer.js` — Image viewport logic (zoom, pan, fit, rotation, flips)
-- `shortcuts.js` / `keybinds.js` — Input normalization and action dispatch
-- `filePanel.js` / `menubar.js` / `options.js` — UI component wiring
+The frontend is split into a state machine, pure services, and single-owner UI modules that talk through `Core.onStateChange` — not by writing each other's DOM:
 
-> **Design Principle:** When behavior starts to grow inside `main.js`, prefer moving the domain logic into a focused module and leaving `main.js` as the bridge between DOM events and state/actions.
+- `core.js` — App state and configuration. No DOM.
+- `services/` — Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), key combos, keybind rules, sorting, viewer math.
+- `shared/` — Cross-window theme/CSS apply, pre-paint injector, config preview / emergency reset, window fit.
+- `viewer/` — Facade plus render pool and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
+- `filepanel/` — File list (virtualized), columns, breadcrumb, resize. Favorites persistence is `favoritesStore.js`.
+- `menubar/` — Chrome visibility and the sole `#statusbar` writer. `menubar.js` owns dropdown interaction.
+- `main/` — Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge.
+- `options/` — Options window, keybind capture UI, file-association UI.
+- `fsUtils.js` — Filesystem and archive navigation (no DOM).
+- `shortcuts.js` / `keybinds.js` — Input dispatch and config merge. Action ids come from `ACTION_REGISTRY`.
+
+CSS follows the same split: `global.css` holds tokens and shared rules; `main.css`, `options.css`, and `metadata.css` are page-only.
+
+The Rust backend is still a small set of crate-root modules (`lib.rs`, `commands.rs`, `config.rs`, `archives.rs`, `ico.rs`, `utils.rs`, `models.rs`). Further backend splitting is planned, not landed.
+
+> **Design Principle:** New DOM belongs in the module that already owns that surface. New domain logic belongs in `core.js` or `services/`. Do not grow `main.js` back into a god file.
 
 ### File Associations (Windows)
 
@@ -208,8 +217,8 @@ npm run tauri dev
 Run backend and frontend syntax checks:
 ```bash
 cd src-tauri && cargo check
-node --check src/js/main.js
-node --check src/js/options.js
+node --check src/js/main/main.js
+node --check src/js/options/options.js
 # etc.
 ```
 
@@ -241,49 +250,76 @@ node --check src/js/options.js
 ```text
 QuiviT/
 ├─ src/
-│  ├─ index.html              # Main viewer window
-│  ├─ options.html            # Options window
-│  ├─ metadata.html           # Archive metadata window
+│  ├─ index.html                 # Main viewer window
+│  ├─ options.html               # Options window
+│  ├─ metadata.html              # Archive metadata window
 │  ├─ css/
-│  │  ├─ main.css             # Viewer layout and shared theme tokens
-│  │  ├─ options.css          # Options window layout
-│  │  └─ metadata.css         # Metadata window layout
+│  │  ├─ global.css              # Tokens, resets, rules shared by every page
+│  │  ├─ main.css                # Viewer / file-panel layout
+│  │  ├─ options.css             # Options window layout
+│  │  └─ metadata.css            # Metadata window layout
 │  └─ js/
-│     ├─ associationsUi.js    # File-type association UI (Options)
-│     ├─ core.js              # Central app state and config management
-│     ├─ directoryPrefs.js    # Persistent per-directory grouping and sorting
-│     ├─ filePanel.js         # File list rendering, sorting UI, resizing, favorites
-│     ├─ fsUtils.js           # Filesystem and Rust backend interaction
-│     ├─ keyboardNav.js       # Accessible keyboard navigation (Tab/Home/End)
-│     ├─ keybindUi.js         # Keybind configuration grid and conflicts
-│     ├─ keybinds.js          # Default shortcuts and config merge helpers
-│     ├─ main.js              # DOM wiring for the main window
-│     ├─ menubar.js           # Main window menu bar DOM wiring
-│     ├─ metadata-window.js   # Metadata window live-sync controller
-│     ├─ navigationHistory.js # Session-only container Back/Forward stacks
-│     ├─ options.js           # Options window DOM wiring and width auto-fit
-│     ├─ shellBackground.js   # Mirrors --surface into the native window background
-│     ├─ shortcuts.js         # Shortcut matching and keyboard dispatch
-│     └─ viewer.js            # Image viewport, zoom, fit, pan, rotation, flips
+│     ├─ core.js                 # State machine (no DOM)
+│     ├─ directoryPrefs.js       # Per-directory sort prefs
+│     ├─ fsUtils.js              # Filesystem / archive navigation
+│     ├─ keybinds.js             # Config merge + pan/zoom defaults
+│     ├─ keyboardNav.js          # List / tab keyboard navigation
+│     ├─ menubar.js              # Menu bar dropdown interaction
+│     ├─ metadata.js             # ComicInfo / CoMet / OPF parsing
+│     ├─ metadata-window.js      # Metadata window controller
+│     ├─ navigationHistory.js    # Session-only Back/Forward
+│     ├─ shellBackground.js      # Mirrors --surface into the native window
+│     ├─ shortcuts.js            # Keyboard / mouse / wheel dispatch
+│     ├─ filepanel/
+│     │  ├─ filePanel.js         # File list, columns, breadcrumb, resize
+│     │  └─ favoritesStore.js    # Favorites persistence (no DOM)
+│     ├─ main/
+│     │  ├─ main.js              # Bootstrap + slim state fan-out
+│     │  ├─ fullscreen.js        # Fullscreen UX
+│     │  ├─ dropzone.js          # Drag-and-drop
+│     │  ├─ lifecycle.js         # Title, flush-on-close, single-instance
+│     │  └─ metadataBadge.js     # Archive-info badge
+│     ├─ menubar/
+│     │  ├─ chrome.js            # Menu / status visibility
+│     │  └─ statusbar.js         # Sole #statusbar writer
+│     ├─ options/
+│     │  ├─ options.js           # Options window orchestration
+│     │  ├─ keybindUi.js         # Keybind capture / conflicts
+│     │  └─ associationsUi.js    # File-type association UI
+│     ├─ services/
+│     │  ├─ actions.js           # ACTION_REGISTRY + dispatch
+│     │  ├─ keyCombo.js          # Combo normalize / format
+│     │  ├─ keybindDomain.js     # Locked binds, conflicts, categories
+│     │  ├─ sorting.js           # naturalCompare / applySort
+│     │  └─ viewerMath.js        # Zoom / pan / fit math
+│     ├─ shared/
+│     │  ├─ theme.js             # applyTheme / applyCustomCss
+│     │  ├─ themePrePaint.js     # Synchronous pre-paint injector
+│     │  ├─ configPreview.js     # Live preview + emergency CSS reset
+│     │  └─ windowFit.js         # Options / metadata content fit
+│     └─ viewer/
+│        ├─ viewer.js            # Facade
+│        ├─ viewerRender.js      # Image pool + transforms
+│        └─ viewerGestures.js    # Pan input
 ├─ src-tauri/
 │  ├─ capabilities/
-│  │  └─ default.json         # Tauri permissions for main/options/metadata windows
-│  ├─ icons/                  # Application icons
+│  │  └─ default.json            # Tauri permissions for main/options/metadata windows
+│  ├─ icons/                     # Application icons
 │  ├─ src/
-│  │  ├─ archives.rs          # Archive extraction and caching
-│  │  ├─ commands.rs          # Tauri commands and directory watcher
-│  │  ├─ config.rs            # Configuration state, window sizes, window fit/center commands
-│  │  ├─ ico.rs               # ICO frame extraction and spritesheet
-│  │  ├─ lib.rs               # Module definitions, app entry, main-window construction
-│  │  ├─ main.rs              # Native executable entry point
-│  │  ├─ models.rs            # Data structures and structs
-│  │  └─ utils.rs             # Supported formats and helpers
+│  │  ├─ archives.rs             # Archive extraction and caching
+│  │  ├─ commands.rs             # Tauri commands and directory watcher
+│  │  ├─ config.rs               # Configuration state, window sizes, window fit/center
+│  │  ├─ ico.rs                  # ICO frame extraction and spritesheet
+│  │  ├─ lib.rs                  # Module definitions, app entry, protocol, main window
+│  │  ├─ main.rs                 # Native executable entry point
+│  │  ├─ models.rs               # Data structures and structs
+│  │  └─ utils.rs                # Supported formats and helpers
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json
-├─ matcha-latte.css           # Example theme (bundled with the release)
-├─ sage-mint.css              # Example theme (bundled with the release)
+├─ matcha-latte.css              # Example theme (bundled with the release)
+├─ sage-mint.css                 # Example theme (bundled with the release)
 ├─ package.json
-└─ README.md                  # Project overview & architecture documentation
+└─ README.md                     # Project overview & architecture documentation
 ```
 
 ## Attributions
