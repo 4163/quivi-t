@@ -197,7 +197,6 @@ function fetchNativeIcon(ext) {
         document.querySelectorAll(`img[data-ext="${CSS.escape(ext)}"]`).forEach(img => {
           if (src) {
             img.src = src;
-            img.style.imageRendering = 'pixelated';
             img.removeAttribute('data-ext');
           } else {
             // fallback generic icon
@@ -425,34 +424,8 @@ export function navigateHighlightedFavorite(delta) {
 }
 
 function measureRowHeight() {
-  const dummy = document.createElement('li');
-  dummy.style.position = 'relative';
-  dummy.style.visibility = 'hidden';
-
-  const itemName = document.createElement('span');
-  itemName.className = 'item-name';
-  itemName.innerHTML = '<svg></svg>';
-
-  const itemLabel = document.createElement('span');
-  itemLabel.className = 'item-label';
-  itemLabel.textContent = 'Test';
-  itemName.appendChild(itemLabel);
-
-  const itemExt = document.createElement('span');
-  itemExt.className = 'item-ext';
-  itemExt.textContent = '.ext';
-
-  const itemDate = document.createElement('span');
-  itemDate.className = 'item-date';
-  itemDate.textContent = 'Date';
-
-  dummy.appendChild(itemName);
-  dummy.appendChild(itemExt);
-  dummy.appendChild(itemDate);
-
-  fileListUl.appendChild(dummy);
-  ROW_HEIGHT = dummy.getBoundingClientRect().height || 22;
-  fileListUl.removeChild(dummy);
+  const sentinel = document.getElementById('file-list-sentinel');
+  ROW_HEIGHT = sentinel ? sentinel.getBoundingClientRect().height || 22 : 22;
 }
 
 function initDomPool() {
@@ -573,10 +546,7 @@ function updateEntry(li, item, index, selectedIndex) {
   
   const itemName = li.querySelector('.item-name');
   itemName.innerHTML = getIconHtml(item);
-  if (item.is_hidden) {
-    const icon = itemName.firstElementChild;
-    if (icon) icon.style.opacity = '0.65';
-  }
+  li.classList.toggle('is-hidden-entry', !!item.is_hidden);
   
   const itemLabel = document.createElement('span');
   itemLabel.className = 'item-label';

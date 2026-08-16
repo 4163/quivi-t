@@ -466,6 +466,11 @@ li:hover > .fav-remove,
   pointer-events: none;
 }
 
+#file-list-sentinel {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* File list composite widget — show ring on the container, not items */
 #file-list:focus-visible {
   outline: none;
@@ -534,6 +539,8 @@ li:hover > .fav-remove,
 #file-list .item-name, #favorites-list .item-name { min-width: 0; overflow: hidden; padding-left: 8px; display: flex; align-items: center; gap: 4px; }
 #file-list .item-name > svg, #favorites-list .item-name > svg,
 #file-list .item-name > img, #favorites-list .item-name > img { width: var(--fs-14); height: var(--fs-14); flex: 0 0 var(--fs-14); object-fit: contain; image-rendering: pixelated; }
+#file-list .is-hidden-entry .item-name > svg,
+#file-list .is-hidden-entry .item-name > img { opacity: 0.65; }
 #file-list .item-label, #favorites-list .item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #file-list .item-ext, #favorites-list .item-ext  { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); padding-left: 8px; }
 #file-list .item-date, #favorites-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-10); color: var(--text-dim); padding-left: 8px; }

@@ -122,6 +122,12 @@
           </div>
         </div>
         <ul id="file-list" role="listbox" aria-label="Images in current directory">
+          <!-- Sentinel: invisible layout probe for row height measurement and pool cloning -->
+          <li id="file-list-sentinel" aria-hidden="true">
+            <span class="item-name"><span class="item-label">&nbsp;</span></span>
+            <span class="item-ext">&nbsp;</span>
+            <span class="item-date">&nbsp;</span>
+          </li>
         </ul>
         <div class="file-panel-actions">
           <button id="cmd-open-explorer" class="icon-btn" title="Open in File Explorer">
