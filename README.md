@@ -25,7 +25,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Persistent State**: Persists favorites, single-instance handoff, optional auto-open behavior, and the last opened image.
 - **Windows Integration**: Use native file/folder icons and register file associations per-user for Windows Default Apps.
 - **Configuration**: Choose roaming user config or portable config stored next to the executable.
-- **Custom Theming**: Inject and live-reload custom CSS rules.
+- **Custom Theming**: Inject and live-reload custom CSS rules, with native light/dark mode support.
 - **ICO Spritesheets**: Render multi-frame `.ico` files as generated spritesheets.
 
 ## Shortcuts & Controls
@@ -111,7 +111,7 @@ html {
 
 **Developer Tools:** Inspect Element is intentionally left enabled to help users create and debug custom CSS.
 
-**Example themes:** Try the included `matcha-latte.css` and `sage-mint.css` example themes — import them from **Options → Customization** to restyle the app without writing any CSS.
+**Example themes:** Try the included `matcha-latte.css` and `sage-mint.css` example themes — import them from **Options → Customization** to restyle the app.
 
 > If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` in any QuiviT window. This emergency reset instantly removes the custom CSS and reloads the interface safely.
 
