@@ -32,6 +32,7 @@ let startWidth = 0;
 let columnResizeMoved = false;
 
 let lastRenderedList = null;
+let lastScrolledIndex = -1;
 
 let currentPath = '';
 
@@ -586,7 +587,8 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
   wasFocused = wasFocused || panelKeyboardActive || forceFocus ||
     (document.activeElement && fileListUl.contains(document.activeElement));
 
-  if (selectedIndex >= 0 && selectedIndex < lastRenderedList.length) {
+  if (selectedIndex >= 0 && selectedIndex < lastRenderedList.length && selectedIndex !== lastScrolledIndex) {
+    lastScrolledIndex = selectedIndex;
     const itemTop = selectedIndex * ROW_HEIGHT;
     const itemBottom = itemTop + ROW_HEIGHT;
     const viewTop = fileListUl.scrollTop;
@@ -669,6 +671,7 @@ function renderFilePanel(state) {
     return;
   }
   lastRenderedList = state.list;
+  lastScrolledIndex = -1;
 
   const forceFocus = focusMainListOnNextRender;
   focusMainListOnNextRender = false;
