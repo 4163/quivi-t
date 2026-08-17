@@ -32,8 +32,7 @@ let startWidth = 0;
 let columnResizeMoved = false;
 
 let lastRenderedList = null;
-let lastClickTime = 0;
-let lastClickIndex = -1;
+
 let currentPath = '';
 
 // Virtualization
@@ -47,8 +46,7 @@ let favoritesExpanded = false;
 let favoritesBtnEl = null;
 let favoritesListUl = null;
 let favoritesHeaderEl = null;
-let favLastClickPath = '';
-let favLastClickTime = 0;
+
 let highlightedFavoritePath = '';
 let refreshPulseTimer = null;
 let hoverPreloadImg = null;
@@ -317,20 +315,16 @@ function buildFavoriteEntry(fav) {
   });
 
   li.addEventListener('click', () => {
+    highlightFavoriteByPath(fav.path);
+    const isDirOrArchive = fav.is_dir || (fav.ext && FsUtils && FsUtils.isArchive(fav.name));
+    if (!isDirOrArchive) {
+      openFavorite(fav);
+    }
+  });
+
+  li.addEventListener('dblclick', () => {
     const isDirOrArchive = fav.is_dir || (fav.ext && FsUtils && FsUtils.isArchive(fav.name));
     if (isDirOrArchive) {
-      highlightFavoriteByPath(fav.path);
-      const now = Date.now();
-      if (favLastClickPath === fav.path && (now - favLastClickTime < 400)) {
-        favLastClickPath = '';
-        favLastClickTime = 0;
-        openFavorite(fav);
-      } else {
-        favLastClickPath = fav.path;
-        favLastClickTime = now;
-      }
-    } else {
-      highlightFavoriteByPath(fav.path);
       openFavorite(fav);
     }
   });
@@ -472,23 +466,19 @@ function initDomPool() {
       }
     });
 
-    li.addEventListener('click', (e) => {
+    li.addEventListener('click', () => {
       const idxStr = li.dataset.index;
       if (!idxStr) return;
       const index = parseInt(idxStr, 10);
-      
       if (Core.getState().index !== index) {
         Core.selectIndex(index);
       }
-      const now = Date.now();
-      if (lastClickIndex === index && (now - lastClickTime < 400)) {
-        Core.jumpToIndex(index);
-        lastClickTime = 0;
-        lastClickIndex = -1;
-      } else {
-        lastClickTime = now;
-        lastClickIndex = index;
-      }
+    });
+
+    li.addEventListener('dblclick', () => {
+      const idxStr = li.dataset.index;
+      if (!idxStr) return;
+      Core.jumpToIndex(parseInt(idxStr, 10));
     });
 
     li.addEventListener('mouseenter', () => {
