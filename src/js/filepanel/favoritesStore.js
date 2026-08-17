@@ -37,7 +37,7 @@ export function toggleFavorite(entry) {
   let favs = getFavorites();
   const idx = favs.findIndex(f => f.path === entry.path);
   if (idx === -1) {
-    favs.push({ path: entry.path, name: entry.name, is_dir: entry.is_dir, is_drive: entry.is_drive, ext: entry.ext });
+    favs.push({ path: entry.path, name: entry.name, is_dir: entry.is_dir, is_drive: entry.is_drive, ext: entry.ext, is_hidden: entry.is_hidden });
   } else {
     favs.splice(idx, 1);
   }

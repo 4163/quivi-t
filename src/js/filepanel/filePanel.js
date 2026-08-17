@@ -259,6 +259,8 @@ function buildFavoriteEntry(fav) {
   li.dataset.path = fav.path;
   li.setAttribute('role', 'option');
   li.setAttribute('tabindex', '0');
+  
+  li.classList.toggle('is-hidden-entry', !!fav.is_hidden);
 
   const itemName = document.createElement('span');
   itemName.className = 'item-name';
