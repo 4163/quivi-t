@@ -33,6 +33,9 @@ let columnResizeMoved = false;
 
 let lastRenderedList = null;
 let lastScrolledIndex = -1;
+let lastClickTime = 0;
+let lastClickIndex = -1;
+let pendingClickIndex = -1;
 
 let currentPath = '';
 
@@ -48,6 +51,8 @@ let favoritesBtnEl = null;
 let favoritesListUl = null;
 let favoritesHeaderEl = null;
 
+let favLastClickPath = '';
+let favLastClickTime = 0;
 let highlightedFavoritePath = '';
 let refreshPulseTimer = null;
 let hoverPreloadImg = null;
@@ -320,14 +325,17 @@ function buildFavoriteEntry(fav) {
   li.addEventListener('click', () => {
     highlightFavoriteByPath(fav.path);
     const isDirOrArchive = fav.is_dir || (fav.ext && FsUtils && FsUtils.isArchive(fav.name));
-    if (!isDirOrArchive) {
-      openFavorite(fav);
-    }
-  });
-
-  li.addEventListener('dblclick', () => {
-    const isDirOrArchive = fav.is_dir || (fav.ext && FsUtils && FsUtils.isArchive(fav.name));
     if (isDirOrArchive) {
+      const now = Date.now();
+      if (favLastClickPath === fav.path && (now - favLastClickTime < 400)) {
+        favLastClickPath = '';
+        favLastClickTime = 0;
+        openFavorite(fav);
+      } else {
+        favLastClickPath = fav.path;
+        favLastClickTime = now;
+      }
+    } else {
       openFavorite(fav);
     }
   });
@@ -469,19 +477,26 @@ function initDomPool() {
       }
     });
 
-    li.addEventListener('click', () => {
+    li.addEventListener('mousedown', () => {
       const idxStr = li.dataset.index;
-      if (!idxStr) return;
-      const index = parseInt(idxStr, 10);
+      pendingClickIndex = idxStr ? parseInt(idxStr, 10) : -1;
+    });
+
+    li.addEventListener('click', () => {
+      const index = pendingClickIndex;
+      if (index === -1) return;
       if (Core.getState().index !== index) {
         Core.selectIndex(index);
       }
-    });
-
-    li.addEventListener('dblclick', () => {
-      const idxStr = li.dataset.index;
-      if (!idxStr) return;
-      Core.jumpToIndex(parseInt(idxStr, 10));
+      const now = Date.now();
+      if (lastClickIndex === index && (now - lastClickTime < 400)) {
+        Core.jumpToIndex(index);
+        lastClickTime = 0;
+        lastClickIndex = -1;
+      } else {
+        lastClickTime = now;
+        lastClickIndex = index;
+      }
     });
 
     li.addEventListener('mouseenter', () => {
@@ -674,6 +689,8 @@ function renderFilePanel(state) {
   }
   lastRenderedList = state.list;
   lastScrolledIndex = -1;
+  lastClickTime = 0;
+  lastClickIndex = -1;
 
   const forceFocus = focusMainListOnNextRender;
   focusMainListOnNextRender = false;
