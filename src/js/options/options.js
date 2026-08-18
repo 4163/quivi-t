@@ -135,11 +135,11 @@ document.getElementById('btn-reset-keybinds').addEventListener('click', () => {
 
 // --- Browse Start Dir ---
 document.getElementById('btn-browse-start').addEventListener('click', async () => {
-  if (!open) {
+  if (!invoke) {
     showStatus('Directory picker is unavailable in this window.');
     return;
   }
-  const path = await open({ directory: true });
+  const path = await invoke('pick_folder');
   if (path) {
     document.getElementById('opt-start-dir').value = path;
   }

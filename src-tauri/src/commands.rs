@@ -838,3 +838,9 @@ pub fn get_initial_args() -> Vec<String> {
 pub fn show_window(window: tauri::Window) {
     let _ = window.show();
 }
+
+#[tauri::command]
+pub fn pick_folder(window: tauri::Window) -> Result<Option<String>, String> {
+    let hwnd = window.hwnd().map(|h| h.0 as isize).ok();
+    crate::platform::dialog::pick_folder(hwnd)
+}

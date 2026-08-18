@@ -180,7 +180,8 @@ pub fn run() {
             register_associations,
             unregister_associations,
             get_initial_args,
-            show_window
+            show_window,
+            pick_folder
         ])
         .register_asynchronous_uri_scheme_protocol("quivit", |ctx, request, responder| {
             // Protocol: quivit://archive/<archive_path_base64>/<entry_name>

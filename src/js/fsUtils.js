@@ -402,9 +402,32 @@ export const FsUtils = {
       : pathStr.name || '';
     let path = typeof pathStr === 'string' ? pathStr : (pathStr.path || pathStr.name);
 
-    // Windows CLSID paths (e.g. 'This PC') → route to drive list
+    // Windows CLSID paths (e.g. 'This PC', 'Desktop', 'Downloads')
     if (path && path.startsWith('::{')) {
-      path = '__DRIVES__';
+      const pId = path.toLowerCase();
+      try {
+        const tPath = window.__TAURI__.path;
+        if (pId === '::{b4bfcc3a-db2c-424c-b029-7fe99a87c641}') {
+          path = await tPath.desktopDir();
+        } else if (pId === '::{374de290-123f-4565-9164-39c4925e467b}') {
+          path = await tPath.downloadDir();
+        } else if (pId === '::{59031a47-3f72-44a7-89c5-5595fe6b30ee}') {
+          path = await tPath.homeDir();
+        } else if (pId === '::{1cf1260c-4dd0-4ebb-811f-33c572699fde}') {
+          path = await tPath.pictureDir();
+        } else if (pId === '::{fdd39ad0-238f-46af-adb4-6c85480369c7}') {
+          path = await tPath.documentDir();
+        } else if (pId === '::{a0953c92-50dc-43bf-be83-3742fed03c9c}') {
+          path = await tPath.videoDir();
+        } else if (pId === '::{4d9f7874-4e0c-4904-967b-40b0d20c3e4b}') {
+          path = await tPath.audioDir();
+        } else {
+          path = '__DRIVES__'; // This PC or other unmappable virtual folders
+        }
+      } catch (err) {
+        console.error('[Core] Failed to resolve CLSID path:', err);
+        path = '__DRIVES__';
+      }
     }
     
     if (path === '__DRIVES__') {
@@ -562,8 +585,7 @@ export const FsUtils = {
 
   async openDirectoryDialog() {
     try {
-      const { open } = window.__TAURI__.dialog;
-      const selected = await open({ directory: true, multiple: false });
+      const selected = await invoke('pick_folder');
       if (selected) {
         await this.loadFile(selected);
       }
