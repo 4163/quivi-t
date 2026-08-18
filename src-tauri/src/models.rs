@@ -1,8 +1,8 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 // ── Data structures ──────────────────────────────────────────────────────────
 
-#[derive(Serialize, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileEntry {
     pub name: String,
     pub path: String,
@@ -12,7 +12,24 @@ pub struct FileEntry {
     pub is_hidden: bool,
 }
 
-#[derive(Serialize)]
+impl FileEntry {
+    #[inline(always)]
+    pub fn new_file(name: String, path: String, ext: String, date: String, is_hidden: bool) -> Self {
+        Self { name, path, ext, date, is_dir: false, is_hidden }
+    }
+
+    #[inline(always)]
+    pub fn new_directory(name: String, path: String, date: String, is_hidden: bool) -> Self {
+        Self { name, path, ext: String::new(), date, is_dir: true, is_hidden }
+    }
+
+    #[inline(always)]
+    pub fn new_archive_entry(name: String, path: String, ext: String, date: String) -> Self {
+        Self { name, path, ext, date, is_dir: false, is_hidden: false }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DirectoryReadResult {
     pub files: Vec<FileEntry>,
     pub initial_index: usize,
@@ -21,8 +38,17 @@ pub struct DirectoryReadResult {
     pub parent_directory: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArchiveReadResult {
     pub files: Vec<FileEntry>,
     pub archive_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FormatStatus {
+    pub ext: String,
+    pub name: String,
+    pub icon: String,
+    pub category: String,
+    pub registered: bool,
 }

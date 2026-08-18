@@ -128,25 +128,11 @@ pub fn ico_frames_from_bytes(data: &[u8]) -> Result<String, String> {
             .map_err(|e| format!("Failed to encode PNG: {e}"))?;
     }
     
-    let b64 = base64_encode(&png_bytes);
+    let b64 = crate::utils::base64_encode(&png_bytes);
     Ok(format!("data:image/png;base64,{b64}"))
 }
 
-pub fn base64_encode(data: &[u8]) -> String {
-    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::new();
-    for chunk in data.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
-        let n = (b0 << 16) | (b1 << 8) | b2;
-        result.push(CHARS[((n >> 18) & 63) as usize] as char);
-        result.push(CHARS[((n >> 12) & 63) as usize] as char);
-        result.push(if chunk.len() > 1 { CHARS[((n >> 6) & 63) as usize] as char } else { '=' });
-        result.push(if chunk.len() > 2 { CHARS[(n & 63) as usize] as char } else { '=' });
-    }
-    result
-}
+
 
 #[tauri::command]
 pub fn get_native_icon(ext: &str) -> Result<Option<String>, String> {

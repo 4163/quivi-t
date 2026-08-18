@@ -253,28 +253,24 @@ pub fn list_zip_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
                     continue;
                 }
 
-                files.push(FileEntry {
-                    name: decoded_name.clone(),
-                    path: format!("{}|{}", archive_path, decoded_name),
-                    ext: ext.to_uppercase(),
-                    date: "".to_string(),
-                    is_dir: false,
-                    is_hidden: false,
-                });
+                files.push(FileEntry::new_archive_entry(
+                    decoded_name.clone(),
+                    format!("{}|{}", archive_path, decoded_name),
+                    ext.to_uppercase(),
+                    "".to_string(),
+                ));
             }
             Err(_) => {
                 // Entry has a corrupt local file header but exists in central directory.
                 // List it anyway so users see it exists (will show "Failed to load" in UI).
                 let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
                 if is_image_ext(&ext) || is_metadata_ext(&ext) {
-                    files.push(FileEntry {
-                        name: name.clone(),
-                        path: format!("{}|{}", archive_path, name),
-                        ext: ext.to_uppercase(),
-                        date: "".to_string(),
-                        is_dir: false,
-                        is_hidden: false,
-                    });
+                    files.push(FileEntry::new_archive_entry(
+                        name.clone(),
+                        format!("{}|{}", archive_path, name),
+                        ext.to_uppercase(),
+                        "".to_string(),
+                    ));
                 }
                 skipped_count += 1;
             }
@@ -354,14 +350,12 @@ pub fn list_rar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
                 if !entry.is_directory() {
                     let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
                     if is_image_ext(&ext) || is_metadata_ext(&ext) {
-                        files.push(FileEntry {
-                            name: name.clone(),
-                            path: format!("{}|{}", archive_path, name),
-                            ext: ext.to_uppercase(),
-                            date: "".to_string(),
-                            is_dir: false,
-                            is_hidden: false,
-                        });
+                        files.push(FileEntry::new_archive_entry(
+                            name.clone(),
+                            format!("{}|{}", archive_path, name),
+                            ext.to_uppercase(),
+                            "".to_string(),
+                        ));
                     }
                 }
                 iter = header.skip().map_err(|e| e.to_string())?;
@@ -437,14 +431,12 @@ pub fn list_7z_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
             continue;
         }
 
-        files.push(FileEntry {
-            name: name.clone(),
-            path: format!("{}|{}", archive_path, name),
-            ext: ext.to_uppercase(),
-            date: "".to_string(),
-            is_dir: false,
-            is_hidden: false,
-        });
+        files.push(FileEntry::new_archive_entry(
+            name.clone(),
+            format!("{}|{}", archive_path, name),
+            ext.to_uppercase(),
+            "".to_string(),
+        ));
     }
 
     files.sort_by(|a, b| natord::compare(&a.name, &b.name));
@@ -511,14 +503,12 @@ pub fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
             continue;
         }
 
-        files.push(FileEntry {
-            name: name.clone(),
-            path: format!("{}|{}", archive_path, name),
-            ext: ext.to_uppercase(),
-            date: "".to_string(),
-            is_dir: false,
-            is_hidden: false,
-        });
+        files.push(FileEntry::new_archive_entry(
+            name.clone(),
+            format!("{}|{}", archive_path, name),
+            ext.to_uppercase(),
+            "".to_string(),
+        ));
     }
 
     files.sort_by(|a, b| natord::compare(&a.name, &b.name));

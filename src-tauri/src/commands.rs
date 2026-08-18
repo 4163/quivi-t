@@ -125,14 +125,22 @@ pub fn read_directory_impl(
                         "".to_string()
                     };
 
-                    files.push(FileEntry {
-                        name: name.clone(),
-                        path: path.to_string_lossy().into_owned(),
-                        ext: ext_upper,
-                        date,
-                        is_dir,
-                        is_hidden,
-                    });
+                    if is_dir {
+                        files.push(FileEntry::new_directory(
+                            name.clone(),
+                            path.to_string_lossy().into_owned(),
+                            date,
+                            is_hidden,
+                        ));
+                    } else {
+                        files.push(FileEntry::new_file(
+                            name.clone(),
+                            path.to_string_lossy().into_owned(),
+                            ext_upper,
+                            date,
+                            is_hidden,
+                        ));
+                    }
                 }
             }
         }
@@ -601,14 +609,7 @@ pub fn write_text_file(path: String, content: String) -> Result<(), String> {
 #[cfg(windows)]
 use winreg::{enums::*, RegKey};
 
-#[derive(serde::Serialize)]
-pub struct FormatStatus {
-    pub ext: String,
-    pub name: String,
-    pub icon: String,
-    pub category: String,
-    pub registered: bool,
-}
+
 
 #[tauri::command]
 pub fn get_format_status() -> Vec<FormatStatus> {
