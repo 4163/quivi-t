@@ -1,15 +1,14 @@
-use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::Mutex;
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{Emitter, Manager};
 
 use crate::archives::*;
+use crate::formats::*;
 use crate::ico::ico_frames_from_bytes;
 use crate::models::*;
-use crate::formats::*;
 use crate::platform::attributes::is_hidden_path;
 
 // ── Directory Watcher ────────────────────────────────────────────────────────
@@ -29,7 +28,6 @@ impl WatcherState {
 }
 
 // ── Tauri commands ───────────────────────────────────────────────────────────
-
 
 pub fn read_directory_impl(
     path: &str,
@@ -63,7 +61,11 @@ pub fn read_directory_impl(
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            let file_type = if let Ok(ft) = entry.file_type() { ft } else { continue; };
+            let file_type = if let Ok(ft) = entry.file_type() {
+                ft
+            } else {
+                continue;
+            };
             let is_dir = file_type.is_dir();
             let is_file = file_type.is_file();
 
@@ -88,7 +90,7 @@ pub fn read_directory_impl(
                         .to_string();
                     let metadata_res = entry.metadata();
                     let is_hidden = is_hidden_path(&name, metadata_res.as_ref().ok());
-                    
+
                     if !show_hidden && is_hidden {
                         continue;
                     }
@@ -173,65 +175,7 @@ pub fn list_archive(
     state: tauri::State<'_, Mutex<ArchiveCache>>,
 ) -> Result<ArchiveReadResult, String> {
     let mut cache = state.lock().map_err(|e| e.to_string())?;
-
-    if !cache.archives.contains_key(&archive_path) {
-        let mut single = SingleArchiveCache {
-            zip_entries: HashMap::new(),
-            zip_archive: None,
-            extract_temp_dir: None,
-            extract_notify: Arc::new((Mutex::new(HashSet::new()), Condvar::new())),
-        };
-
-        let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
-        if ext == "rar"
-            || ext == "cbr"
-            || ext == "7z"
-            || ext == "cb7"
-            || ext == "cbt"
-            || ext == "tar"
-        {
-            let hash = format!("{:x}", md5::compute(&archive_path));
-            let temp_dir = std::env::temp_dir().join("QuiviT").join(hash);
-            fs::create_dir_all(&temp_dir).ok();
-            single.extract_temp_dir = Some(temp_dir.clone());
-
-            let notify = single.extract_notify.clone();
-            let archive_path_clone = archive_path.to_string();
-            std::thread::spawn(move || {
-                if ext == "rar" || ext == "cbr" {
-                    extract_rar_to_temp(archive_path_clone, temp_dir, notify);
-                } else if ext == "7z" || ext == "cb7" {
-                    extract_7z_to_temp(archive_path_clone, temp_dir, notify);
-                } else {
-                    extract_tar_to_temp(archive_path_clone, temp_dir, notify);
-                }
-            });
-        } else if ext == "zip" || ext == "cbz" {
-            if let Ok(file) = fs::File::open(&archive_path) {
-                if let Ok(archive) = zip::ZipArchive::new(std::io::BufReader::new(file)) {
-                    single.zip_archive = Some(archive);
-                }
-            }
-        }
-
-        cache.register_archive(archive_path.clone(), single);
-    } else {
-        cache.touch_archive(&archive_path);
-    }
-
-    let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
-    let files = match ext.as_str() {
-        "zip" | "cbz" => list_zip_entries(&archive_path)?,
-        "rar" | "cbr" => list_rar_entries(&archive_path)?,
-        "7z" | "cb7" => list_7z_entries(&archive_path)?,
-        "cbt" | "tar" => list_tar_entries(&archive_path)?,
-        _ => return Err(format!("Unsupported archive format: {ext}")),
-    };
-
-    Ok(ArchiveReadResult {
-        files,
-        archive_path,
-    })
+    cache.prepare_archive(&archive_path)
 }
 
 #[tauri::command(async)]
@@ -246,39 +190,8 @@ pub fn prefetch_archive_entries(
     }
 
     for entry_name in entries {
-        {
-            let mut cache = state.lock().unwrap();
-            if cache.get_zip_entry(&archive_path, &entry_name).is_some() {
-                continue;
-            }
-        }
-
-        let extracted = {
-            let mut cache = state.lock().unwrap();
-            if let Some(single) = cache.archives.get_mut(&archive_path) {
-                if let Some(archive) = single.zip_archive.as_mut() {
-                    // Try direct lookup first (UTF-8 ZIPs) and fallback scan if needed
-                    crate::archives::read_zip_entry_by_decoded_name(archive, &entry_name).ok()
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        };
-
-        let data = if let Some(d) = extracted {
-            d
-        } else {
-            if let Ok(d) = extract_zip_entry(&archive_path, &entry_name) {
-                d
-            } else {
-                continue;
-            }
-        };
-
-        let mut cache = state.lock().unwrap();
-        cache.insert_zip_entry(&archive_path, &entry_name, data);
+        let mut cache = state.lock().map_err(|e| e.to_string())?;
+        let _ = cache.read_entry_bytes(&archive_path, &entry_name);
     }
 
     Ok(())
@@ -290,81 +203,10 @@ pub fn get_archive_ico_frames(
     entry_name: String,
     state: tauri::State<'_, Mutex<ArchiveCache>>,
 ) -> Result<String, String> {
-    let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
-    let data = match ext.as_str() {
-        "zip" | "cbz" => {
-            {
-                let mut cache = state.lock().map_err(|e| e.to_string())?;
-                if let Some(cached) = cache.get_zip_entry(&archive_path, &entry_name) {
-                    return ico_frames_from_bytes(&cached);
-                }
-            }
-
-            let extracted = {
-                let mut cache = state.lock().map_err(|e| e.to_string())?;
-                if let Some(single) = cache.archives.get_mut(&archive_path) {
-                    if let Some(archive) = single.zip_archive.as_mut() {
-                        crate::archives::read_zip_entry_by_decoded_name(archive, &entry_name).ok()
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            };
-
-            let data = if let Some(data) = extracted {
-                data
-            } else {
-                extract_zip_entry(&archive_path, &entry_name)?
-            };
-
-            {
-                let mut cache = state.lock().map_err(|e| e.to_string())?;
-                cache.insert_zip_entry(&archive_path, &entry_name, data.clone());
-            }
-
-            data
-        }
-        "rar" | "cbr" | "7z" | "cb7" | "cbt" | "tar" => {
-            let (temp_dir_opt, notify_opt) = {
-                let cache = state.lock().map_err(|e| e.to_string())?;
-                if let Some(single) = cache.archives.get(&archive_path) {
-                    (
-                        single.extract_temp_dir.clone(),
-                        Some(single.extract_notify.clone()),
-                    )
-                } else {
-                    (None, None)
-                }
-            };
-
-            let temp_dir = temp_dir_opt.ok_or_else(|| {
-                format!("Archive is not prepared for temporary extraction: {archive_path}")
-            })?;
-            let file_path = archive_entry_temp_path(&temp_dir, &entry_name)
-                .ok_or_else(|| format!("Unsafe archive entry path: {entry_name}"))?;
-
-            if let Ok(bytes) = fs::read(&file_path) {
-                bytes
-            } else if let Some(notify) = notify_opt {
-                let (lock, cvar) = &*notify;
-                let set = lock.lock().map_err(|e| e.to_string())?;
-                let _ = cvar
-                    .wait_timeout_while(set, std::time::Duration::from_secs(30), |pending| {
-                        !pending.contains(&entry_name)
-                    })
-                    .map_err(|e| e.to_string())?;
-                fs::read(&file_path).map_err(|e| {
-                    format!("Cannot read extracted archive ICO entry {entry_name}: {e}")
-                })?
-            } else {
-                return Err(format!("Archive entry is not extracted yet: {entry_name}"));
-            }
-        }
-        _ => return Err(format!("Unsupported archive format: {ext}")),
-    };
-
+    let data = state
+        .lock()
+        .map_err(|e| e.to_string())?
+        .read_entry_bytes(&archive_path, &entry_name)?;
     ico_frames_from_bytes(&data)
 }
 
@@ -400,7 +242,11 @@ pub fn open_sibling(
     let mut siblings: Vec<PathBuf> = Vec::new();
     if let Ok(entries) = fs::read_dir(parent) {
         for entry in entries.flatten() {
-            let file_type = if let Ok(ft) = entry.file_type() { ft } else { continue; };
+            let file_type = if let Ok(ft) = entry.file_type() {
+                ft
+            } else {
+                continue;
+            };
             if file_type.is_dir() {
                 let p = entry.path();
                 let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -465,7 +311,11 @@ pub fn open_sibling_container(
     if let Ok(entries) = fs::read_dir(parent) {
         for entry in entries.flatten() {
             let p = entry.path();
-            let file_type = if let Ok(ft) = entry.file_type() { ft } else { continue; };
+            let file_type = if let Ok(ft) = entry.file_type() {
+                ft
+            } else {
+                continue;
+            };
             let is_dir = file_type.is_dir();
             let is_archive = if file_type.is_file() {
                 p.extension()
@@ -591,8 +441,6 @@ pub fn write_text_file(path: String, content: String) -> Result<(), String> {
 #[cfg(windows)]
 use winreg::{enums::*, RegKey};
 
-
-
 #[tauri::command]
 pub fn get_format_status() -> Vec<FormatStatus> {
     let mut statuses = Vec::new();
@@ -633,7 +481,8 @@ pub fn get_format_status() -> Vec<FormatStatus> {
                 let ext_key_path = format!(r#"Software\Classes\.{}"#, fmt.ext.to_lowercase());
                 if let Ok(ext_key) = hkcu.open_subkey(&ext_key_path) {
                     if let Ok(current_progid) = ext_key.get_value::<String, _>("") {
-                        if current_progid.eq_ignore_ascii_case(&expected_progid) && actually_exists {
+                        if current_progid.eq_ignore_ascii_case(&expected_progid) && actually_exists
+                        {
                             registered = true;
                         }
                     }
@@ -763,7 +612,7 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
         let (app_key, _) = hkcu
             .create_subkey(r"Software\Classes\Applications\quivit.exe")
             .map_err(|e| format!("Failed creating quivit.exe key: {}", e))?;
-        
+
         let (app_cmd, _) = app_key
             .create_subkey(r"shell\open\command")
             .map_err(|e| format!("Failed creating app command key: {}", e))?;
@@ -852,7 +701,9 @@ pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
         }
 
         // Clean up Applications\quivit.exe if no SupportedTypes remain
-        if let Ok(app_supported) = hkcu.open_subkey(r"Software\Classes\Applications\quivit.exe\SupportedTypes") {
+        if let Ok(app_supported) =
+            hkcu.open_subkey(r"Software\Classes\Applications\quivit.exe\SupportedTypes")
+        {
             if app_supported.enum_values().count() == 0 {
                 let _ = hkcu.delete_subkey_all(r"Software\Classes\Applications\quivit.exe");
             }
@@ -873,7 +724,6 @@ pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
 pub fn get_initial_args() -> Vec<String> {
     std::env::args().collect()
 }
-
 
 #[tauri::command]
 pub fn pick_folder(window: tauri::Window) -> Result<Option<String>, String> {

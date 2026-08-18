@@ -8,7 +8,6 @@ pub mod platform;
 pub mod utils;
 pub mod windows;
 
-use std::fs;
 use std::sync::Mutex;
 use tauri::http::Response;
 use tauri::{Emitter, Manager};
@@ -185,114 +184,13 @@ pub fn run() {
             let app_handle = ctx.app_handle().clone();
 
             std::thread::spawn(move || {
-                let mut data = None;
-                let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
+                let data = app_handle
+                    .state::<Mutex<ArchiveCache>>()
+                    .lock()
+                    .map_err(|e| e.to_string())
+                    .and_then(|mut cache| cache.read_entry_bytes(&archive_path, &entry_name));
 
-                {
-                    let state = app_handle.state::<Mutex<ArchiveCache>>();
-                    let mut cache = state.lock().unwrap();
-
-                    if ext == "zip" || ext == "cbz" {
-                        data = cache.get_zip_entry(&archive_path, &entry_name);
-                    } else if ext == "rar"
-                        || ext == "cbr"
-                        || ext == "7z"
-                        || ext == "cb7"
-                        || ext == "cbt"
-                        || ext == "tar"
-                    {
-                        if let Some(single) = cache.archives.get(&archive_path) {
-                            if let Some(temp_dir) = &single.extract_temp_dir {
-                                if let Some(file_path) =
-                                    crate::archives::archive_entry_temp_path(temp_dir, &entry_name)
-                                {
-                                    if let Ok(bytes) = fs::read(&file_path) {
-                                        data = Some(bytes);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if data.is_none() {
-                    if ext == "zip" || ext == "cbz" {
-                        let extracted = {
-                            let state = app_handle.state::<Mutex<ArchiveCache>>();
-                            let mut cache = state.lock().unwrap();
-                            if let Some(single) = cache.archives.get_mut(&archive_path) {
-                                if let Some(archive) = single.zip_archive.as_mut() {
-                                    // Try direct lookup first (UTF-8 ZIPs) and fallback scan if needed
-                                    crate::archives::read_zip_entry_by_decoded_name(
-                                        archive,
-                                        &entry_name,
-                                    )
-                                    .ok()
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            }
-                        };
-
-                        let d = if let Some(d) = extracted {
-                            d
-                        } else {
-                            extract_zip_entry(&archive_path, &entry_name).unwrap_or_default()
-                        };
-
-                        if !d.is_empty() {
-                            data = Some(d.clone());
-                            let state = app_handle.state::<Mutex<ArchiveCache>>();
-                            let mut cache = state.lock().unwrap();
-                            cache.insert_zip_entry(&archive_path, &entry_name, d);
-                        }
-                    } else if ext == "rar"
-                        || ext == "cbr"
-                        || ext == "7z"
-                        || ext == "cb7"
-                        || ext == "cbt"
-                        || ext == "tar"
-                    {
-                        let (temp_dir_opt, notify_opt) = {
-                            let state = app_handle.state::<Mutex<ArchiveCache>>();
-                            let cache = state.lock().unwrap();
-                            if let Some(single) = cache.archives.get(&archive_path) {
-                                (
-                                    single.extract_temp_dir.clone(),
-                                    Some(single.extract_notify.clone()),
-                                )
-                            } else {
-                                (None, None)
-                            }
-                        };
-                        if let Some(temp_dir) = temp_dir_opt {
-                            if let Some(file_path) =
-                                crate::archives::archive_entry_temp_path(&temp_dir, &entry_name)
-                            {
-                                if let Ok(bytes) = fs::read(&file_path) {
-                                    data = Some(bytes);
-                                } else if let Some(notify) = notify_opt {
-                                    let (lock, cvar) = &*notify;
-                                    let set = lock.lock().unwrap();
-                                    let timeout = std::time::Duration::from_secs(30);
-                                    let _ = cvar
-                                        .wait_timeout_while(set, timeout, |pending| {
-                                            !pending.contains(&entry_name)
-                                        })
-                                        .unwrap();
-
-                                    if let Ok(bytes) = fs::read(&file_path) {
-                                        data = Some(bytes);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if let Some(d) = data {
+                if let Ok(d) = data {
                     let mime = guess_mime(&entry_name);
                     let response = Response::builder()
                         .status(200)
@@ -339,7 +237,6 @@ pub fn run() {
 }
 
 // ── Utility functions ────────────────────────────────────────────────────────
-
 
 #[tauri::command]
 fn open_in_explorer(path: &str) -> Result<(), String> {
