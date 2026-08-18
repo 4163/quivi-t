@@ -418,3 +418,10 @@ After each slice, the active agent MUST follow this handoff protocol:
 
 *(Entries are logged here chronologically as each slice lands on `refactor/decoupling`)*
 
+### Slice 1: Tests decoupling, shared models & Base64 consolidation (Completed)
+- **Architectural Choices:** Decoupled `tests` from the crate root into a dedicated `tests/` tree. Extracted shared domain models (like `FileInfo`, `FilterOptions`, etc.) into `models.rs` to break circular dependencies between commands and utils. Consolidated Base64 string encoding logic.
+- **New Modules/Helpers:** 
+  - `src-tauri/src/models.rs` (created for shared types)
+  - `src-tauri/src/tests/` (created for isolated tests)
+- **Invariant Rules Upheld:** Strict separation of data structures from business logic. Test suite encapsulation maintained.
+- **Deferred Follow-ups:** None. Ready for Slice 2.

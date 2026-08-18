@@ -23,8 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# Note: .agents/sessions-index.md, .agents/session-recovery.md and other .agents/ files are strictly local and intentionally ignored
-.agents/sessions-index.md
+# Note: .agents/session-index.md, .agents/session-recovery.md and other .agents/ files are strictly local and intentionally ignored
+.agents/session-index.md
 .agents/session-recovery.md
 .agents/user-notes
 
