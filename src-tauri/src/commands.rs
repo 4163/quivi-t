@@ -606,6 +606,12 @@ pub fn get_format_status() -> Vec<FormatStatus> {
 
         #[cfg(windows)]
         {
+            let mut actually_exists = false;
+            let progid_path = format!(r#"Software\Classes\{}"#, expected_progid);
+            if hkcu.open_subkey(&progid_path).is_ok() {
+                actually_exists = true;
+            }
+
             // Check UserChoice first — this is the actual default handler on Win10/11.
             // UserChoice is hash-protected and can only be set by the user through
             // Windows Settings, but we can *read* it to know if QuiviT is the active default.
@@ -615,7 +621,7 @@ pub fn get_format_status() -> Vec<FormatStatus> {
             );
             if let Ok(uc_key) = hkcu.open_subkey(&userchoice_path) {
                 if let Ok(prog_id) = uc_key.get_value::<String, _>("ProgId") {
-                    if prog_id.eq_ignore_ascii_case(&expected_progid) {
+                    if prog_id.eq_ignore_ascii_case(&expected_progid) && actually_exists {
                         registered = true;
                     }
                     // If UserChoice exists but points elsewhere, QuiviT is NOT the
@@ -627,7 +633,7 @@ pub fn get_format_status() -> Vec<FormatStatus> {
                 let ext_key_path = format!(r#"Software\Classes\.{}"#, fmt.ext.to_lowercase());
                 if let Ok(ext_key) = hkcu.open_subkey(&ext_key_path) {
                     if let Ok(current_progid) = ext_key.get_value::<String, _>("") {
-                        if current_progid.eq_ignore_ascii_case(&expected_progid) {
+                        if current_progid.eq_ignore_ascii_case(&expected_progid) && actually_exists {
                             registered = true;
                         }
                     }
@@ -753,6 +759,25 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             .map_err(|e| format!("Failed creating RegisteredApplications: {}", e))?;
         let _ = reg_apps.set_value("QuiviT", &r"Software\QuiviT\Capabilities");
 
+        // 7. Register the application itself to ensure it shows up in "Open With"
+        let (app_key, _) = hkcu
+            .create_subkey(r"Software\Classes\Applications\quivit.exe")
+            .map_err(|e| format!("Failed creating quivit.exe key: {}", e))?;
+        
+        let (app_cmd, _) = app_key
+            .create_subkey(r"shell\open\command")
+            .map_err(|e| format!("Failed creating app command key: {}", e))?;
+        let _ = app_cmd.set_value("", &format!(r#""{}" "%1""#, exe_str));
+
+        let (app_supported, _) = app_key
+            .create_subkey("SupportedTypes")
+            .map_err(|e| format!("Failed creating SupportedTypes key: {}", e))?;
+
+        for ext in &extensions {
+            let lower_ext = ext.to_lowercase();
+            let _ = app_supported.set_value(format!(".{}", lower_ext), &"");
+        }
+
         // Notify shell to refresh icons
         unsafe {
             use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
@@ -802,6 +827,14 @@ pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
             ) {
                 let _ = fa_key.delete_value(format!(".{}", lower_ext));
             }
+
+            // Remove from Applications\quivit.exe\SupportedTypes
+            if let Ok(app_supported) = hkcu.open_subkey_with_flags(
+                r"Software\Classes\Applications\quivit.exe\SupportedTypes",
+                KEY_ALL_ACCESS,
+            ) {
+                let _ = app_supported.delete_value(format!(".{}", lower_ext));
+            }
         }
 
         // If no more file associations remain, clean up Capabilities + RegisteredApplications
@@ -815,6 +848,13 @@ pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
                 hkcu.open_subkey_with_flags(r"Software\RegisteredApplications", KEY_ALL_ACCESS)
             {
                 let _ = reg_apps.delete_value("QuiviT");
+            }
+        }
+
+        // Clean up Applications\quivit.exe if no SupportedTypes remain
+        if let Ok(app_supported) = hkcu.open_subkey(r"Software\Classes\Applications\quivit.exe\SupportedTypes") {
+            if app_supported.enum_values().count() == 0 {
+                let _ = hkcu.delete_subkey_all(r"Software\Classes\Applications\quivit.exe");
             }
         }
 
