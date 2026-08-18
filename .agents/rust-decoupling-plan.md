@@ -424,40 +424,41 @@ After each slice, the active agent MUST follow this handoff protocol:
   - `src-tauri/src/models.rs` (created for shared types)
   - `src-tauri/src/tests/` (created for isolated tests)
 - **Invariant Rules Upheld:** Strict separation of data structures from business logic. Test suite encapsulation maintained.
-- **Deferred Follow-ups:** None. Ready for Slice 2.
+- **Deferred Follow-ups:** Ready for Slice 2.
 
 ### Slice 2: Formats registry & unified platform attributes (Completed)
-- **Architectural Choices:** Extracted file format metadata into a dedicated `formats.rs` module. Refactored the core extension matchers (`is_image_ext`, `is_archive_ext`, `is_metadata_ext`) to use zero-allocation `eq_ignore_ascii_case` checks, and removed `.to_lowercase()` from all directory and archive scanning call-sites (a follow-up optimization to eliminate O(N) string allocations during traversal). Unified Win32 file attribute inspection and mutation under a new `platform/attributes.rs` boundary.
+- **Architectural Choices:** Extracted file format metadata into a dedicated `formats.rs` module. Refactored the core extension matchers (`is_image_ext`, `is_archive_ext`, `is_metadata_ext`) to use zero-allocation `eq_ignore_ascii_case` checks, and removed `.to_lowercase()` from all directory and archive scanning call-sites (a follow-up optimization to eliminate O(N) string allocations during traversal). Unified Win32 file attribute inspection and mutation under a new `platform/attributes.rs` boundary. Re-applied portable mode `hidden` attribute at launch via `apply_pending_config_to_disk`. Tied the folder picker to the backend for virtual directory / Library resolution via COM `IFileOpenDialog` in `platform/dialog.rs`.
 - **New Modules/Helpers:**
-  - `src-tauri/src/formats.rs` (FormatCategory enum, file registries, and zero-allocation predicates)
-  - `src-tauri/src/platform/attributes.rs` (Win32 OS interactions)
-  - `src-tauri/src/tests/format_tests.rs` (Unit tests for zero-allocation matchers)
+  - `src-tauri/src/formats.rs` (`FormatCategory` enum, file registries, zero-allocation predicates)
+  - `src-tauri/src/platform/attributes.rs` (Win32 OS file attribute interactions)
+  - `src-tauri/src/platform/dialog.rs` (native folder picker with Windows shell Library support)
+  - `src-tauri/src/tests/format_tests.rs` (unit tests for zero-allocation matchers)
 - **Invariant Rules Upheld:** "Performance first: Avoid dynamic evaluations and allocations in hot paths." (Zero-allocation directory scans). "One owner per concern." (Win32 attributes isolated).
-- **Deferred Follow-ups:** Portable `hidden` is re-applied at launch via `apply_pending_config_to_disk`. Folder picking is a backend `pick_folder` command in `platform/dialog.rs` (COM `IFileOpenDialog` + Library virtual-folder resolution).
+- **Deferred Follow-ups:** Ready for Slice 3.
 
 ### Slice 3: Windows subsystem extraction & `is_portable` bug fix (Completed)
-- **Architectural Choices:** Extracted all window management logic out of `config.rs` and `commands.rs` into a dedicated `windows.rs` module. All window sizing constants (`MAIN_INITIAL_W/H`, `OPTIONS_INITIAL_W/H`, `META_INITIAL_W/H`, and their `_MIN_` counterparts), the IPC commands `open_options`, `fit_options_window`, `open_metadata_window`, `fit_metadata_window`, and `show_window` now live exclusively in `windows.rs`. A shared `center_window_over_main` helper was extracted to eliminate duplicated positioning math. The `apply_shell_background` function was migrated from `lib.rs` into `windows.rs` so all window construction flows through a single module.
-- **Bug Fixed:** `is_portable()` in `config.rs` was corrected to check for the presence of the `.portable` flag file (previously broken, causing portable mode detection to behave incorrectly).
+- **Architectural Choices:** Extracted all window management logic out of `config.rs` and `commands.rs` into a dedicated `windows.rs` module. All window sizing constants (`MAIN_INITIAL_W/H`, `OPTIONS_INITIAL_W/H`, `META_INITIAL_W/H`, and their `_MIN_` counterparts), the IPC commands `open_options`, `fit_options_window`, `open_metadata_window`, `fit_metadata_window`, and `show_window` now live exclusively in `windows.rs`. A shared `center_window_over_main` helper was extracted to eliminate duplicated positioning math. The `apply_shell_background` function was migrated from `lib.rs` into `windows.rs` so all window construction flows through a single module. Fixed `is_portable()` in `config.rs` to check for the `.portable` flag file. Restored the `#measure-probe` element in `index.html` to allow live shell background synchronization on theme change without restart. Registered `quivit.exe` in Windows Open With menu and hardened `get_format_status` to require existing HKCU ProgId keys.
 - **New Modules/Helpers:**
   - `src-tauri/src/windows.rs` (window constants, constructors, sizing commands, shell background)
 - **Invariant Rules Upheld:** "One owner per concern." (All window lifecycle logic owns a single home). "Tauri windows share a single construction path to guarantee consistent shell background color before first paint." IPC command names and JSON shapes are stable — no frontend changes required.
-- **Deferred Follow-ups:** `index.html` has `#measure-probe` so live theme changes sync the main-window shell background. `register_associations` writes `Applications\quivit.exe` Open With entries; `get_format_status` requires the ProgId key to exist. Ready for Slice 4.
+- **Deferred Follow-ups:** Ready for Slice 4.
 
 ### Slice 4: Archive cache encapsulation & domain services (Completed)
-- **Architectural Choices:** Replaced the flat `archives.rs` with an `archives/` subsystem (`mod.rs`, `cache.rs`, `zip.rs`, `rar.rs`, `sevenz.rs`, `tar.rs`). `SingleArchiveCache` is `pub(crate)` with private fields; callers only construct `ArchiveCache`. Format routing is a crate-private `ArchiveKind` enum. The three duplicated extraction pipelines (`quivit://` in `lib.rs`, `prefetch_archive_entries`, `get_archive_ico_frames`) now go through `prepare_archive` (init + listing) and `read_entry_bytes` (ZIP LRU / temp-dir Condvar wait). The plan's public `get_temp_extraction_dir` was not added — callers no longer need the temp dir. Tests use `#[cfg(test)]` inspectors instead of constructing `SingleArchiveCache`.
+- **Architectural Choices:** Replaced the flat `archives.rs` monolith with an `archives/` subsystem (`mod.rs`, `cache.rs`, `zip.rs`, `rar.rs`, `sevenz.rs`, `tar.rs`). `SingleArchiveCache` is `pub(crate)` with private fields; callers only construct `ArchiveCache`. Format routing is a crate-private `ArchiveKind` enum. The three duplicated extraction pipelines (`quivit://` in `lib.rs`, `prefetch_archive_entries`, `get_archive_ico_frames`) now go through `prepare_archive` (init + listing) and `read_entry_bytes` (ZIP LRU / temp-dir Condvar wait). The plan's public `get_temp_extraction_dir` was not added — callers no longer need the temp dir. Tests use `#[cfg(test)]` inspectors instead of constructing `SingleArchiveCache`. Dispatched mouse side-button navigation on press rather than release in `src/js/shortcuts.js` to eliminate double-firing under Windows `auxclick`.
 - **New Modules/Helpers:**
   - `src-tauri/src/archives/mod.rs` (`ArchiveKind`, `prepare_archive`, `read_entry_bytes`)
   - `src-tauri/src/archives/cache.rs` (cache, LRU, temp-path safety, test inspectors)
   - `src-tauri/src/archives/zip.rs` / `rar.rs` / `sevenz.rs` / `tar.rs`
 - **Invariant Rules Upheld:** "Encapsulation over public field reach-in." "No `pub` churn for tests." IPC command names, JSON shapes, and `quivit://` URLs unchanged.
-- **Deferred Follow-ups:** Slice 5 extracts the remaining `quivit://` URI parse / MIME from `lib.rs`. Unrelated `src/js/shortcuts.js` side-button change is in the working tree — do not fold into the Slice 4 commit. Ready for Slice 5.
+- **Deferred Follow-ups:** Ready for Slice 5.
 
-### Slice 5: Custom URI scheme protocol handler extraction & CJK Encoding Fix (Completed)
-- **Architectural Choices:** Extracted the asynchronous `quivit://` custom URI scheme handler and the MIME guessing helper out of `lib.rs` into a dedicated `protocol.rs` module. Reduced `lib.rs` from 292 to 206 lines by replacing the inline handler with a clean one-line registration call `crate::protocol::register_quivit_protocol(builder)`. `protocol.rs` cleanly leverages `ArchiveCache::read_entry_bytes` without exposing or touching any internal cache structures. Fixed CJK character encoding mojibake in ZIP and TAR archives by using `chardetng::EncodingDetector` on raw header bytes. Extracted this helper (`decode_cjk_name`) into a separate `encoding.rs` module to keep submodules clean and aligned with the JS shared helper pattern (e.g. `theme.js`).
+### Slice 5: Custom URI scheme protocol handler extraction (Completed)
+- **Architectural Choices:** Extracted the asynchronous `quivit://` custom URI scheme handler and the MIME guessing helper out of `lib.rs` into a dedicated `protocol.rs` module. Reduced `lib.rs` from 292 to 206 lines (-86 lines) by replacing the inline handler with a clean one-line registration call `crate::protocol::register_quivit_protocol(builder)`. `protocol.rs` cleanly leverages `ArchiveCache::read_entry_bytes` without exposing or touching any internal cache structures. Resolved CJK character encoding mojibake in ZIP and TAR archives by using `chardetng::EncodingDetector` on raw header bytes. Extracted this helper (`decode_cjk_name`) into a separate `encoding.rs` module to keep submodules clean and aligned with the JS shared helper pattern (e.g. `theme.js`). Reorganized archive test fixtures into `encoding_tests/` and `metadata_tests/`.
 - **New Modules/Helpers:**
   - `src-tauri/src/protocol.rs` (`register_quivit_protocol`, `guess_mime`)
   - `src-tauri/src/archives/encoding.rs` (`decode_cjk_name`)
+  - `src-tauri/src/tests/archive_tests.rs` (added Shift-JIS, GBK, and EUC-KR regression tests)
+  - `test-files/archives/encoding_tests/` & `metadata_tests/`
 - **Invariant Rules Upheld:** "One owner per concern." "Encapsulation over public field reach-in." "No behavior or wire change" — `quivit://` URI parsing, URL decoding, and HTTP response headers maintained 100% backward compatibility. Shared `decode_cjk_name` keeps encoding concerns encapsulated.
-- **Deferred Follow-ups:**
-  - Ready for Slice 6 (Commands Monolith Dissolution).
+- **Deferred Follow-ups:** Ready for Slice 6 (Commands Monolith Dissolution).
 
