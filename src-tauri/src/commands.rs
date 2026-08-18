@@ -834,10 +834,6 @@ pub fn get_initial_args() -> Vec<String> {
     std::env::args().collect()
 }
 
-#[tauri::command]
-pub fn show_window(window: tauri::Window) {
-    let _ = window.show();
-}
 
 #[tauri::command]
 pub fn pick_folder(window: tauri::Window) -> Result<Option<String>, String> {

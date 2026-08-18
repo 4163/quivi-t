@@ -6,60 +6,18 @@ pub mod ico;
 pub mod models;
 pub mod platform;
 pub mod utils;
+pub mod windows;
 
 use std::fs;
 use std::sync::Mutex;
 use tauri::http::Response;
-use tauri::window::Color;
 use tauri::{Emitter, Manager};
 
 use archives::*;
 use commands::*;
 use config::*;
 use ico::*;
-
-// ── App entry point ──────────────────────────────────────────────────────────
-
-// Sets the native window background color before the webview paints, so the
-// shell behind the page is never white/black at launch.
-//
-// NOTE: this is only a startup fallback. Live theme / custom-CSS changes are
-// synced by the frontend `src/js/shellBackground.js`, which invokes the
-// `plugin:window|set_background_color` command directly with a `value` key.
-// The official `@tauri-apps/api` `Window#setBackgroundColor` wrapper must NOT
-// be used: it sends `{ color }` while this command's parameter is named
-// `value`, and since it is `Option<Color>`, the missing key silently
-// deserializes to `None` (no error) — which *resets* the background instead
-// of setting it. See the file header of shellBackground.js for details.
-//
-// These values mirror `--surface` from src/css/main.css (the dominant visible
-// page background), NOT `--bg` (the page backdrop): light #ffffff, dark
-// #252526.
-fn apply_shell_background(window: &tauri::WebviewWindow, config: &AppConfig) {
-    let theme = config
-        .frontend_data
-        .get("theme")
-        .and_then(|v| v.as_str())
-        .unwrap_or("system");
-
-    let dark = match theme {
-        "dark" => true,
-        "light" => false,
-        _ => window
-            .theme()
-            .map(|theme| theme == tauri::Theme::Dark)
-            .unwrap_or(false),
-    };
-
-    // --surface (light) / --surface (dark)
-    let color = if dark {
-        Color(37, 37, 38, 255)
-    } else {
-        Color(255, 255, 255, 255)
-    };
-
-    let _ = window.set_background_color(Some(color));
-}
+use windows::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -107,7 +65,7 @@ pub fn run() {
             .build()
             .expect("failed to build main window");
 
-            apply_shell_background(&main_window, &config);
+            windows::apply_shell_background(&main_window, &config);
 
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {

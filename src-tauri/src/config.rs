@@ -5,39 +5,6 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 use tauri_plugin_opener::OpenerExt;
 
-// ── Window Size Constants ────────────────────────────────────────────────────
-// Initial/min sizes in logical pixels. Named for easy tweaking.
-
-// Main window — built in lib.rs setup so all windows share one path.
-pub const MAIN_INITIAL_W: f64 = 1280.0;
-pub const MAIN_INITIAL_H: f64 = 720.0;
-pub const MAIN_MIN_W: f64 = 640.0;
-pub const MAIN_MIN_H: f64 = 400.0;
-
-// Shared initial size for auto-fit windows: hidden until the JS fits + centers it,
-// so these are only build placeholders, never displayed.
-const AUTO_FIT_INITIAL_W: f64 = 560.0;
-const AUTO_FIT_INITIAL_H: f64 = 600.0;
-
-// Options window — width auto-fits to content (capped at OPTIONS_MAX_W), height fixed.
-const OPTIONS_INITIAL_W: f64 = AUTO_FIT_INITIAL_W;
-const OPTIONS_INITIAL_H: f64 = 620.0;
-const OPTIONS_MIN_W: f64 = 400.0;
-const OPTIONS_MIN_H: f64 = 360.0;
-// Auto-fit clamp for the width; mirrored by OPTIONS_MAX_INITIAL_W in shared/windowFit.js.
-#[allow(dead_code)] // Single source of truth for the cap; enforced in JS.
-const OPTIONS_MAX_W: f64 = 560.0;
-
-// Metadata window — 400 wide; height auto-fits to content (capped at META_MAX_H,
-// a fit cap, not a hard size limit). Opens hidden, fitted + centered before show.
-const META_INITIAL_W: f64 = 400.0;
-const META_INITIAL_H: f64 = AUTO_FIT_INITIAL_H;
-const META_MIN_W: f64 = 320.0;
-const META_MIN_H: f64 = 280.0;
-// Auto-fit clamp; mirrored by META_MAX_INITIAL_H in shared/windowFit.js.
-#[allow(dead_code)] // Single source of truth for the cap; enforced in JS.
-const META_MAX_H: f64 = 600.0;
-
 // ── Configuration ────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -70,7 +37,7 @@ pub fn get_exe_dir() -> PathBuf {
 
 pub fn is_portable() -> bool {
     let exe_dir = get_exe_dir();
-    exe_dir.join("quivit_config.json").exists()
+    exe_dir.join(".portable").exists() || exe_dir.join("quivit_config.json").exists()
 }
 
 pub fn roaming_dir_path(app_handle: &tauri::AppHandle) -> PathBuf {
@@ -309,142 +276,6 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
 
         let _ = fs::remove_file(exe_dir.join("quivit_config.json"));
     }
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("options") {
-        // If the window already exists but is still hidden (mid auto-fit), don't
-        // force-show it — the JS side reveals it via showOptionsWindow() once the
-        // fit settles. Force-showing now would paint the pre-fit width and cause
-        // a visible flicker, which spam-clicking would otherwise trigger.
-        if window.is_visible().map_err(|e| format!("Failed to check options window: {e}"))? {
-            window.set_focus().map_err(|e| format!("Failed to focus options window: {e}"))?;
-        }
-        return Ok(());
-    }
-
-    let builder = tauri::WebviewWindowBuilder::new(
-        &app,
-        "options",
-        tauri::WebviewUrl::App("options.html".into())
-    )
-    .title("Options")
-    .inner_size(OPTIONS_INITIAL_W, OPTIONS_INITIAL_H)
-    .min_inner_size(OPTIONS_MIN_W, OPTIONS_MIN_H)
-    .resizable(true)
-    .closable(true)
-    .maximizable(false)
-    // Hidden until JS fits the width to content (avoids a size flicker).
-    // fit_options_window also re-centers it over the main window after the fit.
-    .visible(false)
-    .devtools(true)
-    .center();
-
-    builder
-        .build()
-        .map_err(|e| format!("Failed to open options window: {e}"))?;
-
-    Ok(())
-}
-
-// Fit the options window to `width` logical px and center it over the main
-// window. Height stays fixed at OPTIONS_INITIAL_H. Called by the frontend after
-// measuring the rendered content so the window is exactly as wide as it needs.
-#[tauri::command]
-pub async fn fit_options_window(app: tauri::AppHandle, width: f64) -> Result<(), String> {
-    let options = app.get_webview_window("options")
-        .ok_or_else(|| "options window not found".to_string())?;
-
-    options
-        .set_size(tauri::LogicalSize::new(width, OPTIONS_INITIAL_H))
-        .map_err(|e| format!("Failed to size options window: {e}"))?;
-
-    let position: Option<tauri::PhysicalPosition<i32>> = (|| {
-        let main = app.get_webview_window("main")?;
-        let pos  = main.outer_position().ok()?;
-        let size = main.outer_size().ok()?;
-        let scale = main.scale_factor().ok()?;
-        let x = pos.x + (size.width  as i32 - (width * scale) as i32) / 2;
-        let y = pos.y + (size.height as i32 - (OPTIONS_INITIAL_H * scale) as i32) / 2;
-        Some(tauri::PhysicalPosition::new(x, y))
-    })();
-
-    if let Some(pos) = position {
-        options
-            .set_position(pos)
-            .map_err(|e| format!("Failed to position options window: {e}"))?;
-    }
-
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("metadata") {
-        // If the window already exists but is still hidden (mid auto-fit), don't
-        // force-show it — the JS side reveals it via showWindow() once the fit
-        // settles. Force-showing now would paint the pre-fit height and cause a
-        // visible flicker, which spam-clicking the badge would otherwise trigger.
-        if window.is_visible().map_err(|e| format!("Failed to check metadata window: {e}"))? {
-            window.set_focus().map_err(|e| format!("Failed to focus metadata window: {e}"))?;
-        }
-        return Ok(());
-    }
-
-    let builder = tauri::WebviewWindowBuilder::new(
-        &app,
-        "metadata",
-        tauri::WebviewUrl::App("metadata.html".into())
-    )
-    .title("Archive Info")
-    .inner_size(META_INITIAL_W, META_INITIAL_H)
-    .min_inner_size(META_MIN_W, META_MIN_H)
-    .resizable(true)
-    .closable(true)
-    .maximizable(true)
-    // Hidden until JS fits the height to content (avoids a size flicker).
-    // fit_metadata_window also re-centers it after the fit.
-    .visible(false)
-    // Devtools enabled for all windows so users can inspect/debug Custom CSS.
-    .devtools(true)
-    .center();
-
-    builder
-        .build()
-        .map_err(|e| format!("Failed to open metadata window: {e}"))?;
-
-    Ok(())
-}
-
-// Fit the metadata window to `height` logical px and center it over the main
-// window. Dynamic height keeps it exactly centered on the actual content.
-#[tauri::command]
-pub async fn fit_metadata_window(app: tauri::AppHandle, height: f64) -> Result<(), String> {
-    let metadata = app.get_webview_window("metadata")
-        .ok_or_else(|| "metadata window not found".to_string())?;
-
-    metadata
-        .set_size(tauri::LogicalSize::new(META_INITIAL_W, height))
-        .map_err(|e| format!("Failed to size metadata window: {e}"))?;
-
-    let position: Option<tauri::PhysicalPosition<i32>> = (|| {
-        let main = app.get_webview_window("main")?;
-        let pos  = main.outer_position().ok()?;
-        let size = main.outer_size().ok()?;
-        let scale = main.scale_factor().ok()?;
-        let x = pos.x + (size.width  as i32 - (META_INITIAL_W * scale) as i32) / 2;
-        let y = pos.y + (size.height as i32 - (height * scale) as i32) / 2;
-        Some(tauri::PhysicalPosition::new(x, y))
-    })();
-
-    if let Some(pos) = position {
-        metadata
-            .set_position(pos)
-            .map_err(|e| format!("Failed to position metadata window: {e}"))?;
-    }
-
     Ok(())
 }
 
