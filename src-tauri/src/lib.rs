@@ -5,11 +5,11 @@ pub mod formats;
 pub mod ico;
 pub mod models;
 pub mod platform;
+pub mod protocol;
 pub mod utils;
 pub mod windows;
 
 use std::sync::Mutex;
-use tauri::http::Response;
 use tauri::{Emitter, Manager};
 
 use archives::*;
@@ -103,7 +103,7 @@ pub fn run() {
             Ok(())
         });
 
-    builder
+    builder = builder
         .manage(Mutex::new(ArchiveCache::new(cache_mb)))
         .manage(Mutex::new(WatcherState::new()))
         .invoke_handler(tauri::generate_handler![
@@ -139,76 +139,9 @@ pub fn run() {
             get_initial_args,
             show_window,
             pick_folder
-        ])
-        .register_asynchronous_uri_scheme_protocol("quivit", |ctx, request, responder| {
-            // Protocol: quivit://archive/<archive_path_base64>/<entry_name>
-            let url = request.uri().to_string();
+        ]);
 
-            // URL could be http://quivit.localhost/archive/... or quivit://localhost/archive/...
-            let parts: Vec<&str> = url.splitn(2, "/archive/").collect();
-
-            if parts.len() < 2 {
-                let response = Response::builder()
-                    .status(400)
-                    .body(format!("Invalid quivit URL: {}", url).into_bytes())
-                    .unwrap();
-                responder.respond(response);
-                return;
-            }
-
-            let path_parts: Vec<&str> = parts[1].splitn(2, '/').collect();
-            if path_parts.len() < 2 {
-                let response = Response::builder()
-                    .status(400)
-                    .body(b"Missing archive path or entry name".to_vec())
-                    .unwrap();
-                responder.respond(response);
-                return;
-            }
-
-            let archive_path = match crate::utils::base64_decode(path_parts[0]) {
-                Some(p) => p,
-                None => {
-                    let response = Response::builder()
-                        .status(400)
-                        .body(b"Invalid base64 archive path".to_vec())
-                        .unwrap();
-                    responder.respond(response);
-                    return;
-                }
-            };
-
-            // URL-decode the entry name (handles %20, etc.)
-            let entry_name = crate::utils::url_decode(path_parts[1]);
-
-            let app_handle = ctx.app_handle().clone();
-
-            std::thread::spawn(move || {
-                let data = app_handle
-                    .state::<Mutex<ArchiveCache>>()
-                    .lock()
-                    .map_err(|e| e.to_string())
-                    .and_then(|mut cache| cache.read_entry_bytes(&archive_path, &entry_name));
-
-                if let Ok(d) = data {
-                    let mime = guess_mime(&entry_name);
-                    let response = Response::builder()
-                        .status(200)
-                        .header("Content-Type", mime)
-                        .header("Content-Length", d.len().to_string())
-                        .header("Access-Control-Allow-Origin", "*")
-                        .body(d)
-                        .unwrap();
-                    responder.respond(response);
-                } else {
-                    let response = Response::builder()
-                        .status(404)
-                        .body(b"Entry not found or failed to extract".to_vec())
-                        .unwrap();
-                    responder.respond(response);
-                }
-            });
-        })
+    crate::protocol::register_quivit_protocol(builder)
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // Architectural Standard: The 'main' window acts as the primary process lifecycle controller.
@@ -261,26 +194,7 @@ fn get_default_dir() -> String {
     String::new()
 }
 
-fn guess_mime(name: &str) -> &'static str {
-    match name
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_lowercase()
-        .as_str()
-    {
-        "jpg" | "jpeg" => "image/jpeg",
-        "png" => "image/png",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        "svg" => "image/svg+xml",
-        "bmp" => "image/bmp",
-        "ico" => "image/x-icon",
-        "avif" => "image/avif",
-        "apng" => "image/apng",
-        _ => "application/octet-stream",
-    }
-}
+
 
 #[cfg(test)]
 #[path = "tests/archive_tests.rs"]
