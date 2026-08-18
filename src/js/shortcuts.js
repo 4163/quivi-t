@@ -206,7 +206,6 @@ function isInteractiveKeyTarget(e) {
 }
 
 export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPan }) {
-  let lastSideButtonDispatch = { button: null, time: 0 };
   updateKeyboardPanBindings(Core.getState().config);
   rebuildBindMap(Core.getState().config);
   window.addEventListener('quivit-config-loaded', () => {
@@ -222,23 +221,24 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
     e.preventDefault();
     e.stopPropagation();
-    lastSideButtonDispatch = { button, time: Date.now() };
     dispatchAction(actionId);
     return true;
   }
 
-  function handleSideButton(e) {
+  function handleSideButtonPress(e) {
     if (e.button !== 3 && e.button !== 4) return false;
 
     e.preventDefault();
     e.stopPropagation();
-
-    const now = Date.now();
-    if (lastSideButtonDispatch.button === e.button && now - lastSideButtonDispatch.time < 120) {
-      return true;
-    }
-
     return dispatchMouseButton(e.button, e);
+  }
+
+  function suppressSideButtonRelease(e) {
+    if (e.button !== 3 && e.button !== 4) return false;
+
+    e.preventDefault();
+    e.stopPropagation();
+    return true;
   }
 
   const handleShortcut = (e) => {
@@ -323,7 +323,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   });
 
   window.addEventListener('mousedown', (e) => {
-    if (handleSideButton(e)) return;
+    if (handleSideButtonPress(e)) return;
 
     // Mouse/double-click gestures are viewport actions — never over the file
     // panel, menubar/dropdowns, or status bar (which handle their own clicks).
@@ -335,15 +335,13 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   }, { capture: true });
 
   window.addEventListener('mouseup', (e) => {
-    if (e.button === 3 || e.button === 4) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+    suppressSideButtonRelease(e);
     activeButtons.delete(e.button);
   });
 
   window.addEventListener('auxclick', (e) => {
-    handleSideButton(e);
+    // Windows fires auxclick for side buttons on release; navigation is press-only.
+    suppressSideButtonRelease(e);
   }, { capture: true });
 
   // Buttons 0 (left) and 2 (right) wait out a short window before dispatching
