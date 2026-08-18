@@ -1,4 +1,5 @@
 mod cache;
+mod encoding;
 mod rar;
 mod sevenz;
 mod tar;
@@ -27,6 +28,8 @@ pub(crate) use tar::extract_tar_to_temp;
 pub(crate) use tar::list_tar_entries;
 #[cfg(test)]
 pub(crate) use zip::extract_zip_entry;
+#[cfg(test)]
+pub(crate) use zip::list_zip_entries;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ArchiveKind {
@@ -170,3 +173,5 @@ fn spawn_temp_extractor(
         ArchiveKind::Zip => {}
     });
 }
+
+pub(crate) use encoding::decode_cjk_name;

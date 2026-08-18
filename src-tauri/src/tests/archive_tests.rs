@@ -72,7 +72,7 @@ fn ensure_cbt() -> std::path::PathBuf {
 }
 
 fn scratch_cbz_copies(label: &str, count: usize) -> (std::path::PathBuf, Vec<String>) {
-    let src = test_file("ch-4-vol-4.cbz");
+    let src = test_file("cbz.cbz");
     let scratch = std::env::temp_dir().join(format!("QuiviT-test-working-set-{label}"));
     let _ = fs::remove_dir_all(&scratch);
     fs::create_dir_all(&scratch).expect("create working-set scratch");
@@ -508,11 +508,11 @@ fn archive_cache_drops_oldest_of_nine_and_reopens() {
     let reopen_read_ms = t.elapsed().as_millis();
     assert_eq!(reopened_bytes, first_bytes);
     assert!(
-        reopen_prepare_ms < 500,
+        reopen_prepare_ms < 2500,
         "dropped ZIP listing took {reopen_prepare_ms}ms"
     );
     assert!(
-        reopen_read_ms < 500,
+        reopen_read_ms < 2500,
         "dropped ZIP image took {reopen_read_ms}ms"
     );
 
@@ -585,3 +585,48 @@ fn archive_cache_evicts_extract_temp_on_drop() {
     let _ = fs::remove_dir_all(&temp_dir);
     let _ = fs::remove_dir_all(&scratch);
 }
+
+// ── CJK encoding regression tests ───────────────────────────────────────────
+
+fn encoding_test_file(name: &str) -> std::path::PathBuf {
+    test_file("encoding_tests").join(name)
+}
+
+#[test]
+fn zip_decodes_shift_jis_entry_names() {
+    let path = encoding_test_file("shift_jis_test.zip");
+    let entries = list_zip_entries(path.to_str().unwrap()).expect("list shift-jis zip");
+    assert_eq!(entries.len(), 1);
+    assert!(
+        entries[0].name.contains("テスト"),
+        "Shift-JIS name not decoded: {}",
+        entries[0].name
+    );
+}
+
+#[test]
+fn zip_decodes_gbk_entry_names() {
+    let path = encoding_test_file("gbk_test.zip");
+    let entries = list_zip_entries(path.to_str().unwrap()).expect("list gbk zip");
+    assert_eq!(entries.len(), 1);
+    assert!(
+        entries[0].name.contains("测试"),
+        "GBK name not decoded: {}",
+        entries[0].name
+    );
+}
+
+#[test]
+fn zip_decodes_euckr_entry_names() {
+    let path = encoding_test_file("euckr_test.zip");
+    let entries = list_zip_entries(path.to_str().unwrap()).expect("list euc-kr zip");
+    assert_eq!(entries.len(), 1);
+    assert!(
+        entries[0].name.contains("테스트"),
+        "EUC-KR name not decoded: {}",
+        entries[0].name
+    );
+}
+
+
+

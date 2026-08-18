@@ -14,29 +14,7 @@ pub(crate) fn open_zip_archive(archive_path: &str) -> Result<ZipArchive, String>
 fn decode_zip_entry_name<R: std::io::Read + std::io::Seek>(
     entry: &zip::read::ZipFile<'_, R>,
 ) -> String {
-    let name = entry.name();
-    if !name.contains('\u{FFFD}') {
-        return name.to_string();
-    }
-
-    let raw_bytes = entry.name_raw();
-
-    let (decoded, _, had_errors) = encoding_rs::SHIFT_JIS.decode(raw_bytes);
-    if !had_errors {
-        return decoded.into_owned();
-    }
-
-    let (decoded, _, had_errors) = encoding_rs::GB18030.decode(raw_bytes);
-    if !had_errors {
-        return decoded.into_owned();
-    }
-
-    let (decoded, _, had_errors) = encoding_rs::EUC_KR.decode(raw_bytes);
-    if !had_errors {
-        return decoded.into_owned();
-    }
-
-    name.to_string()
+    crate::archives::decode_cjk_name(entry.name_raw())
 }
 
 pub(crate) fn list_zip_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {

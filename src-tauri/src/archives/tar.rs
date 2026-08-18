@@ -5,6 +5,11 @@ use crate::formats::{is_image_ext, is_metadata_ext};
 use crate::models::FileEntry;
 
 use super::cache::{notify_extracted, write_temp_entry, ExtractNotify};
+use super::decode_cjk_name;
+
+fn decode_tar_name<R: std::io::Read>(entry: &tar::Entry<'_, R>) -> String {
+    decode_cjk_name(&entry.path_bytes()).replace('\\', "/")
+}
 
 pub(crate) fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
     let file = fs::File::open(archive_path).map_err(|e| format!("Cannot open TAR archive: {e}"))?;
@@ -16,11 +21,7 @@ pub(crate) fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, Str
         .map_err(|e| format!("Cannot read TAR entries: {e}"))?;
     for entry in entries {
         let entry = entry.map_err(|e| format!("Error reading TAR entry: {e}"))?;
-        let name = entry
-            .path()
-            .map_err(|e| e.to_string())?
-            .to_string_lossy()
-            .replace('\\', "/");
+        let name = decode_tar_name(&entry);
         if entry.header().entry_type().is_dir() {
             continue;
         }
@@ -51,11 +52,7 @@ pub(crate) fn extract_tar_entry(archive_path: &str, entry_name: &str) -> Result<
 
     for entry in entries {
         let mut entry = entry.map_err(|e| format!("Error reading TAR entry: {e}"))?;
-        let name = entry
-            .path()
-            .map_err(|e| e.to_string())?
-            .to_string_lossy()
-            .replace('\\', "/");
+        let name = decode_tar_name(&entry);
         if name == entry_name {
             let mut buf = Vec::with_capacity(entry.size() as usize);
             std::io::Read::read_to_end(&mut entry, &mut buf)
@@ -80,10 +77,7 @@ pub(crate) fn extract_tar_to_temp(archive_path: String, temp_dir: PathBuf, notif
         let Ok(mut entry) = entry else {
             continue;
         };
-        let Ok(path) = entry.path() else {
-            continue;
-        };
-        let name = path.to_string_lossy().replace('\\', "/");
+        let name = decode_tar_name(&entry);
         if entry.header().entry_type().is_dir() {
             continue;
         }
