@@ -451,3 +451,13 @@ After each slice, the active agent MUST follow this handoff protocol:
   - `src-tauri/src/archives/zip.rs` / `rar.rs` / `sevenz.rs` / `tar.rs`
 - **Invariant Rules Upheld:** "Encapsulation over public field reach-in." "No `pub` churn for tests." IPC command names, JSON shapes, and `quivit://` URLs unchanged.
 - **Deferred Follow-ups:** Slice 5 extracts the remaining `quivit://` URI parse / MIME from `lib.rs`. Unrelated `src/js/shortcuts.js` side-button change is in the working tree — do not fold into the Slice 4 commit. Ready for Slice 5.
+
+### Slice 5: Custom URI scheme protocol handler extraction & CJK Encoding Fix (Completed)
+- **Architectural Choices:** Extracted the asynchronous `quivit://` custom URI scheme handler and the MIME guessing helper out of `lib.rs` into a dedicated `protocol.rs` module. Reduced `lib.rs` from 292 to 206 lines by replacing the inline handler with a clean one-line registration call `crate::protocol::register_quivit_protocol(builder)`. `protocol.rs` cleanly leverages `ArchiveCache::read_entry_bytes` without exposing or touching any internal cache structures. Fixed CJK character encoding mojibake in ZIP and TAR archives by using `chardetng::EncodingDetector` on raw header bytes. Extracted this helper (`decode_cjk_name`) into a separate `encoding.rs` module to keep submodules clean and aligned with the JS shared helper pattern (e.g. `theme.js`).
+- **New Modules/Helpers:**
+  - `src-tauri/src/protocol.rs` (`register_quivit_protocol`, `guess_mime`)
+  - `src-tauri/src/archives/encoding.rs` (`decode_cjk_name`)
+- **Invariant Rules Upheld:** "One owner per concern." "Encapsulation over public field reach-in." "No behavior or wire change" — `quivit://` URI parsing, URL decoding, and HTTP response headers maintained 100% backward compatibility. Shared `decode_cjk_name` keeps encoding concerns encapsulated.
+- **Deferred Follow-ups:**
+  - Ready for Slice 6 (Commands Monolith Dissolution).
+
