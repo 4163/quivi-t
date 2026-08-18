@@ -4,7 +4,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 
 use crate::models::FileEntry;
-use crate::utils::{is_image_ext, is_metadata_ext};
+use crate::formats::{is_image_ext, is_metadata_ext};
 
 // ── Archive cache (thread-safe) ──────────────────────────────────────────────
 // Caches extracted bytes so we don't re-read the archive for every image.
@@ -248,8 +248,8 @@ pub fn list_zip_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
                 if entry.is_dir() {
                     continue;
                 }
-                let ext = decoded_name.rsplit('.').next().unwrap_or("").to_lowercase();
-                if !is_image_ext(&ext) && !is_metadata_ext(&ext) {
+                let ext = decoded_name.rsplit('.').next().unwrap_or("");
+                if !is_image_ext(ext) && !is_metadata_ext(ext) {
                     continue;
                 }
 
@@ -263,8 +263,8 @@ pub fn list_zip_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
             Err(_) => {
                 // Entry has a corrupt local file header but exists in central directory.
                 // List it anyway so users see it exists (will show "Failed to load" in UI).
-                let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-                if is_image_ext(&ext) || is_metadata_ext(&ext) {
+                let ext = name.rsplit('.').next().unwrap_or("");
+                if is_image_ext(ext) || is_metadata_ext(ext) {
                     files.push(FileEntry::new_archive_entry(
                         name.clone(),
                         format!("{}|{}", archive_path, name),
@@ -348,8 +348,8 @@ pub fn list_rar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
                 let entry = header.entry();
                 let name = entry.filename.to_string_lossy().to_string();
                 if !entry.is_directory() {
-                    let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-                    if is_image_ext(&ext) || is_metadata_ext(&ext) {
+                    let ext = name.rsplit('.').next().unwrap_or("");
+                    if is_image_ext(ext) || is_metadata_ext(ext) {
                         files.push(FileEntry::new_archive_entry(
                             name.clone(),
                             format!("{}|{}", archive_path, name),
@@ -381,8 +381,8 @@ pub fn extract_rar_to_temp(
                     let entry = header.entry();
                     let name = entry.filename.to_string_lossy().to_string();
                     if !entry.is_directory() {
-                        let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-                        if is_image_ext(&ext) || is_metadata_ext(&ext) {
+                        let ext = name.rsplit('.').next().unwrap_or("");
+                        if is_image_ext(ext) || is_metadata_ext(ext) {
                             if let Ok((data, next)) = header.read() {
                                 if write_temp_entry(&temp_dir, &name, |path| fs::write(path, &data))
                                     .is_some()
@@ -426,8 +426,8 @@ pub fn list_7z_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
             continue;
         }
         let name = entry.name().to_string();
-        let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-        if !is_image_ext(&ext) {
+        let ext = name.rsplit('.').next().unwrap_or("");
+        if !is_image_ext(ext) {
             continue;
         }
 
@@ -458,8 +458,8 @@ pub fn extract_7z_to_temp(
             return Ok(true);
         }
         let name = entry.name().to_string();
-        let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-        if !is_image_ext(&ext) && !is_metadata_ext(&ext) {
+        let ext = name.rsplit('.').next().unwrap_or("");
+        if !is_image_ext(ext) && !is_metadata_ext(ext) {
             return Ok(true);
         }
         if write_temp_entry(&temp_dir, &name, |path| {
@@ -498,8 +498,8 @@ pub fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
         if entry.header().entry_type().is_dir() {
             continue;
         }
-        let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-        if !is_image_ext(&ext) && !is_metadata_ext(&ext) {
+        let ext = name.rsplit('.').next().unwrap_or("");
+        if !is_image_ext(ext) && !is_metadata_ext(ext) {
             continue;
         }
 
@@ -565,8 +565,8 @@ pub fn extract_tar_to_temp(
             continue;
         }
 
-        let ext = name.rsplit('.').next().unwrap_or("").to_lowercase();
-        if !is_image_ext(&ext) && !is_metadata_ext(&ext) {
+        let ext = name.rsplit('.').next().unwrap_or("");
+        if !is_image_ext(ext) && !is_metadata_ext(ext) {
             continue;
         }
 

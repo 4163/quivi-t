@@ -6,13 +6,11 @@ use std::sync::{Arc, Condvar, Mutex};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{Emitter, Manager};
 
-#[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
-
 use crate::archives::*;
 use crate::ico::ico_frames_from_bytes;
 use crate::models::*;
-use crate::utils::*;
+use crate::formats::*;
+use crate::platform::attributes::is_hidden_path;
 
 // ── Directory Watcher ────────────────────────────────────────────────────────
 
@@ -32,21 +30,6 @@ impl WatcherState {
 
 // ── Tauri commands ───────────────────────────────────────────────────────────
 
-pub fn is_hidden_path(name: &str, metadata: Option<&fs::Metadata>) -> bool {
-    if name.starts_with('.') {
-        return true;
-    }
-
-    #[cfg(windows)]
-    {
-        const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
-        if let Some(meta) = metadata {
-            return meta.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0;
-        }
-    }
-
-    false
-}
 
 pub fn read_directory_impl(
     path: &str,
@@ -91,10 +74,9 @@ pub fn read_directory_impl(
                 if is_dir {
                     include = true;
                 } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                    let ext_lower = ext.to_lowercase();
-                    if is_image_ext(&ext_lower) || is_archive_ext(&ext_lower) {
+                    if is_image_ext(ext) || is_archive_ext(ext) {
                         include = true;
-                        ext_upper = ext_lower.to_uppercase();
+                        ext_upper = ext.to_uppercase();
                     }
                 }
 

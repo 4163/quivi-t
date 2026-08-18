@@ -1,8 +1,10 @@
 pub mod archives;
 pub mod commands;
 pub mod config;
+pub mod formats;
 pub mod ico;
 pub mod models;
+pub mod platform;
 pub mod utils;
 
 use std::fs;
@@ -427,3 +429,7 @@ fn guess_mime(name: &str) -> &'static str {
 #[cfg(test)]
 #[path = "tests/archive_tests.rs"]
 mod archive_tests;
+
+#[cfg(test)]
+#[path = "tests/format_tests.rs"]
+mod format_tests;

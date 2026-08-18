@@ -253,18 +253,15 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
     let exe_dir = get_exe_dir();
 
     if config.portable_mode {
-        // Portable: write the single self-contained file beside the executable
-        // first, then drop the roaming copies so exactly one location stays active.
         let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
         let config_path = exe_dir.join("quivit_config.json");
         fs::write(&config_path, data).map_err(|e| e.to_string())?;
 
         // Apply hidden attribute to the portable config file only
-        crate::utils::set_hidden_attribute(&config_path, config.hidden)?;
+        crate::platform::attributes::set_hidden_attribute(&config_path, config.hidden)?;
 
         remove_roaming_files(&roaming_dir_path(&app_handle));
         
-        // Remove roaming custom_css.css if it exists
         let _ = fs::remove_file(roaming_dir(&app_handle).join("custom_css.css"));
     } else {
         // Roaming: write the split files first, then remove portable leftovers so
