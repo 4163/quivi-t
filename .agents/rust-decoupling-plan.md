@@ -433,6 +433,7 @@ After each slice, the active agent MUST follow this handoff protocol:
   - `src-tauri/src/platform/attributes.rs` (Win32 OS interactions)
   - `src-tauri/src/tests/format_tests.rs` (Unit tests for zero-allocation matchers)
 - **Invariant Rules Upheld:** "Performance first: Avoid dynamic evaluations and allocations in hot paths." (Zero-allocation directory scans). "One owner per concern." (Win32 attributes isolated).
+- **Deferred Follow-ups:** Portable `hidden` is re-applied at launch via `apply_pending_config_to_disk`. Folder picking is a backend `pick_folder` command in `platform/dialog.rs` (COM `IFileOpenDialog` + Library virtual-folder resolution).
 
 ### Slice 3: Windows subsystem extraction & `is_portable` bug fix (Completed)
 - **Architectural Choices:** Extracted all window management logic out of `config.rs` and `commands.rs` into a dedicated `windows.rs` module. All window sizing constants (`MAIN_INITIAL_W/H`, `OPTIONS_INITIAL_W/H`, `META_INITIAL_W/H`, and their `_MIN_` counterparts), the IPC commands `open_options`, `fit_options_window`, `open_metadata_window`, `fit_metadata_window`, and `show_window` now live exclusively in `windows.rs`. A shared `center_window_over_main` helper was extracted to eliminate duplicated positioning math. The `apply_shell_background` function was migrated from `lib.rs` into `windows.rs` so all window construction flows through a single module.
@@ -440,4 +441,13 @@ After each slice, the active agent MUST follow this handoff protocol:
 - **New Modules/Helpers:**
   - `src-tauri/src/windows.rs` (window constants, constructors, sizing commands, shell background)
 - **Invariant Rules Upheld:** "One owner per concern." (All window lifecycle logic owns a single home). "Tauri windows share a single construction path to guarantee consistent shell background color before first paint." IPC command names and JSON shapes are stable — no frontend changes required.
-- **Deferred Follow-ups:** None. Ready for Slice 4.
+- **Deferred Follow-ups:** `index.html` has `#measure-probe` so live theme changes sync the main-window shell background. `register_associations` writes `Applications\quivit.exe` Open With entries; `get_format_status` requires the ProgId key to exist. Ready for Slice 4.
+
+### Slice 4: Archive cache encapsulation & domain services (Completed)
+- **Architectural Choices:** Replaced the flat `archives.rs` with an `archives/` subsystem (`mod.rs`, `cache.rs`, `zip.rs`, `rar.rs`, `sevenz.rs`, `tar.rs`). `SingleArchiveCache` is `pub(crate)` with private fields; callers only construct `ArchiveCache`. Format routing is a crate-private `ArchiveKind` enum. The three duplicated extraction pipelines (`quivit://` in `lib.rs`, `prefetch_archive_entries`, `get_archive_ico_frames`) now go through `prepare_archive` (init + listing) and `read_entry_bytes` (ZIP LRU / temp-dir Condvar wait). The plan's public `get_temp_extraction_dir` was not added — callers no longer need the temp dir. Tests use `#[cfg(test)]` inspectors instead of constructing `SingleArchiveCache`.
+- **New Modules/Helpers:**
+  - `src-tauri/src/archives/mod.rs` (`ArchiveKind`, `prepare_archive`, `read_entry_bytes`)
+  - `src-tauri/src/archives/cache.rs` (cache, LRU, temp-path safety, test inspectors)
+  - `src-tauri/src/archives/zip.rs` / `rar.rs` / `sevenz.rs` / `tar.rs`
+- **Invariant Rules Upheld:** "Encapsulation over public field reach-in." "No `pub` churn for tests." IPC command names, JSON shapes, and `quivit://` URLs unchanged.
+- **Deferred Follow-ups:** Slice 5 extracts the remaining `quivit://` URI parse / MIME from `lib.rs`. Unrelated `src/js/shortcuts.js` side-button change is in the working tree — do not fold into the Slice 4 commit. Ready for Slice 5.
