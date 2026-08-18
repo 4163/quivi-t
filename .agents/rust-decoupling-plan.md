@@ -425,3 +425,11 @@ After each slice, the active agent MUST follow this handoff protocol:
   - `src-tauri/src/tests/` (created for isolated tests)
 - **Invariant Rules Upheld:** Strict separation of data structures from business logic. Test suite encapsulation maintained.
 - **Deferred Follow-ups:** None. Ready for Slice 2.
+
+### Slice 2: Formats registry & unified platform attributes (Completed)
+- **Architectural Choices:** Extracted file format metadata into a dedicated `formats.rs` module. Refactored the core extension matchers (`is_image_ext`, `is_archive_ext`, `is_metadata_ext`) to use zero-allocation `eq_ignore_ascii_case` checks, and removed `.to_lowercase()` from all directory and archive scanning call-sites (a follow-up optimization to eliminate O(N) string allocations during traversal). Unified Win32 file attribute inspection and mutation under a new `platform/attributes.rs` boundary.
+- **New Modules/Helpers:**
+  - `src-tauri/src/formats.rs` (FormatCategory enum, file registries, and zero-allocation predicates)
+  - `src-tauri/src/platform/attributes.rs` (Win32 OS interactions)
+  - `src-tauri/src/tests/format_tests.rs` (Unit tests for zero-allocation matchers)
+- **Invariant Rules Upheld:** "Performance first: Avoid dynamic evaluations and allocations in hot paths." (Zero-allocation directory scans). "One owner per concern." (Win32 attributes isolated).

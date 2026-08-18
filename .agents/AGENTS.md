@@ -65,4 +65,4 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 - Refactors keep IPC command names, JSON shapes, and custom-protocol URLs stable unless a change is a practical function or performance win.
 
 > [!NOTE]
-> Not strict, as Rust Decoupling has not been started or completed yet.
+> Not strict, as Rust decoupling is currently being worked on.
