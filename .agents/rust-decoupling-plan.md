@@ -433,3 +433,11 @@ After each slice, the active agent MUST follow this handoff protocol:
   - `src-tauri/src/platform/attributes.rs` (Win32 OS interactions)
   - `src-tauri/src/tests/format_tests.rs` (Unit tests for zero-allocation matchers)
 - **Invariant Rules Upheld:** "Performance first: Avoid dynamic evaluations and allocations in hot paths." (Zero-allocation directory scans). "One owner per concern." (Win32 attributes isolated).
+
+### Slice 3: Windows subsystem extraction & `is_portable` bug fix (Completed)
+- **Architectural Choices:** Extracted all window management logic out of `config.rs` and `commands.rs` into a dedicated `windows.rs` module. All window sizing constants (`MAIN_INITIAL_W/H`, `OPTIONS_INITIAL_W/H`, `META_INITIAL_W/H`, and their `_MIN_` counterparts), the IPC commands `open_options`, `fit_options_window`, `open_metadata_window`, `fit_metadata_window`, and `show_window` now live exclusively in `windows.rs`. A shared `center_window_over_main` helper was extracted to eliminate duplicated positioning math. The `apply_shell_background` function was migrated from `lib.rs` into `windows.rs` so all window construction flows through a single module.
+- **Bug Fixed:** `is_portable()` in `config.rs` was corrected to check for the presence of the `.portable` flag file (previously broken, causing portable mode detection to behave incorrectly).
+- **New Modules/Helpers:**
+  - `src-tauri/src/windows.rs` (window constants, constructors, sizing commands, shell background)
+- **Invariant Rules Upheld:** "One owner per concern." (All window lifecycle logic owns a single home). "Tauri windows share a single construction path to guarantee consistent shell background color before first paint." IPC command names and JSON shapes are stable — no frontend changes required.
+- **Deferred Follow-ups:** None. Ready for Slice 4.
