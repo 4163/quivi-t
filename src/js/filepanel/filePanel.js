@@ -547,9 +547,8 @@ function initDomPool() {
   fileListUl.appendChild(scrollSpacer);
 }
 
-function updateEntry(li, item, index, selectedIndex) {
+function updateEntry(li, item, index) {
   li.dataset.index = index;
-  li.classList.toggle('selected', index === selectedIndex);
   li.title = item.name !== '..' ? item.name : '';
   
   const itemName = li.querySelector('.item-name');
@@ -590,7 +589,10 @@ function renderVisibleSlice() {
     const li = domPool[i];
     
     if (dataIndex >= 0 && dataIndex < list.length) {
-      updateEntry(li, list[dataIndex], dataIndex, state.index);
+      if (li.dataset.index !== String(dataIndex)) {
+        updateEntry(li, list[dataIndex], dataIndex);
+      }
+      li.classList.toggle('selected', dataIndex === state.index);
     } else {
       li.style.display = 'none';
       li.dataset.index = '';
@@ -691,6 +693,7 @@ function renderFilePanel(state) {
   lastScrolledIndex = -1;
   lastClickTime = 0;
   lastClickIndex = -1;
+  domPool.forEach(li => li.dataset.index = '');
 
   const forceFocus = focusMainListOnNextRender;
   focusMainListOnNextRender = false;
