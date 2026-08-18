@@ -148,6 +148,14 @@ pub fn apply_pending_config_to_disk() {
             let _ = fs::write(get_config_path(), data);
         }
     }
+
+    // Sync the Win32 hidden attribute so manual JSON edits take effect on launch
+    if config.portable_mode {
+        let _ = crate::platform::attributes::set_hidden_attribute(
+            &get_exe_dir().join("quivit_config.json"),
+            config.hidden,
+        );
+    }
 }
 
 // ── Config split helpers ──────────────────────────────────────────────────────

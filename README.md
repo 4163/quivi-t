@@ -163,7 +163,7 @@ Data is split across five files:
 - `#viewer-img-wrapper` image bridge — Two reusable DOM images for the current target and decoded previous image; nearby pages warm through off-DOM preloaders after navigation settles behind the 45ms image swap buffer
 - `previewTheme` / `previewCss` — Options window live theme and custom CSS previews (persisting across config reloads until Apply or Close)
 
-**Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth. In portable mode, the top-level `hidden` flag controls the Windows hidden attribute on that local `quivit_config.json`: `true` hides it, and `false` leaves it visible.
+**Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth. In portable mode, the top-level `hidden` flag controls the Windows hidden attribute on that local `quivit_config.json`: `true` hides it, and `false` leaves it visible. The attribute is synced on every app launch and on each config save; edits made to the JSON while QuiviT is running are overwritten by the in-memory state on the next save.
 
 ### Architecture
 
