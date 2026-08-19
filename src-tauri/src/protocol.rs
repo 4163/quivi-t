@@ -54,11 +54,13 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
         let app_handle = ctx.app_handle().clone();
 
         std::thread::spawn(move || {
-            let data = app_handle
+            let entry_data = app_handle
                 .state::<Mutex<ArchiveCache>>()
                 .lock()
                 .map_err(|e| e.to_string())
                 .and_then(|mut cache| cache.read_entry_bytes(&archive_path, &entry_name));
+
+            let data = entry_data.and_then(|d| d.wait_for_data(&entry_name));
 
             if let Ok(d) = data {
                 let mime = guess_mime(&entry_name);

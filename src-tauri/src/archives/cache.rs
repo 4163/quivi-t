@@ -11,6 +11,7 @@ pub(crate) struct SingleArchiveCache {
     zip_archive: Option<ZipArchive>,
     extract_temp_dir: Option<PathBuf>,
     extract_notify: ExtractNotify,
+    extract_cancel: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl SingleArchiveCache {
@@ -20,6 +21,7 @@ impl SingleArchiveCache {
             zip_archive,
             extract_temp_dir: None,
             extract_notify: Arc::new((Mutex::new(HashSet::new()), Condvar::new())),
+            extract_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -29,16 +31,22 @@ impl SingleArchiveCache {
             zip_archive: None,
             extract_temp_dir: Some(extract_temp_dir),
             extract_notify: Arc::new((Mutex::new(HashSet::new()), Condvar::new())),
+            extract_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
     pub(crate) fn notify(&self) -> ExtractNotify {
         self.extract_notify.clone()
     }
+
+    pub(crate) fn cancel_flag(&self) -> Arc<std::sync::atomic::AtomicBool> {
+        self.extract_cancel.clone()
+    }
 }
 
 impl Drop for SingleArchiveCache {
     fn drop(&mut self) {
+        self.extract_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         if let Some(dir) = &self.extract_temp_dir {
             let _ = fs::remove_dir_all(dir);
         }

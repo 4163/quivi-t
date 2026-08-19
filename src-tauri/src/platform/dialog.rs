@@ -15,10 +15,26 @@ pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
         FOS_PICKFOLDERS, SIGDN_FILESYSPATH, SIGDN_DESKTOPABSOLUTEPARSING, DSFT_DETECT,
     };
 
-    unsafe {
-        // COM init is harmless if already initialized on this thread.
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+    struct ScopedCoInit;
+    impl ScopedCoInit {
+        fn new() -> Self {
+            unsafe {
+                let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            }
+            Self
+        }
+    }
+    impl Drop for ScopedCoInit {
+        fn drop(&mut self) {
+            unsafe {
+                CoUninitialize();
+            }
+        }
+    }
 
+    let _co_init = ScopedCoInit::new();
+
+    unsafe {
         let dialog: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)
             .map_err(|e| format!("CoCreateInstance failed: {e}"))?;
 
@@ -41,7 +57,6 @@ pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
         if let Ok(path_pwstr) = item.GetDisplayName(SIGDN_FILESYSPATH) {
             let path = path_pwstr.to_string()
                 .map_err(|e| format!("Path conversion failed: {e}"))?;
-            CoUninitialize();
             return Ok(Some(path));
         }
 
@@ -51,7 +66,6 @@ pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
                 if let Ok(default_folder) = library.GetDefaultSaveFolder::<IShellItem>(DSFT_DETECT) {
                     if let Ok(path_pwstr) = default_folder.GetDisplayName(SIGDN_FILESYSPATH) {
                         if let Ok(path) = path_pwstr.to_string() {
-                            CoUninitialize();
                             return Ok(Some(path));
                         }
                     }
@@ -63,11 +77,9 @@ pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
         if let Ok(path_pwstr) = item.GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING) {
             let path = path_pwstr.to_string()
                 .map_err(|e| format!("Path conversion failed: {e}"))?;
-            CoUninitialize();
             return Ok(Some(path));
         }
 
-        CoUninitialize();
         Err("Selected folder is virtual and could not be resolved".into())
     }
 }

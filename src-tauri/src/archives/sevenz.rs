@@ -34,13 +34,21 @@ pub(crate) fn list_7z_entries(archive_path: &str) -> Result<Vec<FileEntry>, Stri
     Ok(files)
 }
 
-pub(crate) fn extract_7z_to_temp(archive_path: String, temp_dir: PathBuf, notify: ExtractNotify) {
+pub(crate) fn extract_7z_to_temp(
+    archive_path: String,
+    temp_dir: PathBuf,
+    notify: ExtractNotify,
+    cancel_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
     let Ok(mut reader) =
         sevenz_rust2::ArchiveReader::open(&archive_path, sevenz_rust2::Password::empty())
     else {
         return;
     };
     let _ = reader.for_each_entries(|entry, data| {
+        if cancel_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            return Ok(false);
+        }
         if entry.is_directory() || entry.is_anti_item() {
             return Ok(true);
         }

@@ -39,10 +39,18 @@ pub(crate) fn list_rar_entries(archive_path: &str) -> Result<Vec<FileEntry>, Str
     Ok(files)
 }
 
-pub(crate) fn extract_rar_to_temp(archive_path: String, temp_dir: PathBuf, notify: ExtractNotify) {
+pub(crate) fn extract_rar_to_temp(
+    archive_path: String,
+    temp_dir: PathBuf,
+    notify: ExtractNotify,
+    cancel_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
     if let Ok(archive) = unrar::Archive::new(&archive_path).open_for_processing() {
         let mut iter = archive;
         loop {
+            if cancel_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
             match iter.read_header() {
                 Ok(Some(header)) => {
                     let entry = header.entry();

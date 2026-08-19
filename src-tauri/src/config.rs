@@ -5,6 +5,13 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 use tauri_plugin_opener::OpenerExt;
 
+/// Write-to-tmp then rename. Prevents half-written config on crash.
+fn atomic_write(path: &Path, data: impl AsRef<[u8]>) -> std::io::Result<()> {
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, data)?;
+    fs::rename(&tmp, path)
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct AppConfig {
@@ -108,7 +115,7 @@ pub fn apply_pending_config_to_disk() {
     apply_pending_to_config(&mut config);
     if had_pending {
         if let Ok(data) = serde_json::to_string_pretty(&config) {
-            let _ = fs::write(get_config_path(), data);
+            let _ = atomic_write(&get_config_path(), data);
         }
     }
 
@@ -224,7 +231,7 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
     if config.portable_mode {
         let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
         let config_path = exe_dir.join("quivit_config.json");
-        fs::write(&config_path, data).map_err(|e| e.to_string())?;
+        atomic_write(&config_path, data).map_err(|e| e.to_string())?;
 
         // Only the portable config file gets the hidden attribute.
         crate::platform::attributes::set_hidden_attribute(&config_path, config.hidden)?;
@@ -248,24 +255,24 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
 
         let dir = roaming_dir(&app_handle);
         let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-        fs::write(dir.join("quivit_config.json"), data).map_err(|e| e.to_string())?;
-        fs::write(
-            dir.join("quivit_state.json"),
+        atomic_write(&dir.join("quivit_config.json"), data).map_err(|e| e.to_string())?;
+        atomic_write(
+            &dir.join("quivit_state.json"),
             serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
-        fs::write(
-            dir.join("quivit_directory_sort.json"),
+        atomic_write(
+            &dir.join("quivit_directory_sort.json"),
             serde_json::to_string_pretty(&sort).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
-        fs::write(
-            dir.join("quivit_favorites.json"),
+        atomic_write(
+            &dir.join("quivit_favorites.json"),
             serde_json::to_string_pretty(&favorites).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
         
-        fs::write(dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())?;
+        atomic_write(&dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())?;
 
         let _ = fs::remove_file(exe_dir.join("quivit_config.json"));
     }

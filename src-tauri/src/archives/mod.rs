@@ -56,16 +56,55 @@ impl ArchiveKind {
     }
 }
 
+pub enum ArchiveEntryData {
+    Ready(Vec<u8>),
+    PendingExtraction {
+        file_path: PathBuf,
+        notify: cache::ExtractNotify,
+    },
+}
+
+impl ArchiveEntryData {
+    pub fn wait_for_data(self, entry_name: &str) -> Result<Vec<u8>, String> {
+        match self {
+            Self::Ready(data) => Ok(data),
+            Self::PendingExtraction { file_path, notify } => {
+                let (lock, cvar) = &*notify;
+                let set = lock.lock().map_err(|e| e.to_string())?;
+                let _ = cvar
+                    .wait_timeout_while(set, Duration::from_secs(30), |pending| {
+                        !pending.contains(entry_name)
+                    })
+                    .map_err(|e| e.to_string())?;
+
+                fs::read(&file_path)
+                    .map_err(|e| format!("Cannot read extracted archive entry {entry_name}: {e}"))
+            }
+        }
+    }
+}
+
 impl ArchiveCache {
     pub fn prepare_archive(&mut self, archive_path: &str) -> Result<ArchiveReadResult, String> {
         let kind = ArchiveKind::from_path(archive_path)?;
-        self.prepare_archive_state(archive_path, kind);
-
         let files = match kind {
-            ArchiveKind::Zip => zip::list_zip_entries(archive_path)?,
-            ArchiveKind::Rar => rar::list_rar_entries(archive_path)?,
-            ArchiveKind::SevenZ => sevenz::list_7z_entries(archive_path)?,
-            ArchiveKind::Tar => tar::list_tar_entries(archive_path)?,
+            ArchiveKind::Zip => {
+                let (files, zip_archive) = zip::list_zip_entries(archive_path)?;
+                self.prepare_archive_state(archive_path, kind, Some(zip_archive));
+                files
+            }
+            ArchiveKind::Rar => {
+                self.prepare_archive_state(archive_path, kind, None);
+                rar::list_rar_entries(archive_path)?
+            }
+            ArchiveKind::SevenZ => {
+                self.prepare_archive_state(archive_path, kind, None);
+                sevenz::list_7z_entries(archive_path)?
+            }
+            ArchiveKind::Tar => {
+                self.prepare_archive_state(archive_path, kind, None);
+                tar::list_tar_entries(archive_path)?
+            }
         };
 
         Ok(ArchiveReadResult {
@@ -78,30 +117,41 @@ impl ArchiveCache {
         &mut self,
         archive_path: &str,
         entry_name: &str,
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<ArchiveEntryData, String> {
         match ArchiveKind::from_path(archive_path)? {
-            ArchiveKind::Zip => self.read_zip_entry_bytes(archive_path, entry_name),
+            ArchiveKind::Zip => self
+                .read_zip_entry_bytes(archive_path, entry_name)
+                .map(ArchiveEntryData::Ready),
             ArchiveKind::Rar | ArchiveKind::SevenZ | ArchiveKind::Tar => {
                 self.read_temp_entry_bytes(archive_path, entry_name)
             }
         }
     }
 
-    fn prepare_archive_state(&mut self, archive_path: &str, kind: ArchiveKind) {
+    fn prepare_archive_state(
+        &mut self,
+        archive_path: &str,
+        kind: ArchiveKind,
+        zip_archive: Option<cache::ZipArchive>,
+    ) {
         if self.contains_archive(archive_path) {
             self.touch_archive(archive_path);
             return;
         }
 
         let single = match kind {
-            ArchiveKind::Zip => cache::SingleArchiveCache::with_zip_archive(
-                zip::open_zip_archive(archive_path).ok(),
-            ),
+            ArchiveKind::Zip => cache::SingleArchiveCache::with_zip_archive(zip_archive),
             ArchiveKind::Rar | ArchiveKind::SevenZ | ArchiveKind::Tar => {
                 let temp_dir = archive_temp_dir(archive_path);
                 fs::create_dir_all(&temp_dir).ok();
                 let single = cache::SingleArchiveCache::with_temp_dir(temp_dir.clone());
-                spawn_temp_extractor(kind, archive_path.to_string(), temp_dir, single.notify());
+                spawn_temp_extractor(
+                    kind,
+                    archive_path.to_string(),
+                    temp_dir,
+                    single.notify(),
+                    single.cancel_flag(),
+                );
                 single
             }
         };
@@ -118,7 +168,7 @@ impl ArchiveCache {
             return Ok(cached);
         }
 
-        self.prepare_archive_state(archive_path, ArchiveKind::Zip);
+        self.prepare_archive_state(archive_path, ArchiveKind::Zip, None);
 
         let data = self
             .read_from_open_zip(archive_path, entry_name)
@@ -133,9 +183,9 @@ impl ArchiveCache {
         &mut self,
         archive_path: &str,
         entry_name: &str,
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<ArchiveEntryData, String> {
         let kind = ArchiveKind::from_path(archive_path)?;
-        self.prepare_archive_state(archive_path, kind);
+        self.prepare_archive_state(archive_path, kind, None);
 
         let (temp_dir, notify) = self.temp_extraction_state(archive_path).ok_or_else(|| {
             format!("Archive is not prepared for temporary extraction: {archive_path}")
@@ -144,19 +194,10 @@ impl ArchiveCache {
             .ok_or_else(|| format!("Unsafe archive entry path: {entry_name}"))?;
 
         if let Ok(bytes) = fs::read(&file_path) {
-            return Ok(bytes);
+            return Ok(ArchiveEntryData::Ready(bytes));
         }
 
-        let (lock, cvar) = &*notify;
-        let set = lock.lock().map_err(|e| e.to_string())?;
-        let _ = cvar
-            .wait_timeout_while(set, Duration::from_secs(30), |pending| {
-                !pending.contains(entry_name)
-            })
-            .map_err(|e| e.to_string())?;
-
-        fs::read(&file_path)
-            .map_err(|e| format!("Cannot read extracted archive entry {entry_name}: {e}"))
+        Ok(ArchiveEntryData::PendingExtraction { file_path, notify })
     }
 }
 
@@ -165,11 +206,12 @@ fn spawn_temp_extractor(
     archive_path: String,
     temp_dir: PathBuf,
     notify: cache::ExtractNotify,
+    cancel_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
     std::thread::spawn(move || match kind {
-        ArchiveKind::Rar => rar::extract_rar_to_temp(archive_path, temp_dir, notify),
-        ArchiveKind::SevenZ => sevenz::extract_7z_to_temp(archive_path, temp_dir, notify),
-        ArchiveKind::Tar => tar::extract_tar_to_temp(archive_path, temp_dir, notify),
+        ArchiveKind::Rar => rar::extract_rar_to_temp(archive_path, temp_dir, notify, cancel_flag),
+        ArchiveKind::SevenZ => sevenz::extract_7z_to_temp(archive_path, temp_dir, notify, cancel_flag),
+        ArchiveKind::Tar => tar::extract_tar_to_temp(archive_path, temp_dir, notify, cancel_flag),
         ArchiveKind::Zip => {}
     });
 }

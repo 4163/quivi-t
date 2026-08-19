@@ -64,7 +64,12 @@ pub(crate) fn extract_tar_entry(archive_path: &str, entry_name: &str) -> Result<
     Err(format!("Cannot find TAR entry {}", entry_name))
 }
 
-pub(crate) fn extract_tar_to_temp(archive_path: String, temp_dir: PathBuf, notify: ExtractNotify) {
+pub(crate) fn extract_tar_to_temp(
+    archive_path: String,
+    temp_dir: PathBuf,
+    notify: ExtractNotify,
+    cancel_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
     let Ok(file) = fs::File::open(&archive_path) else {
         return;
     };
@@ -74,6 +79,9 @@ pub(crate) fn extract_tar_to_temp(archive_path: String, temp_dir: PathBuf, notif
     };
 
     for entry in entries {
+        if cancel_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            break;
+        }
         let Ok(mut entry) = entry else {
             continue;
         };

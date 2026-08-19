@@ -35,7 +35,12 @@ fn ensure_cbt() -> std::path::PathBuf {
         std::sync::Mutex::new(std::collections::HashSet::new()),
         std::sync::Condvar::new(),
     ));
-    extract_7z_to_temp(seven.to_str().unwrap().to_string(), scratch.clone(), notify);
+    extract_7z_to_temp(
+        seven.to_str().unwrap().to_string(),
+        scratch.clone(),
+        notify,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
 
     let mut builder = tar::Builder::new(fs::File::create(&cbt).expect("create cbt"));
     for entry in fs::read_dir(&scratch).expect("read extracted source folder") {
@@ -115,7 +120,12 @@ fn extracts_solid_7z_to_temp() {
         std::sync::Mutex::new(std::collections::HashSet::new()),
         std::sync::Condvar::new(),
     ));
-    extract_7z_to_temp(path.to_str().unwrap().to_string(), temp_dir.clone(), notify);
+    extract_7z_to_temp(
+        path.to_str().unwrap().to_string(),
+        temp_dir.clone(),
+        notify,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
 
     // A nested entry must exist and match the same-named root entry
     // (the test 7z carries duplicate copies).
@@ -158,7 +168,12 @@ fn lists_and_reads_tar() {
         std::sync::Mutex::new(std::collections::HashSet::new()),
         std::sync::Condvar::new(),
     ));
-    extract_7z_to_temp(seven.to_str().unwrap().to_string(), scratch.clone(), notify);
+    extract_7z_to_temp(
+        seven.to_str().unwrap().to_string(),
+        scratch.clone(),
+        notify,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
     let original = fs::read(scratch.join("export_1785518878919.png")).unwrap();
     assert_eq!(data.len(), original.len());
     let _ = fs::remove_dir_all(&scratch);
@@ -178,7 +193,12 @@ fn extracts_tar_to_temp() {
         std::sync::Condvar::new(),
     ));
 
-    extract_tar_to_temp(cbt.to_str().unwrap().to_string(), temp_dir.clone(), notify);
+    extract_tar_to_temp(
+        cbt.to_str().unwrap().to_string(),
+        temp_dir.clone(),
+        notify,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    );
 
     let root = temp_dir.join("export_1785518878919.png");
     let nested = temp_dir.join("New folder/export_1785518859589.webp");
@@ -232,6 +252,7 @@ fn tar_temp_extraction_includes_metadata() {
         cbt.to_string_lossy().into_owned(),
         extract_dir.clone(),
         notify,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
     );
 
     assert!(extract_dir.join("page.jpg").exists());
@@ -320,7 +341,14 @@ fn protocol_serve_timing_simulation() {
         std::sync::Mutex::new(std::collections::HashSet::new()),
         std::sync::Condvar::new(),
     ));
-    std::thread::spawn(move || extract_7z_to_temp(seven_path, td, notify));
+    std::thread::spawn(move || {
+        extract_7z_to_temp(
+            seven_path,
+            td,
+            notify,
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        )
+    });
 
     // First sorted entry is BAKEMONOGATARI...jpg. Poll it like the handler would.
     let first = "BAKEMONOGATARI - c013 (v03) - p002 [Kodansha Comics] [Digital] [1r0n] {HQ}.jpg";
@@ -366,6 +394,7 @@ fn protocol_serve_timing_simulation() {
         cbt.to_str().unwrap().to_string(),
         tar_temp_dir.clone(),
         tar_notify,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
     );
     let tar_first = fs::read(tar_temp_dir.join(first));
     eprintln!(
@@ -408,7 +437,7 @@ fn archive_cache_byte_budget_evicts_globally() {
     assert!(cache.contains_zip_entry("a.cbz", "p1"));
 
     // Touch p1, then insert p3. p2 is now least-recently-used and leaves.
-    assert!(cache.read_entry_bytes("a.cbz", "p1").is_ok());
+    assert!(cache.read_entry_bytes("a.cbz", "p1").unwrap().wait_for_data("p1").is_ok());
     insert(&mut cache, "a.cbz", "p3", mb1);
     assert!(cache.contains_zip_entry("a.cbz", "p1"));
     assert!(!cache.contains_zip_entry("a.cbz", "p2"));
@@ -469,7 +498,9 @@ fn archive_cache_drops_oldest_of_nine_and_reopens() {
     let first_entry = first.files[0].name.clone();
     let first_bytes = cache
         .read_entry_bytes(&paths[0], &first_entry)
-        .expect("read archive 1 first image");
+        .expect("read archive 1 first image")
+        .wait_for_data(&first_entry)
+        .expect("wait for archive 1 first image");
     assert!(!first_bytes.is_empty());
 
     for path in &paths[1..8] {
@@ -501,7 +532,9 @@ fn archive_cache_drops_oldest_of_nine_and_reopens() {
     let t = Instant::now();
     let reopened_bytes = cache
         .read_entry_bytes(&paths[0], &first_entry)
-        .expect("re-read dropped archive first image");
+        .expect("re-read dropped archive first image")
+        .wait_for_data(&first_entry)
+        .expect("wait for re-read dropped archive first image");
     let reopen_read_ms = t.elapsed().as_millis();
     assert_eq!(reopened_bytes, first_bytes);
     assert!(
@@ -576,7 +609,9 @@ fn archive_cache_evicts_extract_temp_on_drop() {
 
     let bytes = cache
         .read_entry_bytes(seven, &first_entry)
-        .expect("read first 7z image after re-open");
+        .expect("read first 7z image after re-open")
+        .wait_for_data(&first_entry)
+        .expect("wait for read first 7z image after re-open");
     assert!(!bytes.is_empty());
 
     let _ = fs::remove_dir_all(&temp_dir);
@@ -592,7 +627,7 @@ fn encoding_test_file(name: &str) -> std::path::PathBuf {
 #[test]
 fn zip_decodes_shift_jis_entry_names() {
     let path = encoding_test_file("shift_jis_test.zip");
-    let entries = list_zip_entries(path.to_str().unwrap()).expect("list shift-jis zip");
+    let (entries, _) = list_zip_entries(path.to_str().unwrap()).expect("list shift-jis zip");
     assert_eq!(entries.len(), 1);
     assert!(
         entries[0].name.contains("テスト"),
@@ -604,7 +639,7 @@ fn zip_decodes_shift_jis_entry_names() {
 #[test]
 fn zip_decodes_gbk_entry_names() {
     let path = encoding_test_file("gbk_test.zip");
-    let entries = list_zip_entries(path.to_str().unwrap()).expect("list gbk zip");
+    let (entries, _) = list_zip_entries(path.to_str().unwrap()).expect("list gbk zip");
     assert_eq!(entries.len(), 1);
     assert!(
         entries[0].name.contains("测试"),
@@ -616,7 +651,7 @@ fn zip_decodes_gbk_entry_names() {
 #[test]
 fn zip_decodes_euckr_entry_names() {
     let path = encoding_test_file("euckr_test.zip");
-    let entries = list_zip_entries(path.to_str().unwrap()).expect("list euc-kr zip");
+    let (entries, _) = list_zip_entries(path.to_str().unwrap()).expect("list euc-kr zip");
     assert_eq!(entries.len(), 1);
     assert!(
         entries[0].name.contains("테스트"),
@@ -669,6 +704,7 @@ fn sevenz_extracts_metadata_to_temp() {
         path.to_str().unwrap().to_string(),
         temp_dir.clone(),
         notify,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
     );
 
     let xml_path = temp_dir.join("ComicInfo.xml");

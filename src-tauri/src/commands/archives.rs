@@ -31,8 +31,8 @@ pub fn prefetch_archive_entries(
         return Ok(());
     }
 
+    let mut cache = state.lock().map_err(|e| e.to_string())?;
     for entry_name in entries {
-        let mut cache = state.lock().map_err(|e| e.to_string())?;
         let _ = cache.read_entry_bytes(&archive_path, &entry_name);
     }
 
@@ -45,9 +45,10 @@ pub fn get_archive_ico_frames(
     entry_name: String,
     state: tauri::State<'_, Mutex<ArchiveCache>>,
 ) -> Result<String, String> {
-    let data = state
+    let entry_data = state
         .lock()
         .map_err(|e| e.to_string())?
         .read_entry_bytes(&archive_path, &entry_name)?;
+    let data = entry_data.wait_for_data(&entry_name)?;
     ico_frames_from_bytes(&data)
 }
