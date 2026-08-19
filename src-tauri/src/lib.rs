@@ -44,6 +44,8 @@ pub fn run() {
     }
 
     builder = builder
+        .manage(Mutex::new(ArchiveCache::new(cache_mb)))
+        .manage(Mutex::new(WatcherState::new()))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
@@ -65,47 +67,12 @@ pub fn run() {
 
             windows::apply_shell_background(&main_window, &config);
             platform::icons::warmup();
+            crate::commands::watchers::spawn_config_file_watcher(app.handle().clone());
 
-            let app_handle = app.handle().clone();
-            std::thread::spawn(move || {
-                use notify::{EventKind, RecursiveMode, Watcher};
-                use std::time::Duration;
-
-                let config_path = crate::config::get_config_path();
-                if let Some(parent) = config_path.parent() {
-                    let (tx, rx) = std::sync::mpsc::channel();
-                    let mut watcher = notify::recommended_watcher(tx).unwrap();
-                    let _ = watcher.watch(parent, RecursiveMode::NonRecursive);
-
-                    let mut last_emit = std::time::Instant::now();
-
-                    for res in rx {
-                        match res {
-                            Ok(event) => {
-                                if let EventKind::Modify(_) = event.kind {
-                                    if event
-                                        .paths
-                                        .iter()
-                                        .any(|p| p.file_name() == config_path.file_name())
-                                    {
-                                        if last_emit.elapsed() > Duration::from_millis(500) {
-                                            last_emit = std::time::Instant::now();
-                                            let _ = app_handle.emit("config-changed", ());
-                                        }
-                                    }
-                                }
-                            }
-                            Err(_) => {}
-                        }
-                    }
-                }
-            });
             Ok(())
         });
 
     builder = builder
-        .manage(Mutex::new(ArchiveCache::new(cache_mb)))
-        .manage(Mutex::new(WatcherState::new()))
         .invoke_handler(tauri::generate_handler![
             read_directory,
             list_archive,

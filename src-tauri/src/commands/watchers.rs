@@ -7,6 +7,7 @@ use tauri::{Emitter, Manager};
 pub struct WatcherState {
     pub watcher: Option<RecommendedWatcher>,
     pub parent_watcher: Option<RecommendedWatcher>,
+    pub config_watcher: Option<RecommendedWatcher>,
 }
 
 impl WatcherState {
@@ -14,6 +15,7 @@ impl WatcherState {
         Self {
             watcher: None,
             parent_watcher: None,
+            config_watcher: None,
         }
     }
 }
@@ -61,4 +63,44 @@ pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String
     }
 
     Ok(())
+}
+
+pub fn spawn_config_file_watcher(app: tauri::AppHandle) {
+    let state = app.state::<Mutex<WatcherState>>();
+    let mut state = state.lock().unwrap();
+
+    let config_path = crate::config::get_config_path();
+    if let Some(parent) = config_path.parent() {
+        let parent_path = parent.to_path_buf();
+        let app_clone = app.clone();
+
+        let last_emit = std::sync::Arc::new(std::sync::Mutex::new(std::time::Instant::now()));
+
+        let watcher_res = notify::recommended_watcher(move |res: notify::Result<Event>| {
+            if let Ok(event) = res {
+                if let notify::EventKind::Modify(_) = event.kind {
+                    if event
+                        .paths
+                        .iter()
+                        .any(|p| p.file_name() == config_path.file_name())
+                    {
+                        let mut last = last_emit.lock().unwrap();
+                        if last.elapsed() > std::time::Duration::from_millis(500) {
+                            *last = std::time::Instant::now();
+                            let _ = app_clone.emit("config-changed", ());
+                        }
+                    }
+                }
+            }
+        });
+
+        if let Ok(mut watcher) = watcher_res {
+            if watcher
+                .watch(&parent_path, notify::RecursiveMode::NonRecursive)
+                .is_ok()
+            {
+                state.config_watcher = Some(watcher);
+            }
+        }
+    }
 }
