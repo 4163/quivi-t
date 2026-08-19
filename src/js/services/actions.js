@@ -225,7 +225,16 @@ export const ACTION_REGISTRY = [
         return;
       }
       const entry = state.list[state.index];
-      if (!entry) return;
+      if (!entry) {
+        if (state.directory) {
+          try {
+            await window.__TAURI__.core.invoke('open_in_explorer', { path: state.directory });
+          } catch (err) {
+            console.error('[Action] Failed to open explorer:', err);
+          }
+        }
+        return;
+      }
       try {
         if (entry.is_parent) {
           await window.__TAURI__.core.invoke('open_in_explorer', { path: state.directory });
