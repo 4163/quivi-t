@@ -83,14 +83,41 @@ impl Drop for ScopedScreenDc {
     }
 }
 
-pub fn get_cached_native_icon(ext: &str) -> Result<Option<String>, String> {
+/// Pre-warm the Windows shell icon infrastructure on a background thread.
+/// The first SHGetFileInfoW call in a process pays a ~2-3s initialization cost;
+/// absorbing it here keeps the UI icon pipeline jank-free.
+pub fn warmup() {
+    #[cfg(windows)]
+    {
+        std::thread::spawn(|| {
+            let dummy: Vec<u16> = OsStr::new("warmup.txt")
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+            let mut shfi = SHFILEINFOW::default();
+            unsafe {
+                SHGetFileInfoW(
+                    windows::core::PCWSTR(dummy.as_ptr()),
+                    FILE_ATTRIBUTE_NORMAL,
+                    Some(&mut shfi),
+                    std::mem::size_of::<SHFILEINFOW>() as u32,
+                    SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON,
+                );
+                if !shfi.hIcon.is_invalid() {
+                    let _ = DestroyIcon(shfi.hIcon);
+                }
+            }
+        });
+    }
+}
+
+pub fn get_cached_native_icon(path: &str, ext_key: &str) -> Result<Option<String>, String> {
     #[cfg(not(windows))]
     return Ok(None);
 
     #[cfg(windows)]
     {
-        // Check cache first
-        let lower_ext = ext.to_lowercase();
+        let lower_ext = ext_key.to_lowercase();
         {
             let mut cache_guard = NATIVE_ICON_CACHE.lock().map_err(|e| e.to_string())?;
             if let Some(cache) = cache_guard.as_mut() {
@@ -102,30 +129,37 @@ pub fn get_cached_native_icon(ext: &str) -> Result<Option<String>, String> {
             }
         }
 
-        let is_folder = lower_ext == "__folder__";
+        // Drives and special folders use the real path so Windows resolves their
+        // unique shell icons. Regular extensions use a dummy filename with
+        // SHGFI_USEFILEATTRIBUTES for speed (no filesystem access).
+        let is_real_path = lower_ext.contains('\\') || lower_ext.contains('/') || lower_ext.contains(':');
+        let is_generic_folder = lower_ext == "__folder__";
 
-        let dummy_name = if is_folder {
-            "dummy".to_string()
+        let (query_name, attrs, flags) = if is_real_path {
+            let wide: Vec<u16> = OsStr::new(path)
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+            (wide, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON)
+        } else if is_generic_folder {
+            let wide: Vec<u16> = OsStr::new("dummy")
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+            (wide, FILE_ATTRIBUTE_DIRECTORY, SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON)
         } else {
-            let name = format!("dummy{}", if ext.starts_with('.') { "" } else { "." });
-            format!("{}{}", name, ext)
+            let name = format!("dummy.{}", ext_key.trim_start_matches('.'));
+            let wide: Vec<u16> = OsStr::new(&name)
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+            (wide, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON)
         };
 
-        let ext_wide: Vec<u16> = OsStr::new(&dummy_name)
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
         let mut shfi = SHFILEINFOW::default();
-        let flags = SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON;
-        let attrs = if is_folder {
-            FILE_ATTRIBUTE_DIRECTORY
-        } else {
-            FILE_ATTRIBUTE_NORMAL
-        };
-
         let res = unsafe {
             SHGetFileInfoW(
-                windows::core::PCWSTR(ext_wide.as_ptr()),
+                windows::core::PCWSTR(query_name.as_ptr()),
                 attrs,
                 Some(&mut shfi),
                 std::mem::size_of::<SHFILEINFOW>() as u32,
@@ -245,7 +279,6 @@ pub fn get_cached_native_icon(ext: &str) -> Result<Option<String>, String> {
         } else {
             return Ok(None);
         }
-
         // Convert BGRA to RGBA
         for chunk in pixels.chunks_exact_mut(4) {
             let b = chunk[0];

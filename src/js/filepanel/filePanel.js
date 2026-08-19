@@ -187,22 +187,23 @@ const iconCache = new Map();
 
 
 
-function fetchNativeIcon(ext) {
+function fetchNativeIcon(path, ext) {
   if (iconCache.has(ext)) return;
   iconCache.set(ext, 'pending');
 
   if (window.__TAURI__) {
-    const extArg = ext === '__folder__' ? ext : '.' + ext;
-      window.__TAURI__.core.invoke('get_native_icon', { ext: extArg })
+      window.__TAURI__.core.invoke('get_native_icon', { path: path, extKey: ext })
       .then(src => {
-        iconCache.set(ext, src || '');
+        const finalSrc = src || '';
+        iconCache.set(ext, finalSrc);
+        try { localStorage.setItem('icon:' + ext, finalSrc); } catch (e) {}
         document.querySelectorAll(`img[data-ext="${CSS.escape(ext)}"]`).forEach(img => {
           if (src) {
             img.src = src;
             img.removeAttribute('data-ext');
           } else {
             // Generic fallback icon.
-            const isFolder = ext === '__folder__';
+            const isFolder = ext === '__folder__' || ext.includes('\\') || ext.includes('/');
             img.outerHTML = isFolder
               ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
               : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
@@ -214,15 +215,19 @@ function fetchNativeIcon(ext) {
 }
 
 function getIconHtml(item) {
-  if (item.is_drive) {
-    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>';
-  }
-  
   let ext;
   let fallbackSvg;
 
-  if (item.is_dir || item.is_parent) {
-    ext = '__folder__';
+  if (item.is_drive) {
+    ext = item.path;
+    fallbackSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>';
+  } else if (item.is_dir || item.is_parent) {
+    const specialFolders = ['Downloads', 'Pictures', 'Documents', 'Music', 'Videos', 'Desktop'];
+    if (!item.is_parent && specialFolders.includes(item.name)) {
+      ext = item.path;
+    } else {
+      ext = '__folder__';
+    }
     fallbackSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>';
   } else {
     ext = (item.ext || '').toLowerCase();
@@ -241,7 +246,16 @@ function getIconHtml(item) {
     return fallbackSvg;
   }
 
-  fetchNativeIcon(ext);
+  const stored = localStorage.getItem('icon:' + ext);
+  if (stored !== null) {
+    iconCache.set(ext, stored);
+    if (stored) {
+      return `<img src="${stored}" draggable="false">`;
+    }
+    return fallbackSvg;
+  }
+
+  fetchNativeIcon(item.path, ext);
   return `<img data-ext="${CSS.escape(ext)}" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
 }
 

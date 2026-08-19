@@ -538,7 +538,7 @@ li:hover > .fav-remove,
 
 #file-list .item-name, #favorites-list .item-name { min-width: 0; overflow: hidden; padding-left: 8px; display: flex; align-items: center; gap: 4px; }
 #file-list .item-name > svg, #favorites-list .item-name > svg,
-#file-list .item-name > img, #favorites-list .item-name > img { width: var(--fs-14); height: var(--fs-14); flex: 0 0 var(--fs-14); object-fit: contain; image-rendering: pixelated; }
+#file-list .item-name > img, #favorites-list .item-name > img { width: var(--fs-14); height: var(--fs-14); flex: 0 0 var(--fs-14); object-fit: contain; }
 #file-list .is-hidden-entry .item-name > svg,
 #favorites-list .is-hidden-entry .item-name > svg,
 #file-list .is-hidden-entry .item-name > img,

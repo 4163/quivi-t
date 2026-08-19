@@ -64,6 +64,7 @@ pub fn run() {
             .expect("failed to build main window");
 
             windows::apply_shell_background(&main_window, &config);
+            platform::icons::warmup();
 
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
