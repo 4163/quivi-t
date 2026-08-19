@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary & File Overview
 
-[`config.rs`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs) serves as the persistent configuration and state management module for QuiviT. Its core mission is to handle user preferences, multi-file JSON decomposition and aggregation, roaming vs. portable storage modes, startup staged configuration promotion, and configuration directory opening.
+[`config.rs`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs) is the persistent configuration and state management module for QuiviT. Its core mission is to handle user preferences, multi-file JSON decomposition and aggregation, roaming vs. portable storage modes, startup staged configuration promotion, and configuration directory opening.
 
 However, `config.rs` has accumulated severe architectural coupling by acting as a secondary window management module. In addition to pure configuration persistence, it contains:
 1. **Window Construction & Lifecycle Logic:** Direct calls to Tauri's [`WebviewWindowBuilder`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L323-L342) to construct, focus, and configure the `"options"` and `"metadata"` webviews.
@@ -25,7 +25,7 @@ However, `config.rs` has accumulated severe architectural coupling by acting as 
 | :--- | :--- |
 | **Total Lines** | 513 lines |
 | **Code Lines** | ~400 lines (excluding blanks and comments) |
-| **Test Suite Lines** | 67 lines (Lines 446–512) |
+| **Test Suite Lines** | 67 lines (Lines 446-512) |
 | **Primary Domain Responsibilities** | Config persistence, portable/roaming detection, multi-file partitioning |
 | **Secondary (Leaked) Responsibilities** | Window instantiation, DPI scale calculations, window centering, sizing constants |
 | **Tauri Commands Exported** | 10 commands (6 config/path commands, 4 window management commands) |
@@ -60,9 +60,9 @@ However, `config.rs` has accumulated severe architectural coupling by acting as 
 
 | Symbol | Visibility | Lines | Description |
 | :--- | :--- | :--- | :--- |
-| [`AppConfig`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L43-L50) | `pub struct` | 43–50 | Root configuration model (`portable_mode`, `hidden`, `archive_cache_mb`, `frontend_data`). Derives `Serialize, Deserialize, Clone`. |
-| [`AppConfig::default()`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L52-L61) | `impl Default` | 52–61 | Default initialization for `AppConfig`. |
-| [`ROAMING_FILES`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L86-L92) | `pub const` | 86–92 | Array of 5 file names stored under the roaming profile directory. |
+| [`AppConfig`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L43-L50) | `pub struct` | 43-50 | Root configuration model (`portable_mode`, `hidden`, `archive_cache_mb`, `frontend_data`). Derives `Serialize, Deserialize, Clone`. |
+| [`AppConfig::default()`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L52-L61) | `impl Default` | 52-61 | Default initialization for `AppConfig`. |
+| [`ROAMING_FILES`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L86-L92) | `pub const` | 86-92 | Array of 5 file names stored under the roaming profile directory. |
 | [`STATE_KEYS`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L159) | `pub const` | 159 | Array of key names extracted into `quivit_state.json`. |
 | [`SORT_KEYS`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L160) | `pub const` | 160 | Array of key names extracted into `quivit_directory_sort.json`. |
 | [`FAVORITES_KEYS`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L161) | `pub const` | 161 | Array of key names extracted into `quivit_favorites.json`. |
@@ -71,34 +71,34 @@ However, `config.rs` has accumulated severe architectural coupling by acting as 
 
 | Symbol | Visibility | Lines | Signature | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| [`get_exe_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L63-L69) | `pub fn` | 63–69 | `() -> PathBuf` | Resolves directory containing current running executable. |
-| [`is_portable`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L71-L74) | `pub fn` | 71–74 | `() -> bool` | Checks if `quivit_config.json` exists in the executable directory. |
-| [`roaming_dir_path`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L76-L78) | `pub fn` | 76–78 | `(&tauri::AppHandle) -> PathBuf` | Queries Tauri `app_config_dir` path. |
-| [`roaming_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L80-L84) | `pub fn` | 80–84 | `(&tauri::AppHandle) -> PathBuf` | Resolves roaming path and creates directory if missing. |
-| [`remove_roaming_files`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L94-L98) | `pub fn` | 94–98 | `(&Path)` | Deletes the 5 roaming files when switching to portable mode. |
-| [`get_config_path`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L100-L113) | `pub fn` | 100–113 | `() -> PathBuf` | Computes active config file path without `AppHandle` (checking `.portable` / `quivit_config.json` or `%APPDATA%`). |
-| [`load_config_early`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L115-L123) | `pub fn` | 115–123 | `() -> AppConfig` | Synchronous config loader used during early application startup. |
-| [`apply_pending_to_config`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L131-L140) | `pub fn` | 131–140 | `(&mut AppConfig)` | In-memory promotion of `pending_single_instance` to `single_instance`. |
-| [`apply_pending_config_to_disk`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L142-L151) | `pub fn` | 142–151 | `()` | Promotes staged startup settings and writes back to disk. |
-| [`extract_keys`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L163-L173) | `pub fn` | 163–173 | `(&mut JsonValue, &[&str]) -> JsonValue` | Removes specified keys from a JSON object and returns them. |
-| [`merge_keys`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L175-L181) | `pub fn` | 175–181 | `(&mut JsonValue, JsonValue)` | Merges key-value pairs from source JSON object into target. |
-| [`read_json_file`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L183-L186) | `pub fn` | 183–186 | `<T: DeserializeOwned>(&Path) -> Option<T>` | Generic JSON deserialization from disk path. |
-| [`merge_file_into`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L188-L192) | `pub fn` | 188–192 | `(&Path, &mut JsonValue)` | Reads JSON file and merges keys into `frontend_data`. |
+| [`get_exe_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L63-L69) | `pub fn` | 63-69 | `() -> PathBuf` | Resolves directory containing current running executable. |
+| [`is_portable`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L71-L74) | `pub fn` | 71-74 | `() -> bool` | Checks if `quivit_config.json` exists in the executable directory. |
+| [`roaming_dir_path`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L76-L78) | `pub fn` | 76-78 | `(&tauri::AppHandle) -> PathBuf` | Queries Tauri `app_config_dir` path. |
+| [`roaming_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L80-L84) | `pub fn` | 80-84 | `(&tauri::AppHandle) -> PathBuf` | Resolves roaming path and creates directory if missing. |
+| [`remove_roaming_files`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L94-L98) | `pub fn` | 94-98 | `(&Path)` | Deletes the 5 roaming files when switching to portable mode. |
+| [`get_config_path`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L100-L113) | `pub fn` | 100-113 | `() -> PathBuf` | Computes active config file path without `AppHandle` (checking `.portable` / `quivit_config.json` or `%APPDATA%`). |
+| [`load_config_early`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L115-L123) | `pub fn` | 115-123 | `() -> AppConfig` | Synchronous config loader used during early application startup. |
+| [`apply_pending_to_config`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L131-L140) | `pub fn` | 131-140 | `(&mut AppConfig)` | In-memory promotion of `pending_single_instance` to `single_instance`. |
+| [`apply_pending_config_to_disk`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L142-L151) | `pub fn` | 142-151 | `()` | Promotes staged startup settings and writes back to disk. |
+| [`extract_keys`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L163-L173) | `pub fn` | 163-173 | `(&mut JsonValue, &[&str]) -> JsonValue` | Removes specified keys from a JSON object and returns them. |
+| [`merge_keys`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L175-L181) | `pub fn` | 175-181 | `(&mut JsonValue, JsonValue)` | Merges key-value pairs from source JSON object into target. |
+| [`read_json_file`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L183-L186) | `pub fn` | 183-186 | `<T: DeserializeOwned>(&Path) -> Option<T>` | Generic JSON deserialization from disk path. |
+| [`merge_file_into`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L188-L192) | `pub fn` | 188-192 | `(&Path, &mut JsonValue)` | Reads JSON file and merges keys into `frontend_data`. |
 
 ### 2.4. Tauri IPC Commands
 
 | Command Name | Kind / Attribute | Lines | Signature | Domain Role |
 | :--- | :--- | :--- | :--- | :--- |
-| [`load_config`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L194-L215) | `#[tauri::command]` | 194–215 | `(AppHandle) -> AppConfig` | Aggregates multi-file split JSON in roaming mode or loads portable JSON. |
-| [`get_config_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L222-L225) | `#[tauri::command]` | 222–225 | `(AppHandle) -> String` | Returns roaming config folder path as string. |
-| [`open_config_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L227-L235) | `#[tauri::command]` | 227–235 | `(AppHandle) -> Result<(), String>` | Opens roaming config folder in Windows Explorer via `opener`. |
-| [`get_local_data_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L237-L240) | `#[tauri::command]` | 237–240 | `() -> String` | Returns executable folder path as string. |
-| [`open_local_data_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L242-L249) | `#[tauri::command]` | 242–249 | `(AppHandle) -> Result<(), String>` | Opens executable folder in Windows Explorer via `opener`. |
-| [`save_config`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L251-L308) | `#[tauri::command]` | 251–308 | `(AppHandle, AppConfig) -> Result<(), String>` | Persists config; handles portable hidden attributes and roaming file splitting. |
-| [`open_options`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L310-L345) | `#[tauri::command] pub async` | 310–345 | `(AppHandle) -> Result<(), String>` | Creates or focuses `"options"` webview window (hidden initially). |
-| [`fit_options_window`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L350-L376) | `#[tauri::command] pub async` | 350–376 | `(AppHandle, f64) -> Result<(), String>` | Sizes `"options"` window to content width and centers over `"main"`. |
-| [`open_metadata_window`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L378-L414) | `#[tauri::command] pub async` | 378–414 | `(AppHandle) -> Result<(), String>` | Creates or focuses `"metadata"` webview window (hidden initially). |
-| [`fit_metadata_window`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L418-L444) | `#[tauri::command] pub async` | 418–444 | `(AppHandle, f64) -> Result<(), String>` | Sizes `"metadata"` window to content height and centers over `"main"`. |
+| [`load_config`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L194-L215) | `#[tauri::command]` | 194-215 | `(AppHandle) -> AppConfig` | Aggregates multi-file split JSON in roaming mode or loads portable JSON. |
+| [`get_config_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L222-L225) | `#[tauri::command]` | 222-225 | `(AppHandle) -> String` | Returns roaming config folder path as string. |
+| [`open_config_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L227-L235) | `#[tauri::command]` | 227-235 | `(AppHandle) -> Result<(), String>` | Opens roaming config folder in Windows Explorer via `opener`. |
+| [`get_local_data_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L237-L240) | `#[tauri::command]` | 237-240 | `() -> String` | Returns executable folder path as string. |
+| [`open_local_data_dir`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L242-L249) | `#[tauri::command]` | 242-249 | `(AppHandle) -> Result<(), String>` | Opens executable folder in Windows Explorer via `opener`. |
+| [`save_config`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L251-L308) | `#[tauri::command]` | 251-308 | `(AppHandle, AppConfig) -> Result<(), String>` | Persists config; handles portable hidden attributes and roaming file splitting. |
+| [`open_options`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L310-L345) | `#[tauri::command] pub async` | 310-345 | `(AppHandle) -> Result<(), String>` | Creates or focuses `"options"` webview window (hidden initially). |
+| [`fit_options_window`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L350-L376) | `#[tauri::command] pub async` | 350-376 | `(AppHandle, f64) -> Result<(), String>` | Sizes `"options"` window to content width and centers over `"main"`. |
+| [`open_metadata_window`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L378-L414) | `#[tauri::command] pub async` | 378-414 | `(AppHandle) -> Result<(), String>` | Creates or focuses `"metadata"` webview window (hidden initially). |
+| [`fit_metadata_window`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L418-L444) | `#[tauri::command] pub async` | 418-444 | `(AppHandle, f64) -> Result<(), String>` | Sizes `"metadata"` window to content height and centers over `"main"`. |
 
 ---
 
@@ -127,57 +127,57 @@ graph TD
 ```
 config.rs (513 lines)
 │
-├── Cluster 1: Window Dimension & Clamping Constants (L8–40)
-│   ├── MAIN_INITIAL_W, MAIN_INITIAL_H, MAIN_MIN_W, MAIN_MIN_H (L12–15)
-│   ├── AUTO_FIT_INITIAL_W, AUTO_FIT_INITIAL_H (L19–20)
-│   ├── OPTIONS_INITIAL_W, OPTIONS_INITIAL_H, OPTIONS_MIN_W, OPTIONS_MIN_H, OPTIONS_MAX_W (L23–29)
-│   └── META_INITIAL_W, META_INITIAL_H, META_MIN_W, META_MIN_H, META_MAX_H (L33–39)
+├── Cluster 1: Window Dimension & Clamping Constants (L8-40)
+│   ├── MAIN_INITIAL_W, MAIN_INITIAL_H, MAIN_MIN_W, MAIN_MIN_H (L12-15)
+│   ├── AUTO_FIT_INITIAL_W, AUTO_FIT_INITIAL_H (L19-20)
+│   ├── OPTIONS_INITIAL_W, OPTIONS_INITIAL_H, OPTIONS_MIN_W, OPTIONS_MIN_H, OPTIONS_MAX_W (L23-29)
+│   └── META_INITIAL_W, META_INITIAL_H, META_MIN_W, META_MIN_H, META_MAX_H (L33-39)
 │
-├── Cluster 2: Data Models & Default Invariants (L43–61)
-│   ├── AppConfig struct definition (L43–50)
-│   └── AppConfig::default implementation (L52–61)
+├── Cluster 2: Data Models & Default Invariants (L43-61)
+│   ├── AppConfig struct definition (L43-50)
+│   └── AppConfig::default implementation (L52-61)
 │
-├── Cluster 3: Filesystem Path Discovery & Portability Resolution (L63–113)
-│   ├── get_exe_dir (L63–69)
-│   ├── is_portable (L71–74)
-│   ├── roaming_dir_path (L76–78)
-│   ├── roaming_dir (L80–84)
-│   ├── ROAMING_FILES constant (L86–92)
-│   ├── remove_roaming_files (L94–98)
-│   └── get_config_path (L100–113)
+├── Cluster 3: Filesystem Path Discovery & Portability Resolution (L63-113)
+│   ├── get_exe_dir (L63-69)
+│   ├── is_portable (L71-74)
+│   ├── roaming_dir_path (L76-78)
+│   ├── roaming_dir (L80-84)
+│   ├── ROAMING_FILES constant (L86-92)
+│   ├── remove_roaming_files (L94-98)
+│   └── get_config_path (L100-113)
 │
-├── Cluster 4: Startup Bootstrapping & Pending Settings Promotion (L115–151)
-│   ├── load_config_early (L115–123)
-│   ├── apply_pending_to_config (L131–140)
-│   └── apply_pending_config_to_disk (L142–151)
+├── Cluster 4: Startup Bootstrapping & Pending Settings Promotion (L115-151)
+│   ├── load_config_early (L115-123)
+│   ├── apply_pending_to_config (L131-140)
+│   └── apply_pending_config_to_disk (L142-151)
 │
-├── Cluster 5: Multi-File JSON Partitioning & Merging Engine (L153–192)
-│   ├── STATE_KEYS, SORT_KEYS, FAVORITES_KEYS constants (L159–161)
-│   ├── extract_keys (L163–173)
-│   ├── merge_keys (L175–181)
-│   ├── read_json_file (L183–186)
-│   └── merge_file_into (L188–192)
+├── Cluster 5: Multi-File JSON Partitioning & Merging Engine (L153-192)
+│   ├── STATE_KEYS, SORT_KEYS, FAVORITES_KEYS constants (L159-161)
+│   ├── extract_keys (L163-173)
+│   ├── merge_keys (L175-181)
+│   ├── read_json_file (L183-186)
+│   └── merge_file_into (L188-192)
 │
-├── Cluster 6: Config IPC Commands & Persistence Routing (L194–308)
-│   ├── load_config command (L194–215)
-│   ├── get_config_dir command (L222–225)
-│   ├── open_config_dir command (L227–235)
-│   ├── get_local_data_dir command (L237–240)
-│   ├── open_local_data_dir command (L242–249)
-│   └── save_config command (L251–308)
+├── Cluster 6: Config IPC Commands & Persistence Routing (L194-308)
+│   ├── load_config command (L194-215)
+│   ├── get_config_dir command (L222-225)
+│   ├── open_config_dir command (L227-235)
+│   ├── get_local_data_dir command (L237-240)
+│   ├── open_local_data_dir command (L242-249)
+│   └── save_config command (L251-308)
 │
-├── Cluster 7: Secondary Window Lifecycle, Sizing & Centering (L310–444)
-│   ├── open_options command (L310–345)
-│   ├── fit_options_window command (L350–376)
-│   ├── open_metadata_window command (L378–414)
-│   └── fit_metadata_window command (L418–444)
+├── Cluster 7: Secondary Window Lifecycle, Sizing & Centering (L310-444)
+│   ├── open_options command (L310-345)
+│   ├── fit_options_window command (L350-376)
+│   ├── open_metadata_window command (L378-414)
+│   └── fit_metadata_window command (L418-444)
 │
-└── Cluster 8: In-Tree Unit Test Suite (L446–512)
-    ├── test_appconfig_resiliency (L450–470)
-    ├── test_apply_pending_config_disable_promotion (L471–481)
-    ├── test_apply_pending_config_enable_promotion (L482–492)
-    ├── test_apply_pending_config_noop_without_pending (L493–501)
-    └── test_apply_pending_config_non_bool_dropped (L502–512)
+└── Cluster 8: In-Tree Unit Test Suite (L446-512)
+    ├── test_appconfig_resiliency (L450-470)
+    ├── test_apply_pending_config_disable_promotion (L471-481)
+    ├── test_apply_pending_config_enable_promotion (L482-492)
+    ├── test_apply_pending_config_noop_without_pending (L493-501)
+    └── test_apply_pending_config_non_bool_dropped (L502-512)
 ```
 
 ---
@@ -242,7 +242,7 @@ Certain runtime settings (such as single-instance enforcement via `tauri_plugin_
 
 ### 6.1. Violation of Single Responsibility Principle (SRP): Window Lifecycle in Config
 
-[`config.rs`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs) contains 135 lines (Lines 310–444) dedicated entirely to window management:
+[`config.rs`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs) contains 135 lines (Lines 310-444) dedicated entirely to window management:
 - [`open_options`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L310-L345) and [`open_metadata_window`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L378-L414) build and show webview windows.
 - [`fit_options_window`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L350-L376) and [`fit_metadata_window`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L418-L444) query window scale factors, calculate physical monitor coordinates, and reposition windows.
 
@@ -252,7 +252,7 @@ Certain runtime settings (such as single-instance enforcement via `tauri_plugin_
 
 The coordinate centering calculation is duplicated almost verbatim across `fit_options_window` and `fit_metadata_window`:
 
-**Lines 359–367 (`fit_options_window`):**
+**Lines 359-367 (`fit_options_window`):**
 ```rust
 let position: Option<tauri::PhysicalPosition<i32>> = (|| {
     let main = app.get_webview_window("main")?;
@@ -265,7 +265,7 @@ let position: Option<tauri::PhysicalPosition<i32>> = (|| {
 })();
 ```
 
-**Lines 427–435 (`fit_metadata_window`):**
+**Lines 427-435 (`fit_metadata_window`):**
 ```rust
 let position: Option<tauri::PhysicalPosition<i32>> = (|| {
     let main = app.get_webview_window("main")?;
@@ -322,7 +322,7 @@ If an OS crash, power loss, or write error occurs on file 3, files 1 and 2 are u
 
 ### 6.6. Dead / Mirrored Clamping Constants
 
-Lines 28–29 and 38–39 declare constants marked `#[allow(dead_code)]`:
+Lines 28-29 and 38-39 declare constants marked `#[allow(dead_code)]`:
 ```rust
 #[allow(dead_code)] // Single source of truth for the cap; enforced in JS.
 const OPTIONS_MAX_W: f64 = 560.0;
@@ -340,11 +340,11 @@ The bottom of [`config.rs`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L
 
 | Test Function | Lines | Coverage Target | Assertions / Verification |
 | :--- | :--- | :--- | :--- |
-| [`test_appconfig_resiliency`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L451-L470) | 451–470 | `AppConfig` deserialization | Tests that missing `portable_mode` defaults to `false`, missing `frontend_data` defaults to empty object `{}`. |
-| [`test_apply_pending_config_disable_promotion`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L472-L481) | 472–481 | `apply_pending_to_config` | Verifies `pending_single_instance: false` overrides effective `single_instance: true` and is removed. |
-| [`test_apply_pending_config_enable_promotion`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L483-L492) | 483–492 | `apply_pending_to_config` | Verifies `pending_single_instance: true` overrides effective `single_instance: false` and is removed. |
-| [`test_apply_pending_config_noop_without_pending`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L494-L501) | 494–501 | `apply_pending_to_config` | Verifies configuration is untouched when `pending_single_instance` key is absent. |
-| [`test_apply_pending_config_non_bool_dropped`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L503-L512) | 503–512 | `apply_pending_to_config` | Verifies invalid non-boolean types (e.g. `"yes"`) are stripped without mutating `single_instance`. |
+| [`test_appconfig_resiliency`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L451-L470) | 451-470 | `AppConfig` deserialization | Tests that missing `portable_mode` defaults to `false`, missing `frontend_data` defaults to empty object `{}`. |
+| [`test_apply_pending_config_disable_promotion`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L472-L481) | 472-481 | `apply_pending_to_config` | Verifies `pending_single_instance: false` overrides effective `single_instance: true` and is removed. |
+| [`test_apply_pending_config_enable_promotion`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L483-L492) | 483-492 | `apply_pending_to_config` | Verifies `pending_single_instance: true` overrides effective `single_instance: false` and is removed. |
+| [`test_apply_pending_config_noop_without_pending`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L494-L501) | 494-501 | `apply_pending_to_config` | Verifies configuration is untouched when `pending_single_instance` key is absent. |
+| [`test_apply_pending_config_non_bool_dropped`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L503-L512) | 503-512 | `apply_pending_to_config` | Verifies invalid non-boolean types (e.g. `"yes"`) are stripped without mutating `single_instance`. |
 
 *Decoupling Target:* These tests exercise pure data structure deserialization and transformation with zero private state dependencies. They can be moved cleanly to an external test file `tests/config_tests.rs`.
 
@@ -445,18 +445,18 @@ src-tauri/
 
 | Symbol / Item | Current Location in `config.rs` | Recommended Target Location | Target Visibility |
 | :--- | :--- | :--- | :--- |
-| `MAIN_INITIAL_W` / `H`, `MAIN_MIN_W` / `H` | Lines 12–15 | `src-tauri/src/windows/constants.rs` | `pub const` |
-| `OPTIONS_*` & `META_*` constants | Lines 19–39 | `src-tauri/src/windows/constants.rs` | `pub(crate) const` |
-| `AppConfig` | Lines 43–61 | `src-tauri/src/config/mod.rs` | `pub struct` |
-| `get_exe_dir`, `is_portable` | Lines 63–74 | `src-tauri/src/config/paths.rs` | `pub fn` |
-| `roaming_dir_path`, `roaming_dir` | Lines 76–84 | `src-tauri/src/config/paths.rs` | `pub fn` |
-| `ROAMING_FILES`, `remove_roaming_files` | Lines 86–98 | `src-tauri/src/config/paths.rs` | `pub(crate)` |
-| `get_config_path`, `load_config_early` | Lines 100–123 | `src-tauri/src/config/mod.rs` | `pub fn` |
-| `apply_pending_to_config`, `apply_pending_config_to_disk` | Lines 131–151 | `src-tauri/src/config/mod.rs` | `pub fn` |
-| `STATE_KEYS`, `SORT_KEYS`, `FAVORITES_KEYS` | Lines 159–161 | `src-tauri/src/config/mod.rs` | `pub const` |
-| `extract_keys`, `merge_keys`, `read_json_file`, `merge_file_into` | Lines 163–192 | `src-tauri/src/config/mod.rs` | `pub(crate) fn` |
-| `load_config`, `save_config` | Lines 194–215, 251–308 | `src-tauri/src/config/mod.rs` | `#[tauri::command] pub` |
-| `get_config_dir`, `open_config_dir`, `get_local_data_dir`, `open_local_data_dir` | Lines 222–249 | `src-tauri/src/config/mod.rs` | `#[tauri::command] pub` |
-| `open_options`, `fit_options_window` | Lines 310–376 | `src-tauri/src/windows/commands.rs` | `#[tauri::command] pub` |
-| `open_metadata_window`, `fit_metadata_window` | Lines 378–444 | `src-tauri/src/windows/commands.rs` | `#[tauri::command] pub` |
-| `mod tests` (5 tests) | Lines 446–512 | `src-tauri/tests/config_tests.rs` | Integration tests |
+| `MAIN_INITIAL_W` / `H`, `MAIN_MIN_W` / `H` | Lines 12-15 | `src-tauri/src/windows/constants.rs` | `pub const` |
+| `OPTIONS_*` & `META_*` constants | Lines 19-39 | `src-tauri/src/windows/constants.rs` | `pub(crate) const` |
+| `AppConfig` | Lines 43-61 | `src-tauri/src/config/mod.rs` | `pub struct` |
+| `get_exe_dir`, `is_portable` | Lines 63-74 | `src-tauri/src/config/paths.rs` | `pub fn` |
+| `roaming_dir_path`, `roaming_dir` | Lines 76-84 | `src-tauri/src/config/paths.rs` | `pub fn` |
+| `ROAMING_FILES`, `remove_roaming_files` | Lines 86-98 | `src-tauri/src/config/paths.rs` | `pub(crate)` |
+| `get_config_path`, `load_config_early` | Lines 100-123 | `src-tauri/src/config/mod.rs` | `pub fn` |
+| `apply_pending_to_config`, `apply_pending_config_to_disk` | Lines 131-151 | `src-tauri/src/config/mod.rs` | `pub fn` |
+| `STATE_KEYS`, `SORT_KEYS`, `FAVORITES_KEYS` | Lines 159-161 | `src-tauri/src/config/mod.rs` | `pub const` |
+| `extract_keys`, `merge_keys`, `read_json_file`, `merge_file_into` | Lines 163-192 | `src-tauri/src/config/mod.rs` | `pub(crate) fn` |
+| `load_config`, `save_config` | Lines 194-215, 251-308 | `src-tauri/src/config/mod.rs` | `#[tauri::command] pub` |
+| `get_config_dir`, `open_config_dir`, `get_local_data_dir`, `open_local_data_dir` | Lines 222-249 | `src-tauri/src/config/mod.rs` | `#[tauri::command] pub` |
+| `open_options`, `fit_options_window` | Lines 310-376 | `src-tauri/src/windows/commands.rs` | `#[tauri::command] pub` |
+| `open_metadata_window`, `fit_metadata_window` | Lines 378-444 | `src-tauri/src/windows/commands.rs` | `#[tauri::command] pub` |
+| `mod tests` (5 tests) | Lines 446-512 | `src-tauri/tests/config_tests.rs` | Integration tests |

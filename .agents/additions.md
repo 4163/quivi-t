@@ -1,25 +1,25 @@
 # QuiviT Implementation Plan
 
-- `.agents/architecture-state.md` — current module map and verification checklist.
-- `.agents/implemented.md` — shipped, verified work. Port completed slices there when they leave this plan.
+- `.agents/architecture-state.md`: current module map and verification checklist.
+- `.agents/implemented.md`: shipped, verified work. Port completed slices there when they leave this plan.
 
 ## Work Plan
 
 *Easiest and least invasive first.*
 
 ### Animated "Loading..." Broken-Image Feedback on Image Load
-- Re-introduce the animated `alt="Loading..."` broken-image visual whenever an image is in the loading state — i.e. when `.status-filename` shows `Loading...` (`viewerRender.js` already writes that on `activeChanged`).
+- Re-introduce the animated `alt="Loading..."` broken-image visual whenever an image is in the loading state: i.e. when `.status-filename` shows `Loading...` (`viewerRender.js` already writes that on `activeChanged`).
 - Currently `_setElementLoadingLabel` sets only a static `alt = 'Loading...'`, and the broken-image frame is only actually visible on the first-display placeholder; seamless swaps (previous image held as a bridge) show no loading feedback at all.
 - Easy emulation: create an `img` element whose `src` purposefully points at a non-existent target (or a broken base64-encoded image) so the browser renders its built-in broken-image frame, and animate its `alt` text (`Loading. → Loading.. → Loading...`, reuse/restore the earlier `startLoadingAltAnimation`-style helper in `viewerRender.js`) while loading.
 
 ### Favorites & Bookmarks System (Medium Logic)
 - **From clipboard notes (2026-08-13):**
-  - Middle-click removes a favorite directly — intentionally NOT mappable to a keybind; just document it in the README Features section where favorites is covered.
+  - Middle-click removes a favorite directly: intentionally NOT mappable to a keybind; just document it in the README Features section where favorites is covered.
   - Ordering: implement the advanced favorites next, but FIRST rename the current favorites names in JS/HTML/CSS (functions, classes, IDs) to "bookmark".
   - README: document the favorites system under Features; afterwards place the bookmark (legacy favorites) system entry under it, described simply as a bookmark that works similarly to favorites.
-  - Favorites file-list remove-button (X) visibility: currently an active/highlighted item makes its X button visible; it should only be visible on hover, or when focused via Tab keyboard navigation — not merely because the item is the active selection.
+  - Favorites file-list remove-button (X) visibility: currently an active/highlighted item makes its X button visible; it should only be visible on hover, or when focused via Tab keyboard navigation: not merely because the item is the active selection.
 - **Improve favorites system:** add a Favorites dropdown under the menu bar to load/save favorites. Consider an input for titles, only if the styling/intuitiveness of the dropdown interaction is good.
-- **Separate bookmarks system (legacy favorites):** placed under the favorites section, acting like the old favorites. The JS names across both can be consolidated into the same thing — the only difference is saving/loading favorites as a favorites list.
+- **Separate bookmarks system (legacy favorites):** placed under the favorites section, acting like the old favorites. The JS names across both can be consolidated into the same thing: the only difference is saving/loading favorites as a favorites list.
 
 ### View, Rendering & Window Enhancements (Visuals/Features)
 - **Fullscreen Focus & Shortcut Loss Fix:** Fix bug where shortcut keys (including `Escape` / `F11`) occasionally stop functioning while in fullscreen mode (e.g., when switching focus to another monitor or Alt-Tabbing away and back).
@@ -76,18 +76,18 @@
 
 ## Post-Release Backlog (Future Considerations)
 
-*Items deliberately deferred until after the initial release. Low priority by design — do not start without re-validating the need.*
+*Items deliberately deferred until after the initial release. Low priority by design: do not start without re-validating the need.*
 
 ### File List Relocation, Detach & Drag-and-Drop
-- Add a way to change the location of the file list (left default, top, bottom, right). Detached as well? Maybe drag-and-droppable — how practical would the implementation be?
-- Using a JS library sounds ideal; this has been done before on a smaller scale at `E:\Projects\x4163-apps\dither-app` (not sure if it's the best/most-used library — performance-first). Prioritize clean/snappy user interaction with no jank.
+- Add a way to change the location of the file list (left default, top, bottom, right). Detached as well? Maybe drag-and-droppable: how practical would the implementation be?
+- Using a JS library sounds ideal; this has been done before on a smaller scale at `E:\Projects\x4163-apps\dither-app` (not sure if it's the best/most-used library: performance-first). Prioritize clean/snappy user interaction with no jank.
 - Partial implementation via UI buttons (detach + move location) is acceptable pre-release; drag-and-drop capabilities should be implemented after release.
 
 ### File List Thumbnail View
 - Add a thumbnail/medium view mode to the file list: image files show a medium-size preview thumbnail, non-image items (folders, archives, `..`) show a medium-size icon.
-- Medium icons have a partial backend already: `get_native_icon` fetches 16×16 shell icons via `SHGFI_SMALLICON`. A medium variant would need `SHGFI_LARGEICON`/32×32 — mind the documented Windows shell scaling bug that returns open-folder variants when requesting large icons downscaled (`ico.rs` already works around this).
+- Medium icons have a partial backend already: `get_native_icon` fetches 16×16 shell icons via `SHGFI_SMALLICON`. A medium variant would need `SHGFI_LARGEICON`/32×32: mind the documented Windows shell scaling bug that returns open-folder variants when requesting large icons downscaled (`ico.rs` already works around this).
 - Image previews: reuse the existing `asset://` / `quivit://` src pipeline (`fsUtils.js` `buildArchiveSrc`) to generate thumbnails on demand; lean on the existing off-screen preloader / caching patterns.
-- **Placement TBD:** the toggle-button location is unresolved — `.file-panel-actions` (the bottom action strip holding Open Explorer / Open Folder / Favorite / metadata badge) feels iffy. Alternatives to explore: a view-mode control in the file-panel header (above the column-header row), a View-menu item, or a `cmd-*` keybind like the existing view toggles.
+- **Placement TBD:** the toggle-button location is unresolved: `.file-panel-actions` (the bottom action strip holding Open Explorer / Open Folder / Favorite / metadata badge) feels iffy. Alternatives to explore: a view-mode control in the file-panel header (above the column-header row), a View-menu item, or a `cmd-*` keybind like the existing view toggles.
 - **Performance-first:** only load thumbnails for visible rows (lazy/virtualized), never decode full-size images for the preview, and no overhead in the normal list mode.
 
 ### Double Page View & Manga Spread Mode
@@ -106,7 +106,7 @@
 - **Active Item Synchronization:** As the user scrolls vertically through the continuous strip, dynamically track the currently visible image and keep the active item selection in the file list and status bar perfectly in sync.
 
 ### Web Fetching (Manga/Manwha)
-- Add a webfetch capability via a standalone JS script (maybe into their own dir to keep decoupled — but only if each website needs complex fetch parsing); manga/manwha websites, etc.
+- Add a webfetch capability via a standalone JS script (maybe into their own dir to keep decoupled: but only if each website needs complex fetch parsing); manga/manwha websites, etc.
 - If an API exists for the target site, use it.
 - Entry point: goes into the menubar File dropdown.
 
@@ -116,14 +116,14 @@
 
 ### Animated Frame Timeline
 - Add a frame timeline bar at the bottom of the canvas viewer for animated formats (WebP, APNG, GIF, SVG? (if that's even possible, discuss practical options), and any other animated image formats supported).
-- **Reference:** https://sourceforge.net/projects/gifviewer/ — match its visual style and interaction model.
+- **Reference:** https://sourceforge.net/projects/gifviewer/: match its visual style and interaction model.
 - **Controls:**
   - Play/pause button.
   - Frame count indicator (`X / Y`).
   - Draggable scrubber bar to seek through frames.
   - Keyboard navigatable via arrow keys and tab navigation.
   - The existing `cmd-next` / `cmd-prev` keybinds should tie into frame stepping when an animated file is active.
-- **Layout:** Sits at the bottom of the canvas viewer (not full-width of the window). Height should always match `#file-panel-actions` via a shared CSS variable so it stays visually consistent. Exact width behavior TBD — full width feels off for files with few frames, so consider a constrained or content-aware width.
+- **Layout:** Sits at the bottom of the canvas viewer (not full-width of the window). Height should always match `#file-panel-actions` via a shared CSS variable so it stays visually consistent. Exact width behavior TBD: full width feels off for files with few frames, so consider a constrained or content-aware width.
 - **Performance-first**: snappy (not sluggish) interaction with little to no visual delays/jank (delayed responses/unresponsiveness, flickering etc.), and only activate timeline logic when an animated format is detected; no overhead for static images.
 
 ### UI Sound Design (Low/Last Priority)
@@ -137,9 +137,9 @@
 - Full plan: `.agents/7z_implementation.md` (retained for future reference; has a `Status: Shelved` note).
 - **Why shelved:** the original UI-blocking bug was already solved in pure Rust. The speed gap does not manifest as a real UX problem, and the sidecar adds deployment complexity plus re-introduces partial-file race concerns.
 - If picked up later: keep the pure-Rust path as a fallback, and prefer single-entry `7zr` extraction over the full-extraction + watcher design in the current plan.
-- **Optional single-file engine:** Ship the 7z/cb7 DLL as a drop-in sidecar — if it's present next to the exe, use it; otherwise fall back to the optimized pure-Rust path. Keeps the app portable for users who don't use 7z/cb7.
+- **Optional single-file engine:** Ship the 7z/cb7 DLL as a drop-in sidecar: if it's present next to the exe, use it; otherwise fall back to the optimized pure-Rust path. Keeps the app portable for users who don't use 7z/cb7.
 - **Placement (leaning):** require the DLL to be either next to the exe or in the roaming folder to take effect. Not storing it as a portable-mode config item.
-- Future optional dependencies could follow the same drop-in pattern — they act like non-required modules.
+- Future optional dependencies could follow the same drop-in pattern: they act like non-required modules.
 - Document this on the README under documentation after it is implemented.
 
 ### Custom QuiviT Icons
@@ -155,15 +155,15 @@
 
 ### Update Availability Indicator
 - Add a lightweight GitHub releases check on startup that displays an update notice in the `.menubar-spacer` area (right-aligned, pointing toward the GitHub button).
-- When an update is available: show a sentence like "Version X.Y.Z is available — you are X versions behind" inside the menubar spacer. Temporarily reroute the GitHub button to the releases page for that session.
-- No auto-download or auto-install — this intentionally avoids an auto-update system, which is out of scope and conflicts with the portable-first goals.
+- When an update is available: show a sentence like "Version X.Y.Z is available: you are X versions behind" inside the menubar spacer. Temporarily reroute the GitHub button to the releases page for that session.
+- No auto-download or auto-install: this intentionally avoids an auto-update system, which is out of scope and conflicts with the portable-first goals.
 - Fail silently when offline or rate-limited.
 - **Important:** Must be implemented and tested after the first actual release is published on GitHub, otherwise there's nothing to compare against.
 
 ### Other Platform Support
-- Currently impractical: this is a Windows-only codebase and there's no access to other devices (or OSes) for testing. A huge portion of the backend relies on Windows APIs — `SHGetFileInfoW` native icons (`ico.rs`), registry-based file associations with `UserChoice` semantics and `ms-settings:defaultapps` deep links (`commands.rs`), `SHChangeNotify`, explorer integration, the `.exe`-adjacent portable config — plus Windows-specific assumptions in the frontend (drive-root `C:\` paths, `quivit://localhost` protocol routing differences, WebView2 as the only runtime).
-- **Best path forward — undecided, open question.** Candidate directions:
+- Currently impractical: this is a Windows-only codebase and there's no access to other devices (or OSes) for testing. A huge portion of the backend relies on Windows APIs: `SHGetFileInfoW` native icons (`ico.rs`), registry-based file associations with `UserChoice` semantics and `ms-settings:defaultapps` deep links (`commands.rs`), `SHChangeNotify`, explorer integration, the `.exe`-adjacent portable config: plus Windows-specific assumptions in the frontend (drive-root `C:\` paths, `quivit://localhost` protocol routing differences, WebView2 as the only runtime).
+- **Best path forward: undecided, open question.** Candidate directions:
   - **(a) Multiple projects:** fork/split each platform into its own codebase/project. Pros: native behavior per platform, no abstraction tax. Cons: duplicated frontend/UI, double maintenance burden.
-  - **(b) OS-abstraction pipeline in this codebase:** put a structure/system/pipeline in place so OS-specific API/function calls sit behind platform layers where Windows APIs are currently used directly — e.g. a Rust `platform` module/trait behind the Tauri commands (Windows impl today, stub/fallback impls for other targets) plus a JS-side capability switch, so other targets at least compile and degrade gracefully.
+  - **(b) OS-abstraction pipeline in this codebase:** put a structure/system/pipeline in place so OS-specific API/function calls sit behind platform layers where Windows APIs are currently used directly: e.g. a Rust `platform` module/trait behind the Tauri commands (Windows impl today, stub/fallback impls for other targets) plus a JS-side capability switch, so other targets at least compile and degrade gracefully.
   - **(c) Hybrid:** abstract only where the seam is cheap (path handling, protocol routing, config locations), and keep separate projects where the gap is too large (file associations, native icons).
-- Do not start this without first securing at least one non-Windows test device or CI runner — verification is impossible otherwise.
+- Do not start this without first securing at least one non-Windows test device or CI runner: verification is impossible otherwise.

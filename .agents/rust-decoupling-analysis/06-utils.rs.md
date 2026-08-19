@@ -27,30 +27,30 @@ However, the module exhibits several structural shortcomings: it couples platfor
 
 | Symbol | Visibility | Lines | Description |
 | :--- | :--- | :--- | :--- |
-| [`FileFormat`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L61-L67) | `pub` | 61–67 | Static descriptor for a supported file format, containing file extension (`ext`), display name (`name`), icon filename (`icon`), and format group (`category`). Derives `Serialize`, `Deserialize`, `Clone`, and `Debug`. |
+| [`FileFormat`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L61-L67) | `pub` | 61-67 | Static descriptor for a supported file format, containing file extension (`ext`), display name (`name`), icon filename (`icon`), and format group (`category`). Derives `Serialize`, `Deserialize`, `Clone`, and `Debug`. |
 
 ### 2.2 Declarative Macros (Module-Scoped)
 
 | Symbol | Visibility | Lines | Expansion / Purpose |
 | :--- | :--- | :--- | :--- |
-| [`image!`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L69-L73) | Private (file-local) | 69–73 | Constructs a `FileFormat` with `category: "Image"`. |
-| [`archive!`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L74-L78) | Private (file-local) | 74–78 | Constructs a `FileFormat` with `category: "Archive"`. |
+| [`image!`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L69-L73) | Private (file-local) | 69-73 | Constructs a `FileFormat` with `category: "Image"`. |
+| [`archive!`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L74-L78) | Private (file-local) | 74-78 | Constructs a `FileFormat` with `category: "Archive"`. |
 
 ### 2.3 Constants & Registry Tables
 
 | Symbol | Visibility | Lines | Type | Item Count | Content / Formats |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [`SUPPORTED_FORMATS`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L80-L101) | `pub const` | 80–101 | `&[FileFormat]` | 18 formats | **Images (10):** `jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `svg`, `bmp`, `ico`, `avif`<br>**Archives (8):** `zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar` |
+| [`SUPPORTED_FORMATS`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L80-L101) | `pub const` | 80-101 | `&[FileFormat]` | 18 formats | **Images (10):** `jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `svg`, `bmp`, `ico`, `avif`<br>**Archives (8):** `zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar` |
 
 ### 2.4 Functions
 
 | Symbol | Target / Attributes | Lines | Signature | Purpose |
 | :--- | :--- | :--- | :--- | :--- |
-| [`set_hidden_attribute`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L9-L51) | `#[cfg(windows)] pub fn` | 9–51 | `(path: &Path, hidden: bool) -> Result<(), String>` | Queries and sets/clears the Win32 `FILE_ATTRIBUTE_HIDDEN` (0x2) flag via `GetFileAttributesW` / `SetFileAttributesW`. |
-| [`set_hidden_attribute`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L53-L57) | `#[cfg(not(windows))] pub fn` | 53–57 | `(_path: &Path, _hidden: bool) -> Result<(), String>` | Non-Windows no-op stub returning `Ok(())`. |
-| [`is_image_ext`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L103-L106) | `pub fn` | 103–106 | `(ext: &str) -> bool` | Checks if lowercase extension matches an `"Image"` format in `SUPPORTED_FORMATS`. |
-| [`is_metadata_ext`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L108-L111) | `pub fn` | 108–111 | `(ext: &str) -> bool` | Checks if lowercase extension matches `"xml"` or `"opf"`. |
-| [`is_archive_ext`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L113-L116) | `pub fn` | 113–116 | `(ext: &str) -> bool` | Checks if lowercase extension matches an `"Archive"` format in `SUPPORTED_FORMATS`. |
+| [`set_hidden_attribute`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L9-L51) | `#[cfg(windows)] pub fn` | 9-51 | `(path: &Path, hidden: bool) -> Result<(), String>` | Queries and sets/clears the Win32 `FILE_ATTRIBUTE_HIDDEN` (0x2) flag via `GetFileAttributesW` / `SetFileAttributesW`. |
+| [`set_hidden_attribute`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L53-L57) | `#[cfg(not(windows))] pub fn` | 53-57 | `(_path: &Path, _hidden: bool) -> Result<(), String>` | Non-Windows no-op stub returning `Ok(())`. |
+| [`is_image_ext`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L103-L106) | `pub fn` | 103-106 | `(ext: &str) -> bool` | Checks if lowercase extension matches an `"Image"` format in `SUPPORTED_FORMATS`. |
+| [`is_metadata_ext`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L108-L111) | `pub fn` | 108-111 | `(ext: &str) -> bool` | Checks if lowercase extension matches `"xml"` or `"opf"`. |
+| [`is_archive_ext`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L113-L116) | `pub fn` | 113-116 | `(ext: &str) -> bool` | Checks if lowercase extension matches an `"Archive"` format in `SUPPORTED_FORMATS`. |
 
 ---
 
@@ -107,20 +107,20 @@ graph TD
 ```
 utils.rs (117 lines)
 │
-├── Cluster 1: Win32 File Attributes Manipulation (L5–57)
-│   ├── set_hidden_attribute [windows] (L9–51)
-│   └── set_hidden_attribute [not(windows)] (L53–57)
+├── Cluster 1: Win32 File Attributes Manipulation (L5-57)
+│   ├── set_hidden_attribute [windows] (L9-51)
+│   └── set_hidden_attribute [not(windows)] (L53-57)
 │
-├── Cluster 2: Format Registry Data Models & Definition Macros (L59–101)
-│   ├── FileFormat struct (L61–67)
-│   ├── image! macro (L69–73)
-│   ├── archive! macro (L74–78)
-│   └── SUPPORTED_FORMATS constant slice (L80–101)
+├── Cluster 2: Format Registry Data Models & Definition Macros (L59-101)
+│   ├── FileFormat struct (L61-67)
+│   ├── image! macro (L69-73)
+│   ├── archive! macro (L74-78)
+│   └── SUPPORTED_FORMATS constant slice (L80-101)
 │
-└── Cluster 3: Extension Classification Engine (L103–117)
-    ├── is_image_ext (L103–106)
-    ├── is_metadata_ext (L108–111)
-    └── is_archive_ext (L113–116)
+└── Cluster 3: Extension Classification Engine (L103-117)
+    ├── is_image_ext (L103-106)
+    ├── is_metadata_ext (L108-111)
+    └── is_archive_ext (L113-116)
 ```
 
 ---
@@ -156,14 +156,14 @@ pub fn is_archive_ext(ext: &str) -> bool {
 QuiviT has several general-purpose utilities scattered across unrelated backend files rather than centralized:
 
 1. **Base64 Encoding**:
-   - `ico.rs` ([L135–149](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149)) implements a manual custom byte encoder with bit shifts and ASCII lookup tables (`pub fn base64_encode`).
+   - `ico.rs` ([L135-149](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149)) implements a manual custom byte encoder with bit shifts and ASCII lookup tables (`pub fn base64_encode`).
    - `ico.rs` ([L160](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L160), [L300](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L300)) separately imports `base64::prelude::*` and calls `BASE64_STANDARD.encode(...)`.
 2. **Base64 Decoding**:
-   - `lib.rs` ([L382–429](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L429)) implements custom manual decoders `base64_decode` and `base64_decode_bytes` with hand-crafted 256-entry lookup tables and padding logic, completely bypassing the `base64` crate listed in `Cargo.toml`.
+   - `lib.rs` ([L382-429](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L429)) implements custom manual decoders `base64_decode` and `base64_decode_bytes` with hand-crafted 256-entry lookup tables and padding logic, completely bypassing the `base64` crate listed in `Cargo.toml`.
 3. **URL Percent-Decoding**:
-   - `lib.rs` ([L431–448](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L431-L448)) implements custom manual percent-decoding (`urlencoding_decode`).
+   - `lib.rs` ([L431-448](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L431-L448)) implements custom manual percent-decoding (`urlencoding_decode`).
 4. **Shift-JIS / Multi-byte CJK Charset Decoding**:
-   - `archives.rs` ([L187–229](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L187-L229)) defines `decode_zip_entry_name` with `encoding_rs::SHIFT_JIS`, `encoding_rs::GB18030`, and `encoding_rs::EUC_KR` fallback decoding.
+   - `archives.rs` ([L187-229](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L187-L229)) defines `decode_zip_entry_name` with `encoding_rs::SHIFT_JIS`, `encoding_rs::GB18030`, and `encoding_rs::EUC_KR` fallback decoding.
 
 *Smell:* Hand-rolled encoding/decoding logic with duplicated implementations across `ico.rs`, `lib.rs`, and `archives.rs` creates maintenance overhead and security/correctness risks.
 

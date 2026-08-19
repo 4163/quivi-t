@@ -1,4 +1,4 @@
-# Slice 5 — Viewer split (math/render/gestures)
+# Slice 5: Viewer split (math/render/gestures)
 
 I have successfully completed Slice 5 of the decoupling plan. The `viewer.js` monolith is now split into pure, testable, and cohesive modules without breaking upstream usage.
 

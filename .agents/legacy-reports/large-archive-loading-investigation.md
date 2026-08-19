@@ -1,16 +1,16 @@
-# Large-Archive Image Loading Failure — Investigation Notes
+# Large-Archive Image Loading Failure: Investigation Notes
 
-Status: IN PROGRESS — root cause partially identified (7z poll race confirmed at Rust layer), cbz path still unexplained. Delegated for deeper debugging.
+Status: IN PROGRESS: root cause partially identified (7z poll race confirmed at Rust layer), cbz path still unexplained. Delegated for deeper debugging.
 
 Date: 2026-08-05
 
 ## Bug report (user)
 
 - Formats affected: **7z and cbz** on "larger files".
-- Symptom: images don't load initially — the viewer shows a generic broken-image icon with `title=""` (the `onerror` fallback in viewer.js) instead of the picture.
+- Symptom: images don't load initially: the viewer shows a generic broken-image icon with `title=""` (the `onerror` fallback in viewer.js) instead of the picture.
 - Loading "eventually works" after navigating back/forth between images (initial load fails, takes several attempts).
 - The user's "404/202" phrasing was approximate; the real observable is the broken-image icon.
-- The first (sorted) file is `BAKEMONOGATARI - c013 (v03) - p002 [Kodansha Comics] [Digital] [1r0n] {HQ}.jpg` (7.8MB, pure ASCII name) — so the UTF-8 name handling is NOT the trigger for the first image, though it was a real bug worth fixing.
+- The first (sorted) file is `BAKEMONOGATARI - c013 (v03) - p002 [Kodansha Comics] [Digital] [1r0n] {HQ}.jpg` (7.8MB, pure ASCII name): so the UTF-8 name handling is NOT the trigger for the first image, though it was a real bug worth fixing.
 - User confirmed the issue **still persists** after the UTF-8 fix.
 
 ## Architecture recap
@@ -48,7 +48,7 @@ cbt on-demand first entry: 7790305 bytes (OK)
 ```
 
 - **7z/cb7 (and rar/cbr) large files: CONFIRMED RACE.** The handler's 3-second poll (lib.rs:1240-1246) is too short. The 31MB BMP is not written to the temp dir within 3s of extraction starting, so the first request 404s → broken image. Navigating back/forth later works because by then the background extraction has finished writing the file. This exactly matches the "eventually works after going back/forth" report.
-  - The first/early entries are fine (extracted quickly) — so the user's failing case is large entries deep in the archive, or slow disks / big archives.
+  - The first/early entries are fine (extracted quickly): so the user's failing case is large entries deep in the archive, or slow disks / big archives.
   - Race also has a secondary hazard: `fs::read` on a file that is currently mid-write (background thread uses `File::create` + `io::copy`) can return a PARTIAL file → image decodes as garbage even if the poll succeeds. Not yet proven, but the write-then-read race exists (no atomic rename).
 
 ### FIXED (regression-tested)
@@ -59,11 +59,11 @@ cbt on-demand first entry: 7790305 bytes (OK)
 
 - **cbz serving at Rust layer works** (on-demand extraction returns full bytes; no poll race for zip). So why does the user see cbz fail on larger files? Hypotheses, not yet verified:
   1. WebView2/Tauri custom-protocol large-response failure: serving ~8MB (or the 31MB BMP) in a single `Response.body(vec)` over `register_asynchronous_uri_scheme_protocol` on Windows. Known Tauri issue family (#9875, #3421, wry #1174). The tauri IPC-fallback fix (#10582, b1d9ffa) is in 2.11.5, but large-body behavior on Windows WebView2 custom protocols is still suspect. zip/rar/tar of the SAME content would presumably also fail → but user only reported 7z + cbz, so maybe they only tested those, or the mechanism differs.
-  2. LRU eviction interaction: `zip_capacity: 20`, archive has 14 image entries, so eviction shouldn't matter, but 31MB × 14 ≈ 434MB in RAM — memory pressure possible.
+  2. LRU eviction interaction: `zip_capacity: 20`, archive has 14 image entries, so eviction shouldn't matter, but 31MB × 14 ≈ 434MB in RAM: memory pressure possible.
   3. Something specific to how WebView2 loads `<img>` from the custom protocol with large bodies (response buffering / content-length handling).
-- Why 7z AND cbz specifically (not zip/rar/tar/cbt) is odd given code-path equivalence (cbz≡zip). Possibly the user only opened cbz + 7z, or fixture `cbz.cbz`/`7z.7z` sizes (47MB/38MB) trigger it while `zip.zip` (49MB) happens to be tolerated — unlikely to be a hard threshold.
+- Why 7z AND cbz specifically (not zip/rar/tar/cbt) is odd given code-path equivalence (cbz≡zip). Possibly the user only opened cbz + 7z, or fixture `cbz.cbz`/`7z.7z` sizes (47MB/38MB) trigger it while `zip.zip` (49MB) happens to be tolerated: unlikely to be a hard threshold.
 
-## Test fixtures (test-files/archives/) — all 8 contain identical content
+## Test fixtures (test-files/archives/): all 8 contain identical content
 
 - `7z.7z` 38MB solid LZMA2 (Blocks=1), `cb7.cb7` 38MB solid LZMA2:25
 - `cbz.cbz` 47MB, `zip.zip` 49MB, `cbt.cbt` 82MB, `tar.tar` 82MB
@@ -85,10 +85,10 @@ cargo check
    - Replace the 3s fixed poll with waiting until the entry exists (no arbitrary timeout), OR
    - Make `extract_7z_to_temp`/`extract_rar_to_temp` write to a temp filename then atomically rename when the entry is complete, so the handler never reads a partial file, OR
    - Have the background extractor signal completion (e.g., a `.done` marker file or shared flag) and have the handler block until then instead of polling, OR
-   - Serve 7z via on-demand decompression: extract just the requested entry from the solid block (sevenz-rust2 supports seeking within the block — see `ArchiveReader` iteration) instead of the full temp extraction. Removes the race entirely but may be slower per request.
+   - Serve 7z via on-demand decompression: extract just the requested entry from the solid block (sevenz-rust2 supports seeking within the block: see `ArchiveReader` iteration) instead of the full temp extraction. Removes the race entirely but may be slower per request.
 2. **cbz / large response bodies:**
    - Investigate WebView2 custom-protocol large-response limits on Windows. Options: stream the body via chunked response, or use `convertFileSrc`/asset protocol + temp file for zip entries (already on disk for 7z), or serve via a local HTTP server.
-   - Verify by testing whether `zip.zip`/`rar.rar`/`tar.tar` (same content) also fail in the app — if yes, it's a size/protocol issue, not cbz-specific.
+   - Verify by testing whether `zip.zip`/`rar.rar`/`tar.tar` (same content) also fail in the app: if yes, it's a size/protocol issue, not cbz-specific.
 3. **General:** check WebView2 `Response` body size handling; consider setting `Content-Length` explicitly (currently only `Content-Type` + CORS are set).
 
 ## Key file references

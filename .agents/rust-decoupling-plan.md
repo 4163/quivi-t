@@ -3,7 +3,7 @@ user note for initial slice:
 refer to '.agents/rust-decoupling-plan.md' and begin planning and discussion for next refactor/decoupling slice.
 "
 
-# Rust Backend Decoupling — Architecture & Implementation Plan
+# Rust Backend Decoupling: Architecture & Implementation Plan
 
 **Scope:** Decouple the monolithic Rust backend in `src-tauri/src/` into cohesive, single-responsibility domain modules, eliminate cross-module field reach-ins, consolidate multi-way code duplications (Base64, extraction pipelines, notify watchers), resolve Win32 GDI safety/resource leaks, and restore `lib.rs` as a pure, lightweight application bootstrap.
 
@@ -86,8 +86,8 @@ src-tauri/
 
 | # | Smells / Duplications | Existing Locations | Resolution Strategy | Slice |
 |---|---|---|---|---|
-| **1** | **Hand-rolled Base64 Encoders / Decoders** | `lib.rs` (L431–L459), `ico.rs` (L135–L149) | Replace all hand-rolled bit-shifts with standard `base64::prelude::BASE64_STANDARD` in `utils.rs`. | Slice 1 |
-| **2** | **Stranded Test Suites** | `lib.rs` (475 lines: `mod archive_tests`), `config.rs` (L446–L512: `mod tests`) | Move to `src/tests/archive_tests.rs` and `src/tests/config_tests.rs` via `#[path]`. | Slice 1 |
+| **1** | **Hand-rolled Base64 Encoders / Decoders** | `lib.rs` (L431-L459), `ico.rs` (L135-L149) | Replace all hand-rolled bit-shifts with standard `base64::prelude::BASE64_STANDARD` in `utils.rs`. | Slice 1 |
+| **2** | **Stranded Test Suites** | `lib.rs` (475 lines: `mod archive_tests`), `config.rs` (L446-L512: `mod tests`) | Move to `src/tests/archive_tests.rs` and `src/tests/config_tests.rs` via `#[path]`. | Slice 1 |
 | **3** | **Anemic Model Derives & Stranded DTOs** | `models.rs` (missing `Debug`, `PartialEq`, `Deserialize`), `commands.rs` (`FormatStatus`) | Add standard derives to `models.rs`, migrate `FormatStatus` to `models.rs`, provide factory constructors. | Slice 1 |
 | **4** | **Hot-Path Allocations in Format Checks** | `utils.rs` (`ext.to_lowercase()`) | Replace with zero-allocation ASCII case-insensitive checks (`eq_ignore_ascii_case`) in `formats.rs`. | Slice 2 |
 | **5** | **Asymmetric Hidden Attribute Logic** | `utils.rs` (`set_hidden_attribute`) vs. `commands.rs` (`is_hidden_path`) | Unify in `platform/attributes.rs`. | Slice 2 |
@@ -115,7 +115,7 @@ graph TD
 
 ---
 
-### Slice 1 — Test Decoupling, Models Enrichment & Base64 Consolidation
+### Slice 1: Test Decoupling, Models Enrichment & Base64 Consolidation
 
 **Focus:** Extract stranded test suites out of `lib.rs` and `config.rs`, enrich `models.rs` with standard derives and factory constructors, and consolidate Base64 utilities.
 
@@ -130,8 +130,8 @@ graph TD
 
 **Detailed Tasks:**
 1. **Test Extraction via `#[path]`:**
-   - Move the 475-line `mod archive_tests` from `lib.rs` (Lines 489–963) into `src/tests/archive_tests.rs`. Connect via `#[cfg(test)] #[path = "tests/archive_tests.rs"] mod archive_tests;` in `lib.rs`.
-   - Move unit tests from `config.rs` (Lines 446–512) into `src/tests/config_tests.rs`. Connect via `#[cfg(test)] #[path = "tests/config_tests.rs"] mod tests;` in `config.rs`.
+   - Move the 475-line `mod archive_tests` from `lib.rs` (Lines 489-963) into `src/tests/archive_tests.rs`. Connect via `#[cfg(test)] #[path = "tests/archive_tests.rs"] mod archive_tests;` in `lib.rs`.
+   - Move unit tests from `config.rs` (Lines 446-512) into `src/tests/config_tests.rs`. Connect via `#[cfg(test)] #[path = "tests/config_tests.rs"] mod tests;` in `config.rs`.
    - Preserves 100% private field access without forcing `pub` visibility churn.
 2. **Models Enrichment:**
    - Add `#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]` to `FileEntry`, `DirectoryReadResult`, and `ArchiveReadResult`.
@@ -147,7 +147,7 @@ graph TD
 
 ---
 
-### Slice 2 — Zero-Allocation Formats & Platform Attributes Layer
+### Slice 2: Zero-Allocation Formats & Platform Attributes Layer
 
 **Focus:** Extract file format registry into a dedicated `formats.rs` module with zero-allocation predicates, and unify Win32 file attribute inspection and mutation.
 
@@ -185,7 +185,7 @@ graph TD
 
 ---
 
-### Slice 3 — Window Subsystem & Sizing Extraction
+### Slice 3: Window Subsystem & Sizing Extraction
 
 **Focus:** Extract window creation, window geometry/fit calculations, shell background styling, and secondary window IPC commands out of `config.rs` and `lib.rs` into `windows.rs`.
 
@@ -212,7 +212,7 @@ graph TD
 
 ---
 
-### Slice 4 — Archive Cache Encapsulation & Domain Services
+### Slice 4: Archive Cache Encapsulation & Domain Services
 
 **Focus:** Encapsulate internal fields of `ArchiveCache` and `SingleArchiveCache`, implement domain facade methods, eliminate 3-way duplicated extraction pipelines, and organize `archives/` submodules.
 
@@ -245,7 +245,7 @@ graph TD
 
 ---
 
-### Slice 5 — Custom Protocol Scheme Decoupling
+### Slice 5: Custom Protocol Scheme Decoupling
 
 **Focus:** Extract the asynchronous `quivit://` custom URI scheme handler out of `lib.rs` into a dedicated `protocol.rs` module.
 
@@ -271,7 +271,7 @@ graph TD
 
 ---
 
-### Slice 6 — Commands Monolith Dissolution
+### Slice 6: Commands Monolith Dissolution
 
 **Focus:** Dissolve the 858-line `commands.rs` and stray commands in `lib.rs` into cohesive, domain-focused command modules under `commands/`.
 
@@ -301,7 +301,7 @@ graph TD
 
 ---
 
-### Slice 7 — Native Shell Icons & Win32 GDI RAII Safety
+### Slice 7: Native Shell Icons & Win32 GDI RAII Safety
 
 **Focus:** Decouple pure ICO frame parsing from Win32 shell extraction, create RAII handle wrappers for GDI resources, and eliminate memory leaks.
 
@@ -332,7 +332,7 @@ graph TD
 
 ---
 
-### Slice 8 — Watchers Consolidation & Slender `lib.rs` Bootstrap
+### Slice 8: Watchers Consolidation & Slender `lib.rs` Bootstrap
 
 **Focus:** Consolidate directory and configuration `notify` watchers, reduce `lib.rs` to a pure application bootstrap (~95 lines), and complete end-to-end architectural validation.
 
@@ -440,11 +440,11 @@ After each slice, the active agent MUST follow this handoff protocol:
 - **Architectural Choices:** Extracted all window management logic out of `config.rs` and `commands.rs` into a dedicated `windows.rs` module. All window sizing constants (`MAIN_INITIAL_W/H`, `OPTIONS_INITIAL_W/H`, `META_INITIAL_W/H`, and their `_MIN_` counterparts), the IPC commands `open_options`, `fit_options_window`, `open_metadata_window`, `fit_metadata_window`, and `show_window` now live exclusively in `windows.rs`. A shared `center_window_over_main` helper was extracted to eliminate duplicated positioning math. The `apply_shell_background` function was migrated from `lib.rs` into `windows.rs` so all window construction flows through a single module. Fixed `is_portable()` in `config.rs` to check for the `.portable` flag file. Restored the `#measure-probe` element in `index.html` to allow live shell background synchronization on theme change without restart. Registered `quivit.exe` in Windows Open With menu and hardened `get_format_status` to require existing HKCU ProgId keys.
 - **New Modules/Helpers:**
   - `src-tauri/src/windows.rs` (window constants, constructors, sizing commands, shell background)
-- **Invariant Rules Upheld:** "One owner per concern." (All window lifecycle logic owns a single home). "Tauri windows share a single construction path to guarantee consistent shell background color before first paint." IPC command names and JSON shapes are stable — no frontend changes required.
+- **Invariant Rules Upheld:** "One owner per concern." (All window lifecycle logic owns a single home). "Tauri windows share a single construction path to guarantee consistent shell background color before first paint." IPC command names and JSON shapes are stable: no frontend changes required.
 - **Deferred Follow-ups:** Ready for Slice 4.
 
 ### Slice 4: Archive cache encapsulation & domain services (Completed)
-- **Architectural Choices:** Replaced the flat `archives.rs` monolith with an `archives/` subsystem (`mod.rs`, `cache.rs`, `zip.rs`, `rar.rs`, `sevenz.rs`, `tar.rs`). `SingleArchiveCache` is `pub(crate)` with private fields; callers only construct `ArchiveCache`. Format routing is a crate-private `ArchiveKind` enum. The three duplicated extraction pipelines (`quivit://` in `lib.rs`, `prefetch_archive_entries`, `get_archive_ico_frames`) now go through `prepare_archive` (init + listing) and `read_entry_bytes` (ZIP LRU / temp-dir Condvar wait). The plan's public `get_temp_extraction_dir` was not added — callers no longer need the temp dir. Tests use `#[cfg(test)]` inspectors instead of constructing `SingleArchiveCache`. Dispatched mouse side-button navigation on press rather than release in `src/js/shortcuts.js` to eliminate double-firing under Windows `auxclick`.
+- **Architectural Choices:** Replaced the flat `archives.rs` monolith with an `archives/` subsystem (`mod.rs`, `cache.rs`, `zip.rs`, `rar.rs`, `sevenz.rs`, `tar.rs`). `SingleArchiveCache` is `pub(crate)` with private fields; callers only construct `ArchiveCache`. Format routing is a crate-private `ArchiveKind` enum. The three duplicated extraction pipelines (`quivit://` in `lib.rs`, `prefetch_archive_entries`, `get_archive_ico_frames`) now go through `prepare_archive` (init + listing) and `read_entry_bytes` (ZIP LRU / temp-dir Condvar wait). The plan's public `get_temp_extraction_dir` was not added: callers no longer need the temp dir. Tests use `#[cfg(test)]` inspectors instead of constructing `SingleArchiveCache`. Dispatched mouse side-button navigation on press rather than release in `src/js/shortcuts.js` to eliminate double-firing under Windows `auxclick`.
 - **New Modules/Helpers:**
   - `src-tauri/src/archives/mod.rs` (`ArchiveKind`, `prepare_archive`, `read_entry_bytes`)
   - `src-tauri/src/archives/cache.rs` (cache, LRU, temp-path safety, test inspectors)
@@ -459,6 +459,6 @@ After each slice, the active agent MUST follow this handoff protocol:
   - `src-tauri/src/archives/encoding.rs` (`decode_cjk_name`)
   - `src-tauri/src/tests/archive_tests.rs` (added Shift-JIS, GBK, and EUC-KR regression tests)
   - `test-files/archives/encoding_tests/` & `metadata_tests/`
-- **Invariant Rules Upheld:** "One owner per concern." "Encapsulation over public field reach-in." "No behavior or wire change" — `quivit://` URI parsing, URL decoding, and HTTP response headers maintained 100% backward compatibility. Shared `decode_cjk_name` keeps encoding concerns encapsulated.
+- **Invariant Rules Upheld:** "One owner per concern." "Encapsulation over public field reach-in." "No behavior or wire change": `quivit://` URI parsing, URL decoding, and HTTP response headers maintained 100% backward compatibility. Shared `decode_cjk_name` keeps encoding concerns encapsulated.
 - **Deferred Follow-ups:** Ready for Slice 6 (Commands Monolith Dissolution).
 

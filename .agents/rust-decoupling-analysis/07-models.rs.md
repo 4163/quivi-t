@@ -27,9 +27,9 @@ Despite its central role as the application's data contract, the module suffers 
 
 | Symbol | Visibility | Lines | Derives | Purpose / Description |
 | :--- | :--- | :--- | :--- | :--- |
-| [`FileEntry`](file:///E:/Projects/QuiviT/src-tauri/src/models.rs#L5-L13) | `pub` | 5–13 | `Serialize, Clone` | Universal item descriptor representing a physical filesystem entry or a virtual archive member. |
-| [`DirectoryReadResult`](file:///E:/Projects/QuiviT/src-tauri/src/models.rs#L15-L22) | `pub` | 15–22 | `Serialize` | Tauri IPC response payload for filesystem directory queries and navigation commands. |
-| [`ArchiveReadResult`](file:///E:/Projects/QuiviT/src-tauri/src/models.rs#L24-L28) | `pub` | 24–28 | `Serialize` | Tauri IPC response payload for archive entry listings. |
+| [`FileEntry`](file:///E:/Projects/QuiviT/src-tauri/src/models.rs#L5-L13) | `pub` | 5-13 | `Serialize, Clone` | Universal item descriptor representing a physical filesystem entry or a virtual archive member. |
+| [`DirectoryReadResult`](file:///E:/Projects/QuiviT/src-tauri/src/models.rs#L15-L22) | `pub` | 15-22 | `Serialize` | Tauri IPC response payload for filesystem directory queries and navigation commands. |
+| [`ArchiveReadResult`](file:///E:/Projects/QuiviT/src-tauri/src/models.rs#L24-L28) | `pub` | 24-28 | `Serialize` | Tauri IPC response payload for archive entry listings. |
 
 ### 2.2 Deep-Dive Field Analysis
 
@@ -134,10 +134,10 @@ graph TD
 1. **[`src/archives.rs`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L6)**:
    - Imports [`FileEntry`](file:///E:/Projects/QuiviT/src-tauri/src/models.rs#L5-L13).
    - Constructed across all archive enumeration formats:
-     - [`list_zip_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L231) (lines 256–263, 270–277)
-     - [`list_rar_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L342) (lines 357–364)
-     - [`list_7z_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L424) (lines 440–447)
-     - [`list_tar_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L491) (lines 514–521)
+     - [`list_zip_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L231) (lines 256-263, 270-277)
+     - [`list_rar_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L342) (lines 357-364)
+     - [`list_7z_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L424) (lines 440-447)
+     - [`list_tar_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L491) (lines 514-521)
 2. **[`src/commands.rs`](file:///E:/Projects/QuiviT/src-tauri/src/commands.rs#L14)**:
    - Glob imports `use crate::models::*;`.
    - Populates [`FileEntry`](file:///E:/Projects/QuiviT/src-tauri/src/models.rs#L5-L13) during directory traversal in [`read_directory_impl`](file:///E:/Projects/QuiviT/src-tauri/src/commands.rs#L128-L135).
@@ -150,7 +150,7 @@ graph TD
    - Constructs and returns [`ArchiveReadResult`](file:///E:/Projects/QuiviT/src-tauri/src/models.rs#L24-L28) in [`list_archive`](file:///E:/Projects/QuiviT/src-tauri/src/commands.rs#L184,L241-L244).
 3. **[`src/lib.rs`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L5)**:
    - Declares `pub mod models;`.
-   - Archive tests directly inspect `FileEntry` fields ([`lib.rs:570–584`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L570-L584), [`lib.rs:616–627`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L616-L627)).
+   - Archive tests directly inspect `FileEntry` fields ([`lib.rs:570-584`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L570-L584), [`lib.rs:616-627`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L616-L627)).
 
 ### 3.2 Downstream Consumer Audit (Frontend JavaScript)
 
@@ -176,7 +176,7 @@ Currently, the structs define only the bare minimum derives:
 
 #### Consequences:
 - **Missing `Debug`**: Makes structured tracing, logging, and error reporting via `tracing::debug!("{:?}", result)` or `eprintln!("{:?}", entry)` impossible without manual formatting.
-- **Missing `PartialEq, Eq`**: Unit test assertions cannot compare structs directly (`assert_eq!(result, expected)`). Instead, tests must painfully compare individual field slices (e.g. in [`lib.rs:580–584`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L580-L584)).
+- **Missing `PartialEq, Eq`**: Unit test assertions cannot compare structs directly (`assert_eq!(result, expected)`). Instead, tests must painfully compare individual field slices (e.g. in [`lib.rs:580-584`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L580-L584)).
 - **Missing `Deserialize`**: Prevents bidirectional IPC testing, mock fixture loading from JSON files, and reusing `FileEntry` as a request payload (e.g., when the frontend sends back an active entry).
 - **Missing `Default`**: Prevents placeholder initialization or default struct building patterns.
 
@@ -243,10 +243,10 @@ files.push(FileEntry {
 Several core DTOs and state models that logically belong in `models` or a `models/` subsystem are scattered across the codebase:
 
 1. **[`FormatStatus`](file:///E:/Projects/QuiviT/src-tauri/src/commands.rs#L605-L611)**:
-   - Defined inside `commands.rs` (lines 605–611) instead of `models.rs`.
+   - Defined inside `commands.rs` (lines 605-611) instead of `models.rs`.
    - Used as the response DTO for `get_format_status` Tauri IPC.
 2. **[`FileFormat`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L61-L67)**:
-   - Defined inside `utils.rs` (lines 61–67).
+   - Defined inside `utils.rs` (lines 61-67).
    - Core domain model for file extension registry and format classification.
 3. **Stray Window Fit IPC Parameters**:
    - `fit_options_window` ([`config.rs:351`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L351)) takes `width: f64`.

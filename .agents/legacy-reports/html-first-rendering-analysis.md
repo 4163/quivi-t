@@ -1,4 +1,4 @@
-# QuiviT HTML-First Rendering — Working Tree Audit & Refactoring Specification
+# QuiviT HTML-First Rendering: Working Tree Audit & Refactoring Specification
 
 > **Date:** August 15, 2026  
 > **Scope:** Active HTML entry points (`index.html`, `options.html`, `metadata.html`), CSS stylesheets (`src/css/`), and decoupled JavaScript modules (`src/js/`).  
@@ -19,7 +19,7 @@ To minimize browser engine (Blink/WebView2) style recalculations and eliminate f
 
 | Tier | Target Scope | Intent & Performance Characteristics | QuiviT Architectural Examples |
 |---|---|---|---|
-| **Tier 1 (Global)** | `<body>` / `<html>` | Window-wide interaction modes, global drag cursor locks, app themes. Direct rules only (`body.cursor-move { cursor: move !important; }`) — never broad descendant selectors (`body.foo *`). | `body.cursor-move`, `body.resizing-panel`, `body.resizing-col`, `body.is-fullscreen`, `html[data-theme]` |
+| **Tier 1 (Global)** | `<body>` / `<html>` | Window-wide interaction modes, global drag cursor locks, app themes. Direct rules only (`body.cursor-move { cursor: move !important; }`): never broad descendant selectors (`body.foo *`). | `body.cursor-move`, `body.resizing-panel`, `body.resizing-col`, `body.is-fullscreen`, `html[data-theme]` |
 | **Tier 2 (Component / Container)** | Host Container / Parent Node | Compound multi-element state coordinated within a single module; locally-scoped custom properties (`--*`) to restrict inheritance recalc. | `#file-panel` (`--panel-w`), `.keybind-row.is-conflict`, `#file-list.is-empty` |
 | **Tier 3 (Leaf / Direct Element)** | Target Element (Default) | Single-element state & visibility toggles. Highest performance: $O(1)$ localized invalidation bounded strictly to target node. | `.viewer-img.active`, `.viewer-img[data-scaling="none"]`, `#metadata-badge.is-visible`, `li.is-selected` |
 
@@ -66,8 +66,8 @@ To minimize browser engine (Blink/WebView2) style recalculations and eliminate f
 
 #### 1. [`src/index.html`](file:///E:/Projects/QuiviT/src/index.html) & [`src/js/viewer/viewerRender.js`](file:///E:/Projects/QuiviT/src/js/viewer/viewerRender.js)
 - **Problem:**
-  - `index.html` lines 165–166 have inline `style="display: none;"` attributes on `#viewer-img` bridge elements.
-  - `viewerRender.js` (lines 16–33, 105–110) dynamically calls `createElement('img')` and `pop()?.remove()` during pool operations.
+  - `index.html` lines 165-166 have inline `style="display: none;"` attributes on `#viewer-img` bridge elements.
+  - `viewerRender.js` (lines 16-33, 105-110) dynamically calls `createElement('img')` and `pop()?.remove()` during pool operations.
   - `viewerRender.js` (lines 74, 112, 127, 147, 152, 251) mutates inline `style.display = 'none'`/`'block'` and `style.imageRendering`.
   - Missing upfront broken-image loading placeholder (`alt="Loading..."`).
 - **Refactoring Requirement:**
@@ -111,9 +111,9 @@ To minimize browser engine (Blink/WebView2) style recalculations and eliminate f
 
 #### 1. [`src/options.html`](file:///E:/Projects/QuiviT/src/options.html) & [`src/js/options/keybindUi.js`](file:///E:/Projects/QuiviT/src/js/options/keybindUi.js)
 - **Problem:**
-  - `options.html` lines 115–117 leave `#keybinds-container` completely empty.
-  - `keybindUi.js` (lines 327–438) calls `container.innerHTML = ''` and recreates all category headers, rows, labels, and buttons on every keystroke capture or dialog opening.
-  - Lines 361–362 mutate `tag.style.color` and `tag.style.borderColor` directly.
+  - `options.html` lines 115-117 leave `#keybinds-container` completely empty.
+  - `keybindUi.js` (lines 327-438) calls `container.innerHTML = ''` and recreates all category headers, rows, labels, and buttons on every keystroke capture or dialog opening.
+  - Lines 361-362 mutate `tag.style.color` and `tag.style.borderColor` directly.
 - **Refactoring Requirement:**
   1. Pre-render static category headers and action rows directly in `options.html`. Each row includes a static `<div class="keybind-tags" data-action="cmd-id"></div>`.
   2. `renderKeybinds()` only updates the key tags inside each existing row slot without wiping the container.
@@ -121,8 +121,8 @@ To minimize browser engine (Blink/WebView2) style recalculations and eliminate f
 
 #### 2. [`src/options.html`](file:///E:/Projects/QuiviT/src/options.html) & [`src/js/options/associationsUi.js`](file:///E:/Projects/QuiviT/src/js/options/associationsUi.js)
 - **Problem:**
-  - `options.html` lines 130–132 contains a temporary `<p>Loading formats...</p>` that is destroyed with `innerHTML = ''`.
-  - `associationsUi.js` (lines 52–98) builds all category headers, cards, and format checkboxes at runtime.
+  - `options.html` lines 130-132 contains a temporary `<p>Loading formats...</p>` that is destroyed with `innerHTML = ''`.
+  - `associationsUi.js` (lines 52-98) builds all category headers, cards, and format checkboxes at runtime.
 - **Refactoring Requirement:**
   1. Declare the static format cards and checkboxes directly in `options.html`.
   2. `initAssociationsUi()` queries existing checkboxes and sets `.checked = true/false` based on backend registration.
@@ -136,7 +136,7 @@ To minimize browser engine (Blink/WebView2) style recalculations and eliminate f
 ### D. Standalone Metadata Window
 
 #### 1. [`src/metadata.html`](file:///E:/Projects/QuiviT/src/metadata.html) & [`src/js/metadata-window.js`](file:///E:/Projects/QuiviT/src/js/metadata-window.js)
-- **Problem:** `metadata-window.js` (lines 55–97) calls `gridEl.replaceChildren(...)` and creates dynamic span elements on every render.
+- **Problem:** `metadata-window.js` (lines 55-97) calls `gridEl.replaceChildren(...)` and creates dynamic span elements on every render.
 - **Refactoring Requirement:**
   1. Pre-render standard metadata row slots in `metadata.html` (e.g. `<span class="meta-label" data-key="date">Date</span><span class="meta-val" data-key="date"></span>`).
   2. `render()` updates `textContent` on existing elements and toggles `.hidden` on absent rows.

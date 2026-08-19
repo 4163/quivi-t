@@ -1,4 +1,4 @@
-# QuiviT JS Refactoring & Decoupling — Final Passthrough Report
+# QuiviT JS Refactoring & Decoupling: Final Passthrough Report
 
 > **Date:** August 15, 2026  
 > **Status:** Final Architectural Review & Decoupling Passthrough  
@@ -65,7 +65,7 @@ A key requirement of this audit is evaluating large modules (`fsUtils.js`, `file
 
 5. **[`src/js/services/actions.js`](file:///E:/Projects/QuiviT/src/js/services/actions.js) (13.4 KB, 320 lines)**
    - **Role:** Single declarative registry for all application actions, user labels, categories, default bindings, and handlers.
-   - **Verdict: DO NOT DECOUPLE.** Serves as the single source of truth for the entire application.
+   - **Verdict: DO NOT DECOUPLE.** Is the single source of truth for the entire application.
 
 ---
 
@@ -74,19 +74,19 @@ A key requirement of this audit is evaluating large modules (`fsUtils.js`, `file
 Across all analyzed modules, the following dead code, stale references, and uncalled functions were identified for surgical removal:
 
 ### 2.1 State & Method Remnants in `core.js`
-- **Dead State — `decodedSrc` ([`core.js:L54`](file:///E:/Projects/QuiviT/src/js/core.js#L54)):** Written to in `viewerRender.js` (`Core.setState({ decodedSrc: state.src })`), but **never read** by any consumer. Crucially, calling `Core.setState({ decodedSrc })` causes `Core._notify()` to fire an extra full cascade of `onStateChange` listeners across all modules on every image decode.
-- **Dead State — `parentDirectory` ([`core.js:L69`](file:///E:/Projects/QuiviT/src/js/core.js#L69)):** Assigned in `fsUtils.js`, but unread across the application (navigation uses `FsUtils.openParent()` / `parentOf()`).
-- **Dead Method — `Core.saveConfig` ([`core.js:L330-343`](file:///E:/Projects/QuiviT/src/js/core.js#L330-L343)):** Uncalled across the codebase (Options saves directly via backend IPC; runtime saves use `Core.persistConfig()`).
+- **Dead State: `decodedSrc` ([`core.js:L54`](file:///E:/Projects/QuiviT/src/js/core.js#L54)):** Written to in `viewerRender.js` (`Core.setState({ decodedSrc: state.src })`), but **never read** by any consumer. Crucially, calling `Core.setState({ decodedSrc })` causes `Core._notify()` to fire an extra full cascade of `onStateChange` listeners across all modules on every image decode.
+- **Dead State: `parentDirectory` ([`core.js:L69`](file:///E:/Projects/QuiviT/src/js/core.js#L69)):** Assigned in `fsUtils.js`, but unread across the application (navigation uses `FsUtils.openParent()` / `parentOf()`).
+- **Dead Method: `Core.saveConfig` ([`core.js:L330-343`](file:///E:/Projects/QuiviT/src/js/core.js#L330-L343)):** Uncalled across the codebase (Options saves directly via backend IPC; runtime saves use `Core.persistConfig()`).
 - **Top-Level Destructuring Guard ([`core.js:L42`](file:///E:/Projects/QuiviT/src/js/core.js#L42)):** `const { invoke } = window.__TAURI__.core;` should use optional chaining (`window.__TAURI__?.core?.invoke;`) to prevent runtime errors in testing/headless environments.
 
 ### 2.2 Dead Functions & Path Inconsistencies in `fsUtils.js`
-- **Dead Function — `FsUtils.openContainer` ([`fsUtils.js:L462-479`](file:///E:/Projects/QuiviT/src/js/fsUtils.js#L462-L479)):** Obsolete IPC wrapper superseded by client-side `FsUtils.openSibling(delta)`.
-- **Duplicate Helper — `_basename` ([`fsUtils.js:L59-61`](file:///E:/Projects/QuiviT/src/js/fsUtils.js#L59-L61)):** Redundant internal duplicate of public `FsUtils.basename`.
+- **Dead Function: `FsUtils.openContainer` ([`fsUtils.js:L462-479`](file:///E:/Projects/QuiviT/src/js/fsUtils.js#L462-L479)):** Obsolete IPC wrapper superseded by client-side `FsUtils.openSibling(delta)`.
+- **Duplicate Helper: `_basename` ([`fsUtils.js:L59-61`](file:///E:/Projects/QuiviT/src/js/fsUtils.js#L59-L61)):** Redundant internal duplicate of public `FsUtils.basename`.
 - **Unused Destructure ([`fsUtils.js:L6`](file:///E:/Projects/QuiviT/src/js/fsUtils.js#L6)):** `convertFileSrc` destructured on line 6 is unused (invoked directly via `window.__TAURI__.core.convertFileSrc`).
 - **Root-Drive Path Truncation ([`fsUtils.js:L366`](file:///E:/Projects/QuiviT/src/js/fsUtils.js#L366)):** `loadArchive` computes parent directory with an inline regex that fails on root Windows drives (`E:\` becomes `E:`). Should use `parentOf(result.archive_path)`.
 
 ### 2.3 Dead Code & Selectors in Input / Gestures
-- **Unused Import — `PASSIVE_ACTIONS` ([`shortcuts.js:L5`](file:///E:/Projects/QuiviT/src/js/shortcuts.js#L5)):** Handled internally in `keyCombo.js`.
+- **Unused Import: `PASSIVE_ACTIONS` ([`shortcuts.js:L5`](file:///E:/Projects/QuiviT/src/js/shortcuts.js#L5)):** Handled internally in `keyCombo.js`.
 - **Unused Re-exports ([`shortcuts.js:L7`](file:///E:/Projects/QuiviT/src/js/shortcuts.js#L7)):** `normalizeCombo, formatKeyName, formatKeysCombo, normalizeList` re-exported but unneeded.
 - **UI Selector Typos ([`shortcuts.js:L329`](file:///E:/Projects/QuiviT/src/js/shortcuts.js#L329) & [`viewerGestures.js:L164`](file:///E:/Projects/QuiviT/src/js/viewer/viewerGestures.js#L164)):** Checks for `.menubar, .dropdown-menu` instead of `#menubar, .menu-dropdown`, causing false negatives when filtering out UI clicks.
 - **Gesture Initialization Sync ([`viewerGestures.js:L39`](file:///E:/Projects/QuiviT/src/js/viewer/viewerGestures.js#L39)):** `_updatePanKeysCache()` is only attached to `quivit-config-loaded` and not called immediately during `createViewerGestures()` creation.
@@ -174,39 +174,39 @@ In accordance with `AGENTS.md` (*"Performance first. Avoid dynamic evaluations a
 | **Core** | `src/js/core.js` | 54 | Dead State | Remove `decodedSrc: ''` from `_state` |
 | **Core** | `src/js/core.js` | 69 | Dead State | Remove `parentDirectory: ''` from `_state` |
 | **Core** | `src/js/core.js` | 179 | Performance / IPC | Change `_persistConfig()` to `_scheduleConfigFlush(1500)` |
-| **Core** | `src/js/core.js` | 330–343 | Dead Code | Delete uncalled `saveConfig` method |
+| **Core** | `src/js/core.js` | 330-343 | Dead Code | Delete uncalled `saveConfig` method |
 | **Viewer** | `src/js/viewer/viewerRender.js` | 95, 164 | Dead State Setters | Remove `Core.setState({ decodedSrc: ... })` (removes state cascade) |
 | **Viewer** | `src/js/viewer/viewerGestures.js` | 39 | Initialization Bug | Call `_updatePanKeysCache()` in `createViewerGestures()` |
 | **Viewer** | `src/js/viewer/viewerGestures.js` | 164 | Selector Typo | Change `.menubar, .dropdown-menu` to `#menubar, .menu-dropdown` |
-| **Viewer** | `src/js/viewer/viewer.js` | 29–46 | Code Duplication | Extract `_getViewportCenter()` helper for `zoomCenter` & `setZoom` |
+| **Viewer** | `src/js/viewer/viewer.js` | 29-46 | Code Duplication | Extract `_getViewportCenter()` helper for `zoomCenter` & `setZoom` |
 | **Services** | `src/js/services/actions.js` | 9, 15, 159 | Service Purity | Inject `isFavoritesFocused` in `actionCtx`; sync checkmark via `Core.onStateChange` |
-| **Services** | `src/js/services/actions.js` | 314–320 | Performance | Replace `.find()` with pre-compiled `ACTION_MAP.get(actionId)` |
-| **Services** | `src/js/services/keyCombo.js` | 88–98 | Performance | Cache keybindings in `Map<combo, actionId>` for $O(1)$ dispatch |
-| **Services** | `src/js/services/keybindDomain.js` | 66–68 | Dead Code | Remove duplicate alias `canUseMenubarBinds` |
-| **Services** | `src/js/services/sorting.js` | 5–10 | Performance | Replace `.shift()` with index loop in `naturalCompare` |
+| **Services** | `src/js/services/actions.js` | 314-320 | Performance | Replace `.find()` with pre-compiled `ACTION_MAP.get(actionId)` |
+| **Services** | `src/js/services/keyCombo.js` | 88-98 | Performance | Cache keybindings in `Map<combo, actionId>` for $O(1)$ dispatch |
+| **Services** | `src/js/services/keybindDomain.js` | 66-68 | Dead Code | Remove duplicate alias `canUseMenubarBinds` |
+| **Services** | `src/js/services/sorting.js` | 5-10 | Performance | Replace `.shift()` with index loop in `naturalCompare` |
 | **FS Utils** | `src/js/fsUtils.js` | 6 | Dead Destructuring | Remove unused `convertFileSrc` |
-| **FS Utils** | `src/js/fsUtils.js` | 59–61 | Dead Helper | Remove duplicate `_basename`; use `basename` |
+| **FS Utils** | `src/js/fsUtils.js` | 59-61 | Dead Helper | Remove duplicate `_basename`; use `basename` |
 | **FS Utils** | `src/js/fsUtils.js` | 366 | Path Bug | Replace regex with `parentOf(result.archive_path)` |
-| **FS Utils** | `src/js/fsUtils.js` | 462–479 | Dead Code | Delete obsolete `FsUtils.openContainer` |
+| **FS Utils** | `src/js/fsUtils.js` | 462-479 | Dead Code | Delete obsolete `FsUtils.openContainer` |
 | **Shortcuts**| `src/js/shortcuts.js` | 5, 7 | Dead Imports/Exports| Remove unused `PASSIVE_ACTIONS` and unneeded re-exports |
 | **Shortcuts**| `src/js/shortcuts.js` | 329 | Selector Typo | Change `.menubar, .dropdown-menu` to `#menubar, .menu-dropdown` |
 | **FilePanel**| `src/js/filepanel/filePanel.js` | 26, 44 | Code Quality | Replace `let Core/FsUtils = null` with direct static ESM imports |
 | **FilePanel**| `src/js/filepanel/filePanel.js` | 189 | Sanitization | Use `CSS.escape(ext)` instead of `escapeAttr(ext)` in querySelector |
-| **FilePanel**| `src/js/filepanel/favoritesStore.js` | 6–14 | Code Quality | Replace dynamic `Core` injection with direct static ESM import |
-| **Keyboard** | `src/js/keyboardNav.js` | 99–112 | Decoupling Bug | Remove `fav-remove` check; skip `onAction` when focused on interactive controls |
-| **Menubar**  | `src/js/menubar/chrome.js` | 18–24 | Dead Exports | Remove unused `isMenuBarVisible` and `isStatusBarVisible` |
-| **Menubar**  | `src/js/menubar/statusbar.js` | 29–37 | Bug / Performance | Fix `FIT_LABELS` keys and extract to module-level constant |
+| **FilePanel**| `src/js/filepanel/favoritesStore.js` | 6-14 | Code Quality | Replace dynamic `Core` injection with direct static ESM import |
+| **Keyboard** | `src/js/keyboardNav.js` | 99-112 | Decoupling Bug | Remove `fav-remove` check; skip `onAction` when focused on interactive controls |
+| **Menubar**  | `src/js/menubar/chrome.js` | 18-24 | Dead Exports | Remove unused `isMenuBarVisible` and `isStatusBarVisible` |
+| **Menubar**  | `src/js/menubar/statusbar.js` | 29-37 | Bug / Performance | Fix `FIT_LABELS` keys and extract to module-level constant |
 | **Menubar**  | `src/js/menubar.js` | 3 | Stale Comment | Update comment regarding chrome visibility ownership |
-| **Main**     | `src/js/main/main.js` | 216–263 | Code Duplication | Unify duplicate `quivit-config-loaded` blocks |
-| **Main**     | `src/js/main/dropzone.js` | 5–7 | Code Duplication | Remove duplicate `pathBasename`; use `FsUtils.basename` |
+| **Main**     | `src/js/main/main.js` | 216-263 | Code Duplication | Unify duplicate `quivit-config-loaded` blocks |
+| **Main**     | `src/js/main/dropzone.js` | 5-7 | Code Duplication | Remove duplicate `pathBasename`; use `FsUtils.basename` |
 | **Main**     | `src/js/main/metadataBadge.js` | 40 | Format Support | Replace ad-hoc regex with `FsUtils.isImageEntry(f)` |
 | **Options**  | `src/js/options/options.js` | 4, 14, 120 | Dead Code & Types | Remove `tauriConfirm`, clean shadowed `NodeList`, import from `keybindDomain` |
 | **Options**  | `src/js/options/options.js` | 87, 168 | Code Quality | Declare `let currentTheme = 'system';` at top level |
 | **Options**  | `src/js/options/options.js` | 240 | Stale Comment | Remove `// We will implement this` |
 | **Options**  | `src/js/options/keybindUi.js` | 330 | Dead Computation | Remove redundant `getConflictColors` call |
-| **Options**  | `src/js/options/associationsUi.js` | 106–110 | Dead DOM Probe | Remove dead `#btn-assoc-apply` probe and comment |
+| **Options**  | `src/js/options/associationsUi.js` | 106-110 | Dead DOM Probe | Remove dead `#btn-assoc-apply` probe and comment |
 | **Metadata** | `src/js/metadata-window.js` | 18, 100 | Cleanliness | Remove unused `rootEl`; move `import { fitContentHeight }` to top of file |
-| **Shared**   | `src/js/shared/theme.js` | 5–10 | IPC Isolation | Do not write to `localStorage` during in-memory preview |
+| **Shared**   | `src/js/shared/theme.js` | 5-10 | IPC Isolation | Do not write to `localStorage` during in-memory preview |
 | **HTML**     | `src/index.html` | 122, 203 | HTML Cleanliness | Fix stale comment; remove redundant `<script type="module" src="/js/core.js">` |
 | **HTML**     | `src/metadata.html` | 28 | Script Tag Syntax | Standardize `<script type="module" src="/js/shellBackground.js"></script>` |
 

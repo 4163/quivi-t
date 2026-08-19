@@ -49,7 +49,7 @@ fn main() {
 | :--- | :--- | :--- | :--- |
 | [L1](file:///E:/Projects/QuiviT/src-tauri/src/main.rs#L1) | `// Prevents additional console window...` | Comment | Developer warning explaining the necessity of the Windows subsystem attribute. |
 | [L2](file:///E:/Projects/QuiviT/src-tauri/src/main.rs#L2) | `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` | Inner Attribute / Linker Flag | Conditional compilation attribute instructing MSVC/GNU linkers to target the GUI subsystem in release builds while preserving the console subsystem in debug builds. |
-| [L4–L6](file:///E:/Projects/QuiviT/src-tauri/src/main.rs#L4-L6) | `fn main() { tauri_app_lib::run() }` | Function Entry Point | Process entry point function invoking the Tauri application runner in `tauri_app_lib`. |
+| [L4-L6](file:///E:/Projects/QuiviT/src-tauri/src/main.rs#L4-L6) | `fn main() { tauri_app_lib::run() }` | Function Entry Point | Process entry point function invoking the Tauri application runner in `tauri_app_lib`. |
 
 ### 2.3 Windows Subsystem Linker Attribute Mechanics
 
@@ -79,7 +79,7 @@ fn main() {
 
 | Line Range | Syntax / Symbol | Category | Description & Purpose |
 | :--- | :--- | :--- | :--- |
-| [L1–L3](file:///E:/Projects/QuiviT/src-tauri/build.rs#L1-L3) | `fn main() { tauri_build::build() }` | Build Script Entry Point | Cargo pre-build hook executing `tauri_build::build()` to compile platform resources, validate `tauri.conf.json`, and generate compile-time code. |
+| [L1-L3](file:///E:/Projects/QuiviT/src-tauri/build.rs#L1-L3) | `fn main() { tauri_build::build() }` | Build Script Entry Point | Cargo pre-build hook executing `tauri_build::build()` to compile platform resources, validate `tauri.conf.json`, and generate compile-time code. |
 
 ### 3.3 Build-Time Orchestration Performed by `tauri_build::build()`
 

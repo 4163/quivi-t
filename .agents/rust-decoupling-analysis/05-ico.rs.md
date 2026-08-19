@@ -15,7 +15,7 @@
 2. **Native Windows Shell Icon Extraction:** Querying the Windows Shell (`SHGetFileInfoW`) for file extension and folder icons, rasterizing the native `HICON` onto an off-screen 32-bit GDI Device Independent Bitmap (DIB), converting BGRA pixels to RGBA, and returning a PNG base64 data URI.
 
 While compact (306 lines), `ico.rs` exhibits significant architectural coupling, code duplication, and safety risks:
-- **Redundant Base64 Implementations:** Contains a hand-rolled 15-line base64 encoder ([lines 135–149](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149)), while simultaneously importing the external `base64` crate on [line 160](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L160) (`BASE64_STANDARD.encode(...)`), and while [`lib.rs`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L429) implements yet another hand-rolled base64 decoder.
+- **Redundant Base64 Implementations:** Contains a hand-rolled 15-line base64 encoder ([lines 135-149](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149)), while simultaneously importing the external `base64` crate on [line 160](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L160) (`BASE64_STANDARD.encode(...)`), and while [`lib.rs`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L429) implements yet another hand-rolled base64 decoder.
 - **Mixed Domain Responsibilities:** Blends cross-platform binary format parsing (pure Rust image decoding) with low-level, unsafe Windows-only Win32 GDI/Shell graphics manipulation.
 - **Manual GDI Resource Management:** Uses manual cleanup calls for Win32 handles (`HDC`, `HBITMAP`, `HICON`) across multiple early-return error paths without RAII Drop guards, creating potential resource leak hazards.
 - **Monochrome Icon Vulnerability:** Assumes all icons have a valid `icon_info.hbmColor`, which fails for 1-bit monochrome icons where `hbmColor` is NULL.
@@ -36,7 +36,7 @@ While compact (306 lines), `ico.rs` exhibits significant architectural coupling,
 | [L11](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L11) | `windows::Win32::UI::WindowsAndMessaging::{GetIconInfo, DestroyIcon, DrawIconEx, DI_NORMAL}` | `#[cfg(windows)]` | Win32 icon inspection, rendering, and lifecycle |
 | [L13](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L13) | `windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC, CreateCompatibleDC, DeleteDC, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, DeleteObject, CreateDIBSection, SelectObject, GetObjectW, BITMAP}` | `#[cfg(windows)]` | GDI device context, DIB section allocation, and bitmap drawing |
 | [L15](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L15) | `windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_DIRECTORY}` | `#[cfg(windows)]` | Shell file attribute flags for dummy icon resolution |
-| [L158–L160](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L158-L160) | `image::RgbaImage`, `std::io::Cursor`, `base64::prelude::*` | `#[cfg(windows)]` (inside `get_native_icon`) | Image buffer construction, PNG serialization, and standard base64 encoding |
+| [L158-L160](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L158-L160) | `image::RgbaImage`, `std::io::Cursor`, `base64::prelude::*` | `#[cfg(windows)]` (inside `get_native_icon`) | Image buffer construction, PNG serialization, and standard base64 encoding |
 
 ---
 
@@ -44,10 +44,10 @@ While compact (306 lines), `ico.rs` exhibits significant architectural coupling,
 
 | Line Range | Signature | Category | Description |
 | :--- | :--- | :--- | :--- |
-| [L21–L25](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L21-L25) | `#[tauri::command]`<br>`pub fn get_ico_frames(path: String) -> Result<String, String>` | Tauri Command | Reads a loose `.ico` file from disk and returns a horizontal PNG sprite sheet as a base64 data URI. |
-| [L27–L133](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L27-L133) | `pub fn ico_frames_from_bytes(data: &[u8]) -> Result<String, String>` | Core Domain Function | Pure parser and compositor: extracts sub-images from raw ICO bytes, builds a sprite sheet, and encodes to PNG base64. Consumed by `get_ico_frames` and [`commands::get_archive_ico_frames`](file:///E:/Projects/QuiviT/src-tauri/src/commands.rs#L298). |
-| [L135–L149](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149) | `pub fn base64_encode(data: &[u8]) -> String` | Utility Helper | Custom handwritten base64 encoder converting byte slice to ASCII Base64 string. |
-| [L151–L305](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L151-L305) | `#[tauri::command]`<br>`pub fn get_native_icon(ext: &str) -> Result<Option<String>, String>` | Tauri Command | Queries Windows Shell for an extension or folder icon, renders via GDI to a 32bpp DIB, and returns a PNG base64 data URI (returns `Ok(None)` on non-Windows). |
+| [L21-L25](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L21-L25) | `#[tauri::command]`<br>`pub fn get_ico_frames(path: String) -> Result<String, String>` | Tauri Command | Reads a loose `.ico` file from disk and returns a horizontal PNG sprite sheet as a base64 data URI. |
+| [L27-L133](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L27-L133) | `pub fn ico_frames_from_bytes(data: &[u8]) -> Result<String, String>` | Core Domain Function | Pure parser and compositor: extracts sub-images from raw ICO bytes, builds a sprite sheet, and encodes to PNG base64. Consumed by `get_ico_frames` and [`commands::get_archive_ico_frames`](file:///E:/Projects/QuiviT/src-tauri/src/commands.rs#L298). |
+| [L135-L149](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149) | `pub fn base64_encode(data: &[u8]) -> String` | Utility Helper | Custom handwritten base64 encoder converting byte slice to ASCII Base64 string. |
+| [L151-L305](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L151-L305) | `#[tauri::command]`<br>`pub fn get_native_icon(ext: &str) -> Result<Option<String>, String>` | Tauri Command | Queries Windows Shell for an extension or folder icon, renders via GDI to a 32bpp DIB, and returns a PNG base64 data URI (returns `Ok(None)` on non-Windows). |
 
 ---
 
@@ -74,7 +74,7 @@ While compact (306 lines), `ico.rs` exhibits significant architectural coupling,
 └───────────────────────────────┴────────────────────────────────────────┘
 ```
 
-### Cluster 1: ICO Binary Header Parsing & Synthetic Frame Generation ([L27–L96](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L27-L96))
+### Cluster 1: ICO Binary Header Parsing & Synthetic Frame Generation ([L27-L96](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L27-L96))
 - **Responsibilities:**
   - Validates minimum ICO header size (6 bytes: reserved `0x0000`, type `0x0001`, entry count `u16`).
   - Validates directory structure bounds (`data.len() >= 6 + count * 16`).
@@ -83,7 +83,7 @@ While compact (306 lines), `ico.rs` exhibits significant architectural coupling,
   - **BMP Sub-Image Decoding via Synthetic ICO:** Legacy BMP entries in `.ico` files lack a standard `BITMAPFILEHEADER`. Instead of writing a manual BMP parser, `ico.rs` synthesizes an in-memory 22-byte single-entry ICO header (`[0, 0, 1, 0, 1, 0]` + 12 directory bytes + offset 22) followed by the raw BMP payload, delegating parsing to `image::load_from_memory_with_format(..., ImageFormat::Ico)`.
   - **Fallback:** If individual frame decoders fail, attempts whole-file decode via `ImageFormat::Ico`.
 
-### Cluster 2: Multi-Frame Sprite Sheet Compositing ([L97–L133](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L97-L133))
+### Cluster 2: Multi-Frame Sprite Sheet Compositing ([L97-L133](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L97-L133))
 - **Responsibilities:**
   - Sorts extracted frames in descending order by width (`frames.sort_by(|a, b| b.width().cmp(&a.width()))`).
   - Deduplicates consecutive duplicate resolutions (`frames.dedup_by(...)`).
@@ -93,13 +93,13 @@ While compact (306 lines), `ico.rs` exhibits significant architectural coupling,
   - Encodes the canvas to PNG format via `image::codecs::png::PngEncoder`.
   - Wraps the resulting bytes in a base64 data URI: `format!("data:image/png;base64,{b64}")`.
 
-### Cluster 3: Hand-Rolled Base64 Encoder ([L135–L149](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149))
+### Cluster 3: Hand-Rolled Base64 Encoder ([L135-L149](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149))
 - **Responsibilities:**
   - Implements custom 3-byte chunking, 24-bit bitshift operations, and lookup against static table `b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"`.
   - Generates padding characters (`=`).
 - **Architectural Smell:** Redundant reinvented utility. Lines 160 & 300 in the very same file use the standard `base64` crate (`BASE64_STANDARD.encode(...)`).
 
-### Cluster 4: Windows Shell & GDI Native Icon Extraction ([L151–L305](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L151-L305))
+### Cluster 4: Windows Shell & GDI Native Icon Extraction ([L151-L305](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L151-L305))
 - **Responsibilities:**
   - Normalizes file extension into a dummy filename (e.g. `"dummy.png"`, `"dummy.pdf"`, or `"dummy"` for `"__folder__"`).
   - Invokes `SHGetFileInfoW` with `SHGFI_USEFILEATTRIBUTES` to query the registered Windows shell icon without touching the filesystem.
@@ -136,7 +136,7 @@ graph TD
 
 ### 4.1. Manual Resource Cleanup & Leak Hazards
 
-The Windows GDI subsystem requires strict, paired cleanup of all allocated handles. In [`ico.rs:225–280`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L225-L280), resource management is entirely manual without RAII wrappers:
+The Windows GDI subsystem requires strict, paired cleanup of all allocated handles. In [`ico.rs:225-280`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L225-L280), resource management is entirely manual without RAII wrappers:
 
 ```rust
 // ico.rs:234-241 - Error exit branch during DIB creation
@@ -151,7 +151,7 @@ Err(_) => {
 ```
 
 #### Fragility Points:
-1. **Duplicated Cleanup Blocks:** The 5 cleanup calls are copy-pasted across line 235 and line 245, and then repeated in reverse order on lines 272–279.
+1. **Duplicated Cleanup Blocks:** The 5 cleanup calls are copy-pasted across line 235 and line 245, and then repeated in reverse order on lines 272-279.
 2. **Panic Safety:** If `image::RgbaImage::from_raw` or any subsequent operation panics, Rust unwinding skips manual cleanup, leaking GDI handles in the host OS process.
 3. **Handle Ordering Rule:** GDI strictly forbids deleting a bitmap while it is selected into a Device Context. While `ico.rs` correctly calls `SelectObject(hdc_mem, old_bmp)` before `DeleteObject(hbm_dib.into())` on line 272, this invariant is vulnerable to future refactoring errors without an RAII guard.
 
@@ -159,7 +159,7 @@ Err(_) => {
 
 ### 4.2. Monochrome Icon Edge-Case Bug
 
-In [`ico.rs:201–206`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L201-L206):
+In [`ico.rs:201-206`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L201-L206):
 ```rust
 let mut bmp = BITMAP::default();
 GetObjectW(
@@ -205,9 +205,9 @@ graph TD
     end
 ```
 
-1. [`ico.rs:135–149`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149) implements a custom 15-line base64 encoder.
+1. [`ico.rs:135-149`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149) implements a custom 15-line base64 encoder.
 2. [`ico.rs:160, 300`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L160) imports and uses the official `base64` crate (`0.23.1`) already included in `Cargo.toml`.
-3. [`lib.rs:382–429`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L429) implements a custom 45-line base64 byte decoder.
+3. [`lib.rs:382-429`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L429) implements a custom 45-line base64 byte decoder.
 
 **Recommendation:** Delete both handwritten encoders/decoders. Standardize on the `base64` crate across the entire backend, exposing unified helper functions in [`utils.rs`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs) if needed.
 
@@ -225,7 +225,7 @@ graph TD
 
 ### 5.3. Performance: Pixel-by-Pixel Blitting vs Memory Blit
 
-In [`ico.rs:110–112`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L110-L112):
+In [`ico.rs:110-112`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L110-L112):
 ```rust
 for (px, py, pixel) in rgba.enumerate_pixels() {
     spritesheet.put_pixel(x_offset + px, y_offset + py, *pixel);
@@ -250,12 +250,12 @@ for (px, py, pixel) in rgba.enumerate_pixels() {
 
 | # | Severity | Category | Description | Exact Location |
 | :- | :--- | :--- | :--- | :--- |
-| 1 | **High** | Code Duplication | Hand-rolled `base64_encode` exists alongside `base64` crate usage in the same file. | [`ico.rs:135–149`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149) |
-| 2 | **Medium** | Safety / Resource Leak | Manual GDI handle cleanup across multiple error returns without RAII guards. | [`ico.rs:234–280`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L234-L280) |
-| 3 | **Medium** | Bug / Correctness | Monochrome icons with `hbmColor == NULL` fail dimension queries in `GetObjectW`. | [`ico.rs:201–206`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L201-L206) |
+| 1 | **High** | Code Duplication | Hand-rolled `base64_encode` exists alongside `base64` crate usage in the same file. | [`ico.rs:135-149`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L135-L149) |
+| 2 | **Medium** | Safety / Resource Leak | Manual GDI handle cleanup across multiple error returns without RAII guards. | [`ico.rs:234-280`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L234-L280) |
+| 3 | **Medium** | Bug / Correctness | Monochrome icons with `hbmColor == NULL` fail dimension queries in `GetObjectW`. | [`ico.rs:201-206`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L201-L206) |
 | 4 | **Medium** | Performance | Synchronous `#[tauri::command]` blocks Tauri's IPC thread during file I/O & PNG compression. | [`ico.rs:21, 151`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L21) |
-| 5 | **Low** | Performance | Nested pixel-by-pixel loop (`put_pixel`) instead of `imageops::overlay`. | [`ico.rs:110–112`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L110-L112) |
-| 6 | **Low** | Modularity | Domain parser (`ico_frames_from_bytes`) mixed with Windows-only Shell API logic in one file. | [`ico.rs:1–306`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L1-L306) |
+| 5 | **Low** | Performance | Nested pixel-by-pixel loop (`put_pixel`) instead of `imageops::overlay`. | [`ico.rs:110-112`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L110-L112) |
+| 6 | **Low** | Modularity | Domain parser (`ico_frames_from_bytes`) mixed with Windows-only Shell API logic in one file. | [`ico.rs:1-306`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L1-L306) |
 
 ---
 
@@ -361,7 +361,7 @@ impl Drop for AutoReleaseDC {
 
 ### 8.3. Action Plan 3: Optimize Sprite Sheet Blit using `imageops::overlay`
 
-Replace the nested pixel loop in [`ico.rs:107–114`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L107-L114) with:
+Replace the nested pixel loop in [`ico.rs:107-114`](file:///E:/Projects/QuiviT/src-tauri/src/ico.rs#L107-L114) with:
 
 ```rust
 let mut spritesheet = image::RgbaImage::new(total_width, max_height);

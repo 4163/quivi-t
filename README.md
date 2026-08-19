@@ -111,7 +111,7 @@ html {
 
 **Developer Tools:** Inspect Element is intentionally left enabled to help users create and debug custom CSS.
 
-**Example themes:** Try the included `matcha-latte.css` and `sage-mint.css` example themes — import them from **Options → Customization** to restyle the app.
+**Example themes:** Try the included `matcha-latte.css` and `sage-mint.css` example themes: import them from **Options → Customization** to restyle the app.
 
 > If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` in any QuiviT window. This emergency reset instantly removes the custom CSS and reloads the interface safely.
 
@@ -128,13 +128,13 @@ The following system defaults are used:
 - **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
 - **Scaling Mode:** `bicubic`
 - **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in Options → General → Panning.
-- **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge reflects the active state — `Scroll Zoom — Toggled` while latched in toggle mode, or the bound modifier(s) you're holding (`Ctrl — Held`, `Shift — Held`, `Ctrl+Shift — Held`) when they change scroll behavior.
+- **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge shows whether scroll zoom is latched or which bound modifier keys are currently held.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
 - **Default Sort:** `name` ascending. Per-directory preferences are cached for up to 100 directories, with the oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort` (`col`: `name`, `ext`, or `date`; `desc`: `false` = ascending, `true` = descending). Directories without a saved preference in `quivit_directory_sort.json` fall back to it.
-- **History Trail:** Menu bar **Folder → Back / Forward** (`Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only — opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
+- **History Trail:** Menu bar **Folder → Back / Forward** (`Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only: opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
 - **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
 - **Secondary Windows:** Options and Archive Info windows size to their content and open centered over the main window.
-- **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor — or the Drives view at the root.
+- **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor, or the Drives view at the root.
 - **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting on or off requires an app restart to take effect.
 - **Image Swap Buffer:** The DOM viewer keeps a decoded previous image visible while the next target image loads, then waits for a short 45ms settled-navigation window before committing the swap. This is an intentional WebView2/HTML `<img>` tradeoff: it slightly delays final activation during rapid navigation, but prevents visible blank-frame flicker that can occur when very large images are decoded, uploaded, or repainted by the browser.
 - **Archive Resilience:** Corrupted or inaccessible archives are reported without freezing the viewer, and navigation skips unsupported archive entries when they cannot be opened. Legacy ZIP filename encodings are decoded for regional archives, including Shift-JIS (CP932) and other CJK code pages.
@@ -143,42 +143,42 @@ The following system defaults are used:
 
 QuiviT manages data across three distinct tiers depending on lifecycle and scope:
 
-**Roaming files (source of truth)** — stored in Tauri's app config directory:
+**Roaming files (source of truth)**: stored in Tauri's app config directory:
 `C:\Users\<user>\AppData\Roaming\com.x4163.quivit`
 
 Data is split across five files:
-- `quivit_config.json` — User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, default sort, options)
-- `quivit_state.json` — Runtime state (`last_opened_path`, `last_active_image`, `scroll_zoom_latched`)
-- `quivit_directory_sort.json` — Per-directory sort column/direction
-- `quivit_favorites.json` — Favorited folders/files and collapsed state
-- `custom_css.css` — Custom CSS source text
+- `quivit_config.json`: User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, default sort, options)
+- `quivit_state.json`: Runtime state (`last_opened_path`, `last_active_image`, `scroll_zoom_latched`)
+- `quivit_directory_sort.json`: Per-directory sort column/direction
+- `quivit_favorites.json`: Favorited folders/files and collapsed state
+- `custom_css.css`: Custom CSS source text
 
-**WebView2 localStorage** — never the source of truth; used only as a fast cache layer:
-- `quivit-theme` / `quivit-custom-css` — Pre-paint mirrors so the theme and custom CSS apply before first render (prevents flicker)
-- `options-active-tab` — Session-only; cleared on each app start
+**WebView2 localStorage**: never the source of truth; used only as a fast cache layer:
+- `quivit-theme` / `quivit-custom-css`: Pre-paint mirrors so the theme and custom CSS apply before first render (prevents flicker)
+- `options-active-tab`: Session-only; cleared on each app start
 
-**In-memory state** — session-only; reset on app exit:
-- `navigationHistory` — Container-level Back/Forward history trail (capped at 100 entries)
-- `ArchiveCache` — Recent archive working set. ZIP/CBZ entries use a byte-budgeted in-memory image cache (default 512 MB) and background prefetch queue; RAR/CBR, 7Z/CB7, and TAR/CBT archives keep temporary extraction state for up to 8 recently opened archives.
-- `#viewer-img-wrapper` image bridge — Two reusable DOM images for the current target and decoded previous image; nearby pages warm through off-DOM preloaders after navigation settles behind the 45ms image swap buffer
-- `previewTheme` / `previewCss` — Options window live theme and custom CSS previews (persisting across config reloads until Apply or Close)
+**In-memory state**: session-only; reset on app exit:
+- `navigationHistory`: Container-level Back/Forward history trail (capped at 100 entries)
+- `ArchiveCache`: Recent archive working set. ZIP/CBZ entries use a byte-budgeted in-memory image cache (default 512 MB) and background prefetch queue; RAR/CBR, 7Z/CB7, and TAR/CBT archives keep temporary extraction state for up to 8 recently opened archives.
+- `#viewer-img-wrapper` image bridge: Two reusable DOM images for the current target and decoded previous image; nearby pages warm through off-DOM preloaders after navigation settles behind the 45ms image swap buffer
+- `previewTheme` / `previewCss`: Options window live theme and custom CSS previews (persisting across config reloads until Apply or Close)
 
 **Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth. In portable mode, the top-level `hidden` flag controls the Windows hidden attribute on that local `quivit_config.json`: `true` hides it, and `false` leaves it visible. The attribute is synced on every app launch and on each config save; edits made to the JSON while QuiviT is running are overwritten by the in-memory state on the next save.
 
 ### Architecture
 
-The frontend is split into a state machine, pure services, and single-owner UI modules that talk through `Core.onStateChange` — not by writing each other's DOM:
+The frontend is split into a state machine, pure services, and single-owner UI modules that talk through `Core.onStateChange` instead of writing each other's DOM:
 
-- `core.js` — App state and configuration. No DOM.
-- `services/` — Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), key combos, keybind rules, sorting, viewer math.
-- `shared/` — Cross-window theme/CSS apply, pre-paint injector, config preview / emergency reset, window fit.
-- `viewer/` — Facade plus render pool and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
-- `filepanel/` — File list (virtualized), columns, breadcrumb, resize. Favorites persistence is `favoritesStore.js`.
-- `menubar/` — Chrome visibility and the sole `#statusbar` writer. `menubar.js` owns dropdown interaction.
-- `main/` — Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge.
-- `options/` — Options window, keybind capture UI, file-association UI.
-- `fsUtils.js` — Filesystem and archive navigation (no DOM).
-- `shortcuts.js` / `keybinds.js` — Input dispatch and config merge. Action ids come from `ACTION_REGISTRY`.
+- `core.js`: App state and configuration. No DOM.
+- `services/`: Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), key combos, keybind rules, sorting, viewer math.
+- `shared/`: Cross-window theme/CSS apply, pre-paint injector, config preview / emergency reset, window fit.
+- `viewer/`: Facade plus render pool and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
+- `filepanel/`: File list (virtualized), columns, breadcrumb, resize. Favorites persistence is `favoritesStore.js`.
+- `menubar/`: Chrome visibility and the sole `#statusbar` writer. `menubar.js` owns dropdown interaction.
+- `main/`: Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge.
+- `options/`: Options window, keybind capture UI, file-association UI.
+- `fsUtils.js`: Filesystem and archive navigation (no DOM).
+- `shortcuts.js` / `keybinds.js`: Input dispatch and config merge. Action ids come from `ACTION_REGISTRY`.
 
 CSS follows the same split: `global.css` holds tokens and shared rules; `main.css`, `options.css`, and `metadata.css` are page-only.
 
@@ -192,7 +192,7 @@ The Rust backend is still a small set of crate-root modules (`lib.rs`, `commands
 
 Checkboxes reflect whether QuiviT is the active default handler for each format, reading the `UserChoice` registry key first and falling back to the `Classes` registration.
 
-> **Note on Windows 10/11 defaults:** A format's active default handler lives in the `UserChoice` registry key, which is hash-protected and cannot be written programmatically. A format with no existing `UserChoice` becomes QuiviT's once registered — double-click opens it directly. For formats already claimed by another program, registering only adds QuiviT as an *available* handler; Windows surfaces it automatically via the "How do you want to open this file?" picker when such a file is opened, OR the default can be changed permanently there, via "Open with", or in Windows Settings.
+> **Note on Windows 10/11 defaults:** A format's active default handler lives in the `UserChoice` registry key, which is hash-protected and cannot be written programmatically. A format with no existing `UserChoice` becomes QuiviT's once registered: double-click opens it directly. For formats already claimed by another program, registering only adds QuiviT as an *available* handler; Windows surfaces it automatically via the "How do you want to open this file?" picker when such a file is opened, OR the default can be changed permanently there, via "Open with", or in Windows Settings.
 
 ### Command-Line Interface
 

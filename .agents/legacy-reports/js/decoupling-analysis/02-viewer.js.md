@@ -1,7 +1,7 @@
-# viewer.js — Decoupling Analysis
+# viewer.js: Decoupling Analysis
 
-> File: `src/js/viewer.js` — ~781 lines (reported 678; actual higher)
-> Role: Viewport rendering — fit/zoom/pan over a 2-node sliding `<img>` pool inside `#viewer-img-wrapper`, subscribed to Core state.
+> File: `src/js/viewer.js`: ~781 lines (reported 678; actual higher)
+> Role: Viewport rendering: fit/zoom/pan over a 2-node sliding `<img>` pool inside `#viewer-img-wrapper`, subscribed to Core state.
 
 ## 1. Exports
 
@@ -25,7 +25,7 @@ Module-internal (not exported): `zoomTo`, `clearDisplayedImage`, all `_`-prefixe
 
 | Module | Symbols | Notes |
 |---|---|---|
-| `./core.js` | Core — getState, onStateChange | Pure state read only |
+| `./core.js` | Core: getState, onStateChange | Pure state read only |
 | `./fsUtils.js` | revokeIfObjectURL, isImageEntry, isIco, buildArchiveSrc, buildFileSrcSync, formatStatusIndex | Own sync URL building for neighbors |
 | `./shortcuts.js` | activeKeys, MOUSE_BUTTON_NAMES | activeKeys for keyboard-pan hold; MOUSE_BUTTON_NAMES for pan-button table |
 | `./keybinds.js` | DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE | Module defaults mirroring Core's |
@@ -36,17 +36,17 @@ Note: `menubar.js` imports `Viewer` but never uses it (dead import).
 
 **Heavy.** ~50+ DOM statements.
 
-Reads at module init (side-effectful module body): `getElementById('viewer-img-wrapper')` L21, `getElementById('viewer-img')` L23, `querySelectorAll('.viewer-img')` L26, `createElement('img')` L34/L52, `getElementById('img-grill')`/`img-grill-border` L108-109 (**dead — never used again**), `querySelector` status elements L110-113, `getElementById('viewport')` L751.
+Reads at module init (side-effectful module body): `getElementById('viewer-img-wrapper')` L21, `getElementById('viewer-img')` L23, `querySelectorAll('.viewer-img')` L26, `createElement('img')` L34/L52, `getElementById('img-grill')`/`img-grill-border` L108-109 (**dead: never used again**), `querySelector` status elements L110-113, `getElementById('viewport')` L751.
 
-**Repeated hot-path lookups:** `document.getElementById('viewport')` at L150, 186, 264, 290, 776 — 5 sites.
+**Repeated hot-path lookups:** `document.getElementById('viewport')` at L150, 186, 264, 290, 776: 5 sites.
 
 **Element groups owned:**
-1. Image pool (`.viewer-img` in `#viewer-img-wrapper`) — full lifecycle (L26-105, 516-568, 683-739).
-2. `#viewer-img-wrapper` — the only transformed element: `style.transform` + `setProperty('--zoom-scale', _scale)`.
-3. `#viewport` — event target + geometry source.
-4. Statusbar readouts `.status-zoom/.status-dims/.status-filename/.status-index` — written by viewer **and** main.js.
-5. `document.body.style.cursor` — pan grab cursor.
-6. `#img-grill` / `#img-grill-border` — declared but not touched; `.active` toggled by main.js.
+1. Image pool (`.viewer-img` in `#viewer-img-wrapper`): full lifecycle (L26-105, 516-568, 683-739).
+2. `#viewer-img-wrapper`: the only transformed element: `style.transform` + `setProperty('--zoom-scale', _scale)`.
+3. `#viewport`: event target + geometry source.
+4. Statusbar readouts `.status-zoom/.status-dims/.status-filename/.status-index`: written by viewer **and** main.js.
+5. `document.body.style.cursor`: pan grab cursor.
+6. `#img-grill` / `#img-grill-border`: declared but not touched; `.active` toggled by main.js.
 7. Off-DOM `new Image()` preloaders + Tauri window cursor polling.
 
 **Event listeners:** resize, viewport mousedown/contextmenu, window mousemove/mouseup, window keyup/blur, `quivit-config-loaded`, per-node `load`.
@@ -55,25 +55,25 @@ Reads at module init (side-effectful module body): `getElementById('viewer-img-w
 
 | Cluster | Lines | Functions |
 |---|---|---|
-| Pool bootstrap / DOM setup | 14–42 | module body (side effects at import time) |
-| Pool lifecycle | 44–105 | `_getPoolNode`, `_recyclePoolNode`, `_dropExtraPoolNodes`, `_loadPoolNode`, `_setElementLoadingLabel`, `_isVisibleImage` |
-| Viewer state + element refs | 107–125 | module vars + status/grill refs |
-| Scaling / fit math | 127–251 | `_applyScaling`, `_visualSize`, `_clampPan`, `_applyTransform`, `_scheduleTransform`, `applyFitMode` (L185-251, 66 lines — pure math embedded with DOM reads) |
-| Zoom / rotate / flip | 253–309 | `zoomTo`, `zoomAt`, `zoomCenter`, `rotate`, `flipHorizontal`, `flipVertical` |
-| Pan gestures (mouse + keyboard + Tauri poll) | 311–508 | `_updatePanKeysCache`, `_keyPanHeld`, `_isMousePanKey`, `_panActive`, `_startPan`, `_stopPan`, `_cursorToClient`, `_startCursorPoll`, `_stopCursorPoll`, `_pollCursor`, `_updatePan`, `_onMouseDown/Move/Up`, `panBy` (largest cluster) |
-| Scaling setter | 505–508 | `setScaling` |
-| Image load / activation | 510–568 | `_activatePoolNode`, `_attachLoadHandler` |
-| State subscription + preloading | 570–745 | `_clearTargetLoadTimer`, `_clearScheduledPreloads`, `_schedulePoolPreloads`, `clearDisplayedImage`, `Core.onStateChange` (L630-745, giant 115-line callback) |
-| Event wiring + export | 747–781 | resize, mouse listeners, `Viewer` object |
+| Pool bootstrap / DOM setup | 14-42 | module body (side effects at import time) |
+| Pool lifecycle | 44-105 | `_getPoolNode`, `_recyclePoolNode`, `_dropExtraPoolNodes`, `_loadPoolNode`, `_setElementLoadingLabel`, `_isVisibleImage` |
+| Viewer state + element refs | 107-125 | module vars + status/grill refs |
+| Scaling / fit math | 127-251 | `_applyScaling`, `_visualSize`, `_clampPan`, `_applyTransform`, `_scheduleTransform`, `applyFitMode` (L185-251, 66 lines: pure math embedded with DOM reads) |
+| Zoom / rotate / flip | 253-309 | `zoomTo`, `zoomAt`, `zoomCenter`, `rotate`, `flipHorizontal`, `flipVertical` |
+| Pan gestures (mouse + keyboard + Tauri poll) | 311-508 | `_updatePanKeysCache`, `_keyPanHeld`, `_isMousePanKey`, `_panActive`, `_startPan`, `_stopPan`, `_cursorToClient`, `_startCursorPoll`, `_stopCursorPoll`, `_pollCursor`, `_updatePan`, `_onMouseDown/Move/Up`, `panBy` (largest cluster) |
+| Scaling setter | 505-508 | `setScaling` |
+| Image load / activation | 510-568 | `_activatePoolNode`, `_attachLoadHandler` |
+| State subscription + preloading | 570-745 | `_clearTargetLoadTimer`, `_clearScheduledPreloads`, `_schedulePoolPreloads`, `clearDisplayedImage`, `Core.onStateChange` (L630-745, giant 115-line callback) |
+| Event wiring + export | 747-781 | resize, mouse listeners, `Viewer` object |
 
 ## 5. Coupling / overlap
 
 1. **Status readout contention (viewer ↔ main.js).** Both query/write the same 4 elements; main.js guards via a DOM probe into viewer's pool (`document.querySelector('.viewer-img.active[data-decoded="true"]')`). Two writers, one coordination hack.
 2. **`img-grill`/`img-grill-border` split ownership.** Live in viewer's wrapper; viewer declares but never uses (dead refs); main.js toggles `.active`. `--zoom-scale` CSS var is the coupling channel.
-3. **Object URL revocation.** `FsUtils.revokeIfObjectURL` called from core.js, fsUtils, and viewer `_recyclePoolNode` — same src can be revoked twice.
-4. **Preloading parallelism.** viewer `_schedulePoolPreloads` (browser `Image`, ±7 window) vs fsUtils `prefetchAhead` (backend archive prefetch, ±7 window) — two independent neighbor-window systems. `entrySrcAt` re-implements entry filtering already in core.js/fsUtils.
+3. **Object URL revocation.** `FsUtils.revokeIfObjectURL` called from core.js, fsUtils, and viewer `_recyclePoolNode`: same src can be revoked twice.
+4. **Preloading parallelism.** viewer `_schedulePoolPreloads` (browser `Image`, ±7 window) vs fsUtils `prefetchAhead` (backend archive prefetch, ±7 window): two independent neighbor-window systems. `entrySrcAt` re-implements entry filtering already in core.js/fsUtils.
 5. **Pan keybind default duplicated.** `_updatePanKeysCache` fallback `['MouseLeft','MouseMiddle','Space']` duplicates `DEFAULT_KEYBINDS['cmd-pan-drag']`.
-6. **UI-chrome selector lists duplicated 3 ways.** viewer L476, shortcuts `isWheelOverUI`, shortcuts mousedown — same concept, three slightly different strings.
+6. **UI-chrome selector lists duplicated 3 ways.** viewer L476, shortcuts `isWheelOverUI`, shortcuts mousedown: same concept, three slightly different strings.
 7. **Double `applyFitMode`.** Every fit command calls `Core.setFitMode(...)` then `Viewer.applyFitMode()`, while Core.setFitMode → notify → viewer state handler also calls applyFitMode. Two refits per command.
 8. **Statusbar fit/zoom split.** `statusFit` formatted in main.js only; `statusZoom` % in viewer only; formatting scattered across two modules.
 
@@ -97,7 +97,7 @@ Reads at module init (side-effectful module body): `getElementById('viewer-img-w
 
 **C. `viewerGestures.js` (pan gestures, DOM + Tauri).** Move pan state/buttons, `_onMouseDown/Move/Up`, cursor poll, body-cursor styling. Talks only to viewportState.panBy/startPan.
 
-**D. `viewerPreload.js` (optional)** — DOM-Image neighbor warm-up, so the state callback shrinks. Combine with viewerRender if 2-file split preferred.
+**D. `viewerPreload.js` (optional)**: DOM-Image neighbor warm-up, so the state callback shrinks. Combine with viewerRender if 2-file split preferred.
 
 **What stays in `viewer.js`:** thin facade re-exporting `Viewer` API from the new modules so main.js/filePanel.js call sites don't churn.
 

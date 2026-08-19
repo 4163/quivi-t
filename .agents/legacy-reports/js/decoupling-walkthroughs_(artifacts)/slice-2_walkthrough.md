@@ -1,4 +1,4 @@
-# Walkthrough: JS DOM Decoupling — Slice 2 (Statusbar single-owner)
+# Walkthrough: JS DOM Decoupling: Slice 2 (Statusbar single-owner)
 
 This slice resolved the "3-writer problem" where `main.js`, `viewer.js`, and `shortcuts.js` all competed to mutate the `#statusbar` DOM elements directly.
 

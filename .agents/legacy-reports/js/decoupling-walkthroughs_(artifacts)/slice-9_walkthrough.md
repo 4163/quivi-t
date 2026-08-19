@@ -1,4 +1,4 @@
-# Walkthrough: JS DOM Decoupling — Slice 9
+# Walkthrough: JS DOM Decoupling: Slice 9
 
 Slice 9 of the JS DOM Decoupling has been successfully completed. `main.js` has undergone its final thinning and small modules have been polished.
 
@@ -9,7 +9,7 @@ Slice 9 of the JS DOM Decoupling has been successfully completed. `main.js` has 
 - **Created `main/dropzone.js`**: Encapsulated all drag-and-drop wiring and dropping logic.
 - **Thinned and Moved `main.js`**: `main.js` is now purely a bootstrap and state-dispatch entry point located at `src/js/main/main.js`. `src/index.html` was updated to import it from its new location.
 - **Polished `navigationHistory.js`**: Removed the unreachable dead `history: 'replace'` parameter option.
-- **Polished `shellBackground.js`**: Deleted the broad, inefficient `<head>` `MutationObserver` and replaced it with clean Tauri IPC (`theme-preview`, `css-preview`) and JS `storage` event listeners for instantaneous shell window background sync without DOM thrashing.
+- **Polished `shellBackground.js`**: Deleted the broad, inefficient `<head>` `MutationObserver` and replaced it with Tauri IPC (`theme-preview`, `css-preview`) and JS `storage` event listeners for fast shell window background sync without DOM thrashing.
 
 ## Validation Results
 - **Static Check**: Ran `node --check` across the `src/js` directory; all files parsed successfully.

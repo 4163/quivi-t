@@ -10,15 +10,15 @@
 
 ## 1. Executive Summary & File Overview
 
-[`lib.rs`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs) serves as the root library crate entry point for the QuiviT Tauri backend. It defines the public application bootstrap function [`run()`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L62-L378), declares all backend child modules (`archives`, `commands`, `config`, `ico`, `models`, `utils`), and wires together Tauri plugins, state containers, command handlers, custom URI scheme handlers, and window lifecycle listeners.
+[`lib.rs`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs) is the root library crate entry point for the QuiviT Tauri backend. It defines the public application bootstrap function [`run()`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L62-L378), declares all backend child modules (`archives`, `commands`, `config`, `ico`, `models`, `utils`), and wires together Tauri plugins, state containers, command handlers, custom URI scheme handlers, and window lifecycle listeners.
 
 However, `lib.rs` currently suffers from significant architectural bloat and severe cross-domain coupling:
-1. **Bloat via Stranded Tests:** 475 lines (49.0% of the entire file, lines 494–969) consist of a test suite (`mod archive_tests`) that tests archive extraction, TAR/7z/RAR listing, path traversal safety, and cache eviction—functionality belonging entirely to [`archives.rs`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs).
-2. **Leaky Protocol Handler:** The `quivit://` asynchronous protocol handler (lines 183–352) reaches directly into private and semi-private fields of [`ArchiveCache`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L19-L29) (`single.extract_temp_dir`, `single.extract_notify`, `single.zip_archive`), orchestrating Condvar synchronization, background wait timeouts, and multi-step cache fallbacks inside `lib.rs`.
-3. **Reinvented Standard Utilities:** Lines 382–448 implement handwritten Base64 and percent-decoding algorithms from scratch, despite `Cargo.toml` already importing `base64 = "0.23.1"`.
+1. **Bloat via Stranded Tests:** 475 lines (49.0% of the entire file, lines 494-969) consist of a test suite (`mod archive_tests`) that tests archive extraction, TAR/7z/RAR listing, path traversal safety, and cache eviction:functionality belonging entirely to [`archives.rs`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs).
+2. **Leaky Protocol Handler:** The `quivit://` asynchronous protocol handler (lines 183-352) reaches directly into private and semi-private fields of [`ArchiveCache`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L19-L29) (`single.extract_temp_dir`, `single.extract_notify`, `single.zip_archive`), orchestrating Condvar synchronization, background wait timeouts, and multi-step cache fallbacks inside `lib.rs`.
+3. **Reinvented Standard Utilities:** Lines 382-448 implement handwritten Base64 and percent-decoding algorithms from scratch, despite `Cargo.toml` already importing `base64 = "0.23.1"`.
 4. **Scattered Window Management:** Window creation, configuration, sizing constants, and background color styling are fragmented across `lib.rs` and [`config.rs`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs).
 5. **Stray Command Implementations:** Commands like [`open_in_explorer`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L450-L460) and [`get_default_dir`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L462-L471) are implemented in `lib.rs` rather than in [`commands.rs`](file:///E:/Projects/QuiviT/src-tauri/src/commands.rs).
-6. **Ad-Hoc Background File Watcher:** Spawns an unmanaged `notify` watcher thread inside the `.setup()` hook (lines 111–143) instead of utilizing a managed watcher service.
+6. **Ad-Hoc Background File Watcher:** Spawns an unmanaged `notify` watcher thread inside the `.setup()` hook (lines 111-143) instead of utilizing a managed watcher service.
 
 ---
 
@@ -34,17 +34,17 @@ However, `lib.rs` currently suffers from significant architectural bloat and sev
 | [L4](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L4) | `pub mod ico;` | `pub` | Native Windows icon extraction via Win32 Shell API |
 | [L5](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L5) | `pub mod models;` | `pub` | Data structures shared between Rust and TS/JS frontend |
 | [L6](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L6) | `pub mod utils;` | `pub` | File format definitions and Win32 file attribute flags |
-| [L8–L18](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L8-L18) | Top-level imports | `private` | Imports `std::fs`, `std::sync::Mutex`, `tauri::*`, and glob `archives::*`, `commands::*`, `config::*`, `ico::*` |
+| [L8-L18](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L8-L18) | Top-level imports | `private` | Imports `std::fs`, `std::sync::Mutex`, `tauri::*`, and glob `archives::*`, `commands::*`, `config::*`, `ico::*` |
 
 ### 2.2. Public Functions & Exports
 
 | Line Range | Signature | Description |
 | :--- | :--- | :--- |
-| [L62–L378](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L62-L378) | `pub fn run()` | Main Tauri application entry point (`#[cfg_attr(mobile, tauri::mobile_entry_point)]`). Initializes plugins, state, commands, protocol, and starts event loop. |
+| [L62-L378](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L62-L378) | `pub fn run()` | Main Tauri application entry point (`#[cfg_attr(mobile, tauri::mobile_entry_point)]`). Initializes plugins, state, commands, protocol, and starts event loop. |
 
 ### 2.3. Tauri Commands Registered in `lib.rs`
 
-`lib.rs` registers 29 Tauri commands into `tauri::generate_handler![]` ([lines 150–182](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L150-L182)). Two commands are implemented directly in `lib.rs`:
+`lib.rs` registers 29 Tauri commands into `tauri::generate_handler![]` ([lines 150-182](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L150-L182)). Two commands are implemented directly in `lib.rs`:
 
 | Command Name | Source Line | Implementation Location | Category / Role |
 | :--- | :--- | :--- | :--- |
@@ -84,11 +84,11 @@ However, `lib.rs` currently suffers from significant architectural bloat and sev
 
 | Function / Helper | Line Range | Purpose |
 | :--- | :--- | :--- |
-| [`apply_shell_background`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L36-L60) | [L36–L60](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L36-L60) | Queries config theme and sets native window background before first paint |
-| [`base64_decode`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L386) | [L382–L386](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L386) | Decodes base64 string to UTF-8 String |
-| [`base64_decode_bytes`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L388-L429) | [L388–L429](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L388-L429) | Low-level custom ASCII lookup table base64 byte decoder |
-| [`urlencoding_decode`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L431-L448) | [L431–L448](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L431-L448) | Percent-decoding parser (`%XX` hex byte translation) |
-| [`guess_mime`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L473-L492) | [L473–L492](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L473-L492) | Static extension-to-MIME string matcher |
+| [`apply_shell_background`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L36-L60) | [L36-L60](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L36-L60) | Queries config theme and sets native window background before first paint |
+| [`base64_decode`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L386) | [L382-L386](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L386) | Decodes base64 string to UTF-8 String |
+| [`base64_decode_bytes`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L388-L429) | [L388-L429](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L388-L429) | Low-level custom ASCII lookup table base64 byte decoder |
+| [`urlencoding_decode`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L431-L448) | [L431-L448](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L431-L448) | Percent-decoding parser (`%XX` hex byte translation) |
+| [`guess_mime`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L473-L492) | [L473-L492](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L473-L492) | Static extension-to-MIME string matcher |
 
 ---
 
@@ -110,7 +110,7 @@ However, `lib.rs` currently suffers from significant architectural bloat and sev
 └───────────────────────────────┴────────────────────────────────────────┘
 ```
 
-### Cluster 1: App Bootstrap, Plugins & Lifecycle ([L62–L90](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L62-L90), [L353–L378](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L353-L378))
+### Cluster 1: App Bootstrap, Plugins & Lifecycle ([L62-L90](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L62-L90), [L353-L378](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L353-L378))
 - **Responsibilities:**
   - Loads configuration early via [`crate::config::load_config_early()`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L64) to determine single-instance activation and cache capacity.
   - Initializes `tauri_plugin_single_instance`: captures subsequent CLI invocations, focuses the `main` window, and emits `single-instance-open`.
@@ -119,21 +119,21 @@ However, `lib.rs` currently suffers from significant architectural bloat and sev
   - Implements `on_window_event` listener: when `main` window receives `CloseRequested`, automatically closes child windows (`options`, `metadata`) to prevent orphaned headless processes.
   - Implements `RunEvent::Exit` hook: triggers [`crate::config::apply_pending_config_to_disk()`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L149).
 
-### Cluster 2: Window Construction & Native Shell Styling ([L21–L60](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L21-L60), [L92–L110](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L92-L110))
+### Cluster 2: Window Construction & Native Shell Styling ([L21-L60](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L21-L60), [L92-L110](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L92-L110))
 - **Responsibilities:**
   - Builds the `main` window programmatically in the `.setup()` hook (`WebviewWindowBuilder::new(app, "main", ...)`).
   - Configures initial dimensions (`MAIN_INITIAL_W`, `MAIN_INITIAL_H`, `MAIN_MIN_W`, `MAIN_MIN_H` imported from `config.rs`).
   - [`apply_shell_background`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L36-L60): Evaluates user theme ("dark", "light", or OS system theme) and applies Win32 webview surface background color (`#252526` or `#ffffff`) before first paint to eliminate launch flicker.
 - **Architectural Smell:** Window creation is split between `lib.rs` (`main` window) and `config.rs` (`options` and `metadata` windows). Window dimension constants are declared in `config.rs` but consumed in `lib.rs`.
 
-### Cluster 3: Embedded Config File Watcher ([L111–L145](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L111-L145))
+### Cluster 3: Embedded Config File Watcher ([L111-L145](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L111-L145))
 - **Responsibilities:**
   - Spawns a dedicated OS thread (`std::thread::spawn`) in `.setup()` using `notify::recommended_watcher`.
   - Watches parent directory of `config.json`.
   - Debounces `EventKind::Modify` events (500ms cooldown) and emits `config-changed` to the frontend webview.
 - **Architectural Smell:** Unmanaged thread creation directly inside `lib.rs`. Duplicate usage of `notify` crate (the directory watcher is in `commands.rs`, while the config watcher is embedded in `lib.rs`).
 
-### Cluster 4: Custom `quivit://` Asset Scheme Protocol Handler ([L183–L352](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L183-L352), [L473–L492](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L473-L492))
+### Cluster 4: Custom `quivit://` Asset Scheme Protocol Handler ([L183-L352](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L183-L352), [L473-L492](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L473-L492))
 - **Responsibilities:**
   - Registers the custom asynchronous URI scheme protocol `"quivit"`.
   - Parses incoming request URIs (`quivit://archive/<base64_archive_path>/<entry_name>`).
@@ -143,7 +143,7 @@ However, `lib.rs` currently suffers from significant architectural bloat and sev
   - Formats HTTP `Response` with headers (`Content-Type`, `Content-Length`, `Access-Control-Allow-Origin: *`).
 - **Architectural Smell:** Heavily reaches into [`ArchiveCache`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L19-L29) internals, managing Mutexes and Condvars directly. It bypasses any clean service layer in `archives.rs`.
 
-### Cluster 5: Handwritten Utilities & Stray Tauri Commands ([L380–L471](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L380-L471))
+### Cluster 5: Handwritten Utilities & Stray Tauri Commands ([L380-L471](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L380-L471))
 - **Responsibilities:**
   - [`base64_decode`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L386) & [`base64_decode_bytes`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L388-L429): Custom base64 decoder.
   - [`urlencoding_decode`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L431-L448): Custom percent decoder.
@@ -152,7 +152,7 @@ However, `lib.rs` currently suffers from significant architectural bloat and sev
   - [`guess_mime`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L473-L492): File extension to MIME mapper.
 - **Architectural Smell:** Reinventing wheel for base64/urlencoding; placing random Tauri IPC commands inside `lib.rs`.
 
-### Cluster 6: Archive & Cache Unit/Integration Test Suite ([L494–L969](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L494-L969))
+### Cluster 6: Archive & Cache Unit/Integration Test Suite ([L494-L969](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L494-L969))
 - **Responsibilities:**
   - 13 test functions + 2 test helper functions testing archive extraction, CBT creation, solid 7z listing, RAR5 listing, path traversal safety, and cache eviction.
 - **Architectural Smell:** Makes up 49% of `lib.rs` source code. Belongs in `archives.rs` or `tests/archive_tests.rs`.
@@ -176,7 +176,7 @@ graph TD
 
 ### 4.1. Leaky Abstraction: Protocol Handler Reaching Into `ArchiveCache` Internals
 
-In [`lib.rs:230–332`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L230-L332), the protocol handler performs deep multi-step manipulation of `ArchiveCache` internal fields:
+In [`lib.rs:230-332`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L230-L332), the protocol handler performs deep multi-step manipulation of `ArchiveCache` internal fields:
 ```rust
 // lib.rs:243-254 - Directly inspecting inner struct fields
 if let Some(single) = cache.archives.get(&archive_path) {
@@ -189,7 +189,7 @@ if let Some(single) = cache.archives.get(&archive_path) {
     }
 }
 ```
-And on cache miss ([lines 297–330](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L297-L330)):
+And on cache miss ([lines 297-330](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L297-L330)):
 ```rust
 // lib.rs extracts raw extract_notify Arc<(Mutex<HashSet<String>>, Condvar)> from cache
 // and executes a blocking wait_timeout_while in lib.rs!
@@ -208,32 +208,32 @@ let _ = cvar.wait_timeout_while(set, timeout, |pending| {
 ### 4.2. Unmanaged Concurrency & Thread Contention in `quivit://` Protocol
 
 - For every image request made by the webview (`<img src="quivit://archive/...">`), `lib.rs:226` calls `std::thread::spawn(move || { ... })`.
-- During fast thumbnail rendering or rapid scrolling, 20–50 OS threads can be spawned concurrently.
+- During fast thumbnail rendering or rapid scrolling, 20-50 OS threads can be spawned concurrently.
 - Each thread acquires `state.lock().unwrap()` on the global `Mutex<ArchiveCache>` up to 3 separate times (initial check, extraction lookup, cache insert).
 - Threads waiting for solid 7z extraction block for up to 30 seconds on a Condvar.
 
 ### 4.3. Duplicated / Handwritten Utility Logic
 
-- **Base64 Decoding ([L382–L429](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L429)):**
+- **Base64 Decoding ([L382-L429](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L382-L429)):**
   `lib.rs` defines a custom 45-line base64 decoder using raw ASCII table lookups.
   However, `Cargo.toml` already declares:
   ```toml
   base64 = "0.23.1"
   ```
   Handwritten base64 parsers introduce unnecessary maintenance and lack standard security/fuzzing assurances.
-- **Percent Decoding ([L431–L448](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L431-L448)):**
+- **Percent Decoding ([L431-L448](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L431-L448)):**
   Handwritten `%XX` loop instead of standard URL decoding helpers.
 
 ### 4.4. Fragmented Window Management
 
-- `lib.rs` creates the `main` window and sets its background color ([L95–L108](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L95-L108)).
+- `lib.rs` creates the `main` window and sets its background color ([L95-L108](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L95-L108)).
 - `config.rs` creates the `options` and `metadata` windows ([`config.rs:273`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L273), [`config.rs:377`](file:///E:/Projects/QuiviT/src-tauri/src/config.rs#L377)).
-- Window dimension constants (`MAIN_INITIAL_W`, `MAIN_INITIAL_H`, `MAIN_MIN_W`, `MAIN_MIN_H`, `OPTIONS_INITIAL_W`, `META_INITIAL_W`, etc.) are declared in `config.rs` (lines 12–39), making `config.rs` responsible for both JSON serialization and Win32 UI geometry.
-- `lib.rs` handles the child window close cascading logic ([L353–L370](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L353-L370)).
+- Window dimension constants (`MAIN_INITIAL_W`, `MAIN_INITIAL_H`, `MAIN_MIN_W`, `MAIN_MIN_H`, `OPTIONS_INITIAL_W`, `META_INITIAL_W`, etc.) are declared in `config.rs` (lines 12-39), making `config.rs` responsible for both JSON serialization and Win32 UI geometry.
+- `lib.rs` handles the child window close cascading logic ([L353-L370](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L353-L370)).
 
 ### 4.5. Half of `lib.rs` is Stranded Tests
 
-- Lines 494–969 (475 lines) are unit and integration tests for `archives.rs`.
+- Lines 494-969 (475 lines) are unit and integration tests for `archives.rs`.
 - These tests do not test `lib.rs` functionality.
 - They inflate compilation and navigation overhead in `lib.rs`.
 
@@ -241,25 +241,25 @@ let _ = cvar.wait_timeout_while(set, timeout, |pending| {
 
 ## 5. Test Suite Analysis (`mod archive_tests`)
 
-The `archive_tests` module ([lines 494–969](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L494-L969)) contains 13 test functions and 2 private test helper functions:
+The `archive_tests` module ([lines 494-969](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L494-L969)) contains 13 test functions and 2 private test helper functions:
 
 | Test / Helper Name | Line Range | Target Functionality Tested | Test Type |
 | :--- | :--- | :--- | :--- |
-| `test_file` (helper) | [L501–L508](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L501-L508) | Resolves path to `../test-files/archives/<name>` | Test Fixture Helper |
-| `ensure_cbt` (helper) | [L513–L566](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L513-L566) | Self-provisions `cbt.cbt` by repacking images from `7z.7z` | Test Fixture Builder |
-| `lists_solid_7z_with_nested_folders` | [L568–L584](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L568-L584) | [`archives::list_7z_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) natural sorting and path preservation | Unit / Integration |
-| `extracts_solid_7z_to_temp` | [L586–L611](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L586-L611) | [`archives::extract_7z_to_temp`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) unpacking & nested file integrity | Integration |
-| `lists_and_reads_tar` | [L613–L643](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L613-L643) | [`archives::list_tar_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) and [`extract_tar_entry`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) byte match against 7z | Integration |
-| `extracts_tar_to_temp` | [L645–L666](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L645-L666) | [`archives::extract_tar_to_temp`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) temp directory extraction | Integration |
-| `archive_entry_temp_path_rejects_escape_paths` | [L668–L678](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L668-L678) | [`archives::archive_entry_temp_path`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) traversal rejection (`..`, `/absolute`) | Security / Unit |
-| `tar_temp_extraction_includes_metadata` | [L680–L718](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L680-L718) | Extraction of `ComicInfo.xml` alongside images | Integration |
-| `supported_archives_include_new_formats` | [L720–L725](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L720-L725) | [`utils::is_archive_ext`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L113) format verification (`7z`, `cb7`, `cbt`, `tar`) | Unit |
-| `lists_rar5_cbr` | [L727–L737](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L727-L737) | [`archives::list_rar_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) RAR5 unicode file entry reading | Integration |
-| `lists_cb7_like_7z` | [L739–L751](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L739-L751) | `.cb7` extension handling via 7z pipeline | Integration |
-| `url_decode_roundtrips_utf8_entry_names` | [L753–L766](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L753-L766) | [`urlencoding_decode`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L431) with Japanese multi-byte UTF-8 | Unit |
-| `protocol_serve_timing_simulation` | [L768–L868](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L768-L868) | Simulates async protocol response timing and background 7z/CBT extraction | Integration / Benchmark |
-| `archive_cache_byte_budget_evicts_globally` | [L870–L937](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L870-L937) | [`ArchiveCache`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L19) LRU eviction, byte budget capping, oversize handling | Unit |
-| `archive_cache_bounds_open_archive_state` | [L939–L968](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L939-L968) | [`ArchiveCache::max_open_archives`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L28) LRU archive state bounding | Unit |
+| `test_file` (helper) | [L501-L508](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L501-L508) | Resolves path to `../test-files/archives/<name>` | Test Fixture Helper |
+| `ensure_cbt` (helper) | [L513-L566](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L513-L566) | Self-provisions `cbt.cbt` by repacking images from `7z.7z` | Test Fixture Builder |
+| `lists_solid_7z_with_nested_folders` | [L568-L584](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L568-L584) | [`archives::list_7z_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) natural sorting and path preservation | Unit / Integration |
+| `extracts_solid_7z_to_temp` | [L586-L611](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L586-L611) | [`archives::extract_7z_to_temp`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) unpacking & nested file integrity | Integration |
+| `lists_and_reads_tar` | [L613-L643](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L613-L643) | [`archives::list_tar_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) and [`extract_tar_entry`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) byte match against 7z | Integration |
+| `extracts_tar_to_temp` | [L645-L666](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L645-L666) | [`archives::extract_tar_to_temp`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) temp directory extraction | Integration |
+| `archive_entry_temp_path_rejects_escape_paths` | [L668-L678](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L668-L678) | [`archives::archive_entry_temp_path`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) traversal rejection (`..`, `/absolute`) | Security / Unit |
+| `tar_temp_extraction_includes_metadata` | [L680-L718](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L680-L718) | Extraction of `ComicInfo.xml` alongside images | Integration |
+| `supported_archives_include_new_formats` | [L720-L725](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L720-L725) | [`utils::is_archive_ext`](file:///E:/Projects/QuiviT/src-tauri/src/utils.rs#L113) format verification (`7z`, `cb7`, `cbt`, `tar`) | Unit |
+| `lists_rar5_cbr` | [L727-L737](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L727-L737) | [`archives::list_rar_entries`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) RAR5 unicode file entry reading | Integration |
+| `lists_cb7_like_7z` | [L739-L751](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L739-L751) | `.cb7` extension handling via 7z pipeline | Integration |
+| `url_decode_roundtrips_utf8_entry_names` | [L753-L766](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L753-L766) | [`urlencoding_decode`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L431) with Japanese multi-byte UTF-8 | Unit |
+| `protocol_serve_timing_simulation` | [L768-L868](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L768-L868) | Simulates async protocol response timing and background 7z/CBT extraction | Integration / Benchmark |
+| `archive_cache_byte_budget_evicts_globally` | [L870-L937](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L870-L937) | [`ArchiveCache`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L19) LRU eviction, byte budget capping, oversize handling | Unit |
+| `archive_cache_bounds_open_archive_state` | [L939-L968](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs#L939-L968) | [`ArchiveCache::max_open_archives`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs#L28) LRU archive state bounding | Unit |
 
 **Test Migration Destination:**
 - The pure unit tests (`archive_cache_byte_budget_evicts_globally`, `archive_cache_bounds_open_archive_state`, `archive_entry_temp_path_rejects_escape_paths`) belong directly in [`src-tauri/src/archives.rs`](file:///E:/Projects/QuiviT/src-tauri/src/archives.rs) as an inline `#[cfg(test)] mod tests`.
@@ -317,13 +317,13 @@ graph TD
 
 | Step | Action | Source Location | Target Location | Rationale |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | Extract archive tests to integration suite | `lib.rs:494–969` | `tests/archive_tests.rs` & `archives.rs` | Eliminates 475 lines of stranded code from `lib.rs`. |
-| **2** | Move stray commands to `commands.rs` | `lib.rs:450–471` (`open_in_explorer`, `get_default_dir`) | `commands.rs` | Keeps all Tauri command implementations together. |
-| **3** | Create `src/protocol.rs` and encapsulate scheme handler | `lib.rs:183–352`, `lib.rs:382–448`, `lib.rs:473–492` | `src/protocol.rs` | Decouples scheme parsing and MIME guessing; replaces handwritten base64 with `base64` crate. |
-| **4** | Add clean retrieval method to `ArchiveCache` | `lib.rs:230–332` | `archives.rs: ArchiveCache::get_or_wait_entry(...)` | Eliminates leaky direct field manipulation and Condvar waits in protocol handler. |
-| **5** | Create `src/windows.rs` and consolidate window logic | `lib.rs:21–60`, `lib.rs:95–109`, `lib.rs:353–370`, `config.rs:12–39`, `config.rs:273–485` | `src/windows.rs` | Unifies window constants, creation, fitting, styling, and lifecycle in one module. |
-| **6** | Extract config watcher into `src/watchers.rs` | `lib.rs:111–145` | `src/watchers.rs` | Clean separation of background watcher threads. |
-| **7** | Streamline `lib.rs` | `lib.rs` | `src/lib.rs` (~90–120 lines) | `lib.rs` becomes a clean, readable orchestrator. |
+| **1** | Extract archive tests to integration suite | `lib.rs:494-969` | `tests/archive_tests.rs` & `archives.rs` | Eliminates 475 lines of stranded code from `lib.rs`. |
+| **2** | Move stray commands to `commands.rs` | `lib.rs:450-471` (`open_in_explorer`, `get_default_dir`) | `commands.rs` | Keeps all Tauri command implementations together. |
+| **3** | Create `src/protocol.rs` and encapsulate scheme handler | `lib.rs:183-352`, `lib.rs:382-448`, `lib.rs:473-492` | `src/protocol.rs` | Decouples scheme parsing and MIME guessing; replaces handwritten base64 with `base64` crate. |
+| **4** | Add clean retrieval method to `ArchiveCache` | `lib.rs:230-332` | `archives.rs: ArchiveCache::get_or_wait_entry(...)` | Eliminates leaky direct field manipulation and Condvar waits in protocol handler. |
+| **5** | Create `src/windows.rs` and consolidate window logic | `lib.rs:21-60`, `lib.rs:95-109`, `lib.rs:353-370`, `config.rs:12-39`, `config.rs:273-485` | `src/windows.rs` | Unifies window constants, creation, fitting, styling, and lifecycle in one module. |
+| **6** | Extract config watcher into `src/watchers.rs` | `lib.rs:111-145` | `src/watchers.rs` | Clean separation of background watcher threads. |
+| **7** | Streamline `lib.rs` | `lib.rs` | `src/lib.rs` (~90-120 lines) | `lib.rs` becomes a clean, readable orchestrator. |
 
 ---
 
