@@ -462,3 +462,14 @@ After each slice, the active agent MUST follow this handoff protocol:
 - **Invariant Rules Upheld:** "One owner per concern." "Encapsulation over public field reach-in." "No behavior or wire change": `quivit://` URI parsing, URL decoding, and HTTP response headers maintained 100% backward compatibility. Shared `decode_cjk_name` keeps encoding concerns encapsulated.
 - **Deferred Follow-ups:** Ready for Slice 6 (Commands Monolith Dissolution).
 
+### Slice 6: Commands monolith dissolution (Completed)
+- **Architectural Choices:** Replaced the flat `commands.rs` file with a `commands/` module tree and kept IPC command names/signatures unchanged through `commands/mod.rs` re-exports. Split command handlers by owner: directory browsing/navigation, archive IPC adapters, directory watchers, registry/file associations, and shell/dialog helpers. Moved `open_in_explorer` and `get_default_dir` out of `lib.rs`. Left `show_window` in `windows.rs` because Slice 3 already made window lifecycle ownership clean. Left the config watcher in `lib.rs` for Slice 8, as planned.
+- **New Modules/Helpers:**
+  - `src-tauri/src/commands/mod.rs` (domain modules and public command re-exports)
+  - `src-tauri/src/commands/directory.rs` (directory listing, navigation, path classification, text file I/O)
+  - `src-tauri/src/commands/archives.rs` (archive list, prefetch, archive ICO frame commands)
+  - `src-tauri/src/commands/watchers.rs` (`WatcherState`, `watch_directory`)
+  - `src-tauri/src/commands/registry.rs` (format status, icon dumping, association registration)
+  - `src-tauri/src/commands/shell.rs` (`open_in_explorer`, `get_default_dir`, `get_initial_args`, `pick_folder`)
+- **Invariant Rules Upheld:** "One owner per concern." IPC wire compatibility maintained: frontend invoke names and argument shapes are unchanged. The old `commands.rs` file was deleted in the same change that introduced `commands/mod.rs`, avoiding the Rust module-resolution conflict between a flat file and folder module.
+- **Deferred Follow-ups:** Ready for Slice 7. Native shell icon extraction still lives in `ico.rs`; Slice 7 should move Win32 shell icon work into `platform/icons.rs` and add RAII cleanup wrappers.
