@@ -4,7 +4,7 @@ description: Commit and push the current working tree through the repository com
 argument-hint: "<push, push-x, push-a, or commit context>"
 ---
 
-User note for initial familiarization:
+User note for commit pipeline:
 ```
 use the commit-pipeline skill and follow its workflow.
 ```
@@ -50,5 +50,6 @@ Write commit messages from the staged diff and verified context:
 
 - Header: concise past-tense summary, preferably under 50 characters.
 - Body: explain what changed and why. Separate it from the header with a blank line.
-- Bullets: use them when the body has multiple points.
+- Tense: write the whole commit message in past tense. The header and body bullets describe what the staged diff did, not what it will do.
+- Bullets: use them when the body has multiple points. Do not force active voice or present-tense action verbs. Prefer `Moved X`, `Kept Y`, or `Added Z` over `Moves X`, `Ensures Y`, or `Improves Z`.
 - Technical details: include complex or non-obvious implementation decisions. If session recovery was used, mention only relevant facts that affected the commit.
