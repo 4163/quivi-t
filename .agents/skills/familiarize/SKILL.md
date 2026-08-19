@@ -20,7 +20,7 @@ use the familiarize skill and follow its guidance.
 - Identify the architecture: languages and frameworks in use, how modules/services/layers are separated, where the entry points are (main files, routers, config), and how data and control flow through the system.
 - Read the package manifest(s) (`package.json`, `requirements.txt`, `Cargo.toml`, etc.), build/config files, and any existing README or architecture docs.
 - Note the conventions already in place: naming, folder layout, testing patterns, and style. New work should fit the codebase instead of fighting it.
-- Read `.agents/AGENTS.md` and follow it. Tell the user that you have taken in those rules.
+- Most importantly, read `.agents/AGENTS.md` and strictly follow it. If the task includes docs, prompts, comments, or user-facing copy, also read `.agents/skills/unslop/SKILL.md` and strictly follow it. Treat that writing guidance as active even when the harness does not auto-load always-active skills. Explicitly confirm to the user that you have read and taken in the relevant rules.
 
 ## 2. Check session context only when relevant
 

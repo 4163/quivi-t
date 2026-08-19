@@ -4,6 +4,7 @@ These rules apply to the AI coding assistant.
 ## Agent Behavior
 - Keep responses concise and focused on the task.
 - Follow existing code style and formatting for each directory and its associated files.
+- For writing work, read `.agents/skills/unslop/SKILL.md` and follow it even if the harness does not auto-load always-active skills. This applies to docs, prompts, comments, and user-facing copy.
 - NEVER (unless instructed otherwise) execute git commit commands or automate git commits. The user handles all commits manually or through the commit pipeline.
 
 ## Code Guidelines
