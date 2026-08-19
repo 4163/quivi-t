@@ -1,6 +1,5 @@
-/// Show a native folder picker dialog that resolves Windows Library virtual
-/// folders (Documents, Pictures, Videos, Music) to their default save location
-/// on the filesystem. Falls back gracefully for normal filesystem folders.
+/// Show a native folder picker. Windows Library virtual folders (Documents,
+/// Pictures, Videos, Music) resolve to their default save location on disk.
 ///
 /// Returns `Ok(Some(path))` on selection, `Ok(None)` on cancel, or `Err` on
 /// COM/dialog failure.
@@ -17,7 +16,7 @@ pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
     };
 
     unsafe {
-        // COM init — harmless if already initialized on this thread
+        // COM init is harmless if already initialized on this thread.
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
 
         let dialog: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)
@@ -46,7 +45,7 @@ pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
             return Ok(Some(path));
         }
 
-        // Virtual folder — try resolving as a Windows Library
+        // Virtual folder. Try resolving as a Windows Library.
         if let Ok(library) = CoCreateInstance::<_, IShellLibrary>(&ShellLibrary, None, CLSCTX_INPROC_SERVER) {
             if library.LoadLibraryFromItem(&item, 0).is_ok() {
                 if let Ok(default_folder) = library.GetDefaultSaveFolder::<IShellItem>(DSFT_DETECT) {
@@ -60,7 +59,7 @@ pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
             }
         }
 
-        // Fallback: Virtual folder (e.g. "This PC") - get parsing name (starts with ::{...)
+        // Fallback for virtual folders such as "This PC": return the parsing name.
         if let Ok(path_pwstr) = item.GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING) {
             let path = path_pwstr.to_string()
                 .map_err(|e| format!("Path conversion failed: {e}"))?;

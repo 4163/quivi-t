@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-// ── Data structures ──────────────────────────────────────────────────────────
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileEntry {
     pub name: String,

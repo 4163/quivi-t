@@ -2,10 +2,10 @@ use tauri::Manager;
 use tauri::window::Color;
 use crate::config::AppConfig;
 
-// ── Window Size Constants ────────────────────────────────────────────────────
+// Window size constants
 // Initial/min sizes in logical pixels. Named for easy tweaking.
 
-// Main window — built in lib.rs setup so all windows share one path.
+// Main window is built in lib.rs setup so all windows share one path.
 pub const MAIN_INITIAL_W: f64 = 1280.0;
 pub const MAIN_INITIAL_H: f64 = 720.0;
 pub const MAIN_MIN_W: f64 = 640.0;
@@ -16,7 +16,7 @@ pub const MAIN_MIN_H: f64 = 400.0;
 const AUTO_FIT_INITIAL_W: f64 = 560.0;
 const AUTO_FIT_INITIAL_H: f64 = 600.0;
 
-// Options window — width auto-fits to content (capped at OPTIONS_MAX_W), height fixed.
+// Options window width auto-fits to content (capped at OPTIONS_MAX_W), height fixed.
 pub(crate) const OPTIONS_INITIAL_W: f64 = AUTO_FIT_INITIAL_W;
 pub(crate) const OPTIONS_INITIAL_H: f64 = 620.0;
 pub(crate) const OPTIONS_MIN_W: f64 = 400.0;
@@ -25,7 +25,7 @@ pub(crate) const OPTIONS_MIN_H: f64 = 360.0;
 #[allow(dead_code)] // Single source of truth for the cap; enforced in JS.
 const OPTIONS_MAX_W: f64 = 560.0;
 
-// Metadata window — 400 wide; height auto-fits to content (capped at META_MAX_H,
+// Metadata window is 400 wide; height auto-fits to content (capped at META_MAX_H,
 // a fit cap, not a hard size limit). Opens hidden, fitted + centered before show.
 pub(crate) const META_INITIAL_W: f64 = 400.0;
 pub(crate) const META_INITIAL_H: f64 = AUTO_FIT_INITIAL_H;
@@ -35,7 +35,7 @@ pub(crate) const META_MIN_H: f64 = 280.0;
 #[allow(dead_code)] // Single source of truth for the cap; enforced in JS.
 const META_MAX_H: f64 = 600.0;
 
-// ── Styling & Appearance ─────────────────────────────────────────────────────
+// Styling and appearance
 
 // Sets the native window background color before the webview paints, so the
 // shell behind the page is never white/black at launch.
@@ -65,7 +65,7 @@ pub fn apply_shell_background(window: &tauri::WebviewWindow, config: &AppConfig)
     let _ = window.set_background_color(Some(color));
 }
 
-// ── Secondary Window Creation & Fitting ──────────────────────────────────────
+// Secondary window creation and fitting
 
 #[tauri::command]
 pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {

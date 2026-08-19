@@ -260,7 +260,7 @@ fn lists_rar5_cbr() {
 
 #[test]
 fn lists_cb7_like_7z() {
-    // cb7 is the comic-book extension for 7z — same codec, must route the same.
+    // cb7 is the comic-book extension for 7z. Same codec, same routing.
     let src = test_file("7z.7z");
     let cb7 = std::env::temp_dir()
         .join("QuiviT-test-extract")
@@ -289,12 +289,9 @@ fn url_decode_roundtrips_utf8_entry_names() {
 
 #[test]
 fn protocol_serve_timing_simulation() {
-    // Mirrors the protocol handler serving path:
-    //  - rar/cbr/7z/cb7/cbt/tar: served from extract_temp_dir
-    //  - zip/cbz: on-demand extract_zip_entry
-    // Simulates the FIRST image request arriving right after list_archive
-    // spawns the background extractor, then reports how long the first
-    // entry takes to become servable and whether the 3s poll would 404.
+    // Mirror the protocol handler. Extracted formats read from extract_temp_dir;
+    // ZIP and CBZ use on-demand extraction. This simulates the first request
+    // after list_archive starts the background extractor.
     use std::time::{Duration, Instant};
 
     fn poll_temp(temp_dir: &std::path::Path, entry: &str, timeout_ms: u64) -> (bool, Duration) {
@@ -334,7 +331,7 @@ fn protocol_serve_timing_simulation() {
         "first 7z entry never became available within 30s poll -> 404"
     );
 
-    // Now the large BMP: how long until IT is extractable from the temp dir?
+    // Check how long the large BMP takes to reach the temp directory.
     let bmp = "BDレーベル.bmp";
     let (found_bmp, elapsed_bmp) = poll_temp(&temp_dir, bmp, 30000);
     eprintln!("7z BMP poll: found={found_bmp} elapsed={:?}", elapsed_bmp);
@@ -406,7 +403,7 @@ fn archive_cache_byte_budget_evicts_globally() {
     // 1 MB entries
     let mb1 = 1024 * 1024;
     insert(&mut cache, "a.cbz", "p1", mb1);
-    insert(&mut cache, "a.cbz", "p2", mb1); // 2 MB total — at budget
+    insert(&mut cache, "a.cbz", "p2", mb1); // 2 MB total, at budget
     assert_eq!(cache.current_zip_bytes(), 2 * mb1);
     assert!(cache.contains_zip_entry("a.cbz", "p1"));
 
@@ -586,7 +583,7 @@ fn archive_cache_evicts_extract_temp_on_drop() {
     let _ = fs::remove_dir_all(&scratch);
 }
 
-// ── CJK encoding regression tests ───────────────────────────────────────────
+// CJK encoding regression tests
 
 fn encoding_test_file(name: &str) -> std::path::PathBuf {
     test_file("encoding_tests").join(name)
@@ -627,6 +624,3 @@ fn zip_decodes_euckr_entry_names() {
         entries[0].name
     );
 }
-
-
-

@@ -21,7 +21,7 @@ use windows::*;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let config = crate::config::load_config_early();
-    // Single instance defaults to true if not explicitly set to false
+    // Single instance defaults to true unless config opts out.
     let single_instance = config
         .frontend_data
         .get("single_instance")
@@ -48,9 +48,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
-            // The 'main' window is built here in Rust (not declared in
-            // tauri.conf.json) so all windows share a single construction path
-            // in config.rs and the shell background is applied before first paint.
+            // Build the main window in Rust, not tauri.conf.json. That keeps
+            // window setup in one path and applies the shell background before
+            // first paint.
             let main_window = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
@@ -144,9 +144,8 @@ pub fn run() {
     crate::protocol::register_quivit_protocol(builder)
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // Architectural Standard: The 'main' window acts as the primary process lifecycle controller.
-                // If the user closes the main viewer window, all secondary/child windows (Options, Metadata, etc.)
-                // MUST be explicitly closed here to ensure the Tauri app exits cleanly rather than leaving orphans running.
+                // The main viewer owns the app lifetime. Closing it also closes
+                // secondary windows so Tauri exits cleanly.
                 if window.label() == "main" {
                     if let Some(options_window) = window.app_handle().get_webview_window("options")
                     {
@@ -168,8 +167,6 @@ pub fn run() {
             }
         });
 }
-
-// ── Utility functions ────────────────────────────────────────────────────────
 
 #[tauri::command]
 fn open_in_explorer(path: &str) -> Result<(), String> {

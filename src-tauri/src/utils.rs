@@ -1,5 +1,3 @@
-// ── Base64 & URL Decoding ────────────────────────────────────────────────────
-
 use base64::prelude::*;
 
 pub fn base64_encode(bytes: &[u8]) -> String {

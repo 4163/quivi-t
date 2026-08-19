@@ -12,14 +12,14 @@ pub fn set_hidden_attribute(path: &Path, hidden: bool) -> Result<(), String> {
 
     const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
 
-    // Convert path to wide string for Windows API
+    // Convert the path for Win32.
     let wide_path: Vec<u16> = OsStr::new(path)
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
 
     unsafe {
-        // Get current attributes
+        // Read current attributes.
         let attrs = windows::Win32::Storage::FileSystem::GetFileAttributesW(
             windows::core::PCWSTR(wide_path.as_ptr())
         );
@@ -35,7 +35,7 @@ pub fn set_hidden_attribute(path: &Path, hidden: bool) -> Result<(), String> {
             attrs & !FILE_ATTRIBUTE_HIDDEN
         };
 
-        // Apply new attributes
+        // Write updated attributes.
         let result = windows::Win32::Storage::FileSystem::SetFileAttributesW(
             windows::core::PCWSTR(wide_path.as_ptr()),
             windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(new_attrs)
@@ -51,7 +51,7 @@ pub fn set_hidden_attribute(path: &Path, hidden: bool) -> Result<(), String> {
 
 #[cfg(not(windows))]
 pub fn set_hidden_attribute(_path: &Path, _hidden: bool) -> Result<(), String> {
-    // No-op on non-Windows platforms
+    // No-op outside Windows.
     Ok(())
 }
 

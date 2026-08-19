@@ -14,7 +14,7 @@ use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC, CreateCompatibleDC, Delete
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_DIRECTORY};
 
-// ── ICO Spritesheet ──────────────────────────────────────────────────────────
+// ICO spritesheet
 
 /// Extract all frames from an ICO file and return them as a horizontal
 /// spritesheet encoded as a PNG data-URL.
@@ -25,7 +25,7 @@ pub fn get_ico_frames(path: String) -> Result<String, String> {
 }
 
 pub fn ico_frames_from_bytes(data: &[u8]) -> Result<String, String> {
-    // Parse the ICO directory header manually to find all image entries,
+    // Parse the ICO directory header directly to find all image entries,
     // then decode each sub-image individually.
     if data.len() < 6 {
         return Err("File too small to be an ICO".into());

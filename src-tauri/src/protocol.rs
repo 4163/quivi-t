@@ -48,7 +48,7 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             }
         };
 
-        // URL-decode the entry name (handles %20, etc.)
+        // Decode the entry name, including %20 spaces.
         let entry_name = crate::utils::url_decode(path_parts[1]);
 
         let app_handle = ctx.app_handle().clone();

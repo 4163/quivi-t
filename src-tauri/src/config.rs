@@ -5,8 +5,6 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 use tauri_plugin_opener::OpenerExt;
 
-// ── Configuration ────────────────────────────────────────────────────────────
-
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct AppConfig {
@@ -89,12 +87,10 @@ pub fn load_config_early() -> AppConfig {
     }
 }
 
-// Startup-only settings are persisted as a "pending" value so they only take
-// effect after a restart (matching the Options "Takes effect after restarting
-// QuiviT." hint). Options writes `pending_single_instance`; the effective
-// `single_instance` is never written by the UI. On the next launch, promote the
-// pending value into `single_instance`, drop the pending key, and persist the
-// file — before any startup logic (single-instance plugin gate) reads it.
+// Startup-only settings use a pending value so they take effect after restart.
+// Options writes `pending_single_instance`; the UI never writes the effective
+// `single_instance`. On the next launch, promote the pending value, drop the
+// pending key, and persist before startup logic reads it.
 pub fn apply_pending_to_config(config: &mut AppConfig) {
     if let Some(pending) = config.frontend_data.get("pending_single_instance").cloned() {
         if pending.is_boolean() {
@@ -116,7 +112,7 @@ pub fn apply_pending_config_to_disk() {
         }
     }
 
-    // Sync the Win32 hidden attribute so manual JSON edits take effect on launch
+    // Sync the Win32 hidden attribute so manual JSON edits apply on launch.
     if config.portable_mode {
         let _ = crate::platform::attributes::set_hidden_attribute(
             &get_exe_dir().join("quivit_config.json"),
@@ -125,10 +121,8 @@ pub fn apply_pending_config_to_disk() {
     }
 }
 
-// ── Config split helpers ──────────────────────────────────────────────────────
-// Runtime state (last-opened location, remembered images), per-directory
-// sort prefs, and favorites are persisted as their own files so the roaming
-// config file only holds user preferences. Portable mode keeps a single
+// Runtime state, directory sort prefs, and favorites live in their own roaming
+// files so quivit_config.json only holds preferences. Portable mode keeps one
 // self-contained file.
 
 pub const STATE_KEYS: &[&str] = &["last_opened_path", "last_active_image", "scroll_zoom_latched"];
@@ -180,7 +174,7 @@ pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
     merge_file_into(&dir.join("quivit_directory_sort.json"), &mut config.frontend_data);
     merge_file_into(&dir.join("quivit_favorites.json"), &mut config.frontend_data);
     
-    // Load custom CSS from separate file in roaming mode
+    // Roaming mode stores custom CSS in its own file.
     let css_path = dir.join("custom_css.css");
     if let Ok(custom_css) = fs::read_to_string(&css_path) {
         config.frontend_data["custom_css"] = serde_json::json!(custom_css);
@@ -232,7 +226,7 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
         let config_path = exe_dir.join("quivit_config.json");
         fs::write(&config_path, data).map_err(|e| e.to_string())?;
 
-        // Apply hidden attribute to the portable config file only
+        // Only the portable config file gets the hidden attribute.
         crate::platform::attributes::set_hidden_attribute(&config_path, config.hidden)?;
 
         remove_roaming_files(&roaming_dir_path(&app_handle));
@@ -246,7 +240,7 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
         let sort = extract_keys(&mut fd, SORT_KEYS);
         let favorites = extract_keys(&mut fd, FAVORITES_KEYS);
         
-        // Extract custom_css and save it as a separate file
+        // Store custom CSS separately.
         let custom_css = fd.get("custom_css").and_then(|v| v.as_str()).unwrap_or("").to_string();
         fd.as_object_mut().map(|obj| obj.remove("custom_css"));
         
@@ -271,7 +265,6 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
         )
         .map_err(|e| e.to_string())?;
         
-        // Write custom CSS as a separate file
         fs::write(dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())?;
 
         let _ = fs::remove_file(exe_dir.join("quivit_config.json"));

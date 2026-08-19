@@ -11,7 +11,7 @@ use crate::ico::ico_frames_from_bytes;
 use crate::models::*;
 use crate::platform::attributes::is_hidden_path;
 
-// ── Directory Watcher ────────────────────────────────────────────────────────
+// Directory watcher
 
 pub struct WatcherState {
     pub watcher: Option<RecommendedWatcher>,
@@ -27,7 +27,7 @@ impl WatcherState {
     }
 }
 
-// ── Tauri commands ───────────────────────────────────────────────────────────
+// Tauri commands
 
 pub fn read_directory_impl(
     path: &str,
@@ -217,7 +217,7 @@ pub fn open_parent(
 ) -> Result<DirectoryReadResult, String> {
     let path = Path::new(current_dir);
     let parent = path.parent().ok_or("Already at root")?;
-    // On Windows, a drive root like "E:\" has parent == "" — treat that as root too
+    // On Windows, a drive root like "E:\" has parent == "". Treat that as root too.
     if parent.as_os_str().is_empty() {
         return Err("Already at root".to_string());
     }
@@ -388,11 +388,11 @@ pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String
     let state = app.state::<Mutex<WatcherState>>();
     let mut state = state.lock().unwrap();
 
-    // Drop existing watchers to stop tracking the old directory
+    // Stop tracking the old directory.
     state.watcher = None;
     state.parent_watcher = None;
 
-    // Main watcher: fires on any change inside the directory
+    // Watch for changes inside the directory.
     let app_clone = app.clone();
     let mut watcher = notify::recommended_watcher(move |_res: notify::Result<Event>| {
         let _ = app_clone.emit("directory-changed", ());
@@ -405,8 +405,8 @@ pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String
 
     state.watcher = Some(watcher);
 
-    // Parent watcher: detects when the directory itself is moved/renamed/deleted
-    // from the outside. Only emits if our directory no longer exists at its path.
+    // Watch the parent for a move, rename, or deletion of this directory.
+    // Emit only after this path disappears.
     let dir_path = PathBuf::from(&path);
     if let Some(parent) = dir_path.parent() {
         if !parent.as_os_str().is_empty() {
@@ -460,7 +460,7 @@ pub fn get_format_status() -> Vec<FormatStatus> {
                 actually_exists = true;
             }
 
-            // Check UserChoice first — this is the actual default handler on Win10/11.
+            // Check UserChoice first. This is the actual default handler on Win10/11.
             // UserChoice is hash-protected and can only be set by the user through
             // Windows Settings, but we can *read* it to know if QuiviT is the active default.
             let userchoice_path = format!(
@@ -473,10 +473,10 @@ pub fn get_format_status() -> Vec<FormatStatus> {
                         registered = true;
                     }
                     // If UserChoice exists but points elsewhere, QuiviT is NOT the
-                    // default — leave registered = false so the user can re-register.
+                    // default. Leave registered = false so the user can re-register.
                 }
             } else {
-                // No UserChoice set — fall back to checking Classes default value.
+                // No UserChoice set. Fall back to checking Classes default value.
                 // This covers fresh installs or formats where no app has claimed default.
                 let ext_key_path = format!(r#"Software\Classes\.{}"#, fmt.ext.to_lowercase());
                 if let Ok(ext_key) = hkcu.open_subkey(&ext_key_path) {
@@ -608,7 +608,7 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             .map_err(|e| format!("Failed creating RegisteredApplications: {}", e))?;
         let _ = reg_apps.set_value("QuiviT", &r"Software\QuiviT\Capabilities");
 
-        // 7. Register the application itself to ensure it shows up in "Open With"
+        // 7. Register the application itself so it shows up in "Open With"
         let (app_key, _) = hkcu
             .create_subkey(r"Software\Classes\Applications\quivit.exe")
             .map_err(|e| format!("Failed creating quivit.exe key: {}", e))?;

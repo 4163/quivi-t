@@ -1,6 +1,6 @@
 /// Decode raw archive entry name bytes into a Unicode string.
 /// UTF-8 fast-path, then chardetng statistical detection for legacy CJK
-/// encodings (Shift-JIS, GBK, EUC-KR, BIG5, etc.), lossy fallback last.
+/// encodings such as Shift-JIS, GBK, EUC-KR, and Big5. Lossy fallback last.
 pub(crate) fn decode_cjk_name(raw_bytes: &[u8]) -> String {
     if let Ok(utf8_str) = std::str::from_utf8(raw_bytes) {
         return utf8_str.to_string();
