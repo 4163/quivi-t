@@ -231,7 +231,7 @@ body.resizing-col { cursor: col-resize !important; }
   flex-shrink: 0;
 }
 
-#file-panel-favorites:has(.hidden) {
+#file-panel-favorites.is-empty {
   display: none
 }
 

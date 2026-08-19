@@ -351,6 +351,7 @@ function renderFavorites() {
   
   favoritesListUl.innerHTML = '';
   const panel = document.getElementById('file-panel-favorites');
+  if (panel) panel.classList.toggle('is-empty', favs.length === 0);
   if (favs.length === 0) {
     favoritesExpanded = false;
     saveFavoritesCollapsed(true);
