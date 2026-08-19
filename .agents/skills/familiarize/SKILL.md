@@ -22,17 +22,17 @@ use the familiarize skill and follow its guidance.
 - Note the conventions already in place: naming, folder layout, testing patterns, and style. New work should fit the codebase instead of fighting it.
 - Most importantly, read `.agents/AGENTS.md` and strictly follow it. If the task includes docs, prompts, comments, or user-facing copy, also read `.agents/skills/unslop/SKILL.md` and strictly follow it. Treat that writing guidance as active even when the harness does not auto-load always-active skills. Explicitly confirm to the user that you have read and taken in the relevant rules.
 
-## 2. Check session context only when relevant
+## 2. Gather past-session context only when it matches current work
 
-- Start from the current repository: inspect the working tree, recent commits, manifests, architecture docs, and the source files relevant to the task.
-- Use the `session-recovery` skill to check for relevant prior context when the task appears to continue earlier work, touches an area with recent agent activity, or names a prior session/conversation.
-- Before reading any full transcript, compare the candidate session date, branch/worktree hints, changed files, and summary against the current git state. Ignore entries that predate newer unrelated commits or describe work unrelated to the active request.
-- Treat any recovered session content as a lead, not ground truth. Verify important details against the current source before relying on them.
+- Start from the current repository: working tree, recent commits, manifests, architecture docs, and relevant source files.
+- Use `session-recovery` only when the current-source pass gives you a concrete match to check: resume/recover/continue wording, a named or exported session, unfinished diffs, or a maintained plan/report/handoff that matches the branch, files, or recent commits.
+- Before reading a transcript, compare the candidate session date, changed files, branch/worktree hints, and summary against the working tree and recent commits. Skip stale or unrelated candidates.
+- Treat recovered notes as leads, not ground truth. Verify important details against the current source.
 
 ## 3. Use subagents to do this faster
 
 - If subagents are available, don't run all of the above serially yourself. Delegate.
 - Split the work by relevance: one subagent can map the file/directory structure, another can read architecture and manifest files, another can explore a specific subsystem in depth.
-- Delegate session-index or transcript recovery only as a narrow relevance check through the `session-recovery` skill. The subagent should report `none` if the index date, summary, or changed files do not match the active task.
+- Delegate session-index or transcript recovery only after the session gate above passes. Give the subagent the exact match to check. It should report `none` if the session does not match the active task.
 - Have each subagent report back a short, focused summary rather than raw output. That keeps exploration costs off your main context window and reduces total token usage.
 - Reserve your own context for synthesis and decisions, not for absorbing raw exploration. That is what subagents are for.
