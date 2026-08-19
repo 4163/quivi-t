@@ -1,6 +1,6 @@
 /**
  * keyboardNav.js
- * Utility for making lists of elements keyboard navigable (Arrow keys, Home, End).
+ * Keyboard navigation helpers for element lists.
  */
 
 export function makeListNavigable(elements, options = {}) {
@@ -39,7 +39,7 @@ export function makeListNavigable(elements, options = {}) {
 }
 
 /**
- * Event-delegation based navigation for dynamic lists (e.g. file panels).
+ * Event-delegated navigation for dynamic lists, such as file panels.
  * Listens on `containerEl`, finds items matching `itemSelector`.
  */
 export function makeContainerNavigable(containerEl, itemSelector, options = {}) {
@@ -96,7 +96,7 @@ export function makeContainerNavigable(containerEl, itemSelector, options = {}) 
       case 'Enter':
       case ' ':
         if (onAction && currentIndex !== -1) {
-          // If focus is on a child button/input, let it handle its own Enter keypress naturally
+          // Child controls keep their native Enter handling.
           if (document.activeElement !== items[currentIndex] && document.activeElement.matches('button, input, [role="button"]')) {
             break;
           }

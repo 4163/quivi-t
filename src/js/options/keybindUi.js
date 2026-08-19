@@ -121,9 +121,9 @@ export function initKeybindUi(containerId, config, showStatus) {
       window.removeEventListener('mousedown', onMouseDown, true);
       window.removeEventListener('mouseup', onMouseUp, true);
       window.removeEventListener('wheel', onWheel, true);
-      // Keep suppressing the browser context menu until the capture window ends:
-      // the contextmenu event that trails a finalizing right-click press
-      // (mousedown → contextmenu) would otherwise pop the native menu.
+      // Keep suppressing the browser context menu until capture ends.
+      // A right-click mousedown followed by contextmenu would otherwise pop the
+      // native menu.
       setTimeout(() => {
         isCapturing = false;
         window.removeEventListener('contextmenu', onContextMenu, true);
@@ -160,7 +160,7 @@ export function initKeybindUi(containerId, config, showStatus) {
             finish(finalCombo);
           } else if (maxButtons.size > 0 && maxKeys.size === 0
                      && [...maxButtons].every(b => b === 0 || b === 2)) {
-            // Left/right buttons can become a double-click gesture — wait the
+            // Left/right buttons can become a double-click gesture. Wait the
             // window. Middle/back/forward have no double state, so commit now.
             clearMouseTimer();
             mouseTimer = setTimeout(() => {
@@ -172,7 +172,7 @@ export function initKeybindUi(containerId, config, showStatus) {
           }
         } else {
           // Modifier-only press (Ctrl/Shift/Alt/Meta held then released with no
-          // other key/button) is not a valid binding — exit capture entirely
+          // other key/button) is not a valid binding. Exit capture entirely
           // (same as Escape) instead of lingering in the listening state.
           finish(null);
         }
@@ -248,17 +248,15 @@ export function initKeybindUi(containerId, config, showStatus) {
       e.stopPropagation();
     };
 
-    // Scroll wheel bindings: ScrollUp / ScrollDown (optionally combined with
-    // modifiers) show live while scrolling and finalize once the gesture
-    // settles, so continued scrolling never bleeds past capture and scrolls
-    // the options page.
+    // Show scroll bindings while scrolling, then finish once the gesture
+    // settles. That keeps later wheel events from scrolling the options page.
     const onWheel = (e) => {
       e.preventDefault();
       e.stopPropagation();
       if (isFinalizing) return;
       if (singleOnly) return;
       const scrollDir = e.deltaY < 0 ? 'ScrollUp' : 'ScrollDown';
-      // Only modifier keys combine with the scroll direction — non-modifier
+      // Only modifier keys combine with the scroll direction. Non-modifier
       // keys and mouse buttons are ignored so scroll combos stay consistent
       // with the double-click gestures (no key/button + gesture).
       const mods = new Set(Array.from(activeKeys).filter(k => ['control', 'shift', 'alt', 'meta'].includes(k.toLowerCase())));
@@ -297,7 +295,7 @@ export function initKeybindUi(containerId, config, showStatus) {
     btnToggle.type = 'button';
     btnToggle.className = 'scroll-mode-btn';
     btnToggle.textContent = 'Toggle';
-    btnToggle.title = 'Persistently switch zoom/pan states.';
+    btnToggle.title = 'Tap the zoom modifier to switch between zoom and pan.';
 
     const apply = () => {
       const active = config.frontend_data.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold';
@@ -325,10 +323,9 @@ export function initKeybindUi(containerId, config, showStatus) {
     const container = document.getElementById(containerId);
     if (!container) return;
     
-    // The structural markup (category headers, action labels, container slots) 
-    // is fully pre-rendered in options.html for zero layout shift on load/update. 
-    // This creates a tight coupling: if an action is added to CATEGORIES in actions.js, 
-    // its corresponding markup MUST be added to options.html.
+    // options.html contains the category headers, action labels, and tag slots
+    // before this runs. Add a matching slot there when adding an action to
+    // CATEGORIES in actions.js.
     
     const binds = config.frontend_data.keybinds;
     const slots = container.querySelectorAll('.keybind-tags[data-action]');
@@ -406,10 +403,10 @@ export function initKeybindUi(containerId, config, showStatus) {
     });
   }
 
-  // Initial render
+  // Initial render.
   renderKeybinds();
   
-  // Return the render function in case it needs to be called externally
+  // Options can call this after resetting keybinds.
   return {
     renderKeybinds
   };

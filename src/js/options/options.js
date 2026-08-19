@@ -21,7 +21,7 @@ const localDataDirLabel = document.getElementById('local-data-dir-label');
 let keybindUiInstance = null;
 let forceClose = false;
 
-// Emergency CSS Reset (Ctrl+Shift+Alt+C)
+// Emergency CSS reset (Ctrl+Shift+Alt+C).
 window.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.shiftKey && e.altKey && e.key.toLowerCase() === 'c') {
     e.preventDefault();
@@ -70,7 +70,7 @@ async function init() {
     if (configDirLabel) configDirLabel.textContent = await invoke('get_config_dir');
     if (localDataDirLabel) localDataDirLabel.textContent = await invoke('get_local_data_dir');
     
-    // Bind data to inputs
+    // Bind config to inputs.
     document.getElementById('opt-portable-mode').checked = config.portable_mode;
     document.getElementById('opt-continue-last').checked = config.frontend_data.continue_last !== false;
     document.getElementById('opt-remember-last-image').checked = config.frontend_data.remember_last_image === true;
@@ -83,7 +83,7 @@ async function init() {
     document.getElementById('opt-wheel-pan-step').value = config.frontend_data.wheel_pan_step || 120;
     document.getElementById('opt-start-dir').value = config.frontend_data.start_dir || '';
 
-    // Theme & Custom CSS
+    // Theme and custom CSS.
     const theme = config.frontend_data.theme || 'system';
     currentTheme = theme;
     
@@ -108,7 +108,7 @@ async function init() {
   }
 }
 
-// --- Tab Navigation ---
+// Tab navigation.
 function switchTab(targetId) {
   document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
   const targetContent = document.getElementById(targetId);
@@ -123,7 +123,7 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
 });
 makeListNavigable(document.querySelectorAll('.tab-btn'), { horizontal: false, vertical: true });
 
-// Restore last active tab from this session (resets on app restart)
+// Restore the last active tab for this session only.
 const _savedTab = localStorage.getItem('options-active-tab');
 if (_savedTab && document.getElementById(_savedTab)) switchTab(_savedTab);
 
@@ -133,7 +133,7 @@ document.getElementById('btn-reset-keybinds').addEventListener('click', () => {
   showStatus('Keybindings reset to defaults.');
 });
 
-// --- Browse Start Dir ---
+// Start directory picker.
 document.getElementById('btn-browse-start').addEventListener('click', async () => {
   if (!invoke) {
     showStatus('Directory picker is unavailable in this window.');
@@ -165,7 +165,7 @@ document.getElementById('btn-open-local-data-dir').addEventListener('click', asy
   }
 });
 
-// --- Theme Buttons ---
+// Theme buttons.
 document.querySelectorAll('.theme-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     currentTheme = btn.dataset.theme;
@@ -209,7 +209,7 @@ if (optionsWindow?.onCloseRequested) {
   });
 }
 
-// --- Import / Export CSS ---
+// Import and export CSS.
 document.getElementById('btn-import-css').addEventListener('click', async () => {
   if (!open) return;
   const path = await open({
@@ -251,7 +251,7 @@ async function localPreviewCss() {
   try { localStorage.setItem('quivit-custom-css', css); } catch(e) {}
   applyCustomCss(css);
   previewCss(css);
-  showStatus('CSS previewed locally (Click Apply to save).');
+  showStatus('CSS previewed locally. Click Apply to save.');
 }
 
 document.getElementById('btn-save-apply-css').addEventListener('click', localPreviewCss);
@@ -263,7 +263,7 @@ document.getElementById('opt-custom-css').addEventListener('keydown', (e) => {
   }
 });
 
-// --- Save ---
+// Save.
 function buildConfigFromForm(baseConfig) {
   const newConfig = { ...baseConfig };
   newConfig.portable_mode = document.getElementById('opt-portable-mode').checked;
@@ -308,7 +308,7 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
     
     const currentStatus = statusEl ? statusEl.textContent : '';
     if (currentStatus.toLowerCase().includes('failed') || currentStatus.toLowerCase().includes('error')) {
-      showStatus('Options applied, but some operations failed (see above logs).');
+      showStatus('Options applied, but some operations failed. Check the logs above.');
     } else {
       showStatus('Options applied successfully.');
     }

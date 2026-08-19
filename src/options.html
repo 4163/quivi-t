@@ -56,7 +56,7 @@
           <input type="checkbox" id="opt-hide-chrome-fullscreen" checked />
           Auto-hide interface in fullscreen
         </label>
-        <label class="checkbox-label" title="Automatically open the first image in a directory">
+        <label class="checkbox-label" title="Open the first image in a directory">
           <input type="checkbox" id="opt-open-first-image" />
           Open first image
         </label>
@@ -110,8 +110,8 @@
       <div class="options-section">
         <h3>Keybindings</h3>
         <div class="flex-row keybinds-header">
-          <p class="hint">Click a tag to rebind — hold all desired keys, then release. Middle-click a tag to remove it (middle mouse is still bindable*). Matching colors indicate conflicts. Press Escape to cancel.</p>
-          <button id="btn-reset-keybinds" class="secondary">Reset to Defaults</button>
+          <p class="hint">Click a tag to rebind. Hold the keys you want, then release. Middle-click a tag to remove it (middle mouse is still bindable*). Matching colors indicate conflicts. Press Escape to cancel.</p>
+          <button id="btn-reset-keybinds" class="secondary">Reset to defaults</button>
         </div>
         <div class="keybinds-list" id="keybinds-container">
           <h3 class="keybind-category-header">Navigation</h3>
@@ -234,7 +234,7 @@
           <div class="keybind-item scroll-mode-toggle" id="scroll-mode-toggle">
             <span class="keybind-name">Zoom (Ctrl+Wheel) Modifier Mode</span>
             <button class="keybind-tag" data-mode="hold" title="Hold Ctrl to zoom, release to pan.">Hold</button>
-            <button class="keybind-tag" data-mode="toggle" title="Persistently switch zoom/pan states.">Toggle</button>
+            <button class="keybind-tag" data-mode="toggle" title="Tap the zoom modifier to switch between zoom and pan.">Toggle</button>
           </div>
           <h3 class="keybind-category-header">Rotation</h3>
           <div class="keybind-item">
@@ -322,7 +322,7 @@
     <div class="tab-content" id="tab-associations">
       <div class="options-section">
         <h3>Associated File Types</h3>
-        <p class="hint">Checking these boxes registers QuiviT as an available handler. You may still need to manually assign it through the file's `<i>Open with</i>` dialog, or as the default app in Windows Settings.</p>
+        <p class="hint">Checking these boxes registers QuiviT as an available handler. You may still need to choose it in the file's `<i>Open with</i>` dialog or set it as the default app in Windows Settings.</p>
         <div class="flex-row assoc-actions">
           <button id="btn-assoc-select-all" class="secondary">Select All</button>
           <button id="btn-assoc-deselect-all" class="secondary">Deselect All</button>
@@ -428,8 +428,8 @@
         </div>
       </div>
       <div class="options-section">
-        <h3>System Integration</h3>
-        <p class="hint">Use if Windows restricts native registration.</p>
+        <h3>System integration</h3>
+        <p class="hint">Open Windows Settings if your selection did not, or cannot, make QuiviT the default app.</p>
         <div class="flex-row">
           <button id="btn-assoc-settings" class="secondary">Open Windows Default Apps Settings</button>
         </div>
@@ -439,7 +439,7 @@
     <div class="tab-content" id="tab-customization">
       <div class="options-section">
         <h3>Theme</h3>
-        <p class="hint">Select your preferred appearance.</p>
+        <p class="hint">Choose an appearance.</p>
         <div class="theme-group flex-row">
           <button type="button" class="theme-btn secondary" data-theme="system">System</button>
           <button type="button" class="theme-btn secondary" data-theme="light">Light</button>
@@ -450,7 +450,7 @@
         <h3>Custom CSS</h3>
         <p class="hint">Override QuiviT's default styles here. Leave empty to use defaults.<br>
           Press <code>Ctrl+S</code> while editing to quickly apply changes.<br>
-          <strong>Emergency Reset:</strong> Press `<i>Ctrl+Shift+Alt+C</i>` to clear custom CSS if the UI becomes unusable.
+          <strong>Emergency reset:</strong> Press `<i>Ctrl+Shift+Alt+C</i>` to clear custom CSS if CSS bricks the UI.
         </p>
         <div class="flex-row">
           <button id="btn-import-css">Import .css</button>
@@ -503,7 +503,7 @@ html {
         <h3>Language</h3>
         <label>
           <input type="radio" checked disabled />
-          <!-- Twemoji US Flag. See: https://github.com/jdecked/twemoji -->
+          <!-- Twemoji US flag. See: https://github.com/jdecked/twemoji -->
           <span class="language-name"><img class="flag-icon" src="/assets/lang-flags/twemoji-us.svg" alt="US"> English</span>
         </label>
       </div>

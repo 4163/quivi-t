@@ -1,5 +1,5 @@
 /**
- * keybinds.js — QuiviT
+ * keybinds.js: QuiviT
  * Single source of truth for default keybindings, shared by core.js
  * (main window) and options.js (options window).
  */
@@ -11,11 +11,11 @@ import { DEFAULT_KEYBINDS as REGISTRY_DEFAULTS } from './services/actions.js';
 export const DEFAULT_KEYBINDS = REGISTRY_DEFAULTS;
 
 // Pixel distance moved by keyboard pan commands (W/A/S/D and arrow keys).
-// Default: 72px. Configurable via Options → Interface.
+// Default: 72px. Configurable via Options > Interface.
 export const DEFAULT_KEYBOARD_PAN_STEP = 72;
 
 // Pixel distance moved per scroll-wheel notch when the wheel is bound to pan.
-// Default: 120px. Configurable via Options → Interface.
+// Default: 120px. Configurable via Options > Interface.
 export const DEFAULT_WHEEL_PAN_STEP = 120;
 
 export const DEFAULT_FIT_MODE = 'height-if-larger';

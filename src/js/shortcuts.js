@@ -15,14 +15,13 @@ export function updateMenuShortcuts(config) {
   }
 }
 
-// Scroll-wheel modifier latch (Options → Keys → Scroll Wheel → Toggle).
+// Scroll-wheel modifier latch (Options > Keys > Scroll Wheel > Toggle).
 // In 'toggle' mode, pressing the zoom modifier once enters a sticky "zoom
 // mode" so the wheel keeps zooming without holding the key; pressing it again
 // exits. The toggle key is derived from the zoom scroll bindings so rebinding
 // zoom to e.g. Alt+ScrollUp makes Alt the toggle key.
-// Persistence: the latched state is last-known runtime state, split into
-// quivit_state.json by the backend (STATE_KEYS) alongside last_active_image.
-// See the persistence policy in core.js.
+// The backend stores the current latch with other runtime state in
+// quivit_state.json. See the persistence policy in core.js.
 let _toggleLatched = false;
 let _toggleKeyDown = false;
 let _toggleChordBroken = false;
@@ -33,9 +32,8 @@ export function resetScrollLatch() {
   _toggleLatched = false;
   _toggleKeyDown = false;
   _toggleChordBroken = false;
-  // No DOM write here: this always runs right before Core.loadConfig(), and
-  // syncScrollLatch() (via quivit-config-loaded) is the single writer, so the
-  // latch indicator is not touched on every navigation/config reload.
+  // Core.loadConfig() follows this call. syncScrollLatch() then updates the
+  // indicator once through quivit-config-loaded.
 }
 
 // Re-read the persisted latch after config loads (startup or Options Apply &
@@ -52,10 +50,9 @@ function isToggleModifier(config) {
   return config?.frontend_data?.scroll_zoom_modifier === 'toggle';
 }
 
-// The modifier keys bound to the scroll-wheel combos (Ctrl + Shift by default),
-// derived from config so rebinding zoom/pan to e.g. Alt+ScrollUp updates the
-// indicator. Deduplicated, in no particular order. ids lets callers scope the
-// lookup to the zoom or pan groups.
+// Derive scroll-wheel modifiers from config so rebinding zoom or pan also
+// updates the indicator. The result is deduplicated and unordered. `ids`
+// limits the lookup to zoom or pan bindings.
 const _SCROLL_ZOOM_IDS = ['cmd-zoom-in', 'cmd-zoom-out'];
 const _SCROLL_PAN_IDS = ['cmd-pan-up', 'cmd-pan-down', 'cmd-pan-left', 'cmd-pan-right'];
 const _SCROLL_ALL_IDS = [..._SCROLL_ZOOM_IDS, ..._SCROLL_PAN_IDS];
@@ -86,14 +83,9 @@ function _getToggleEventKeys(config) {
   return zoomMods.map(m => _TOKEN_TO_EVENT_KEY[m]).filter(Boolean);
 }
 
-// Status-bar indicator for the scroll-wheel modifier. In hold mode a physically
-// held bound modifier changes scroll behavior, so it shows e.g. "Ctrl+Shift — Held".
-// In toggle mode the sticky latch is the zoom switch, so while latched it shows
-// "Scroll Zoom — Toggled"; when unlatched Ctrl does nothing and only a held pan
-// modifier (Shift by default) changes behavior, so that is shown as "— Held".
-// The two states are mutually exclusive — gated on the configured modifier mode.
-// Idempotent: if the rendered text and classes already match the computed state,
-// the DOM is left completely untouched.
+// The status bar reports the active scroll-wheel modifier. Hold mode shows a
+// held bound modifier. Toggle mode shows the zoom latch or a held pan modifier.
+// The modes are mutually exclusive. Skip DOM work when the output is unchanged.
 function _updateScrollIndicator(config) {
 
   let text = '';
@@ -102,27 +94,24 @@ function _updateScrollIndicator(config) {
 
   if (isToggleModifier(config)) {
     if (_toggleLatched) {
-      text = 'Scroll Zoom — Toggled';
+      text = 'Scroll Zoom: Toggled';
       latched = true;
     } else {
-      // Unlatched: the toggle keys do nothing to the wheel.
-      // Only physically held pan modifiers matter.
+      // Without the latch, only held pan modifiers affect the wheel.
       const toggleTokens = getScrollModifierKeys(config, _SCROLL_ZOOM_IDS);
       const mods = getScrollModifierKeys(config, _SCROLL_PAN_IDS)
         .filter(m => !toggleTokens.includes(m))
         .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
       held = mods.length > 0;
-      if (held) text = `${mods.join('+')} — Held`;
+      if (held) text = `${mods.join('+')}: Held`;
     }
   } else {
-    // Hold mode: show any bound scroll modifier that's physically held,
-    // but only if the resulting combo actually resolves to a dispatchable
-    // scroll action (e.g. Ctrl+Shift has no binding, so suppress it).
+    // Show held modifiers only when their combo has a scroll action.
     const mods = getScrollModifierKeys(config)
       .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
     if (mods.length > 0 && findAction(config, [...mods, 'ScrollUp'].join('+'))) {
       held = true;
-      text = `${mods.join('+')} — Held`;
+      text = `${mods.join('+')}: Held`;
     }
   }
 
@@ -260,7 +249,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   window.addEventListener('keydown', (e) => {
     const config = Core.getState().config;
     // Don't hijack Space/arrows when an interactive element (e.g. a button)
-    // has focus — Space should still activate the button natively.
+    // has focus. Space should still activate the button natively.
     const onInteractive = isInteractiveKeyTarget(e);
 
     if (!onInteractive && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Alt'].includes(e.key)) {
@@ -325,7 +314,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   window.addEventListener('mousedown', (e) => {
     if (handleSideButtonPress(e)) return;
 
-    // Mouse/double-click gestures are viewport actions — never over the file
+    // Mouse/double-click gestures are viewport actions, never over the file
     // panel, menubar/dropdowns, or status bar (which handle their own clicks).
     const isUI = e.target.closest('#file-panel, #menubar, .menu-dropdown, #statusbar');
     if (isUI) return;
@@ -393,10 +382,8 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     }, DOUBLE_CLICK_MS);
   }
 
-  // Scroll wheel: route through the keybind table so ScrollUp/ScrollDown and
-  // Ctrl+ScrollUp/Ctrl+ScrollDown are remappable. In hold mode a physically
-  // held Ctrl synthesizes the modifier; in toggle mode only the sticky latch
-  // does, so zooming requires the "zoom mode" to actually be active.
+  // Route wheel events through the keybind table so scroll bindings stay
+  // remappable. Hold mode uses held modifiers. Toggle mode uses the latch.
   window.addEventListener('wheel', (e) => {
     if (isWheelOverUI(e)) return;
 

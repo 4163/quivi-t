@@ -1,11 +1,11 @@
 /* ============================================================
-   main.css — QuiviT (main window)
+   main.css: QuiviT (main window)
    Component styles for the main viewer window.
    Shared foundation (tokens, resets, base styles) lives in
    global.css, loaded before this file.
    ============================================================ */
 
-/* --- App layout: column flex ------------------------------ */
+/* App layout. */
 /* menubar | workspace | statusbar */
 body {
   display: flex;
@@ -15,7 +15,7 @@ body.cursor-move { cursor: move !important; }
 body.resizing-panel { cursor: ew-resize !important; }
 body.resizing-col { cursor: col-resize !important; }
 
-/* --- Menu bar --------------------------------------------- */
+/* Menu bar. */
 #menubar {
   display: flex;
   align-items: stretch;
@@ -170,7 +170,7 @@ body.resizing-col { cursor: col-resize !important; }
   flex-shrink: 0;
 }
 
-/* --- Workspace: file panel + viewport --------------------- */
+/* Workspace. */
 #workspace {
   display: flex;
   flex: 1;
@@ -178,7 +178,7 @@ body.resizing-col { cursor: col-resize !important; }
   overflow: hidden;
 }
 
-/* --- File panel ------------------------------------------- */
+/* File panel. */
 #file-panel {
   display: flex;
   flex-direction: column;
@@ -224,7 +224,7 @@ body.resizing-col { cursor: col-resize !important; }
   cursor: not-allowed;
 }
 
-/* --- Favorites panel --- */
+/* Favorites panel. */
 #file-panel-favorites {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -271,7 +271,7 @@ body.resizing-col { cursor: col-resize !important; }
   overflow-y: auto;
 }
 
-/* Favorites composite widget — show ring on the container, not items */
+/* Favorites focus ring belongs on the container, not each item. */
 #favorites-list:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 1px var(--accent);
@@ -471,7 +471,7 @@ li:hover > .fav-remove,
   pointer-events: none;
 }
 
-/* File list composite widget — show ring on the container, not items */
+/* File-list focus ring belongs on the container, not each item. */
 #file-list:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 1px var(--accent);
@@ -532,7 +532,7 @@ li:hover > .fav-remove,
   color: var(--selected-text);
 }
 
-/* Items are not individually focusable — the list handles keyboard */
+/* Items are not individually focusable. The list handles keyboard. */
 #file-list li,
 #favorites-list li { outline: none; }
 
@@ -564,7 +564,7 @@ li:hover > .fav-remove,
   opacity: 0.5;
 }
 
-/* --- Viewport --------------------------------------------- */
+/* Viewport. */
 #viewport {
   flex: 1;
   position: relative;
@@ -588,7 +588,7 @@ li:hover > .fav-remove,
   background: var(--bg);
 }
 
-/* --- Fullscreen exit affordance --------------------------- */
+/* Fullscreen exit button. */
 #fullscreen-exit-hint {
   position: fixed;
   top: 18px;
@@ -686,7 +686,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   outline: none;
 }
 
-/* --- Drop overlay ----------------------------------------- */
+/* Drop overlay. */
 #drop-overlay {
   position: absolute;
   inset: 0;
@@ -757,7 +757,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 .drop-hint p   { font-size: 0.95rem; font-weight: 500; text-align: center; }
 .drop-hint span{ font-size: 0.75rem; opacity: 0.5; letter-spacing: 0.04em; text-align: center; }
 
-/* --- Viewer image wrapper --------------------------------- */
+/* Viewer image wrapper. */
 /* The wrapper is the positioned/transformed element. Both the
    image and the overlay live inside so CSS aligns them for free. */
 #viewer-img-wrapper {
@@ -769,7 +769,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   pointer-events: none;
 }
 
-/* --- Viewer image ----------------------------------------- */
+/* Viewer image. */
 /* position: relative puts it in the same stacking layer as #img-grill
    (position: absolute), so DOM order determines paint order and the
    image (second in DOM) naturally renders on top of the grill. */
@@ -789,7 +789,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   image-rendering: pixelated;
 }
 
-/* --- Opaque image grill ----------------------------------- */
+/* Opaque image grill. */
 #img-grill {
   display: none;
   position: absolute;
@@ -819,7 +819,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 
 /* Border around the grill */
 /* No z-index: like #img-grill it shares the wrapper's stacking layer, so DOM
-   order decides paint order — the image (last in DOM) renders on top of it. */
+   order decides paint order. The image (last in DOM) renders on top of it. */
 #img-grill-border {
   display: none;
   position: absolute;
@@ -833,7 +833,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   display: block;
 }
 
-/* --- Status bar ------------------------------------------- */
+/* Status bar. */
 #statusbar {
   display: flex;
   align-items: center;
@@ -882,7 +882,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 .status-fit::before     { content: '·'; margin-right: 12px; color: var(--border); }
 .status-version::before { content: '·'; margin-right: 12px; color: var(--border); }
 
-/* Sticky zoom-mode indicator (Options → Keys → Scroll Wheel → Toggle Ctrl) */
+/* Sticky zoom-mode indicator (Options > Keys > Scroll Wheel > Toggle Ctrl) */
 .status-scroll-zoom {
   display: none;
   overflow: hidden;
@@ -895,4 +895,4 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   display: inline-block;
 }
 
-/* --- Utility ---------------------------------------------- */
+/* Utilities. */

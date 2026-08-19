@@ -33,7 +33,7 @@ export const Statusbar = {
     statusScrollZoom = document.querySelector('.status-scroll-zoom');
   },
 
-  // Called from Core.onStateChange — owns fit mode, formatted index,
+  // Called from Core.onStateChange. Owns fit mode, formatted index,
   // and non-image placeholders. For non-image entries also writes filename
   // since viewer.js won't fire for those.
   update(state) {

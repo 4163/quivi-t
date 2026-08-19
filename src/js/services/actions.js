@@ -1,5 +1,5 @@
 /**
- * actions.js - Central registry for all user actions (commands, shortcuts).
+ * actions.js: central registry for user commands and shortcuts.
  */
 
 export const ACTION_REGISTRY = [
@@ -292,7 +292,7 @@ export const ACTION_REGISTRY = [
 export const CATEGORIES = [];
 export const DEFAULT_KEYBINDS = {};
 
-// Build the CATEGORIES, DEFAULT_KEYBINDS, and O(1) dispatch map from ACTION_REGISTRY
+// Build categories, default keybinds, and the O(1) dispatch map from ACTION_REGISTRY.
 const categoryMap = {};
 for (const action of ACTION_REGISTRY) {
   DEFAULT_KEYBINDS[action.id] = Array.isArray(action.defaultBinds) ? action.defaultBinds : [action.defaultBinds];

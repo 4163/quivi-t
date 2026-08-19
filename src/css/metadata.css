@@ -63,7 +63,7 @@ body {
   white-space: pre-wrap; /* Preserve line breaks from XML */
 }
 
-/* ── Grid details ── */
+/* Grid details */
 
 #metadata-grid {
   display: grid;
@@ -91,4 +91,4 @@ body {
   word-break: break-word;
   line-height: 1.4;
 }
-
+

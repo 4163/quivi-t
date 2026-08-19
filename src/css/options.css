@@ -432,7 +432,7 @@ button.primary:hover {
   background: var(--accent-hover);
 }
 
-/* --- Associations UI --- */
+/* Associations UI. */
 .assoc-actions {
   margin-bottom: 10px;
 }

@@ -1,6 +1,6 @@
 /**
  * menubar.js
- * Handles the top menubar logic and dropdown menus.
+ * Handles the top menubar and dropdown menus.
  */
 
 let activeMenu = null;
@@ -45,7 +45,7 @@ function bindMenus() {
         closeMenus();
         menu.classList.add('open');
         activeMenu = menu;
-        // Focus the first item in the dropdown
+        // Focus the first dropdown item.
         const firstItem = menu.querySelector('.menu-dropdown li[role="menuitem"]');
         if (firstItem) firstItem.focus();
       }
@@ -53,7 +53,7 @@ function bindMenus() {
         closeMenus();
       }
       
-      // Arrow navigation
+      // Arrow navigation.
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         e.preventDefault();
         const triggers = Array.from(document.querySelectorAll('#menubar .menu-trigger'));
@@ -78,7 +78,7 @@ function bindMenus() {
     if (!e.target.closest('.menu-item')) closeMenus();
   });
 
-  // Enter/Space on dropdown items (they are <li>s, not buttons)
+  // Enter and Space support for dropdown <li> items.
   document.querySelectorAll('.menu-dropdown').forEach(dropdown => {
     const items = Array.from(dropdown.querySelectorAll('li[role="menuitem"]'));
     items.forEach((item, index) => {
@@ -104,7 +104,7 @@ function bindMenus() {
           prev.focus();
         }
         if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-          // Pass control back to menubar triggers
+          // Pass control back to the menubar triggers.
           e.preventDefault();
           const trigger = item.closest('.menu-item').querySelector('.menu-trigger');
           const event = new KeyboardEvent('keydown', { key: e.key });

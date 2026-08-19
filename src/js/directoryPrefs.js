@@ -42,7 +42,7 @@ export const DirectoryPrefs = {
   },
 
   sortCurrentState(directoryPath, col, desc) {
-    if (!directoryPath) return; // No active directory — nothing to sort/persist
+    if (!directoryPath) return; // No active directory, nothing to sort/persist.
     this.setSortPrefs(directoryPath, col, desc);
     const state = Core.getState();
     const sortedList = applySort(state.list, col, desc);

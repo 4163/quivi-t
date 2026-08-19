@@ -28,7 +28,7 @@ function _isCurrentGeneration(generation) {
   return generation === undefined || generation === _navigationGeneration;
 }
 
-// Parent of a file/folder path; normalizes Windows drive roots to "E:\"
+// Parent of a file/folder path. Windows drive roots stay as "E:\".
 function parentOf(path) {
   const trimmed = path.replace(/[\\/]+$/, '');
   const idx = Math.max(trimmed.lastIndexOf('\\'), trimmed.lastIndexOf('/'));
@@ -100,8 +100,8 @@ export const FsUtils = {
     return window.__TAURI__.core.convertFileSrc(filePath);
   },
 
-  // Synchronous variant for the DOM image pool; ICO files need async
-  // processing so they are excluded and handled via the async path.
+  // Sync path for the DOM image pool. ICO files need async processing, so the
+  // caller handles them through buildFileSrc().
   buildFileSrcSync(filePath) {
     if (filePath.startsWith('blob:')) return filePath;
     return window.__TAURI__.core.convertFileSrc(filePath);
@@ -191,7 +191,7 @@ export const FsUtils = {
     return { current: idx + 1, total: sorted.length };
   },
 
-  // Statusbar index — legacy counting (folders/archives/files all count) with
+  // Statusbar index: legacy counting (folders/archives/files all count) with
   // the '..' parent row excluded from both numerator and denominator. '..' is
   // always list[0] when present.
   formatStatusIndex(state) {
@@ -244,7 +244,7 @@ export const FsUtils = {
       }
 
       if (preferredIndex === -1 && result.target_filename) {
-        // Find by name after sorting — initial_index is stale if sort order differs
+        // Find by name after sorting. initial_index is stale if sort order differs.
         preferredIndex = files.findIndex(f => f.name === result.target_filename);
       }
 
@@ -253,10 +253,10 @@ export const FsUtils = {
         preferredIndex = Math.min(files.length - 1, Math.max(0, result.initial_index + offset));
       }
 
-      // options.preferInitial forces the target entry (e.g. highlight the archive
-      // you came back from). options.forceFirstImage forces the first image with a
-      // first-item fallback (hidden archive). Otherwise the config decides: ON
-      // opens the first image, OFF highlights the target entry.
+      // preferInitial highlights the target entry, such as the archive you came
+      // back from. forceFirstImage picks the first image, with a first-item
+      // fallback for hidden archives. Otherwise config decides: ON opens the
+      // first image, OFF highlights the target entry.
       if (options.forceFirstImage) {
         const idx = this.firstImageIndex(files, preferredIndex);
         index = idx === 0 && files.length > 1 ? 1 : idx;
@@ -367,7 +367,7 @@ export const FsUtils = {
       if (!_isCurrentGeneration(options.generation)) return;
       this.persistLastOpened(result.archive_path);
 
-      // Trigger prefetch for initial load
+      // Initial archive load starts the nearby-entry prefetch.
       this.prefetchAhead(result.archive_path, index, 1);
 
       return;
@@ -487,9 +487,8 @@ export const FsUtils = {
       try {
         const result = await invoke('read_directory', { path: state.archivePath, showHidden: this.showHidden() });
         if (!_isCurrentGeneration(generation)) return;
-        // Land on the archive entry when it's present (so it can be re-opened).
-        // If it's missing from the listing (e.g. hidden with "show hidden" off),
-        // highlight the first image in the folder, else the first item.
+        // Land on the archive entry when possible so it can be re-opened. If
+        // hidden filtering removes it, fall back to the first image or first row.
         const archiveListed = result.files.some(f => f.path === state.archivePath);
         if (archiveListed) {
           this.applyDirectoryResult(result, { preferInitial: true, generation, previousEntry });
@@ -508,7 +507,7 @@ export const FsUtils = {
     try {
       const result = await invoke('open_parent', { currentDir: state.directory, showHidden: this.showHidden() });
       if (!_isCurrentGeneration(generation)) return;
-      // Highlight the folder we came from (same behavior as archives)
+      // Highlight the folder we came from, matching archive behavior.
       this.applyDirectoryResult(result, { preferInitial: true, generation, previousEntry });
       this.persistLastOpened(result.directory);
     } catch (err) {
@@ -570,7 +569,7 @@ export const FsUtils = {
 
         try {
           await this.loadFile(sorted[currentIndexToCheck].path, { generation });
-          return; // Successfully loaded a sibling, exit loop
+          return;
         } catch (err) {
           console.error(`[Core] Skipping inaccessible sibling container: ${sorted[currentIndexToCheck].path}`, err);
           attempts++;
@@ -667,7 +666,7 @@ export const FsUtils = {
 
     const indicesToPrefetch = [];
     
-    // ── Symmetric window: 7 ahead, 7 behind ──
+    // Symmetric window: 7 ahead, 7 behind.
     const PREFETCH_HALF = 7;
     for (let i = 1; i <= PREFETCH_HALF; i++) {
       const ahead = currentIndex + (direction * i);

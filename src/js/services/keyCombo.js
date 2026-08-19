@@ -85,7 +85,7 @@ export function formatKeysCombo(keysSet, buttonsSet, scrollDir) {
   return combo.concat(others).join('+');
 }
 
-// ── Cached keybind lookup (rebuilt on config load) ──
+// Cached keybind lookup, rebuilt on config load.
 let _bindMap = new Map();
 
 export function rebuildBindMap(config) {

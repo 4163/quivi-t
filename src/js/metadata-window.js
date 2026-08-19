@@ -1,5 +1,5 @@
 /**
- * metadata-window.js — QuiviT
+ * metadata-window.js: QuiviT
  * Receives comic metadata from the main window via Tauri event and renders it.
  *
  * The main window stores the serialised ComicMeta object in localStorage under
@@ -22,7 +22,7 @@ function render(payload) {
 
   if (!meta) return;
 
-  // Cover image — keep hidden until fully decoded to avoid progressive JPEG scan-line rendering
+  // Cover image stays hidden until fully decoded to avoid progressive JPEG scan-line rendering.
   if (coverSrc) {
     coverWrap.classList.add('hidden');
     coverImg.onload = () => {
@@ -122,7 +122,7 @@ try {
 } catch (e) { showWindow(); }
 
 // The window is built hidden (config.rs) so it never paints at the pre-fit
-// height. Show it only after the content-fit settles — avoids the visible
+// height. Show it only after the content-fit settles. This avoids the visible
 // shrink flicker. Guarded so live updates don't re-trigger it.
 let windowShown = false;
 function showWindow() {
@@ -131,26 +131,24 @@ function showWindow() {
   window.__TAURI__.window.getCurrentWindow().show().catch(() => {});
 }
 
-// Stay live: update when the main window changes archive
+// Update when the main window changes archives.
 if (window.__TAURI__) {
   window.__TAURI__.event.listen('metadata-data', (e) => {
     render(e.payload);
     // Re-fit to the new content height (render() also re-fits after the cover
     // decodes, but the window should shrink immediately even without a cover).
     fitContentHeight();
-    // Keep localStorage in sync so re-opens don't need to wait for an event
+    // Keep localStorage in sync so reopened windows do not wait for an event.
     try { localStorage.setItem('quivit-metadata-current', JSON.stringify(e.payload)); } catch (_) {}
   }).catch(console.error);
 
-  // Architectural Standard (Live Previews): Secondary windows must intercept Tauri events
-  // emitted by the Options window to instantly reflect in-progress theme/CSS changes.
+  // Options sends preview events while the user edits the theme or CSS.
   window.__TAURI__.event.listen('theme-preview', (e) => applyTheme(e.payload)).catch(console.error);
   window.__TAURI__.event.listen('css-preview', (e) => applyCustomCss(e.payload)).catch(console.error);
 }
 
-// Architectural Standard (Permanent State): Secondary windows tap into the native JS `storage` 
-// event to catch finalized config changes. `main.js` is the sole writer to `quivit-theme` / 
-// `quivit-custom-css` in localStorage, which natively broadcasts to all open webviews.
+// Finalized theme and CSS changes arrive through the native `storage` event.
+// `main.js` writes the localStorage values shared by open webviews.
 window.addEventListener('storage', (e) => {
   if (e.key === 'quivit-theme') applyTheme(e.newValue);
   if (e.key === 'quivit-custom-css') applyCustomCss(e.newValue);

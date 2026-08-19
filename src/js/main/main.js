@@ -1,5 +1,5 @@
 /**
- * main/main.js - main window DOM wiring bootstrap.
+ * main/main.js: main window DOM wiring bootstrap.
  */
 
 import { Core } from '../core.js';
@@ -23,17 +23,17 @@ import { initLifecycle } from './lifecycle.js';
 import { initMetadataBadge, openMetadataWindow } from './metadataBadge.js';
 import { initDropZone } from './dropzone.js';
 
-// Reset the options tab state on app startup so it defaults to General per session
+// Reset the options tab on startup so each session starts on General.
 localStorage.removeItem('options-active-tab');
 
-// Emergency CSS Reset (Ctrl+Shift+Alt+C)
+// Emergency CSS reset (Ctrl+Shift+Alt+C).
 window.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.shiftKey && e.altKey && e.key.toLowerCase() === 'c') {
     e.preventDefault();
     emergencyCssReset(Core.getState().config);
   }
 
-  // Global Tab Navigation Jump (Home/End)
+  // Home/End jumps across tabbable controls.
   handleTabJump(e);
 });
 
@@ -118,7 +118,7 @@ Core.onStateChange((state) => {
       Chrome.setStatusBarVisible(fd.status_visible);
     }
     
-    // Explicitly sync checkmarks that rely on state on startup
+    // Sync checkmarks that rely on startup state.
     document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!state.fileListVisible);
     document.getElementById('cmd-fullscreen')?.classList.toggle('checked', isFullscreenActive());
     
@@ -142,7 +142,7 @@ Core.onStateChange((state) => {
     viewport.classList.remove('empty');
   }
 
-  // Apply statusbar visibility
+  // Apply statusbar visibility.
   Chrome.applyStatusBarVisibility();
 
   if (state.config && state.config.frontend_data) {
@@ -158,7 +158,7 @@ Core.onStateChange((state) => {
     }
   }
 
-  // Auto-update standard statusbar fields (fit mode, index, empty state)
+  // Update standard statusbar fields.
   Statusbar.update(state);
 
   if (state.scalingMode !== activeScaling) {
@@ -174,7 +174,7 @@ window.addEventListener('quivit-history-changed', () => {
   updateHistoryMenu();
 });
 
-// Initialization sequence
+// Initialization.
 Statusbar.init();
 initFullscreen();
 initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, FsUtils });

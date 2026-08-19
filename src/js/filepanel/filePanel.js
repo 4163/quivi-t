@@ -1,5 +1,5 @@
 /**
- * filePanel.js - file list rendering, sorting, and column resizing.
+ * filePanel.js: file list rendering, sorting, and column resizing.
  */
 import { DirectoryPrefs } from '../directoryPrefs.js';
 import { makeContainerNavigable } from '../keyboardNav.js';
@@ -64,11 +64,9 @@ let columnsInitialized = false;
 // Prevents the viewport's image-load cycle from stealing focus away.
 let panelKeyboardActive = false;
 
-// Forces focus to jump to the main file list when a favorite is loaded.
-// UX Design Note: We intentionally force focus to the main list because most users 
-// open a favorite to immediately navigate its neighbors with arrow keys. 
-// Without this, mouse clicks wouldn't transfer focus, and keyboard users would 
-// have to manually tab out of the favorites list to browse the new directory.
+// After opening a favorite, move focus to the main file list. Most users open a
+// favorite and then navigate nearby entries with arrow keys; keyboard users
+// should not need to tab out of Favorites first.
 let focusMainListOnNextRender = false;
 
 function setColumnWidth(col, width) {
@@ -158,7 +156,7 @@ function renderBreadcrumb(state) {
   breadcrumbEl.title = path || '';
 }
 
-// --- Favorites rendering ---
+// Favorites rendering.
 
 function updateFavoriteBtn(path) {
   if (!favoritesBtnEl) return;
@@ -177,7 +175,7 @@ export function toggleFavoriteCurrent() {
   const wasFavorite = isFavorite(entry.path);
   toggleFavorite(entry);
   updateFavoriteBtn(entry.path);
-  // Always expand the section when a new favorite is added
+  // Reveal newly added favorites.
   if (!wasFavorite) {
     favoritesExpanded = true;
     saveFavoritesCollapsed(false);
@@ -191,7 +189,7 @@ const iconCache = new Map();
 
 function fetchNativeIcon(ext) {
   if (iconCache.has(ext)) return;
-  iconCache.set(ext, 'pending'); // mark as pending
+  iconCache.set(ext, 'pending');
 
   if (window.__TAURI__) {
     const extArg = ext === '__folder__' ? ext : '.' + ext;
@@ -203,7 +201,7 @@ function fetchNativeIcon(ext) {
             img.src = src;
             img.removeAttribute('data-ext');
           } else {
-            // fallback generic icon
+            // Generic fallback icon.
             const isFolder = ext === '__folder__';
             img.outerHTML = isFolder
               ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
@@ -259,7 +257,7 @@ function buildFavoriteEntry(fav) {
   // Full system path as tooltip. For archive entries ("archive|inner/path.png")
   // put the inner entry on its own line, keeping its native "/" separators.
   li.title = fav.path.includes('|')
-    ? fav.path.replace('|', '\n→ ')
+    ? fav.path.replace('|', '\nEntry: ')
     : fav.path;
   li.dataset.path = fav.path;
   li.setAttribute('role', 'option');
@@ -434,7 +432,7 @@ function measureRowHeight() {
 }
 
 function initDomPool() {
-  // Clear existing pool elements in case of a config reload
+  // Clear existing pool elements after config reloads.
   domPool.forEach(li => li.remove());
   domPool = [];
   if (scrollSpacer) {
@@ -655,7 +653,7 @@ function renderFilePanel(state) {
   if (!state.fileListVisible) return;
   renderBreadcrumb(state);
 
-  // Update favorite star button for current entry (images and folders; not ..)
+  // Update the favorite star for the current entry. Skip `..`.
   {
     const entry = state.list[state.index];
     if (entry && !entry.is_parent) {
@@ -671,7 +669,7 @@ function renderFilePanel(state) {
     }
   }
 
-  // Sync favorites highlighting to the currently active file-panel item
+  // Sync Favorites highlighting to the active file-panel item.
   updateFavoritesSelection(state);
 
   const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
@@ -724,7 +722,7 @@ export function initFilePanel(deps) {
     }
   });
 
-  // Wire favorites UI
+  // Wire Favorites UI.
   favoritesBtnEl = document.getElementById('btn-favorite-current');
   favoritesListUl = document.getElementById('favorites-list');
   favoritesHeaderEl = document.getElementById('file-panel-favorites-header');
@@ -741,7 +739,7 @@ export function initFilePanel(deps) {
     });
   }
 
-  // Composite widget keyboard navigation (mirrors the file list below)
+  // Keyboard navigation mirrors the file list below.
   if (favoritesListUl) {
     makeContainerNavigable(favoritesListUl, 'li', {
       vertical: true,
@@ -768,13 +766,13 @@ export function initFilePanel(deps) {
   window.addEventListener('quivit-config-loaded', () => {
     favoritesExpanded = !getFavoritesCollapsed();
     renderFavorites();
-    // Invalidate row height so custom CSS font sizes take effect
+    // Re-measure rows so custom CSS font sizes apply.
     ROW_HEIGHT = 0;
     if (Core) renderFilePanel(Core.getState());
   });
 
   window.addEventListener('quivit-css-applied', () => {
-    // Invalidate row height for live CSS previews in the options dialog
+    // Re-measure rows for live CSS previews.
     ROW_HEIGHT = 0;
     if (Core) renderFilePanel(Core.getState());
   });
@@ -797,7 +795,7 @@ export function initFilePanel(deps) {
     highlightedFavoritePath = '';
   });
 
-  // Composite widget keyboard navigation
+  // File-list keyboard navigation.
   makeContainerNavigable(fileListUl, 'li', {
     vertical: true,
     horizontal: false,

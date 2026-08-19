@@ -1,11 +1,11 @@
 /**
- * metadata.js — QuiviT
+ * metadata.js: QuiviT
  * Detects, fetches, and parses comic metadata files from open archives.
  *
  * Supported formats (priority order):
- *   1. ComicInfo.xml  — industry standard (ComicRack schema)
- *   2. CoMet.xml      — older alternative standard
- *   3. metadata.opf   — Calibre/ePub-style OPF metadata
+ *   1. ComicInfo.xml: industry standard (ComicRack schema)
+ *   2. CoMet.xml: older alternative standard
+ *   3. metadata.opf: Calibre/ePub-style OPF metadata
  *
  * All lookups are case-insensitive. The module is stateless; callers
  * cache the result if they need it.
@@ -25,7 +25,7 @@ const METADATA_FILENAMES = ['comicinfo.xml', 'comet.xml', 'metadata.opf'];
 export function findMetadataEntry(fileNames) {
   for (const target of METADATA_FILENAMES) {
     const match = fileNames.find(n => {
-      // Strip directory prefix — only match root-level or bare filenames.
+      // Strip directory prefix. Only match root-level or bare filenames.
       const bare = n.replace(/\\/g, '/').split('/').pop();
       return bare.toLowerCase() === target;
     });
@@ -70,7 +70,7 @@ export async function fetchMetadata(archivePath, fileNames) {
   }
 }
 
-// ── Parsers ──────────────────────────────────────────────────────────────────
+// Parsers
 
 /** @param {Document} doc */
 function parseComicInfo(doc) {
@@ -114,7 +114,7 @@ function parseComicInfo(doc) {
   };
 }
 
-/** @param {Document} doc — OPF/Calibre format */
+/** @param {Document} doc OPF/Calibre format */
 function parseOpf(doc) {
   const ns = 'http://purl.org/dc/elements/1.1/';
   const get = (tag) => doc.getElementsByTagNameNS(ns, tag)[0]?.textContent?.trim() || '';

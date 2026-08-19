@@ -1,11 +1,7 @@
-/* ============================================================
-   global.css — QuiviT
-   Shared foundation loaded by every page (index, options, metadata).
-   System-theme aware (light default / dark via media query).
-   All design tokens live here as CSS custom properties.
-   ============================================================ */
+/* Shared foundation for index, options, and metadata pages.
+   Design tokens live here as CSS custom properties. */
 
-/* --- System font stack (zero external requests → best LCP) -- */
+/* System font stack. Zero external requests, best LCP. */
 :root {
   /* Light theme tokens */
   --bg:            #f0f0f0;
@@ -135,11 +131,10 @@
   --grill-border: rgba(60, 200, 170, 0.6);
 }
 
-/* --- Reset -------------------------------------------------- */
+/* Reset */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* --- Focus-visible: keyboard-only outline ------------------ */
-/* Only shows when navigating with keyboard, not on mouse click */
+/* Keyboard focus only, not mouse click. */
 :focus { outline: none; }
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -165,10 +160,9 @@ html, body {
 
 body {
   /*
-    global of 13px for the font-size
-    really weird implementation;
-    - font sizes are done this way so users can set a default html value via the css section in options.
-    - this isn't inherently bad, as browser preferences cannot be set in tauri applications in the first place.
+    Body owns the app's 13px default. html stays at the browser default so
+    custom CSS in Options can change the root font size. Tauri does not expose
+    browser font preferences, so this is the user's override path.
   */
   font-size: var(--fs-13);
 }
@@ -183,7 +177,7 @@ input {
   cursor: pointer;
 }
 
-/* --- Utilities --------------------------------------------- */
+/* Utilities */
 .hidden { display: none !important; }
 
 /* Scrollbar styling (Webkit) */
@@ -192,7 +186,7 @@ input {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
 
-/* --- Measurement & Placeholder ----------------------------- */
+/* Measurement and placeholder */
 .measure-probe {
   position: absolute;
   left: -9999px;
@@ -207,4 +201,4 @@ input {
   display: none;
 }
 
-/* --- Accessibility navigation styles ----------------------- */
+/* Accessibility navigation styles */

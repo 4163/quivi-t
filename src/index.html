@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="QuiviT — standalone image and comic viewer." />
+    <meta name="description" content="QuiviT, standalone image and comic viewer." />
     <title>QuiviT</title>
     <link rel="stylesheet" href="/css/global.css" />
     <link rel="stylesheet" href="/css/main.css" />
@@ -16,16 +16,16 @@
 
   <body>
 
-    <!-- ── Menu bar ─────────────────────────────────────────── -->
+    <!-- Menu bar -->
     <nav id="menubar" role="menubar">
 
       <div class="menu-item" id="menu-file">
         <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">File</button>
         <ul class="menu-dropdown" role="menu">
-          <li role="menuitem" id="cmd-open-dir" tabindex="0">Open directory…<span class="shortcut">Ctrl+O</span></li>
-          <li role="menuitem" id="cmd-open-file" tabindex="0">Open file/archive…<span class="shortcut"></span></li>
+          <li role="menuitem" id="cmd-open-dir" tabindex="0">Open directory...<span class="shortcut">Ctrl+O</span></li>
+          <li role="menuitem" id="cmd-open-file" tabindex="0">Open file/archive...<span class="shortcut"></span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-options" tabindex="0">Options…<span class="shortcut">5</span></li>
+          <li role="menuitem" id="cmd-options" tabindex="0">Options...<span class="shortcut">5</span></li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-quit" tabindex="0">Quit</li>
         </ul>
@@ -63,9 +63,9 @@
           <li role="menuitem" id="cmd-fit-height-if-larger" tabindex="0" title="Shrink to viewport height, but never enlarge small images">Fit height if larger<span class="shortcut">E</span></li>
           <li role="menuitem" id="cmd-fit-window-if-larger" tabindex="0" title="Shrink to fit the viewport, but never enlarge small images">Fit window if larger<span class="shortcut">F</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none" title="Cycle Through Modes: ] / [">Scaling: None</li>
-          <li role="menuitem" id="cmd-scale-bicubic" tabindex="0" data-scaling="bicubic" title="Cycle Through Modes: ] / [">Scaling: Bicubic</li>
-          <li role="menuitem" id="cmd-scale-lanczos" tabindex="0" data-scaling="lanczos" title="Cycle Through Modes: ] / [">Scaling: Lanczos</li>
+          <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none" title="Cycle modes with ] / [">Scaling: None</li>
+          <li role="menuitem" id="cmd-scale-bicubic" tabindex="0" data-scaling="bicubic" title="Cycle modes with ] / [">Scaling: Bicubic</li>
+          <li role="menuitem" id="cmd-scale-lanczos" tabindex="0" data-scaling="lanczos" title="Cycle modes with ] / [">Scaling: Lanczos</li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-rotate-cw" tabindex="0">Rotate clockwise<span class="shortcut">H</span></li>
           <li role="menuitem" id="cmd-rotate-ccw" tabindex="0">Rotate counter-clockwise<span class="shortcut">G</span></li>
@@ -93,7 +93,7 @@
 
     </nav>
 
-    <!-- ── Workspace (file panel + viewport) ────────────────── -->
+    <!-- Workspace (file panel + viewport) -->
     <div id="workspace">
 
       <!-- File list panel -->
@@ -143,7 +143,7 @@
             <svg id="i-icon" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
           </button>
         </div>
-        <!-- Drag handle to resize panel -->
+        <!-- Panel resize handle -->
         <div id="panel-resize-handle" title="Drag to resize"></div>
       </aside>
 
@@ -151,7 +151,7 @@
       <div id="viewport">
 
 
-        <!-- Drop overlay (shown when no image loaded) -->
+        <!-- Drop overlay, shown when no image is loaded -->
         <div id="drop-overlay" class="active">
           <div class="drop-hint">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -164,8 +164,8 @@
           </div>
         </div>
 
-        <!-- Image wrapper: contains the image, grill, and border.
-             The wrapper is the transformed element. CSS handles their sizing automatically. -->
+        <!-- Image wrapper. It contains the image, grill, and border.
+             The wrapper is the transformed element. CSS handles the sizing. -->
         <div id="viewer-img-wrapper">
           <img id="viewer-loading-frame" class="viewer-img is-placeholder" decoding="async" alt="Loading..." draggable="false">
           <div id="img-grill"></div>
@@ -176,7 +176,7 @@
 
       </div>
 
-      <!-- Fullscreen exit hint (Boss key / Esc) -->
+      <!-- Fullscreen exit hint, Boss key / Esc -->
       <div id="fullscreen-exit-hint" role="status" aria-live="polite">
         <span>Press and hold</span>
         <kbd id="fullscreen-exit-key">Esc</kbd>
@@ -194,7 +194,7 @@
       </div>
     </div>
 
-    <!-- ── Status bar ────────────────────────────────────────── -->
+    <!-- Status bar -->
     <footer id="statusbar" class="hidden" aria-live="polite">
       <div class="status-filename-container">
         <span class="status-filename">Loading...</span>
@@ -208,7 +208,7 @@
     </footer>
 
 
-    <!-- Scripts: decoupled load order -->
+    <!-- Scripts, decoupled load order -->
     <div id="measure-probe" class="measure-probe" aria-hidden="true"></div>
     <script type="module" src="/js/main/main.js"></script>
     <script type="module" src="/js/shellBackground.js"></script>

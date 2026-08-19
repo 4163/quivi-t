@@ -13,9 +13,7 @@ let preFullscreenState = null;
 const menubarEl = document.getElementById('menubar');
 const statusbarEl = document.getElementById('statusbar');
 
-// --- Visibility Getters / Setters ---
-
-
+// Visibility.
 
 export function setMenuBarVisible(visible, { persist = false } = {}) {
   menuBarVisible = !!visible;
@@ -58,7 +56,7 @@ export function toggleStatusBar({ persist = true } = {}) {
   setStatusBarVisible(!statusBarVisible, { persist });
 }
 
-// --- Persistence ---
+// Persistence.
 
 function saveChromeState() {
   const state = Core.getState();
@@ -71,7 +69,7 @@ function saveChromeState() {
   }
 }
 
-// --- Fullscreen Helpers ---
+// Fullscreen helpers.
 
 export function snapshotPreFullscreenChrome() {
   preFullscreenState = { menuBar: menuBarVisible, statusBar: statusBarVisible };
