@@ -624,3 +624,61 @@ fn zip_decodes_euckr_entry_names() {
         entries[0].name
     );
 }
+
+// Metadata inclusion tests
+
+fn metadata_test_file(name: &str) -> std::path::PathBuf {
+    test_file("metadata_tests").join(name)
+}
+
+#[test]
+fn sevenz_lists_metadata_files() {
+    let path = metadata_test_file("metadata.7z");
+    let files = list_7z_entries(path.to_str().unwrap()).expect("list 7z with metadata");
+
+    let has_image = files.iter().any(|f| f.name.ends_with(".png"));
+    let has_xml = files.iter().any(|f| f.name == "ComicInfo.xml");
+
+    assert!(has_image, "7z listing missing image entries");
+    assert!(has_xml, "7z listing missing ComicInfo.xml metadata");
+    assert_eq!(files.len(), 3, "expected 2 images + 1 metadata file");
+}
+
+#[test]
+fn cb7_lists_metadata_files() {
+    let path = metadata_test_file("metadata.cb7");
+    let files = list_7z_entries(path.to_str().unwrap()).expect("list cb7 with metadata");
+
+    let has_xml = files.iter().any(|f| f.name == "ComicInfo.xml");
+    assert!(has_xml, "cb7 listing missing ComicInfo.xml metadata");
+}
+
+#[test]
+fn sevenz_extracts_metadata_to_temp() {
+    let path = metadata_test_file("metadata.7z");
+    let hash = format!("{:x}", md5::compute(path.to_str().unwrap()));
+    let temp_dir = std::env::temp_dir()
+        .join("QuiviT-test-metadata-extract")
+        .join(hash);
+    let _ = fs::remove_dir_all(&temp_dir);
+    let notify = std::sync::Arc::new((
+        std::sync::Mutex::new(std::collections::HashSet::new()),
+        std::sync::Condvar::new(),
+    ));
+    extract_7z_to_temp(
+        path.to_str().unwrap().to_string(),
+        temp_dir.clone(),
+        notify,
+    );
+
+    let xml_path = temp_dir.join("ComicInfo.xml");
+    assert!(xml_path.exists(), "ComicInfo.xml not extracted from 7z");
+
+    let content = fs::read_to_string(&xml_path).expect("read extracted ComicInfo.xml");
+    assert!(
+        content.contains("<Title>Test</Title>"),
+        "extracted ComicInfo.xml has wrong content: {content}"
+    );
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}

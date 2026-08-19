@@ -505,7 +505,12 @@ export const FsUtils = {
 
     if (!state.directory || state.directory === 'Drives') return;
     try {
-      const result = await invoke('open_parent', { currentDir: state.directory, showHidden: this.showHidden() });
+      const parentDir = parentOf(state.directory);
+      if (parentDir === state.directory) {
+        throw 'Already at root';
+      }
+      const targetName = basename(state.directory);
+      const result = await invoke('read_directory', { path: parentDir, showHidden: this.showHidden(), targetName });
       if (!_isCurrentGeneration(generation)) return;
       // Highlight the folder we came from, matching archive behavior.
       this.applyDirectoryResult(result, { preferInitial: true, generation, previousEntry });

@@ -117,7 +117,7 @@ pub fn get_cached_native_icon(path: &str, ext_key: &str) -> Result<Option<String
 
     #[cfg(windows)]
     {
-        let lower_ext = ext_key.to_lowercase();
+        let lower_ext = ext_key.to_string();
         {
             let mut cache_guard = NATIVE_ICON_CACHE.lock().map_err(|e| e.to_string())?;
             if let Some(cache) = cache_guard.as_mut() {

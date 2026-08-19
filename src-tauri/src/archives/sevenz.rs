@@ -18,7 +18,7 @@ pub(crate) fn list_7z_entries(archive_path: &str) -> Result<Vec<FileEntry>, Stri
         }
         let name = entry.name().to_string();
         let ext = name.rsplit('.').next().unwrap_or("");
-        if !is_image_ext(ext) {
+        if !is_image_ext(ext) && !is_metadata_ext(ext) {
             continue;
         }
 

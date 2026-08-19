@@ -18,7 +18,7 @@ pub fn get_format_status() -> Vec<FormatStatus> {
 
     for fmt in SUPPORTED_FORMATS {
         let mut registered = false;
-        let expected_progid = format!("QuiviT.{}", fmt.ext.to_lowercase());
+        let expected_progid = format!("QuiviT.{}", fmt.ext);
 
         #[cfg(windows)]
         {
@@ -33,7 +33,7 @@ pub fn get_format_status() -> Vec<FormatStatus> {
             // Windows Settings, but we can read it to know if QuiviT is the active default.
             let userchoice_path = format!(
                 r#"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.{}\UserChoice"#,
-                fmt.ext.to_lowercase()
+                fmt.ext
             );
             if let Ok(uc_key) = hkcu.open_subkey(&userchoice_path) {
                 if let Ok(prog_id) = uc_key.get_value::<String, _>("ProgId") {
@@ -46,7 +46,7 @@ pub fn get_format_status() -> Vec<FormatStatus> {
             } else {
                 // No UserChoice set. Fall back to checking Classes default value.
                 // This covers fresh installs or formats where no app has claimed default.
-                let ext_key_path = format!(r#"Software\Classes\.{}"#, fmt.ext.to_lowercase());
+                let ext_key_path = format!(r#"Software\Classes\.{}"#, fmt.ext);
                 if let Ok(ext_key) = hkcu.open_subkey(&ext_key_path) {
                     if let Ok(current_progid) = ext_key.get_value::<String, _>("") {
                         if current_progid.eq_ignore_ascii_case(&expected_progid) && actually_exists

@@ -26,8 +26,8 @@ pub fn prefetch_archive_entries(
     entries: Vec<String>,
     state: tauri::State<'_, Mutex<ArchiveCache>>,
 ) -> Result<(), String> {
-    let ext = archive_path.rsplit('.').next().unwrap_or("").to_lowercase();
-    if ext != "zip" && ext != "cbz" {
+    let ext = archive_path.rsplit('.').next().unwrap_or("");
+    if !ext.eq_ignore_ascii_case("zip") && !ext.eq_ignore_ascii_case("cbz") {
         return Ok(());
     }
 

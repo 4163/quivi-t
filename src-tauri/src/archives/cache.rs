@@ -239,6 +239,8 @@ pub(crate) fn archive_entry_temp_path(temp_dir: &Path, entry_name: &str) -> Opti
     Some(temp_dir.join(relative))
 }
 
+// Called by rar.rs, sevenz.rs, and tar.rs extractors to atomically write
+// each decompressed entry to the temp directory via a .tmp rename.
 pub(crate) fn write_temp_entry(
     temp_dir: &Path,
     entry_name: &str,
@@ -256,6 +258,8 @@ pub(crate) fn write_temp_entry(
     Some(out_path)
 }
 
+// Called by rar.rs, sevenz.rs, and tar.rs extractors after each entry is
+// written, waking any protocol/IPC thread waiting on that file.
 pub(crate) fn notify_extracted(notify: &ExtractNotify, entry_name: &str) {
     let (lock, cvar) = &**notify;
     let mut set = lock.lock().unwrap();
