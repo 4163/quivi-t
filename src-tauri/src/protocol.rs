@@ -52,6 +52,12 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
         let entry_name = crate::utils::url_decode(path_parts[1]);
 
         let app_handle = ctx.app_handle().clone();
+        if let Ok(mut cache) = app_handle.state::<Mutex<ArchiveCache>>().try_lock() {
+            if let Ok(Some(data)) = cache.cached_zip_entry_bytes(&archive_path, &entry_name) {
+                responder.respond(entry_response(&entry_name, data.to_vec()));
+                return;
+            }
+        }
 
         std::thread::spawn(move || {
             let entry_data = app_handle
@@ -63,15 +69,7 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             let data = entry_data.and_then(|d| d.wait_for_data(&entry_name));
 
             if let Ok(d) = data {
-                let mime = guess_mime(&entry_name);
-                let response = Response::builder()
-                    .status(200)
-                    .header("Content-Type", mime)
-                    .header("Content-Length", d.len().to_string())
-                    .header("Access-Control-Allow-Origin", "*")
-                    .body(d)
-                    .unwrap();
-                responder.respond(response);
+                responder.respond(entry_response(&entry_name, d));
             } else {
                 let response = Response::builder()
                     .status(404)
@@ -81,6 +79,17 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             }
         });
     })
+}
+
+fn entry_response(entry_name: &str, data: Vec<u8>) -> Response<Vec<u8>> {
+    let mime = guess_mime(entry_name);
+    Response::builder()
+        .status(200)
+        .header("Content-Type", mime)
+        .header("Content-Length", data.len().to_string())
+        .header("Access-Control-Allow-Origin", "*")
+        .body(data)
+        .unwrap()
 }
 
 fn guess_mime(name: &str) -> &'static str {

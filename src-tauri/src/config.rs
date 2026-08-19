@@ -72,12 +72,14 @@ pub fn remove_roaming_files(dir: &Path) {
 pub fn get_config_path() -> PathBuf {
     let exe_dir = get_exe_dir();
     let is_port = exe_dir.join(".portable").exists() || exe_dir.join("quivit_config.json").exists();
-    
+
     if is_port {
         exe_dir.join("quivit_config.json")
     } else {
         if let Ok(appdata) = std::env::var("APPDATA") {
-            Path::new(&appdata).join("com.x4163.quivit").join("quivit_config.json")
+            Path::new(&appdata)
+                .join("com.x4163.quivit")
+                .join("quivit_config.json")
         } else {
             PathBuf::new()
         }
@@ -86,7 +88,7 @@ pub fn get_config_path() -> PathBuf {
 
 pub fn load_config_early() -> AppConfig {
     let config_path = get_config_path();
-    
+
     if let Ok(content) = fs::read_to_string(&config_path) {
         serde_json::from_str(&content).unwrap_or_default()
     } else {
@@ -111,7 +113,10 @@ pub fn apply_pending_to_config(config: &mut AppConfig) {
 
 pub fn apply_pending_config_to_disk() {
     let mut config = load_config_early();
-    let had_pending = config.frontend_data.get("pending_single_instance").is_some();
+    let had_pending = config
+        .frontend_data
+        .get("pending_single_instance")
+        .is_some();
     apply_pending_to_config(&mut config);
     if had_pending {
         if let Ok(data) = serde_json::to_string_pretty(&config) {
@@ -132,7 +137,11 @@ pub fn apply_pending_config_to_disk() {
 // files so quivit_config.json only holds preferences. Portable mode keeps one
 // self-contained file.
 
-pub const STATE_KEYS: &[&str] = &["last_opened_path", "last_active_image", "scroll_zoom_latched"];
+pub const STATE_KEYS: &[&str] = &[
+    "last_opened_path",
+    "last_active_image",
+    "scroll_zoom_latched",
+];
 pub const SORT_KEYS: &[&str] = &["directory_sort"];
 pub const FAVORITES_KEYS: &[&str] = &["favorites", "favorites_collapsed"];
 
@@ -178,15 +187,21 @@ pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
     // New layout: state, directory-sort, and favorites live in their own files.
     // Legacy layout (everything in quivit_config.json) loads unchanged.
     merge_file_into(&dir.join("quivit_state.json"), &mut config.frontend_data);
-    merge_file_into(&dir.join("quivit_directory_sort.json"), &mut config.frontend_data);
-    merge_file_into(&dir.join("quivit_favorites.json"), &mut config.frontend_data);
-    
+    merge_file_into(
+        &dir.join("quivit_directory_sort.json"),
+        &mut config.frontend_data,
+    );
+    merge_file_into(
+        &dir.join("quivit_favorites.json"),
+        &mut config.frontend_data,
+    );
+
     // Roaming mode stores custom CSS in its own file.
     let css_path = dir.join("custom_css.css");
     if let Ok(custom_css) = fs::read_to_string(&css_path) {
         config.frontend_data["custom_css"] = serde_json::json!(custom_css);
     }
-    
+
     config
 }
 
@@ -237,7 +252,7 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
         crate::platform::attributes::set_hidden_attribute(&config_path, config.hidden)?;
 
         remove_roaming_files(&roaming_dir_path(&app_handle));
-        
+
         let _ = fs::remove_file(roaming_dir(&app_handle).join("custom_css.css"));
     } else {
         // Roaming: write the split files first, then remove portable leftovers so
@@ -246,11 +261,15 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
         let state = extract_keys(&mut fd, STATE_KEYS);
         let sort = extract_keys(&mut fd, SORT_KEYS);
         let favorites = extract_keys(&mut fd, FAVORITES_KEYS);
-        
+
         // Store custom CSS separately.
-        let custom_css = fd.get("custom_css").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let custom_css = fd
+            .get("custom_css")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         fd.as_object_mut().map(|obj| obj.remove("custom_css"));
-        
+
         config.frontend_data = fd;
 
         let dir = roaming_dir(&app_handle);
@@ -271,7 +290,7 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
             serde_json::to_string_pretty(&favorites).map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.to_string())?;
-        
+
         atomic_write(&dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())?;
 
         let _ = fs::remove_file(exe_dir.join("quivit_config.json"));

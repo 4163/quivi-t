@@ -17,9 +17,7 @@ fn decode_zip_entry_name<R: std::io::Read + std::io::Seek>(
     crate::archives::decode_cjk_name(entry.name_raw())
 }
 
-pub(crate) fn list_zip_entries(
-    archive_path: &str,
-) -> Result<(Vec<FileEntry>, ZipArchive), String> {
+pub(crate) fn list_zip_entries(archive_path: &str) -> Result<(Vec<FileEntry>, ZipArchive), String> {
     let mut archive = open_zip_archive(archive_path)?;
     let all_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
 

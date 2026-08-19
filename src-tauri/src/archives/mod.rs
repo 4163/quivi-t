@@ -7,6 +7,7 @@ mod zip;
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::models::ArchiveReadResult;
@@ -57,7 +58,7 @@ impl ArchiveKind {
 }
 
 pub enum ArchiveEntryData {
-    Ready(Vec<u8>),
+    Ready(Arc<[u8]>),
     PendingExtraction {
         file_path: PathBuf,
         notify: cache::ExtractNotify,
@@ -67,7 +68,7 @@ pub enum ArchiveEntryData {
 impl ArchiveEntryData {
     pub fn wait_for_data(self, entry_name: &str) -> Result<Vec<u8>, String> {
         match self {
-            Self::Ready(data) => Ok(data),
+            Self::Ready(data) => Ok(data.to_vec()),
             Self::PendingExtraction { file_path, notify } => {
                 let (lock, cvar) = &*notify;
                 let set = lock.lock().map_err(|e| e.to_string())?;
@@ -128,6 +129,18 @@ impl ArchiveCache {
         }
     }
 
+    pub fn cached_zip_entry_bytes(
+        &mut self,
+        archive_path: &str,
+        entry_name: &str,
+    ) -> Result<Option<cache::SharedEntryBytes>, String> {
+        if ArchiveKind::from_path(archive_path)? != ArchiveKind::Zip {
+            return Ok(None);
+        }
+
+        Ok(self.get_zip_entry(archive_path, entry_name))
+    }
+
     fn prepare_archive_state(
         &mut self,
         archive_path: &str,
@@ -163,20 +176,23 @@ impl ArchiveCache {
         &mut self,
         archive_path: &str,
         entry_name: &str,
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<cache::SharedEntryBytes, String> {
         if let Some(cached) = self.get_zip_entry(archive_path, entry_name) {
             return Ok(cached);
         }
 
         self.prepare_archive_state(archive_path, ArchiveKind::Zip, None);
 
-        let data = self
-            .read_from_open_zip(archive_path, entry_name)
-            .or_else(|| zip::extract_zip_entry(archive_path, entry_name).ok())
-            .ok_or_else(|| format!("Cannot find ZIP entry: {entry_name}"))?;
+        let shared = if let Some(data) = self.read_from_open_zip(archive_path, entry_name) {
+            data
+        } else {
+            zip::extract_zip_entry(archive_path, entry_name)
+                .map(cache::SharedEntryBytes::from)
+                .map_err(|_| format!("Cannot find ZIP entry: {entry_name}"))?
+        };
 
-        self.insert_zip_entry(archive_path, entry_name, data.clone());
-        Ok(data)
+        self.insert_zip_entry(archive_path, entry_name, shared.clone());
+        Ok(shared)
     }
 
     fn read_temp_entry_bytes(
@@ -194,7 +210,7 @@ impl ArchiveCache {
             .ok_or_else(|| format!("Unsafe archive entry path: {entry_name}"))?;
 
         if let Ok(bytes) = fs::read(&file_path) {
-            return Ok(ArchiveEntryData::Ready(bytes));
+            return Ok(ArchiveEntryData::Ready(bytes.into()));
         }
 
         Ok(ArchiveEntryData::PendingExtraction { file_path, notify })
@@ -210,7 +226,9 @@ fn spawn_temp_extractor(
 ) {
     std::thread::spawn(move || match kind {
         ArchiveKind::Rar => rar::extract_rar_to_temp(archive_path, temp_dir, notify, cancel_flag),
-        ArchiveKind::SevenZ => sevenz::extract_7z_to_temp(archive_path, temp_dir, notify, cancel_flag),
+        ArchiveKind::SevenZ => {
+            sevenz::extract_7z_to_temp(archive_path, temp_dir, notify, cancel_flag)
+        }
         ArchiveKind::Tar => tar::extract_tar_to_temp(archive_path, temp_dir, notify, cancel_flag),
         ArchiveKind::Zip => {}
     });

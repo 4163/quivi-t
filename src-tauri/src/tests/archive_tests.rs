@@ -437,7 +437,11 @@ fn archive_cache_byte_budget_evicts_globally() {
     assert!(cache.contains_zip_entry("a.cbz", "p1"));
 
     // Touch p1, then insert p3. p2 is now least-recently-used and leaves.
-    assert!(cache.read_entry_bytes("a.cbz", "p1").unwrap().wait_for_data("p1").is_ok());
+    assert!(cache
+        .read_entry_bytes("a.cbz", "p1")
+        .unwrap()
+        .wait_for_data("p1")
+        .is_ok());
     insert(&mut cache, "a.cbz", "p3", mb1);
     assert!(cache.contains_zip_entry("a.cbz", "p1"));
     assert!(!cache.contains_zip_entry("a.cbz", "p2"));
@@ -466,6 +470,24 @@ fn archive_cache_byte_budget_evicts_globally() {
 
     cache.insert_zip_entry("missing.cbz", "ghost", vec![0u8; mb1]);
     assert_eq!(cache.current_zip_bytes(), before);
+}
+
+#[test]
+fn archive_cache_zip_hits_reuse_shared_bytes() {
+    let mut cache = ArchiveCache::new(2);
+    cache.register_test_archive("a.cbz");
+    cache.insert_zip_entry("a.cbz", "p1", vec![1, 2, 3, 4]);
+
+    let first = cache
+        .cached_zip_entry_bytes("a.cbz", "p1")
+        .expect("cache lookup")
+        .expect("cached entry");
+    let second = cache
+        .cached_zip_entry_bytes("a.cbz", "p1")
+        .expect("cache lookup")
+        .expect("cached entry");
+
+    assert!(std::sync::Arc::ptr_eq(&first, &second));
 }
 
 #[test]

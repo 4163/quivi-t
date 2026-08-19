@@ -5,9 +5,10 @@ use std::sync::{Arc, Condvar, Mutex};
 
 pub(crate) type ZipArchive = zip::ZipArchive<std::io::BufReader<std::fs::File>>;
 pub(crate) type ExtractNotify = Arc<(Mutex<HashSet<String>>, Condvar)>;
+pub(crate) type SharedEntryBytes = Arc<[u8]>;
 
 pub(crate) struct SingleArchiveCache {
-    zip_entries: HashMap<String, Vec<u8>>,
+    zip_entries: HashMap<String, SharedEntryBytes>,
     zip_archive: Option<ZipArchive>,
     extract_temp_dir: Option<PathBuf>,
     extract_notify: ExtractNotify,
@@ -46,7 +47,8 @@ impl SingleArchiveCache {
 
 impl Drop for SingleArchiveCache {
     fn drop(&mut self) {
-        self.extract_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.extract_cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
         if let Some(dir) = &self.extract_temp_dir {
             let _ = fs::remove_dir_all(dir);
         }
@@ -87,7 +89,7 @@ impl ArchiveCache {
         &mut self,
         archive_path: &str,
         entry_name: &str,
-    ) -> Option<Vec<u8>> {
+    ) -> Option<SharedEntryBytes> {
         self.archives
             .get_mut(archive_path)?
             .zip_archive
@@ -95,6 +97,7 @@ impl ArchiveCache {
             .and_then(|archive| {
                 crate::archives::zip::read_zip_entry_by_decoded_name(archive, entry_name).ok()
             })
+            .map(Vec::into)
     }
 
     pub(crate) fn temp_extraction_state(
@@ -163,7 +166,7 @@ impl ArchiveCache {
         &mut self,
         archive_path: &str,
         entry_name: &str,
-    ) -> Option<Vec<u8>> {
+    ) -> Option<SharedEntryBytes> {
         let data = self
             .archives
             .get(archive_path)?
@@ -174,7 +177,12 @@ impl ArchiveCache {
         Some(data)
     }
 
-    pub(crate) fn insert_zip_entry(&mut self, archive_path: &str, entry_name: &str, data: Vec<u8>) {
+    pub(crate) fn insert_zip_entry(
+        &mut self,
+        archive_path: &str,
+        entry_name: &str,
+        data: impl Into<SharedEntryBytes>,
+    ) {
         let Some(single) = self.archives.get(archive_path) else {
             return;
         };
@@ -183,6 +191,7 @@ impl ArchiveCache {
             return;
         }
 
+        let data = data.into();
         self.evict_until_within_budget(data.len());
         if let Some(single) = self.archives.get_mut(archive_path) {
             self.current_zip_bytes += data.len();
