@@ -1,0 +1,38 @@
+---
+name: familiarize
+description: Use at the very start of a session to familiarize yourself with this repository before proceeding with actual work.
+argument-hint: "<task to prepare for>"
+---
+
+User note for initial familiarization:
+```
+recomended models to use for the initial familiarization task for specific harnesses:
+DeepSeek V4 Flash - High / Gemini 3.7 Flash - High / GPT 5.6 Terra - High
+
+use the familiarize skill and follow its guidance.
+```
+
+# Familiarize
+
+## 1. Learn the codebase
+
+- Walk the file and directory structure from the root down before diving into any single file. Build a mental map of how the project is organized.
+- Identify the architecture: languages and frameworks in use, how modules/services/layers are separated, where the entry points are (main files, routers, config), and how data and control flow through the system.
+- Read the package manifest(s) (`package.json`, `requirements.txt`, `Cargo.toml`, etc.), build/config files, and any existing README or architecture docs.
+- Note the conventions already in place: naming, folder layout, testing patterns, and style. New work should fit the codebase instead of fighting it.
+- Read `.agents/AGENTS.md` and follow it. Tell the user that you have taken in those rules.
+
+## 2. Check session context only when relevant
+
+- Start from the current repository: inspect the working tree, recent commits, manifests, architecture docs, and the source files relevant to the task.
+- Use the `session-recovery` skill to check for relevant prior context when the task appears to continue earlier work, touches an area with recent agent activity, or names a prior session/conversation.
+- Before reading any full transcript, compare the candidate session date, branch/worktree hints, changed files, and summary against the current git state. Ignore entries that predate newer unrelated commits or describe work unrelated to the active request.
+- Treat any recovered session content as a lead, not ground truth. Verify important details against the current source before relying on them.
+
+## 3. Use subagents to do this faster
+
+- If subagents are available, don't run all of the above serially yourself. Delegate.
+- Split the work by relevance: one subagent can map the file/directory structure, another can read architecture and manifest files, another can explore a specific subsystem in depth.
+- Delegate session-index or transcript recovery only as a narrow relevance check through the `session-recovery` skill. The subagent should report `none` if the index date, summary, or changed files do not match the active task.
+- Have each subagent report back a short, focused summary rather than raw output. That keeps exploration costs off your main context window and reduces total token usage.
+- Reserve your own context for synthesis and decisions, not for absorbing raw exploration. That is what subagents are for.
