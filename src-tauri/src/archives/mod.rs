@@ -130,7 +130,7 @@ impl ArchiveCache {
     }
 
     pub fn cached_zip_entry_bytes(
-        &mut self,
+        &self,
         archive_path: &str,
         entry_name: &str,
     ) -> Result<Option<cache::SharedEntryBytes>, String> {

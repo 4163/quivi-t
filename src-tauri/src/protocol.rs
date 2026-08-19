@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+
 
 use tauri::http::Response;
 use tauri::Manager;
@@ -73,8 +73,8 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
 
         tauri::async_runtime::spawn_blocking(move || {
             let entry_data = app_handle
-                .state::<Mutex<ArchiveCache>>()
-                .lock()
+                .state::<std::sync::RwLock<ArchiveCache>>()
+                .write()
                 .map_err(|e| e.to_string())
                 .and_then(|mut cache| cache.read_entry_bytes(&archive_path, &entry_name));
 
@@ -130,8 +130,8 @@ fn try_cached_entry_response<R: tauri::Runtime>(
     entry_name: &str,
     range_header: Option<&str>,
 ) -> Option<Response<Vec<u8>>> {
-    let state = app_handle.state::<Mutex<ArchiveCache>>();
-    let mut cache = state.try_lock().ok()?;
+    let state = app_handle.state::<std::sync::RwLock<ArchiveCache>>();
+    let cache = state.try_read().ok()?;
     let data = cache
         .cached_zip_entry_bytes(archive_path, entry_name)
         .ok()

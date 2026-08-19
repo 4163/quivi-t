@@ -9,7 +9,7 @@ pub mod protocol;
 pub mod utils;
 pub mod windows;
 
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 use tauri::{Emitter, Manager};
 
 use archives::*;
@@ -44,7 +44,7 @@ pub fn run() {
     }
 
     builder = builder
-        .manage(Mutex::new(ArchiveCache::new(cache_mb)))
+        .manage(RwLock::new(ArchiveCache::new(cache_mb)))
         .manage(Mutex::new(WatcherState::new()))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())

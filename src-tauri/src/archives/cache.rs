@@ -55,12 +55,16 @@ impl Drop for SingleArchiveCache {
     }
 }
 
-pub struct ArchiveCache {
-    archives: HashMap<String, SingleArchiveCache>,
+struct ArchiveLruState {
     global_zip_lru: VecDeque<(String, String)>,
     archive_lru: VecDeque<String>,
-    global_zip_capacity_bytes: usize,
     current_zip_bytes: usize,
+}
+
+pub struct ArchiveCache {
+    archives: HashMap<String, SingleArchiveCache>,
+    lru: Mutex<ArchiveLruState>,
+    global_zip_capacity_bytes: usize,
     max_open_archives: usize,
 }
 
@@ -68,10 +72,12 @@ impl ArchiveCache {
     pub fn new(capacity_mb: usize) -> Self {
         Self {
             archives: HashMap::new(),
-            global_zip_lru: VecDeque::new(),
-            archive_lru: VecDeque::new(),
+            lru: Mutex::new(ArchiveLruState {
+                global_zip_lru: VecDeque::new(),
+                archive_lru: VecDeque::new(),
+                current_zip_bytes: 0,
+            }),
             global_zip_capacity_bytes: capacity_mb.saturating_mul(1024 * 1024),
-            current_zip_bytes: 0,
             max_open_archives: 8,
         }
     }
@@ -80,9 +86,10 @@ impl ArchiveCache {
         self.archives.contains_key(archive_path)
     }
 
-    pub(crate) fn touch_archive(&mut self, archive_path: &str) {
-        self.archive_lru.retain(|p| p != archive_path);
-        self.archive_lru.push_back(archive_path.to_string());
+    pub(crate) fn touch_archive(&self, archive_path: &str) {
+        let mut lru = self.lru.lock().unwrap();
+        lru.archive_lru.retain(|p| p != archive_path);
+        lru.archive_lru.push_back(archive_path.to_string());
     }
 
     pub(crate) fn read_from_open_zip(
@@ -111,48 +118,69 @@ impl ArchiveCache {
         ))
     }
 
-    fn touch_zip_entry(&mut self, archive_path: &str, entry_name: &str) {
+    fn touch_zip_entry(&self, archive_path: &str, entry_name: &str) {
         let key = (archive_path.to_string(), entry_name.to_string());
-        self.global_zip_lru.retain(|existing| existing != &key);
-        self.global_zip_lru.push_back(key);
+        {
+            let mut lru = self.lru.lock().unwrap();
+            lru.global_zip_lru.retain(|existing| existing != &key);
+            lru.global_zip_lru.push_back(key);
+        }
         self.touch_archive(archive_path);
     }
 
     fn remove_archive_zip_entries(&mut self, archive_path: &str) {
+        let mut removed_bytes = 0;
         if let Some(single) = self.archives.get_mut(archive_path) {
             for data in single.zip_entries.drain().map(|(_, data)| data) {
-                self.current_zip_bytes = self.current_zip_bytes.saturating_sub(data.len());
+                removed_bytes += data.len();
             }
         }
-        self.global_zip_lru.retain(|(path, _)| path != archive_path);
+        let mut lru = self.lru.lock().unwrap();
+        lru.current_zip_bytes = lru.current_zip_bytes.saturating_sub(removed_bytes);
+        lru.global_zip_lru.retain(|(path, _)| path != archive_path);
     }
 
     fn evict_idle_archives(&mut self, keep_path: &str) {
         while self.archives.len() > self.max_open_archives {
-            let Some(old_archive) = self.archive_lru.pop_front() else {
-                break;
+            let old_archive = {
+                let mut lru = self.lru.lock().unwrap();
+                let Some(front) = lru.archive_lru.pop_front() else {
+                    break;
+                };
+                if front == keep_path {
+                    lru.archive_lru.push_back(front);
+                    continue;
+                }
+                front
             };
-            if old_archive == keep_path {
-                self.archive_lru.push_back(old_archive);
-                continue;
-            }
             self.remove_archive_zip_entries(&old_archive);
             self.archives.remove(&old_archive);
         }
     }
 
     fn evict_until_within_budget(&mut self, incoming_bytes: usize) {
-        while self.current_zip_bytes + incoming_bytes > self.global_zip_capacity_bytes {
-            let Some((old_archive, old_entry)) = self.global_zip_lru.pop_front() else {
-                break;
+        loop {
+            let (old_archive, old_entry) = {
+                let lru = self.lru.lock().unwrap();
+                if lru.current_zip_bytes + incoming_bytes <= self.global_zip_capacity_bytes {
+                    break;
+                }
+                let Some(entry) = lru.global_zip_lru.front().cloned() else {
+                    break;
+                };
+                entry
             };
+            
             let removed = self
                 .archives
                 .get_mut(&old_archive)
                 .and_then(|s| s.zip_entries.remove(&old_entry))
                 .map(|d| d.len())
                 .unwrap_or(0);
-            self.current_zip_bytes = self.current_zip_bytes.saturating_sub(removed);
+                
+            let mut lru = self.lru.lock().unwrap();
+            lru.global_zip_lru.pop_front();
+            lru.current_zip_bytes = lru.current_zip_bytes.saturating_sub(removed);
         }
     }
 
@@ -163,7 +191,7 @@ impl ArchiveCache {
     }
 
     pub(crate) fn get_zip_entry(
-        &mut self,
+        &self,
         archive_path: &str,
         entry_name: &str,
     ) -> Option<SharedEntryBytes> {
@@ -183,10 +211,10 @@ impl ArchiveCache {
         entry_name: &str,
         data: impl Into<SharedEntryBytes>,
     ) {
-        let Some(single) = self.archives.get(archive_path) else {
+        if !self.archives.contains_key(archive_path) {
             return;
-        };
-        if single.zip_entries.contains_key(entry_name) {
+        }
+        if self.archives.get(archive_path).unwrap().zip_entries.contains_key(entry_name) {
             self.touch_zip_entry(archive_path, entry_name);
             return;
         }
@@ -194,10 +222,16 @@ impl ArchiveCache {
         let data = data.into();
         self.evict_until_within_budget(data.len());
         if let Some(single) = self.archives.get_mut(archive_path) {
-            self.current_zip_bytes += data.len();
-            single.zip_entries.insert(entry_name.to_string(), data);
-            self.touch_zip_entry(archive_path, entry_name);
+            let mut lru = self.lru.lock().unwrap();
+            if let Some(old) = single
+                .zip_entries
+                .insert(entry_name.to_string(), data.clone())
+            {
+                lru.current_zip_bytes = lru.current_zip_bytes.saturating_sub(old.len());
+            }
+            lru.current_zip_bytes = lru.current_zip_bytes.saturating_add(data.len());
         }
+        self.touch_zip_entry(archive_path, entry_name);
     }
 
     #[cfg(test)]
@@ -220,7 +254,7 @@ impl ArchiveCache {
 
     #[cfg(test)]
     pub(crate) fn current_zip_bytes(&self) -> usize {
-        self.current_zip_bytes
+        self.lru.lock().unwrap().current_zip_bytes
     }
 
     #[cfg(test)]
