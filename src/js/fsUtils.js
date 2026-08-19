@@ -77,6 +77,14 @@ export const FsUtils = {
     return `${base}/archive/${encoded}/${encodeURIComponent(entryName)}`;
   },
 
+  buildNativeIconSrc(path, extKey) {
+    const encodedPath = _base64Encode(path || '');
+    const encodedExt = _base64Encode(extKey || '');
+    const isWindows = navigator.userAgent.includes('Windows');
+    const base = isWindows ? 'http://quivit.localhost' : 'quivit://localhost';
+    return `${base}/icon/${encodedPath}/${encodedExt}`;
+  },
+
   async buildArchiveEntrySrc(archivePath, entryName) {
     if (this.isIco(entryName) && window.__TAURI__) {
       try {

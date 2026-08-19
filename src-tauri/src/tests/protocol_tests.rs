@@ -1,4 +1,6 @@
-use super::{entry_response, guess_mime, parse_archive_url, parse_byte_range, ByteRange};
+use super::{
+    entry_response, guess_mime, parse_archive_url, parse_byte_range, parse_icon_url, ByteRange,
+};
 
 #[test]
 fn guess_mime_matches_known_image_extensions_case_insensitively() {
@@ -26,6 +28,27 @@ fn parse_archive_url_rejects_malformed_urls() {
     assert!(parse_archive_url("quivit://localhost/not-archive/path").is_err());
     assert!(parse_archive_url("quivit://localhost/archive/only-path").is_err());
     assert!(parse_archive_url("quivit://localhost/archive/not-base64/page.jpg").is_err());
+}
+
+#[test]
+fn parse_icon_url_decodes_path_and_extension_key() {
+    let path = "E:\\Comics\\Issue 01.cbz";
+    let ext_key = "cbz";
+    let encoded_path = crate::utils::base64_encode(path.as_bytes());
+    let encoded_ext = crate::utils::base64_encode(ext_key.as_bytes());
+    let url = format!("http://quivit.localhost/icon/{encoded_path}/{encoded_ext}");
+
+    let (parsed_path, parsed_ext) = parse_icon_url(&url).expect("parse icon URL");
+
+    assert_eq!(parsed_path, path);
+    assert_eq!(parsed_ext, ext_key);
+}
+
+#[test]
+fn parse_icon_url_rejects_malformed_urls() {
+    assert!(parse_icon_url("quivit://localhost/not-icon/path").is_err());
+    assert!(parse_icon_url("quivit://localhost/icon/only-path").is_err());
+    assert!(parse_icon_url("quivit://localhost/icon/not-base64/Y2J6").is_err());
 }
 
 #[test]

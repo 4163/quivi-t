@@ -19,6 +19,34 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             .and_then(|value| value.to_str().ok())
             .map(str::to_string);
 
+        if url.contains("/icon/") {
+            let (path, ext_key) = match parse_icon_url(&url) {
+                Ok(parts) => parts,
+                Err(message) => {
+                    let response = Response::builder()
+                        .status(400)
+                        .body(message.into_bytes())
+                        .unwrap();
+                    responder.respond(response);
+                    return;
+                }
+            };
+
+            tauri::async_runtime::spawn_blocking(move || {
+                let response = match crate::platform::icons::get_cached_native_icon_png(
+                    &path, &ext_key,
+                ) {
+                    Ok(Some(bytes)) => png_response(bytes),
+                    _ => Response::builder()
+                        .status(404)
+                        .body(b"Icon not found".to_vec())
+                        .unwrap(),
+                };
+                responder.respond(response);
+            });
+            return;
+        }
+
         let (archive_path, entry_name) = match parse_archive_url(&url) {
             Ok(parts) => parts,
             Err(message) => {
@@ -43,7 +71,7 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             return;
         }
 
-        std::thread::spawn(move || {
+        tauri::async_runtime::spawn_blocking(move || {
             let entry_data = app_handle
                 .state::<Mutex<ArchiveCache>>()
                 .lock()
@@ -63,6 +91,22 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             }
         });
     })
+}
+
+fn parse_icon_url(url: &str) -> Result<(String, String), String> {
+    let Some((_, icon_path)) = url.split_once("/icon/") else {
+        return Err(format!("Invalid quivit icon URL: {url}"));
+    };
+
+    let Some((path_encoded, ext_encoded)) = icon_path.split_once('/') else {
+        return Err("Missing icon path or extension key".to_string());
+    };
+
+    let path = crate::utils::base64_decode(path_encoded)
+        .ok_or_else(|| "Invalid base64 icon path".to_string())?;
+    let ext_key = crate::utils::base64_decode(ext_encoded)
+        .ok_or_else(|| "Invalid base64 icon extension key".to_string())?;
+    Ok((path, ext_key))
 }
 
 fn parse_archive_url(url: &str) -> Result<(String, String), String> {
@@ -93,6 +137,16 @@ fn try_cached_entry_response<R: tauri::Runtime>(
         .ok()
         .flatten()?;
     Some(entry_response(entry_name, data.to_vec(), range_header))
+}
+
+fn png_response(data: Vec<u8>) -> Response<Vec<u8>> {
+    Response::builder()
+        .status(200)
+        .header("Content-Type", "image/png")
+        .header("Content-Length", data.len().to_string())
+        .header("Access-Control-Allow-Origin", "*")
+        .body(data)
+        .unwrap()
 }
 
 fn entry_response(

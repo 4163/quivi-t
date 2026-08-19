@@ -29,7 +29,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 #[cfg(windows)]
-static NATIVE_ICON_CACHE: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+static NATIVE_ICON_CACHE: Mutex<Option<HashMap<String, Vec<u8>>>> = Mutex::new(None);
 
 #[cfg(windows)]
 struct ScopedHicon(HICON);
@@ -112,6 +112,21 @@ pub fn warmup() {
 }
 
 pub fn get_cached_native_icon(path: &str, ext_key: &str) -> Result<Option<String>, String> {
+    let Some(png_bytes) = get_cached_native_icon_png(path, ext_key)? else {
+        return Ok(None);
+    };
+
+    #[cfg(windows)]
+    {
+        let base64_str = BASE64_STANDARD.encode(png_bytes);
+        return Ok(Some(format!("data:image/png;base64,{}", base64_str)));
+    }
+
+    #[cfg(not(windows))]
+    return Ok(None);
+}
+
+pub fn get_cached_native_icon_png(path: &str, ext_key: &str) -> Result<Option<Vec<u8>>, String> {
     #[cfg(not(windows))]
     return Ok(None);
 
@@ -121,8 +136,8 @@ pub fn get_cached_native_icon(path: &str, ext_key: &str) -> Result<Option<String
         {
             let mut cache_guard = NATIVE_ICON_CACHE.lock().map_err(|e| e.to_string())?;
             if let Some(cache) = cache_guard.as_mut() {
-                if let Some(data_uri) = cache.get(&lower_ext) {
-                    return Ok(Some(data_uri.clone()));
+                if let Some(png_bytes) = cache.get(&lower_ext) {
+                    return Ok(Some(png_bytes.clone()));
                 }
             } else {
                 *cache_guard = Some(HashMap::new());
@@ -299,17 +314,16 @@ pub fn get_cached_native_icon(path: &str, ext_key: &str) -> Result<Option<String
         )
         .map_err(|e| e.to_string())?;
 
-        let base64_str = BASE64_STANDARD.encode(buf.into_inner());
-        let data_uri = format!("data:image/png;base64,{}", base64_str);
+        let png_bytes = buf.into_inner();
 
         // Store in cache
         {
             let mut cache_guard = NATIVE_ICON_CACHE.lock().map_err(|e| e.to_string())?;
             if let Some(cache) = cache_guard.as_mut() {
-                cache.insert(lower_ext, data_uri.clone());
+                cache.insert(lower_ext, png_bytes.clone());
             }
         }
 
-        Ok(Some(data_uri))
+        Ok(Some(png_bytes))
     }
 }
