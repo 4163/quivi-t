@@ -480,3 +480,10 @@ After each slice, the active agent MUST follow this handoff protocol:
   - `src-tauri/src/platform/icons.rs` (`get_cached_native_icon`, `warmup`, `ScopedHicon`, `ScopedHgdiobj`, etc.)
 - **Invariant Rules Upheld:** "One owner per concern." Windows OS capabilities and GDI interactions are now exclusively in `platform/`. "Performance first" and "Zero-Flicker Lifecycle": Added frontend `localStorage` caching to eliminate IPC boundaries and guarantee 0ms instant renders for all previously encountered icons, bypassing OS shell extension bottlenecks entirely.
 - **Deferred Follow-ups:** Ready for Slice 8 (Watchers consolidation & pure bootstrap slimming).
+
+### Slice 8: Watchers consolidation & pure bootstrap slimming (Completed)
+- **Architectural Choices:** Extracted the inline `notify` configuration file watcher from `lib.rs` into `commands/watchers.rs` alongside the existing `watch_directory` logic. Implemented `spawn_config_file_watcher` to encapsulate the setup of the file watcher, managing the watcher instance inside `WatcherState` to prevent orphaned background threads. Streamlined `lib.rs` to solely handle Tauri plugins, state management, protocol registration, and window construction, completely isolating background thread work. Updated `Cargo.toml` with accurate project descriptions and authorship.
+- **New Modules/Helpers:**
+  - `src-tauri/src/commands/watchers.rs` (`spawn_config_file_watcher`)
+- **Invariant Rules Upheld:** "One owner per concern." All directory and configuration watching logic is centralized in `watchers.rs`. `lib.rs` restored to its role as a pure application bootstrap module.
+- **Deferred Follow-ups:** The Rust backend decoupling plan is now fully completed! All slices successfully implemented.
