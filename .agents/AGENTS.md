@@ -4,18 +4,18 @@ These rules apply to the AI coding assistant.
 ## Agent Behavior
 - Keep responses concise and focused on the task.
 - Follow existing code style and formatting for each directory and its associated files.
-- NEVER (unless instructed otherwise) execute git commit commands or automate git commits. The user handles all commits manually or through the push pipeline.
+- NEVER (unless instructed otherwise) execute git commit commands or automate git commits. The user handles all commits manually or through the commit pipeline.
 
 ## Code Guidelines
-- **Self-documenting code.** Write code that reads clearly on its own — use descriptive names and flat control flow (early returns over multi-layer nesting). Keep comments minimal and concise and reserve them for *why*, not *what*. The only exception is documenting complex module invariants or system rules (e.g., `// Architectural Standard:` or `// ── Persistence policy ──`), which should be thoroughly documented in-line to maintain structural consistency.
+- **Self-documenting code.** Write code that reads clearly on its own. Use descriptive names and flat control flow (early returns over multi-layer nesting). Keep comments minimal and concise and reserve them for *why*, not *what*. The only exception is documenting complex module invariants or system rules (for example, `// Architectural Standard:` or `// Persistence policy:`), which should be documented inline to maintain structural consistency.
 - **Performance first.** Avoid dynamic evaluations and allocations in hot paths. Cache aggressively.
   *Practical Examples for Agents:*
   1. **Hot Path Optimization:** Pre-parse config values into `O(1)` lookup structures (e.g. JS `Set` or `Map`) on configuration load instead of dynamically mapping strings inside `requestAnimationFrame`, `mousemove`, or `scroll` handlers.
   2. **Zero-Flicker Lifecycle:** Inject tiny Base64-encoded cover thumbnails directly into `localStorage` cross-window state to eliminate IPC and protocol (`asset://`) fetch latency during window instantiation.
   3. **Thread Concurrency:** Offload heavy CPU bound tasks (e.g., LZMA2/7Z extraction via `sevenz-rust`) strictly to non-blocking background threads (`tokio::spawn` or `std::thread`), leaving the primary Tauri IPC and JS UI threads exclusively for layout and rendering.
-  4. **Aggressive I/O Caching:** Utilize header-only file reads and maintain in-memory LRU caches (`lru` crate) to achieve instantaneous virtual archive directory traversal.
-  5. **DOM & Asset Virtualization:** Recycle a bounded row pool on scroll for list views. NEVER decode original full-size image assets to create thumbnail views — leverage system/shell thumbnails (`SHGetFileInfoW`) or pre-scaled caches where applicable.
-- **Measure twice, cut once.** Prefer small, deliberate changes over broad refactors. Before writing a new function, search the existing codebase for one that already does the job — reuse it or extend it rather than creating a duplicate. If a change would duplicate logic, extract it into a shared helper instead.
+  4. **Aggressive I/O Caching:** Use header-only file reads and maintain in-memory LRU caches (`lru` crate) for fast virtual archive directory traversal.
+  5. **DOM & Asset Virtualization:** Recycle a bounded row pool on scroll for list views. NEVER decode original full-size image assets to create thumbnail views. Use system/shell thumbnails (`SHGetFileInfoW`) or pre-scaled caches where applicable.
+- **Measure twice, cut once.** Prefer small, deliberate changes over broad refactors. Before writing a new function, search the existing codebase for one that already does the job. Reuse it or extend it rather than creating a duplicate. If a change would duplicate logic, extract it into a shared helper instead.
 - **Work in logical slices.** Prioritize small, precise code changes rather than big blocks to prevent tooling and scope failures, especially during large refactors. Be surgical!
 - **YAGNI.** Do not add abstractions, features, or complexity without a clear need.
 
@@ -42,12 +42,12 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 ### CSS Source of Truth
 - Shared tokens, resets, and cross-page rules live in `global.css`. Each HTML page has its own sheet for layout and components.
 - Design tokens are CSS custom properties on `:root` in `global.css`. Page sheets consume them; they do not redeclare the token set.
-- **CSS is the visual source of truth.** JS must not set intrinsic visual values (`width`, `height`, `display`, `cursor`, `opacity`, `color`, `image-rendering`, …) via inline `style` or presentational HTML attributes.
+- **CSS is the visual source of truth.** JS must not set intrinsic visual values (`width`, `height`, `display`, `cursor`, `opacity`, `color`, `image-rendering`, etc.) via inline `style` or presentational HTML attributes.
 - Allowed JS writes: CSS custom properties on `:root` or a host node, viewport / virtualization `transform` matrices, and `classList` / `data-*` state.
 - Class and custom-property assignment follows the 3-tier scope model (keep style invalidation local):
-  1. **Global** — `html` / `body` for window-wide modes. Direct rules only; never `body.foo *`.
-  2. **Component** — host node for coordinated child state.
-  3. **Leaf** — the target element.
+  1. **Global.** `html` / `body` for window-wide modes. Direct rules only; never `body.foo *`.
+  2. **Component.** Host node for coordinated child state.
+  3. **Leaf.** The target element.
 
 ### JS Module Ownership
 - The state machine owns app state and has no DOM. UI modules subscribe to it and render themselves.
