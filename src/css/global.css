@@ -171,16 +171,20 @@ button {
   font-size: inherit;
 }
 
-input {
+input[type="checkbox"],
+input[type="radio"] {
   width: var(--fs-13);
   height: var(--fs-13);
   cursor: pointer;
 }
 
+input[type="text"],
+input[type="number"] {
+  cursor: text;
+}
+
 /* Utilities */
 .hidden { display: none !important; }
-
-/* Scrollbar styling (Webkit) */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }

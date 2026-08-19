@@ -84,6 +84,7 @@ body > * {
   gap: 8px;
   cursor: pointer;
   margin-bottom: 8px;
+  width: fit-content;
 }
 
 .theme-group {
