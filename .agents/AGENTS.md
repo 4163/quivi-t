@@ -7,7 +7,7 @@ These rules apply to the AI coding assistant.
 - NEVER (unless instructed otherwise) execute git commit commands or automate git commits. The user handles all commits manually or through the commit pipeline.
 
 ## Code Guidelines
-- **Self-documenting code.** Write code that reads clearly on its own. Use descriptive names and flat control flow (early returns over multi-layer nesting). Keep comments minimal and concise and reserve them for *why*, not *what*. The only exception is documenting complex module invariants or system rules (for example, `// Architectural Standard:` or `// Persistence policy:`), which should be documented inline to maintain structural consistency.
+- **Self-documenting code.** Write code that reads clearly on its own. Use descriptive names and flat control flow (early returns over multi-layer nesting). Keep comments minimal and concise. Reserve them for *why*, non-obvious constraints, and maintained module invariants. A short local heading is fine when a file needs to explain an ownership, lifecycle, or persistence rule. Do not add commentary that merely narrates the code.
 - **Performance first.** Avoid dynamic evaluations and allocations in hot paths. Cache aggressively.
   *Practical Examples for Agents:*
   1. **Hot Path Optimization:** Pre-parse config values into `O(1)` lookup structures (e.g. JS `Set` or `Map`) on configuration load instead of dynamically mapping strings inside `requestAnimationFrame`, `mousemove`, or `scroll` handlers.

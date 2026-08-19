@@ -10,10 +10,13 @@ Edit text to remove AI patterns and add human voice.
 
 ## Process
 
-1. Scan for the patterns below.
-2. Rewrite. Preserve meaning, match intended tone.
-3. Add soul (see next section).
-4. Self-audit: "What makes this obviously AI generated?" Fix remaining tells.
+1. Read the text itself. For files, inspect the relevant file or changed section directly before editing.
+2. Use pattern scans as support, not as the main review. Regex catches obvious tells; it cannot judge whether a comment, UI string, or paragraph sounds stiff.
+3. Rewrite. Preserve meaning, match intended tone.
+4. Add soul (see next section).
+5. Self-audit: "What makes this obviously AI generated?" Fix remaining tells.
+
+For repository work, prefer a file-by-file pass over docs, prompts, comments, and user-facing strings. Keep code behavior, identifiers, serialized values, and test assertions intact unless the requested cleanup explicitly includes them.
 
 ## Adding soul
 
