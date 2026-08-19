@@ -5,9 +5,9 @@ Slice 5 of the Rust backend decoupling plan is implemented in the working tree (
 ## Changes Made
 
 - **Extracted `protocol.rs`:**
-  - [`protocol.rs`](file:///E:/Projects/QuiviT/src-tauri/src/protocol.rs) — `register_quivit_protocol` and `guess_mime`. Handles URI path parsing, Base64 decoding of archive paths, URL-decoding of entry names, MIME type guessing, and async background thread dispatch for HTTP response creation.
+  - [`protocol.rs`](file:///E:/Projects/QuiviT/src-tauri/src/protocol.rs): `register_quivit_protocol` and `guess_mime`. Handles URI path parsing, Base64 decoding of archive paths, URL-decoding of entry names, MIME type guessing, and async background thread dispatch for HTTP response creation.
 - **Slimmed `lib.rs`:**
-  - [`lib.rs`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs) — Dropped from 292 lines to 206 lines (-86 lines). Removed inline protocol scheme handler block, unused `tauri::http::Response` import, and `guess_mime`. Replaced with a single builder chaining call `crate::protocol::register_quivit_protocol(builder)`.
+  - [`lib.rs`](file:///E:/Projects/QuiviT/src-tauri/src/lib.rs): Dropped from 292 lines to 206 lines (-86 lines). Removed inline protocol scheme handler block, unused `tauri::http::Response` import, and `guess_mime`. Replaced with a single builder chaining call `crate::protocol::register_quivit_protocol(builder)`.
 - **Encapsulated Cache Delegation:**
   - `protocol.rs` cleanly interacts with `ArchiveCache` via the facade method `read_entry_bytes(&archive_path, &entry_name)` without inspecting or reaching into inner cache fields.
 

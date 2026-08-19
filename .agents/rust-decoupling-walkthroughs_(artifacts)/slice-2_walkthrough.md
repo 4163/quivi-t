@@ -1,6 +1,6 @@
 # Walkthrough: Rust Decoupling Slice 2 Completed
 
-The second slice of the Rust Decoupling plan — **Zero-Allocation Formats & Platform Attributes Layer** — is now successfully implemented and passing all tests!
+The second slice of the Rust Decoupling plan: **Zero-Allocation Formats & Platform Attributes Layer**: is now successfully implemented and passing all tests!
 
 ## Changes Made
 
@@ -22,4 +22,4 @@ The second slice of the Rust Decoupling plan — **Zero-Allocation Formats & Pla
 - ✔️ `cargo check` passes with 0 warnings in the main build.
 - ✔️ `cargo test` passes successfully. All 21 unit tests (including the new `format_tests` and the stranded `archive_tests` from Slice 1) are executing perfectly.
 
-You can now review the file changes and, when ready, we can move forward with planning **Slice 3 — Window Service & Tauri Commands Decoupling**!
+You can now review the file changes and, when ready, we can move forward with planning **Slice 3: Window Service & Tauri Commands Decoupling**!
