@@ -3,6 +3,13 @@ use std::sync::Mutex;
 use crate::archives::ArchiveCache;
 use crate::ico::ico_frames_from_bytes;
 use crate::models::ArchiveReadResult;
+use std::fs;
+
+#[tauri::command(async)]
+pub fn get_ico_frames(path: String) -> Result<String, String> {
+    let data = fs::read(&path).map_err(|e| format!("Cannot read ICO file: {e}"))?;
+    ico_frames_from_bytes(&data)
+}
 
 #[tauri::command(async)]
 pub fn list_archive(

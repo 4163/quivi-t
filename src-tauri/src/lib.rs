@@ -15,7 +15,6 @@ use tauri::{Emitter, Manager};
 use archives::*;
 use commands::*;
 use config::*;
-use ico::*;
 use windows::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

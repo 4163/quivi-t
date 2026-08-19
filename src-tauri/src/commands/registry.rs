@@ -5,6 +5,11 @@ use crate::models::FormatStatus;
 use winreg::{enums::*, RegKey};
 
 #[tauri::command]
+pub fn get_native_icon(ext: String) -> Result<Option<String>, String> {
+    crate::platform::icons::get_cached_native_icon(&ext)
+}
+
+#[tauri::command]
 pub fn get_format_status() -> Vec<FormatStatus> {
     let mut statuses = Vec::new();
 
