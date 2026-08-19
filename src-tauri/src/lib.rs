@@ -168,31 +168,6 @@ pub fn run() {
         });
 }
 
-#[tauri::command]
-fn open_in_explorer(path: &str) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn get_default_dir() -> String {
-    #[cfg(windows)]
-    {
-        if let Ok(profile) = std::env::var("USERPROFILE") {
-            return format!("{}\\Pictures", profile);
-        }
-    }
-    String::new()
-}
-
-
-
 #[cfg(test)]
 #[path = "tests/archive_tests.rs"]
 mod archive_tests;
