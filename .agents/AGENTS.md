@@ -5,6 +5,7 @@ These rules apply to the AI coding assistant.
 - Keep responses concise and focused on the task.
 - Follow existing code style and formatting for each directory and its associated files.
 - For writing work, read `.agents/skills/unslop/SKILL.md` and follow it even if the harness does not auto-load always-active skills. This applies to docs, prompts, comments, and user-facing copy.
+- When completing an implementation slice, read `.agents/skills/verify-implementation/SKILL.md` and follow its workflow. This applies even if the harness does not auto-load always-active skills.
 - NEVER (unless instructed otherwise) execute git commit commands or automate git commits. The user handles all commits manually or through the commit pipeline.
 
 ## Code Guidelines
@@ -19,6 +20,7 @@ These rules apply to the AI coding assistant.
 - **Measure twice, cut once.** Prefer small, deliberate changes over broad refactors. Before writing a new function, search the existing codebase for one that already does the job. Reuse it or extend it rather than creating a duplicate. If a change would duplicate logic, extract it into a shared helper instead.
 - **Work in logical slices.** Prioritize small, precise code changes rather than big blocks to prevent tooling and scope failures, especially during large refactors. Be surgical!
 - **YAGNI.** Do not add abstractions, features, or complexity without a clear need.
+- **Blast radius.** When modifying core cross-cutting surfaces (IPC, configs, cross-window state, protocol URLs, or archives), stop and prove you haven't broken downstream consumers. Do not rely on speculation or writeups. Use the `.agents/skills/blast-radius/SKILL.md` workflow to execute actual checks and confirm safety.
 
 ## Architecture Rules
 

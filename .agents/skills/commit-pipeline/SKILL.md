@@ -2,12 +2,8 @@
 name: commit-pipeline
 description: Commit and push the current working tree through the repository commit pipeline.
 argument-hint: "<push, push-x, push-a, or commit context>"
+disable-model-invocation: true
 ---
-
-User note for commit pipeline:
-```
-use the commit-pipeline skill and follow its workflow.
-```
 
 # Commit pipeline
 
@@ -25,11 +21,12 @@ To generate accurate commits and commit messages, understand the recent changes 
 
 1. Review the working tree with `git status` and `git diff`.
 2. Group changes into logical commits. Use one commit per feature, fix, refactor, documentation update, build change, or other cohesive change. Keep related changes together, even if they span multiple files. Split commits only when the changes are independent and could reasonably be reviewed or reverted separately.
-3. Stage only the files for the current commit with `git add`, then verify the staged changes with `git diff --cached`.
-4. Familiarize with the project structure and related files when the diff is not minimal or straightforward.
-5. Use the `session-recovery` skill only for session context that is strictly relevant to the staged changes. Check `.agents/skills/session-recovery/references/session-index.md` first, reject stale or unrelated entries, and read full transcripts only when the index, date, changed files, and current git state match.
-6. Commit the current logical group with `git commit -m`, following the message rules below. Repeat until the working tree is clean.
-7. Push all commits with `git push`.
+3. Verify `.gitignore` coverage before staging. Do not track generated runtime config, portable config, build output, personal directory-sort metadata, personal user paths or file names, or any sensitive data. If portable mode or test harnesses writes personal paths/data, ensure those files are ignored.
+4. Stage only the files for the current commit with `git add`, then verify the staged changes with `git diff --cached`.
+5. Familiarize with the project structure and related files when the diff is not minimal or straightforward.
+6. Use the `session-recovery` skill only for session context that is strictly relevant to the staged changes. Check `.agents/session-index.md` first, reject stale or unrelated entries, and read full transcripts only when the index, date, changed files, and current git state match.
+7. Commit the current logical group with `git commit -m`, following the message rules below. Repeat until the working tree is clean.
+8. Push all commits with `git push`.
 
 ## Planned slice commit rules
 

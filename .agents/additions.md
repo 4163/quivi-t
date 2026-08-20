@@ -67,12 +67,19 @@
 - **Contributing Section:** Add a contributing section to the github page, for general contributions to the project, but more on documenting how new languages should be created for the language settings.
 
 ### Rust Decoupling (Refactoring)
-- Planned. Backend is still a crate-root monolith.
+- Planned/Ongoing. Backend modules are currently being split out.
 - Implement `.agents/rust-decoupling-plan.md`.
 
-### Instrumentation System: Decoupled Performance Benchmarking (AHK + Python)
-- After all the HTML/CSS/JS and Rust refactors are done, implement a decoupled backend instrumentation system to debug and test performance benchmarks on archive/file back-end and front-end processing.
-- Connected driving system via AutoHotkey (.ahk) and Python, where the JS and Rust files automatically log data in ms about processing timings and excessive function calls (hot spots / call counts) for benchmark analysis.
+### Instrumentation System: Test Harness
+- Main job after the HTML/CSS/JS and Rust refactors: rewrite and decouple functions that have no honest test seam, then write a proper test harness covering a decent portion of QuiviT's functions.
+- For each behavior worth keeping, write a targeted cargo test (or extend an existing one) that exercises the real code path and fails loud if the behavior is wrong.
+- Focus on: functions, commands, and public APIs; config schema (defaults, key renames, type shifts); archive entry parsing, sort order, and cache-key logic; state machine transitions and callback contracts.
+- Do not write tests for pure presentation (CSS, layout, visual rendering). Those stay on the manual verify checklist.
+- Place new tests alongside existing test infrastructure (`src-tauri/src/tests/`, in-tree `#[path]` tests). If a seam has no home yet, discuss placement before inventing a new tree. Throwaway scripts are fine for fixture generation, environment probes, or one-off coverage sweeps. They are not the harness.
+- Run `cargo test` in `src-tauri`. Fix the implementation or the test. Do not proceed with failing tests.
+- **Skill allocation.** The harness work belongs on the next branch inside `diagnose`. One explicit skill. Same lock style as `update-architecture-state`.
+- **Scope boundary.** `blast-radius` stays "prove this change did not break a consumer." It does not build the harness.
+- **Deferred, after the harness exists.** Do not start Python instrumentation in the same slice as the rewrite. Once the cargo tests cover a decent portion of the app, add JS and Rust timing and call-count logs (processing time in ms, hot spots / call counts). Python then drives the benches and collects the output. `diagnose` still owns that later slice. Trigger on "it's slow," "it's flaky," or "measure X."
 
 ## Post-Release Backlog (Future Considerations)
 
