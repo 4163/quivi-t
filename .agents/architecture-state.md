@@ -65,7 +65,8 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - Options/metadata open hidden, measure, `fit_*_window`, then show.
 
 **Rust:**
-- `lib.rs` & `main.rs`: bootstrap, config watcher, main-window build, and in-tree archive tests.
+- `lib.rs` & `main.rs`: bootstrap, config watcher, and main-window build.
+- `tests/`: in-tree testing for archives, config, formats, and protocol.
 - `config.rs`: `AppConfig` / persistence / portable / pending promotion.
 - `commands/`: Tauri command surface (directory, archives, watcher, associations, shell).
 - `archives/` & `formats.rs`: archive readers + `ArchiveCache` and format registry.

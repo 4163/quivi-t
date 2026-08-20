@@ -27,6 +27,8 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Configuration**: Choose roaming user config or portable config stored next to the executable.
 - **Custom Theming**: Inject and live-reload custom CSS rules, with native light/dark mode support.
 - **ICO Spritesheets**: Render multi-frame `.ico` files as generated spritesheets.
+- **Archive Resilience**: Skip corrupted or unsupported entries without freezing. Legacy CJK filename encodings (like Shift-JIS) are automatically decoded for ZIP and TAR archives.
+- **Performance**: Fast O(1) virtualized rendering handles folders and archives with thousands of items instantly. Native shell icons are cached to eliminate UI pop-in.
 
 ## Shortcuts & Controls
 
@@ -34,35 +36,43 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 
 | Action | Default Shortcut(s) |
 |---|---|
+| **Navigation** | |
+| Next item | `Shift+D` / `Shift+ArrowRight` / `Shift+S` / `Shift+ArrowDown` |
+| Previous item | `Shift+A` / `Shift+ArrowLeft` / `Shift+W` / `Shift+ArrowUp` |
+| History back | `Alt+A` / `Alt+W` / `Alt+ArrowLeft` / `Alt+ArrowUp` / `MouseBack` |
+| History forward | `Alt+D` / `Alt+S` / `Alt+ArrowRight` / `Alt+ArrowDown` / `MouseForward` |
+| Parent directory | `Backspace` |
+| Open next / previous directory | `Ctrl+X` / `Ctrl+Z` |
+| **View** | |
+| Fit none | `R` / `DoubleClick` |
+| Fit width / height | `Shift+Q` / `Shift+E` |
+| Fit window | `Shift+F` |
+| Fit width / height if larger | `Q` / `E` |
+| Fit window if larger | `F` |
+| Cycle scaling mode | `[` / `]` |
+| **Zoom** | |
+| Zoom in / out | `C` / `Z` |
+| Zoom in / out (Scroll) | `Ctrl+ScrollUp` / `Ctrl+ScrollDown` |
+| Zoom 100% | `X` |
+| **Pan** | |
+| Pan (Drag) | `MouseLeft` / `MouseMiddle` / `Space` |
+| Pan up / left / down / right | `W` / `A` / `S` / `D` / `ArrowUp` / `ArrowLeft` / `ArrowDown` / `ArrowRight` |
+| Pan up / down (Scroll) | `ScrollUp` / `ScrollDown` |
+| Pan left / right (Scroll) | `Shift+ScrollUp` / `Shift+ScrollDown` |
+| **Rotation** | |
+| Rotate counter-clockwise / clockwise | `G` / `H` |
+| Flip horizontal / vertical | `V` / `B` |
+| **Window & UI** | |
+| Options | `5` |
 | Toggle file list | `1` |
 | Toggle menu bar | `2` |
 | Toggle status bar | `3` |
 | Full screen | `4` / `Alt+Enter` |
 | Exit full screen (Hold) | `Escape` |
-| Options | `5` |
-| Refresh | `6` / `Ctrl+R` |
-| Parent directory | `Backspace` |
+| **Files & Folders** | |
 | Open directory... | `Ctrl+O` |
 | Open file/archive... | `Ctrl+Shift+O` |
-| Open next/previous directory | `Ctrl+X` / `Ctrl+Z` |
-| History back | `Alt+A` / `Alt+W` / `Alt+ArrowLeft` / `Alt+ArrowUp` / `MouseBack` |
-| History forward | `Alt+D` / `Alt+S` / `Alt+ArrowRight` / `Alt+ArrowDown` / `MouseForward` |
-| Next item | `Shift+D` / `Shift+ArrowRight` / `Shift+S` / `Shift+ArrowDown` |
-| Previous item | `Shift+A` / `Shift+ArrowLeft` / `Shift+W` / `Shift+ArrowUp` |
-| Zoom in / out | `C` / `Z` |
-| Zoom in / out (Scroll) | `Ctrl+ScrollUp` / `Ctrl+ScrollDown` |
-| Zoom 100% | `X` |
-| Fit width / height if larger | `Q` / `E` |
-| Pan (Drag) | `MouseLeft` / `MouseMiddle` / `Space` |
-| Pan (Up / Left / Down / Right) | `W` / `A` / `S` / `D` / `ArrowUp` / `ArrowLeft` / `ArrowDown` / `ArrowRight` |
-| Pan up / down | `ScrollUp` / `ScrollDown` |
-| Pan left / right | `Shift+ScrollUp` / `Shift+ScrollDown` |
-| Rotate counter-clockwise / clockwise | `G` / `H` |
-| Flip horizontal / vertical | `V` / `B` |
-| Fit none | `R` / `DoubleClick` |
-| Fit width / height | `T` / `Y` |
-| Auto fit | `F` |
-| Cycle scaling mode | `[` / `]` |
+| Refresh | `6` / `Ctrl+R` |
 
 ## Custom CSS
 
@@ -130,14 +140,13 @@ The following system defaults are used:
 - **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in Options → General → Panning.
 - **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge shows whether scroll zoom is latched or which bound modifier keys are currently held.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
-- **Default Sort:** `name` ascending. Per-directory preferences are cached for up to 100 directories, with the oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort` (`col`: `name`, `ext`, or `date`; `desc`: `false` = ascending, `true` = descending). Directories without a saved preference in `quivit_directory_sort.json` fall back to it.
-- **History Trail:** Menu bar **Folder → Back / Forward** (`Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only: opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
-- **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
 - **Secondary Windows:** Options and Archive Info windows size to their content and open centered over the main window.
+- **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
+- **History Trail:** Menu bar **Folder → Back / Forward** (`Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only: opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
 - **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor, or the Drives view at the root.
 - **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting on or off requires an app restart to take effect.
+- **Default Sort:** `name` ascending. Per-directory preferences are cached for up to 100 directories, with the oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort` (`col`: `name`, `ext`, or `date`; `desc`: `false` = ascending, `true` = descending). Directories without a saved preference in `quivit_directory_sort.json` fall back to it.
 - **Image Swap Buffer:** The DOM viewer keeps a decoded previous image visible while the next target image loads, then waits for a short 45ms settled-navigation window before committing the swap. This is an intentional WebView2/HTML `<img>` tradeoff: it slightly delays final activation during rapid navigation, but prevents visible blank-frame flicker that can occur when very large images are decoded, uploaded, or repainted by the browser.
-- **Archive Resilience:** Corrupted or inaccessible archives are reported without freezing the viewer, and navigation skips unsupported archive entries when they cannot be opened. Legacy ZIP filename encodings are decoded for regional archives, including Shift-JIS (CP932) and other CJK code pages.
 
 ### Configuration & Persistence
 
@@ -182,7 +191,18 @@ The frontend is split into a state machine, pure services, and single-owner UI m
 
 CSS follows the same split: `global.css` holds tokens and shared rules; `main.css`, `options.css`, and `metadata.css` are page-only.
 
-The Rust backend is still a small set of crate-root modules (`lib.rs`, `commands.rs`, `config.rs`, `archives.rs`, `ico.rs`, `utils.rs`, `models.rs`). Further backend splitting is planned, not landed.
+The Rust backend is split into domain-specific modules:
+
+- `lib.rs` & `main.rs`: Bootstrap, config watcher, and main-window build.
+- `config.rs`: `AppConfig`, persistence, portable mode, and pending promotion.
+- `commands/`: Tauri command surface (directory, archives, watcher, associations, shell).
+- `archives/` & `formats.rs`: Archive readers, `ArchiveCache`, and format registry.
+- `platform/` & `windows.rs`: OS-level integrations, dialogs, and window lifecycle.
+- `tests/`: In-tree testing for archives, config, formats, and protocol.
+- `protocol.rs`: `quivit://` and `asset://` handler logic.
+- `ico.rs`: ICO spritesheets.
+- `models.rs`: IPC structs and data models.
+- `utils.rs`: Base64 and encoding helpers.
 
 > **Design Principle:** New DOM belongs in the module that already owns that surface. New domain logic belongs in `core.js` or `services/`. Do not grow `main.js` back into a god file.
 
@@ -306,14 +326,19 @@ QuiviT/
 │  │  └─ default.json            # Tauri permissions for main/options/metadata windows
 │  ├─ icons/                     # Application icons
 │  ├─ src/
-│  │  ├─ archives.rs             # Archive extraction and caching
-│  │  ├─ commands.rs             # Tauri commands and directory watcher
-│  │  ├─ config.rs               # Configuration state, window sizes, window fit/center
+│  │  ├─ archives/               # Archive readers, caching, and extraction
+│  │  ├─ commands/               # Tauri command surface and watchers
+│  │  ├─ platform/               # OS-level integrations, dialogs, and shell icons
+│  │  ├─ tests/                  # In-tree tests (archives, formats, protocol, config)
+│  │  ├─ config.rs               # Configuration state, persistence, and portable mode
+│  │  ├─ formats.rs              # Supported format registry
 │  │  ├─ ico.rs                  # ICO frame extraction and spritesheet
-│  │  ├─ lib.rs                  # Module definitions, app entry, protocol, main window
+│  │  ├─ lib.rs                  # Bootstrap, config watcher, and main-window build
 │  │  ├─ main.rs                 # Native executable entry point
-│  │  ├─ models.rs               # Data structures and structs
-│  │  └─ utils.rs                # Supported formats and helpers
+│  │  ├─ models.rs               # IPC structs and data models
+│  │  ├─ protocol.rs             # quivit:// and asset:// handler logic
+│  │  ├─ utils.rs                # Base64 and encoding helpers
+│  │  └─ windows.rs              # Window lifecycle and size constants
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json
 ├─ matcha-latte.css              # Example theme (bundled with the release)
@@ -326,3 +351,4 @@ QuiviT/
 
 - Icons: [Flaticon (Cosplayer, Webp, Gif, Cbz, Cbr, Svg)](https://www.flaticon.com)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
+- Agent Skills: Adapted from [poteto - pstack](https://github.com/cursor/plugins/tree/main/pstack) and [mattpocock/skills](https://github.com/mattpocock/skills)
