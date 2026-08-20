@@ -59,13 +59,9 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 - Shared cross-window helpers (theme, preview, window fit) stay out of the state machine and out of feature UI files.
 - New frontend work extends this layering. Do not dump new DOM into bootstrap or new domain logic into a UI file.
 
-### Rust Encapsulation
-- The crate root is bootstrap: module declarations, plugin wiring, command registration. No new domain logic, protocol bodies, or test suites land there.
-- Config code is config: persistence, paths, portable mode, pending promotion. Window lifecycle and sizing do not grow there.
-- **Encapsulation over public field reach-in.** Callers use facade methods, not another module's internals.
-- **No `pub` churn for tests.** Keep private access via in-tree `#[path]` tests rather than widening visibility.
-- One concern per module. Folders appear only when a split creates siblings. Do not add a second copy of a helper that already exists.
-- Refactors keep IPC command names, JSON shapes, and custom-protocol URLs stable unless a change is a practical function or performance win.
-
-> [!NOTE]
-> Not strict, as Rust decoupling is currently being worked on.
+### Rust Module Ownership
+- The crate root is bootstrap: plugin wiring, command registration, main-window construction, config-watcher start. It does not grow archive, protocol, command, or test bodies.
+- Domain logic lives in `archives/` (readers + `ArchiveCache` facade), `formats.rs`, and `ico.rs`. Callers use facade methods, not another module's internals.
+- `commands/` is the Tauri IPC surface. Each command file owns one family (directory, archives, watchers, associations, shell) and adapts domain modules. It does not grow archive, window, or config internals.
+- Protocol, windows, platform, and config stay out of bootstrap and out of each other: `protocol.rs` owns `quivit://`, `windows.rs` owns window lifecycle and size constants, `platform/` owns OS integrations, `config.rs` is persistence only. `models.rs` is the IPC contract. Tests live under `tests/` via `#[path]`; do not widen visibility for tests.
+- New backend work extends this layering. Do not dump new domain into `lib.rs`, new window code into `config.rs`, or a second copy of a helper that already exists. Keep IPC command names, JSON shapes, and `quivit://` URLs stable unless the change is a practical function or performance win.

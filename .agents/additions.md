@@ -66,10 +66,6 @@
 ### Documentation & GitHub (Project Health)
 - **Contributing Section:** Add a contributing section to the github page, for general contributions to the project, but more on documenting how new languages should be created for the language settings.
 
-### Rust Decoupling (Refactoring)
-- Planned/Ongoing. Backend modules are currently being split out.
-- Implement `.agents/rust-decoupling-plan.md`.
-
 ### Instrumentation System: Test Harness
 - Main job after the HTML/CSS/JS and Rust refactors: rewrite and decouple functions that have no honest test seam, then write a proper test harness covering a decent portion of QuiviT's functions.
 - For each behavior worth keeping, write a targeted cargo test (or extend an existing one) that exercises the real code path and fails loud if the behavior is wrong.

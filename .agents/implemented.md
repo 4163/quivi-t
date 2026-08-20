@@ -11,6 +11,11 @@ Shipped, verified work (features / fixes / reports / optimizations).
 - **JS DOM decoupling (9 slices):** frontend split into `core.js` (no DOM), `services/` (pure), `shared/` (theme / preview / window fit), `viewer/`, `filepanel/`, `menubar/`, `main/`, and `options/`. UI modules self-subscribe to `Core.onStateChange`. `ACTION_REGISTRY` is the single `cmd-*` source. Statusbar and chrome each have one writer. File panel self-renders; `main.js` is bootstrap only.
 - **HTML-first (incremental):** static probes/skeletons where they help (e.g. `#file-list-sentinel`), CSS classes for presentation state (`.is-hidden-entry`, body resize/cursor classes), `--panel-w` / `--col-*-w` instead of inline widths. File-panel row pool stays JS-allocated and sized to the viewport: a hardcoded static skeleton is not required.
 
+### Rust Backend Decoupling (landed on `refactor/decoupling`)
+- **8 slices:** tests moved out of crate-root files, zero-allocation formats registry, window subsystem, archive-cache encapsulation, `quivit://` protocol extraction, commands split, native shell icons with GDI RAII, watchers plus bootstrap slimming.
+- **Module map:** `lib.rs` / `main.rs` are bootstrap. `archives/` owns readers and `ArchiveCache`. `commands/` is the Tauri surface. `protocol.rs` owns `quivit://`. `platform/` and `windows.rs` own OS integrations and window lifecycle. `config.rs` is persistence only. Tests live under `tests/` via `#[path]`.
+- **Contracts kept:** IPC command names, config file layout, and `quivit://` URLs. Callers use `ArchiveCache` facade methods instead of reaching into cache fields. Window size constants live in `windows.rs`; JS caps in `shared/windowFit.js` stay mirrored (`OPTIONS_MAX_INITIAL_W` 560, `META_MAX_INITIAL_H` 600).
+
 ### Tab Navigation Extraction
 - List and tab keyboard navigation live in `keyboardNav.js` (`makeContainerNavigable`, Home/End tab jump). File panel and favorites reuse it; Options tabs use the same helper. No inline `switch (e.key)` blocks remain in those UIs.
 
