@@ -61,7 +61,7 @@ export function createHistoryEntry(state) {
 }
 
 export function recordNavigation(previousEntry, nextState, options = {}) {
-  if (options.history === 'skip' || options.history === 'replace') return;
+  if (options.history === 'skip') return;
 
   const nextEntry = createHistoryEntry(nextState);
   if (!previousEntry || !nextEntry || sameContainer(previousEntry, nextEntry)) return;

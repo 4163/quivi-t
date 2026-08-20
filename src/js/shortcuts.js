@@ -2,144 +2,47 @@
  * shortcuts.js - keyboard shortcut matching and command dispatch.
  */
 
-function bindingMatches(binding, combo) {
-  return Array.isArray(binding) ? binding.includes(combo) : binding === combo;
-}
-
-const PASSIVE_ACTIONS = new Set(['cmd-exit-fullscreen-hold']);
-
+import { formatKeysCombo, findAction, rebuildBindMap, normalizeCombo, formatKeyName, normalizeList, isModifierKey } from './services/keyCombo.js';
+import { Statusbar } from './menubar/statusbar.js';
 export const activeKeys = new Set();
 export const activeButtons = new Set();
-
-const SPECIAL_KEY_MAP = {
-  backspace: 'Backspace',
-  delete: 'Delete',
-  insert: 'Insert',
-  home: 'Home',
-  end: 'End',
-  enter: 'Enter',
-  tab: 'Tab',
-  escape: 'Escape',
-  arrowup: 'ArrowUp',
-  arrowdown: 'ArrowDown',
-  arrowleft: 'ArrowLeft',
-  arrowright: 'ArrowRight',
-  pageup: 'PageUp',
-  pagedown: 'PageDown',
-  capslock: 'CapsLock',
-  scrolllock: 'ScrollLock',
-  numlock: 'NumLock',
-  printscreen: 'PrintScreen',
-  contextmenu: 'ContextMenu',
-  pause: 'Pause',
-  scrollup: 'ScrollUp',
-  scrolldown: 'ScrollDown',
-  doubleclick: 'DoubleClick',
-  doublerightclick: 'DoubleRightClick',
-  ' ': 'Space',
-  space: 'Space',
-  mouseleft: 'MouseLeft',
-  mousemiddle: 'MouseMiddle',
-  mouseright: 'MouseRight',
-  mouseback: 'MouseBack',
-  mouseforward: 'MouseForward',
-};
-
-// Native mouse button number → canonical keybind name. Single source of truth
-// shared by formatKeysCombo (dispatch), keybindUi (capture), and the viewer pan
-// key lookup — keep the three in sync by using this one table.
-export const MOUSE_BUTTON_NAMES = { 0: 'MouseLeft', 1: 'MouseMiddle', 2: 'MouseRight', 3: 'MouseBack', 4: 'MouseForward' };
-
-export function formatKeyName(key) {
-  const k = key.toLowerCase();
-  if (SPECIAL_KEY_MAP[k]) return SPECIAL_KEY_MAP[k];
-  if (k.length === 1) return k;
-  return k.charAt(0).toUpperCase() + k.slice(1);
-}
-
-export function normalizeCombo(combo) {
-  if (typeof combo !== 'string') return combo;
-  return combo.split('+').map(formatKeyName).join('+');
-}
-
-export function formatKeysCombo(keysSet, buttonsSet, scrollDir) {
-  const combo = [];
-  const lowerKeys = Array.from(keysSet).map(k => k.toLowerCase());
-  
-  if (lowerKeys.includes('control')) combo.push('Ctrl');
-  if (lowerKeys.includes('alt')) combo.push('Alt');
-  if (lowerKeys.includes('shift')) combo.push('Shift');
-
-  const modifiers = ['control', 'alt', 'shift', 'meta'];
-  const others = [];
-
-  for (const k of lowerKeys) {
-    if (!modifiers.includes(k)) {
-      others.push(k === ' ' ? 'Space' : formatKeyName(k));
-    }
-  }
-
-  for (const b of buttonsSet) {
-    others.push(MOUSE_BUTTON_NAMES[b] || `Mouse${b}`);
-  }
-
-  others.sort();
-  if (scrollDir) others.push(scrollDir);
-
-  return combo.concat(others).join('+');
-}
-
-export function formatKeyCombo(e) {
-  return formatKeysCombo(activeKeys, activeButtons);
-}
-
-function findAction(config, combo) {
-  const binds = config?.frontend_data?.keybinds || {};
-
-  const lowerCombo = combo.toLowerCase();
-  for (const [id, bindCombo] of Object.entries(binds)) {
-    if (Array.isArray(bindCombo)) {
-      if (bindCombo.some(b => b.toLowerCase() === lowerCombo)) return PASSIVE_ACTIONS.has(id) ? null : id;
-    } else {
-      if (bindCombo.toLowerCase() === lowerCombo) return PASSIVE_ACTIONS.has(id) ? null : id;
-    }
-  }
-
-  return null;
-}
 
 export function updateMenuShortcuts(config) {
   const binds = config?.frontend_data?.keybinds || {};
   for (const [id, combo] of Object.entries(binds)) {
     const shortcut = document.querySelector(`#${id} .shortcut`);
-    if (shortcut) shortcut.textContent = Array.isArray(combo) ? combo[0] : combo;
+    if (shortcut) shortcut.textContent = normalizeList(combo)[0] || combo;
   }
 }
 
-// Scroll-wheel modifier latch (Options → Keys → Scroll Wheel → Toggle).
-// In 'toggle' mode, pressing Ctrl once enters a sticky "zoom mode" so the
-// wheel keeps zooming without holding Ctrl; pressing Ctrl again exits.
-// persistence: the latched state is last-known runtime state, split into
-// quivit_state.json by the backend (STATE_KEYS) alongside last_active_image.
-// See the persistence policy in core.js.
-let ctrlLatched = false;
-let ctrlKeyDown = false;
-let ctrlChordBroken = false;
+// Scroll-wheel modifier latch (Options > Keys > Scroll Wheel > Toggle).
+// In 'toggle' mode, pressing the zoom modifier once enters a sticky "zoom
+// mode" so the wheel keeps zooming without holding the key; pressing it again
+// exits. The toggle key is derived from the zoom scroll bindings so rebinding
+// zoom to e.g. Alt+ScrollUp makes Alt the toggle key.
+// The backend stores the current latch with other runtime state in
+// quivit_state.json. See the persistence policy in core.js.
+let _toggleLatched = false;
+let _toggleKeyDown = false;
+let _toggleChordBroken = false;
+let _cachedToggleKeys = ['Control'];
+let _cachedToggleKeysLower = ['control'];
 
 export function resetScrollLatch() {
-  ctrlLatched = false;
-  ctrlKeyDown = false;
-  ctrlChordBroken = false;
-  // No DOM write here: this always runs right before Core.loadConfig(), and
-  // syncScrollLatch() (via quivit-config-loaded) is the single writer, so the
-  // latch indicator is not touched on every navigation/config reload.
+  _toggleLatched = false;
+  _toggleKeyDown = false;
+  _toggleChordBroken = false;
+  // Core.loadConfig() follows this call. syncScrollLatch() then updates the
+  // indicator once through quivit-config-loaded.
 }
 
 // Re-read the persisted latch after config loads (startup or Options Apply &
 // Close). Only meaningful in 'toggle' modifier mode; in 'hold' mode a stale
 // latch must not show the badge or latch zoom.
 export function syncScrollLatch(config) {
-  ctrlLatched = isToggleModifier(config) && config?.frontend_data?.scroll_zoom_latched === true;
+  _toggleLatched = isToggleModifier(config) && config?.frontend_data?.scroll_zoom_latched === true;
+  _cachedToggleKeys = _getToggleEventKeys(config);
+  _cachedToggleKeysLower = _cachedToggleKeys.map(k => k.toLowerCase());
   _updateScrollIndicator(config);
 }
 
@@ -147,10 +50,9 @@ function isToggleModifier(config) {
   return config?.frontend_data?.scroll_zoom_modifier === 'toggle';
 }
 
-// The modifier keys bound to the scroll-wheel combos (Ctrl + Shift by default),
-// derived from config so rebinding zoom/pan to e.g. Alt+ScrollUp updates the
-// indicator. Deduplicated, in no particular order. ids lets callers scope the
-// lookup to the zoom or pan groups.
+// Derive scroll-wheel modifiers from config so rebinding zoom or pan also
+// updates the indicator. The result is deduplicated and unordered. `ids`
+// limits the lookup to zoom or pan bindings.
 const _SCROLL_ZOOM_IDS = ['cmd-zoom-in', 'cmd-zoom-out'];
 const _SCROLL_PAN_IDS = ['cmd-pan-up', 'cmd-pan-down', 'cmd-pan-left', 'cmd-pan-right'];
 const _SCROLL_ALL_IDS = [..._SCROLL_ZOOM_IDS, ..._SCROLL_PAN_IDS];
@@ -161,7 +63,7 @@ function getScrollModifierKeys(config, ids = _SCROLL_ALL_IDS) {
   const found = new Set();
   for (const id of ids) {
     const combo = binds[id];
-    const list = Array.isArray(combo) ? combo : (combo ? [combo] : []);
+    const list = normalizeList(combo);
     for (const c of list) {
       if (typeof c === 'string' && /Scroll(Up|Down)$/.test(c)) {
         const token = c.split('+').find(t => _MODIFIER_LOWER[t] !== undefined);
@@ -172,49 +74,48 @@ function getScrollModifierKeys(config, ids = _SCROLL_ALL_IDS) {
   return Array.from(found);
 }
 
-// Status-bar indicator for the scroll-wheel modifier. In hold mode a physically
-// held bound modifier changes scroll behavior, so it shows e.g. "Ctrl+Shift — Held".
-// In toggle mode the sticky latch is the zoom switch, so while latched it shows
-// "Scroll Zoom — Toggled"; when unlatched Ctrl does nothing and only a held pan
-// modifier (Shift by default) changes behavior, so that is shown as "— Held".
-// The two states are mutually exclusive — gated on the configured modifier mode.
-// Idempotent: if the rendered text and classes already match the computed state,
-// the DOM is left completely untouched.
+// The e.key names for modifiers that act as the zoom toggle, derived from
+// the zoom scroll bindings. Falls back to ['Control'] if no modifier is bound.
+const _TOKEN_TO_EVENT_KEY = { Ctrl: 'Control', Alt: 'Alt', Shift: 'Shift', Meta: 'Meta' };
+function _getToggleEventKeys(config) {
+  const zoomMods = getScrollModifierKeys(config, _SCROLL_ZOOM_IDS);
+  if (zoomMods.length === 0) return ['Control'];
+  return zoomMods.map(m => _TOKEN_TO_EVENT_KEY[m]).filter(Boolean);
+}
+
+// The status bar reports the active scroll-wheel modifier. Hold mode shows a
+// held bound modifier. Toggle mode shows the zoom latch or a held pan modifier.
+// The modes are mutually exclusive. Skip DOM work when the output is unchanged.
 function _updateScrollIndicator(config) {
-  const bar = document.getElementById('statusbar');
-  const el = document.querySelector('.status-scroll-zoom');
-  if (!bar || !el) return;
 
   let text = '';
   let held = false;
   let latched = false;
 
   if (isToggleModifier(config)) {
-    const isLatched = ctrlLatched;
-    if (isLatched) {
-      text = 'Scroll Zoom — Toggled';
+    if (_toggleLatched) {
+      text = 'Scroll Zoom: Toggled';
       latched = true;
     } else {
-      // Unlatched: Ctrl is the toggle key, so holding it does nothing to the
-      // wheel. Only physically held pan modifiers (Shift by default) matter.
+      // Without the latch, only held pan modifiers affect the wheel.
+      const toggleTokens = getScrollModifierKeys(config, _SCROLL_ZOOM_IDS);
       const mods = getScrollModifierKeys(config, _SCROLL_PAN_IDS)
-        .filter(m => m !== 'Ctrl')
+        .filter(m => !toggleTokens.includes(m))
         .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
       held = mods.length > 0;
-      if (held) text = `${mods.join('+')} — Held`;
+      if (held) text = `${mods.join('+')}: Held`;
     }
   } else {
-    // Hold mode: show any bound scroll modifier that's physically held.
+    // Show held modifiers only when their combo has a scroll action.
     const mods = getScrollModifierKeys(config)
       .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
-    held = mods.length > 0;
-    if (held) text = `${mods.join('+')} — Held`;
+    if (mods.length > 0 && findAction(config, [...mods, 'ScrollUp'].join('+'))) {
+      held = true;
+      text = `${mods.join('+')}: Held`;
+    }
   }
 
-  // ── Only write differences ──
-  if (el.textContent !== text) el.textContent = text;
-  if (bar.classList.contains('zoom-held') !== held) bar.classList.toggle('zoom-held', held);
-  if (bar.classList.contains('zoom-latched') !== latched) bar.classList.toggle('zoom-latched', latched);
+  Statusbar.setScrollIndicatorState(text, held, latched);
 }
 
 // The wheel should never hijack scrolling over UI chrome or the file list.
@@ -246,7 +147,7 @@ function updateKeyboardPanBindings(config) {
 
   for (const [actionId, vector] of Object.entries(KEYBOARD_PAN_VECTORS)) {
     const raw = binds[actionId];
-    const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    const list = normalizeList(raw);
     for (const combo of list) {
       if (typeof combo !== 'string') continue;
       const tokens = normalizeCombo(combo).split('+').map(keybindTokenToActiveKey);
@@ -294,10 +195,12 @@ function isInteractiveKeyTarget(e) {
 }
 
 export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPan }) {
-  let lastSideButtonDispatch = { button: null, time: 0 };
   updateKeyboardPanBindings(Core.getState().config);
+  rebuildBindMap(Core.getState().config);
   window.addEventListener('quivit-config-loaded', () => {
-    updateKeyboardPanBindings(Core.getState().config);
+    const config = Core.getState().config;
+    updateKeyboardPanBindings(config);
+    rebuildBindMap(config);
   });
 
   function dispatchMouseButton(button, e) {
@@ -307,35 +210,36 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
     e.preventDefault();
     e.stopPropagation();
-    lastSideButtonDispatch = { button, time: Date.now() };
     dispatchAction(actionId);
     return true;
   }
 
-  function handleSideButton(e) {
+  function handleSideButtonPress(e) {
     if (e.button !== 3 && e.button !== 4) return false;
 
     e.preventDefault();
     e.stopPropagation();
-
-    const now = Date.now();
-    if (lastSideButtonDispatch.button === e.button && now - lastSideButtonDispatch.time < 120) {
-      return true;
-    }
-
     return dispatchMouseButton(e.button, e);
+  }
+
+  function suppressSideButtonRelease(e) {
+    if (e.button !== 3 && e.button !== 4) return false;
+
+    e.preventDefault();
+    e.stopPropagation();
+    return true;
   }
 
   const handleShortcut = (e) => {
     // Ignore bare modifiers for dispatch
-    if (e.type === 'keydown' && ['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+    if (e.type === 'keydown' && isModifierKey(e.key)) return;
 
     if (e.type === 'mousedown') {
       const isUI = e.target.closest('.menu-item, #statusbar, .file-panel-header');
       if (isUI) return;
     }
 
-    const actionId = findAction(Core.getState().config, formatKeyCombo(e));
+    const actionId = findAction(Core.getState().config, formatKeysCombo(activeKeys, activeButtons));
     if (!actionId) return;
 
     e.preventDefault();
@@ -343,31 +247,31 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   };
 
   window.addEventListener('keydown', (e) => {
+    const config = Core.getState().config;
     // Don't hijack Space/arrows when an interactive element (e.g. a button)
-    // has focus — Space should still activate the button natively.
+    // has focus. Space should still activate the button natively.
     const onInteractive = isInteractiveKeyTarget(e);
 
-    if (!onInteractive && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+    if (!onInteractive && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Alt'].includes(e.key)) {
       e.preventDefault();
     }
 
-    // Track a clean Ctrl tap so 'toggle' mode can latch zoom without being
-    // triggered by ordinary shortcuts like Ctrl+X.
-    if (e.key === 'Control') {
+    // Track a clean toggle-key tap so 'toggle' mode can latch zoom without
+    // being triggered by ordinary shortcuts like Ctrl+X.
+    if (_cachedToggleKeys.includes(e.key)) {
       if (!e.repeat) {
-        ctrlKeyDown = true;
-        ctrlChordBroken = false;
+        _toggleKeyDown = true;
+        _toggleChordBroken = false;
       }
     } else {
-      if (ctrlKeyDown) ctrlChordBroken = true;
+      if (_toggleKeyDown) _toggleChordBroken = true;
     }
 
     activeKeys.add(e.key.toLowerCase());
-    const config = Core.getState().config;
-    const actionId = findAction(config, formatKeyCombo(e));
+    const actionId = findAction(config, formatKeysCombo(activeKeys, activeButtons));
     if (!onInteractive && actionId && !KEYBOARD_PAN_VECTORS[actionId]) {
       handleShortcut(e);
-      if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(config);
+      if (isModifierKey(e.key)) _updateScrollIndicator(config);
       return;
     }
 
@@ -375,30 +279,30 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     if (!onInteractive && (keyboardPanVector.x !== 0 || keyboardPanVector.y !== 0)) {
       e.preventDefault();
       dispatchKeyboardPan?.(keyboardPanVector.x, keyboardPanVector.y);
-      if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(config);
+      if (isModifierKey(e.key)) _updateScrollIndicator(config);
       return;
     }
 
     handleShortcut(e);
-    if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(Core.getState().config);
+    if (isModifierKey(e.key)) _updateScrollIndicator(Core.getState().config);
   });
 
   window.addEventListener('keyup', (e) => {
-    if (e.key === 'Control') {
-      // A standalone Ctrl press/release (no other key in between) toggles the
-      // sticky zoom latch in 'toggle' mode.
-      if (ctrlKeyDown && !ctrlChordBroken && isToggleModifier(Core.getState().config)) {
-        ctrlLatched = !ctrlLatched;
-        _updateScrollIndicator(Core.getState().config);
-        const config = Core.getState().config;
-        config.frontend_data.scroll_zoom_latched = ctrlLatched;
+    const config = Core.getState().config;
+    if (_cachedToggleKeys.includes(e.key)) {
+      // A standalone toggle-key press/release (no other key in between)
+      // toggles the sticky zoom latch in 'toggle' mode.
+      if (_toggleKeyDown && !_toggleChordBroken && isToggleModifier(config)) {
+        _toggleLatched = !_toggleLatched;
+        _updateScrollIndicator(config);
+        config.frontend_data.scroll_zoom_latched = _toggleLatched;
         Core.persistConfig({ debounceMs: 1500 });
       }
-      ctrlKeyDown = false;
-      ctrlChordBroken = false;
+      _toggleKeyDown = false;
+      _toggleChordBroken = false;
     }
     activeKeys.delete(e.key.toLowerCase());
-    if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) _updateScrollIndicator(Core.getState().config);
+    if (isModifierKey(e.key)) _updateScrollIndicator(config);
   });
 
   window.addEventListener('blur', () => {
@@ -408,11 +312,11 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   });
 
   window.addEventListener('mousedown', (e) => {
-    if (handleSideButton(e)) return;
+    if (handleSideButtonPress(e)) return;
 
-    // Mouse/double-click gestures are viewport actions — never over the file
+    // Mouse/double-click gestures are viewport actions, never over the file
     // panel, menubar/dropdowns, or status bar (which handle their own clicks).
-    const isUI = e.target.closest('#file-panel, .menubar, .dropdown-menu, #statusbar');
+    const isUI = e.target.closest('#file-panel, #menubar, .menu-dropdown, #statusbar');
     if (isUI) return;
 
     activeButtons.add(e.button);
@@ -420,15 +324,13 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   }, { capture: true });
 
   window.addEventListener('mouseup', (e) => {
-    if (e.button === 3 || e.button === 4) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
+    suppressSideButtonRelease(e);
     activeButtons.delete(e.button);
   });
 
   window.addEventListener('auxclick', (e) => {
-    handleSideButton(e);
+    // Windows fires auxclick for side buttons on release; navigation is press-only.
+    suppressSideButtonRelease(e);
   }, { capture: true });
 
   // Buttons 0 (left) and 2 (right) wait out a short window before dispatching
@@ -470,7 +372,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
       return;
     }
 
-    const combo = formatKeyCombo(e);
+    const combo = formatKeysCombo(activeKeys, activeButtons);
     clearClickTimer();
     clickState = { button, x: e.clientX, y: e.clientY, time: now, timer: null };
     clickState.timer = setTimeout(() => {
@@ -480,26 +382,28 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     }, DOUBLE_CLICK_MS);
   }
 
-  // Scroll wheel: route through the keybind table so ScrollUp/ScrollDown and
-  // Ctrl+ScrollUp/Ctrl+ScrollDown are remappable. In hold mode a physically
-  // held Ctrl synthesizes the modifier; in toggle mode only the sticky latch
-  // does, so zooming requires the "zoom mode" to actually be active.
+  // Route wheel events through the keybind table so scroll bindings stay
+  // remappable. Hold mode uses held modifiers. Toggle mode uses the latch.
   window.addEventListener('wheel', (e) => {
     if (isWheelOverUI(e)) return;
 
     const config = Core.getState().config;
     const toggleMode = isToggleModifier(config);
-    const latched = toggleMode && ctrlLatched;
     const keys = new Set(activeKeys);
     const scrollDir = e.deltaY < 0 ? 'ScrollUp' : 'ScrollDown';
 
     if (toggleMode) {
-      if (latched) keys.add('control');
-      else keys.delete('control');
+      // Synthesize the primary toggle key to satisfy the bind matching.
+      const primaryActiveKey = _cachedToggleKeysLower[0] || 'control';
+      if (_toggleLatched) {
+        keys.add(primaryActiveKey);
+      } else {
+        _cachedToggleKeysLower.forEach(k => keys.delete(k));
+      }
+      // A wheel event while a toggle key is held means the press wasn't a
+      // clean tap, so releasing it must not toggle the latch.
+      if (_cachedToggleKeysLower.some(k => activeKeys.has(k))) _toggleChordBroken = true;
     }
-    // A wheel event while Ctrl is down means the press wasn't a clean tap, so
-    // releasing Ctrl must not toggle the latch.
-    if (activeKeys.has('control')) ctrlChordBroken = true;
 
     const combo = formatKeysCombo(keys, activeButtons, scrollDir);
     const actionId = findAction(config, combo);

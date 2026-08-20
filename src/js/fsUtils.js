@@ -1,8 +1,9 @@
 import { Core } from './core.js';
 import { DirectoryPrefs } from './directoryPrefs.js';
+import { naturalCompare, applySort } from './services/sorting.js';
 import { createHistoryEntry, recordNavigation } from './navigationHistory.js';
 
-const { invoke, convertFileSrc } = window.__TAURI__.core;
+const { invoke } = window.__TAURI__.core;
 
 export const SUPPORTED_IMAGES = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'apng', 'svg', 'bmp', 'ico', 'avif',
@@ -27,13 +28,18 @@ function _isCurrentGeneration(generation) {
   return generation === undefined || generation === _navigationGeneration;
 }
 
-// Parent of a file/folder path; normalizes Windows drive roots to "E:\"
+// Parent of a file/folder path. Windows drive roots stay as "E:\".
 function parentOf(path) {
   const trimmed = path.replace(/[\\/]+$/, '');
   const idx = Math.max(trimmed.lastIndexOf('\\'), trimmed.lastIndexOf('/'));
   if (idx === -1) return path;
   const parent = trimmed.slice(0, idx);
   return /^[A-Za-z]:$/.test(parent) ? parent + '\\' : parent;
+}
+
+function basename(path) {
+  if (!path) return '';
+  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
 }
 
 function _formatDate(msStr) {
@@ -50,11 +56,10 @@ function _base64Encode(str) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function _basename(path) {
-  return String(path || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
-}
+
 
 export const FsUtils = {
+  basename,
   isArchive(name) { return SUPPORTED_ARCHIVES.has(_ext(name)); },
   isImage(name) { return SUPPORTED_IMAGES.has(_ext(name)); },
   isIco(name) { return _ext(name) === 'ico'; },
@@ -70,6 +75,14 @@ export const FsUtils = {
     const isWindows = navigator.userAgent.includes('Windows');
     const base = isWindows ? 'http://quivit.localhost' : 'quivit://localhost';
     return `${base}/archive/${encoded}/${encodeURIComponent(entryName)}`;
+  },
+
+  buildNativeIconSrc(path, extKey) {
+    const encodedPath = _base64Encode(path || '');
+    const encodedExt = _base64Encode(extKey || '');
+    const isWindows = navigator.userAgent.includes('Windows');
+    const base = isWindows ? 'http://quivit.localhost' : 'quivit://localhost';
+    return `${base}/icon/${encodedPath}/${encodedExt}`;
   },
 
   async buildArchiveEntrySrc(archivePath, entryName) {
@@ -95,8 +108,8 @@ export const FsUtils = {
     return window.__TAURI__.core.convertFileSrc(filePath);
   },
 
-  // Synchronous variant for the DOM image pool; ICO files need async
-  // processing so they are excluded and handled via the async path.
+  // Sync path for the DOM image pool. ICO files need async processing, so the
+  // caller handles them through buildFileSrc().
   buildFileSrcSync(filePath) {
     if (filePath.startsWith('blob:')) return filePath;
     return window.__TAURI__.core.convertFileSrc(filePath);
@@ -142,6 +155,29 @@ export const FsUtils = {
     ];
   },
 
+  neighborEntries(state, index, half) {
+    if (!state || !state.list || state.mode === 'empty') return [];
+    
+    const entrySrcAt = (idx) => {
+      const entry = state.list[idx];
+      if (!entry || entry.is_dir || entry.is_parent || !this.isImageEntry(entry)) return null;
+      if (state.mode === 'archive') {
+        if (this.isIco(entry.name)) return null;
+        return this.buildArchiveSrc(state.archivePath, entry.name);
+      }
+      return this.isIco(entry.path) ? null : this.buildFileSrcSync(entry.path);
+    };
+
+    const srcs = [];
+    for (let i = 1; i <= half; i++) {
+      const ahead = entrySrcAt(index + i);
+      if (ahead && ahead !== state.src) srcs.push(ahead);
+      const behind = entrySrcAt(index - i);
+      if (behind && behind !== state.src) srcs.push(behind);
+    }
+    return srcs;
+  },
+
   firstImageIndex(list, preferredIndex = 0) {
     if (this.isImageEntry(list[preferredIndex])) return preferredIndex;
     const next = list.findIndex(e => this.isImageEntry(e));
@@ -157,13 +193,13 @@ export const FsUtils = {
     const images = list.filter(e => this.isImageEntry(e));
     if (!images.length) return null;
     const sorted = [...images].sort((a, b) =>
-      DirectoryPrefs.naturalCompare(a.name.toLowerCase(), b.name.toLowerCase()));
+      naturalCompare(a.name.toLowerCase(), b.name.toLowerCase()));
     const idx = sorted.findIndex(e => e.name === filename);
     if (idx === -1) return null;
     return { current: idx + 1, total: sorted.length };
   },
 
-  // Statusbar index — legacy counting (folders/archives/files all count) with
+  // Statusbar index: legacy counting (folders/archives/files all count) with
   // the '..' parent row excluded from both numerator and denominator. '..' is
   // always list[0] when present.
   formatStatusIndex(state) {
@@ -190,7 +226,7 @@ export const FsUtils = {
 
     let files = this.buildDirectoryList(result);
     const prefs = DirectoryPrefs.getSortPrefs(result.directory);
-    files = DirectoryPrefs.applySort(files, prefs.col, prefs.desc);
+    files = applySort(files, prefs.col, prefs.desc);
 
     const state = Core.getState();
     let index = 0;
@@ -216,7 +252,7 @@ export const FsUtils = {
       }
 
       if (preferredIndex === -1 && result.target_filename) {
-        // Find by name after sorting — initial_index is stale if sort order differs
+        // Find by name after sorting. initial_index is stale if sort order differs.
         preferredIndex = files.findIndex(f => f.name === result.target_filename);
       }
 
@@ -225,10 +261,10 @@ export const FsUtils = {
         preferredIndex = Math.min(files.length - 1, Math.max(0, result.initial_index + offset));
       }
 
-      // options.preferInitial forces the target entry (e.g. highlight the archive
-      // you came back from). options.forceFirstImage forces the first image with a
-      // first-item fallback (hidden archive). Otherwise the config decides: ON
-      // opens the first image, OFF highlights the target entry.
+      // preferInitial highlights the target entry, such as the archive you came
+      // back from. forceFirstImage picks the first image, with a first-item
+      // fallback for hidden archives. Otherwise config decides: ON opens the
+      // first image, OFF highlights the target entry.
       if (options.forceFirstImage) {
         const idx = this.firstImageIndex(files, preferredIndex);
         index = idx === 0 && files.length > 1 ? 1 : idx;
@@ -249,7 +285,6 @@ export const FsUtils = {
       list: files,
       index,
       directory: result.directory,
-      parentDirectory: result.parent_directory || '',
       archivePath: '',
       filename: files[index]?.name || '',
       src: selectedSrc,
@@ -293,7 +328,7 @@ export const FsUtils = {
 
       let files = this.buildArchiveList({ ...result, files: imgFiles });
       const prefs = DirectoryPrefs.getSortPrefs(result.archive_path);
-      files = DirectoryPrefs.applySort(files, prefs.col, prefs.desc);
+      files = applySort(files, prefs.col, prefs.desc);
 
       const state = Core.getState();
       this.revokeIfObjectURL(state.src);
@@ -333,7 +368,6 @@ export const FsUtils = {
         archivePath: result.archive_path,
         archiveMetadataFiles: metaFiles,
         directory: '',
-        parentDirectory: result.archive_path.replace(/[\\/][^\\/]*$/, ''),
         filename: files[index]?.name || '',
         src: selectedSrc
       });
@@ -341,7 +375,7 @@ export const FsUtils = {
       if (!_isCurrentGeneration(options.generation)) return;
       this.persistLastOpened(result.archive_path);
 
-      // Trigger prefetch for initial load
+      // Initial archive load starts the nearby-entry prefetch.
       this.prefetchAhead(result.archive_path, index, 1);
 
       return;
@@ -356,7 +390,7 @@ export const FsUtils = {
         Core.setState({
           mode: state.mode === 'empty' ? 'image' : state.mode,
           src: '',
-          filename: `Failed to open archive: ${_basename(archivePath) || archivePath}`,
+          filename: `Failed to open archive: ${basename(archivePath) || archivePath}`,
         });
       }
       throw err;
@@ -376,9 +410,32 @@ export const FsUtils = {
       : pathStr.name || '';
     let path = typeof pathStr === 'string' ? pathStr : (pathStr.path || pathStr.name);
 
-    // Windows CLSID paths (e.g. 'This PC') → route to drive list
+    // Windows CLSID paths (e.g. 'This PC', 'Desktop', 'Downloads')
     if (path && path.startsWith('::{')) {
-      path = '__DRIVES__';
+      const pId = path.toLowerCase();
+      try {
+        const tPath = window.__TAURI__.path;
+        if (pId === '::{b4bfcc3a-db2c-424c-b029-7fe99a87c641}') {
+          path = await tPath.desktopDir();
+        } else if (pId === '::{374de290-123f-4565-9164-39c4925e467b}') {
+          path = await tPath.downloadDir();
+        } else if (pId === '::{59031a47-3f72-44a7-89c5-5595fe6b30ee}') {
+          path = await tPath.homeDir();
+        } else if (pId === '::{1cf1260c-4dd0-4ebb-811f-33c572699fde}') {
+          path = await tPath.pictureDir();
+        } else if (pId === '::{fdd39ad0-238f-46af-adb4-6c85480369c7}') {
+          path = await tPath.documentDir();
+        } else if (pId === '::{a0953c92-50dc-43bf-be83-3742fed03c9c}') {
+          path = await tPath.videoDir();
+        } else if (pId === '::{4d9f7874-4e0c-4904-967b-40b0d20c3e4b}') {
+          path = await tPath.audioDir();
+        } else {
+          path = '__DRIVES__'; // This PC or other unmappable virtual folders
+        }
+      } catch (err) {
+        console.error('[Core] Failed to resolve CLSID path:', err);
+        path = '__DRIVES__';
+      }
     }
     
     if (path === '__DRIVES__') {
@@ -429,24 +486,6 @@ export const FsUtils = {
     }
   },
 
-  async openContainer(delta) {
-    const generation = _nextNavigationGeneration();
-    const state = Core.getState();
-    const currentPath = state.mode === 'archive' ? state.archivePath : state.directory;
-    if (!currentPath) return;
-
-    try {
-      const path = await invoke('open_sibling_container', {
-        currentPath,
-        delta,
-        showHidden: this.showHidden(),
-      });
-      if (!_isCurrentGeneration(generation)) return;
-      await this.loadFile(path, { generation });
-    } catch (err) {
-      console.error('[Core] openContainer error:', err);
-    }
-  },
 
   async openParent() {
     const generation = _nextNavigationGeneration();
@@ -456,9 +495,8 @@ export const FsUtils = {
       try {
         const result = await invoke('read_directory', { path: state.archivePath, showHidden: this.showHidden() });
         if (!_isCurrentGeneration(generation)) return;
-        // Land on the archive entry when it's present (so it can be re-opened).
-        // If it's missing from the listing (e.g. hidden with "show hidden" off),
-        // highlight the first image in the folder, else the first item.
+        // Land on the archive entry when possible so it can be re-opened. If
+        // hidden filtering removes it, fall back to the first image or first row.
         const archiveListed = result.files.some(f => f.path === state.archivePath);
         if (archiveListed) {
           this.applyDirectoryResult(result, { preferInitial: true, generation, previousEntry });
@@ -475,9 +513,14 @@ export const FsUtils = {
 
     if (!state.directory || state.directory === 'Drives') return;
     try {
-      const result = await invoke('open_parent', { currentDir: state.directory, showHidden: this.showHidden() });
+      const parentDir = parentOf(state.directory);
+      if (parentDir === state.directory) {
+        throw 'Already at root';
+      }
+      const targetName = basename(state.directory);
+      const result = await invoke('read_directory', { path: parentDir, showHidden: this.showHidden(), targetName });
       if (!_isCurrentGeneration(generation)) return;
-      // Highlight the folder we came from (same behavior as archives)
+      // Highlight the folder we came from, matching archive behavior.
       this.applyDirectoryResult(result, { preferInitial: true, generation, previousEntry });
       this.persistLastOpened(result.directory);
     } catch (err) {
@@ -518,7 +561,7 @@ export const FsUtils = {
       }
 
       const prefs = DirectoryPrefs.getSortPrefs(prefsPath);
-      const sorted = DirectoryPrefs.applySort(containers, prefs.col, prefs.desc);
+      const sorted = applySort(containers, prefs.col, prefs.desc);
 
       const currentIdx = sorted.findIndex(f => f.path === currentPath);
       if (currentIdx === -1) {
@@ -539,7 +582,7 @@ export const FsUtils = {
 
         try {
           await this.loadFile(sorted[currentIndexToCheck].path, { generation });
-          return; // Successfully loaded a sibling, exit loop
+          return;
         } catch (err) {
           console.error(`[Core] Skipping inaccessible sibling container: ${sorted[currentIndexToCheck].path}`, err);
           attempts++;
@@ -554,8 +597,7 @@ export const FsUtils = {
 
   async openDirectoryDialog() {
     try {
-      const { open } = window.__TAURI__.dialog;
-      const selected = await open({ directory: true, multiple: false });
+      const selected = await invoke('pick_folder');
       if (selected) {
         await this.loadFile(selected);
       }
@@ -637,7 +679,7 @@ export const FsUtils = {
 
     const indicesToPrefetch = [];
     
-    // ── Symmetric window: 7 ahead, 7 behind ──
+    // Symmetric window: 7 ahead, 7 behind.
     const PREFETCH_HALF = 7;
     for (let i = 1; i <= PREFETCH_HALF; i++) {
       const ahead = currentIndex + (direction * i);

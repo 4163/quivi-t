@@ -1,8 +1,8 @@
 [package]
 name = "tauri-app"
 version = "1.0.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "A lightweight standalone port of Quivi, built with Tauri and Vanilla HTML/CSS/JS."
+authors = ["QuiviT Contributors"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -33,7 +33,8 @@ tauri-plugin-single-instance = "2"
 image = { version = "0.25", features = ["ico"] }
 md5 = "0.8.1"
 base64 = "0.23.1"
-windows = { version = "0.62.2", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_Foundation", "Win32_Storage_FileSystem"] }
+windows = { version = "0.62.2", features = ["Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Com"] }
 winreg = "0.53.0"
 encoding_rs = "0.8"
+chardetng = "1.0.0"
 

@@ -1,47 +1,47 @@
 /**
- * core.js — QuiviT
+ * core.js: QuiviT
  *
  * State machine and application logic. No DOM access here.
- * Communicates outward exclusively via registered callbacks.
+ * Other modules hear about changes through registered callbacks.
  *
- * ── Persistence policy ──────────────────────────────────────────────────
+ * Persistence policy
  * Where app data lives, and which situation uses which mechanism:
  *
- * Roaming/portable files (backend save_config / load_config) — SOURCE OF TRUTH.
- *   quivit_config.json            → user PREFERENCES (theme, keybinds,
- *                                   scroll_zoom_modifier, fit/scaling mode, …)
- *   quivit_state.json             → last-known RUNTIME STATE (last_opened_path,
+ * Roaming/portable files (backend save_config / load_config): SOURCE OF TRUTH.
+ *   quivit_config.json            -> user PREFERENCES (theme, keybinds,
+ *                                   scroll_zoom_modifier, fit/scaling mode, etc.)
+ *   quivit_state.json             -> last-known RUNTIME STATE (last_opened_path,
  *                                   last_active_image, scroll_zoom_latched)
- *   quivit_directory_sort.json    → per-directory sort prefs
- *   quivit_favorites.json         → favorites + collapsed state
+ *   quivit_directory_sort.json    -> per-directory sort prefs
+ *   quivit_favorites.json         -> favorites + collapsed state
  * Portable mode folds all of these into one self-contained quivit_config.json
  * beside the executable; roaming mode keeps them as separate files.
  *
- * WebView2 localStorage — NEVER the source of truth for anything that must
+ * WebView2 localStorage: NEVER the source of truth for anything that must
  * survive a restart. Allowed roles:
- *   quivit-theme / quivit-custom-css → pre-paint caches mirroring config so the
+ *   quivit-theme / quivit-custom-css -> pre-paint caches mirroring config so the
  *                                      head <script> applies theme/CSS before
  *                                      first paint (prevents flicker)
- *   options-active-tab               → session-only; cleared each app start
+ *   options-active-tab               -> session-only; cleared each app start
  *
- * In-memory state — session-only; reset on app exit:
- *   navigationHistory                → Container-level Back/Forward history
- *   archives LRU cache               → ZIP/CBZ in-memory image cache and prefetch
- *   previewTheme / previewCss        → Options window live previews (until Apply/Close)
+ * In-memory state: session-only; reset on app exit:
+ *   navigationHistory                -> Container-level Back/Forward history
+ *   archives LRU cache               -> ZIP/CBZ in-memory image cache and prefetch
+ *   previewTheme / previewCss        -> Options window live previews (until Apply/Close)
  *
  * Decision guide:
- *   user chose it explicitly       → quivit_config.json (frontend_data)
- *   "last-known" runtime state     → quivit_state.json (STATE_KEYS in lib.rs)
- *   only needed before first paint → localStorage cache of config
- *   ephemeral within a session     → in-memory state (or cleared localStorage)
+ *   user chose it explicitly       -> quivit_config.json (frontend_data)
+ *   "last-known" runtime state     -> quivit_state.json (STATE_KEYS in lib.rs)
+ *   only needed before first paint -> localStorage cache of config
+ *   ephemeral within a session     -> in-memory state (or cleared localStorage)
  */
 
 import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, mergeConfig } from './keybinds.js';
 import { FsUtils } from './fsUtils.js';
 
-const { invoke } = window.__TAURI__.core;
+const invoke = window.__TAURI__?.core?.invoke;
 
-// --- Internal state -----------------------------------------------------------
+// Internal state.
 
 const _state = {
   /** @type {'empty'|'image'|'archive'} */
@@ -62,22 +62,22 @@ const _state = {
   /** Current directory path (for sibling navigation) */
   directory: '',
 
-  /** Parent directory path for the visible directory, if any */
-  parentDirectory: '',
-
   /** If mode === 'archive', the path to the archive */
   archivePath: '',
 
   /** If mode === 'archive', the filenames of any metadata files found */
   archiveMetadataFiles: [],
 
-  /** UI State: Is the file list panel visible? */
+  /** File list panel visibility. */
   fileListVisible: true,
 
-  /** View State: How to fit the image */
+  /** Current image fit mode. */
   fitMode: DEFAULT_FIT_MODE,
 
-  /** View State: Which image scaling mode to use */
+  /** Monotonic counter bumped on every setFitMode call (even same-mode) */
+  fitModeGen: 0,
+
+  /** Current image scaling mode. */
   scalingMode: DEFAULT_SCALING_MODE,
   
   /** Options configuration */
@@ -98,7 +98,7 @@ const _listeners = [];
 let _configDirty = false;
 let _persistTimer = null;
 
-// --- Helpers ------------------------------------------------------------------
+// Helpers.
 
 function _notify() {
   const snapshot = { ..._state };
@@ -160,7 +160,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     newSrc = await FsUtils.buildFileSrc(file.path);
   }
 
-  // Prevent race condition if user navigated away while we were loading ICO frames
+  // Ignore stale ICO results if the user navigated away while frames loaded.
   if (_state.index !== index) return;
 
   FsUtils.revokeIfObjectURL(_state.src);
@@ -170,7 +170,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     const container = _state.mode === 'archive' ? _state.archivePath : _state.directory;
     if (container) {
       _state.config.frontend_data.last_active_image = { container, path: file.path };
-      _persistConfig();
+      _scheduleConfigFlush(1500);
     }
   }
 
@@ -181,7 +181,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   }
 }
 
-// --- Public API ---------------------------------------------------------------
+// Public API.
 
 export const Core = {
   onStateChange(fn) {
@@ -225,6 +225,7 @@ export const Core = {
 
   setFitMode(mode, options = {}) {
     _state.fitMode = mode;
+    _state.fitModeGen++;
     if (options.persist) {
       _state.config.frontend_data.fit_mode = mode;
       _scheduleConfigFlush(1500);
@@ -258,7 +259,8 @@ export const Core = {
     }
 
     if (firstImgIdx !== -1 && firstImgIdx !== lastImgIdx) {
-      // "if the first and last item is an image"
+      // When image entries wrap around a non-image edge row, keep the previous
+      // preview visible instead of flashing blank.
       const firstItemIsImage = FsUtils.isImageEntry(_state.list[_state.list[0]?.name === '..' ? 1 : 0]);
       const lastItemIsImage = FsUtils.isImageEntry(_state.list[_state.list.length - 1]);
       
@@ -284,7 +286,7 @@ export const Core = {
   },
 
   /**
-   * Load the application configuration from Rust backend.
+   * Load app configuration from the Rust backend.
    */
   async loadConfig() {
     try {
@@ -301,17 +303,9 @@ export const Core = {
       _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
       _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
       
-      // Apply Theme
-      const theme = _state.config.frontend_data.theme || 'system';
-      document.documentElement.removeAttribute('data-theme');
-      if (theme === 'light' || theme === 'dark') {
-        document.documentElement.setAttribute('data-theme', theme);
-        try { localStorage.setItem('quivit-theme', theme); } catch(e) {}
-      } else {
-        try { localStorage.removeItem('quivit-theme'); } catch(e) {}
-      }
       
-      // Auto-refresh if show_hidden changed
+
+      // Refresh when show_hidden changes.
       if (oldShowHidden !== undefined && oldShowHidden !== _state.config.frontend_data.show_hidden) {
         if (_state.directory || _state.archivePath) {
           FsUtils.refresh();
@@ -326,30 +320,12 @@ export const Core = {
   },
 
   /**
-   * Save the application configuration to Rust backend.
-   */
-  async saveConfig(portable_mode, frontend_data) {
-    try {
-      _state.config = mergeConfig({ portable_mode, frontend_data });
-      if (_state.config.frontend_data.continue_last === false) {
-        delete _state.config.frontend_data.last_opened_path;
-      }
-      _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
-      _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
-      await invoke('save_config', { config: _state.config });
-      _notify();
-    } catch (err) {
-      console.error('[Core] Failed to save config:', err);
-    }
-  },
-  
-  /**
-   * Run initial setup (called by main.js)
+   * Run initial setup, called by main.js.
    */
   async init() {
     await this.loadConfig();
     
-    // Resolve startup directory
+    // Pick the startup path.
     const fd = _state.config.frontend_data || {};
     let startPath = '';
     let args = [];
@@ -380,7 +356,7 @@ export const Core = {
     if (window.__TAURI__) {
       setTimeout(() => {
         invoke('show_window').catch(e => console.error(e));
-      }, 50); // slight delay to allow first render
+      }, 50); // Let the first render settle.
     }
   }
 };

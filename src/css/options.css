@@ -1,11 +1,3 @@
-/* Keyboard-only focus ring — matches main.css */
-:focus { outline: none; }
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-  border-radius: 2px;
-}
-
 body {
   background: var(--surface);
   padding: 16px 8px;
@@ -13,7 +5,6 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  box-sizing: border-box;
 }
 
 body > * {
@@ -93,6 +84,7 @@ body > * {
   gap: 8px;
   cursor: pointer;
   margin-bottom: 8px;
+  width: fit-content;
 }
 
 .theme-group {
@@ -441,8 +433,33 @@ button.primary:hover {
   background: var(--accent-hover);
 }
 
-/* --- Accessibility: keyboard focus outlines --- */
-*:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+/* Associations UI. */
+.assoc-actions {
+  margin-bottom: 10px;
+}
+
+.assoc-header {
+  margin-top: 10px;
+}
+
+.assoc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.assoc-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.assoc-icon {
+  width: var(--fs-24);
+  height: var(--fs-24);
+  object-fit: contain;
+}
+
+.assoc-text {
+  font-size: 0.9em;
 }

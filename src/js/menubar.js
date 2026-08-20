@@ -1,16 +1,9 @@
 /**
  * menubar.js
- * Handles the top menubar logic, dropdowns, and fullscreen visibility toggles.
+ * Handles the top menubar and dropdown menus.
  */
 
-import { Core } from './core.js';
-import { Viewer } from './viewer.js';
-
 let activeMenu = null;
-export let menuBarVisible = true;
-
-let _preFullscreenState = null;
-const menubarEl = document.getElementById('menubar');
 
 export function initMenuBar() {
   bindMenus();
@@ -22,32 +15,6 @@ export function closeMenus() {
   activeMenu = null;
 }
 
-export function setMenuBarVisible(visible, { persist = false } = {}) {
-  menuBarVisible = visible;
-  menubarEl.classList.toggle('hidden', !menuBarVisible);
-  if (!menuBarVisible) closeMenus();
-  if (persist) saveUIState();
-}
-
-export function toggleMenuBar({ persist = true } = {}) {
-  setMenuBarVisible(!menuBarVisible, { persist });
-}
-
-export function saveUIState() {
-  const state = Core.getState();
-  if (state.config && state.config.frontend_data) {
-    state.config.frontend_data.menu_visible = menuBarVisible;
-    if (window.__TAURI__) Core.persistConfig({ debounceMs: 1500 });
-  }
-}
-
-export function getPreFullscreenState() {
-  return _preFullscreenState;
-}
-
-export function setPreFullscreenState(state) {
-  _preFullscreenState = state;
-}
 
 function bindMenus() {
   document.querySelectorAll('.menu-item').forEach(menu => {
@@ -78,7 +45,7 @@ function bindMenus() {
         closeMenus();
         menu.classList.add('open');
         activeMenu = menu;
-        // Focus the first item in the dropdown
+        // Focus the first dropdown item.
         const firstItem = menu.querySelector('.menu-dropdown li[role="menuitem"]');
         if (firstItem) firstItem.focus();
       }
@@ -86,7 +53,7 @@ function bindMenus() {
         closeMenus();
       }
       
-      // Arrow navigation
+      // Arrow navigation.
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         e.preventDefault();
         const triggers = Array.from(document.querySelectorAll('#menubar .menu-trigger'));
@@ -111,7 +78,7 @@ function bindMenus() {
     if (!e.target.closest('.menu-item')) closeMenus();
   });
 
-  // Enter/Space on dropdown items (they are <li>s, not buttons)
+  // Enter and Space support for dropdown <li> items.
   document.querySelectorAll('.menu-dropdown').forEach(dropdown => {
     const items = Array.from(dropdown.querySelectorAll('li[role="menuitem"]'));
     items.forEach((item, index) => {
@@ -137,7 +104,7 @@ function bindMenus() {
           prev.focus();
         }
         if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-          // Pass control back to menubar triggers
+          // Pass control back to the menubar triggers.
           e.preventDefault();
           const trigger = item.closest('.menu-item').querySelector('.menu-trigger');
           const event = new KeyboardEvent('keydown', { key: e.key });

@@ -1,14 +1,6 @@
-html, body {
-  height: 100%;
-  background-color: var(--surface);
-}
-
 body {
   background-color: var(--surface);
-  color: var(--text);
-  margin: 0;
   overflow-y: auto;
-  font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
 #metadata-root {
@@ -71,7 +63,7 @@ body {
   white-space: pre-wrap; /* Preserve line breaks from XML */
 }
 
-/* ── Grid details ── */
+/* Grid details */
 
 #metadata-grid {
   display: grid;
@@ -100,11 +92,3 @@ body {
   line-height: 1.4;
 }
 
-/* ── Empty state ── */
-
-#metadata-empty {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: var(--fs-14);
-  padding: 40px 0;
-}

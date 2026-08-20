@@ -2,9 +2,22 @@
 
 Date started: 2026-08-01
 
-This file tracks items that are fully implemented and verified, separate from the active implementation plan.
+Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
+
+### CSS / JS Decoupling & HTML-First Specs (landed on `refactor/decoupling`)
+- **CSS decoupling:** `src/css/global.css` holds tokens, resets, and shared rules. `main.css`, `options.css`, and `metadata.css` are page-only. Every HTML page loads `global.css` first.
+- **JS DOM decoupling (9 slices):** frontend split into `core.js` (no DOM), `services/` (pure), `shared/` (theme / preview / window fit), `viewer/`, `filepanel/`, `menubar/`, `main/`, and `options/`. UI modules self-subscribe to `Core.onStateChange`. `ACTION_REGISTRY` is the single `cmd-*` source. Statusbar and chrome each have one writer. File panel self-renders; `main.js` is bootstrap only.
+- **HTML-first (incremental):** static probes/skeletons where they help (e.g. `#file-list-sentinel`), CSS classes for presentation state (`.is-hidden-entry`, body resize/cursor classes), `--panel-w` / `--col-*-w` instead of inline widths. File-panel row pool stays JS-allocated and sized to the viewport: a hardcoded static skeleton is not required.
+
+### Rust Backend Decoupling (landed on `refactor/decoupling`)
+- **8 slices:** tests moved out of crate-root files, zero-allocation formats registry, window subsystem, archive-cache encapsulation, `quivit://` protocol extraction, commands split, native shell icons with GDI RAII, watchers plus bootstrap slimming.
+- **Module map:** `lib.rs` / `main.rs` are bootstrap. `archives/` owns readers and `ArchiveCache`. `commands/` is the Tauri surface. `protocol.rs` owns `quivit://`. `platform/` and `windows.rs` own OS integrations and window lifecycle. `config.rs` is persistence only. Tests live under `tests/` via `#[path]`.
+- **Contracts kept:** IPC command names, config file layout, and `quivit://` URLs. Callers use `ArchiveCache` facade methods instead of reaching into cache fields. Window size constants live in `windows.rs`; JS caps in `shared/windowFit.js` stay mirrored (`OPTIONS_MAX_INITIAL_W` 560, `META_MAX_INITIAL_H` 600).
+
+### Tab Navigation Extraction
+- List and tab keyboard navigation live in `keyboardNav.js` (`makeContainerNavigable`, Home/End tab jump). File panel and favorites reuse it; Options tabs use the same helper. No inline `switch (e.key)` blocks remain in those UIs.
 
 ### Lazy Config Save, Exit Flush & Fullscreen State Sync on Reload (2026-08-13)
 - **Lazy Config Save (Performance):** Replaced all immediate `_persistConfig()` calls for UI preference mutations with a centralized dirty-flag debouncer (`_scheduleConfigFlush(1500)`). Preference toggles (transparent background, fit mode, scaling mode, scroll zoom latch, menu/status bar visibility) now mark config as dirty in memory, update the UI immediately, and schedule a single debounced disk write 1500 ms after the last interaction. Eliminates frame drops and `save_config` IPC thrash during rapid UI toggling.
@@ -24,31 +37,31 @@ This file tracks items that are fully implemented and verified, separate from th
 - **Separate pan lengths (scroll vs keyboard):** `frontend_data.keyboard_pan_step` (default 72) and `frontend_data.wheel_pan_step` (default 120), configurable via Options → General → Panning number inputs (`opt-keyboard-pan-step` / `opt-wheel-pan-step`). Defaults live in `DEFAULT_KEYBOARD_PAN_STEP` / `DEFAULT_WHEEL_PAN_STEP` in `keybinds.js` (matching original Quivi defaults).
 - **`mergeConfig` pan-step normalization (`keybinds.js`):** the raw `keyboard_pan_step`/`wheel_pan_step` values are stripped from the incoming `frontend_data` spread (`fdBase`) and re-added number-guarded with the `DEFAULT_*` fallbacks, so junk/non-number values in saved config can never produce a broken pan step.
 - **Pan-step hot-path caching:** `main.js` pre-parses both steps into module-level constants once via `updatePanSteps()` on `quivit-config-loaded` (`Number.isFinite`-guarded fallback to defaults) instead of re-reading `config.frontend_data.keyboard_pan_step || 72` inside every dispatch; `dispatchAction` picks `keyboardPanStep`/`wheelPanStep` through the `payload?.wheel` flag.
-- **Responsive keyboard panning:** `shortcuts.js` pre-parses pan keybinds into the `KEYBOARD_PAN_VECTORS` table (actionId → x/y vector) on boot and on `quivit-config-loaded`. `keydown` aggregates the currently held pan keys (`readKeyboardPanVector`) and dispatches **immediately per key press** through a new `dispatchKeyboardPan` callback, so panning starts with zero debounce/delay and supports fast multi-directional spam (e.g. holding W+A pans diagonally). Native key-repeat drives speed; pan keys bypass the generic `handleShortcut` path so each keydown pans exactly once. Stops on `keyup` and on window `blur` (which also clears `activeKeys`/`activeButtons` — fixes stuck keys after focus loss). `isInteractiveKeyTarget` extracted so Space/arrows still activate buttons natively.
-- **Smooth panning — tried, rejected:** evaluated an animated/smoothed pan; reverted — stepped panning feels more responsive. No easing/lerp path remains in `viewer.js` (only rAF-batched transform application).
-- **Zoom smoothing — tried, rejected:** same decision — instant zoom kept.
+- **Responsive keyboard panning:** `shortcuts.js` pre-parses pan keybinds into the `KEYBOARD_PAN_VECTORS` table (actionId → x/y vector) on boot and on `quivit-config-loaded`. `keydown` aggregates the currently held pan keys (`readKeyboardPanVector`) and dispatches **immediately per key press** through a new `dispatchKeyboardPan` callback, so panning starts with zero debounce/delay and supports fast multi-directional spam (e.g. holding W+A pans diagonally). Native key-repeat drives speed; pan keys bypass the generic `handleShortcut` path so each keydown pans exactly once. Stops on `keyup` and on window `blur` (which also clears `activeKeys`/`activeButtons`: fixes stuck keys after focus loss). `isInteractiveKeyTarget` extracted so Space/arrows still activate buttons natively.
+- **Smooth panning: tried, rejected:** evaluated an animated/smoothed pan; reverted: stepped panning feels more responsive. No easing/lerp path remains in `viewer.js` (only rAF-batched transform application).
+- **Zoom smoothing: tried, rejected:** same decision: instant zoom kept.
 
 ### HTML Flickering & Image Navigation Overhaul (Closed, 2026-08-12/13)
-- **Closed from `additions.md`:** the flicker overhaul shipped via the `feature/preloading` branch (merged `c5442cd`) plus the image-pool loading semantics entry above (two-image DOM bridge, decode-gated swap that holds the previous image, first-display placeholder with animated "Loading…" alt, cancellable off-DOM preloads, symmetric 7/7 prefetch).
+- **Closed from `additions.md`:** the flicker overhaul shipped via the `feature/preloading` branch (merged `c5442cd`) plus the image-pool loading semantics entry above (two-image DOM bridge, decode-gated swap that holds the previous image, first-display placeholder with animated "Loading..." alt, cancellable off-DOM preloads, symmetric 7/7 prefetch).
 - **Opaque canvas + image appear together:** the grill/opaque canvas is a persistent CSS backdrop (`#img-grill`/`#img-grill-border`, `inset: 0`, `--zoom-scale` counter-scaling) that stays constant behind the pool nodes, so it no longer appears as a flash ahead of the image; navigation swaps only on `decode()`.
-- **Session cache of archive entries:** retained in-session decompression cache resolved by the global byte-budgeted `ArchiveCache` (default 512 MB `archive_cache_mb`, LRU eviction) from the Multi-Archive cache entry — the "cache limit in Options" discussion was decided against; the budget stays config-file-only.
+- **Session cache of archive entries:** retained in-session decompression cache resolved by the global byte-budgeted `ArchiveCache` (default 512 MB `archive_cache_mb`, LRU eviction) from the Multi-Archive cache entry: the "cache limit in Options" discussion was decided against; the budget stays config-file-only.
 
 ### Multi-Archive Byte-Budgeted Archive Cache & Pool-Driven Prefetch (2026-08-12)
 - **`ArchiveCache` refactored into bounded per-archive state + one global budget:** `archives.rs` now keeps a recent-set `HashMap<String, SingleArchiveCache>` (each with its own ZIP entry map, `zip_archive`, temp-extract dir, and notify pair) alongside a global LRU of `(archive_path, entry_name)` pairs and a total byte budget. The old single-active-archive, 20-entry count-based `zip_entries`/`zip_lru` is gone; `commands.rs` `list_archive`/`prefetch_archive_entries` and the `lib.rs` protocol handler all route through the per-archive state.
 - **`archive_cache_mb` config (default 512 MB):** new top-level `usize` field in `config.rs` `AppConfig` (config-file-only, no UI). `lib.rs` builds the cache with `ArchiveCache::new(cache_mb)`.
-- **Shared byte-budget helper:** eviction/insert/read-touch logic consolidated into `ArchiveCache::insert_zip_entry`, `get_zip_entry`, and `evict_until_within_budget` in `archives.rs` (was duplicated in `commands.rs` and `lib.rs`) — evicts least-recently-used `(archive, entry)` pairs until the incoming entry fits, and always allows a single entry larger than the whole budget. Removed the write-only `active_path` field (the per-archive map superseded it).
+- **Shared byte-budget helper:** eviction/insert/read-touch logic consolidated into `ArchiveCache::insert_zip_entry`, `get_zip_entry`, and `evict_until_within_budget` in `archives.rs` (was duplicated in `commands.rs` and `lib.rs`): evicts least-recently-used `(archive, entry)` pairs until the incoming entry fits, and always allows a single entry larger than the whole budget. Removed the write-only `active_path` field (the per-archive map superseded it).
 - **Symmetric prefetch window:** `fsUtils.js` prefetch is now 7 ahead + 7 behind (was 7 ahead / 3 behind), warming decoded ZIP/CBZ entries around the settled image while the viewer keeps a smaller two-image DOM bridge.
-- **`buildFileSrcSync` helper:** synchronous `convertFileSrc` variant in `fsUtils.js` for the DOM pool (ICO stays async — spritesheets are fetched via the existing async path).
+- **`buildFileSrcSync` helper:** synchronous `convertFileSrc` variant in `fsUtils.js` for the DOM pool (ICO stays async: spritesheets are fetched via the existing async path).
 - **Archive ICO spritesheets:** archived `.ico` entries now use the same frame extraction/spritesheet pipeline as loose ICO files via `get_archive_ico_frames`, instead of being handed to the archive protocol as raw `image/x-icon` bytes. Sync hover/neighbor preloads skip archive ICO entries so the active async decode path remains the single source of truth.
 - **Validation-pass fixes:** follow-up verification corrected the docs from 500 MB to the actual 512 MB default, split Manhwa Mode back into its own future backlog slice (the HTML flicker work did not implement continuous-strip rendering), added README coverage for ICO spritesheets, and removed the unused `mut` from the new archive-cache test helper closure.
 - **Verification:** `node --check` and `cargo check` clean, `cargo test` 13/13 archive tests + new `archive_cache_byte_budget_evicts_globally` (cross-archive LRU eviction order, budget enforcement, oversized-entry insert, duplicate-insert no-op) = 14/14 total.
 
 ### Image-Pool Loading Semantics & Scroll-Zoom Indicator Idempotency (2026-08-12)
-- **Window title never shows "Loading..."** — reverted the interrupted session's `Loading... ◦ QuiviT` branch in `updateWindowTitle` (main.js) entirely; the title only ever renders `filename (current/total) ◦ container ◦ QuiviT` like the legacy master. Removed the now-unused `quivit-image-loaded` title listener and the `export` keyword.
-- **Loading feedback lives on the img element, not the window title:** `startLoadingAltAnimation(el)` in `viewer.js` now targets the actual loading pool node (previously it wrote to the stale module-level `img` — the old visible image, or `null` on the first load, so the animation never appeared). It animates both `alt` and `title` through `Loading. → Loading.. → Loading...` (320 ms).
-- **Placeholder only when nothing is on screen** (per user): first display (no previous image — entering an archive, after clear) shows the pool node with its src stripped so the browser renders the default broken-image frame with the animated "Loading..." alt/title, fetched via a hidden legacy-style preloader; the real src + `alt`/`title` = filename attach on load, `Failed to load X` on error. When a previous image is visible (navigation), the old image is held and the swap happens on `decode()` with no loading feedback at all.
+- **Window title never shows "Loading..."**: reverted the interrupted session's `Loading... ◦ QuiviT` branch in `updateWindowTitle` (main.js) entirely; the title only ever renders `filename (current/total) ◦ container ◦ QuiviT` like the legacy master. Removed the now-unused `quivit-image-loaded` title listener and the `export` keyword.
+- **Loading feedback lives on the img element, not the window title:** `startLoadingAltAnimation(el)` in `viewer.js` now targets the actual loading pool node (previously it wrote to the stale module-level `img`: the old visible image, or `null` on the first load, so the animation never appeared). It animates both `alt` and `title` through `Loading. → Loading.. → Loading...` (320 ms).
+- **Placeholder only when nothing is on screen** (per user): first display (no previous image: entering an archive, after clear) shows the pool node with its src stripped so the browser renders the default broken-image frame with the animated "Loading..." alt/title, fetched via a hidden legacy-style preloader; the real src + `alt`/`title` = filename attach on load, `Failed to load X` on error. When a previous image is visible (navigation), the old image is held and the swap happens on `decode()` with no loading feedback at all.
 - **Status bar untouched beyond filename:** the static `Loading...` filename write stays (restored by `_activatePoolNode`), but the interrupted session's `.status-filename-container` title hack is gone.
-- **`_updateScrollIndicator` is now idempotent** (shortcuts.js): computes the target text + `zoom-held`/`zoom-latched` classes, compares against the current DOM, and writes nothing when unchanged. `resetScrollLatch` no longer writes the indicator at all — it always runs right before `Core.loadConfig()`, and `syncScrollLatch` (via `quivit-config-loaded`) is the single writer. This kills the per-navigation latch-badge churn that `_persistConfig()` → `config-changed` → reload caused (root cause of "scroll-zoom is being touched" during every image navigation).
+- **`_updateScrollIndicator` is now idempotent** (shortcuts.js): computes the target text + `zoom-held`/`zoom-latched` classes, compares against the current DOM, and writes nothing when unchanged. `resetScrollLatch` no longer writes the indicator at all: it always runs right before `Core.loadConfig()`, and `syncScrollLatch` (via `quivit-config-loaded`) is the single writer. This kills the per-navigation latch-badge churn that `_persistConfig()` → `config-changed` → reload caused (root cause of "scroll-zoom is being touched" during every image navigation).
 - **Pool load handler guard:** `_attachLoadHandler` skips src-less placeholder nodes so a placeholder's inert "error" state can't stamp bogus dims.
 - **Verification:** `node --check` on all touched JS, `cargo check` clean, 13/13 Node harness checks for indicator idempotency (hold-mode repeat no-ops, toggle latched/unlatched sync dedupe, `resetScrollLatch` zero writes) and 18/18 viewer harness checks (first-display placeholder alt/title/animation + preloader restore, seamless no-feedback swap, src-less placeholder load-handler guard).
 
@@ -69,22 +82,22 @@ This file tracks items that are fully implemented and verified, separate from th
 - **Agent Rules Expansion (`AGENTS.md`):** Added explicit guidelines for "Performance first" (including practical caching examples) and "Self-documenting code" (avoiding multi-layer nesting, keeping comments concise but explicitly allowing structural comments like `// ── Persistence policy ──`). Upgraded "Measure twice, cut once" to strictly mandate reusing or extracting helpers before writing new logic to avoid code duplication.
 
 ### Configurable Pan Key
-- **Implemented as a normal keybind:** the pan key is the `cmd-pan-drag` action in `DEFAULT_KEYBINDS` (`keybinds.js`, default `['MouseLeft', 'MouseMiddle', 'Space']`), stored in `frontend_data.keybinds` and persisted/canonicalized exactly like every other keybind via `mergeConfig` → `normalizeCombo`. No separate `pan_key` config field or `normalizePanKey` helper — the shortcut keybind system is the single source of truth.
-- **Capture restrictions (per user spec):** only single inputs — no modifier keys, no key combinations, no wheel or double-click gestures. The Pan (Hold & Drag) entry in Options → Keys (Pan category) reuses the existing tag UI and `captureKeybind` machinery via a `singleOnly` capture mode: a lone key or mouse button is held (and shown) until the user releases it, committing on keyup/mouseup just like every other keybind; a second input while one is held is ignored; modifiers are ignored; Escape cancels; Delete removes the highlighted entry.
-- **Hold & drag behavior (`viewer.js`):** `_panKeys()` reads `frontend_data.keybinds['cmd-pan-drag']`. Mouse-button pan keys pan while pressed and dragged; keyboard pan keys support two modes — hold the key and move the mouse (grab mode, starts only over the viewport, never over UI chrome), or hold the key + left-button drag. Panning state is driven by `_panActive()` (held pan buttons + held keyboard keys); releasing the held key or button stops it. When `MouseRight` is a configured pan key, the viewer's `contextmenu` is suppressed so right-drag pans instead of popping the menu.
+- **Implemented as a normal keybind:** the pan key is the `cmd-pan-drag` action in `DEFAULT_KEYBINDS` (`keybinds.js`, default `['MouseLeft', 'MouseMiddle', 'Space']`), stored in `frontend_data.keybinds` and persisted/canonicalized exactly like every other keybind via `mergeConfig` → `normalizeCombo`. No separate `pan_key` config field or `normalizePanKey` helper: the shortcut keybind system is the single source of truth.
+- **Capture restrictions (per user spec):** only single inputs: no modifier keys, no key combinations, no wheel or double-click gestures. The Pan (Hold & Drag) entry in Options → Keys (Pan category) reuses the existing tag UI and `captureKeybind` machinery via a `singleOnly` capture mode: a lone key or mouse button is held (and shown) until the user releases it, committing on keyup/mouseup just like every other keybind; a second input while one is held is ignored; modifiers are ignored; Escape cancels; Delete removes the highlighted entry.
+- **Hold & drag behavior (`viewer.js`):** `_panKeys()` reads `frontend_data.keybinds['cmd-pan-drag']`. Mouse-button pan keys pan while pressed and dragged; keyboard pan keys support two modes: hold the key and move the mouse (grab mode, starts only over the viewport, never over UI chrome), or hold the key + left-button drag. Panning state is driven by `_panActive()` (held pan buttons + held keyboard keys); releasing the held key or button stops it. When `MouseRight` is a configured pan key, the viewer's `contextmenu` is suppressed so right-drag pans instead of popping the menu.
 - **Outside-window tracking:** keyboard grab-pan polls the OS cursor position via Tauri (`cursorPosition()` / `innerPosition()` / `scaleFactor()`, refreshed on window move) while the pan key is held, so panning continues when the pointer leaves the window exactly like a mouse-button drag (which tracks via implicit pointer capture). Polling starts only for keyboard pan keys, stops on key release, and a `blur` handler ends the grab so it can't pan from wherever the pointer happens to be when focus is lost.
-- **Shared mouse-button mapping:** `MOUSE_BUTTON_NAMES` (`shortcuts.js`) is the single source for mouse button number ↔ name — used by `formatKeysCombo`, keybind capture (`keybindUi.js`), and the viewer pan-key lookup. No duplicated button tables.
+- **Shared mouse-button mapping:** `MOUSE_BUTTON_NAMES` (`shortcuts.js`) is the single source for mouse button number ↔ name: used by `formatKeysCombo`, keybind capture (`keybindUi.js`), and the viewer pan-key lookup. No duplicated button tables.
 - **Verification:** `node --check` on all touched modules, `cargo check` clean.
 
 ### Single-Instance Restart Gating
-- **Behavior made symmetric:** "Allow only one QuiviT instance" now requires a restart in *both* directions, so the Options hint "Takes effect after restarting QuiviT." is accurate. Previously, disabling took effect immediately (each new process reads the live config at its own startup) while enabling required a restart — an inconsistency.
-- **Mechanism (staged/pending value, plugin untouched):** Options Save writes the checkbox to `pending_single_instance` and never writes the effective `single_instance`. On the next launch, `apply_pending_config()` in `config.rs` (used by `lib.rs` `run()` before the plugin gate) promotes the pending value into `single_instance`, deletes the pending key, and persists `quivit_config.json` (only when a pending value exists — no file churn otherwise). The stock `tauri-plugin-single-instance` registration logic is unchanged.
-- **Verification:** 4 new unit tests in `config.rs` (`test_apply_pending_config_{disable,enable,non_bool_dropped,noop_without_pending}`) — 13/13 `cargo test` pass; `cargo check` and `node --check src/js/options.js` clean.
+- **Behavior made symmetric:** "Allow only one QuiviT instance" now requires a restart in *both* directions, so the Options hint "Takes effect after restarting QuiviT." is accurate. Previously, disabling took effect immediately (each new process reads the live config at its own startup) while enabling required a restart: an inconsistency.
+- **Mechanism (staged/pending value, plugin untouched):** Options Save writes the checkbox to `pending_single_instance` and never writes the effective `single_instance`. On the next launch, `apply_pending_config()` in `config.rs` (used by `lib.rs` `run()` before the plugin gate) promotes the pending value into `single_instance`, deletes the pending key, and persists `quivit_config.json` (only when a pending value exists: no file churn otherwise). The stock `tauri-plugin-single-instance` registration logic is unchanged.
+- **Verification:** 4 new unit tests in `config.rs` (`test_apply_pending_config_{disable,enable,non_bool_dropped,noop_without_pending}`): 13/13 `cargo test` pass; `cargo check` and `node --check src/js/options.js` clean.
 
 ### Window Title & Statusbar Index
 - **Dynamic window title:** The OS title bar reflects the currently displayed image via `updateWindowTitle()` in `main.js`: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages (separator is `◦` U+25E6, per user preference). Non-image selections (`..`, folders, archives, drives) fall back to just `QuiviT`. `setTitle` only fires on actual change (`_lastTitle` guard); requires the `core:window:allow-set-title` capability.
 - **Image-only page count:** `FsUtils.naturalPagePosition(list, filename)` counts only image entries in natural ascending filename order (via `DirectoryPrefs.naturalCompare`), independent of the active sort column/direction. The `(current/total)` suffix appears only when `total > 1`.
-- **Statusbar index fix:** `FsUtils.formatStatusIndex(state)` replaces the inline `index+1 / length` math in `main.js`/`viewer.js` — the `..` parent row is excluded from both numerator and denominator (it is always `list[0]` when present). Single-entry lists render nothing.
+- **Statusbar index fix:** `FsUtils.formatStatusIndex(state)` replaces the inline `index+1 / length` math in `main.js`/`viewer.js`: the `..` parent row is excluded from both numerator and denominator (it is always `list[0]` when present). Single-entry lists render nothing.
 - **Verification:** 20/20 Node harness checks pass for `formatStatusIndex`, `naturalPagePosition`, and `naturalCompare`; runtime-confirmed in-app (title format for archive/folder pages, page count independent of sort).
 
 ### Global Default Sort Guard
@@ -101,8 +114,8 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ### Scroll-Modifier Status Indicator
 - Replaced the toggle-only `_updateLatchIndicator` with `_updateScrollIndicator(config)` in `shortcuts.js`, backed by `getScrollModifierKeys(config, ids)` which derives bound modifiers from the zoom (`cmd-zoom-in`/`cmd-zoom-out`) and pan (`cmd-pan-*`) groups so rebinding to Alt/Meta updates the badge.
-- **Hold mode:** shows any physically held bound scroll modifier — `Ctrl — Held`, `Shift — Held`, `Ctrl+Shift — Held` — updated on modifier keydown/keyup.
-- **Toggle mode:** while latched shows `Scroll Zoom — Toggled`; when unlatched it shows held **pan** modifiers only (`Shift — Held`), because Ctrl is the toggle key and does nothing to the wheel unlatched (it is stripped from the combo). Ctrl never renders as a held badge in toggle mode.
+- **Hold mode:** shows any physically held bound scroll modifier: `Ctrl: Held`, `Shift: Held`, `Ctrl+Shift: Held`: updated on modifier keydown/keyup.
+- **Toggle mode:** while latched shows `Scroll Zoom: Toggled`; when unlatched it shows held **pan** modifiers only (`Shift: Held`), because Ctrl is the toggle key and does nothing to the wheel unlatched (it is stripped from the combo). Ctrl never renders as a held badge in toggle mode.
 - Indicator cleared on reset; both states are mutually exclusive and gated on the configured modifier mode. CSS: `#statusbar.zoom-held .status-scroll-zoom` alongside the existing `zoom-latched` rule; the statusbar span is now JS-owned (empty in `index.html`).
 
 ### Example Theme Bundling
@@ -116,9 +129,9 @@ This file tracks items that are fully implemented and verified, separate from th
 ### Window Auto-Fit & Sizing
 - **Centralized size constants:** Main/options/metadata initial + min window sizes moved to `config.rs` (`MAIN_INITIAL_W/H`, `OPTIONS_INITIAL_W/H`, `META_INITIAL_W/H`, etc.), with JS caps mirrored (`OPTIONS_MAX_INITIAL_W` in `options.js`, `META_MAX_INITIAL_H` in `metadata-window.js`).
 - **Main window built in Rust:** The main window is now constructed in `lib.rs` setup (was declared in `tauri.conf.json`) so all windows share one construction path and the shell background applies before first paint. Initial 1280×720, min 640×400.
-- **Options window auto-fit width:** Opens hidden, JS measures the `.tabs` bar at `fit-content` (unreliable to measure tab content — the Customization textarea's long placeholder lines inflate max-content past the clamp), adds the body's horizontal padding read from computed CSS, and calls `fit_options_window` (size + re-center over the main window) before showing. No size flicker.
+- **Options window auto-fit width:** Opens hidden, JS measures the `.tabs` bar at `fit-content` (unreliable to measure tab content: the Customization textarea's long placeholder lines inflate max-content past the clamp), adds the body's horizontal padding read from computed CSS, and calls `fit_options_window` (size + re-center over the main window) before showing. No size flicker.
 - **Metadata window auto-fit height:** Opens hidden, JS measures the content root's `scrollHeight` (not `documentElement.scrollHeight`, which is clamped to viewport and would never shrink), capped at 600, and calls `fit_metadata_window` before showing. Re-fits live on `metadata-data` updates and cover decode.
-- **Subpixel rounding:** `getBoundingClientRect()` returns fractional widths (font metrics), so the options width is `Math.ceil`'d — rounding down could size the window 1px too narrow and clip content. No hardcoded +1.
+- **Subpixel rounding:** `getBoundingClientRect()` returns fractional widths (font metrics), so the options width is `Math.ceil`'d: rounding down could size the window 1px too narrow and clip content. No hardcoded +1.
 - **Serialized fits:** Both windows serialize fits through a promise chain so out-of-order IPC invokes (initial render, cover decode, live updates) can't leave a stale short measurement as the final size.
 - **Version statusbar:** Added a `v1.0.0` version badge (`.status-version`) to the statusbar; app version bumped to 1.0.0 across `package.json`, `package-lock.json`, `Cargo.toml`, and `tauri.conf.json`. Added `core:window:allow-show` capability for the JS-side `.show()` calls.
 
@@ -134,7 +147,7 @@ This file tracks items that are fully implemented and verified, separate from th
 - **File Deletion Fallbacks:** When an active archive or folder is deleted while viewing, the user is properly booted back. Deleting a directory falls back to its parent; deleting an archive falls back to its parent directory. Ensure "Continue from last opened directory/image" falls back gracefully by recursively walking up the directory tree using `parentOf()` if the target doesn't exist at startup, until it stabilizes at the root and ultimately falls back to the Drives view.
   - **Archive Interruption Fix:** Prevent active image interruptions inside an archive. Directory-change events on the background archive no longer boot the user back to the first image; the viewer preserves the active image page while silently refreshing the underlying file list.
 - **Folder CUT Handling:** Improved the file watcher by adding a parent directory watcher. This ensures that folder CUT (move) operations, which previously bypassed the internal watcher silently, correctly boot the user back to the parent directory just like a folder deletion.
-- **'This PC' Dialog Limitation:** Investigated and verified that the native Windows folder picker in Tauri cannot return a path for the virtual "This PC" shell folder, as it simply cancels the dialog. This is documented as a native OS limitation.
+- **Virtual Folder Picker:** Replaced the Tauri dialog-based folder picker with a backend `pick_folder` command (COM `IFileOpenDialog` + `IShellLibrary`, `platform/dialog.rs`) that returns real filesystem paths for Windows Library virtual folders (Documents, Pictures, Videos, Music), so the earlier "This PC dialog limitation" no longer applies. `fsUtils.js` also maps known CLSID shell folders (Desktop, Downloads, Home, Pictures, Documents, Videos, Music) to their resolved paths; unmappable virtual folders (e.g. This PC itself) fall back to the Drives view.
 
 ### Viewer & UI Enhancements (Grill, Menubar, Options)
 - **Opaque Canvas Precision:** Refactored `#img-grill` and `#img-grill-border` out of JavaScript subpixel measurement. Using CSS `inset: 0`, CSS variables (`--zoom-scale`), and `box-shadow`, the grill mathematically resists parent `scale()` transforms and achieves perfect visual thickness across zoom levels.
@@ -303,14 +316,14 @@ This file tracks items that are fully implemented and verified, separate from th
 ### Keybind System Cleanup
 
 - Added `cmd-open-dir` (`Ctrl+O`) and `cmd-open-file` (`Ctrl+Shift+O`) to `DEFAULT_KEYBINDS` so both are fully configurable.
-- Removed hardcoded `Ctrl+o`, `1–5` fallback checks from `shortcuts.js`; all shortcuts now live exclusively in `DEFAULT_KEYBINDS`.
-- Removed `LEGACY_DEFAULT_KEYBINDS` migration block; simplified `mergeConfig` — saved user config is now merged directly over defaults.
+- Removed hardcoded `Ctrl+o`, `1-5` fallback checks from `shortcuts.js`; all shortcuts now live exclusively in `DEFAULT_KEYBINDS`.
+- Removed `LEGACY_DEFAULT_KEYBINDS` migration block; simplified `mergeConfig`: saved user config is now merged directly over defaults.
 
 ### Options: Reset to Defaults Button
 
 - Added a **Reset to Defaults** button in the Options Keys tab header.
 - Clicking it replaces `config.frontend_data.keybinds` with a fresh copy of `DEFAULT_KEYBINDS` and re-renders the keybind list in-place.
-- Styled via `.keybinds-header` and `#btn-reset-keybinds` in `options.css` — no inline styles.
+- Styled via `.keybinds-header` and `#btn-reset-keybinds` in `options.css`: no inline styles.
 
 ### Twemoji Flag (Language Tab)
 
@@ -362,7 +375,7 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ### Managed-Config Favorites
 
-- Moved favorites out of WebView2 `localStorage` into managed config (`frontend_data.favorites` and `frontend_data.favorites_collapsed`) so they persist through the normal config/portable machinery. (The one-time legacy `localStorage` migration was later removed since the app has not shipped — see "Favorites LocalStorage Migration Removal".)
+- Moved favorites out of WebView2 `localStorage` into managed config (`frontend_data.favorites` and `frontend_data.favorites_collapsed`) so they persist through the normal config/portable machinery. (The one-time legacy `localStorage` migration was later removed since the app has not shipped: see "Favorites LocalStorage Migration Removal".)
 - Collapsed/expanded favorites state is persisted and restored; empty lists auto-collapse and persist that state.
 - Favorite items now support single-click highlight and double-click open for folders/archives, with the current folder/archive taking priority over the selected entry so a favorited location stays highlighted.
 
@@ -440,18 +453,18 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ### Options Apply/Preview Behavior & Window Lifecycle
 
-- Theme and Custom CSS changes in Options are now **local previews only** — they apply instantly to both windows (`theme-preview` / `css-preview` events) but are no longer auto-saved on click. Clicking **Apply** persists them to config and emits `config-updated`; **Close/Cancel** re-fetches the saved config and reverts the live previews (theme + CSS) before closing.
+- Theme and Custom CSS changes in Options are now **local previews only**: they apply instantly to both windows (`theme-preview` / `css-preview` events) but are no longer auto-saved on click. Clicking **Apply** persists them to config and emits `config-updated`; **Close/Cancel** re-fetches the saved config and reverts the live previews (theme + CSS) before closing.
 - The Apply status message is no longer clobbered by association results: after `applyAssociations` runs, Apply preserves any "failed/error" status from the associations step instead of overwriting it with a generic success message.
 - Added an `on_window_event` hook in `lib.rs` so closing the main window also closes the Options window (if open).
 
 ### File Association: Windows Default-Apps Registration
 
-- **Registration now follows the VLC/qBittorrent/SumatraPDF pattern.** `register_associations` additionally writes `HKCU\Software\QuiviT\Capabilities` (ApplicationName / ApplicationDescription), `HKCU\Software\QuiviT\Capabilities\FileAssociations` (`.ext` → `QuiviT.<ext>`), and `HKCU\Software\RegisteredApplications\QuiviT` so QuiviT shows up in Windows Settings → Default Apps.
+- **Registration now follows the VLC/qBittorrent/SumatraPDF pattern.** `register_associations` also writes `HKCU\Software\QuiviT\Capabilities` (ApplicationName / ApplicationDescription), `HKCU\Software\QuiviT\Capabilities\FileAssociations` (`.ext` → `QuiviT.<ext>`), and `HKCU\Software\RegisteredApplications\QuiviT` so QuiviT shows up in Windows Settings → Default Apps.
 - **`get_format_status` now reads `UserChoice` first** (the real active default handler on Win10/11). If `UserChoice` exists and points at another program, the checkbox correctly stays unticked; it only falls back to the `Classes` default value when no `UserChoice` exists yet (fresh installs / unclaimed formats).
 - `unregister_associations` now also removes extensions from `Capabilities\FileAssociations`, and when the last format is removed it deletes `Software\QuiviT` and drops the `RegisteredApplications` entry.
 - The "Open Windows Default Apps Settings" button deep-links via `ms-settings:defaultapps?registeredAppUser=QuiviT` (Win11 23H2+), falling back to the generic page.
-- Options → File Types wording updated: checking a box registers QuiviT as an *available* handler; on Windows 10/11 a format with no existing default (no `UserChoice`) gets QuiviT as its handler directly, while a format whose `UserChoice` points at another program can only be changed by the user — but Windows offers QuiviT in the automatic "How do you want to open this file?" picker that appears when opening such a file, as well as via "Open with" and Windows Settings.
-- Select All / Deselect All buttons in the File Types tab work again (restored in the verification pass — their `onclick` handlers had been dropped in the dirty-tracking refactor).
+- Options → File Types wording updated: checking a box registers QuiviT as an *available* handler; on Windows 10/11 a format with no existing default (no `UserChoice`) gets QuiviT as its handler directly, while a format whose `UserChoice` points at another program can only be changed by the user: but Windows offers QuiviT in the automatic "How do you want to open this file?" picker that appears when opening such a file, as well as via "Open with" and Windows Settings.
+- Select All / Deselect All buttons in the File Types tab work again (restored in the verification pass: their `onclick` handlers had been dropped in the dirty-tracking refactor).
 - Added `.taurignore` so `npm run tauri dev` does not hot-reload when `quivit_config.json`, `.portable`, or `DEBUG_REG` change; `DEBUG_REG` added to `.gitignore`.
 
 ### Favorites Keyboard Navigation & Archive-Entry Favorites
@@ -472,7 +485,7 @@ This file tracks items that are fully implemented and verified, separate from th
 - The scroll-wheel toggle latch (`ctrlLatched`, Options → Keys → Scroll Wheel → Toggle Ctrl) now persists across restarts as `frontend_data.scroll_zoom_latched`.
 - Split into `quivit_state.json` in roaming mode via the new `STATE_KEYS` entry in `lib.rs`; portable mode keeps it inline in the single self-contained config file.
 - `shortcuts.js` persists the latch whenever a clean Ctrl tap toggles it, and exports `syncScrollLatch(config)` which restores it after config load; `main.js` calls it on `quivit-config-loaded` (startup and Options Apply & Close).
-- `syncScrollLatch` only applies the latch when the modifier is `'toggle'` — in `'hold'` mode a stale latch never shows the badge or latches zoom.
+- `syncScrollLatch` only applies the latch when the modifier is `'toggle'`: in `'hold'` mode a stale latch never shows the badge or latches zoom.
 
 ### Favorites LocalStorage Migration Removal
 
@@ -481,7 +494,7 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ### Persistence Policy Documentation
 
-- Added a canonical persistence-policy comment block to the `core.js` header: which data belongs in `quivit_config.json` (preferences) vs `quivit_state.json` (last-known runtime state, `STATE_KEYS` in `lib.rs`) vs WebView2 `localStorage` (pre-paint caches and session-only state only — never a source of truth).
+- Added a canonical persistence-policy comment block to the `core.js` header: which data belongs in `quivit_config.json` (preferences) vs `quivit_state.json` (last-known runtime state, `STATE_KEYS` in `lib.rs`) vs WebView2 `localStorage` (pre-paint caches and session-only state only: never a source of truth).
 - Added `// persistence:` pointer comments in `keybinds.js` (`mergeConfig`), `shortcuts.js` (latch), and `filePanel.js` (favorites).
 
 ### Scaling Mode Backward Cycle
@@ -496,7 +509,7 @@ This file tracks items that are fully implemented and verified, separate from th
 - Added `cmd-fit-none` ("Fit: None") to the View menu, `main.js` dispatch/menu wiring, and the Options Keys → View list; default binding is `['DoubleClick', 'r']`. `mergeConfig` adds it to existing configs.
 - Removed the hardcoded viewport `dblclick` toggle in `viewer.js`; double-click now goes through the keybind table like any other gesture.
 - Added `DoubleClick` / `DoubleRightClick` as bindable gestures in `shortcuts.js`: the mouse dispatch for left/right buttons waits out a 350 ms window so a rapid second press becomes the double gesture instead of two single `MouseLeft`/`MouseRight` dispatches. Dispatches are scoped to the viewport (excluded from `#file-panel`, `.menubar`, `.dropdown-menu`, `#statusbar`) so the file list's own double-click-to-open still works.
-- Capture in `keybindUi.js` now recognizes both double-click gestures (same debounce window + position threshold) and fixed a bug where plain mouse-button bindings (`MouseLeft`/`MouseRight`) were discarded — `hasNonModifier` now also counts `maxButtons`, so a bare mouse gesture finalizes correctly.
+- Capture in `keybindUi.js` now recognizes both double-click gestures (same debounce window + position threshold) and fixed a bug where plain mouse-button bindings (`MouseLeft`/`MouseRight`) were discarded: `hasNonModifier` now also counts `maxButtons`, so a bare mouse gesture finalizes correctly.
 - Middle-click (button 1) on a keybind tag removes that binding (alternative to the × button): the tag's middle `mousedown` is `preventDefault()`ed to block the browser's native autoscroll, and removal fires on the tag's `mouseup`, reusing the same removal path.
 - The browser right-click context menu stays enabled in the options window generally but is suppressed during keybind capture (`onContextMenu`), so right-click / double right-click can be captured cleanly.
 - Auto fit menu item now has `title=""`.
@@ -510,17 +523,17 @@ This file tracks items that are fully implemented and verified, separate from th
 ### Keybind Capture Fixes
 
 - **Middle-click removal works again.** Each keybind tag's `mousedown` handler now `preventDefault()`s button 1, blocking the browser's native autoscroll (which previously swallowed the click and suppressed `auxclick`); removal fires on the tag's `mouseup` for button 1 instead of relying on `auxclick`.
-- **Middle mouse stays bindable.** During capture the window capture-phase listener `stopPropagation`s the tag events and already blocks autoscroll, and the tag's removal handler is additionally guarded by `isCapturing`, so `MouseMiddle` can be bound cleanly and middle-click removal is disabled while listening.
-- **Context menu suppression covers the finalizing press.** `cleanup()` now keeps the capture's `onContextMenu` listener attached until the 100ms `isCapturing` reset instead of removing it synchronously — the `contextmenu` event that trails a finalizing right-click press (`mousedown → contextmenu`) used to escape suppression and pop the native menu on the second click of a `DoubleRightClick` capture.
-- **Wheel capture no longer scrolls the page.** Wheel finalization is debounced (`WHEEL_SETTLE_MS = 300`): `onWheel` keeps `preventDefault`ing, shows the live combo (`ScrollUp` / `Ctrl+ScrollDown`, ...) on the element, and only `finish()`es once the gesture settles — a longer scroll no longer bleeds past the capture and scrolls the options page. The settle timer is cleared in `cleanup()`.
+- **Middle mouse stays bindable.** During capture the window capture-phase listener `stopPropagation`s the tag events and already blocks autoscroll, and the tag's removal handler is also guarded by `isCapturing`, so `MouseMiddle` can be bound cleanly and middle-click removal is disabled while listening.
+- **Context menu suppression covers the finalizing press.** `cleanup()` now keeps the capture's `onContextMenu` listener attached until the 100ms `isCapturing` reset instead of removing it synchronously: the `contextmenu` event that trails a finalizing right-click press (`mousedown → contextmenu`) used to escape suppression and pop the native menu on the second click of a `DoubleRightClick` capture.
+- **Wheel capture no longer scrolls the page.** Wheel finalization is debounced (`WHEEL_SETTLE_MS = 300`): `onWheel` keeps `preventDefault`ing, shows the live combo (`ScrollUp` / `Ctrl+ScrollDown`, ...) on the element, and only `finish()`es once the gesture settles: a longer scroll no longer bleeds past the capture and scrolls the options page. The settle timer is cleared in `cleanup()`.
 - **Initiating click counts as the first press of a double-click.** `captureKeybind` now receives the initiating click event and seeds `mousePress` from it, so clicking a tag/`+` then clicking once more within the window captures `DoubleClick` (2 presses) instead of requiring a triple-click. Right-click sequences and distant/delayed second presses are unaffected.
 
 ### Keybind Capture Consistency
 
 - **Non-double mouse buttons commit instantly.** The capture debounce (waiting for a potential second press) now applies only to buttons 0/2 (`MouseLeft`/`MouseRight`), which have double-click gestures; `MouseMiddle`, `MouseBack`, and `MouseForward` finalize immediately on `mouseup` since they have no double state. This matches dispatch, which already treats buttons 1/3/4 as immediate.
-- **Scroll capture is modifier-only.** `onWheel` builds the combo from held modifier keys (`Ctrl`/`Shift`/`Alt`/`Meta`) plus the scroll direction, ignoring non-modifier keys and mouse buttons — so `ScrollUp`, `Ctrl+ScrollUp`, and `Ctrl+Shift+ScrollUp` are bindable while `A+ScrollUp` is not, mirroring the double-click gestures (no key/button + gesture).
+- **Scroll capture is modifier-only.** `onWheel` builds the combo from held modifier keys (`Ctrl`/`Shift`/`Alt`/`Meta`) plus the scroll direction, ignoring non-modifier keys and mouse buttons: so `ScrollUp`, `Ctrl+ScrollUp`, and `Ctrl+Shift+ScrollUp` are bindable while `A+ScrollUp` is not, mirroring the double-click gestures (no key/button + gesture).
 - **Scroll combos always read `Modifiers+Scroll`.** `formatKeysCombo` now pushes `scrollDir` last (after `others.sort()`), so a captured combo can never appear as `ScrollUp+a`; ordering is consistent on both capture and dispatch.
-- **Lone modifier presses no longer get stuck.** When everything is released but the captured state is modifier-only (no real key/button/double), `updateState` resets `maxKeys`/`maxButtons` and shows `Listening...`, ignoring the press instead of leaving the stale modifier displayed. The next input captures normally. (Dispatch has always ignored bare modifiers — `shortcuts.js` returns early for `Control`/`Shift`/`Alt`/`Meta` keydowns — so this was purely a capture-UX fix.)
+- **Lone modifier presses no longer get stuck.** When everything is released but the captured state is modifier-only (no real key/button/double), `updateState` resets `maxKeys`/`maxButtons` and shows `Listening...`, ignoring the press instead of leaving the stale modifier displayed. The next input captures normally. (Dispatch has always ignored bare modifiers: `shortcuts.js` returns early for `Control`/`Shift`/`Alt`/`Meta` keydowns: so this was purely a capture-UX fix.)
 
 ### Navigation Trail History
 
@@ -551,7 +564,7 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ### Shell/Window Polish
 
-- The main Tauri window background is set at startup from the saved theme (`apply_shell_background` in `lib.rs`): `frontend_data.theme` dark/light → `Color(37,37,38,255)` / `Color(255,255,255,255)` — the `--surface` values from `main.css`, since the shell mirrors the dominant visible page background (not the `--bg` backdrop) — with "system" resolved from the native window theme. `tauri.conf.json` sets the main window `backgroundColor`.
+- The main Tauri window background is set at startup from the saved theme (`apply_shell_background` in `lib.rs`): `frontend_data.theme` dark/light → `Color(37,37,38,255)` / `Color(255,255,255,255)`: the `--surface` values from `main.css`, since the shell mirrors the dominant visible page background (not the `--bg` backdrop): with "system" resolved from the native window theme. `tauri.conf.json` sets the main window `backgroundColor`.
 - Options window initial/min sizes already implemented.
 
 ### Directory Sort Limit
@@ -560,14 +573,14 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ### Dynamic Shell Background Sync
 
-- Added `src/js/shellBackground.js`, a self-contained leaf module (IIFE, no deps) included on every page (`index.html`, `options.html`) that keeps the native window background in sync with the page's `--surface` color (the dominant visible page background — not the `--bg` backdrop). Reads the computed `--surface` via a hidden probe element (robust to hex/rgb/named colors and `var()` indirection), debounced, and re-syncs automatically through a MutationObserver on the `data-theme` attribute and `document.head` (catches `#custom-css` style changes), plus a `quivit:shell-sync` event for manual triggers. No-ops outside Tauri. Any new page that includes it gets shell sync for free.
+- Added `src/js/shellBackground.js`, a self-contained leaf module (IIFE, no deps) included on every page (`index.html`, `options.html`) that keeps the native window background in sync with the page's `--surface` color (the dominant visible page background: not the `--bg` backdrop). Reads the computed `--surface` via a hidden probe element (robust to hex/rgb/named colors and `var()` indirection), debounced, and re-syncs automatically through a MutationObserver on the `data-theme` attribute and `document.head` (catches `#custom-css` style changes), plus a `quivit:shell-sync` event for manual triggers. No-ops outside Tauri. Any new page that includes it gets shell sync for free.
 - **Upstream API bug worked around**: the official `@tauri-apps/api` `Window#setBackgroundColor` wrapper invokes `plugin:window|set_background_color` with `{ color }`, but the backend command parameter is named `value` (an `Option<Color>`). Tauri's IPC silently deserializes a missing key to `None` (`deserialize_option`), so the wrapper actually *reset* the background to default (black) with no error. `shellBackground.js` bypasses the wrapper with `window.__TAURI__.core.invoke('plugin:window|set_background_color', { value: {...} })`; the mismatch is documented in both `shellBackground.js` and `lib.rs`.
 - Added `core:window:allow-set-background-color` to `src-tauri/capabilities/default.json`.
 - Debug scaffolding removed after verification: `SHELL_SYNC_ENABLED` flag, `syncShellBackground()` call sites in `main.js`, and the DEBUG-ONLY `transform: scale(0.95)` page-shrink rule in `main.css`.
 
 ### Custom CSS Cascade Priority
 
-- The inline theme/custom-CSS head script in `index.html` and `options.html` now sits below the `<link rel="stylesheet">` tags, so the injected `#custom-css` `<style>` lands last in the head and wins the cascade. Because the script is still inline in the head (blocks parsing), it executes before first paint — no theme flicker.
+- The inline theme/custom-CSS head script in `index.html` and `options.html` now sits below the `<link rel="stylesheet">` tags, so the injected `#custom-css` `<style>` lands last in the head and wins the cascade. Because the script is still inline in the head (blocks parsing), it executes before first paint: no theme flicker.
 
 ### CSS Token Decoupling (`--bg` → `--field-bg`)
 
@@ -579,7 +592,7 @@ This file tracks items that are fully implemented and verified, separate from th
 
 ### Theme/CSS Preview Persistence
 
-- Previewing a theme or custom CSS in Options was silently wiped by the config file watcher: any main-window state persistence (`last_active_image`, statusbar/menubar toggles) rewrites `quivit_config.json`, the Rust watcher (`lib.rs`, 500ms debounce) emits `config-changed`, and both windows reload the *saved* theme/CSS — discarding the preview.
+- Previewing a theme or custom CSS in Options was silently wiped by the config file watcher: any main-window state persistence (`last_active_image`, statusbar/menubar toggles) rewrites `quivit_config.json`, the Rust watcher (`lib.rs`, 500ms debounce) emits `config-changed`, and both windows reload the *saved* theme/CSS: discarding the preview.
 - `main.js` now tracks `previewTheme`/`previewCss` from the `theme-preview`/`css-preview` events and re-applies them on every config reload (`quivit-config-loaded`); they are cleared only on Options Apply (`config-updated`). Plain `config-changed` reloads keep the preview.
 - `options.js` tracks a `previewing` flag (set on theme click / CSS preview; cleared on Apply, Close, and the emergency reset) that gates `refreshLiveConfigState()` so reloads don't revert the preview. Previews now persist until Apply or close-without-Apply.
 
@@ -680,8 +693,8 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 - **Hybrid caching strategy**:
   - ZIP/CBZ: On-demand in-memory LRU cache (20 images) with \prefetch_archive_entries\ command for background prefetching (7 ahead / 3 behind).
   - RAR/CBR: Background sequential extraction to OS temp directory (\%TEMP%\\QuiviT\\<hash>\\) via spawned thread; \quivit://\ protocol polls temp disk with 3-second timeout.
-- **Unified protocol handler**: \quivit://archive/<base64_path>/<entry>\ now routes seamlessly — serves from LRU cache (ZIP) or temp disk (RAR), with on-demand extraction fallback for ZIP cache misses.
-- **Seamless image swapping**: \iewer.js\ uses off-screen \Image\ preloader — retains previous image on screen until new image fully loads, eliminating flicker/black frames during navigation.
+- **Unified protocol handler**: \quivit://archive/<base64_path>/<entry>\ now routes seamlessly: serves from LRU cache (ZIP) or temp disk (RAR), with on-demand extraction fallback for ZIP cache misses.
+- **Seamless image swapping**: \iewer.js\ uses off-screen \Image\ preloader: retains previous image on screen until new image fully loads, eliminating flicker/black frames during navigation.
 - **Prefetch integration**: \core.js\ triggers \prefetchAhead\ on navigation; \sUtils.js\ triggers initial prefetch on archive load.
 - **Dependencies**: Added \md5\ crate for deterministic temp directory naming.
 - **Cleanup**: Old RAR temp directories cleaned up on new archive load; ZIP LRU evicts oldest entries at capacity.
@@ -689,14 +702,21 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 ### 7Z/CB7 and TAR/CBT Archive Support
 
 - **New formats**: `list_archive` now handles 7z, cb7, cbt, and tar in addition to zip/cbz/rar/cbr; `SUPPORTED_ARCHIVES` updated in Rust and `fsUtils.js`; file panel icons map 7z/cb7/cbt/tar to the cbz archive icon.
-- **7Z/CB7 (7z, cb7)**: Added \list_7z_entries\ (header-only via `sevenz-rust2` file metadata — instant, no decompression) and \extract_7z_to_temp\. Solid 7z archives are single-block and not seekable, so they use the same background sequential extraction to the deterministic md5 temp dir as RAR (no ZIP-style random access). Background extraction runs in a spawned thread; protocol handler serves from temp disk with a 3-second poll, then on-demand extraction fallback for cache misses.
-- **TAR/CBT (tar, cbt)**: TAR is uncompressed and seekable, so \list_tar_entries\ lists on demand and \extract_tar_entry\ seeks + reads individual entries directly — no temp copy, no full extraction.
+- **7Z/CB7 (7z, cb7)**: Added \list_7z_entries\ (header-only via `sevenz-rust2` file metadata: instant, no decompression) and \extract_7z_to_temp\. Solid 7z archives are single-block and not seekable, so they use the same background sequential extraction to the deterministic md5 temp dir as RAR (no ZIP-style random access). Background extraction runs in a spawned thread; protocol handler serves from temp disk with a 3-second poll, then on-demand extraction fallback for cache misses.
+- **TAR/CBT (tar, cbt)**: TAR is uncompressed and seekable, so \list_tar_entries\ lists on demand and \extract_tar_entry\ seeks + reads individual entries directly: no temp copy, no full extraction.
 - **Dependencies**: Added \sevenz-rust2 = "0.21"\ and \tar = "0.4"\.
 - **ArchiveCache**: \rar_temp_dir\ generalized to \extract_temp_dir\ for the 7z/RAR shared temp-disk path.
 - **Tests**: Added \archive_tests\ module (6 tests) covering solid 7z listing + nested extraction to temp, cb7 alias routing, tar listing + entry extraction, RAR5/CBR listing, and supported-format registration. Verified \cargo test\ (6/6 pass), \cargo check\, and \node --check\ on frontend files.
-- **Test fixtures**: \test-files/archives/7z.7z\ (solid LZMA2, 14 files incl. `New folder/` nesting) and \test-files/archives/cbr.cbr\ (non-solid RAR5). The \test-files/archives/cbt.cbt\ fixture is self-provisioned by the \ensure_cbt()\ test helper, which rebuilds it (validating 3 entries) from images re-packed out of the 7z fixture via the \tar\ builder — no external 7z/7za tool needed in tests.
+- **Test fixtures**: \test-files/archives/7z.7z\ (solid LZMA2, 14 files incl. `New folder/` nesting) and \test-files/archives/cbr.cbr\ (non-solid RAR5). The \test-files/archives/cbt.cbt\ fixture is self-provisioned by the \ensure_cbt()\ test helper, which rebuilds it (validating 3 entries) from images re-packed out of the 7z fixture via the \tar\ builder: no external 7z/7za tool needed in tests.
 
 ### Non-Blocking Archive Protocol & Loading States
 
 - **Threaded Protocol Handler**: Wrapped the `quivit://` URI scheme protocol handler in a background `std::thread::spawn` on Windows, preventing the WebView I/O threads from blocking during heavy solid-archive extraction. This fixes the application icon reverting to a generic executable and keeps the UI responsive.
 - **Frontend Loading Feedback**: `viewer.js` now immediately writes "Loading..." into the statusbar fields (filename, dimensions, zoom) when a new image fetch begins. Once the fetch completes successfully (or errors out), the actual filename and metrics are restored. `main.js` was updated to only eagerly write filename on state change if the image has already successfully loaded.
+
+### File Navigation DOM Virtualization (O(1) Rendering)
+- **Large Directory DOM Rendering Performance**: Completely refactored `filePanel.js` list rendering by introducing a virtualized DOM pool. The file panel now strictly maintains a fixed array of pre-allocated `<li>` elements (e.g. ~50 nodes matching the current viewport space). These elements are recycled via `position: absolute` transforms hooked into the `scroll` event. `ROW_HEIGHT` is measured dynamically using a hidden probe on initialization to accommodate custom CSS font-sizes. This guarantees $O(1)$ initial UI responsiveness and eliminates layout freezing for large folders and archives holding thousands of items.
+
+### Hold-to-Exit Fullscreen Key Leak Fix (2026-08-21)
+- **Bug:** Holding Escape to exit fullscreen cleared the active image and file-list selection. The hold timer fired after 1500ms and toggled fullscreen off, but the user was still holding the key. Subsequent repeat `keydown` events were no longer consumed by `fullscreen.js` (its capture-phase handler bailed on `!fullscreenActive`), so they leaked through to the file panel's `keyboardNav.js` Escape handler, which called `onCancel()` → `Core.selectIndex(-1)`, wiping the viewer state. Did not reproduce with `4` (toggle) or the hover X button because those paths don't involve a held key.
+- **Fix:** Added a `suppressExitKeyUntilRelease` flag in `fullscreen.js`. Set when the hold timer fires. While active, both repeat `keydown` and the final `keyup` for the exit key are consumed at the capture phase. Clears on `keyup`, restoring normal Escape behavior.

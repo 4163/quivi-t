@@ -23,13 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 
-# Note: .agents/sessions-index.md, .agents/session-recovery.md and other .agents/ files are strictly local and intentionally ignored
-.agents/*
-!.agents/additions.md
-!.agents/AGENTS.md
-!.agents/implemented.md
-!.agents/7z_implementation.md
-!.agents/lazy-config-save-plan.md
+# Note: session-index.md and other .agents/ files are strictly local and intentionally ignored
+.agents/session-index.md
+.agents/user-notes
 
 # Runtime/portable user config; may contain personal paths
 quivit_config.json
@@ -39,7 +35,3 @@ DEBUG_REG
 
 # Too large to host on GitHub (>100 MB), kept local only
 test-files/export_1785548648565.apng
-
-Makefile
-pipeline.instructions.md
-push-pipeline.py

@@ -1,61 +1,21 @@
 /**
- * keybinds.js — QuiviT
+ * keybinds.js: QuiviT
  * Single source of truth for default keybindings, shared by core.js
  * (main window) and options.js (options window).
  */
 
-import { normalizeCombo } from './shortcuts.js';
+import { normalizeCombo, normalizeList } from './services/keyCombo.js';
 
-export const DEFAULT_KEYBINDS = {
-  'cmd-next': ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'],
-  'cmd-prev': ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'],
-  'cmd-history-back': ['Alt+a', 'Alt+w', 'Alt+ArrowLeft', 'Alt+ArrowUp', 'MouseBack'],
-  'cmd-history-forward': ['Alt+d', 'Alt+s', 'Alt+ArrowRight', 'Alt+ArrowDown', 'MouseForward'],
-  'cmd-zoom-in': ['c', 'Ctrl+ScrollUp'],
-  'cmd-zoom-out': ['z', 'Ctrl+ScrollDown'],
-  'cmd-open-next-container': 'Ctrl+x',
-  'cmd-open-prev-container': 'Ctrl+z',
-  'cmd-open-dir': 'Ctrl+o',
-  'cmd-open-file': 'Ctrl+Shift+o',
-  'cmd-open-explorer': [],
-  'cmd-open-folder': [],
-  'cmd-toggle-favorite': [],
-  'cmd-open-metadata': [],
-  'cmd-parent': 'Backspace',
-  'cmd-toggle-filelist': '1',
-  'cmd-toggle-menubar': '2',
-  'cmd-toggle-statusbar': '3',
-  'cmd-fullscreen': ['4', 'Alt+Enter'],
-  'cmd-exit-fullscreen-hold': 'Escape',
-  'cmd-toggle-transparent': [],
-  'cmd-options': '5',
-  'cmd-fit-none': ['r', 'DoubleClick'],
-  'cmd-fit-width': 't',
-  'cmd-fit-height': 'y',
-  'cmd-fit-width-if-larger': 'q',
-  'cmd-fit-height-if-larger': 'e',
-  'cmd-fit-best': 'f',
-  'cmd-zoom-100': 'x',
-  'cmd-cycle-scaling-back': '[',
-  'cmd-cycle-scaling': ']',
-  'cmd-refresh': ['6', 'Ctrl+r'],
-  'cmd-rotate-ccw': 'g',
-  'cmd-rotate-cw': 'h',
-  'cmd-flip-horizontal': 'v',
-  'cmd-flip-vertical': 'b',
-  'cmd-pan-up': ['w', 'ArrowUp', 'ScrollUp'],
-  'cmd-pan-left': ['a', 'ArrowLeft', 'Shift+ScrollUp'],
-  'cmd-pan-down': ['s', 'ArrowDown', 'ScrollDown'],
-  'cmd-pan-right': ['d', 'ArrowRight', 'Shift+ScrollDown'],
-  'cmd-pan-drag': ['MouseLeft', 'MouseMiddle', 'Space'],
-};
+import { DEFAULT_KEYBINDS as REGISTRY_DEFAULTS } from './services/actions.js';
+
+export const DEFAULT_KEYBINDS = REGISTRY_DEFAULTS;
 
 // Pixel distance moved by keyboard pan commands (W/A/S/D and arrow keys).
-// Default: 72px. Configurable via Options → Interface.
+// Default: 72px. Configurable via Options > Interface.
 export const DEFAULT_KEYBOARD_PAN_STEP = 72;
 
 // Pixel distance moved per scroll-wheel notch when the wheel is bound to pan.
-// Default: 120px. Configurable via Options → Interface.
+// Default: 120px. Configurable via Options > Interface.
 export const DEFAULT_WHEEL_PAN_STEP = 120;
 
 export const DEFAULT_FIT_MODE = 'height-if-larger';
@@ -101,11 +61,9 @@ export function mergeConfig(loaded) {
         const userBinds = fd.keybinds || {};
         const merged = { ...defaultClone, ...userBinds };
         for (const [actionId, combo] of Object.entries(merged)) {
-          merged[actionId] = Array.isArray(combo) ? combo.map(normalizeCombo) : normalizeCombo(combo);
+          merged[actionId] = normalizeList(combo).map(normalizeCombo);
         }
-        const fullscreenExitHold = Array.isArray(merged['cmd-exit-fullscreen-hold'])
-          ? merged['cmd-exit-fullscreen-hold']
-          : [merged['cmd-exit-fullscreen-hold']].filter(Boolean);
+        const fullscreenExitHold = merged['cmd-exit-fullscreen-hold'];
         if (!fullscreenExitHold.includes('Escape')) fullscreenExitHold.push('Escape');
         merged['cmd-exit-fullscreen-hold'] = fullscreenExitHold;
         return merged;

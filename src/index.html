@@ -3,41 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="QuiviT — standalone image and comic viewer." />
+    <meta name="description" content="QuiviT, standalone image and comic viewer." />
     <title>QuiviT</title>
+    <link rel="stylesheet" href="/css/global.css" />
     <link rel="stylesheet" href="/css/main.css" />
     <!-- Apply theme and custom CSS after all stylesheets so the injected
          #custom-css style lands last and wins the cascade (inline scripts
          block parsing, so this still runs before first paint). -->
-    <script>
-      (function() {
-        try {
-          var t = localStorage.getItem('quivit-theme');
-          if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
-          var c = localStorage.getItem('quivit-custom-css');
-          if (c) {
-            var s = document.createElement('style');
-            s.id = 'custom-css';
-            s.textContent = c;
-            document.head.appendChild(s);
-          }
-        } catch(e) {}
-      })();
-    </script>
+    <script src="/js/shared/themePrePaint.js"></script>
+    <style id="custom-css"></style>
   </head>
 
   <body>
 
-    <!-- ── Menu bar ─────────────────────────────────────────── -->
+    <!-- Menu bar -->
     <nav id="menubar" role="menubar">
 
       <div class="menu-item" id="menu-file">
         <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">File</button>
         <ul class="menu-dropdown" role="menu">
-          <li role="menuitem" id="cmd-open-dir" tabindex="0">Open directory…<span class="shortcut">Ctrl+O</span></li>
-          <li role="menuitem" id="cmd-open-file" tabindex="0">Open file/archive…<span class="shortcut"></span></li>
+          <li role="menuitem" id="cmd-open-dir" tabindex="0">Open directory...<span class="shortcut">Ctrl+O</span></li>
+          <li role="menuitem" id="cmd-open-file" tabindex="0">Open file/archive...<span class="shortcut"></span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-options" tabindex="0">Options…<span class="shortcut">5</span></li>
+          <li role="menuitem" id="cmd-options" tabindex="0">Options...<span class="shortcut">5</span></li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-quit" tabindex="0">Quit</li>
         </ul>
@@ -66,16 +54,18 @@
           <li role="menuitem" id="cmd-zoom-out" tabindex="0">Zoom out<span class="shortcut">Z</span></li>
           <li role="menuitem" id="cmd-zoom-100" tabindex="0">Zoom 100%<span class="shortcut">X</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-fit-none" tabindex="0">Fit: None<span class="shortcut">R</span></li>
-          <li role="menuitem" id="cmd-fit-width" tabindex="0">Fit width<span class="shortcut">T</span></li>
-          <li role="menuitem" id="cmd-fit-height" tabindex="0">Fit height<span class="shortcut">Y</span></li>
-          <li role="menuitem" id="cmd-fit-width-if-larger" tabindex="0">Fit width if larger<span class="shortcut">Q</span></li>
-          <li role="menuitem" id="cmd-fit-height-if-larger" tabindex="0">Fit height if larger<span class="shortcut">E</span></li>
-          <li role="menuitem" id="cmd-fit-best" tabindex="0" title="">Auto fit<span class="shortcut">F</span></li>
+          <li role="menuitem" id="cmd-fit-none" tabindex="0" title="Display at original size (1:1 pixels)">Fit: None<span class="shortcut">R</span></li>
+          <li role="menuitem" id="cmd-fit-width" tabindex="0" title="Scale to fill viewport width, stretching small images">Fit width<span class="shortcut">Shift+Q</span></li>
+          <li role="menuitem" id="cmd-fit-height" tabindex="0" title="Scale to fill viewport height, stretching small images">Fit height<span class="shortcut">Shift+E</span></li>
+          <li role="menuitem" id="cmd-fit-best" tabindex="0" title="Scale to fit entirely within the viewport, stretching small images">Fit window<span class="shortcut">Shift+F</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none" title="Cycle Through Modes: ] / [">Scaling: None</li>
-          <li role="menuitem" id="cmd-scale-bicubic" tabindex="0" data-scaling="bicubic" title="Cycle Through Modes: ] / [">Scaling: Bicubic</li>
-          <li role="menuitem" id="cmd-scale-lanczos" tabindex="0" data-scaling="lanczos" title="Cycle Through Modes: ] / [">Scaling: Lanczos</li>
+          <li role="menuitem" id="cmd-fit-width-if-larger" tabindex="0" title="Shrink to viewport width, but never enlarge small images">Fit width if larger<span class="shortcut">Q</span></li>
+          <li role="menuitem" id="cmd-fit-height-if-larger" tabindex="0" title="Shrink to viewport height, but never enlarge small images">Fit height if larger<span class="shortcut">E</span></li>
+          <li role="menuitem" id="cmd-fit-window-if-larger" tabindex="0" title="Shrink to fit the viewport, but never enlarge small images">Fit window if larger<span class="shortcut">F</span></li>
+          <li class="separator"></li>
+          <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none" title="Cycle modes with ] / [">Scaling: None</li>
+          <li role="menuitem" id="cmd-scale-bicubic" tabindex="0" data-scaling="bicubic" title="Cycle modes with ] / [">Scaling: Bicubic</li>
+          <li role="menuitem" id="cmd-scale-lanczos" tabindex="0" data-scaling="lanczos" title="Cycle modes with ] / [">Scaling: Lanczos</li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-rotate-cw" tabindex="0">Rotate clockwise<span class="shortcut">H</span></li>
           <li role="menuitem" id="cmd-rotate-ccw" tabindex="0">Rotate counter-clockwise<span class="shortcut">G</span></li>
@@ -103,7 +93,7 @@
 
     </nav>
 
-    <!-- ── Workspace (file panel + viewport) ────────────────── -->
+    <!-- Workspace (file panel + viewport) -->
     <div id="workspace">
 
       <!-- File list panel -->
@@ -119,7 +109,7 @@
         </div>
         <div id="file-panel-header">
           <div class="header-cell col-name" data-sort="name" tabindex="0">
-            File <span class="sort-icon"></span>
+            Name <span class="sort-icon"></span>
             <div class="col-resizer"></div>
           </div>
           <div class="header-cell col-ext" data-sort="ext" tabindex="0">
@@ -127,12 +117,17 @@
             <div class="col-resizer"></div>
           </div>
           <div class="header-cell col-date" data-sort="date" tabindex="0">
-            Last modified <span class="sort-icon"></span>
+            Modified <span class="sort-icon"></span>
             <div class="col-resizer"></div>
           </div>
         </div>
         <ul id="file-list" role="listbox" aria-label="Images in current directory">
-          <!-- populated by core.js -->
+          <!-- Sentinel: invisible layout probe for row height measurement and pool cloning -->
+          <li id="file-list-sentinel" aria-hidden="true">
+            <span class="item-name"><span class="item-label">&nbsp;</span></span>
+            <span class="item-ext">&nbsp;</span>
+            <span class="item-date">&nbsp;</span>
+          </li>
         </ul>
         <div class="file-panel-actions">
           <button id="cmd-open-explorer" class="icon-btn" title="Open in File Explorer">
@@ -144,11 +139,11 @@
           <button id="btn-favorite-current" class="icon-btn" title="Add to Favorites" aria-label="Toggle Favorite">
             <svg id="star" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
           </button>
-          <button id="status-metadata-badge" class="icon-btn hidden" title="Archive Info" aria-label="Show archive info">
+          <button id="status-metadata-badge" class="icon-btn" title="Archive Info" aria-label="Show archive info">
             <svg id="i-icon" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
           </button>
         </div>
-        <!-- Drag handle to resize panel -->
+        <!-- Panel resize handle -->
         <div id="panel-resize-handle" title="Drag to resize"></div>
       </aside>
 
@@ -156,7 +151,7 @@
       <div id="viewport">
 
 
-        <!-- Drop overlay (shown when no image loaded) -->
+        <!-- Drop overlay, shown when no image is loaded -->
         <div id="drop-overlay" class="active">
           <div class="drop-hint">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -169,18 +164,19 @@
           </div>
         </div>
 
-        <!-- Image wrapper: contains the image, grill, and border.
-             The wrapper is the transformed element. CSS handles their sizing automatically. -->
+        <!-- Image wrapper. It contains the image, grill, and border.
+             The wrapper is the transformed element. CSS handles the sizing. -->
         <div id="viewer-img-wrapper">
+          <img id="viewer-loading-frame" class="viewer-img is-placeholder" decoding="async" alt="Loading..." draggable="false">
           <div id="img-grill"></div>
           <div id="img-grill-border"></div>
-          <img class="viewer-img" decoding="async" style="display: none;" alt="" draggable="false">
-          <img class="viewer-img" decoding="async" style="display: none;" alt="" draggable="false">
+          <img class="viewer-img" decoding="async" alt="" draggable="false">
+          <img class="viewer-img" decoding="async" alt="" draggable="false">
         </div>
 
       </div>
 
-      <!-- Fullscreen exit hint (Boss key / Esc) -->
+      <!-- Fullscreen exit hint, Boss key / Esc -->
       <div id="fullscreen-exit-hint" role="status" aria-live="polite">
         <span>Press and hold</span>
         <kbd id="fullscreen-exit-key">Esc</kbd>
@@ -189,7 +185,7 @@
       
       <!-- Fullscreen exit top region -->
       <div id="fullscreen-exit-region" aria-hidden="true">
-        <button id="fullscreen-exit-btn" type="button" aria-label="Exit full screen" title="Exit full screen">
+        <button id="fullscreen-exit-btn" type="button" tabindex="-1" disabled aria-label="Exit full screen">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <line x1="6" y1="6" x2="18" y2="18"></line>
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -198,7 +194,7 @@
       </div>
     </div>
 
-    <!-- ── Status bar ────────────────────────────────────────── -->
+    <!-- Status bar -->
     <footer id="statusbar" class="hidden" aria-live="polite">
       <div class="status-filename-container">
         <span class="status-filename">Loading...</span>
@@ -212,10 +208,9 @@
     </footer>
 
 
-    <!-- Scripts: decoupled load order -->
-    <script type="module" src="/js/core.js"></script>
-    <script type="module" src="/js/viewer.js"></script>
-    <script type="module" src="/js/main.js"></script>
+    <!-- Scripts, decoupled load order -->
+    <div id="measure-probe" class="measure-probe" aria-hidden="true"></div>
+    <script type="module" src="/js/main/main.js"></script>
     <script type="module" src="/js/shellBackground.js"></script>
   </body>
 </html>

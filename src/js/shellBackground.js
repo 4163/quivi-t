@@ -1,33 +1,25 @@
 /**
- * shellBackground.js — mirrors the app's main surface color (--surface) into
- * the native window background so the shell behind the webview matches the
- * visible page background. Self-contained leaf module: include it on any page
- * (Tauri or plain browser); no-ops outside Tauri. Re-syncs automatically when
- * the theme or custom CSS changes, so future pages get shell sync for free.
+ * shellBackground.js: mirrors --surface into the native window background.
+ * That keeps the shell behind the webview from flashing a mismatched color.
+ * Include this on any page. It no-ops outside Tauri and re-syncs when the
+ * theme or custom CSS changes.
  *
  * Why not use the official `@tauri-apps/api` `Window#setBackgroundColor`?
  * Its wrapper invokes `plugin:window|set_background_color` with `{ color }`,
  * but the backend command parameter is named `value`. Because both `label`
  * and `value` are `Option`, Tauri's IPC silently turns the missing key into
- * `None` (see the `deserialize_option` CommandItem impl) instead of erroring —
- * so the wrapper actually *resets* the background to the default (black) and
- * the real color never arrives. We therefore bypass the wrapper and invoke
+ * `None` (see the `deserialize_option` CommandItem impl) instead of erroring,
+ * so the wrapper *resets* the background to the default (black) and
+ * the real color never arrives. Bypass the wrapper and invoke
  * the command directly with the correct `value` key.
  */
 (function () {
   if (!window.__TAURI__?.core?.invoke) return;
 
   let timer = null;
-  let probe = null;
-
   function surfaceColor() {
-    if (!probe) {
-      probe = document.createElement('div');
-      probe.style.cssText =
-        'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;visibility:hidden;';
-      probe.style.background = 'var(--surface)';
-      document.body.appendChild(probe);
-    }
+    const probe = document.getElementById('measure-probe');
+    if (!probe) return null;
     const bg = getComputedStyle(probe).backgroundColor;
     const m = bg.match(
       /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/
@@ -59,16 +51,14 @@
 
   sync();
 
-  const observer = new MutationObserver(sync);
-  observer.observe(document.documentElement, {
-    attributes: true,
-    attributeFilter: ['data-theme'],
-  });
-  observer.observe(document.head, {
-    childList: true,
-    characterData: true,
-    subtree: true,
-  });
+  if (window.__TAURI__) {
+    window.__TAURI__.event.listen('theme-preview', sync).catch(console.error);
+    window.__TAURI__.event.listen('css-preview', sync).catch(console.error);
+  }
 
-  document.addEventListener('quivit:shell-sync', sync);
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'quivit-theme' || e.key === 'quivit-custom-css') {
+      sync();
+    }
+  });
 })();
