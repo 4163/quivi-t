@@ -137,7 +137,7 @@ The following system defaults are used:
 
 - **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
 - **Scaling Mode:** `bicubic`
-- **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in Options → General → Panning.
+- **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in **Options → General → Panning**.
 - **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge shows whether scroll zoom is latched or which bound modifier keys are currently held.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
 - **Secondary Windows:** Options and Archive Info windows size to their content and open centered over the main window.
@@ -208,7 +208,7 @@ The Rust backend is split into domain-specific modules:
 
 ### File Associations (Windows)
 
-**Options → File Types** registers image and archive formats with QuiviT. Registration is per-user (no admin rights required): it writes `HKCU\Software\Classes` ProgIDs, dumps format icons to the roaming config directory, and registers QuiviT as an app in Windows Settings → Default Apps. The "Open Windows Default Apps Settings" button deep-links straight to QuiviT's entry.
+**Options → File Types** registers image and archive formats with QuiviT. Registration is per-user (no admin rights required): it writes `HKCU\Software\Classes` ProgIDs, dumps format icons to the roaming config directory, and registers QuiviT as an app in **Windows Settings → Default Apps**. The "Open Windows Default Apps Settings" button deep-links straight to QuiviT's entry.
 
 Checkboxes reflect whether QuiviT is the active default handler for each format, reading the `UserChoice` registry key first and falling back to the `Classes` registration.
 
