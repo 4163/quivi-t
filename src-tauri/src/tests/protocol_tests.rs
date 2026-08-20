@@ -87,7 +87,7 @@ fn parse_byte_range_rejects_unsupported_ranges() {
 
 #[test]
 fn entry_response_serves_valid_byte_ranges() {
-    let response = entry_response("page.jpg", vec![0, 1, 2, 3, 4], Some("bytes=1-3"));
+    let response = entry_response("page.jpg", &[0, 1, 2, 3, 4], Some("bytes=1-3"));
 
     assert_eq!(response.status(), 206);
     assert_eq!(response.headers()["Accept-Ranges"], "bytes");
@@ -98,7 +98,7 @@ fn entry_response_serves_valid_byte_ranges() {
 
 #[test]
 fn entry_response_ignores_invalid_byte_ranges() {
-    let response = entry_response("page.jpg", vec![0, 1, 2, 3, 4], Some("bytes=10-11"));
+    let response = entry_response("page.jpg", &[0, 1, 2, 3, 4], Some("bytes=10-11"));
 
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers()["Accept-Ranges"], "bytes");

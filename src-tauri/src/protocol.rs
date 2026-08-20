@@ -81,7 +81,7 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             let data = entry_data.and_then(|d| d.wait_for_data(&entry_name));
 
             if let Ok(d) = data {
-                responder.respond(entry_response(&entry_name, d, range_header.as_deref()));
+                responder.respond(entry_response(&entry_name, &d, range_header.as_deref()));
             } else {
                 let response = Response::builder()
                     .status(404)
@@ -136,7 +136,7 @@ fn try_cached_entry_response<R: tauri::Runtime>(
         .cached_zip_entry_bytes(archive_path, entry_name)
         .ok()
         .flatten()?;
-    Some(entry_response(entry_name, data.to_vec(), range_header))
+    Some(entry_response(entry_name, &data, range_header))
 }
 
 fn png_response(data: Vec<u8>) -> Response<Vec<u8>> {
@@ -151,7 +151,7 @@ fn png_response(data: Vec<u8>) -> Response<Vec<u8>> {
 
 fn entry_response(
     entry_name: &str,
-    data: Vec<u8>,
+    data: &[u8],
     range_header: Option<&str>,
 ) -> Response<Vec<u8>> {
     let mime = guess_mime(entry_name);
@@ -174,7 +174,7 @@ fn entry_response(
         .header("Accept-Ranges", "bytes")
         .header("Content-Length", data.len().to_string())
         .header("Access-Control-Allow-Origin", "*")
-        .body(data)
+        .body(data.to_vec())
         .unwrap()
 }
 
