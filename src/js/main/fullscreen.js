@@ -3,6 +3,7 @@ import * as Chrome from '../menubar/chrome.js';
 import { normalizeCombo, formatKeyName, normalizeList } from '../services/keyCombo.js';
 
 let fullscreenActive = false;
+let suppressExitKeyUntilRelease = false;
 const FULLSCREEN_EXIT_HINT_MS = 4000;
 const FULLSCREEN_EXIT_KEY_HOLD_MS = 1500;
 const FULLSCREEN_EXIT_HOLD_FEEDBACK_MS = FULLSCREEN_EXIT_KEY_HOLD_MS / 2;
@@ -124,12 +125,20 @@ function startFullscreenExitKeyHold(e) {
   }, FULLSCREEN_EXIT_HOLD_FEEDBACK_MS);
   fullscreenExitKeyHoldTimer = setTimeout(() => {
     cancelFullscreenExitKeyHold();
-    if (fullscreenActive) toggleFullscreen();
+    if (fullscreenActive) {
+      suppressExitKeyUntilRelease = true;
+      toggleFullscreen();
+    }
   }, FULLSCREEN_EXIT_KEY_HOLD_MS);
   return true;
 }
 
 function handleFullscreenExitKeyDown(e) {
+  if (suppressExitKeyUntilRelease && isFullscreenExitKey(e)) {
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
   if (!fullscreenActive || !isFullscreenExitKey(e)) return;
   e.preventDefault();
   e.stopPropagation();
@@ -137,6 +146,12 @@ function handleFullscreenExitKeyDown(e) {
 }
 
 function handleFullscreenExitKeyUp(e) {
+  if (suppressExitKeyUntilRelease && isFullscreenExitKey(e)) {
+    suppressExitKeyUntilRelease = false;
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
   if (!fullscreenActive || fullscreenExitKeyHoldTimer === null) return;
   e.preventDefault();
   e.stopPropagation();
