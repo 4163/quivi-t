@@ -26,10 +26,10 @@
 .PHONY: push push-x push-a
 
 push:
-	python -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push
+	python -B -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push
 
 push-x:
-	python -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push -x
+	python -B -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push -x
 
 push-a:
-	python -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push -a
+	python -B -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push -a
