@@ -1,8 +1,7 @@
 ---
 name: validate-changes
-description: Trigger when the user asks to review, validate, or interrogate a diff, branch, or working tree for architectural compliance before committing or finalizing a refactor.
-argument-hint: "<diff, branch, or working tree>"
-disable-model-invocation: true
+description: Trigger when the user asks to review, validate, or interrogate specific files, a diff, branch, or working tree for architectural compliance before committing or finalizing a refactor.
+argument-hint: "<files, diff, branch, or working tree>"
 ---
 
 # Validate changes

@@ -2,7 +2,6 @@
 name: update-architecture-state
 description: "Trigger when the user asks to explicitly update the architecture state tracking in .agents/architecture-state.md, AGENTS.md Architecture Rules, and the README.md Documentation section."
 argument-hint: "<refactor or restructuring summary>"
-disable-model-invocation: true
 ---
 
 # Update architecture state

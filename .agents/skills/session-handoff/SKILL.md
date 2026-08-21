@@ -2,7 +2,6 @@
 name: session-handoff
 description: Use when the user explicitly asks for a session handoff, handoff message, or agent-ready continuation entry in .agents/session-index.md.
 argument-hint: "<current task, branch, or handoff context>"
-disable-model-invocation: true
 ---
 
 # Session handoff

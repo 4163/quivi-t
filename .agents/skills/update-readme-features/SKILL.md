@@ -2,7 +2,6 @@
 name: update-readme-features
 description: "Trigger when the user asks to explicitly update the user-facing feature lists and shortcuts in the top sections of the README."
 argument-hint: "<new feature or modified behavior>"
-disable-model-invocation: true
 ---
 
 # Update README features

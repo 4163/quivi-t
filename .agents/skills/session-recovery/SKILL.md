@@ -1,8 +1,7 @@
 ---
 name: session-recovery
-description: Trigger when the user asks to resume an interrupted task, find prior conversation context, check continuity, or add verified session provenance to the session index.
+description: Trigger when the user asks to resume an interrupted task, find prior conversation context, check continuity, log session, or add verified session provenance to the session index.
 argument-hint: "<session id, title, date, or resume context>"
-disable-model-invocation: true
 ---
 
 # Session recovery

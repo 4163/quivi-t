@@ -1,8 +1,7 @@
 ---
 name: commit-pipeline
-description: Commit and push the current working tree through the repository commit pipeline.
+description: "Commit and push the working tree. Trigger only when explicitly told to commit or push."
 argument-hint: "<push, push-x, push-a, or commit context>"
-disable-model-invocation: true
 ---
 
 # Commit pipeline

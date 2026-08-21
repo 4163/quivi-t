@@ -2,7 +2,6 @@
 name: familiarize
 description: Use at the very start of a session to familiarize yourself with this repository before proceeding with actual work.
 argument-hint: "<task to prepare for>"
-disable-model-invocation: true
 ---
 
 User note for initial familiarization:

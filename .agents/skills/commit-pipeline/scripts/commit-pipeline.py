@@ -35,8 +35,8 @@ def apply_submodule_sparse_checkout(config):
             
         if os.path.isdir(os.path.join(section, '.git')):
             print(f"=== Applying sparse-checkout exclusions to {section} ===")
-            subprocess.run(["git", "sparse-checkout", "init", "--no-cone"], cwd=section)
-            subprocess.run(["git", "sparse-checkout", "set", "--stdin"], cwd=section, input='\n'.join(patterns).encode('utf-8'))
+            subprocess.run(["git", "sparse-checkout", "init", "--no-cone"], cwd=section, check=True)
+            subprocess.run(["git", "sparse-checkout", "set", "--stdin"], cwd=section, input='\n'.join(patterns).encode('utf-8'), check=True)
 
 def download_remote_files(config):
     lines = []
@@ -81,26 +81,29 @@ def read_additional_info():
 
 def do_push(manual=False, additional=""):
     print("=== Updating submodules ===")
-    subprocess.run(["git", "submodule", "update", "--remote", "--init"])
+    subprocess.run(["git", "submodule", "update", "--remote", "--init"], check=True)
     
     config = get_config()
     apply_submodule_sparse_checkout(config)
     download_remote_files(config)
     
     print("=== Staging all changes ===")
-    subprocess.run(["git", "add", "-A"])
+    subprocess.run(["git", "add", "-A"], check=True)
     
     if manual:
         print("=== Manual commit ===")
-        msg = input("Commit message: ")
-        subprocess.run(["git", "commit", "-m", msg])
-        subprocess.run(["git", "push"])
+        subprocess.run(["git", "commit"], check=True)
+        subprocess.run(["git", "push"], check=True)
         print("=== Done ===")
         return
     
     print("=== Running AI committer ===")
-    model_flag = f"--model {AI_MODEL}" if AI_MODEL else ""
-    variant_flag = f"--variant {AI_VARIANT}" if AI_VARIANT else ""
+    
+    cmd = [AI_CLI] + AI_CMD.split()
+    if AI_MODEL:
+        cmd.extend(["--model", AI_MODEL])
+    if AI_VARIANT:
+        cmd.extend(["--variant", AI_VARIANT])
 
     prompt = f"Follow the workflow in '{INSTRUCTIONS_PATH}'."
     if additional:
@@ -113,8 +116,8 @@ def do_push(manual=False, additional=""):
             f"{additional}"
         )
 
-    cmd = f"{AI_CLI} {AI_CMD} {model_flag} {variant_flag} \"{prompt}\""
-    subprocess.run(cmd, shell=True)
+    cmd.append(prompt)
+    subprocess.run(cmd, check=True)
     print("=== Done ===")
 
 def do_netlify():
