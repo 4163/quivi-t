@@ -55,10 +55,10 @@ If a script fails or you need to run a broad `rg` search directly, these are the
 
 | Store | Location |
 | --- | --- |
-| OpenCode | `C:\Users\x4163\.local\share\opencode\opencode.db` |
-| Kilo CLI | `C:\Users\x4163\.local\share\kilo\kilo.db` |
-| Antigravity CLI | `C:\Users\x4163\.gemini\antigravity-cli\conversation_summaries.db` |
-| Antigravity IDE | `C:\Users\x4163\.gemini\antigravity-ide\conversations\*.db` |
-| Codex | `C:\Users\x4163\.codex\session_index.jsonl` |
-| Kiro IDE | `C:\Users\x4163\.kiro\sessions\<workspace-hash>\<id>\messages.jsonl` |
-| Grok CLI | `C:\Users\x4163\.grok\sessions\E%3A%5CProjects%5CQuiviT\<id>\chat_history.jsonl` |
+| OpenCode | `~/.local/share/opencode/opencode.db` |
+| Kilo CLI | `~/.local/share/kilo/kilo.db` |
+| Antigravity CLI | `~/.gemini/antigravity-cli/conversation_summaries.db` |
+| Antigravity IDE | `~/.gemini/antigravity-ide/conversations/*.db` |
+| Codex | `~/.codex/session_index.jsonl` |
+| Kiro IDE | `~/.kiro/sessions/<workspace-hash>/<id>/messages.jsonl` |
+| Grok CLI | `~/.grok/sessions/<url-encoded cwd>/<id>/chat_history.jsonl` |
