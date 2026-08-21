@@ -18,18 +18,18 @@
 #   Git reads global config from that HOME, not from Windows home.
 #   Without these configured there, you'll get "dubious ownership" and
 #   "Author identity unknown" (falls back to user@hostname.(none)):
-#     git config --global --add safe.directory E:/Projects/QuiviT
+#     git config --global --add safe.directory <repo>
 #     git config --global user.name "<name>"
 #     git config --global user.email "<email>"
-#   (Run with HOME=C:\tools\msys64\home\x4163 to configure for MSYS2.)
+#   (Run with HOME=C:\tools\msys64\home\<user> to configure for MSYS2.)
 
 .PHONY: push push-x push-a
 
 push:
-	python -B -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push
+	python -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push
 
 push-x:
-	python -B -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push -x
+	python -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push -x
 
 push-a:
-	python -B -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push -a
+	python -I .agents/skills/commit-pipeline/scripts/commit-pipeline.py push -a
