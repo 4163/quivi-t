@@ -1,6 +1,6 @@
 ---
 name: verify-implementation
-description: When an implementation slice is finished: run static checks, verify config/portable mode, hand the user a manual verification list, and port documentation.
+description: "When an implementation slice is finished: run static checks, verify config/portable mode, hand the user a manual verification list, and port documentation."
 argument-hint: "<slice or change description>"
 ---
 
