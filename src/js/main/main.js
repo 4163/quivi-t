@@ -156,6 +156,11 @@ Core.onStateChange((state) => {
     if (toggleEl) {
       toggleEl.classList.toggle('checked', !isTransparent);
     }
+
+    const crtToggleEl = document.getElementById('cmd-toggle-crt-filter');
+    if (crtToggleEl) {
+      crtToggleEl.classList.toggle('checked', !!state.config.frontend_data.crt_filter);
+    }
   }
 
   // Update standard statusbar fields.

@@ -795,18 +795,34 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   image-rendering: auto;
 }
 
+/* ── Lanczos Overlay Canvas (inside img-wrapper) ── */
 #viewer-lanczos-canvas {
   position: absolute;
   top: var(--crop-top, 0px);
   left: var(--crop-left, 0px);
-  width: var(--crop-w, 100%);
-  height: var(--crop-h, 100%);
-  pointer-events: none;
+  width: var(--crop-w);
+  height: var(--crop-h);
   opacity: 0;
 }
 
 #viewer-lanczos-canvas[data-render-ready="true"] {
   opacity: 1;
+}
+
+/* ── WebGL Overlay Canvas (viewport-level, not wrapper-level) ── */
+#viewer-webgl-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#viewer-webgl-canvas[data-render-ready="true"] {
+  opacity: 1;
+}
+
+#viewport:has(#viewer-webgl-canvas[data-render-ready="true"][data-crt="true"]) #viewer-img-wrapper .viewer-img {
+  opacity: 0 !important;
 }
 
 /* SVGs with percentage-based dimensions collapse in the shrink-wrap wrapper.

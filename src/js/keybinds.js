@@ -56,6 +56,7 @@ export function mergeConfig(loaded) {
       hide_chrome_on_fullscreen: fd.hide_chrome_on_fullscreen !== false,
       menu_visible: fd.menu_visible !== false,
       status_visible: fd.status_visible !== false,
+      crt_filter: fd.crt_filter === true,
       keybinds: (() => {
         const defaultClone = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
         const userBinds = fd.keybinds || {};

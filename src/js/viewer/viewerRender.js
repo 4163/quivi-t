@@ -2,6 +2,7 @@ import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { Statusbar } from '../menubar/statusbar.js';
 import { createScalingPipeline } from '../services/scalingPipeline.js';
+import { createWebglPipeline } from '../services/webglPipeline.js';
 
 const PRELOAD_HALF = 7;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
@@ -42,16 +43,29 @@ export function createViewerRenderer(viewportState) {
   const _preloadImages = [];
   let _lastFitModeGen = -1;
 
-  let pipeline = createScalingPipeline(viewportState.getScaling());
+  let pipeline = null;
   let _lastScalingMode = viewportState.getScaling();
+  let _lastCrtFilter = Core.getState()?.config?.frontend_data?.crt_filter;
   const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
+  const webglCanvas = document.getElementById('viewer-webgl-canvas');
   let _renderTimeout = null;
 
+  Core.onStateChange((state) => {
+    if (state.config.frontend_data.crt_filter !== _lastCrtFilter) {
+      _lastCrtFilter = state.config.frontend_data.crt_filter;
+      _cancelRender();
+      _applyScaling();
+      _scheduleTransform();
+      _triggerRender();
+    }
+  });
+
   function _cancelRender() {
-    if (pipeline) pipeline.cancel();
+    if (pipeline && pipeline.type !== 'webgl') pipeline.cancel();
     if (_renderTimeout) clearTimeout(_renderTimeout);
     _renderTimeout = null;
     if (lanczosCanvas) lanczosCanvas.removeAttribute('data-render-ready');
+    // WebGL canvas maintains its state during pan/zoom
   }
 
   function _applyTransform() {
@@ -63,6 +77,18 @@ export function createViewerRenderer(viewportState) {
     // "100%" flash on startup before any image is displayed.
     if (img && img.src) {
       Statusbar.setZoom(viewportState.getScale());
+      
+      // WebGL is fast enough to render every frame continuously during pan/zoom
+      if (pipeline && pipeline.type === 'webgl') {
+        const geom = viewportState.getGeometry();
+        pipeline.render(img, geom).then((ok) => {
+          if (ok && webglCanvas) {
+            webglCanvas.setAttribute('data-render-ready', 'true');
+            if (_lastCrtFilter) webglCanvas.setAttribute('data-crt', 'true');
+            else webglCanvas.removeAttribute('data-crt');
+          }
+        });
+      }
     }
   }
 
@@ -75,53 +101,95 @@ export function createViewerRenderer(viewportState) {
     });
   }
 
+  function _triggerRender() {
+    const scaling = viewportState.getScaling();
+    const crtFilter = _lastCrtFilter;
+    const usesWebgl = crtFilter || scaling === 'anime4k';
+    const usesLanczos = scaling === 'lanczos' && !crtFilter;
+    
+    if (usesLanczos && img) {
+      _renderTimeout = setTimeout(async () => {
+        if (!img || !img.src || !pipeline) return;
+        const geom = viewportState.getGeometry();
+        
+        if (usesLanczos && lanczosCanvas) {
+          const res = await pipeline.render(img, geom);
+          if (res && res.canvas) {
+            lanczosCanvas.width = res.width;
+            lanczosCanvas.height = res.height;
+            const ctx = lanczosCanvas.getContext('2d');
+            ctx.clearRect(0, 0, res.width, res.height);
+            ctx.drawImage(res.canvas, 0, 0);
+            
+            if (res.cssLeft !== undefined) {
+              lanczosCanvas.style.setProperty('--crop-left', res.cssLeft + 'px');
+              lanczosCanvas.style.setProperty('--crop-top', res.cssTop + 'px');
+              lanczosCanvas.style.setProperty('--crop-w', res.cssWidth + 'px');
+              lanczosCanvas.style.setProperty('--crop-h', res.cssHeight + 'px');
+            } else {
+              lanczosCanvas.style.removeProperty('--crop-left');
+              lanczosCanvas.style.removeProperty('--crop-top');
+              lanczosCanvas.style.removeProperty('--crop-w');
+              lanczosCanvas.style.removeProperty('--crop-h');
+            }
+            lanczosCanvas.setAttribute('data-render-ready', 'true');
+          }
+        }
+      }, 80);
+    }
+  }
+
   viewportState.subscribe(() => {
     _cancelRender();
     _applyScaling();
     _scheduleTransform();
-    
-    const scaling = viewportState.getScaling();
-    if (scaling === 'lanczos' && img) {
-      _renderTimeout = setTimeout(async () => {
-        if (!img || !img.src || !pipeline) return;
-        const geom = viewportState.getGeometry();
-        const res = await pipeline.render(img, geom);
-        
-        if (res && res.canvas && lanczosCanvas) {
-          lanczosCanvas.width = res.width;
-          lanczosCanvas.height = res.height;
-          const ctx = lanczosCanvas.getContext('2d');
-          ctx.clearRect(0, 0, res.width, res.height);
-          ctx.drawImage(res.canvas, 0, 0);
-          
-          if (res.cssLeft !== undefined) {
-            lanczosCanvas.style.setProperty('--crop-left', res.cssLeft + 'px');
-            lanczosCanvas.style.setProperty('--crop-top', res.cssTop + 'px');
-            lanczosCanvas.style.setProperty('--crop-w', res.cssWidth + 'px');
-            lanczosCanvas.style.setProperty('--crop-h', res.cssHeight + 'px');
-          } else {
-            lanczosCanvas.style.removeProperty('--crop-left');
-            lanczosCanvas.style.removeProperty('--crop-top');
-            lanczosCanvas.style.removeProperty('--crop-w');
-            lanczosCanvas.style.removeProperty('--crop-h');
-          }
-          
-          lanczosCanvas.setAttribute('data-render-ready', 'true');
-        }
-      }, 80);
-    }
+    _triggerRender();
   });
 
   function _applyScaling() {
     if (!img) return;
     const scaling = viewportState.getScaling();
+    const crtFilter = _lastCrtFilter;
     img.dataset.scaling = scaling;
     
-    if (scaling !== _lastScalingMode) {
-      if (pipeline) pipeline.dispose();
-      pipeline = createScalingPipeline(scaling);
-      _lastScalingMode = scaling;
+    const usesWebgl = crtFilter || scaling === 'anime4k';
+    const usesLanczos = scaling === 'lanczos' && !crtFilter;
+
+    // Check if we need to recreate the pipeline
+    // For simplicity, if pipeline exists but type is wrong, dispose it.
+    let needsNewPipeline = !pipeline;
+    if (pipeline) {
+      if (usesWebgl && pipeline.type !== 'webgl') needsNewPipeline = true;
+      if (usesLanczos && pipeline.type !== 'lanczos') needsNewPipeline = true;
+      if (needsNewPipeline || (!usesWebgl && !usesLanczos)) {
+        if (pipeline.type === 'webgl' && webglCanvas) {
+          webglCanvas.removeAttribute('data-render-ready');
+          webglCanvas.removeAttribute('data-crt');
+        }
+        pipeline.dispose();
+        if (!usesWebgl && !usesLanczos) {
+          pipeline = null;
+        }
+      }
     }
+
+    if (needsNewPipeline || (usesWebgl && (scaling !== _lastScalingMode || crtFilter !== _lastCrtFilter))) {
+      if (pipeline) {
+        if (pipeline.type === 'webgl' && webglCanvas) {
+          webglCanvas.removeAttribute('data-render-ready');
+          webglCanvas.removeAttribute('data-crt');
+        }
+        pipeline.dispose();
+      }
+      if (usesWebgl) {
+        pipeline = createWebglPipeline(webglCanvas, scaling, crtFilter);
+      } else if (usesLanczos) {
+        pipeline = createScalingPipeline(scaling);
+        pipeline.type = 'lanczos';
+      }
+    }
+    
+    _lastScalingMode = scaling;
   }
 
   // Percentage-based SVGs (width="100%" height="100%") collapse to 0×0
@@ -301,6 +369,8 @@ export function createViewerRenderer(viewportState) {
       const ctx = lanczosCanvas.getContext('2d');
       if (ctx) ctx.clearRect(0, 0, lanczosCanvas.width, lanczosCanvas.height);
     }
+    if (pipeline) pipeline.dispose();
+    pipeline = null;
     _poolGeneration += 1;
     _activationGeneration += 1;
     _clearTargetLoadTimer();

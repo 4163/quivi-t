@@ -69,17 +69,29 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-scale-lanczos', label: 'Scale Lanczos', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.setScalingMode('lanczos', { persist: true })
   },
+  { id: 'cmd-scale-anime4k', label: 'Scale Anime4K', defaultBinds: [], category: 'View',
+    run: (ctx) => ctx.Core.setScalingMode('anime4k', { persist: true })
+  },
+  { id: 'cmd-toggle-crt-filter', label: 'Toggle Retro CRT Filter', defaultBinds: [], category: 'View',
+    run: (ctx) => {
+      const state = ctx.Core.getState();
+      state.config.frontend_data.crt_filter = !state.config.frontend_data.crt_filter;
+      ctx.Core.persistConfig();
+      ctx.Core.setState({});
+    }
+  },
   { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
     run: (ctx) => {
-      const modes = ['none', 'bilinear', 'lanczos'];
+      const modes = ['none', 'bilinear', 'lanczos', 'anime4k'];
       const current = ctx.Core.getState().scalingMode;
-      const next = modes[(modes.indexOf(current) - 1 + modes.length) % modes.length];
+      const idx = modes.indexOf(current);
+      const next = idx > 0 ? modes[idx - 1] : modes[modes.length - 1];
       ctx.Core.setScalingMode(next, { persist: true });
     }
   },
   { id: 'cmd-cycle-scaling', label: 'Scale: Next', defaultBinds: ']', category: 'View',
     run: (ctx) => {
-      const modes = ['none', 'bilinear', 'lanczos'];
+      const modes = ['none', 'bilinear', 'lanczos', 'anime4k'];
       const current = ctx.Core.getState().scalingMode;
       const next = modes[(modes.indexOf(current) + 1) % modes.length];
       ctx.Core.setScalingMode(next, { persist: true });

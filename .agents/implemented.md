@@ -6,6 +6,13 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
+### Experimental WebGL Retro CRT Filter (Ad-hoc)
+- **Shader Pipeline:** Implemented an experimental WebGL pipeline (`webglPipeline.js`) to apply a Retro CRT filter overlay. It applies barrel distortion, chromatic aberration, scanlines, and vignette effects.
+- **Inverse Transform Geometry:** The shader natively handles inverse transformation (`screenToTexUV`), calculating coordinates from the CSS screen viewport back to the original image texture. This completely decouples WebGL from CSS `transform` bugs.
+- **Dynamic Bezels & Transparency:** The CRT bezel dynamically adapts to the image's physical bounds, rendering an opaque black outer border when the image fills the screen, or defaulting to a transparent edge (revealing the QuiviT checkerboard) when zoomed out.
+- **Continuous 60FPS Panning:** The pipeline runs in real-time during panning and zooming without debounce timers, relying on `requestAnimationFrame` and URL blob caches to ensure zero layout-thrashing.
+- **Menu Decoupling:** Added a dedicated 'Filter' section in the View menu, separating the CRT toggle from standard scaling modes. Base image hiding is purely CSS-driven via `:has([data-crt="true"])`.
+
 ### Lanczos Scaling Pipeline (Viewport-Based)
 - **Lanczos Scaling Support:** Added the `pica` WebAssembly resampler for Lanczos scaling. It replaces native upscaling.
 - **Viewport-Based Partial Rendering (Tiling):** The pipeline calculates the viewport intersection and resizes only the visible crop. This stops main-thread hangs and memory exhaustion at high zoom levels.
