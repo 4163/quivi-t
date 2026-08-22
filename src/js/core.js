@@ -303,7 +303,6 @@ export const Core = {
       _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
       _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
       
-      
 
       // Refresh when show_hidden changes.
       if (oldShowHidden !== undefined && oldShowHidden !== _state.config.frontend_data.show_hidden) {

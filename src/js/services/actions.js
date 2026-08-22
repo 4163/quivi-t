@@ -60,18 +60,18 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-fit-window-if-larger', label: 'Fit Window If Larger', description: 'Shrink to fit the viewport, but never enlarge small images', defaultBinds: 'f', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('window-if-larger', { persist: true })
   },
-  { id: 'cmd-scale-none', label: 'Scale None', defaultBinds: [], category: 'View',
+  { id: 'cmd-scale-none', label: 'Scale Pixelated', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.setScalingMode('none', { persist: true })
   },
-  { id: 'cmd-scale-bicubic', label: 'Scale Bicubic', defaultBinds: [], category: 'View',
-    run: (ctx) => ctx.Core.setScalingMode('bicubic', { persist: true })
+  { id: 'cmd-scale-bilinear', label: 'Scale Bilinear', defaultBinds: [], category: 'View',
+    run: (ctx) => ctx.Core.setScalingMode('bilinear', { persist: true })
   },
   { id: 'cmd-scale-lanczos', label: 'Scale Lanczos', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.setScalingMode('lanczos', { persist: true })
   },
   { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
     run: (ctx) => {
-      const modes = ['none', 'bicubic', 'lanczos'];
+      const modes = ['none', 'bilinear', 'lanczos'];
       const current = ctx.Core.getState().scalingMode;
       const next = modes[(modes.indexOf(current) - 1 + modes.length) % modes.length];
       ctx.Core.setScalingMode(next, { persist: true });
@@ -79,7 +79,7 @@ export const ACTION_REGISTRY = [
   },
   { id: 'cmd-cycle-scaling', label: 'Scale: Next', defaultBinds: ']', category: 'View',
     run: (ctx) => {
-      const modes = ['none', 'bicubic', 'lanczos'];
+      const modes = ['none', 'bilinear', 'lanczos'];
       const current = ctx.Core.getState().scalingMode;
       const next = modes[(modes.indexOf(current) + 1) % modes.length];
       ctx.Core.setScalingMode(next, { persist: true });

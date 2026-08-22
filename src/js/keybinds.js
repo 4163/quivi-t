@@ -19,7 +19,7 @@ export const DEFAULT_KEYBOARD_PAN_STEP = 72;
 export const DEFAULT_WHEEL_PAN_STEP = 120;
 
 export const DEFAULT_FIT_MODE = 'height-if-larger';
-export const DEFAULT_SCALING_MODE = 'bicubic';
+export const DEFAULT_SCALING_MODE = 'bilinear';
 
 // persistence: frontend_data is merged here with normalized defaults. Preference
 // flags (theme, keybinds, scroll_zoom_modifier) belong in quivit_config.json;

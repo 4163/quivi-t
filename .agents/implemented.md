@@ -6,6 +6,13 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
+### High-Quality Lanczos Scaling Pipeline (Viewport-Based)
+- **Lanczos Scaling Support:** Integrated the `pica` WebAssembly resampler to provide high-quality Lanczos scaling for images, replacing the native blurry upscaling/downscaling.
+- **Viewport-Based Partial Rendering (Tiling):** To prevent massive main-thread hangs and memory exhaustion when zoomed in on large images, the pipeline dynamically calculates the intersection of the viewport with the transformed image. It extracts only the *visible crop* of the source image and resizes it.
+- **Web Worker Offload:** Leveraged `pica`'s Web Worker support by utilizing a `blob:` URL cache for source images (bypassing Tauri `quivit://` cross-origin canvas tainting and `DataCloneError`s). This moves all heavy WASM math strictly to background threads, ensuring 60fps buttery-smooth panning and zooming, with the high-quality overlay popping in 80ms after interactions settle.
+- **CSS Precision Overlay:** The resulting partial Lanczos canvas is positioned seamlessly over the native browser image using CSS custom properties (`--crop-top`, `--crop-left`) to preserve the single CSS source of truth.
+- **Scaling Keybinds:** Made scaling modes settable via keybinds (`cmd-scale-none`, `cmd-scale-bilinear`, `cmd-scale-lanczos`), and mapped `[`/`]` to cycle between them. The active mode is persisted via config and displayed in the file menu.
+
 ### CSS / JS Decoupling & HTML-First Specs (landed on `refactor/decoupling`)
 - **CSS decoupling:** `src/css/global.css` holds tokens, resets, and shared rules. `main.css`, `options.css`, and `metadata.css` are page-only. Every HTML page loads `global.css` first.
 - **JS DOM decoupling (9 slices):** frontend split into `core.js` (no DOM), `services/` (pure), `shared/` (theme / preview / window fit), `viewer/`, `filepanel/`, `menubar/`, `main/`, and `options/`. UI modules self-subscribe to `Core.onStateChange`. `ACTION_REGISTRY` is the single `cmd-*` source. Statusbar and chrome each have one writer. File panel self-renders; `main.js` is bootstrap only.

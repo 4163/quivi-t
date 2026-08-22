@@ -159,6 +159,16 @@ export function createViewportState({ getViewport }) {
     getFlipX: () => _flipX,
     getFlipY: () => _flipY,
     getScaling: () => _scaling,
+    setScaling: (s) => { _scaling = s; notify(); },
+    getGeometry: () => ({
+      scale: _scale,
+      tx: _tx,
+      ty: _ty,
+      rotation: _rotation,
+      flipX: _flipX,
+      flipY: _flipY,
+      viewport: getViewport()
+    }),
     getNaturalW: () => _naturalW,
     getNaturalH: () => _naturalH,
     resetGeometry,

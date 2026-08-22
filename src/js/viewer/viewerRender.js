@@ -1,6 +1,7 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { Statusbar } from '../menubar/statusbar.js';
+import { createScalingPipeline } from '../services/scalingPipeline.js';
 
 const PRELOAD_HALF = 7;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
@@ -25,6 +26,7 @@ export function createViewerRenderer(viewportState) {
       const el = document.createElement('img');
       el.className = 'viewer-img';
       el.draggable = false;
+      el.crossOrigin = 'anonymous';
       el.decoding = 'async';
       imgWrapper.appendChild(el);
       _freeNodes.push(el);
@@ -39,6 +41,18 @@ export function createViewerRenderer(viewportState) {
   const _preloadTimers = [];
   const _preloadImages = [];
   let _lastFitModeGen = -1;
+
+  let pipeline = createScalingPipeline(viewportState.getScaling());
+  let _lastScalingMode = viewportState.getScaling();
+  const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
+  let _renderTimeout = null;
+
+  function _cancelRender() {
+    if (pipeline) pipeline.cancel();
+    if (_renderTimeout) clearTimeout(_renderTimeout);
+    _renderTimeout = null;
+    if (lanczosCanvas) lanczosCanvas.removeAttribute('data-render-ready');
+  }
 
   function _applyTransform() {
     if (imgWrapper) {
@@ -62,14 +76,52 @@ export function createViewerRenderer(viewportState) {
   }
 
   viewportState.subscribe(() => {
+    _cancelRender();
     _applyScaling();
     _scheduleTransform();
+    
+    const scaling = viewportState.getScaling();
+    if (scaling === 'lanczos' && img) {
+      _renderTimeout = setTimeout(async () => {
+        if (!img || !img.src || !pipeline) return;
+        const geom = viewportState.getGeometry();
+        const res = await pipeline.render(img, geom);
+        
+        if (res && res.canvas && lanczosCanvas) {
+          lanczosCanvas.width = res.width;
+          lanczosCanvas.height = res.height;
+          const ctx = lanczosCanvas.getContext('2d');
+          ctx.clearRect(0, 0, res.width, res.height);
+          ctx.drawImage(res.canvas, 0, 0);
+          
+          if (res.cssLeft !== undefined) {
+            lanczosCanvas.style.setProperty('--crop-left', res.cssLeft + 'px');
+            lanczosCanvas.style.setProperty('--crop-top', res.cssTop + 'px');
+            lanczosCanvas.style.setProperty('--crop-w', res.cssWidth + 'px');
+            lanczosCanvas.style.setProperty('--crop-h', res.cssHeight + 'px');
+          } else {
+            lanczosCanvas.style.removeProperty('--crop-left');
+            lanczosCanvas.style.removeProperty('--crop-top');
+            lanczosCanvas.style.removeProperty('--crop-w');
+            lanczosCanvas.style.removeProperty('--crop-h');
+          }
+          
+          lanczosCanvas.setAttribute('data-render-ready', 'true');
+        }
+      }, 80);
+    }
   });
 
   function _applyScaling() {
     if (!img) return;
     const scaling = viewportState.getScaling();
     img.dataset.scaling = scaling;
+    
+    if (scaling !== _lastScalingMode) {
+      if (pipeline) pipeline.dispose();
+      pipeline = createScalingPipeline(scaling);
+      _lastScalingMode = scaling;
+    }
   }
 
   // Percentage-based SVGs (width="100%" height="100%") collapse to 0×0
@@ -141,6 +193,7 @@ export function createViewerRenderer(viewportState) {
       el = document.createElement('img');
       el.className = 'viewer-img';
       el.draggable = false;
+      el.crossOrigin = 'anonymous';
       el.decoding = 'async';
       imgWrapper.appendChild(el);
     }
@@ -182,6 +235,7 @@ export function createViewerRenderer(viewportState) {
   }
 
   function _activatePoolNode(el, filename, state) {
+    _cancelRender();
     if (img && img !== el) {
       img.classList.remove('active');
     }
@@ -227,6 +281,7 @@ export function createViewerRenderer(viewportState) {
         if (generation !== _poolGeneration) return;
         const preloader = new Image();
         preloader.decoding = 'async';
+        preloader.crossOrigin = 'anonymous';
         _preloadImages.push(preloader);
         preloader.onload = () => {
           const idx = _preloadImages.indexOf(preloader);
@@ -241,6 +296,11 @@ export function createViewerRenderer(viewportState) {
   }
 
   function clearDisplayedImage() {
+    _cancelRender();
+    if (lanczosCanvas) {
+      const ctx = lanczosCanvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, lanczosCanvas.width, lanczosCanvas.height);
+    }
     _poolGeneration += 1;
     _activationGeneration += 1;
     _clearTargetLoadTimer();

@@ -789,6 +789,26 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   image-rendering: pixelated;
 }
 
+.viewer-img[data-scaling="bilinear"],
+.viewer-img[data-scaling="bicubic"],
+.viewer-img[data-scaling="lanczos"] {
+  image-rendering: auto;
+}
+
+#viewer-lanczos-canvas {
+  position: absolute;
+  top: var(--crop-top, 0px);
+  left: var(--crop-left, 0px);
+  width: var(--crop-w, 100%);
+  height: var(--crop-h, 100%);
+  pointer-events: none;
+  opacity: 0;
+}
+
+#viewer-lanczos-canvas[data-render-ready="true"] {
+  opacity: 1;
+}
+
 /* SVGs with percentage-based dimensions collapse in the shrink-wrap wrapper.
    JS sets --svg-base-w/--svg-base-h to give them a concrete canvas size. */
 .viewer-img[data-svg-bounds] {
