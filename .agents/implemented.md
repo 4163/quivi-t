@@ -720,3 +720,15 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 ### Hold-to-Exit Fullscreen Key Leak Fix (2026-08-21)
 - **Bug:** Holding Escape to exit fullscreen cleared the active image and file-list selection. The hold timer fired after 1500ms and toggled fullscreen off, but the user was still holding the key. Subsequent repeat `keydown` events were no longer consumed by `fullscreen.js` (its capture-phase handler bailed on `!fullscreenActive`), so they leaked through to the file panel's `keyboardNav.js` Escape handler, which called `onCancel()` → `Core.selectIndex(-1)`, wiping the viewer state. Did not reproduce with `4` (toggle) or the hover X button because those paths don't involve a held key.
 - **Fix:** Added a `suppressExitKeyUntilRelease` flag in `fullscreen.js`. Set when the hold timer fires. While active, both repeat `keydown` and the final `keyup` for the exit key are consumed at the capture phase. Clears on `keyup`, restoring normal Escape behavior.
+
+### Title Bar Theme Sync via Options (2026-08-23)
+- **Problem:** Switching themes in the Options window only updated CSS variables and web-rendered UI. The native OS title bar on all windows stayed in its previous theme until the user changed their Windows system theme.
+- **Fix:** Added `update_theme` Tauri command in `windows.rs` that iterates all open webview windows and calls `window.set_theme()` and `window.set_background_color()` on each. `theme.js` now invokes this command instead of the JS-only `getCurrentWindow().setTheme()`, ensuring both the native title bar and the anti-flash background color update immediately across all windows.
+
+### SVG Rendering & Bounds Fix for Percentage-Based SVGs (2026-08-23)
+- **Problem:** SVGs with `width="100%"` and `height="100%"` (no fixed intrinsic dimensions) collapsed to 0×0 `clientWidth` inside the shrink-wrapped `#viewer-img-wrapper` container. The viewer math received zero-size geometry and rendered the image invisibly. Post-refactor regression: the old code path that handled this was lost during the decoupling.
+- **Root cause:** Circular CSS dependency — the absolutely positioned wrapper tries to shrink-wrap to the image, but the SVG tries to size itself to 100% of its parent. Result: both collapse to zero.
+- **Fix:** In `viewerRender.js`, both `_attachLoadHandler` and `_activatePoolNode` now detect the collapse by checking `clientWidth === 0` after activation. Only suspect SVGs (percentage-based, zero client size) are rescued: their intrinsic base resolution is set to 50% of the current viewport, preserving the aspect ratio from `naturalWidth`/`naturalHeight`. SVGs with fixed dimensions are left untouched. The statusbar reports `SVG × SVG` for dimensionless vectors.
+
+### Metadata Window Credit SVGs (2026-08-23)
+- **Change:** Replaced emoji-based credit icons in `metadata-window.js` with inline SVGs matching the Feather/Lucide icon style used elsewhere in the app. Updated `applyValue` to support rendering an array of DOM nodes. Added UI icon attributions (Feather/Lucide) to `README.md`.

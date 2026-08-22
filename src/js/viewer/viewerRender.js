@@ -72,25 +72,63 @@ export function createViewerRenderer(viewportState) {
     img.dataset.scaling = scaling;
   }
 
+  // Percentage-based SVGs (width="100%" height="100%") collapse to 0×0
+  // clientWidth inside the shrink-wrap wrapper. Detect the collapse and
+  // assign a concrete base resolution via CSS custom properties consumed
+  // by the .viewer-img[data-svg-bounds] rule.
+  function _applySvgBounds(el) {
+    el.removeAttribute('data-svg-bounds');
+    el.style.removeProperty('--svg-base-w');
+    el.style.removeProperty('--svg-base-h');
+
+    let natW = el.naturalWidth;
+    let natH = el.naturalHeight;
+
+    if (natW <= 0) {
+      natW = 1000;
+      natH = 1000;
+      el.style.setProperty('--svg-base-w', '1000px');
+      el.style.setProperty('--svg-base-h', '1000px');
+      el.setAttribute('data-svg-bounds', '');
+      return { natW, natH };
+    }
+
+    let clientW = el.clientWidth;
+    let clientH = el.clientHeight;
+
+    if (clientW === 0 && el.src && el.src.toLowerCase().includes('.svg')) {
+      const scale = Math.min((window.innerWidth * 0.5) / natW, (window.innerHeight * 0.5) / natH);
+      natW = Math.max(1, Math.round(el.naturalWidth * scale));
+      natH = Math.max(1, Math.round(el.naturalHeight * scale));
+      el.style.setProperty('--svg-base-w', natW + 'px');
+      el.style.setProperty('--svg-base-h', natH + 'px');
+      el.setAttribute('data-svg-bounds', '');
+      clientW = el.clientWidth;
+      clientH = el.clientHeight;
+    }
+
+    return { natW, natH, clientW, clientH };
+  }
+
   function _attachLoadHandler(el) {
     el.addEventListener('load', () => {
       if (el !== img) return;
       if (!el.src) return;
       const state = Core.getState();
-      
-      let natW, natH;
-      if (el.naturalWidth > 0) {
-        natW = el.naturalWidth;
-        natH = el.naturalHeight;
-      } else {
-        natW = el.clientWidth || 1000;
-        natH = el.clientHeight || 1000;
-      }
+
       el.classList.add('active');
+      const bounds = _applySvgBounds(el);
+
       _applyScaling();
-      Statusbar.setImage({ filename: state.filename || '', dims: `${natW} × ${natH}`, zoom: viewportState.getScale() });
-      
-      viewportState.applyFitMode(state.fitMode, natW, natH, el.clientWidth, el.clientHeight);
+
+      const displayW = el.naturalWidth > 0 ? el.naturalWidth : 'SVG';
+      const displayH = el.naturalHeight > 0 ? el.naturalHeight : 'SVG';
+      Statusbar.setImage({ filename: state.filename || '', dims: `${displayW} × ${displayH}`, zoom: viewportState.getScale() });
+
+      viewportState.applyFitMode(
+        state.fitMode, bounds.natW, bounds.natH,
+        bounds.clientW ?? el.clientWidth, bounds.clientH ?? el.clientHeight
+      );
     });
   }
 
@@ -155,12 +193,16 @@ export function createViewerRenderer(viewportState) {
     _applyScaling();
     viewportState.resetGeometry();
 
-    if (img.naturalWidth > 0) {
-      Statusbar.setImage({ filename: filename || '', dims: `${img.naturalWidth} × ${img.naturalHeight}`, zoom: viewportState.getScale() });
-      viewportState.applyFitMode(state.fitMode, img.naturalWidth, img.naturalHeight, img.clientWidth, img.clientHeight);
-    } else {
-      Statusbar.setImage({ filename: filename || '' });
-    }
+    const bounds = _applySvgBounds(img);
+
+    const displayW = img.naturalWidth > 0 ? img.naturalWidth : 'SVG';
+    const displayH = img.naturalHeight > 0 ? img.naturalHeight : 'SVG';
+
+    Statusbar.setImage({ filename: filename || '', dims: `${displayW} × ${displayH}`, zoom: viewportState.getScale() });
+    viewportState.applyFitMode(
+      state.fitMode, bounds.natW, bounds.natH,
+      bounds.clientW ?? img.clientWidth, bounds.clientH ?? img.clientHeight
+    );
   }
 
   function _clearTargetLoadTimer() {
@@ -255,14 +297,14 @@ export function createViewerRenderer(viewportState) {
         _targetLoadTimer = null;
         if (activeEl) _loadPoolNode(activeEl, state.src);
 
-        const ready = activeEl && activeEl.complete && (activeEl.naturalWidth > 0 || state.src.toLowerCase().endsWith('.svg'));
+        const ready = activeEl && activeEl.complete && (activeEl.naturalWidth > 0 || state.src.toLowerCase().endsWith('.svg') || state.src.includes('.svg?'));
         const decodePromise = (ready || !activeEl || !activeEl.decode) ? Promise.resolve() : activeEl.decode();
         
         decodePromise.then(() => {
           if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
           if (activeEl) _activatePoolNode(activeEl, state.filename, state);
           _schedulePoolPreloads(neighborSrcs, generation);
-        }).catch(() => {
+        }).catch((err) => {
           if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
           if (activeEl) _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
           Statusbar.setImage({ isError: true });

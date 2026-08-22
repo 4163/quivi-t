@@ -65,6 +65,29 @@ pub fn apply_shell_background(window: &tauri::WebviewWindow, config: &AppConfig)
     let _ = window.set_background_color(Some(color));
 }
 
+#[tauri::command]
+pub fn update_theme(app: tauri::AppHandle, theme: Option<String>) {
+    let tauri_theme = match theme.as_deref() {
+        Some("dark") => Some(tauri::Theme::Dark),
+        Some("light") => Some(tauri::Theme::Light),
+        _ => None,
+    };
+
+    let dark = tauri_theme == Some(tauri::Theme::Dark) || 
+        (tauri_theme.is_none() && app.get_webview_window("main").and_then(|w| w.theme().ok()) == Some(tauri::Theme::Dark));
+        
+    let color = if dark {
+        Color(37, 37, 38, 255)
+    } else {
+        Color(255, 255, 255, 255)
+    };
+
+    for (_, window) in app.webview_windows() {
+        let _ = window.set_theme(tauri_theme);
+        let _ = window.set_background_color(Some(color));
+    }
+}
+
 // Secondary window creation and fitting
 
 #[tauri::command]

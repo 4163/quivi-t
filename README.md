@@ -350,5 +350,6 @@ QuiviT/
 ## Attributions
 
 - Icons: [Flaticon (Cosplayer, Webp, Gif, Cbz, Cbr, Svg)](https://www.flaticon.com)
+- UI Icons: [Feather](https://feathericons.com) / [Lucide](https://lucide.dev)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
 - Agent Skills: Adapted from [poteto - pstack](https://github.com/cursor/plugins/tree/main/pstack) and [mattpocock/skills](https://github.com/mattpocock/skills)

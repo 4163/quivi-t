@@ -3,6 +3,11 @@ export function applyTheme(theme) {
   if (theme === 'light' || theme === 'dark') {
     document.documentElement.setAttribute('data-theme', theme);
   }
+
+  if (window.__TAURI__ && window.__TAURI__.core) {
+    const tauriTheme = (theme === 'light' || theme === 'dark') ? theme : null;
+    window.__TAURI__.core.invoke('update_theme', { theme: tauriTheme }).catch(() => {});
+  }
 }
 
 export function applyCustomCss(cssText) {

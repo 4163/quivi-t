@@ -789,6 +789,13 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   image-rendering: pixelated;
 }
 
+/* SVGs with percentage-based dimensions collapse in the shrink-wrap wrapper.
+   JS sets --svg-base-w/--svg-base-h to give them a concrete canvas size. */
+.viewer-img[data-svg-bounds] {
+  width: var(--svg-base-w);
+  height: var(--svg-base-h);
+}
+
 /* Opaque image grill. */
 #img-grill {
   display: none;

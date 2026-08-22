@@ -102,6 +102,7 @@ pub fn run() {
             unregister_associations,
             get_initial_args,
             show_window,
+            update_theme,
             pick_folder
         ]);
 
