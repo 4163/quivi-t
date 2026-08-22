@@ -6,12 +6,12 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
-### High-Quality Lanczos Scaling Pipeline (Viewport-Based)
-- **Lanczos Scaling Support:** Integrated the `pica` WebAssembly resampler to provide high-quality Lanczos scaling for images, replacing the native blurry upscaling/downscaling.
-- **Viewport-Based Partial Rendering (Tiling):** To prevent massive main-thread hangs and memory exhaustion when zoomed in on large images, the pipeline dynamically calculates the intersection of the viewport with the transformed image. It extracts only the *visible crop* of the source image and resizes it.
-- **Web Worker Offload:** Leveraged `pica`'s Web Worker support by utilizing a `blob:` URL cache for source images (bypassing Tauri `quivit://` cross-origin canvas tainting and `DataCloneError`s). This moves all heavy WASM math strictly to background threads, ensuring 60fps buttery-smooth panning and zooming, with the high-quality overlay popping in 80ms after interactions settle.
-- **CSS Precision Overlay:** The resulting partial Lanczos canvas is positioned seamlessly over the native browser image using CSS custom properties (`--crop-top`, `--crop-left`) to preserve the single CSS source of truth.
-- **Scaling Keybinds:** Made scaling modes settable via keybinds (`cmd-scale-none`, `cmd-scale-bilinear`, `cmd-scale-lanczos`), and mapped `[`/`]` to cycle between them. The active mode is persisted via config and displayed in the file menu.
+### Lanczos Scaling Pipeline (Viewport-Based)
+- **Lanczos Scaling Support:** Added the `pica` WebAssembly resampler for Lanczos scaling. It replaces native upscaling.
+- **Viewport-Based Partial Rendering (Tiling):** The pipeline calculates the viewport intersection and resizes only the visible crop. This stops main-thread hangs and memory exhaustion at high zoom levels.
+- **Web Worker Offload:** Enabled `pica` Web Workers using a `blob:` URL cache for source images, bypassing Tauri `quivit://` canvas tainting and `DataCloneError`. WASM math runs on background threads. The UI stays responsive during pan/zoom, and the overlay renders 80ms after movement stops.
+- **CSS Precision Overlay:** CSS custom properties (`--crop-top`, `--crop-left`) position the partial Lanczos canvas over the browser image. This keeps the CSS source of truth intact.
+- **Scaling Keybinds:** Added scaling mode keybinds (`cmd-scale-none`, `cmd-scale-bilinear`, `cmd-scale-lanczos`), mapped to `[`/`]` to cycle between them. The active mode persists in config and shows in the file menu.
 
 ### CSS / JS Decoupling & HTML-First Specs (landed on `refactor/decoupling`)
 - **CSS decoupling:** `src/css/global.css` holds tokens, resets, and shared rules. `main.css`, `options.css`, and `metadata.css` are page-only. Every HTML page loads `global.css` first.

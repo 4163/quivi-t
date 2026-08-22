@@ -5,7 +5,8 @@ These rules apply to the AI coding assistant.
 - Keep responses concise and focused on the task.
 - Follow existing code style and formatting for each directory and its associated files.
 - For writing work, read `.agents/skills/unslop/SKILL.md` and follow it even if the harness does not auto-load always-active skills. This applies to docs, prompts, comments, and user-facing copy.
-- When completing an implementation slice, read `.agents/skills/verify-implementation/SKILL.md` and follow its workflow. This applies even if the harness does not auto-load always-active skills.
+- **Verify:** Run `.agents/skills/verify-implementation/SKILL.md` when finishing a slice or when asked to "verify".
+- **Validate:** Run `.agents/skills/validate-changes/SKILL.md` when explicitly asked to "validate" code. Do not confuse "verify" (tests and docs) with "validate" (architecture review).
 - NEVER (unless instructed otherwise) execute git commit commands or automate git commits. The user handles all commits manually or through the commit pipeline.
 
 ## Code Guidelines

@@ -1,6 +1,6 @@
 ---
 name: validate-changes
-description: Trigger when the user asks to review, validate, or interrogate specific files, a diff, branch, or working tree for architectural compliance before committing or finalizing a refactor.
+description: "Trigger only when asked to 'validate'. Runs an architectural review against AGENTS.md. Do not use this for general slice completion, instead use verify-implementation."
 argument-hint: "<files, diff, branch, or working tree>"
 ---
 
