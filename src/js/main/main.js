@@ -51,9 +51,10 @@ let _uiInitialized = false;
 let keyboardPanStep = DEFAULT_KEYBOARD_PAN_STEP;
 let wheelPanStep = DEFAULT_WHEEL_PAN_STEP;
 
-function updateScalingMenu() {
+function updateScalingMenu(isAnimated = false, displayScaling = activeScaling) {
+  setMenuItemMuted('cmd-scale-lanczos', isAnimated);
   document.querySelectorAll('[data-scaling]').forEach(item => {
-    item.classList.toggle('checked', item.dataset.scaling === activeScaling);
+    item.classList.toggle('checked', item.dataset.scaling === displayScaling);
   });
 }
 
@@ -160,21 +161,32 @@ Core.onStateChange((state) => {
     const crtToggleEl = document.getElementById('cmd-toggle-crt-filter');
     if (crtToggleEl) {
       crtToggleEl.classList.toggle('checked', !!state.config.frontend_data.crt_filter);
+      setMenuItemMuted('cmd-toggle-crt-filter', !!state.isAnimated);
     }
 
     const anime4kToggleEl = document.getElementById('cmd-toggle-anime4k-filter');
     if (anime4kToggleEl) {
       anime4kToggleEl.classList.toggle('checked', !!state.config.frontend_data.anime4k_filter);
+      setMenuItemMuted('cmd-toggle-anime4k-filter', !!state.isAnimated);
     }
   }
 
   // Update standard statusbar fields.
   Statusbar.update(state);
 
-  if (state.scalingMode !== activeScaling) {
-    activeScaling = state.scalingMode;
-    Viewer.setScaling(activeScaling);
-    updateScalingMenu();
+  const isAnimated = !!state.isAnimated;
+  let displayScaling = state.scalingMode;
+  if (isAnimated && state.scalingMode === 'lanczos') {
+    displayScaling = 'bilinear';
+  }
+
+  if (state.scalingMode !== activeScaling || window._lastAnimated !== isAnimated) {
+    if (state.scalingMode !== activeScaling) {
+      activeScaling = state.scalingMode;
+      Viewer.setScaling(activeScaling);
+    }
+    window._lastAnimated = isAnimated;
+    updateScalingMenu(isAnimated, displayScaling);
   }
 
   updateHistoryMenu();

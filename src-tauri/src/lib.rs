@@ -1,3 +1,4 @@
+pub mod animation;
 pub mod archives;
 pub mod commands;
 pub mod config;
@@ -103,7 +104,8 @@ pub fn run() {
             get_initial_args,
             show_window,
             update_theme,
-            pick_folder
+            pick_folder,
+            check_is_animated
         ]);
 
     crate::protocol::register_quivit_protocol(builder)

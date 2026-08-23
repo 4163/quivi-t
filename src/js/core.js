@@ -68,6 +68,9 @@ const _state = {
   /** If mode === 'archive', the filenames of any metadata files found */
   archiveMetadataFiles: [],
 
+  /** True if the current image is an animated format (bypasses WebGL/Lanczos) */
+  isAnimated: false,
+
   /** File list panel visibility. */
   fileListVisible: true,
 
@@ -160,8 +163,26 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     newSrc = await FsUtils.buildFileSrc(file.path);
   }
 
-  // Ignore stale ICO results if the user navigated away while frames loaded.
+  let isAnimated = false;
+  if (FsUtils.isImageEntry(file)) {
+    if (file.name.toLowerCase().endsWith('.svg')) {
+      isAnimated = true;
+    } else {
+      try {
+        isAnimated = await invoke('check_is_animated', {
+          path: _state.mode === 'archive' ? file.name : file.path,
+          archivePath: _state.mode === 'archive' ? _state.archivePath : null
+        });
+      } catch (err) {
+        console.warn('[Core] Failed to check animation header:', err);
+      }
+    }
+  }
+
+  // Ignore stale results if the user navigated away while loading frames or checking headers.
   if (_state.index !== index) return;
+
+  _state.isAnimated = isAnimated;
 
   FsUtils.revokeIfObjectURL(_state.src);
   _state.src = newSrc;

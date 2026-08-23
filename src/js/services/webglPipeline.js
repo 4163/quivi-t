@@ -113,7 +113,9 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
       // Chromatic aberration
       float dx = 0.001;
       float colR = texture(u_texture, vec2(texUV.x + dx, texUV.y)).r;
-      float colG = texture(u_texture, texUV).g;
+      vec4 centerTex = texture(u_texture, texUV);
+      float colG = centerTex.g;
+      float alpha = centerTex.a;
       float colB = texture(u_texture, vec2(texUV.x - dx, texUV.y)).b;
       vec3 col = vec3(colR, colG, colB);
 
@@ -124,9 +126,13 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
       // Vignette
       float vig = 16.0 * distorted.x * distorted.y *
                   (1.0 - distorted.x) * (1.0 - distorted.y);
-      col *= pow(vig, 0.3);
+      float v = pow(vig, 0.3);
+      col *= v;
+      if (u_blackBezel) {
+        alpha = mix(1.0, alpha, v);
+      }
 
-      outColor = vec4(col, 1.0);
+      outColor = vec4(col, alpha);
     }
   `;
 
@@ -151,7 +157,9 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
         return;
       }
 
-      vec3 color = texture(u_texture, texUV).rgb;
+      vec4 texColor = texture(u_texture, texUV);
+      vec3 color = texColor.rgb;
+      float alpha = texColor.a;
 
       // Sample four neighbours in screen space
       vec2 d = 1.0 / u_viewport;
@@ -166,7 +174,7 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
         color += laplacian * 0.25;
       }
 
-      outColor = vec4(color, 1.0);
+      outColor = vec4(color, alpha);
     }
   `;
 

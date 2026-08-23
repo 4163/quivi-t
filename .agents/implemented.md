@@ -6,6 +6,11 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
+### Animated Images & Scaling Fallback (2026-08-23)
+- **Fast Backend Header Detection:** Added a pure Rust `animation::is_animated` module to detect GIF (`NETSCAPE2.0`), WebP (`VP8X ANIMATION`), and APNG (`acTL` before `IDAT`) formats in microseconds without full image decoding. Exposed via `check_is_animated` Tauri command, taking either local paths or fetching the first 8KB directly from `ArchiveCache` for archived entries.
+- **Frontend Sync & UI Rules:** `core.js` tracks `state.isAnimated` on image selection. When an animated format is detected, `main.js` adds `.muted` to Lanczos, Anime4K, and Retro CRT filter menu items, while preserving their active checkmarks.
+- **Scaling Visual Override:** If Lanczos is selected and an animated image is viewed, the UI visually switches the checkmark to Bilinear (`effectiveScaling`), and `viewerRender.js` natively falls back to standard bilinear canvas scaling while bypassing the WebGL and WASM pipelines. When returning to a static image, the UI restores the Lanczos checkmark seamlessly.
+
 ### Experimental WebGL Retro CRT Filter (Ad-hoc)
 - **Shader Pipeline:** Implemented an experimental WebGL pipeline (`webglPipeline.js`) to apply a Retro CRT filter overlay. It applies barrel distortion, chromatic aberration, scanlines, and vignette effects.
 - **Inverse Transform Geometry:** The shader natively handles inverse transformation (`screenToTexUV`), calculating coordinates from the CSS screen viewport back to the original image texture. This completely decouples WebGL from CSS `transform` bugs.
