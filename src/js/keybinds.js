@@ -57,6 +57,7 @@ export function mergeConfig(loaded) {
       menu_visible: fd.menu_visible !== false,
       status_visible: fd.status_visible !== false,
       crt_filter: fd.crt_filter === true,
+      anime4k_filter: fd.anime4k_filter === true,
       keybinds: (() => {
         const defaultClone = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
         const userBinds = fd.keybinds || {};

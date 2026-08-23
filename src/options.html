@@ -173,17 +173,10 @@
             <div class="keybind-tags" data-action="cmd-fit-window-if-larger"></div>
           </div>
           <div class="keybind-item">
-            <span class="keybind-name">Scale None</span>
-            <div class="keybind-tags" data-action="cmd-scale-none"></div>
+            <span class="keybind-name">Opaque Canvas</span>
+            <div class="keybind-tags" data-action="cmd-toggle-transparent"></div>
           </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Scale Bicubic</span>
-            <div class="keybind-tags" data-action="cmd-scale-bicubic"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Scale Lanczos</span>
-            <div class="keybind-tags" data-action="cmd-scale-lanczos"></div>
-          </div>
+          <h3 class="keybind-category-header">Scaling Method</h3>
           <div class="keybind-item">
             <span class="keybind-name">Scale: Previous</span>
             <div class="keybind-tags" data-action="cmd-cycle-scaling-back"></div>
@@ -193,8 +186,25 @@
             <div class="keybind-tags" data-action="cmd-cycle-scaling"></div>
           </div>
           <div class="keybind-item">
-            <span class="keybind-name">Opaque Canvas</span>
-            <div class="keybind-tags" data-action="cmd-toggle-transparent"></div>
+            <span class="keybind-name">Scale None</span>
+            <div class="keybind-tags" data-action="cmd-scale-none"></div>
+          </div>
+          <div class="keybind-item">
+            <span class="keybind-name">Scale Bilinear</span>
+            <div class="keybind-tags" data-action="cmd-scale-bilinear"></div>
+          </div>
+          <div class="keybind-item">
+            <span class="keybind-name">Scale Lanczos</span>
+            <div class="keybind-tags" data-action="cmd-scale-lanczos"></div>
+          </div>
+          <h3 class="keybind-category-header">Filters</h3>
+          <div class="keybind-item">
+            <span class="keybind-name">Toggle Anime4K Filter</span>
+            <div class="keybind-tags" data-action="cmd-toggle-anime4k-filter"></div>
+          </div>
+          <div class="keybind-item">
+            <span class="keybind-name">Toggle Retro CRT Filter</span>
+            <div class="keybind-tags" data-action="cmd-toggle-crt-filter"></div>
           </div>
           <h3 class="keybind-category-header">Zoom</h3>
           <div class="keybind-item">
@@ -233,8 +243,10 @@
           <h3 class="keybind-category-header">Wheel Behaviour</h3>
           <div class="keybind-item scroll-mode-toggle" id="scroll-mode-toggle">
             <span class="keybind-name">Zoom (Ctrl+Wheel) Modifier Mode</span>
-            <button class="keybind-tag" data-mode="hold" title="Hold Ctrl to zoom, release to pan.">Hold</button>
-            <button class="keybind-tag" data-mode="toggle" title="Tap the zoom modifier to switch between zoom and pan.">Toggle</button>
+            <div class="scroll-mode-controls">
+              <button class="keybind-tag" data-mode="hold" title="Hold Ctrl to zoom, release to pan.">Hold</button>
+              <button class="keybind-tag" data-mode="toggle" title="Tap the zoom modifier to switch between zoom and pan.">Toggle</button>
+            </div>
           </div>
           <h3 class="keybind-category-header">Rotation</h3>
           <div class="keybind-item">

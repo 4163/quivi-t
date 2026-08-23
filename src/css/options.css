@@ -397,6 +397,11 @@ button {
   font-size: var(--fs-12);
 }
 
+.scroll-mode-controls {
+  display: flex;
+  gap: 6px;
+}
+
 .scroll-mode-btn {
   padding: 4px 10px;
   border: 1px solid var(--border);

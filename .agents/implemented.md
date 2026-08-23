@@ -746,3 +746,9 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 
 ### Metadata Window Credit SVGs (2026-08-23)
 - **Change:** Replaced emoji-based credit icons in `metadata-window.js` with inline SVGs matching the Feather/Lucide icon style used elsewhere in the app. Updated `applyValue` to support rendering an array of DOM nodes. Added UI icon attributions (Feather/Lucide) to `README.md`.
+
+### Anime4K Refactored as a Mutually Exclusive WebGL Filter (Ad-hoc)
+- **Structural Re-alignment:** Removed Anime4K from the standard base scaling cycle (`cmd-cycle-scaling`) and converted it into a dedicated, toggleable WebGL filter (`anime4k_filter`). This resolves shader collisions when users attempted to apply both Anime4K and CRT filters simultaneously.
+- **Underlying Scaling Preservation:** Anime4K now operates as an override. Activating the filter replaces the base scaling pipeline, but the user's underlying preference (e.g. Lanczos) remains untouched. Deactivating Anime4K immediately drops back to the exact base scaling mode without needing to re-cycle.
+- **Mutual Exclusivity:** The Anime4K and CRT filters now strictly toggle each other off when activated via keybinds or menu interactions.
+- **UI & Keybinds Reorganization:** Extracted `Scaling Method` and `Filters` into their own dedicated sub-headers within the Options → Keys menu for clearer UX. Moved the Anime4K toggle into the View dropdown's Filters block, complete with a visual separator bar.

@@ -36,6 +36,7 @@ export function createViewerRenderer(viewportState) {
 
   let img = null;
   let _rafPending = false;
+  let _renderGeneration = 0;
   let _poolGeneration = 0;
   let _activationGeneration = 0;
   let _targetLoadTimer = null;
@@ -46,26 +47,30 @@ export function createViewerRenderer(viewportState) {
   let pipeline = null;
   let _lastScalingMode = viewportState.getScaling();
   let _lastCrtFilter = Core.getState()?.config?.frontend_data?.crt_filter;
+  let _lastAnime4kFilter = Core.getState()?.config?.frontend_data?.anime4k_filter;
   const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
   const webglCanvas = document.getElementById('viewer-webgl-canvas');
   let _renderTimeout = null;
 
   Core.onStateChange((state) => {
-    if (state.config.frontend_data.crt_filter !== _lastCrtFilter) {
-      _lastCrtFilter = state.config.frontend_data.crt_filter;
+    const newCrt = state.config.frontend_data.crt_filter;
+    const newAnime4k = state.config.frontend_data.anime4k_filter;
+    if (newCrt !== _lastCrtFilter || newAnime4k !== _lastAnime4kFilter) {
       _cancelRender();
-      _applyScaling();
+      _applyScaling(newCrt, newAnime4k);
+      _lastCrtFilter = newCrt;
+      _lastAnime4kFilter = newAnime4k;
       _scheduleTransform();
       _triggerRender();
     }
   });
 
   function _cancelRender() {
+    _renderGeneration++;
     if (pipeline && pipeline.type !== 'webgl') pipeline.cancel();
     if (_renderTimeout) clearTimeout(_renderTimeout);
     _renderTimeout = null;
     if (lanczosCanvas) lanczosCanvas.removeAttribute('data-render-ready');
-    // WebGL canvas maintains its state during pan/zoom
   }
 
   function _applyTransform() {
@@ -81,7 +86,9 @@ export function createViewerRenderer(viewportState) {
       // WebGL is fast enough to render every frame continuously during pan/zoom
       if (pipeline && pipeline.type === 'webgl') {
         const geom = viewportState.getGeometry();
+        const gen = _renderGeneration;
         pipeline.render(img, geom).then((ok) => {
+          if (gen !== _renderGeneration) return;
           if (ok && webglCanvas) {
             webglCanvas.setAttribute('data-render-ready', 'true');
             if (_lastCrtFilter) webglCanvas.setAttribute('data-crt', 'true');
@@ -146,26 +153,24 @@ export function createViewerRenderer(viewportState) {
     _triggerRender();
   });
 
-  function _applyScaling() {
+  function _applyScaling(incomingCrt, incomingAnime4k) {
     if (!img) return;
     const scaling = viewportState.getScaling();
-    const crtFilter = _lastCrtFilter;
+    const crtFilter = incomingCrt !== undefined ? incomingCrt : _lastCrtFilter;
+    const anime4kFilter = incomingAnime4k !== undefined ? incomingAnime4k : _lastAnime4kFilter;
+    
     img.dataset.scaling = scaling;
     
-    const usesWebgl = crtFilter || scaling === 'anime4k';
-    const usesLanczos = scaling === 'lanczos' && !crtFilter;
+    const activeFilter = crtFilter ? 'crt' : (anime4kFilter ? 'anime4k' : null);
+    const usesWebgl = activeFilter !== null;
+    const usesLanczos = scaling === 'lanczos' && !usesWebgl;
 
-    // Check if we need to recreate the pipeline
-    // For simplicity, if pipeline exists but type is wrong, dispose it.
     let needsNewPipeline = !pipeline;
     if (pipeline) {
       if (usesWebgl && pipeline.type !== 'webgl') needsNewPipeline = true;
       if (usesLanczos && pipeline.type !== 'lanczos') needsNewPipeline = true;
       if (needsNewPipeline || (!usesWebgl && !usesLanczos)) {
-        if (pipeline.type === 'webgl' && webglCanvas) {
-          webglCanvas.removeAttribute('data-render-ready');
-          webglCanvas.removeAttribute('data-crt');
-        }
+        _teardownWebglCanvas();
         pipeline.dispose();
         if (!usesWebgl && !usesLanczos) {
           pipeline = null;
@@ -173,16 +178,16 @@ export function createViewerRenderer(viewportState) {
       }
     }
 
-    if (needsNewPipeline || (usesWebgl && (scaling !== _lastScalingMode || crtFilter !== _lastCrtFilter))) {
+    const prevFilter = _lastCrtFilter ? 'crt' : (_lastAnime4kFilter ? 'anime4k' : null);
+    const filterChanged = activeFilter !== prevFilter;
+
+    if (needsNewPipeline || (usesWebgl && filterChanged)) {
       if (pipeline) {
-        if (pipeline.type === 'webgl' && webglCanvas) {
-          webglCanvas.removeAttribute('data-render-ready');
-          webglCanvas.removeAttribute('data-crt');
-        }
+        _teardownWebglCanvas();
         pipeline.dispose();
       }
       if (usesWebgl) {
-        pipeline = createWebglPipeline(webglCanvas, scaling, crtFilter);
+        pipeline = createWebglPipeline(webglCanvas, scaling, activeFilter);
       } else if (usesLanczos) {
         pipeline = createScalingPipeline(scaling);
         pipeline.type = 'lanczos';
@@ -363,12 +368,19 @@ export function createViewerRenderer(viewportState) {
     });
   }
 
+  function _teardownWebglCanvas() {
+    if (!webglCanvas) return;
+    webglCanvas.removeAttribute('data-render-ready');
+    webglCanvas.removeAttribute('data-crt');
+  }
+
   function clearDisplayedImage() {
     _cancelRender();
     if (lanczosCanvas) {
       const ctx = lanczosCanvas.getContext('2d');
       if (ctx) ctx.clearRect(0, 0, lanczosCanvas.width, lanczosCanvas.height);
     }
+    _teardownWebglCanvas();
     if (pipeline) pipeline.dispose();
     pipeline = null;
     _poolGeneration += 1;

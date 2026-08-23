@@ -161,6 +161,11 @@ Core.onStateChange((state) => {
     if (crtToggleEl) {
       crtToggleEl.classList.toggle('checked', !!state.config.frontend_data.crt_filter);
     }
+
+    const anime4kToggleEl = document.getElementById('cmd-toggle-anime4k-filter');
+    if (anime4kToggleEl) {
+      anime4kToggleEl.classList.toggle('checked', !!state.config.frontend_data.anime4k_filter);
+    }
   }
 
   // Update standard statusbar fields.

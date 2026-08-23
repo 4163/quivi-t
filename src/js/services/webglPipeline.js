@@ -25,7 +25,7 @@ async function _getCleanImage(src) {
   return _cachedCleanImg;
 }
 
-export function createWebglPipeline(canvas, scalingMode, crtFilter) {
+export function createWebglPipeline(canvas, scalingMode, activeFilter) {
   let _active = true;
   let _gl = canvas.getContext('webgl2', {
     antialias: false,
@@ -199,7 +199,7 @@ export function createWebglPipeline(canvas, scalingMode, crtFilter) {
     return prog;
   }
 
-  const _program = crtFilter
+  const _program = activeFilter === 'crt'
     ? linkProgram(crtFsSource)
     : linkProgram(animeFsSource);
 
@@ -311,6 +311,8 @@ export function createWebglPipeline(canvas, scalingMode, crtFilter) {
     dispose() {
       _active = false;
       if (_gl) {
+        _gl.clearColor(0, 0, 0, 0);
+        _gl.clear(_gl.COLOR_BUFFER_BIT);
         if (_sourceTexture) _gl.deleteTexture(_sourceTexture);
         if (_program) _gl.deleteProgram(_program);
         _gl.deleteBuffer(posBuffer);

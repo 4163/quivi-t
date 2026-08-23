@@ -69,20 +69,33 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-scale-lanczos', label: 'Scale Lanczos', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.setScalingMode('lanczos', { persist: true })
   },
-  { id: 'cmd-scale-anime4k', label: 'Scale Anime4K', defaultBinds: [], category: 'View',
-    run: (ctx) => ctx.Core.setScalingMode('anime4k', { persist: true })
+  { id: 'cmd-toggle-anime4k-filter', label: 'Toggle Anime4K Filter', defaultBinds: [], category: 'View',
+    run: (ctx) => {
+      const state = ctx.Core.getState();
+      const nextAnime4k = !state.config.frontend_data.anime4k_filter;
+      state.config.frontend_data.anime4k_filter = nextAnime4k;
+      if (nextAnime4k) {
+        state.config.frontend_data.crt_filter = false;
+      }
+      ctx.Core.persistConfig();
+      ctx.Core.setState({});
+    }
   },
   { id: 'cmd-toggle-crt-filter', label: 'Toggle Retro CRT Filter', defaultBinds: [], category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
-      state.config.frontend_data.crt_filter = !state.config.frontend_data.crt_filter;
+      const nextCrt = !state.config.frontend_data.crt_filter;
+      state.config.frontend_data.crt_filter = nextCrt;
+      if (nextCrt) {
+        state.config.frontend_data.anime4k_filter = false;
+      }
       ctx.Core.persistConfig();
       ctx.Core.setState({});
     }
   },
   { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
     run: (ctx) => {
-      const modes = ['none', 'bilinear', 'lanczos', 'anime4k'];
+      const modes = ['none', 'bilinear', 'lanczos'];
       const current = ctx.Core.getState().scalingMode;
       const idx = modes.indexOf(current);
       const next = idx > 0 ? modes[idx - 1] : modes[modes.length - 1];
@@ -91,7 +104,7 @@ export const ACTION_REGISTRY = [
   },
   { id: 'cmd-cycle-scaling', label: 'Scale: Next', defaultBinds: ']', category: 'View',
     run: (ctx) => {
-      const modes = ['none', 'bilinear', 'lanczos', 'anime4k'];
+      const modes = ['none', 'bilinear', 'lanczos'];
       const current = ctx.Core.getState().scalingMode;
       const next = modes[(modes.indexOf(current) + 1) % modes.length];
       ctx.Core.setScalingMode(next, { persist: true });
