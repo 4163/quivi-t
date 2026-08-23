@@ -21,6 +21,8 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Archives**: Read compressed files directly as folders, including image navigation and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Ctrl`+wheel.
+- **Scaling**: Choose from Pixelated, Bilinear, and high-quality Lanczos scaling.
+- **Filters**: Toggle real-time WebGL filters like Anime4K (for manga/anime upscaling) or Retro CRT (scanlines, barrel distortion).
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
 - **Persistent State**: Persists favorites, single-instance handoff, optional auto-open behavior, and the last opened image.
 - **Windows Integration**: Use native file/folder icons and register file associations per-user for Windows Default Apps.
@@ -49,7 +51,8 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Fit window | `Shift+F` |
 | Fit width / height if larger | `Q` / `E` |
 | Fit window if larger | `F` |
-| Cycle scaling mode | `[` / `]` |
+| **Scaling Method** | |
+| Scale: Previous / Next | `[` / `]` |
 | **Zoom** | |
 | Zoom in / out | `C` / `Z` |
 | Zoom in / out (Scroll) | `Ctrl+ScrollUp` / `Ctrl+ScrollDown` |
@@ -311,7 +314,8 @@ QuiviT/
 │     │  ├─ keyCombo.js          # Combo normalize / format
 │     │  ├─ keybindDomain.js     # Locked binds, conflicts, categories
 │     │  ├─ sorting.js           # naturalCompare / applySort
-│     │  └─ viewerMath.js        # Zoom / pan / fit math
+│     │  ├─ viewerMath.js        # Zoom / pan / fit math
+│     │  └─ webglPipeline.js     # WebGL rendering pipeline
 │     ├─ shared/
 │     │  ├─ theme.js             # applyTheme / applyCustomCss
 │     │  ├─ themePrePaint.js     # Synchronous pre-paint injector
@@ -352,4 +356,5 @@ QuiviT/
 - Icons: [Flaticon (Cosplayer, Webp, Gif, Cbz, Cbr, Svg)](https://www.flaticon.com)
 - UI Icons: [Feather](https://feathericons.com) / [Lucide](https://lucide.dev)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
+- WebGL Shaders: [Bloc97/Anime4K](https://github.com/bloc97/Anime4K) / [stefanlegg/crt-fx](https://github.com/stefanlegg/crt-fx)
 - Agent Skills: Adapted from [poteto - pstack](https://github.com/cursor/plugins/tree/main/pstack) and [mattpocock/skills](https://github.com/mattpocock/skills)

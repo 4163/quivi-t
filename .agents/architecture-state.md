@@ -42,7 +42,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 
 **JavaScript:**
 - `core.js`: state machine. No DOM. UI modules subscribe via `onStateChange`.
-- `services/`: pure domain: `actions.js` (single `cmd-*` registry + dispatch), `keyCombo.js`, `keybindDomain.js`, `sorting.js`, `viewerMath.js`. No `document`.
+- `services/`: pure domain: `actions.js` (single `cmd-*` registry + dispatch), `keyCombo.js`, `keybindDomain.js`, `sorting.js`, `viewerMath.js`, `webglPipeline.js` (WebGL rendering pipeline). No `document` querying.
 - `shared/`: cross-window: `theme.js` / `themePrePaint.js`, `configPreview.js`, `windowFit.js`.
 - `keybinds.js`: `mergeConfig` + pan/zoom defaults. `DEFAULT_KEYBINDS` is derived from `ACTION_REGISTRY`.
 - `shortcuts.js`: keyboard / mouse / wheel dispatch. Does not write the statusbar.
