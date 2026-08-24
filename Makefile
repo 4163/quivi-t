@@ -7,8 +7,8 @@
 # Targets:
 #   make push     - update submodules, download remote files, stage all changes,
 #                   then AI commit and push via opencode
-#   make push-x   - same as above but skip AI committer; opens git commit editor
-#                   for a manual message, then pushes
+#   make push-x   - same as above but skip AI committer; prompts for
+#                   commit message via terminal, then commits and pushes
 #   make push-a   - same as make push, but first prompts for additional
 #                   commit/push info typed in the terminal, which is passed to
 #                   the AI committer as prioritized context
@@ -18,9 +18,9 @@
 #   Git reads global config from that HOME, not from Windows home.
 #   Without these configured there, you'll get "dubious ownership" and
 #   "Author identity unknown" (falls back to user@hostname.(none)):
-#     git config --global --add safe.directory <repo>
-#     git config --global user.name "<name>"
-#     git config --global user.email "<email>"
+#     git config --global --add safe.directory <path/to/repo>
+#     git config --global user.name "Your Name"
+#     git config --global user.email "you@example.com"
 #   (Run with HOME=C:\tools\msys64\home\<user> to configure for MSYS2.)
 
 .PHONY: push push-x push-a
