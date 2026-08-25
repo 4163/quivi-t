@@ -1,29 +1,4 @@
-// Blob cache for same-origin texture uploads. Custom protocol images
-// (quivit://, asset://) are cross-origin and taint the WebGL context
-// without this workaround.
-let _cachedSrc = null;
-let _cachedBlobUrl = null;
-let _cachedCleanImg = null;
-
-function _evictBlobCache() {
-  if (_cachedBlobUrl) URL.revokeObjectURL(_cachedBlobUrl);
-  _cachedSrc = null;
-  _cachedBlobUrl = null;
-  _cachedCleanImg = null;
-}
-
-async function _getCleanImage(src) {
-  if (_cachedSrc === src && _cachedCleanImg) return _cachedCleanImg;
-  _evictBlobCache();
-  const resp = await fetch(src);
-  const blob = await resp.blob();
-  _cachedBlobUrl = URL.createObjectURL(blob);
-  _cachedCleanImg = new Image();
-  _cachedCleanImg.src = _cachedBlobUrl;
-  await _cachedCleanImg.decode();
-  _cachedSrc = src;
-  return _cachedCleanImg;
-}
+import { getCleanImage } from '../shared/blobImage.js';
 
 export function createWebglPipeline(canvas, scalingMode, activeFilter) {
   let _active = true;
@@ -251,7 +226,7 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
       // Fetch as blob for same-origin texture upload
       let cleanImg;
       try {
-        cleanImg = await _getCleanImage(imgElement.src);
+        cleanImg = await getCleanImage(imgElement.src);
       } catch { return null; }
       if (!_active) return null;
       if (!cleanImg.complete || cleanImg.naturalWidth <= 0 || cleanImg.naturalHeight <= 0) return null;

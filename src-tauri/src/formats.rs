@@ -84,8 +84,10 @@ pub fn is_animated(bytes: &[u8]) -> bool {
 }
 
 fn check_gif(bytes: &[u8]) -> bool {
-    // NETSCAPE2.0 looping block is within first ~1 KiB; bound scan to header.
-    let end = bytes.len().min(8192);
+    // NETSCAPE2.0 looping block is within first ~1 KiB; bound scan to 2 KiB header.
+    // Note: A single-frame GIF with a NETSCAPE loop extension is treated as animated
+    // which is an acceptable false-positive per spec. The alternative would require a full frame-count parse.
+    let end = bytes.len().min(2048);
     bytes[..end].windows(14).any(|w| w == b"\x21\xFF\x0BNETSCAPE2.0")
 }
 

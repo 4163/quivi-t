@@ -1,38 +1,8 @@
-// Initialize pica. Now that we fetch images as blobs to ensure they
-// are same-origin, we can safely allow Web Workers and createImageBitmap
-// without triggering DataCloneErrors. This moves the heavy WASM math
-// completely off the main thread, keeping the UI buttery smooth.
-const resampler = window.pica();
+import { getCleanImage } from '../shared/blobImage.js';
 
-// Per-src blob cache. Fetching image bytes and creating a same-origin
-// blob URL is required to avoid canvas tainting, but the fetch is
-// expensive. Cache the decoded Image so repeated renders at different
-// zoom levels skip the network round-trip entirely.
-let _cachedSrc = null;
-let _cachedBlobUrl = null;
-let _cachedCleanImg = null;
-
-const _destCanvas = document.createElement('canvas');
-const _srcCanvas = document.createElement('canvas');
-
-function _evictBlobCache() {
-  if (_cachedBlobUrl) URL.revokeObjectURL(_cachedBlobUrl);
-  _cachedSrc = null;
-  _cachedBlobUrl = null;
-  _cachedCleanImg = null;
-}
-
-async function _getCleanImage(src) {
-  if (_cachedSrc === src && _cachedCleanImg) return _cachedCleanImg;
-  _evictBlobCache();
-  const resp = await fetch(src);
-  const blob = await resp.blob();
-  _cachedBlobUrl = URL.createObjectURL(blob);
-  _cachedCleanImg = new Image();
-  _cachedCleanImg.src = _cachedBlobUrl;
-  await _cachedCleanImg.decode();
-  _cachedSrc = src;
-  return _cachedCleanImg;
+let _resampler = null;
+function getResampler() {
+  return _resampler ||= window.pica();
 }
 
 const PICA_OPTIONS = {
@@ -42,6 +12,8 @@ const PICA_OPTIONS = {
 };
 
 export function createScalingPipeline(mode) {
+  const _destCanvas = document.createElement('canvas');
+  const _srcCanvas = document.createElement('canvas');
   let _activePromise = null;
 
   function cancel() {
@@ -129,7 +101,7 @@ export function createScalingPipeline(mode) {
 
       let cleanImg;
       try {
-        cleanImg = await _getCleanImage(sourceImg.src);
+        cleanImg = await getCleanImage(sourceImg.src);
       } catch {
         return null;
       }
@@ -141,19 +113,13 @@ export function createScalingPipeline(mode) {
       const sctx = _srcCanvas.getContext('2d');
       sctx.drawImage(cleanImg, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
 
+      const resampler = getResampler();
       const renderPromise = resampler.resize(_srcCanvas, _destCanvas, PICA_OPTIONS);
       _activePromise = renderPromise;
 
       try {
         const resultCanvas = await renderPromise;
         if (_activePromise !== renderPromise) return null;
-        
-        // DEBUG: Uncomment the following three lines to visualize the Lanczos 
-        // overlay bounding box. This is useful for verifying that viewport 
-        // partial rendering is accurately cropping and positioning the canvas.
-        const ctx = resultCanvas.getContext('2d');
-        // ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
-        // ctx.fillRect(0, 0, destW, destH);
         
         return { 
           canvas: resultCanvas, 

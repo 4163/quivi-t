@@ -6,6 +6,12 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
+### Duplicate Cache & Pipeline Refactoring (2026-08-25)
+- **Shared Blob Cache:** Extracted the duplicate same-origin `fetch`/`createObjectURL` blob caching logic from `scalingPipeline.js` and `webglPipeline.js` into a shared `src/js/shared/blobImage.js` helper.
+- **Lazy Pica Initialization:** Changed `window.pica()` from a top-level global to a lazy singleton initialized only when `createScalingPipeline` is first invoked, removing race conditions against vendor script load order.
+- **Pipeline Singletons:** Moved the shared `_srcCanvas` and `_destCanvas` inside the `createScalingPipeline` factory so that concurrent scaling renders don't conflict. Removed left-over debug drawing code.
+- **GIF Header Search Bounding:** Adjusted the `check_gif` `NETSCAPE2.0` header scan limit in `formats.rs` from 8 KiB down to 2 KiB as an optimization, and documented the acceptable single-frame GIF false-positive behavior.
+
 ### Animated Images, Header-Only Archive Reads & Scaling Fallback (2026-08-23/25)
 - **Fast Backend Header Detection:** Domain logic in `formats.rs` (`is_animated`) detects GIF (`NETSCAPE2.0`), WebP (`VP8X ANIMATION`), and APNG (`acTL` before `IDAT`) formats in microseconds. Exposed via `check_is_animated` Tauri command, reading local paths or fetching 8 KiB headers directly from `ArchiveCache::read_entry_header` for archived entries without decompressing full files.
 - **Frontend Sync & UI Rules:** `core.js` tracks `state.isAnimated` on image selection. When an animated format is detected, `main.js` adds `.muted` to Lanczos, Anime4K, and Retro CRT filter menu items, while preserving their active checkmarks.
