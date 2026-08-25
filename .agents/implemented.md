@@ -6,10 +6,11 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
-### Animated Images & Scaling Fallback (2026-08-23)
-- **Fast Backend Header Detection:** Added a pure Rust `animation::is_animated` module to detect GIF (`NETSCAPE2.0`), WebP (`VP8X ANIMATION`), and APNG (`acTL` before `IDAT`) formats in microseconds without full image decoding. Exposed via `check_is_animated` Tauri command, taking either local paths or fetching the first 8KB directly from `ArchiveCache` for archived entries.
+### Animated Images, Header-Only Archive Reads & Scaling Fallback (2026-08-23/25)
+- **Fast Backend Header Detection:** Domain logic in `formats.rs` (`is_animated`) detects GIF (`NETSCAPE2.0`), WebP (`VP8X ANIMATION`), and APNG (`acTL` before `IDAT`) formats in microseconds. Exposed via `check_is_animated` Tauri command, reading local paths or fetching 8 KiB headers directly from `ArchiveCache::read_entry_header` for archived entries without decompressing full files.
 - **Frontend Sync & UI Rules:** `core.js` tracks `state.isAnimated` on image selection. When an animated format is detected, `main.js` adds `.muted` to Lanczos, Anime4K, and Retro CRT filter menu items, while preserving their active checkmarks.
-- **Scaling Visual Override:** If Lanczos is selected and an animated image is viewed, the UI visually switches the checkmark to Bilinear (`effectiveScaling`), and `viewerRender.js` natively falls back to standard bilinear canvas scaling while bypassing the WebGL and WASM pipelines. When returning to a static image, the UI restores the Lanczos checkmark seamlessly.
+- **Scaling Visual Override & Bridge Guards:** If Lanczos is selected and an animated image is viewed, the UI visually switches the checkmark to Bilinear (`effectiveScaling`), and `viewerRender.js` natively falls back to standard bilinear canvas scaling while bypassing the WebGL and WASM pipelines. Filter transitions are deferred during two-image DOM bridge swaps to hold previous pixels until new image decode completes, preventing intermediate render ghosts and canvas leaks.
+- **HTML & Native Shell Background Fixes:** Restored `shellBackground.js` in `index.html` to mirror `--surface` onto the native window and pruned redundant `viewer.js` script tag.
 
 ### Experimental WebGL Retro CRT Filter (Ad-hoc)
 - **Shader Pipeline:** Implemented an experimental WebGL pipeline (`webglPipeline.js`) to apply a Retro CRT filter overlay. It applies barrel distortion, chromatic aberration, scanlines, and vignette effects.
