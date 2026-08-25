@@ -107,6 +107,21 @@ impl ArchiveCache {
             .map(Vec::into)
     }
 
+    pub(crate) fn read_from_open_zip_header(
+        &mut self,
+        archive_path: &str,
+        entry_name: &str,
+        limit: usize,
+    ) -> Option<Vec<u8>> {
+        self.archives
+            .get_mut(archive_path)?
+            .zip_archive
+            .as_mut()
+            .and_then(|archive| {
+                crate::archives::zip::read_zip_entry_header(archive, entry_name, limit).ok()
+            })
+    }
+
     pub(crate) fn temp_extraction_state(
         &self,
         archive_path: &str,

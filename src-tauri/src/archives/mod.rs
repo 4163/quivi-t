@@ -141,6 +141,53 @@ impl ArchiveCache {
         Ok(self.get_zip_entry(archive_path, entry_name))
     }
 
+    pub fn read_entry_header(
+        &mut self,
+        archive_path: &str,
+        entry_name: &str,
+        limit: usize,
+    ) -> Result<Vec<u8>, String> {
+        match ArchiveKind::from_path(archive_path)? {
+            ArchiveKind::Zip => self.read_zip_entry_header(archive_path, entry_name, limit),
+            ArchiveKind::Rar | ArchiveKind::SevenZ | ArchiveKind::Tar => {
+                self.read_temp_entry_header(archive_path, entry_name, limit)
+            }
+        }
+    }
+
+    fn read_zip_entry_header(
+        &mut self,
+        archive_path: &str,
+        entry_name: &str,
+        limit: usize,
+    ) -> Result<Vec<u8>, String> {
+        if let Some(cached) = self.get_zip_entry(archive_path, entry_name) {
+            let end = cached.len().min(limit);
+            return Ok(cached[..end].to_vec());
+        }
+
+        if self.contains_archive(archive_path) {
+            if let Some(buf) = self.read_from_open_zip_header(archive_path, entry_name, limit) {
+                return Ok(buf);
+            }
+        }
+
+        let mut archive = zip::open_zip_archive(archive_path)?;
+        zip::read_zip_entry_header(&mut archive, entry_name, limit)
+    }
+
+    fn read_temp_entry_header(
+        &mut self,
+        archive_path: &str,
+        entry_name: &str,
+        limit: usize,
+    ) -> Result<Vec<u8>, String> {
+        let data = self.read_temp_entry_bytes(archive_path, entry_name)?;
+        let bytes = data.wait_for_data(entry_name)?;
+        let end = bytes.len().min(limit);
+        Ok(bytes[..end].to_vec())
+    }
+
     fn prepare_archive_state(
         &mut self,
         archive_path: &str,

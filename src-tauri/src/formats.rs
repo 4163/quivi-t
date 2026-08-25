@@ -66,3 +66,46 @@ pub fn is_archive_ext(ext: &str) -> bool {
 pub fn is_metadata_ext(ext: &str) -> bool {
     ext.eq_ignore_ascii_case("xml") || ext.eq_ignore_ascii_case("opf")
 }
+
+pub fn is_animated(bytes: &[u8]) -> bool {
+    if bytes.len() < 8 {
+        return false;
+    }
+
+    if bytes.starts_with(b"GIF8") {
+        return check_gif(bytes);
+    } else if bytes.starts_with(b"RIFF") && bytes.len() > 12 && &bytes[8..12] == b"WEBP" {
+        return check_webp(bytes);
+    } else if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return check_apng(bytes);
+    }
+
+    false
+}
+
+fn check_gif(bytes: &[u8]) -> bool {
+    // NETSCAPE2.0 looping block is within first ~1 KiB; bound scan to header.
+    let end = bytes.len().min(8192);
+    bytes[..end].windows(14).any(|w| w == b"\x21\xFF\x0BNETSCAPE2.0")
+}
+
+fn check_webp(bytes: &[u8]) -> bool {
+    if let Some(pos) = bytes.windows(4).position(|w| w == b"VP8X") {
+        if pos + 8 < bytes.len() {
+            let flags = bytes[pos + 8];
+            return (flags & 0b0000_0010) != 0;
+        }
+    }
+    false
+}
+
+fn check_apng(bytes: &[u8]) -> bool {
+    let actl_pos = bytes.windows(4).position(|w| w == b"acTL");
+    let idat_pos = bytes.windows(4).position(|w| w == b"IDAT");
+
+    match (actl_pos, idat_pos) {
+        (Some(a), Some(i)) => a < i,
+        (Some(_), None) => true,
+        _ => false,
+    }
+}

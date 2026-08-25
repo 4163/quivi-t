@@ -2,8 +2,8 @@ use std::fs;
 use std::io::Read;
 use std::sync::RwLock;
 
-use crate::animation::is_animated;
 use crate::archives::ArchiveCache;
+use crate::formats::is_animated;
 
 #[tauri::command(async)]
 pub fn check_is_animated(
@@ -12,13 +12,11 @@ pub fn check_is_animated(
     state: tauri::State<'_, RwLock<ArchiveCache>>,
 ) -> Result<bool, String> {
     if let Some(arc_path) = archive_path {
-        let entry_data = {
+        let header = {
             let mut cache = state.write().map_err(|e| e.to_string())?;
-            cache.read_entry_bytes(&arc_path, &path)?
+            cache.read_entry_header(&arc_path, &path, 8192)?
         };
-        
-        let bytes = entry_data.wait_for_data(&path)?;
-        Ok(is_animated(&bytes))
+        Ok(is_animated(&header))
     } else {
         let mut f = fs::File::open(&path).map_err(|e| format!("Cannot open file: {}", e))?;
         let mut buffer = [0u8; 8192];
