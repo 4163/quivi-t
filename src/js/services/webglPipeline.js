@@ -6,7 +6,7 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
     antialias: false,
     preserveDrawingBuffer: true,
     alpha: true,
-    premultipliedAlpha: false,
+    premultipliedAlpha: true,
   });
   if (!_gl) {
     console.warn('WebGL2 not supported');
@@ -87,16 +87,21 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
 
       // Chromatic aberration
       float dx = 0.001;
-      float colR = texture(u_texture, vec2(texUV.x + dx, texUV.y)).r;
+      vec4 rTex = texture(u_texture, vec2(texUV.x + dx, texUV.y));
       vec4 centerTex = texture(u_texture, texUV);
-      float colG = centerTex.g;
+      vec4 bTex = texture(u_texture, vec2(texUV.x - dx, texUV.y));
+      
+      // Premultiply by alpha immediately to suppress invisible RGB bleed
+      float colR = rTex.r * rTex.a;
+      float colG = centerTex.g * centerTex.a;
+      float colB = bTex.b * bTex.a;
       float alpha = centerTex.a;
-      float colB = texture(u_texture, vec2(texUV.x - dx, texUV.y)).b;
       vec3 col = vec3(colR, colG, colB);
 
       // Scanlines (tied to screen pixels, not texture pixels)
       float scanline = sin(distorted.y * u_viewport.y * 2.0) * 0.04;
-      col -= scanline;
+      // Only apply scanlines to visible pixels to avoid making transparent areas negative/weird
+      col -= scanline * alpha;
 
       // Vignette
       float vig = 16.0 * distorted.x * distorted.y *
@@ -107,6 +112,7 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
         alpha = mix(1.0, alpha, v);
       }
 
+      // Output directly since col is already premultiplied and vignette scales it down
       outColor = vec4(col, alpha);
     }
   `;
@@ -138,18 +144,25 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
 
       // Sample four neighbours in screen space
       vec2 d = 1.0 / u_viewport;
-      vec3 t = texture(u_texture, screenToTexUV(v_screenCoord + vec2( 0.0, -d.y))).rgb;
-      vec3 b = texture(u_texture, screenToTexUV(v_screenCoord + vec2( 0.0,  d.y))).rgb;
-      vec3 l = texture(u_texture, screenToTexUV(v_screenCoord + vec2(-d.x,  0.0))).rgb;
-      vec3 r = texture(u_texture, screenToTexUV(v_screenCoord + vec2( d.x,  0.0))).rgb;
+      vec4 t_tex = texture(u_texture, screenToTexUV(v_screenCoord + vec2( 0.0, -d.y)));
+      vec4 b_tex = texture(u_texture, screenToTexUV(v_screenCoord + vec2( 0.0,  d.y)));
+      vec4 l_tex = texture(u_texture, screenToTexUV(v_screenCoord + vec2(-d.x,  0.0)));
+      vec4 r_tex = texture(u_texture, screenToTexUV(v_screenCoord + vec2( d.x,  0.0)));
 
-      vec3 laplacian = 4.0 * color - t - b - l - r;
+      // Premultiply by alpha to suppress sharpening against invisible RGB bleed
+      vec3 c = color * alpha;
+      vec3 t = t_tex.rgb * t_tex.a;
+      vec3 b = b_tex.rgb * b_tex.a;
+      vec3 l = l_tex.rgb * l_tex.a;
+      vec3 r = r_tex.rgb * r_tex.a;
+
+      vec3 laplacian = 4.0 * c - t - b - l - r;
       float edge = abs(getLum(laplacian));
       if (edge > 0.05) {
-        color += laplacian * 0.25;
+        c += laplacian * 0.25;
       }
 
-      outColor = vec4(color, alpha);
+      outColor = vec4(c, alpha);
     }
   `;
 
