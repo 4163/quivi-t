@@ -43,6 +43,8 @@ const invoke = window.__TAURI__?.core?.invoke;
 
 // Internal state.
 
+const _animMemo = new Map();
+
 const _state = {
   /** @type {'empty'|'image'|'archive'} */
   mode: 'empty',
@@ -163,29 +165,39 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     newSrc = await FsUtils.buildFileSrc(file.path);
   }
 
-  let isAnimated = false;
+  FsUtils.revokeIfObjectURL(_state.src);
+  _state.src = newSrc;
+
+  // Optimistic fallback while checking
+  _state.isAnimated = false; 
+  _notify();
+
   if (FsUtils.isImageEntry(file)) {
     if (file.name.toLowerCase().endsWith('.svg')) {
-      isAnimated = true;
+      _state.isAnimated = true;
+      _notify();
     } else {
-      try {
-        isAnimated = await invoke('check_is_animated', {
-          path: _state.mode === 'archive' ? file.name : file.path,
-          archivePath: _state.mode === 'archive' ? _state.archivePath : null
-        });
-      } catch (err) {
-        console.warn('[Core] Failed to check animation header:', err);
+      const cacheKey = `${_state.mode === 'archive' ? _state.archivePath : ''}::${file.path}`;
+      if (_animMemo.has(cacheKey)) {
+        _state.isAnimated = _animMemo.get(cacheKey);
+        _notify();
+      } else {
+        try {
+          const isAnim = await invoke('check_is_animated', {
+            path: _state.mode === 'archive' ? file.name : file.path,
+            archivePath: _state.mode === 'archive' ? _state.archivePath : null
+          });
+          _animMemo.set(cacheKey, isAnim);
+          if (_state.index === index) {
+            _state.isAnimated = isAnim;
+            _notify();
+          }
+        } catch (err) {
+          console.warn('[Core] Failed to check animation header:', err);
+        }
       }
     }
   }
-
-  // Ignore stale results if the user navigated away while loading frames or checking headers.
-  if (_state.index !== index) return;
-
-  _state.isAnimated = isAnimated;
-
-  FsUtils.revokeIfObjectURL(_state.src);
-  _state.src = newSrc;
 
   if (_state.config?.frontend_data?.remember_last_image && _state.src !== '') {
     const container = _state.mode === 'archive' ? _state.archivePath : _state.directory;

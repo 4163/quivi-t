@@ -1,4 +1,5 @@
 import { getCleanImage } from '../shared/blobImage.js';
+import { invertViewport } from './viewerMath.js';
 
 let _resampler = null;
 function getResampler() {
@@ -42,31 +43,12 @@ export function createScalingPipeline(mode) {
       const cx = viewport.clientWidth / 2;
       const cy = viewport.clientHeight / 2;
 
-      // Helper to map screen coordinate (px, py) to unscaled image coordinate
-      const rad = -(rotation || 0) * Math.PI / 180;
-      const cosR = Math.cos(rad);
-      const sinR = Math.sin(rad);
-
-      function screenToImg(px, py) {
-        // 1. Untranslate
-        const rx = px - tx;
-        const ry = py - ty;
-        // 2. Unrotate
-        const sx = rx * cosR - ry * sinR;
-        const sy = rx * sinR + ry * cosR;
-        // 3. Unscale and unflip
-        const lx = (sx / scale) * (flipX || 1);
-        const ly = (sy / scale) * (flipY || 1);
-        // 4. Translate to top-left origin
-        return { x: lx + nw / 2, y: ly + nh / 2 };
-      }
-
       // Map the 4 corners of the viewport
       const pts = [
-        screenToImg(-cx, -cy),
-        screenToImg(cx, -cy),
-        screenToImg(cx, cy),
-        screenToImg(-cx, cy)
+        invertViewport(-cx, -cy, geom, nw, nh),
+        invertViewport(cx, -cy, geom, nw, nh),
+        invertViewport(cx, cy, geom, nw, nh),
+        invertViewport(-cx, cy, geom, nw, nh)
       ];
 
       // Find the bounding box in source image coordinates

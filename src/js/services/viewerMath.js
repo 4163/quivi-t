@@ -182,3 +182,27 @@ export function createViewportState({ getViewport }) {
     setScaling,
   };
 }
+
+export function getEffectiveScaling(scalingMode, isAnimated) {
+  if (isAnimated && scalingMode === 'lanczos') return 'bilinear';
+  return scalingMode;
+}
+
+export function invertViewport(px, py, geom, naturalW, naturalH) {
+  const { scale, tx, ty, rotation, flipX, flipY } = geom;
+  const rad = -(rotation || 0) * (Math.PI / 180);
+  const cosR = Math.cos(rad);
+  const sinR = Math.sin(rad);
+
+  const rx = px - tx;
+  const ry = py - ty;
+  const sx = rx * cosR - ry * sinR;
+  const sy = rx * sinR + ry * cosR;
+  const lx = (sx / scale) * (flipX || 1);
+  const ly = (sy / scale) * (flipY || 1);
+  
+  return {
+    x: lx + (naturalW / 2),
+    y: ly + (naturalH / 2)
+  };
+}

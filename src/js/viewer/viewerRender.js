@@ -1,6 +1,7 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { Statusbar } from '../menubar/statusbar.js';
+import { getEffectiveScaling } from '../services/viewerMath.js';
 import { createScalingPipeline } from '../services/scalingPipeline.js';
 import { createWebglPipeline } from '../services/webglPipeline.js';
 
@@ -186,13 +187,9 @@ export function createViewerRenderer(viewportState) {
 
   function _applyScaling(incomingCrt, incomingAnime4k, incomingIsAnimated) {
     if (!img) return;
-    let scaling = viewportState.getScaling();
     const live = Core.getState();
     const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : !!live?.isAnimated;
-    
-    if (isAnimated && scaling === 'lanczos') {
-      scaling = 'bilinear';
-    }
+    const scaling = getEffectiveScaling(viewportState.getScaling(), isAnimated);
 
     const crtFilter = incomingCrt !== undefined ? incomingCrt : !!live?.config?.frontend_data?.crt_filter;
     const anime4kFilter = incomingAnime4k !== undefined ? incomingAnime4k : !!live?.config?.frontend_data?.anime4k_filter;
