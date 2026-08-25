@@ -821,7 +821,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   opacity: 1;
 }
 
-#viewport:has(#viewer-webgl-canvas[data-render-ready="true"][data-crt="true"]) #viewer-img-wrapper .viewer-img {
+#viewport:has(#viewer-webgl-canvas[data-render-ready="true"]) #viewer-img-wrapper .viewer-img {
   opacity: 0 !important;
 }
 

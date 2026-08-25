@@ -109,8 +109,6 @@ export function createViewerRenderer(viewportState) {
           if (gen !== _renderGeneration) return;
           if (ok && webglCanvas) {
             webglCanvas.setAttribute('data-render-ready', 'true');
-            if (_lastCrtFilter) webglCanvas.setAttribute('data-crt', 'true');
-            else webglCanvas.removeAttribute('data-crt');
           }
         });
       }
@@ -237,7 +235,6 @@ export function createViewerRenderer(viewportState) {
         pipeline = createWebglPipeline(webglCanvas, scaling, activeFilter);
       } else if (usesLanczos) {
         pipeline = createScalingPipeline(scaling);
-        pipeline.type = 'lanczos';
       }
     }
     

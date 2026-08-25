@@ -26,10 +26,11 @@ export function createScalingPipeline(mode) {
   }
 
   if (mode === 'none' || mode === 'bilinear') {
-    return { render: () => Promise.resolve(null), cancel, dispose };
+    return { type: mode, render: () => Promise.resolve(null), cancel, dispose };
   }
 
   return {
+    type: mode,
     render: async (sourceImg, geom) => {
       const { scale, tx, ty, rotation, flipX, flipY, viewport } = geom;
       cancel();

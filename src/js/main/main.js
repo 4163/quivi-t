@@ -22,6 +22,9 @@ import { ACTION_REGISTRY, dispatch } from '../services/actions.js';
 import { initLifecycle } from './lifecycle.js';
 import { initMetadataBadge, openMetadataWindow } from './metadataBadge.js';
 import { initDropZone } from './dropzone.js';
+import { getEffectiveScaling } from '../services/viewerMath.js';
+
+let _lastAnimated = false;
 
 // Reset the options tab on startup so each session starts on General.
 localStorage.removeItem('options-active-tab');
@@ -175,17 +178,14 @@ Core.onStateChange((state) => {
   Statusbar.update(state);
 
   const isAnimated = !!state.isAnimated;
-  let displayScaling = state.scalingMode;
-  if (isAnimated && state.scalingMode === 'lanczos') {
-    displayScaling = 'bilinear';
-  }
+  const displayScaling = getEffectiveScaling(state.scalingMode, isAnimated);
 
-  if (state.scalingMode !== activeScaling || window._lastAnimated !== isAnimated) {
+  if (state.scalingMode !== activeScaling || _lastAnimated !== isAnimated) {
     if (state.scalingMode !== activeScaling) {
       activeScaling = state.scalingMode;
       Viewer.setScaling(activeScaling);
     }
-    window._lastAnimated = isAnimated;
+    _lastAnimated = isAnimated;
     updateScalingMenu(isAnimated, displayScaling);
   }
 

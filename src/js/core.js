@@ -275,6 +275,15 @@ export const Core = {
     _notify();
   },
 
+  setFilter(next) {
+    const fd = _state.config.frontend_data;
+    fd.anime4k_filter = !!next.anime4k;
+    fd.crt_filter = !!next.crt;
+    if (next.crt) fd.anime4k_filter = false;
+    _scheduleConfigFlush();
+    _notify();
+  },
+
   /**
    * Navigate delta items forward or backward.
    */

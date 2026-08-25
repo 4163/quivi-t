@@ -76,26 +76,14 @@ export const ACTION_REGISTRY = [
     run: (ctx) => {
       const state = ctx.Core.getState();
       if (state.isAnimated) return;
-      const nextAnime4k = !state.config.frontend_data.anime4k_filter;
-      state.config.frontend_data.anime4k_filter = nextAnime4k;
-      if (nextAnime4k) {
-        state.config.frontend_data.crt_filter = false;
-      }
-      ctx.Core.persistConfig();
-      ctx.Core.setState({});
+      ctx.Core.setFilter({ anime4k: !state.config.frontend_data.anime4k_filter, crt: false });
     }
   },
   { id: 'cmd-toggle-crt-filter', label: 'Toggle Retro CRT Filter', defaultBinds: [], category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
       if (state.isAnimated) return;
-      const nextCrt = !state.config.frontend_data.crt_filter;
-      state.config.frontend_data.crt_filter = nextCrt;
-      if (nextCrt) {
-        state.config.frontend_data.anime4k_filter = false;
-      }
-      ctx.Core.persistConfig();
-      ctx.Core.setState({});
+      ctx.Core.setFilter({ anime4k: false, crt: !state.config.frontend_data.crt_filter });
     }
   },
   { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
