@@ -42,8 +42,8 @@ If the tree looks the same and ownership did not change, leave this file alone.
 
 **JavaScript:**
 - `core.js`: state machine. No DOM. UI modules subscribe via `onStateChange`.
-- `services/`: pure domain: `actions.js` (single `cmd-*` registry + dispatch), `keyCombo.js`, `keybindDomain.js`, `sorting.js`, `viewerMath.js`, `webglPipeline.js` (WebGL rendering pipeline). No `document` querying.
-- `shared/`: cross-window: `theme.js` / `themePrePaint.js`, `configPreview.js`, `windowFit.js`.
+- `services/`: pure domain: `actions.js` (single `cmd-*` registry + dispatch), `keyCombo.js`, `keybindDomain.js`, `sorting.js`, `viewerMath.js`, `scalingPipeline.js`, `webglPipeline.js` (WebGL rendering pipeline). No `document` querying.
+- `shared/`: cross-window: `theme.js` / `themePrePaint.js`, `configPreview.js`, `windowFit.js`, `blobImage.js`.
 - `keybinds.js`: `mergeConfig` + pan/zoom defaults. `DEFAULT_KEYBINDS` is derived from `ACTION_REGISTRY`.
 - `shortcuts.js`: keyboard / mouse / wheel dispatch. Does not write the statusbar.
 - `viewer/`: `viewer.js` facade; `viewerRender.js` owns the image pool; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
@@ -69,7 +69,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `tests/`: in-tree testing for archives, config, formats, and protocol.
 - `config.rs`: `AppConfig` / persistence / portable / pending promotion.
 - `commands/`: Tauri command surface (directory, archives, watcher, associations, shell).
-- `archives/` & `formats.rs`: archive readers + `ArchiveCache` and format registry.
+- `archives/` & `formats.rs`: archive readers + `ArchiveCache` and format / animation registry.
 - `protocol.rs`: `quivit://` and `asset://` handler logic.
 - `platform/` & `windows.rs`: OS-level integrations (including shell icons and hidden-path logic), window lifecycle (including size constants).
 - `ico.rs`: ICO spritesheets.
