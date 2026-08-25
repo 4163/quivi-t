@@ -59,6 +59,8 @@ export function createViewerRenderer(viewportState) {
     const newIsAnimated = !!state.isAnimated;
     
     if (newCrt !== _lastCrtFilter || newAnime4k !== _lastAnime4kFilter || newIsAnimated !== _lastIsAnimated) {
+      const willBridge = !!(_isVisibleImage(img) && state.src && img && img.src !== state.src);
+      if (willBridge) return;
       _cancelRender();
       _applyScaling(newCrt, newAnime4k, newIsAnimated);
       _lastCrtFilter = newCrt;
@@ -74,7 +76,17 @@ export function createViewerRenderer(viewportState) {
     if (pipeline && pipeline.type !== 'webgl') pipeline.cancel();
     if (_renderTimeout) clearTimeout(_renderTimeout);
     _renderTimeout = null;
-    if (lanczosCanvas) lanczosCanvas.removeAttribute('data-render-ready');
+    if (lanczosCanvas) {
+      lanczosCanvas.removeAttribute('data-render-ready');
+      const ctx = lanczosCanvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, lanczosCanvas.width, lanczosCanvas.height);
+      lanczosCanvas.width = 0;
+      lanczosCanvas.height = 0;
+      lanczosCanvas.style.removeProperty('--crop-left');
+      lanczosCanvas.style.removeProperty('--crop-top');
+      lanczosCanvas.style.removeProperty('--crop-w');
+      lanczosCanvas.style.removeProperty('--crop-h');
+    }
   }
 
   function _applyTransform() {
@@ -88,7 +100,8 @@ export function createViewerRenderer(viewportState) {
       Statusbar.setZoom(viewportState.getScale());
       
       // WebGL is fast enough to render every frame continuously during pan/zoom
-      if (pipeline && pipeline.type === 'webgl') {
+      if (pipeline && pipeline.type === 'webgl' && !_lastIsAnimated && !Core.getState()?.isAnimated) {
+        if (!img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
         const geom = viewportState.getGeometry();
         const gen = _renderGeneration;
         pipeline.render(img, geom).then((ok) => {
@@ -113,21 +126,31 @@ export function createViewerRenderer(viewportState) {
   }
 
   function _triggerRender() {
+    const live = Core.getState();
+    const liveAnimated = !!live?.isAnimated;
     let scaling = viewportState.getScaling();
-    if (_lastIsAnimated && scaling === 'lanczos') scaling = 'bilinear';
+    if (liveAnimated && scaling === 'lanczos') scaling = 'bilinear';
     
-    const crtFilter = _lastCrtFilter && !_lastIsAnimated;
-    const anime4kFilter = _lastAnime4kFilter && !_lastIsAnimated;
+    const crtFilter = !!live?.config?.frontend_data?.crt_filter && !liveAnimated;
+    const anime4kFilter = !!live?.config?.frontend_data?.anime4k_filter && !liveAnimated;
     const usesWebgl = crtFilter || anime4kFilter;
     const usesLanczos = scaling === 'lanczos' && !usesWebgl;
     
     if (usesLanczos && img) {
+      const gen = _renderGeneration;
       _renderTimeout = setTimeout(async () => {
+        if (gen !== _renderGeneration) return;
         if (!img || !img.src || !pipeline) return;
+        const live = Core.getState();
+        const liveAnimated = !!live?.isAnimated;
+        const liveUsesWebgl = (!!live?.config?.frontend_data?.crt_filter || !!live?.config?.frontend_data?.anime4k_filter) && !liveAnimated;
+        const liveUsesLanczos = viewportState.getScaling() === 'lanczos' && !liveUsesWebgl && !liveAnimated;
+        if (!liveUsesLanczos) return;
         const geom = viewportState.getGeometry();
         
         if (usesLanczos && lanczosCanvas) {
           const res = await pipeline.render(img, geom);
+          if (gen !== _renderGeneration) return;
           if (res && res.canvas) {
             lanczosCanvas.width = res.width;
             lanczosCanvas.height = res.height;
@@ -154,6 +177,7 @@ export function createViewerRenderer(viewportState) {
   }
 
   viewportState.subscribe(() => {
+    if (_targetLoadTimer) return;
     _cancelRender();
     _applyScaling();
     _scheduleTransform();
@@ -163,20 +187,33 @@ export function createViewerRenderer(viewportState) {
   function _applyScaling(incomingCrt, incomingAnime4k, incomingIsAnimated) {
     if (!img) return;
     let scaling = viewportState.getScaling();
-    const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : _lastIsAnimated;
+    const live = Core.getState();
+    const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : !!live?.isAnimated;
     
     if (isAnimated && scaling === 'lanczos') {
       scaling = 'bilinear';
     }
 
-    const crtFilter = incomingCrt !== undefined ? incomingCrt : _lastCrtFilter;
-    const anime4kFilter = incomingAnime4k !== undefined ? incomingAnime4k : _lastAnime4kFilter;
+    const crtFilter = incomingCrt !== undefined ? incomingCrt : !!live?.config?.frontend_data?.crt_filter;
+    const anime4kFilter = incomingAnime4k !== undefined ? incomingAnime4k : !!live?.config?.frontend_data?.anime4k_filter;
     
     img.dataset.scaling = scaling;
     
     const activeFilter = isAnimated ? null : (crtFilter ? 'crt' : (anime4kFilter ? 'anime4k' : null));
     const usesWebgl = activeFilter !== null;
     const usesLanczos = scaling === 'lanczos' && !usesWebgl;
+
+    if (!usesLanczos && lanczosCanvas) {
+      lanczosCanvas.removeAttribute('data-render-ready');
+      const ctx = lanczosCanvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, lanczosCanvas.width, lanczosCanvas.height);
+      lanczosCanvas.width = 0;
+      lanczosCanvas.height = 0;
+      lanczosCanvas.style.removeProperty('--crop-left');
+      lanczosCanvas.style.removeProperty('--crop-top');
+      lanczosCanvas.style.removeProperty('--crop-w');
+      lanczosCanvas.style.removeProperty('--crop-h');
+    }
 
     let needsNewPipeline = !pipeline;
     if (pipeline) {
@@ -331,6 +368,10 @@ export function createViewerRenderer(viewportState) {
     img.title = filename || '';
     
     _applyScaling();
+    const live = Core.getState();
+    _lastIsAnimated = !!live?.isAnimated;
+    _lastCrtFilter = !!live?.config?.frontend_data?.crt_filter;
+    _lastAnime4kFilter = !!live?.config?.frontend_data?.anime4k_filter;
     viewportState.resetGeometry();
 
     const bounds = _applySvgBounds(img);
@@ -385,6 +426,13 @@ export function createViewerRenderer(viewportState) {
     if (!webglCanvas) return;
     webglCanvas.removeAttribute('data-render-ready');
     webglCanvas.removeAttribute('data-crt');
+    const gl = webglCanvas.getContext('webgl2');
+    if (gl) {
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    } else {
+      webglCanvas.width = webglCanvas.width;
+    }
   }
 
   function clearDisplayedImage() {

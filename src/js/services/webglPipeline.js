@@ -254,6 +254,7 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
         cleanImg = await _getCleanImage(imgElement.src);
       } catch { return null; }
       if (!_active) return null;
+      if (!cleanImg.complete || cleanImg.naturalWidth <= 0 || cleanImg.naturalHeight <= 0) return null;
 
       // Upload texture when source changes
       if (_texSrc !== imgElement.src || !_sourceTexture) {
