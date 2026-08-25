@@ -54,7 +54,8 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
     precision highp float;
     in vec2 v_screenCoord;
     uniform sampler2D u_texture;
-    uniform bool u_blackBezel;
+    uniform vec2 u_clamp;
+    uniform vec4 u_visualRect;
     ${inverseTransformGLSL}
     out vec4 outColor;
 
@@ -69,50 +70,62 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
     }
 
     void main() {
-      vec2 distorted = curve(v_screenCoord);
+      // 1. Calculate visual UV (0..1 across the image's bounding box on screen)
+      vec2 visualUV = (v_screenCoord - u_visualRect.xy) / u_visualRect.zw;
 
-      if (distorted.x < 0.0 || distorted.x > 1.0 ||
-          distorted.y < 0.0 || distorted.y > 1.0) {
-        outColor = u_blackBezel ? vec4(0.0, 0.0, 0.0, 1.0) : vec4(0.0);
+      // 2. Mix screenCoord and visualUV based on latching
+      vec2 mixUV = vec2(
+        u_clamp.x > 0.5 ? v_screenCoord.x : visualUV.x,
+        u_clamp.y > 0.5 ? v_screenCoord.y : visualUV.y
+      );
+
+      // 3. Apply CRT barrel distortion to the mixed 0..1 space
+      vec2 barrelUV = curve(mixUV);
+
+      // 4. Black bezel overlay (cut off anything outside the CRT glass)
+      if (barrelUV.x < 0.0 || barrelUV.x > 1.0 || barrelUV.y < 0.0 || barrelUV.y > 1.0) {
+        outColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
       }
 
-      vec2 texUV = screenToTexUV(distorted);
+      // 5. Convert distorted CRT coordinate back to true screen space
+      vec2 distortedScreen = vec2(
+        u_clamp.x > 0.5 ? barrelUV.x : barrelUV.x * u_visualRect.z + u_visualRect.x,
+        u_clamp.y > 0.5 ? barrelUV.y : barrelUV.y * u_visualRect.w + u_visualRect.y
+      );
 
-      if (texUV.x < 0.0 || texUV.x > 1.0 ||
-          texUV.y < 0.0 || texUV.y > 1.0) {
-        outColor = vec4(0.0);
+      // 6. Map to texture UV for sampling
+      vec2 sampledUV = screenToTexUV(distortedScreen);
+      if (sampledUV.x < 0.0 || sampledUV.x > 1.0 || sampledUV.y < 0.0 || sampledUV.y > 1.0) {
+        outColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
       }
 
       // Chromatic aberration
       float dx = 0.001;
-      vec4 rTex = texture(u_texture, vec2(texUV.x + dx, texUV.y));
-      vec4 centerTex = texture(u_texture, texUV);
-      vec4 bTex = texture(u_texture, vec2(texUV.x - dx, texUV.y));
+      vec4 rTex = texture(u_texture, vec2(sampledUV.x + dx, sampledUV.y));
+      vec4 centerTex = texture(u_texture, sampledUV);
+      vec4 bTex = texture(u_texture, vec2(sampledUV.x - dx, sampledUV.y));
       
-      // Premultiply by alpha immediately to suppress invisible RGB bleed
       float colR = rTex.r * rTex.a;
       float colG = centerTex.g * centerTex.a;
       float colB = bTex.b * bTex.a;
       float alpha = centerTex.a;
       vec3 col = vec3(colR, colG, colB);
 
-      // Scanlines (tied to screen pixels, not texture pixels)
-      float scanline = sin(distorted.y * u_viewport.y * 2.0) * 0.04;
-      // Only apply scanlines to visible pixels to avoid making transparent areas negative/weird
+      // Scanlines (curved with barrel, scaled based on actual CRT pixel height)
+      float crtHeightPx = u_clamp.y > 0.5 ? u_viewport.y : (u_visualRect.w * u_viewport.y);
+      float scanline = sin(barrelUV.y * crtHeightPx * 2.0) * 0.04;
       col -= scanline * alpha;
 
-      // Vignette
-      float vig = 16.0 * distorted.x * distorted.y *
-                  (1.0 - distorted.x) * (1.0 - distorted.y);
+      // Vignette (perfectly hugs the CRT glass since barrelUV is 0..1 over it)
+      float vx = 4.0 * barrelUV.x * (1.0 - barrelUV.x);
+      float vy = 4.0 * barrelUV.y * (1.0 - barrelUV.y);
+      float vig = vx * vy;
       float v = pow(vig, 0.3);
       col *= v;
-      if (u_blackBezel) {
-        alpha = mix(1.0, alpha, v);
-      }
+      alpha = mix(1.0, alpha, v);
 
-      // Output directly since col is already premultiplied and vignette scales it down
       outColor = vec4(col, alpha);
     }
   `;
@@ -212,7 +225,8 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
     translate: _gl.getUniformLocation(_program, 'u_translate'),
     rotation:  _gl.getUniformLocation(_program, 'u_rotation'),
     flip:      _gl.getUniformLocation(_program, 'u_flip'),
-    blackBezel:_gl.getUniformLocation(_program, 'u_blackBezel'),
+    clamp:     _gl.getUniformLocation(_program, 'u_clamp'),
+    visualRect:_gl.getUniformLocation(_program, 'u_visualRect'),
   };
 
   // Fullscreen quad buffer
@@ -227,6 +241,7 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
 
   return {
     type: 'webgl',
+    filter: activeFilter,
 
     async render(imgElement, geometry) {
       if (!_active || !_gl || !_program) return null;
@@ -262,16 +277,23 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
         _texSrc = imgElement.src;
       }
 
-      // Size canvas to viewport
       const vpW = viewport.clientWidth;
       const vpH = viewport.clientHeight;
+
       canvas.width = vpW;
       canvas.height = vpH;
-      _gl.viewport(0, 0, vpW, vpH);
+      canvas.style.removeProperty('width');
+      canvas.style.removeProperty('height');
 
+      _gl.viewport(0, 0, vpW, vpH);
       _gl.useProgram(_program);
 
-      // Set transform uniforms
+      // Bind texture
+      _gl.activeTexture(_gl.TEXTURE0);
+      _gl.bindTexture(_gl.TEXTURE_2D, _sourceTexture);
+      _gl.uniform1i(_loc.texture, 0);
+
+      // Shared uniforms
       _gl.uniform2f(_loc.viewport, vpW, vpH);
       _gl.uniform2f(_loc.imageSize, nw, nh);
       _gl.uniform1f(_loc.scale, scale);
@@ -279,17 +301,24 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
       _gl.uniform1f(_loc.rotation, (rotation || 0) * Math.PI / 180.0);
       _gl.uniform2f(_loc.flip, flipX || 1, flipY || 1);
 
-      const isRotated = Math.abs(Math.round((rotation || 0) / 90)) % 2 === 1;
-      const visualW = (isRotated ? nh : nw) * scale;
-      const visualH = (isRotated ? nw : nh) * scale;
-      if (_loc.blackBezel !== null) {
-        _gl.uniform1i(_loc.blackBezel, (visualW >= vpW - 1.0 && visualH >= vpH - 1.0) ? 1 : 0);
-      }
+      if (activeFilter === 'crt') {
+        if (_loc.clamp) {
+          const isRotated = Math.abs(Math.round(rotation / 90)) % 2 === 1;
+          const visualW = (isRotated ? nh : nw) * scale;
+          const visualH = (isRotated ? nw : nh) * scale;
+          const clampX = visualW >= vpW - 1 ? 1 : 0;
+          const clampY = visualH >= vpH - 1 ? 1 : 0;
+          _gl.uniform2f(_loc.clamp, clampX, clampY);
 
-      // Bind texture
-      _gl.activeTexture(_gl.TEXTURE0);
-      _gl.bindTexture(_gl.TEXTURE_2D, _sourceTexture);
-      _gl.uniform1i(_loc.texture, 0);
+          const cx = vpW / 2 + tx;
+          const cy = vpH / 2 + ty;
+          const left = cx - visualW / 2;
+          const top = cy - visualH / 2;
+          if (_loc.visualRect) {
+            _gl.uniform4f(_loc.visualRect, left / vpW, top / vpH, visualW / vpW, visualH / vpH);
+          }
+        }
+      }
 
       // Draw fullscreen quad
       _gl.bindBuffer(_gl.ARRAY_BUFFER, posBuffer);

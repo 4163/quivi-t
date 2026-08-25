@@ -809,19 +809,24 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   opacity: 1;
 }
 
-/* ── WebGL Overlay Canvas (viewport-level, not wrapper-level) ── */
-#viewer-webgl-canvas {
+/* ── WebGL Overlay Canvases ── */
+#viewer-crt-canvas,
+#viewer-anime4k-canvas {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
   opacity: 0;
 }
 
-#viewer-webgl-canvas[data-render-ready="true"] {
+#viewer-crt-canvas[data-render-ready="true"],
+#viewer-anime4k-canvas[data-render-ready="true"] {
   opacity: 1;
 }
 
-#viewport:has(#viewer-webgl-canvas[data-render-ready="true"]) #viewer-img-wrapper .viewer-img {
+#viewport:has(#viewer-crt-canvas[data-render-ready="true"]) #viewer-img-wrapper .viewer-img,
+#viewport:has(#viewer-anime4k-canvas[data-render-ready="true"]) #viewer-img-wrapper .viewer-img {
   opacity: 0 !important;
 }
 

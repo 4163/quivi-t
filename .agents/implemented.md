@@ -6,6 +6,12 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
+### CRT Filter Port Completion & Fixes (2026-08-25)
+- **Viewport-Sized Canvas Restoration:** Reverted the CRT canvas to be viewport-sized (like Anime4K), allowing the shader to handle its own clipping and black-border rendering natively.
+- **Dynamic Axis Latching (`u_clamp`):** Re-implemented the experimental logic where the barrel distortion and vignette latch onto the image bounds when zoomed out, but smoothly transfer to the viewport bounds when the image overflows the screen.
+- **Curved Dynamic Scanlines:** Restored the scanline curve to match the barrel distortion (unlike the experimental branch's straight lines), while preserving the experimental logic that scales scanlines physically with the image when zoomed out and latches them to the viewport when zoomed in.
+- **Vignette Bug Fixes:** Fixed a bug where the unlatched axis vignette would disappear when the other axis latched (by mapping `vxImg`/`vyImg` to `sampledUV` instead of `barrelUV`). Fixed the viewport-latched vignette failing to darken transparent pixels by properly mixing the alpha channel.
+
 ### Duplicate Cache & Pipeline Refactoring (2026-08-25)
 - **Shared Blob Cache:** Extracted the duplicate same-origin `fetch`/`createObjectURL` blob caching logic from `scalingPipeline.js` and `webglPipeline.js` into a shared `src/js/shared/blobImage.js` helper.
 - **Lazy Pica Initialization:** Changed `window.pica()` from a top-level global to a lazy singleton initialized only when `createScalingPipeline` is first invoked, removing race conditions against vendor script load order.

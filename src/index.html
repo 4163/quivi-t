@@ -67,7 +67,7 @@
           <li role="menuitem" id="cmd-scale-bilinear" tabindex="0" data-scaling="bilinear" title="Cycle modes with ] / [">Scaling: Bilinear</li>
           <li role="menuitem" id="cmd-scale-lanczos" tabindex="0" data-scaling="lanczos" title="Cycle modes with ] / [">Scaling: Lanczos</li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-toggle-anime4k-filter" tabindex="0" data-checked="false" title="Cycle filters with Shift+] / Shift+[">Filter: Anime4K</li>
+          <li role="menuitem" id="cmd-toggle-anime4k-filter" tabindex="0" data-checked="false">Filter: Anime4K</li>
           <li role="menuitem" id="cmd-toggle-crt-filter" tabindex="0" data-checked="false">Filter: Retro CRT</li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-rotate-cw" tabindex="0">Rotate clockwise<span class="shortcut">H</span></li>
@@ -178,10 +178,8 @@
           <canvas id="viewer-lanczos-canvas"></canvas>
         </div>
 
-        <!-- WebGL canvas lives outside the wrapper so it is not
-             affected by the wrapper's CSS transform. The shaders
-             compute their own screen-to-texture mapping. -->
-        <canvas id="viewer-webgl-canvas"></canvas>
+        <canvas id="viewer-crt-canvas"></canvas>
+        <canvas id="viewer-anime4k-canvas"></canvas>
 
       </div>
 
