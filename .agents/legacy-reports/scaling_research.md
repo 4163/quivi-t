@@ -18,11 +18,14 @@ The most practical candidate. It treats image luminance as a heightmap and "push
 
 **Tradeoff:** It amplifies compression artifacts if the source is a low-quality JPEG. The denoise pass helps, but it's not magic.
 
-**Verdict:** Worth adding. The WebGL2 path means we can integrate it alongside the existing Pica pipeline without new dependencies beyond the shader source. It would sit as a fourth scaling mode: `Scaling: Anime4K`.
+**Verdict:** Implemented. Integrated alongside the existing WebGL pipeline as a toggleable filter (`Filter: Anime4K`).
 
 ---
 
 ### Real-ESRGAN / Real-CUGAN (neural network super-resolution)
+
+> [!WARNING]
+> **Out of Scope:** This leans heavily into file/image upscaling rather than a real-time viewer filter. It will not be implemented.
 
 The "gold standard" for anime upscaling quality. Real-ESRGAN Anime-6B is specifically trained on line art and cel-shading. Real-CUGAN sometimes produces more natural backgrounds.
 
@@ -36,15 +39,15 @@ The "gold standard" for anime upscaling quality. Real-ESRGAN Anime-6B is specifi
 - Memory usage spikes hard during inference
 - Not real-time. Would need an explicit "enhance" action rather than a live scaling mode
 
-**Verdict:** Interesting as an explicit one-shot "Enhance Image" action (not a scaling mode). Deferred until after Anime4K ships, since it needs a different UX pattern.
+**Verdict:** Out of scope / Deferred. Interesting as an explicit one-shot "Enhance Image" action (not a real-time filter).
 
 ---
 
 ### Waifu2x (the original anime upscaler)
 
-The predecessor to Real-ESRGAN. Still effective for clean, simple upscaling. Lighter than Real-ESRGAN but lower quality ceiling.
+The predecessor to Anime4K (which we have already implemented). Still effective for clean, simple upscaling.
 
-**Verdict:** Superseded by Real-ESRGAN for quality and by Anime4K for speed. Skip unless someone specifically asks for it.
+**Verdict:** Superseded by Real-ESRGAN for quality and by Anime4K for speed. Skipped.
 
 ---
 
@@ -72,7 +75,7 @@ The simplest of the three. A 3×3 neighborhood check that expands each pixel int
 
 **Where to get shaders:** [libretro/glsl-shaders](https://github.com/libretro/glsl-shaders) has battle-tested GLSL for all three. We'd port the fragment shaders to our WebGL pipeline.
 
-**Verdict:** Fun additions. Low effort to integrate since they're single-pass (or 2-pass for xBR). Could group them under a "Pixel Art" submenu or expose as experimental scaling modes.
+**Verdict:** Rejected. Deemed unnecessary for the core viewer experience and removed from scope to keep the codebase lean and focused.
 
 ---
 
@@ -86,7 +89,7 @@ Simulates a curved CRT monitor with scanlines, barrel distortion, phosphor glow,
 
 The effect is layered from several fragment shader techniques, all cheap to run. Would look great as a toggle for retro manga or pixel art viewing.
 
-**Verdict:** Low-effort, high-fun. A single post-processing shader pass on the final canvas output would do it.
+**Verdict:** Implemented. Built with custom WebGL fragment shaders for `Filter: Retro CRT` and `Filter: Phosphor` (color-accurate subpixel triad & scanlines).
 
 ---
 
@@ -94,9 +97,9 @@ The effect is layered from several fragment shader techniques, all cheap to run.
 
 | Priority | Method | Type | Effort | Notes |
 |:---------|:-------|:-----|:-------|:------|
-| [x] 1 | **Anime4K** | Serious | Medium | WebGL2 shaders, real-time, purpose-built for anime |
-| [x] 2 | **CRT filter** | Fun | Low | Single post-process pass, instant wow factor |
-| [ ] 3 | **xBR / HQx** | Niche | Low-Medium | Pixel art upscaling from libretro shaders |
-| [ ] 4 | **Real-ESRGAN** | Serious | High | Neural net, needs explicit "enhance" UX, heavy deps |
+| [x] 1 | **Anime4K** | Serious | Medium | Implemented. WebGL2 shaders, real-time. |
+| [x] 2 | **CRT & Phosphor filter** | Fun | Low | Implemented. Real-time WebGL shaders. |
+| [ ] 3 | **xBR / HQx / Scale2x** | Niche | Low-Medium | Rejected. Removed from scope. |
+| [ ] 4 | **Real-ESRGAN** | Serious | High | Out of scope. Neural net inference too heavy. |
 
 All of these would use WebGL (or WebGPU where available) on the existing canvas element. The Pica/Lanczos CPU pipeline stays as the baseline. GPU methods layer on top as post-processing.
