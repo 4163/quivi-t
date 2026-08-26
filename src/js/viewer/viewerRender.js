@@ -47,26 +47,33 @@ export function createViewerRenderer(viewportState) {
 
   let pipeline = null;
   let _lastScalingMode = viewportState.getScaling();
-  let _lastCrtFilter = Core.getState()?.config?.frontend_data?.crt_filter;
-  let _lastAnime4kFilter = Core.getState()?.config?.frontend_data?.anime4k_filter;
+  let _lastActiveFilter = _resolveActiveFilter(Core.getState());
   let _lastIsAnimated = Core.getState()?.isAnimated;
   const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
   const crtCanvas = document.getElementById('viewer-crt-canvas');
-  const anime4kCanvas = document.getElementById('viewer-anime4k-canvas');
+  const filterCanvas = document.getElementById('viewer-anime4k-canvas');
   let _renderTimeout = null;
 
+  function _resolveActiveFilter(state) {
+    if (!state || !!state.isAnimated) return null;
+    const fd = state.config?.frontend_data;
+    if (!fd) return null;
+    if (fd.crt_filter) return 'crt';
+    if (fd.anime4k_filter) return 'anime4k';
+    if (fd.phosphor_filter) return 'phosphor';
+    return null;
+  }
+
   Core.onStateChange((state) => {
-    const newCrt = state.config.frontend_data.crt_filter;
-    const newAnime4k = state.config.frontend_data.anime4k_filter;
+    const newFilter = _resolveActiveFilter(state);
     const newIsAnimated = !!state.isAnimated;
     
-    if (newCrt !== _lastCrtFilter || newAnime4k !== _lastAnime4kFilter || newIsAnimated !== _lastIsAnimated) {
+    if (newFilter !== _lastActiveFilter || newIsAnimated !== _lastIsAnimated) {
       const willBridge = !!(_isVisibleImage(img) && state.src && img && img.src !== state.src);
       if (willBridge) return;
       _cancelRender();
-      _applyScaling(newCrt, newAnime4k, newIsAnimated);
-      _lastCrtFilter = newCrt;
-      _lastAnime4kFilter = newAnime4k;
+      _applyScaling(newFilter, newIsAnimated);
+      _lastActiveFilter = newFilter;
       _lastIsAnimated = newIsAnimated;
       _scheduleTransform();
       _triggerRender();
@@ -101,7 +108,7 @@ export function createViewerRenderer(viewportState) {
     if (img && img.src) {
       Statusbar.setZoom(viewportState.getScale());
       
-      // WebGL is fast enough to render every frame continuously during pan/zoom
+      // WebGL filters render every frame continuously during pan/zoom
       if (pipeline && pipeline.type === 'webgl' && !_lastIsAnimated && !Core.getState()?.isAnimated) {
         if (!img.complete || img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
         const geom = viewportState.getGeometry();
@@ -109,7 +116,7 @@ export function createViewerRenderer(viewportState) {
         pipeline.render(img, geom).then((ok) => {
           if (gen !== _renderGeneration) return;
           if (ok) {
-            const canvas = pipeline.filter === 'crt' ? crtCanvas : anime4kCanvas;
+            const canvas = pipeline.filter === 'crt' ? crtCanvas : filterCanvas;
             if (canvas) canvas.setAttribute('data-render-ready', 'true');
           }
         });
@@ -132,19 +139,19 @@ export function createViewerRenderer(viewportState) {
     let scaling = viewportState.getScaling();
     if (liveAnimated && scaling === 'lanczos') scaling = 'bilinear';
     
-    const crtFilter = !!live?.config?.frontend_data?.crt_filter && !liveAnimated;
-    const anime4kFilter = !!live?.config?.frontend_data?.anime4k_filter && !liveAnimated;
-    const usesWebgl = crtFilter || anime4kFilter;
+    const activeFilter = _resolveActiveFilter(live);
+    const usesWebgl = activeFilter !== null;
     const usesLanczos = scaling === 'lanczos' && !usesWebgl;
     
-    if ((usesLanczos || crtFilter) && img) {
+    if ((usesLanczos || activeFilter === 'crt') && img) {
       const gen = _renderGeneration;
       _renderTimeout = setTimeout(async () => {
         if (gen !== _renderGeneration) return;
         if (!img || !img.src || !pipeline) return;
         const live = Core.getState();
+        const liveFilter = _resolveActiveFilter(live);
         const liveAnimated = !!live?.isAnimated;
-        const liveUsesWebgl = (!!live?.config?.frontend_data?.crt_filter || !!live?.config?.frontend_data?.anime4k_filter) && !liveAnimated;
+        const liveUsesWebgl = liveFilter !== null;
         const liveUsesLanczos = viewportState.getScaling() === 'lanczos' && !liveUsesWebgl && !liveAnimated;
         const liveCrt = pipeline.type === 'webgl' && pipeline.filter === 'crt';
         
@@ -191,20 +198,17 @@ export function createViewerRenderer(viewportState) {
     _triggerRender();
   });
 
-  function _applyScaling(incomingCrt, incomingAnime4k, incomingIsAnimated) {
+  function _applyScaling(incomingFilter, incomingIsAnimated) {
     if (!img) return;
     const live = Core.getState();
     const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : !!live?.isAnimated;
     const scaling = getEffectiveScaling(viewportState.getScaling(), isAnimated);
 
-    const crtFilter = incomingCrt !== undefined ? incomingCrt : !!live?.config?.frontend_data?.crt_filter;
-    const anime4kFilter = incomingAnime4k !== undefined ? incomingAnime4k : !!live?.config?.frontend_data?.anime4k_filter;
-    
-    img.dataset.scaling = scaling;
-    
-    const activeFilter = isAnimated ? null : (crtFilter ? 'crt' : (anime4kFilter ? 'anime4k' : null));
+    const activeFilter = incomingFilter !== undefined ? incomingFilter : _resolveActiveFilter(live);
     const usesWebgl = activeFilter !== null;
     const usesLanczos = scaling === 'lanczos' && !usesWebgl;
+    
+    img.dataset.scaling = scaling;
 
     if (!usesLanczos && lanczosCanvas) {
       lanczosCanvas.removeAttribute('data-render-ready');
@@ -225,14 +229,11 @@ export function createViewerRenderer(viewportState) {
       if (needsNewPipeline || (!usesWebgl && !usesLanczos)) {
         _teardownWebglCanvas();
         pipeline.dispose();
-        if (!usesWebgl && !usesLanczos) {
-          pipeline = null;
-        }
+        if (!usesWebgl && !usesLanczos) pipeline = null;
       }
     }
 
-    const prevFilter = _lastIsAnimated ? null : (_lastCrtFilter ? 'crt' : (_lastAnime4kFilter ? 'anime4k' : null));
-    const filterChanged = activeFilter !== prevFilter;
+    const filterChanged = activeFilter !== _lastActiveFilter;
 
     if (needsNewPipeline || (usesWebgl && filterChanged)) {
       if (pipeline) {
@@ -240,7 +241,7 @@ export function createViewerRenderer(viewportState) {
         pipeline.dispose();
       }
       if (usesWebgl) {
-        const canvas = activeFilter === 'crt' ? crtCanvas : anime4kCanvas;
+        const canvas = activeFilter === 'crt' ? crtCanvas : filterCanvas;
         pipeline = createWebglPipeline(canvas, scaling, activeFilter);
       } else if (usesLanczos) {
         pipeline = createScalingPipeline(scaling);
@@ -373,8 +374,7 @@ export function createViewerRenderer(viewportState) {
     _applyScaling();
     const live = Core.getState();
     _lastIsAnimated = !!live?.isAnimated;
-    _lastCrtFilter = !!live?.config?.frontend_data?.crt_filter;
-    _lastAnime4kFilter = !!live?.config?.frontend_data?.anime4k_filter;
+    _lastActiveFilter = _resolveActiveFilter(live);
     viewportState.resetGeometry();
 
     const bounds = _applySvgBounds(img);
@@ -426,7 +426,7 @@ export function createViewerRenderer(viewportState) {
   }
 
   function _teardownWebglCanvas() {
-    [crtCanvas, anime4kCanvas].forEach(canvas => {
+    [crtCanvas, filterCanvas].forEach(canvas => {
       if (!canvas) return;
       canvas.removeAttribute('data-render-ready');
       canvas.removeAttribute('data-crt');

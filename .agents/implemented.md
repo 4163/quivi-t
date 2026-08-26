@@ -6,6 +6,11 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
+### Phosphor Filter Shader (2026-08-25)
+- **WebGL Pipeline:** Implemented a new RetroZone Phosphor fragment shader (`phosphorFsSource`) inside `webglPipeline.js`, integrating scanlines and phosphor dot grid effects.
+- **Continuous Render:** Leverages the existing WebGL pipeline, applying the shader continuously during pan/zoom on the standard viewer canvas.
+- **Mutual Exclusivity:** Wired the new filter into `core.js`, `actions.js`, and the UI (`index.html`) to ensure it toggles exclusively alongside the existing Anime4K and CRT filters.
+
 ### CRT Filter Port Completion & Fixes (2026-08-25)
 - **Viewport-Sized Canvas Restoration:** Reverted the CRT canvas to be viewport-sized (like Anime4K), allowing the shader to handle its own clipping and black-border rendering natively.
 - **Dynamic Axis Latching (`u_clamp`):** Re-implemented the experimental logic where the barrel distortion and vignette latch onto the image bounds when zoomed out, but smoothly transfer to the viewport bounds when the image overflows the screen.

@@ -179,6 +179,55 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
     }
   `;
 
+  // ── RetroZone: Phosphor Dot Grid ──
+  const phosphorFsSource = `#version 300 es
+    precision highp float;
+    in vec2 v_screenCoord;
+    uniform sampler2D u_texture;
+    ${inverseTransformGLSL}
+    out vec4 outColor;
+
+    void main() {
+      vec2 texUV = screenToTexUV(v_screenCoord);
+      if (texUV.x < 0.0 || texUV.x > 1.0 || texUV.y < 0.0 || texUV.y > 1.0) {
+        outColor = vec4(0.0);
+        return;
+      }
+
+      vec4 tex = texture(u_texture, texUV);
+      vec3 col = tex.rgb;
+      float alpha = tex.a;
+
+      // Anchored to the image, but units are 1:1 with screen pixels (unscaled)
+      vec2 patternPx = texUV * u_imageSize * u_scale;
+
+      // Phosphor triad: 3 pattern pixels per triad
+      int col3 = int(mod(patternPx.x, 3.0));
+      
+      // Soften the mask to preserve color accuracy and brightness
+      vec3 mask = vec3(0.7);
+      if (col3 == 0) mask.r = 1.3;
+      else if (col3 == 1) mask.g = 1.3;
+      else mask.b = 1.3;
+      col *= mask;
+
+      // Scanline darkening (softer to maintain brightness)
+      float scan = 0.92 + 0.08 * sin(patternPx.y * 3.14159);
+      col *= scan;
+
+      // Compensate for overall darkening from the grid/scanlines
+      col *= 1.1;
+
+      // Subtle phosphor glow via neighbor bleed (1 screen pixel distance)
+      vec2 d = 1.0 / (u_imageSize * u_scale);
+      vec3 bleed = texture(u_texture, texUV + vec2(d.x, 0.0)).rgb
+                 + texture(u_texture, texUV - vec2(d.x, 0.0)).rgb;
+      col += bleed * 0.05 * alpha;
+
+      outColor = vec4(col, alpha);
+    }
+  `;
+
   // ── Shader compilation ──
 
   function compileShader(type, source) {
@@ -208,9 +257,13 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
     return prog;
   }
 
-  const _program = activeFilter === 'crt'
-    ? linkProgram(crtFsSource)
-    : linkProgram(animeFsSource);
+  const FILTER_SHADERS = {
+    crt: crtFsSource,
+    anime4k: animeFsSource,
+    phosphor: phosphorFsSource,
+  };
+
+  const _program = linkProgram(FILTER_SHADERS[activeFilter] || animeFsSource);
 
   if (!_program) {
     return { type: 'webgl', render: () => Promise.resolve(null), cancel() {}, dispose() {} };

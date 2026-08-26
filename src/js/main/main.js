@@ -172,6 +172,12 @@ Core.onStateChange((state) => {
       anime4kToggleEl.classList.toggle('checked', !!state.config.frontend_data.anime4k_filter);
       setMenuItemMuted('cmd-toggle-anime4k-filter', !!state.isAnimated);
     }
+
+    const phosphorToggleEl = document.getElementById('cmd-toggle-phosphor-filter');
+    if (phosphorToggleEl) {
+      phosphorToggleEl.classList.toggle('checked', !!state.config.frontend_data.phosphor_filter);
+      setMenuItemMuted('cmd-toggle-phosphor-filter', !!state.isAnimated);
+    }
   }
 
   // Update standard statusbar fields.
