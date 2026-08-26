@@ -13,6 +13,8 @@ export { validateKeybindSafety };
 
 export function initKeybindUi(containerId, config, showStatus) {
   let isCapturing = false;
+  let _scrollHold = null;
+  let _scrollToggle = null;
 
   function showLockedBindingStatus(actionId, bind) {
     if (actionId === 'cmd-exit-fullscreen-hold' && normalizeCombo(bind) === 'Escape') {
@@ -277,46 +279,31 @@ export function initKeybindUi(containerId, config, showStatus) {
     window.addEventListener('contextmenu', onContextMenu, true);
   }
 
-  function createScrollModeToggle() {
-    const wrap = document.createElement('div');
-    wrap.className = 'scroll-mode-toggle';
+  function syncScrollModeToggle() {
+    if (!_scrollHold || !_scrollToggle) {
+      _scrollHold = document.querySelector('#scroll-mode-toggle [data-mode="hold"]');
+      _scrollToggle = document.querySelector('#scroll-mode-toggle [data-mode="toggle"]');
+      if (!_scrollHold || !_scrollToggle) return;
+    }
+    const active = config.frontend_data.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold';
+    _scrollHold.classList.toggle('active', active === 'hold');
+    _scrollToggle.classList.toggle('active', active === 'toggle');
+  }
 
-    const label = document.createElement('span');
-    label.className = 'scroll-mode-label';
-    label.textContent = 'Modifier Key';
-
-    const btnHold = document.createElement('button');
-    btnHold.type = 'button';
-    btnHold.className = 'scroll-mode-btn';
-    btnHold.textContent = 'Hold';
-    btnHold.title = 'Temporarily switch zoom/pan states.';
-
-    const btnToggle = document.createElement('button');
-    btnToggle.type = 'button';
-    btnToggle.className = 'scroll-mode-btn';
-    btnToggle.textContent = 'Toggle';
-    btnToggle.title = 'Tap the zoom modifier to switch between zoom and pan.';
-
-    const apply = () => {
-      const active = config.frontend_data.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold';
-      btnHold.classList.toggle('active', active === 'hold');
-      btnToggle.classList.toggle('active', active === 'toggle');
-    };
-
-    btnHold.addEventListener('click', () => {
+  function initScrollModeToggle() {
+    _scrollHold = document.querySelector('#scroll-mode-toggle [data-mode="hold"]');
+    _scrollToggle = document.querySelector('#scroll-mode-toggle [data-mode="toggle"]');
+    if (!_scrollHold || !_scrollToggle) return;
+    // Directly mutates caller-owned config — matches existing keybinds pattern in this file.
+    _scrollHold.addEventListener('click', () => {
       config.frontend_data.scroll_zoom_modifier = 'hold';
-      apply();
+      syncScrollModeToggle();
     });
-    btnToggle.addEventListener('click', () => {
+    _scrollToggle.addEventListener('click', () => {
       config.frontend_data.scroll_zoom_modifier = 'toggle';
-      apply();
+      syncScrollModeToggle();
     });
-
-    apply();
-    wrap.appendChild(label);
-    wrap.appendChild(btnHold);
-    wrap.appendChild(btnToggle);
-    return wrap;
+    syncScrollModeToggle();
   }
 
   function renderKeybinds() {
@@ -404,10 +391,12 @@ export function initKeybindUi(containerId, config, showStatus) {
   }
 
   // Initial render.
+  initScrollModeToggle();
   renderKeybinds();
   
   // Options can call this after resetting keybinds.
   return {
-    renderKeybinds
+    renderKeybinds,
+    syncScrollModeToggle
   };
 }

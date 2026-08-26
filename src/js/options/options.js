@@ -129,7 +129,13 @@ if (_savedTab && document.getElementById(_savedTab)) switchTab(_savedTab);
 
 document.getElementById('btn-reset-keybinds').addEventListener('click', () => {
   config.frontend_data.keybinds = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
-  if (keybindUiInstance) keybindUiInstance.renderKeybinds();
+  config.frontend_data.scroll_zoom_modifier = 'hold';
+  // Latch is runtime state (quivit_state.json) tied to the modifier — clear together so Toggle starts unlatched.
+  config.frontend_data.scroll_zoom_latched = false;
+  if (keybindUiInstance) {
+    keybindUiInstance.renderKeybinds();
+    keybindUiInstance.syncScrollModeToggle?.();
+  }
   showStatus('Keybindings reset to defaults.');
 });
 
@@ -276,6 +282,9 @@ function buildConfigFromForm(baseConfig) {
   newConfig.frontend_data.keyboard_pan_step = parseInt(document.getElementById('opt-keyboard-pan-step').value, 10);
   newConfig.frontend_data.wheel_pan_step = parseInt(document.getElementById('opt-wheel-pan-step').value, 10);
   newConfig.frontend_data.start_dir = document.getElementById('opt-start-dir').value;
+  // Wheel Behaviour (Keys tab) is owned by keybindUi.js and mutated directly on `config`.
+  // Preserve the current value through the shallow copy so Save persists the toggle.
+  newConfig.frontend_data.scroll_zoom_modifier = baseConfig.frontend_data.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold';
   newConfig.frontend_data.theme = currentTheme;
   newConfig.frontend_data.custom_css = document.getElementById('opt-custom-css').value;
   
