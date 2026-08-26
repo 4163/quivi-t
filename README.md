@@ -22,7 +22,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Ctrl`+wheel.
 - **Scaling**: Choose from Pixelated, Bilinear, and high-quality Lanczos scaling. (Animated images automatically fall back to Bilinear).
-- **Filters**: Toggle real-time WebGL filters like Anime4K (for manga/anime upscaling) or Retro CRT (scanlines, barrel distortion). Filter toggles are muted for animated images.
+- **Filters**: Toggle real-time WebGL filters like Anime4K (for manga/anime upscaling), Scanlines (straight, Geom-inspired beam), Phosphor (dot-matrix) or Retro CRT (scanlines, barrel distortion, chromatic aberration). Filter toggles are muted for animated images.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
 - **Persistent State**: Persists favorites, single-instance handoff, optional auto-open behavior, and the last opened image.
 - **Windows Integration**: Use native file/folder icons and register file associations per-user for Windows Default Apps.
@@ -358,5 +358,5 @@ QuiviT/
 - Icons: [Flaticon (Cosplayer, Webp, Gif, Cbz, Cbr, Svg)](https://www.flaticon.com)
 - UI Icons: [Feather](https://feathericons.com) / [Lucide](https://lucide.dev)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
-- WebGL Shaders: [Bloc97/Anime4K](https://github.com/bloc97/Anime4K) / [stefanlegg/crt-fx](https://github.com/stefanlegg/crt-fx) / [TheMarco/RetroZone](https://github.com/TheMarco/RetroZone)
+- WebGL Shaders: [Bloc97/Anime4K](https://github.com/bloc97/Anime4K) / [stefanlegg/crt-fx](https://github.com/stefanlegg/crt-fx) / [TheMarco/RetroZone](https://github.com/TheMarco/RetroZone) / Scanlines (Geom-inspired beam, original WebGL implementation; concept from [cgwg CRT-Geom](https://github.com/libretro/common-shaders))
 - Agent Skills: Adapted from [poteto - pstack](https://github.com/cursor/plugins/tree/main/pstack) and [mattpocock/skills](https://github.com/mattpocock/skills)

@@ -228,6 +228,40 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
     }
   `;
 
+  // ── Straight Scanlines — Geom-inspired beam, no barrel ──
+  // MIT original, concept inspired by cgwg CRT-Geom (libretro/common-shaders).
+  // Barrel curvature and vignette intentionally omitted — only the beam profile remains.
+  const scanlinesFsSource = `#version 300 es
+    precision highp float;
+    in vec2 v_screenCoord;
+    uniform sampler2D u_texture;
+    ${inverseTransformGLSL}
+    out vec4 outColor;
+
+    void main() {
+      vec2 texUV = screenToTexUV(v_screenCoord);
+      if (texUV.x < 0.0 || texUV.x > 1.0 || texUV.y < 0.0 || texUV.y > 1.0) {
+        outColor = vec4(0.0);
+        return;
+      }
+
+      vec4 tex = texture(u_texture, texUV);
+      vec3 col = tex.rgb;
+      float alpha = tex.a;
+
+      // Screen-anchored 1px stripes — visible at any zoom
+      float screenY = v_screenCoord.y * u_viewport.y;
+      float yFrac = fract(screenY * 0.5);
+      float beam = yFrac < 0.5 ? 0.62 : 1.0;
+      col *= beam;
+
+      // Compensate average darkening (avg 0.81 -> boost to ~0.96)
+      col *= 1.18;
+
+      outColor = vec4(col, alpha);
+    }
+  `;
+
   // ── Shader compilation ──
 
   function compileShader(type, source) {
@@ -261,6 +295,7 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
     crt: crtFsSource,
     anime4k: animeFsSource,
     phosphor: phosphorFsSource,
+    scanlines: scanlinesFsSource,
   };
 
   const _program = linkProgram(FILTER_SHADERS[activeFilter] || animeFsSource);

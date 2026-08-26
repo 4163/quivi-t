@@ -93,6 +93,13 @@ export const ACTION_REGISTRY = [
       ctx.Core.setFilter({ phosphor: !state.config.frontend_data.phosphor_filter });
     }
   },
+  { id: 'cmd-toggle-scanlines-filter', label: 'Toggle Scanlines Filter', defaultBinds: [], category: 'View',
+    run: (ctx) => {
+      const state = ctx.Core.getState();
+      if (state.isAnimated) return;
+      ctx.Core.setFilter({ scanlines: !state.config.frontend_data.scanlines_filter });
+    }
+  },
   { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
