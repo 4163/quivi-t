@@ -228,15 +228,22 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
     }
   `;
 
-  // ── Straight Scanlines — Geom-inspired beam, no barrel ──
-  // MIT original, concept inspired by cgwg CRT-Geom (libretro/common-shaders).
-  // Barrel curvature and vignette intentionally omitted — only the beam profile remains.
+  // ── Straight Scanlines — Geom-inspired Gaussian beam, no barrel ──
+  // Concept from cgwg CRT-Geom (libretro/common-shaders).
+  // No curvature, no vignette, no color grading. Just the beam profile.
+  // Bright pixels widen the beam; dark pixels show the gap.
   const scanlinesFsSource = `#version 300 es
     precision highp float;
     in vec2 v_screenCoord;
     uniform sampler2D u_texture;
     ${inverseTransformGLSL}
     out vec4 outColor;
+
+    const vec3  LUMA_W     = vec3(0.299, 0.587, 0.114);
+    const float BEAM_MIN   = 1.15;  // sigma for black pixels (narrow beam, visible gap)
+    const float BEAM_MAX   = 2.8;   // sigma for white pixels (wide beam, gap fills in)
+    const float SCAN_WEIGHT = 0.28; // gap depth scaling
+    const float BRIGHT_COMP = 1.12; // overall brightness compensation
 
     void main() {
       vec2 texUV = screenToTexUV(v_screenCoord);
@@ -249,14 +256,21 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
       vec3 col = tex.rgb;
       float alpha = tex.a;
 
-      // Screen-anchored 1px stripes — visible at any zoom
+      // Scanline center: every 2 screen pixels
       float screenY = v_screenCoord.y * u_viewport.y;
-      float yFrac = fract(screenY * 0.5);
-      float beam = yFrac < 0.5 ? 0.62 : 1.0;
+      float lineIdx = floor(screenY * 0.5);
+      float center  = (lineIdx + 0.5) * 2.0;
+      float d       = screenY - center;       // distance from beam center
+
+      // Luminance-dependent beam width: brights fill, darks gap
+      float lum   = dot(col, LUMA_W);
+      float sigma = mix(BEAM_MIN, BEAM_MAX, lum);
+
+      // Gaussian beam profile
+      float beam = exp(-0.5 * (d * d) / (sigma * sigma * SCAN_WEIGHT));
       col *= beam;
 
-      // Compensate average darkening (avg 0.81 -> boost to ~0.96)
-      col *= 1.18;
+      col *= BRIGHT_COMP;
 
       outColor = vec4(col, alpha);
     }
