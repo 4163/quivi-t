@@ -6,6 +6,13 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
+### Scaling & Filter Decoupling - Slice 1 (2026-08-28)
+- **Catalog & Configuration Migration:** Centralized filter and scaler definitions into `registry.js` (`FILTERS`, `SCALERS`). Replaced the four legacy boolean filter keys (`crt_filter`, `anime4k_filter`, etc.) with a single mutually exclusive `active_filter` string key (and `filter_options` bag) in `frontend_data`.
+- **Dynamic Action Injection:** Removed static toggle definitions from `ACTION_REGISTRY`. Filter toggles are now dynamically mapped from the `FILTERS` catalog, enforcing `Core.setActiveFilter` usage and the mutual exclusivity rule.
+- **Unified Menu Synchronization:** Shifted View menu checkmark/muted class assignments from `main.js` to `syncViewMenu` in `menubar.js`. `main.js` now simply delegates `syncViewMenu(state)` on `Core.onStateChange` instead of duplicating toggle logic.
+- **Legacy Fallback Removed:** Hard removed the legacy boolean fallbacks per user confirmation, finalizing the migration to `active_filter`.
+
+
 ### Phosphor Filter Shader (2026-08-25)
 - **WebGL Pipeline:** Implemented a new RetroZone Phosphor fragment shader (`phosphorFsSource`) inside `webglPipeline.js`, integrating scanlines and phosphor dot grid effects.
 - **Continuous Render:** Leverages the existing WebGL pipeline, applying the shader continuously during pan/zoom on the standard viewer canvas.
