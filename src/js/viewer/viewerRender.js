@@ -61,6 +61,7 @@ export function createViewerRenderer(viewportState) {
     if (fd.crt_filter) return 'crt';
     if (fd.anime4k_filter) return 'anime4k';
     if (fd.phosphor_filter) return 'phosphor';
+    if (fd.scanlines_filter) return 'scanlines';
     return null;
   }
 

@@ -277,8 +277,8 @@ export const Core = {
 
   setFilter(next) {
     const fd = _state.config.frontend_data;
-    const keys = ['anime4k', 'crt', 'phosphor'];
-    const fdKeys = ['anime4k_filter', 'crt_filter', 'phosphor_filter'];
+    const keys = ['anime4k', 'crt', 'phosphor', 'scanlines'];
+    const fdKeys = ['anime4k_filter', 'crt_filter', 'phosphor_filter', 'scanlines_filter'];
 
     // Apply incoming values
     for (let i = 0; i < keys.length; i++) {

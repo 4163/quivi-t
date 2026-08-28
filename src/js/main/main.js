@@ -178,6 +178,12 @@ Core.onStateChange((state) => {
       phosphorToggleEl.classList.toggle('checked', !!state.config.frontend_data.phosphor_filter);
       setMenuItemMuted('cmd-toggle-phosphor-filter', !!state.isAnimated);
     }
+
+    const scanlinesToggleEl = document.getElementById('cmd-toggle-scanlines-filter');
+    if (scanlinesToggleEl) {
+      scanlinesToggleEl.classList.toggle('checked', !!state.config.frontend_data.scanlines_filter);
+      setMenuItemMuted('cmd-toggle-scanlines-filter', !!state.isAnimated);
+    }
   }
 
   // Update standard statusbar fields.
