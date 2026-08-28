@@ -6,6 +6,13 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
+### Scaling & Filter Decoupling - Slice 3 (2026-08-28)
+- **WebGL Pipeline Extraction:** Broke `webglPipeline.js` into `pipelines/glRuntime.js` and individual filter modules in `filters/`. 
+- **FBO Ping-Pong & Runtime Abstraction:** `glRuntime.js` now manages context lifecycle, shader compilation, and a two-FBO ping-pong loop for multi-pass support. The runtime is agnostic to filter logic.
+- **Filter Modules:** Ported Anime4K, Retro CRT, Phosphor, and Scanlines into standalone files. Each exports an `init` hook (for uniform caching) and an `applyUniforms` hook.
+- **Transparency Bleed Fix:** Applied the `d3cfd7f` alpha premultiplication fix to the Phosphor and Scanlines shaders, matching the prior fixes for CRT and Anime4K.
+- **Consumer Decoupling:** `registry.js` now acts as the single JS import hub for filter modules. `viewerRender.js` was simplified to interact with `glRuntime` via `.setFilter(module)`, eliminating redundant pipeline teardowns.
+
 ### Scaling & Filter Decoupling - Slice 2 (2026-08-28)
 - **Single Filter Canvas:** Consolidated WebGL overlay targets by deleting `#viewer-crt-canvas` and renaming `#viewer-anime4k-canvas` to `#viewer-filter-canvas`. All WebGL filters now render into a single canvas, eliminating dual-context GPU lifecycle issues.
 - **Viewport Host State:** Replaced `:has([data-render-ready])` hacks in CSS with `#viewport[data-filter] #viewer-img-wrapper .viewer-img { opacity: 0 !important; }`. `viewerRender.js` manages `data-filter` directly on `#viewport` when a filter is active, keeping base image visibility scoped to the viewport host.
