@@ -204,11 +204,11 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
       // Phosphor triad: 3 pattern pixels per triad
       int col3 = int(mod(patternPx.x, 3.0));
       
-      // Soften the mask to preserve color accuracy and brightness
-      vec3 mask = vec3(0.7);
-      if (col3 == 0) mask.r = 1.3;
-      else if (col3 == 1) mask.g = 1.3;
-      else mask.b = 1.3;
+      // Softer mask — 0.75/1.25 vs 0.70/1.30 — less candy, more paper
+      vec3 mask = vec3(0.75);
+      if (col3 == 0) mask.r = 1.25;
+      else if (col3 == 1) mask.g = 1.25;
+      else mask.b = 1.25;
       col *= mask;
 
       // Scanline darkening (softer to maintain brightness)
@@ -228,10 +228,7 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
     }
   `;
 
-  // ── Straight Scanlines — Geom-inspired Gaussian beam, no barrel ──
-  // Concept from cgwg CRT-Geom (libretro/common-shaders).
-  // No curvature, no vignette, no color grading. Just the beam profile.
-  // Bright pixels widen the beam; dark pixels show the gap.
+  // ── Geom v2 — Gaussian Beam + Per-Element Hue Pop (No Vignette) ──
   const scanlinesFsSource = `#version 300 es
     precision highp float;
     in vec2 v_screenCoord;
@@ -239,11 +236,21 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
     ${inverseTransformGLSL}
     out vec4 outColor;
 
-    const vec3  LUMA_W     = vec3(0.299, 0.587, 0.114);
-    const float BEAM_MIN   = 1.15;  // sigma for black pixels (narrow beam, visible gap)
-    const float BEAM_MAX   = 2.8;   // sigma for white pixels (wide beam, gap fills in)
-    const float SCAN_WEIGHT = 0.28; // gap depth scaling
-    const float BRIGHT_COMP = 1.12; // overall brightness compensation
+    // ── Geom v2 — Opus hue edit zone ──
+    const vec3  LUMA_W       = vec3(0.299, 0.587, 0.114);
+    const float BEAM_MIN     = 0.90;
+    const float BEAM_MAX     = 1.8;
+    const float SCAN_WEIGHT  = 0.24;
+    const float BRIGHTNESS   = 1.16;
+    const float BEAM_FLOOR   = 0.72;    // minimum beam value (prevents pitch-black gaps)
+    const vec3  GAP_TINT     = vec3(1.12, 0.82, 1.18); // purple/green stylized — purple gap (magenta) vs green ghosts
+    const float GAP_STRENGTH = 0.7;     // how much gap tint to mix in
+    const float GHOST_PX     = 0.001;   // UV-space horizontal offset per ghost
+    const float GHOST_STRENGTH = 0.5;  // additive intensity per ghost channel
+    const vec3  GHOST_RIGHT  = vec3(1.0, 0.0, 0.8);  // magenta
+    const vec3  GHOST_LEFT   = vec3(0.0, 1.0, 0.2);  // green
+
+
 
     void main() {
       vec2 texUV = screenToTexUV(v_screenCoord);
@@ -256,21 +263,40 @@ export function createWebglPipeline(canvas, scalingMode, activeFilter) {
       vec3 col = tex.rgb;
       float alpha = tex.a;
 
-      // Scanline center: every 2 screen pixels
+
+
+      // 2. Magenta/green ghost: per-channel mix (energy-preserving)
+      // GHOST_RIGHT/LEFT define per-channel mix weights, not multipliers.
+      // Weight 0 = leave channel alone, weight 1 = full mix from offset sample.
+      if (GHOST_PX > 0.0001) {
+        vec3 rS = texture(u_texture, vec2(texUV.x + GHOST_PX, texUV.y)).rgb;
+        vec3 lS = texture(u_texture, vec2(texUV.x - GHOST_PX, texUV.y)).rgb;
+        float gs = GHOST_STRENGTH * alpha;
+        // Right offset → magenta (R + B channels)
+        col.r = mix(col.r, rS.r, gs * GHOST_RIGHT.r);
+        col.g = mix(col.g, rS.g, gs * GHOST_RIGHT.g);
+        col.b = mix(col.b, rS.b, gs * GHOST_RIGHT.b);
+        // Left offset → green (G channel)
+        col.r = mix(col.r, lS.r, gs * GHOST_LEFT.r);
+        col.g = mix(col.g, lS.g, gs * GHOST_LEFT.g);
+        col.b = mix(col.b, lS.b, gs * GHOST_LEFT.b);
+      }
+
+      // 3. Gaussian beam (Restored and aligned to pixel centers)
       float screenY = v_screenCoord.y * u_viewport.y;
-      float lineIdx = floor(screenY * 0.5);
-      float center  = (lineIdx + 0.5) * 2.0;
-      float d       = screenY - center;       // distance from beam center
-
-      // Luminance-dependent beam width: brights fill, darks gap
-      float lum   = dot(col, LUMA_W);
-      float sigma = mix(BEAM_MIN, BEAM_MAX, lum);
-
-      // Gaussian beam profile
+      // Pixel centers evaluate at 0.5, 1.5, 2.5. We align beam centers to 0.5, 2.5, 4.5.
+      float d = screenY - (floor(screenY * 0.5) * 2.0 + 0.5);
+      float sigma = mix(BEAM_MIN, BEAM_MAX, dot(col, LUMA_W));
       float beam = exp(-0.5 * (d * d) / (sigma * sigma * SCAN_WEIGHT));
-      col *= beam;
+      beam = max(beam, BEAM_FLOOR);
 
-      col *= BRIGHT_COMP;
+      // Gap hue: rotate color temperature in scanline gaps (energy-neutral)
+      float gapAmount = 1.0 - smoothstep(BEAM_FLOOR, 0.9, beam);
+      col = mix(col, col * GAP_TINT, gapAmount * GAP_STRENGTH);
+
+      col *= BRIGHTNESS; // boost before beam so lit rows compensate for gap darkness
+      col *= beam;
+      col = min(col, vec3(1.0));
 
       outColor = vec4(col, alpha);
     }
