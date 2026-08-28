@@ -6,6 +6,11 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
+### Scaling & Filter Decoupling - Slice 2 (2026-08-28)
+- **Single Filter Canvas:** Consolidated WebGL overlay targets by deleting `#viewer-crt-canvas` and renaming `#viewer-anime4k-canvas` to `#viewer-filter-canvas`. All WebGL filters now render into a single canvas, eliminating dual-context GPU lifecycle issues.
+- **Viewport Host State:** Replaced `:has([data-render-ready])` hacks in CSS with `#viewport[data-filter] #viewer-img-wrapper .viewer-img { opacity: 0 !important; }`. `viewerRender.js` manages `data-filter` directly on `#viewport` when a filter is active, keeping base image visibility scoped to the viewport host.
+- **Dead CSS Removal:** Removed legacy `[data-scaling="bicubic"]` selector remnants from `main.css`.
+
 ### Scaling & Filter Decoupling - Slice 1 (2026-08-28)
 - **Catalog & Configuration Migration:** Centralized filter and scaler definitions into `registry.js` (`FILTERS`, `SCALERS`). Replaced the four legacy boolean filter keys (`crt_filter`, `anime4k_filter`, etc.) with a single mutually exclusive `active_filter` string key (and `filter_options` bag) in `frontend_data`.
 - **Dynamic Action Injection:** Removed static toggle definitions from `ACTION_REGISTRY`. Filter toggles are now dynamically mapped from the `FILTERS` catalog, enforcing `Core.setActiveFilter` usage and the mutual exclusivity rule.
