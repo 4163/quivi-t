@@ -3,8 +3,8 @@ import { FsUtils } from '../fsUtils.js';
 import { Statusbar } from '../menubar/statusbar.js';
 import { getEffectiveScaling } from '../services/viewerMath.js';
 import { createScalingPipeline } from '../services/scalingPipeline.js';
-import { createWebglPipeline } from '../services/webglPipeline.js';
-import { activeFilterId } from '../services/registry.js';
+import { createGlRuntime } from '../services/pipelines/glRuntime.js';
+import { activeFilterId, getFilterModule } from '../services/registry.js';
 
 const PRELOAD_HALF = 7;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
@@ -228,28 +228,35 @@ export function createViewerRenderer(viewportState) {
     }
 
     let needsNewPipeline = !pipeline;
+    
     if (pipeline) {
       if (usesWebgl && pipeline.type !== 'webgl') needsNewPipeline = true;
       if (usesLanczos && pipeline.type !== 'lanczos') needsNewPipeline = true;
-      if (needsNewPipeline || (!usesWebgl && !usesLanczos)) {
+      if (!usesWebgl && !usesLanczos) {
         _teardownWebglCanvas();
         pipeline.dispose();
-        if (!usesWebgl && !usesLanczos) pipeline = null;
+        pipeline = null;
+        needsNewPipeline = false;
       }
     }
 
     const filterChanged = activeFilter !== _lastActiveFilter;
 
-    if (needsNewPipeline || (usesWebgl && filterChanged)) {
+    if (needsNewPipeline) {
       if (pipeline) {
         _teardownWebglCanvas();
         pipeline.dispose();
       }
       if (usesWebgl) {
-        pipeline = createWebglPipeline(filterCanvas, scaling, activeFilter);
+        pipeline = createGlRuntime(filterCanvas);
+        pipeline.setFilter(getFilterModule(activeFilter));
+        pipeline.filter = activeFilter;
       } else if (usesLanczos) {
         pipeline = createScalingPipeline(scaling);
       }
+    } else if (usesWebgl && filterChanged) {
+      pipeline.setFilter(getFilterModule(activeFilter));
+      pipeline.filter = activeFilter;
     }
     
     _lastScalingMode = scaling;
