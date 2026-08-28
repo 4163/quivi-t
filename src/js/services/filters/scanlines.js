@@ -16,12 +16,15 @@ export const filter = {
     const float SCAN_WEIGHT  = 0.24;
     const float BRIGHTNESS   = 1.16;
     const float BEAM_FLOOR   = 0.72;    // minimum beam value (prevents pitch-black gaps)
-    const vec3  GAP_TINT     = vec3(1.12, 0.82, 1.18);
-    const float GAP_STRENGTH = 0.7;
     const float GHOST_PX     = 0.001;
-    const float GHOST_STRENGTH = 0.5;
+    const float GHOST_STRENGTH = 0.3;
     const vec3  GHOST_RIGHT  = vec3(1.0, 0.0, 0.8);
     const vec3  GHOST_LEFT   = vec3(0.0, 1.0, 0.2);
+    const float GAP_HUE_SHIFT_DEG = 28.0;
+    const float GAP_HUE_STRENGTH  = 0.35;
+    const float GAP_CHROMA_MULT   = 0.94;
+
+
 
     void main() {
       vec2 texUV = screenToTexUV(v_screenCoord);
@@ -58,7 +61,29 @@ export const filter = {
       beam = max(beam, BEAM_FLOOR);
 
       float gapAmount = 1.0 - smoothstep(BEAM_FLOOR, 0.9, beam);
-      col = mix(col, col * GAP_TINT, gapAmount * GAP_STRENGTH);
+      float angle = radians(GAP_HUE_SHIFT_DEG);
+      vec3 k = vec3(0.57735); // 1 / sqrt(3)
+      float cosA = cos(angle);
+      float sinA = sin(angle);
+      
+      // Fast RGB Hue Rotation
+      vec3 gapColor = tex.rgb * cosA + cross(k, tex.rgb) * sinA + k * dot(k, tex.rgb) * (1.0 - cosA);
+      
+      // Luma Preservation (fixes brightness shifts during hue rotation)
+      float origLuma = dot(tex.rgb, LUMA_W);
+      float newLuma  = dot(gapColor, LUMA_W);
+      gapColor += (origLuma - newLuma);
+      
+      // Emulate OKLab's chroma drop (tuned factor for RGB space)
+      gapColor = mix(vec3(origLuma), gapColor, GAP_CHROMA_MULT);
+      
+      // Emulate OKLab's satGate (fade out effect on near-greyscale pixels)
+      float maxC = max(max(tex.r, tex.g), tex.b);
+      float minC = min(min(tex.r, tex.g), tex.b);
+      float satGate = smoothstep(0.02, 0.06, maxC - minC);
+      
+      float strength = GAP_HUE_STRENGTH * satGate;
+      col = mix(col, gapColor, gapAmount * strength);
 
       col *= BRIGHTNESS;
       col *= beam;
