@@ -21,30 +21,25 @@ export const filter = {
       vec3 col = tex.rgb * tex.a;
       float alpha = tex.a;
 
-      // Anchored to the image, but units are 1:1 with screen pixels (unscaled)
-      vec2 patternPx = texUV * u_imageSize * u_scale;
-
-      // Phosphor triad: 3 pattern pixels per triad
+      vec2 patternPx = v_screenCoord * u_viewport;
       int col3 = int(mod(patternPx.x, 3.0));
       
-      // Softer mask — 0.75/1.25 vs 0.70/1.30 — less candy, more paper
+
       vec3 mask = vec3(0.75);
       if (col3 == 0) mask.r = 1.25;
       else if (col3 == 1) mask.g = 1.25;
       else mask.b = 1.25;
       col *= mask;
 
-      // Scanline darkening (softer to maintain brightness)
       float scan = 0.92 + 0.08 * sin(patternPx.y * 3.14159);
       col *= scan;
-
-      // Compensate for overall darkening from the grid/scanlines
       col *= 1.1;
 
-      // Subtle phosphor glow via neighbor bleed (1 screen pixel distance)
-      vec2 d = 1.0 / (u_imageSize * u_scale);
-      vec4 bR = texture(u_texture, texUV + vec2(d.x, 0.0));
-      vec4 bL = texture(u_texture, texUV - vec2(d.x, 0.0));
+
+      vec2 texRight = screenToTexUV(v_screenCoord + vec2(1.0 / u_viewport.x, 0.0));
+      vec2 texLeft  = screenToTexUV(v_screenCoord - vec2(1.0 / u_viewport.x, 0.0));
+      vec4 bR = texture(u_texture, texRight);
+      vec4 bL = texture(u_texture, texLeft);
       vec3 bleed = (bR.rgb * bR.a) + (bL.rgb * bL.a);
       col += bleed * 0.05;
 

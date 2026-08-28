@@ -47,9 +47,12 @@ export const filter = {
       }
 
       float dx = 0.001;
-      vec4 rTex = texture(u_texture, vec2(sampledUV.x + dx, sampledUV.y));
+      float screen_dx = dx * u_imageSize.x * u_scale / u_viewport.x;
+      vec2 texRight = screenToTexUV(distortedScreen + vec2(screen_dx, 0.0));
+      vec2 texLeft  = screenToTexUV(distortedScreen - vec2(screen_dx, 0.0));
+      vec4 rTex = texture(u_texture, texRight);
       vec4 centerTex = texture(u_texture, sampledUV);
-      vec4 bTex = texture(u_texture, vec2(sampledUV.x - dx, sampledUV.y));
+      vec4 bTex = texture(u_texture, texLeft);
       
       float colR = rTex.r * rTex.a;
       float colG = centerTex.g * centerTex.a;
