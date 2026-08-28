@@ -790,7 +790,6 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 }
 
 .viewer-img[data-scaling="bilinear"],
-.viewer-img[data-scaling="bicubic"],
 .viewer-img[data-scaling="lanczos"] {
   image-rendering: auto;
 }
@@ -809,9 +808,8 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   opacity: 1;
 }
 
-/* ── WebGL Overlay Canvases ── */
-#viewer-crt-canvas,
-#viewer-anime4k-canvas {
+/* ── WebGL Overlay Canvas ── */
+#viewer-filter-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -820,13 +818,11 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   opacity: 0;
 }
 
-#viewer-crt-canvas[data-render-ready="true"],
-#viewer-anime4k-canvas[data-render-ready="true"] {
+#viewer-filter-canvas[data-render-ready="true"] {
   opacity: 1;
 }
 
-#viewport:has(#viewer-crt-canvas[data-render-ready="true"]) #viewer-img-wrapper .viewer-img,
-#viewport:has(#viewer-anime4k-canvas[data-render-ready="true"]) #viewer-img-wrapper .viewer-img {
+#viewport[data-filter] #viewer-img-wrapper .viewer-img {
   opacity: 0 !important;
 }
 
