@@ -22,7 +22,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Ctrl`+wheel.
 - **Scaling**: Choose from Pixelated, Bilinear, and high-quality Lanczos scaling. (Animated images automatically fall back to Bilinear).
-- **Filters**: Toggle real-time WebGL filters like Anime4K (for manga/anime upscaling), Scanlines (straight, Geom-inspired beam), Phosphor (dot-matrix) or Retro CRT (scanlines, barrel distortion, chromatic aberration). Filter toggles are muted for animated images.
+- **Filters**: Toggle real-time WebGL filters like Anime4K (for manga/anime upscaling), Scanlines (CRT-style), Phosphor (dot-matrix) or Retro CRT (scanlines, barrel distortion, chromatic aberration). Filter toggles are muted for animated images.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
 - **Persistent State**: Persists favorites, single-instance handoff, optional auto-open behavior, and the last opened image.
 - **Windows Integration**: Use native file/folder icons and register file associations per-user for Windows Default Apps.
