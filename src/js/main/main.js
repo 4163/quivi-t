@@ -11,7 +11,7 @@ import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrol
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from '../keybinds.js';
 import { Statusbar } from '../menubar/statusbar.js';
-import { initMenuBar } from '../menubar.js';
+import { initMenuBar, syncViewMenu } from '../menubar.js';
 import * as Chrome from '../menubar/chrome.js';
 import { initFullscreen, toggleFullscreen, syncFullscreenState, isFullscreenActive, syncKeyLabel } from './fullscreen.js';
 
@@ -22,7 +22,6 @@ import { ACTION_REGISTRY, dispatch } from '../services/actions.js';
 import { initLifecycle } from './lifecycle.js';
 import { initMetadataBadge, openMetadataWindow } from './metadataBadge.js';
 import { initDropZone } from './dropzone.js';
-import { getEffectiveScaling } from '../services/viewerMath.js';
 
 let _lastAnimated = false;
 
@@ -53,13 +52,6 @@ let activeScaling = '';
 let _uiInitialized = false;
 let keyboardPanStep = DEFAULT_KEYBOARD_PAN_STEP;
 let wheelPanStep = DEFAULT_WHEEL_PAN_STEP;
-
-function updateScalingMenu(isAnimated = false, displayScaling = activeScaling) {
-  setMenuItemMuted('cmd-scale-lanczos', isAnimated);
-  document.querySelectorAll('[data-scaling]').forEach(item => {
-    item.classList.toggle('checked', item.dataset.scaling === displayScaling);
-  });
-}
 
 function setMenuItemMuted(id, muted) {
   const item = document.getElementById(id);
@@ -108,7 +100,7 @@ function bindMenuCommands() {
     }
   }
 
-  updateScalingMenu();
+  syncViewMenu(Core.getState());
   updateHistoryMenu();
 }
 
@@ -160,37 +152,12 @@ Core.onStateChange((state) => {
     if (toggleEl) {
       toggleEl.classList.toggle('checked', !isTransparent);
     }
-
-    const crtToggleEl = document.getElementById('cmd-toggle-crt-filter');
-    if (crtToggleEl) {
-      crtToggleEl.classList.toggle('checked', !!state.config.frontend_data.crt_filter);
-      setMenuItemMuted('cmd-toggle-crt-filter', !!state.isAnimated);
-    }
-
-    const anime4kToggleEl = document.getElementById('cmd-toggle-anime4k-filter');
-    if (anime4kToggleEl) {
-      anime4kToggleEl.classList.toggle('checked', !!state.config.frontend_data.anime4k_filter);
-      setMenuItemMuted('cmd-toggle-anime4k-filter', !!state.isAnimated);
-    }
-
-    const phosphorToggleEl = document.getElementById('cmd-toggle-phosphor-filter');
-    if (phosphorToggleEl) {
-      phosphorToggleEl.classList.toggle('checked', !!state.config.frontend_data.phosphor_filter);
-      setMenuItemMuted('cmd-toggle-phosphor-filter', !!state.isAnimated);
-    }
-
-    const scanlinesToggleEl = document.getElementById('cmd-toggle-scanlines-filter');
-    if (scanlinesToggleEl) {
-      scanlinesToggleEl.classList.toggle('checked', !!state.config.frontend_data.scanlines_filter);
-      setMenuItemMuted('cmd-toggle-scanlines-filter', !!state.isAnimated);
-    }
   }
 
   // Update standard statusbar fields.
   Statusbar.update(state);
 
   const isAnimated = !!state.isAnimated;
-  const displayScaling = getEffectiveScaling(state.scalingMode, isAnimated);
 
   if (state.scalingMode !== activeScaling || _lastAnimated !== isAnimated) {
     if (state.scalingMode !== activeScaling) {
@@ -198,9 +165,9 @@ Core.onStateChange((state) => {
       Viewer.setScaling(activeScaling);
     }
     _lastAnimated = isAnimated;
-    updateScalingMenu(isAnimated, displayScaling);
   }
 
+  syncViewMenu(state);
   updateHistoryMenu();
 });
 

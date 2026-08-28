@@ -275,24 +275,8 @@ export const Core = {
     _notify();
   },
 
-  setFilter(next) {
-    const fd = _state.config.frontend_data;
-    const keys = ['anime4k', 'crt', 'phosphor', 'scanlines'];
-    const fdKeys = ['anime4k_filter', 'crt_filter', 'phosphor_filter', 'scanlines_filter'];
-
-    // Apply incoming values
-    for (let i = 0; i < keys.length; i++) {
-      if (next[keys[i]] !== undefined) fd[fdKeys[i]] = !!next[keys[i]];
-    }
-
-    // Mutual exclusivity: find the one being turned on and disable the rest
-    const activeKey = keys.find(k => next[k]);
-    if (activeKey) {
-      for (let i = 0; i < keys.length; i++) {
-        if (keys[i] !== activeKey) fd[fdKeys[i]] = false;
-      }
-    }
-
+  setActiveFilter(id) {
+    _state.config.frontend_data.active_filter = id;
     _scheduleConfigFlush();
     _notify();
   },

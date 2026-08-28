@@ -34,6 +34,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `AppConfig` uses `#[serde(default)]`; `frontend_data` is untyped JSON so unknown keys round-trip. `mergeConfig()` fills missing keys from defaults.
 - User-chosen prefs → `quivit_config.json`. Last-known runtime → `quivit_state.json`. Restart-gated settings are staged as `pending_<key>` and promoted at startup.
 - `default_sort` is config-file-only; the UI writes only per-directory sort prefs. Archive cache budget is config-file-only, no UI.
+- Filter preference is stored as `active_filter` (id) and `filter_options` (bag), replacing individual booleans.
 - Theme/CSS live previews are ephemeral until Options Apply. They must not persist to `localStorage` while previewing.
 
 **CSS:**

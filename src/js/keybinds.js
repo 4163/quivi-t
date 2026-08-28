@@ -5,6 +5,7 @@
  */
 
 import { normalizeCombo, normalizeList } from './services/keyCombo.js';
+import { activeFilterId } from './services/registry.js';
 
 import { DEFAULT_KEYBINDS as REGISTRY_DEFAULTS } from './services/actions.js';
 
@@ -56,10 +57,8 @@ export function mergeConfig(loaded) {
       hide_chrome_on_fullscreen: fd.hide_chrome_on_fullscreen !== false,
       menu_visible: fd.menu_visible !== false,
       status_visible: fd.status_visible !== false,
-      crt_filter: fd.crt_filter === true,
-      anime4k_filter: fd.anime4k_filter === true,
-      phosphor_filter: fd.phosphor_filter === true,
-      scanlines_filter: fd.scanlines_filter === true,
+      active_filter: activeFilterId(fd),
+      filter_options: fd.filter_options && typeof fd.filter_options === 'object' ? fd.filter_options : {},
       keybinds: (() => {
         const defaultClone = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
         const userBinds = fd.keybinds || {};

@@ -2,6 +2,8 @@
  * actions.js: central registry for user commands and shortcuts.
  */
 
+import { FILTERS, activeFilterId } from './registry.js';
+
 export const ACTION_REGISTRY = [
   // Navigation
   { id: 'cmd-next', label: 'Next Item', defaultBinds: ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'], category: 'Navigation',
@@ -72,34 +74,18 @@ export const ACTION_REGISTRY = [
       ctx.Core.setScalingMode('lanczos', { persist: true });
     }
   },
-  { id: 'cmd-toggle-anime4k-filter', label: 'Toggle Anime4K Filter', defaultBinds: [], category: 'View',
+  ...FILTERS.map(f => ({
+    id: f.actionId,
+    label: `Toggle ${f.label} Filter`,
+    defaultBinds: [],
+    category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
       if (state.isAnimated) return;
-      ctx.Core.setFilter({ anime4k: !state.config.frontend_data.anime4k_filter });
+      const current = activeFilterId(state.config.frontend_data);
+      ctx.Core.setActiveFilter(current === f.id ? null : f.id);
     }
-  },
-  { id: 'cmd-toggle-crt-filter', label: 'Toggle Retro CRT Filter', defaultBinds: [], category: 'View',
-    run: (ctx) => {
-      const state = ctx.Core.getState();
-      if (state.isAnimated) return;
-      ctx.Core.setFilter({ crt: !state.config.frontend_data.crt_filter });
-    }
-  },
-  { id: 'cmd-toggle-phosphor-filter', label: 'Toggle Phosphor Filter', defaultBinds: [], category: 'View',
-    run: (ctx) => {
-      const state = ctx.Core.getState();
-      if (state.isAnimated) return;
-      ctx.Core.setFilter({ phosphor: !state.config.frontend_data.phosphor_filter });
-    }
-  },
-  { id: 'cmd-toggle-scanlines-filter', label: 'Toggle Scanlines Filter', defaultBinds: [], category: 'View',
-    run: (ctx) => {
-      const state = ctx.Core.getState();
-      if (state.isAnimated) return;
-      ctx.Core.setFilter({ scanlines: !state.config.frontend_data.scanlines_filter });
-    }
-  },
+  })),
   { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();

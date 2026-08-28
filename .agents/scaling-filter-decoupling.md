@@ -275,8 +275,8 @@ Target:
 `active_filter` is `null` or a catalog id. `filter_options` is `{ [id]: object }`. Empty is fine. `mergeConfig`:
 
 1. If `active_filter` is a known id or `null`, use it.
-2. Else walk the old booleans in the same order `viewerRender` does now, CRT first, then Anime4K, Phosphor, Scanlines, and pick the first true one.
-3. Stop writing the four booleans on save. Reading them forever is cheap. Writing both is how they drift.
+2. **Note (2026-08-28):** Legacy fallback and boolean config migration logic was deliberately skipped during implementation, as a public build of the app has not yet been released. Missing `active_filter` falls back to `null` natively instead of walking old booleans.
+3. Stop writing the four booleans on save.
 4. Pass `filter_options` through as a plain object. Do not validate keys you do not know. `frontend_data` already round-trips unknowns in Rust. JS `mergeConfig` is the thing that currently enumerates every flag and would drop a future knob if someone adds it next to the booleans instead of inside this bag.
 
 `Core.setFilter({ anime4k: true })` becomes `Core.setActiveFilter('anime4k' | null)`. Toggle in actions is "if current === id then null else id."

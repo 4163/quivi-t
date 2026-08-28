@@ -4,6 +4,7 @@ import { Statusbar } from '../menubar/statusbar.js';
 import { getEffectiveScaling } from '../services/viewerMath.js';
 import { createScalingPipeline } from '../services/scalingPipeline.js';
 import { createWebglPipeline } from '../services/webglPipeline.js';
+import { activeFilterId } from '../services/registry.js';
 
 const PRELOAD_HALF = 7;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
@@ -58,11 +59,7 @@ export function createViewerRenderer(viewportState) {
     if (!state || !!state.isAnimated) return null;
     const fd = state.config?.frontend_data;
     if (!fd) return null;
-    if (fd.crt_filter) return 'crt';
-    if (fd.anime4k_filter) return 'anime4k';
-    if (fd.phosphor_filter) return 'phosphor';
-    if (fd.scanlines_filter) return 'scanlines';
-    return null;
+    return activeFilterId(fd);
   }
 
   Core.onStateChange((state) => {
