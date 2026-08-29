@@ -1,7 +1,6 @@
-user note for initial slice:
-"
-refer to '.agents/js-dom-decoupling-plan.md' and begin planning and discussion for next refactor/decoupling slice.
-"
+```text
+refer to '.agents/js-dom-decoupling-plan.md' and begin planning plus discussion for the next refactor/decoupling slice.
+```
 
 # JS DOM Decoupling: Implementation Plan
 

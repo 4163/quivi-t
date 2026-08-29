@@ -1,3 +1,5 @@
+> **NOTE:** This document is the original deep-dive analysis. For the actionable, slice-by-slice implementation roadmap, see [`animated-filters-plan.md`](file:///e:/Projects/QuiviT/.agents/animated-filters-plan.md).
+>
 # Animated images through Lanczos and WebGL
 
 QuiviT already plays GIF, APNG, and animated WebP. It does it the cheap way: a pool `<img>` and the browser's decoder. Filters and Lanczos refuse to touch that path. SVG is lumped in with the same boolean, so a still vector file also skips the GPU. `additions.md` parked this as post-release.
