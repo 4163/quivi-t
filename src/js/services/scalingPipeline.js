@@ -13,8 +13,8 @@ const PICA_OPTIONS = {
 };
 
 export function createScalingPipeline(mode) {
-  const _destCanvas = document.createElement('canvas');
-  const _srcCanvas = document.createElement('canvas');
+  const _destCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
+  const _srcCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
   let _activePromise = null;
 
   function cancel() {

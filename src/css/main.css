@@ -934,8 +934,8 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   white-space: nowrap;
 }
 
-#statusbar.zoom-held .status-scroll-zoom,
-#statusbar.zoom-latched .status-scroll-zoom {
+#statusbar.action-held .status-scroll-zoom,
+#statusbar.action-latched .status-scroll-zoom {
   display: inline-block;
 }
 

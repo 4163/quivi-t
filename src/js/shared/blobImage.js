@@ -7,6 +7,7 @@ let _cachedCleanImg = null;
 
 export function evictBlobCache() {
   if (_cachedBlobUrl) URL.revokeObjectURL(_cachedBlobUrl);
+  if (_cachedCleanImg && _cachedCleanImg.close) _cachedCleanImg.close();
   _cachedSrc = null;
   _cachedBlobUrl = null;
   _cachedCleanImg = null;
@@ -28,9 +29,7 @@ export async function getCleanImage(src) {
       const blob = await resp.blob();
       
       const blobUrl = URL.createObjectURL(blob);
-      const cleanImg = new Image();
-      cleanImg.src = blobUrl;
-      await cleanImg.decode();
+      const cleanImg = await createImageBitmap(blob);
       
       _cachedBlobUrl = blobUrl;
       _cachedCleanImg = cleanImg;

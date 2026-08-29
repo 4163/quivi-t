@@ -6,6 +6,14 @@ Shipped, verified work (features / fixes / reports / optimizations).
 
 ## Fully Implemented
 
+### Scaling & Filter Decoupling - Slice 4 (2026-08-29)
+- **Overlay Ownership Extraction:** Extracted all overlay orchestration out of `viewerRender.js` and into a new `viewerPipelines.js` file. `viewerRender.js` now exclusively handles DOM image pooling, while `viewerPipelines.js` holds the reference to the active `TexImageSource` and orchestrates the Lanczos and WebGL pipelines.
+- **Uncoupled Lifecycles:** `viewerPipelines.js` handles the Lanczos 80ms delay timer and the WebGL `requestAnimationFrame` loop entirely on its own.
+- **Zero-Copy WebGL Context:** Added `preserveDrawingBuffer: false` to the WebGL context setup to eliminate the heavy buffer-copy hit on every frame.
+- **WebGL Rendering Optimizations:** Replaced the every-frame `canvas.width` re-assignment with a delta check. Modified the `texImage2D` loop to check a `sourceIdentity` string, meaning `texImage2D` now only runs once per image load instead of on every pan frame.
+- **Native ImageBitmaps:** Replaced the heavy `HTMLImageElement` workaround in the `blobImage.js` cache with native `ImageBitmap` generation via `createImageBitmap(blob)`. Modified cache eviction to immediately invoke `bitmap.close()` when memory needs to be freed, reducing VRAM overhead.
+- **Status Indicator Class Rename:** Renamed `zoom-held` and `zoom-latched` CSS classes to `action-held` and `action-latched` to better reflect their generic usage for pan/zoom actions.
+
 ### Scaling & Filter Decoupling - Slice 3 (2026-08-28)
 - **WebGL Pipeline Extraction:** Broke `webglPipeline.js` into `pipelines/glRuntime.js` and individual filter modules in `filters/`. 
 - **FBO Ping-Pong & Runtime Abstraction:** `glRuntime.js` now manages context lifecycle, shader compilation, and a two-FBO ping-pong loop for multi-pass support. The runtime is agnostic to filter logic.

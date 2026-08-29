@@ -1,6 +1,7 @@
 import { createViewportState } from '../services/viewerMath.js';
 import { createViewerRenderer } from './viewerRender.js';
 import { createViewerGestures } from './viewerGestures.js';
+import { createViewerPipelines } from './viewerPipelines.js';
 
 const viewportState = createViewportState({
   getViewport: () => {
@@ -16,7 +17,11 @@ const viewportState = createViewportState({
   }
 });
 
-createViewerRenderer(viewportState);
+const pipelines = createViewerPipelines(viewportState);
+createViewerRenderer(viewportState, (img) => {
+  if (img) pipelines.setSource(img);
+  else pipelines.clear();
+});
 createViewerGestures(viewportState);
 
 window.addEventListener('quivit-panel-resized', () => {

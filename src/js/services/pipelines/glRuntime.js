@@ -4,7 +4,7 @@ export function createGlRuntime(canvas) {
   let _active = true;
   let _gl = canvas.getContext('webgl2', {
     antialias: false,
-    preserveDrawingBuffer: true,
+    preserveDrawingBuffer: false,
     alpha: true,
     premultipliedAlpha: true,
   });
@@ -136,9 +136,15 @@ export function createGlRuntime(canvas) {
       cleanImg = await getCleanImage(imgElement.src);
     } catch { return null; }
     if (!_active) return null;
-    if (!cleanImg.complete || cleanImg.naturalWidth <= 0 || cleanImg.naturalHeight <= 0) return null;
+    
+    // Support both HTMLImageElement (naturalWidth) and ImageBitmap (width)
+    const cleanW = cleanImg.naturalWidth || cleanImg.width;
+    const cleanH = cleanImg.naturalHeight || cleanImg.height;
+    if (!cleanW || cleanW <= 0 || !cleanH || cleanH <= 0) return null;
 
-    if (_texSrc !== imgElement.src || !_sourceTexture) {
+    const sourceIdentity = imgElement.src + '|' + nw + '|' + nh;
+
+    if (_texSrc !== sourceIdentity || !_sourceTexture) {
       if (_sourceTexture) _gl.deleteTexture(_sourceTexture);
       _sourceTexture = _gl.createTexture();
       _gl.bindTexture(_gl.TEXTURE_2D, _sourceTexture);
@@ -152,16 +158,18 @@ export function createGlRuntime(canvas) {
         console.warn('WebGL texImage2D failed', e);
         return null;
       }
-      _texSrc = imgElement.src;
+      _texSrc = sourceIdentity;
     }
 
     const vpW = geometry.viewport.clientWidth;
     const vpH = geometry.viewport.clientHeight;
 
-    canvas.width = vpW;
-    canvas.height = vpH;
-    canvas.style.removeProperty('width');
-    canvas.style.removeProperty('height');
+    if (canvas.width !== vpW || canvas.height !== vpH) {
+      canvas.width = vpW;
+      canvas.height = vpH;
+      canvas.style.removeProperty('width');
+      canvas.style.removeProperty('height');
+    }
     _gl.viewport(0, 0, vpW, vpH);
 
     if (_programs.length > 1) {
