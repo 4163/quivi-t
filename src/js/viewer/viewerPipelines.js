@@ -70,12 +70,8 @@ export function createViewerPipelines(viewportState) {
     }
     
     const viewportNode = document.getElementById('viewport');
-    if (viewportNode) {
-      if (usesWebgl) {
-        viewportNode.setAttribute('data-filter', activeFilter);
-      } else {
-        viewportNode.removeAttribute('data-filter');
-      }
+    if (viewportNode && !usesWebgl) {
+      viewportNode.removeAttribute('data-filter');
     }
 
     if (!usesLanczos && lanczosCanvas) {
@@ -138,6 +134,8 @@ export function createViewerPipelines(viewportState) {
       if (gen !== _renderGeneration) return;
       if (ok && filterCanvas) {
         filterCanvas.setAttribute('data-render-ready', 'true');
+        const vp = document.getElementById('viewport');
+        if (vp && _lastActiveFilter) vp.setAttribute('data-filter', _lastActiveFilter);
       }
     });
   }
@@ -232,6 +230,8 @@ export function createViewerPipelines(viewportState) {
         pipeline.dispose();
         pipeline = null;
       }
+      const vp = document.getElementById('viewport');
+      if (vp) vp.removeAttribute('data-filter');
     }
   };
 }

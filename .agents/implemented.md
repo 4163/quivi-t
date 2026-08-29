@@ -8,6 +8,11 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Scaling & Filter Decoupling - Slice 6 (2026-08-29)
+- **Frontend IPC Centralization:** Replaced manual `invoke('check_is_animated')` and `try-catch` blocks in `fsUtils.js` `loadFile` and `loadArchive` with a unified `Core.checkIsAnimated(srcPath, archivePath)` helper in `core.js`. This centralizes the `_animMemo` caching layer.
+- **Backend Format Tests:** Expanded `format_tests.rs` to validate the heuristics of `is_animated` in `formats.rs`. Added tests for detecting `NETSCAPE2.0` in GIFs (including the single-frame loop false-positive), checking the `ANIM` bit within the `VP8X` chunk for WebP, and validating the `acTL`/`IDAT` chunk order for APNGs.
+- **Architecture Note:** Added comments in `archives/mod.rs` clarifying that `read_temp_entry_header` waits for full extraction for RAR/7Z/TAR files as a known design choice, unlike ZIP files which stream the header directly.
+
 ### Scaling & Filter Decoupling - Slice 5 (2026-08-29)
 - **Lanczos Pipeline Extraction:** Moved `scalingPipeline.js` to `services/scaling/lanczos.js` and removed the dummy `none` and `bilinear` classes. It now uses `OffscreenCanvas` for the Web Worker path where available.
 - **CSS Scaling Modes:** Restored the `data-scaling` DOM attribute setter onto the active `.viewer-img` pool node within `viewerPipelines.js` so that CSS `image-rendering` applies correctly for the `Pixelated` and `Bilinear` modes.

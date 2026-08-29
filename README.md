@@ -184,9 +184,9 @@ Data is split across five files:
 The frontend is split into a state machine, pure services, and single-owner UI modules that talk through `Core.onStateChange` instead of writing each other's DOM:
 
 - `core.js`: App state and configuration. No DOM.
-- `services/`: Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), key combos, keybind rules, sorting, viewer math.
+- `services/`: Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), key combos, keybind rules, sorting, viewer math. Filter logic lives in `filters/`, scaling in `scaling/`, and the WebGL runtime/catalog in `pipelines/`.
 - `shared/`: Cross-window theme/CSS apply, pre-paint injector, config preview / emergency reset, window fit.
-- `viewer/`: Facade plus render pool and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
+- `viewer/`: Facade plus render pool, overlay canvas owner (`viewerPipelines.js`), and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
 - `filepanel/`: File list (virtualized), columns, breadcrumb, resize. Favorites persistence is `favoritesStore.js`.
 - `menubar/`: Chrome visibility and the sole `#statusbar` writer. `menubar.js` owns dropdown interaction.
 - `main/`: Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge.

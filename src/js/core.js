@@ -182,19 +182,14 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
         _state.isAnimated = _animMemo.get(cacheKey);
         _notify();
       } else {
-        try {
-          const isAnim = await invoke('check_is_animated', {
-            path: _state.mode === 'archive' ? file.name : file.path,
-            archivePath: _state.mode === 'archive' ? _state.archivePath : null
-          });
-          _animMemo.set(cacheKey, isAnim);
+        const pathArg = _state.mode === 'archive' ? file.name : file.path;
+        const archiveArg = _state.mode === 'archive' ? _state.archivePath : null;
+        Core.checkIsAnimated(pathArg, archiveArg).then(isAnim => {
           if (_state.index === index) {
             _state.isAnimated = isAnim;
             _notify();
           }
-        } catch (err) {
-          console.warn('[Core] Failed to check animation header:', err);
-        }
+        });
       }
     }
   }
@@ -248,6 +243,19 @@ export const Core = {
   setFileListVisible(visible, options = {}) {
     _state.fileListVisible = !!visible;
     if (options.notify !== false) _notify();
+  },
+
+  async checkIsAnimated(pathArg, archiveArg = null) {
+    const cacheKey = `${archiveArg || ''}::${pathArg}`;
+    if (_animMemo.has(cacheKey)) return _animMemo.get(cacheKey);
+    try {
+      const isAnim = await invoke('check_is_animated', { path: pathArg, archivePath: archiveArg });
+      _animMemo.set(cacheKey, isAnim);
+      return isAnim;
+    } catch (err) {
+      console.warn('[Core] Failed to check animation header:', err);
+      return false;
+    }
   },
 
   toggleTransparentBg() {

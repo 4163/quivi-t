@@ -55,7 +55,7 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 
 ### JS Module Ownership
 - The state machine owns app state and has no DOM. UI modules subscribe to it and render themselves.
-- Domain logic lives in pure service modules (no `document`). Action ids, labels, defaults, and handlers have one registry; other files derive from it.
+- Domain logic lives in pure service modules (no `document`). Action ids, labels, defaults, and handlers have one registry; other files derive from it. Filter and scaler methods live under `services/filters` and `services/scaling`; the GL runtime does not know their names; overlay canvases have one UI owner.
 - Each UI feature owns its DOM and self-subscribes. Bootstrap stays thin: init + a slim state fan-out. It does not render another module's surface.
 - Shared cross-window helpers (theme, preview, window fit) stay out of the state machine and out of feature UI files.
 - New frontend work extends this layering. Do not dump new DOM into bootstrap or new domain logic into a UI file.

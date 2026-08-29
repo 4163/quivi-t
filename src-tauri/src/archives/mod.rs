@@ -176,6 +176,10 @@ impl ArchiveCache {
         zip::read_zip_entry_header(&mut archive, entry_name, limit)
     }
 
+    // Architectural Note: RAR, 7Z, and TAR formats currently wait for the entire entry
+    // to be fully extracted to disk before we can slice the header out of it.
+    // Unlike ZIP, we do not stream the header from these formats directly.
+    // This behavior is intentional/maintained for now as the temp extractor handles it.
     fn read_temp_entry_header(
         &mut self,
         archive_path: &str,

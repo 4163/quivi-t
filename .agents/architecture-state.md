@@ -43,11 +43,11 @@ If the tree looks the same and ownership did not change, leave this file alone.
 
 **JavaScript:**
 - `core.js`: state machine. No DOM. UI modules subscribe via `onStateChange`.
-- `services/`: pure domain: `actions.js` (single `cmd-*` registry + dispatch), `keyCombo.js`, `keybindDomain.js`, `sorting.js`, `viewerMath.js`, `scalingPipeline.js`, `webglPipeline.js` (WebGL rendering pipeline). No `document` querying.
+- `services/`: pure domain: `actions.js` (single `cmd-*` registry + dispatch), `keyCombo.js`, `keybindDomain.js`, `sorting.js`, `viewerMath.js`. Filter/scaler methods live in `filters/` and `scaling/lanczos.js`; WebGL is orchestrated by `pipelines/glRuntime.js`. No `document` querying.
 - `shared/`: cross-window: `theme.js` / `themePrePaint.js`, `configPreview.js`, `windowFit.js`, `blobImage.js`.
 - `keybinds.js`: `mergeConfig` + pan/zoom defaults. `DEFAULT_KEYBINDS` is derived from `ACTION_REGISTRY`.
 - `shortcuts.js`: keyboard / mouse / wheel dispatch. Does not write the statusbar.
-- `viewer/`: `viewer.js` facade; `viewerRender.js` owns the image pool; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
+- `viewer/`: `viewer.js` facade; `viewerRender.js` owns the image pool; `viewerPipelines.js` owns the overlay canvases; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
 - `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. `favoritesStore.js` is persistence only (no DOM).
 - `fsUtils.js`: filesystem / archive navigation. No DOM.
 - `directoryPrefs.js`: per-directory sort prefs. Sort math is in `services/sorting.js`.

@@ -286,14 +286,7 @@ export const FsUtils = {
       if (selectedEntry.name.toLowerCase().endsWith('.svg')) {
         isAnimated = true;
       } else {
-        try {
-          isAnimated = await invoke('check_is_animated', {
-            path: selectedEntry.path,
-            archivePath: null,
-          });
-        } catch (err) {
-          console.warn('[FsUtils] Failed to check animation header:', err);
-        }
+        isAnimated = await Core.checkIsAnimated(selectedEntry.path, null);
       }
       if (!_isCurrentGeneration(options.generation)) return;
     }
@@ -386,14 +379,7 @@ export const FsUtils = {
         if (selectedEntry.name.toLowerCase().endsWith('.svg')) {
           isAnimated = true;
         } else {
-          try {
-            isAnimated = await invoke('check_is_animated', {
-              path: selectedEntry.name,
-              archivePath: result.archive_path,
-            });
-          } catch (err) {
-            console.warn('[FsUtils] Failed to check animation header:', err);
-          }
+          isAnimated = await Core.checkIsAnimated(selectedEntry.name, result.archive_path);
         }
         if (!_isCurrentGeneration(options.generation)) return;
       }
