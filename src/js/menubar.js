@@ -129,17 +129,11 @@ export function syncViewMenu(state) {
     const el = document.getElementById(f.actionId);
     if (!el) continue;
     el.classList.toggle('checked', currentFilter === f.id);
-    el.classList.toggle('muted', isAnimated);
-    el.setAttribute('aria-disabled', isAnimated ? 'true' : 'false');
   }
 
   for (const s of SCALERS) {
     const el = document.getElementById(s.actionId);
     if (!el) continue;
-    if (s.id === 'lanczos') {
-      el.classList.toggle('muted', isAnimated);
-      el.setAttribute('aria-disabled', isAnimated ? 'true' : 'false');
-    }
     el.classList.toggle('checked', displayScaling === s.id);
   }
 }

@@ -70,7 +70,6 @@ export const ACTION_REGISTRY = [
   },
   { id: 'cmd-scale-lanczos', label: 'Scale Lanczos', defaultBinds: [], category: 'View',
     run: (ctx) => {
-      if (ctx.Core.getState().isAnimated) return;
       ctx.Core.setScalingMode('lanczos', { persist: true });
     }
   },
@@ -81,7 +80,6 @@ export const ACTION_REGISTRY = [
     category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
-      if (state.isAnimated) return;
       const current = activeFilterId(state.config.frontend_data);
       ctx.Core.setActiveFilter(current === f.id ? null : f.id);
     }
@@ -89,8 +87,8 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
-      const modes = state.isAnimated ? ['none', 'bilinear'] : ['none', 'bilinear', 'lanczos'];
-      const current = (state.isAnimated && state.scalingMode === 'lanczos') ? 'bilinear' : state.scalingMode;
+      const modes = ['none', 'bilinear', 'lanczos'];
+      const current = state.scalingMode;
       const idx = modes.indexOf(current);
       const next = idx > 0 ? modes[idx - 1] : modes[modes.length - 1];
       ctx.Core.setScalingMode(next, { persist: true });
@@ -99,8 +97,8 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-cycle-scaling', label: 'Scale: Next', defaultBinds: ']', category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
-      const modes = state.isAnimated ? ['none', 'bilinear'] : ['none', 'bilinear', 'lanczos'];
-      const current = (state.isAnimated && state.scalingMode === 'lanczos') ? 'bilinear' : state.scalingMode;
+      const modes = ['none', 'bilinear', 'lanczos'];
+      const current = state.scalingMode;
       const idx = modes.indexOf(current);
       const next = modes[(idx + 1) % modes.length];
       ctx.Core.setScalingMode(next, { persist: true });

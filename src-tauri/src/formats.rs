@@ -78,6 +78,8 @@ pub fn is_animated(bytes: &[u8]) -> bool {
         return check_webp(bytes);
     } else if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         return check_apng(bytes);
+    } else if bytes.windows(4).any(|w| w == b"<svg") {
+        return check_svg(bytes);
     }
 
     false
@@ -110,4 +112,10 @@ fn check_apng(bytes: &[u8]) -> bool {
         (Some(_), None) => true,
         _ => false,
     }
+}
+
+fn check_svg(bytes: &[u8]) -> bool {
+    bytes.windows(8).any(|w| w == b"<animate")
+        || bytes.windows(4).any(|w| w == b"<set")
+        || bytes.windows(16).any(|w| w == b"animateTransform")
 }

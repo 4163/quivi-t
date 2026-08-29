@@ -283,11 +283,7 @@ export const FsUtils = {
 
     let isAnimated = false;
     if (this.isImageEntry(selectedEntry)) {
-      if (selectedEntry.name.toLowerCase().endsWith('.svg')) {
-        isAnimated = true;
-      } else {
-        isAnimated = await Core.checkIsAnimated(selectedEntry.path, null);
-      }
+      isAnimated = await Core.checkIsAnimated(selectedEntry.path, null);
       if (!_isCurrentGeneration(options.generation)) return;
     }
 
@@ -376,11 +372,7 @@ export const FsUtils = {
 
       let isAnimated = false;
       if (this.isImageEntry(selectedEntry)) {
-        if (selectedEntry.name.toLowerCase().endsWith('.svg')) {
-          isAnimated = true;
-        } else {
-          isAnimated = await Core.checkIsAnimated(selectedEntry.name, result.archive_path);
-        }
+        isAnimated = await Core.checkIsAnimated(selectedEntry.name, result.archive_path);
         if (!_isCurrentGeneration(options.generation)) return;
       }
 

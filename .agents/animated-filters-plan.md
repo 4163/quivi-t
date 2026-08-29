@@ -124,12 +124,17 @@ src-tauri/src/
 
 After each slice, the active agent MUST follow this handoff protocol:
 1. Append a brief summary to the **Completed Slices Log** at the bottom of this file, detailing key architectural choices and any quirks.
-2. Provide a comprehensive summary of the changed files and the verification steps taken in the chat.
-3. Tell the user to commit the slice to the `feature/filters` branch.
-4. Explicitly instruct the user to **start a new agent session** for the next slice to maintain context hygiene.
+2. Provide a comprehensive summary of the changed files and the automated verification steps taken in the chat.
+3. Present a numbered manual runtime tests list for the user to confirm. Each item must be a concrete instruction (where to go, what to do, what to observe) with the expected result in plain language. Only include items relevant to the current slice.
+4. Tell the user to commit the slice to the `feature/filters` branch.
+5. Explicitly instruct the user to **start a new agent session** for the next slice to maintain context hygiene.
 
 ---
 
 ## Completed Slices Log
 
-*(Empty. Ready for Slice 1.)*
+- **Slice 1: SVG Policy & Menu Ungating:** Moved SVG animation detection to a fast byte scanner (`check_svg`) in `formats.rs` targeting `<animate`, `<set`, and `animateTransform` up to 8 KiB deep. Removed frontend UI logic that muted scaling/filter options for animated files. Removed hardcoded SVG `.endsWith` overrides in `core.js` and `fsUtils.js`, routing them into `Core.checkIsAnimated`. Note: `viewerPipelines.js` currently enforces bilinear down-sampling for Lanczos if the target is animated, intentionally preserving a stable fallback until the frame pump is wired in Slice 3.
+  - **Runtime test notes (expected intermediate states):**
+    - Selecting Lanczos on animated formats saves the preference but `getEffectiveScaling` in `viewerMath.js` downgrades it to bilinear. The menu checkmark lands on bilinear, not lanczos. Resolves when the pump makes lanczos work (Slices 3-4).
+    - Selecting a filter on animated formats saves to config but `_resolveActiveFilter` in `viewerPipelines.js` still returns `null` when `isAnimated` is true, so the overlay does not render. Resolves in Slice 3.
+    - Static SVGs can now receive filters, but `getCleanImage` does not feed SVG sources into WebGL properly (ghost of last image with SVG dimensions). Previously hidden because all SVGs were forced to `isAnimated = true`. The live blob cache in Slice 2 addresses this.

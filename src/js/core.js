@@ -173,24 +173,19 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   _notify();
 
   if (FsUtils.isImageEntry(file)) {
-    if (file.name.toLowerCase().endsWith('.svg')) {
-      _state.isAnimated = true;
+    const cacheKey = `${_state.mode === 'archive' ? _state.archivePath : ''}::${file.path}`;
+    if (_animMemo.has(cacheKey)) {
+      _state.isAnimated = _animMemo.get(cacheKey);
       _notify();
     } else {
-      const cacheKey = `${_state.mode === 'archive' ? _state.archivePath : ''}::${file.path}`;
-      if (_animMemo.has(cacheKey)) {
-        _state.isAnimated = _animMemo.get(cacheKey);
-        _notify();
-      } else {
-        const pathArg = _state.mode === 'archive' ? file.name : file.path;
-        const archiveArg = _state.mode === 'archive' ? _state.archivePath : null;
-        Core.checkIsAnimated(pathArg, archiveArg).then(isAnim => {
-          if (_state.index === index) {
-            _state.isAnimated = isAnim;
-            _notify();
-          }
-        });
-      }
+      const pathArg = _state.mode === 'archive' ? file.name : file.path;
+      const archiveArg = _state.mode === 'archive' ? _state.archivePath : null;
+      Core.checkIsAnimated(pathArg, archiveArg).then(isAnim => {
+        if (_state.index === index) {
+          _state.isAnimated = isAnim;
+          _notify();
+        }
+      });
     }
   }
 
