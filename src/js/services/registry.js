@@ -27,7 +27,8 @@ export function activeFilterId(frontendData) {
   return FILTER_BY_ID.has(frontendData.active_filter) ? frontendData.active_filter : null;
 }
 
-export function getFilterModule(id) {
+export function getFilterModule(id, frontendData = {}) {
   const f = FILTER_BY_ID.get(id);
-  return f ? f.module : null;
+  if (!f) return null;
+  return f.module.resolve ? (f.module.resolve(frontendData.filter_options) ?? f.module) : f.module;
 }

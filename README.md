@@ -22,7 +22,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Ctrl`+wheel.
 - **Scaling**: Choose from Pixelated, Bilinear, and high-quality Lanczos scaling. (Animated images automatically fall back to Bilinear).
-- **Filters**: Toggle real-time WebGL filters like Anime4K (for manga/anime upscaling), Scanlines (CRT-style), Phosphor (dot-matrix) or Retro CRT (scanlines, barrel distortion, chromatic aberration). Filter toggles are muted for animated images.
+- **Filters**: Toggle real-time WebGL filters including a true Anime4K pipeline (Mode A Fast/HQ upscaling), Retro CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or simple Scanlines. Filter toggles are muted for animated images.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
 - **Persistent State**: Persists favorites, single-instance handoff, optional auto-open behavior, and the last opened image.
 - **Windows Integration**: Use native file/folder icons and register file associations per-user for Windows Default Apps.
@@ -142,6 +142,7 @@ The following system defaults are used:
 
 - **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
 - **Scaling Mode:** `bicubic`
+- **Anime4K Variant:** Defaults to `fast` (upstream Mode A Fast). Configurable in **Options → General → Anime4K**.
 - **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in **Options → General → Panning**.
 - **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge shows whether scroll zoom is latched or which bound modifier keys are currently held.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.

@@ -141,7 +141,7 @@ body > * {
 .pan-step-row {
   display: flex;
   align-items: flex-start;
-  gap: 32px;
+  gap: 16px;
 }
 
 .pan-step-col {

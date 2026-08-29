@@ -9,6 +9,7 @@ export function createViewerPipelines(viewportState) {
   let pipeline = null;
   let _lastScalingMode = Core.getState().scalingMode;
   let _lastActiveFilter = _resolveActiveFilter(Core.getState());
+  let _lastAnime4kVariant = null;
   let _lastIsAnimated = !!Core.getState()?.isAnimated;
   
   let _rafPending = false;
@@ -100,6 +101,8 @@ export function createViewerPipelines(viewportState) {
     }
 
     const filterChanged = activeFilter !== _lastActiveFilter;
+    const anime4kVariant = activeFilter === 'anime4k' ? live?.config?.frontend_data?.filter_options?.anime4k?.variant : null;
+    const variantChanged = anime4kVariant !== _lastAnime4kVariant;
 
     if (needsNewPipeline) {
       if (pipeline) {
@@ -108,18 +111,19 @@ export function createViewerPipelines(viewportState) {
       }
       if (usesWebgl) {
         pipeline = createGlRuntime(filterCanvas);
-        pipeline.setFilter(getFilterModule(activeFilter));
+        pipeline.setFilter(getFilterModule(activeFilter, live?.config?.frontend_data));
         pipeline.filter = activeFilter;
       } else if (usesLanczos) {
         pipeline = createLanczosPipeline();
       }
-    } else if (usesWebgl && filterChanged) {
-      pipeline.setFilter(getFilterModule(activeFilter));
+    } else if (usesWebgl && (filterChanged || variantChanged)) {
+      pipeline.setFilter(getFilterModule(activeFilter, live?.config?.frontend_data));
       pipeline.filter = activeFilter;
     }
     
     _lastScalingMode = scaling;
     _lastActiveFilter = activeFilter;
+    _lastAnime4kVariant = anime4kVariant;
     _lastIsAnimated = isAnimated;
   }
 
