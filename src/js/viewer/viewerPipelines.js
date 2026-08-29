@@ -372,11 +372,11 @@ export function createViewerPipelines(viewportState) {
     _livePumpImg = decoder;
 
     const ANIME4K_MAX_EDGE = 2048;
-    let pumpVisible = false;
-    let stagingCtx = null;
     let frameIndex = 0;
     let lastFrameTime = performance.now();
     let frameDurationMs = 100;
+    let pumpVisible = false;
+    let stagingCtx = null;
 
     async function pumpTick() {
       if (_livePumpSrc !== currentSrc) return;
@@ -386,8 +386,13 @@ export function createViewerPipelines(viewportState) {
 
       // Advance frame when enough time has passed
       if (elapsed >= frameDurationMs) {
-        frameIndex = (frameIndex + 1) % frameCount;
-        lastFrameTime = now;
+        if (frameIndex < frameCount - 1) {
+          frameIndex++;
+          lastFrameTime = now;
+        } else if (!live.noLoop) {
+          frameIndex = 0;
+          lastFrameTime = now;
+        }
       }
 
       let vf;

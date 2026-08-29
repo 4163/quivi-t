@@ -1,4 +1,4 @@
-use crate::formats::{is_archive_ext, is_image_ext, is_metadata_ext, is_animated};
+use crate::formats::{is_archive_ext, is_image_ext, is_metadata_ext, check_animation_status};
 
 #[test]
 fn test_is_image_ext() {
@@ -56,16 +56,26 @@ fn test_is_metadata_ext() {
 
 #[test]
 fn test_is_animated_gif() {
-    let mut buf = b"GIF89a...".to_vec();
-    buf.extend_from_slice(b"\x21\xFF\x0BNETSCAPE2.0");
-    assert!(is_animated(&buf));
+    // 13-byte header: GIF89a + width/height + flags (0) + bg color + aspect ratio
+    let mut buf = b"GIF89a\x01\x00\x01\x00\x00\x00\x00".to_vec();
+    // \x21 = Extension, \xFF = Application Extension, \x0B = length 11, NETSCAPE2.0, \x03 = length 3 data block, \x01\x00\x00, \x00 = terminator
+    buf.extend_from_slice(b"\x21\xFF\x0BNETSCAPE2.0\x03\x01\x00\x00\x00");
+    assert!(check_animation_status(&buf).is_animated);
     
     // Test case mapping for single-frame with NETSCAPE loop 
     // Documented as a false-positive in formats.rs
-    assert!(is_animated(&buf));
+    assert!(check_animation_status(&buf).is_animated);
 
-    let static_buf = b"GIF89a... just some static image data";
-    assert!(!is_animated(static_buf));
+    let static_buf = b"GIF89a\x01\x00\x01\x00\x00\x00\x00\x2C\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3B";
+    assert!(!check_animation_status(static_buf).is_animated);
+}
+
+#[test]
+fn test_is_animated_gif_no_loop() {
+    let buf = b"GIF89a\x01\x00\x01\x00\x00\x00\x00\x2C\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x2C\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3B".to_vec();
+    let status = check_animation_status(&buf);
+    assert!(status.is_animated);
+    assert!(status.no_loop);
 }
 
 #[test]
@@ -75,29 +85,29 @@ fn test_is_animated_webp() {
     buf.extend_from_slice(&[10, 0, 0, 0]);
     // Flags: bit 1 is ANIM (0b0000_0010)
     buf.push(0b0000_0010); 
-    assert!(is_animated(&buf));
+    assert!(check_animation_status(&buf).is_animated);
 
     let mut static_buf = b"RIFF....WEBPVP8X".to_vec();
     static_buf.extend_from_slice(&[10, 0, 0, 0]);
     static_buf.push(0b0000_0000);
-    assert!(!is_animated(&static_buf));
+    assert!(!check_animation_status(&static_buf).is_animated);
 }
 
 #[test]
 fn test_is_animated_apng() {
     let mut buf = b"\x89PNG\r\n\x1a\n...".to_vec();
     buf.extend_from_slice(b"acTL...IDAT");
-    assert!(is_animated(&buf));
+    assert!(check_animation_status(&buf).is_animated);
 
     let mut static_buf = b"\x89PNG\r\n\x1a\n...".to_vec();
     static_buf.extend_from_slice(b"IDAT...acTL");
-    assert!(!is_animated(&static_buf));
+    assert!(!check_animation_status(&static_buf).is_animated);
 }
 
 #[test]
 fn test_is_animated_truncated() {
     // Truncated buffer should fail gracefully
-    assert!(!is_animated(b"GIF8"));
-    assert!(!is_animated(b"RIFF"));
-    assert!(!is_animated(b"\x89PNG"));
+    assert!(!check_animation_status(b"GIF8").is_animated);
+    assert!(!check_animation_status(b"RIFF").is_animated);
+    assert!(!check_animation_status(b"\x89PNG").is_animated);
 }

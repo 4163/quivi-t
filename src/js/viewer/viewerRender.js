@@ -159,8 +159,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     // Chromium won't reset its internal GIF timer on a src re-assignment,
     // so replacing the DOM node entirely forces a frame-0 restart on re-entry.
     // This fixes the legacy bug where non-looping GIFs stuck on their last frame forever.
-    const isGif = img !== el && el.src && state.filename?.toLowerCase().endsWith('.gif');
-    if (isGif) {
+    const isNoLoopGif = img && img !== el && el.src && state.filename?.toLowerCase().endsWith('.gif') && state.noLoop === true;
+    if (isNoLoopGif) {
       const fresh = document.createElement('img');
       fresh.className = 'viewer-img';
       fresh.draggable = false;
@@ -171,7 +171,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _activeNodes.set(el.dataset.poolSrc, fresh);
       _attachLoadHandler(fresh);
       fresh.setAttribute('data-load-attached', 'true');
-      fresh.src = el.src;
+      
+      const resetParam = `_reset=${Date.now()}`;
+      fresh.src = el.src.includes('?') ? `${el.src}&${resetParam}` : `${el.src}?${resetParam}`;
+      
       el = fresh;
     }
 

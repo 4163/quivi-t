@@ -73,6 +73,9 @@ const _state = {
   /** True if the current image is an animated format (bypasses WebGL/Lanczos) */
   isAnimated: false,
 
+  /** True if the current image is specifically a no-loop animated GIF */
+  noLoop: false,
+
   /** File list panel visibility. */
   fileListVisible: true,
 
@@ -170,23 +173,28 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
 
   // Optimistic fallback while checking
   _state.isAnimated = false; 
+  _state.noLoop = false;
   _notify();
 
   if (FsUtils.isImageEntry(file)) {
     const cacheKey = `${_state.mode === 'archive' ? _state.archivePath : ''}::${file.path}`;
     if (_animMemo.has(cacheKey)) {
-      _state.isAnimated = _animMemo.get(cacheKey);
+      const cached = _animMemo.get(cacheKey);
+      _state.isAnimated = cached.is_animated;
+      _state.noLoop = cached.no_loop;
       _notify();
     } else {
       const pathArg = _state.mode === 'archive' ? file.name : file.path;
       const archiveArg = _state.mode === 'archive' ? _state.archivePath : null;
-      Core.checkIsAnimated(pathArg, archiveArg).then(isAnim => {
+      Core.checkIsAnimated(pathArg, archiveArg).then(animStatus => {
         if (_state.index === index) {
-          _state.isAnimated = isAnim;
+          _state.isAnimated = animStatus.is_animated;
+          _state.noLoop = animStatus.no_loop;
           _notify();
         }
       });
     }
+
   }
 
   if (_state.config?.frontend_data?.remember_last_image && _state.src !== '') {
@@ -244,12 +252,12 @@ export const Core = {
     const cacheKey = `${archiveArg || ''}::${pathArg}`;
     if (_animMemo.has(cacheKey)) return _animMemo.get(cacheKey);
     try {
-      const isAnim = await invoke('check_is_animated', { path: pathArg, archivePath: archiveArg });
-      _animMemo.set(cacheKey, isAnim);
-      return isAnim;
+      const animStatus = await invoke('check_is_animated', { path: pathArg, archivePath: archiveArg });
+      _animMemo.set(cacheKey, animStatus);
+      return animStatus;
     } catch (err) {
       console.warn('[Core] Failed to check animation header:', err);
-      return false;
+      return { is_animated: false, no_loop: false };
     }
   },
 

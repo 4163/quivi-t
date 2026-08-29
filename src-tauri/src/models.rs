@@ -50,3 +50,9 @@ pub struct FormatStatus {
     pub category: String,
     pub registered: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AnimationInfo {
+    pub is_animated: bool,
+    pub no_loop: bool,
+}

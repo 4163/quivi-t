@@ -8,6 +8,11 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Scaling & Filter Decoupling - Slice 5 (2026-08-30)
+- **GIF Header Scanner:** Replaced the naive `NETSCAPE2.0` string scan in `formats.rs` with an accurate GIF chunk scanner (up to 8 KiB) that counts `0x2C` Image Descriptor frames to detect multi-frame no-loop GIFs.
+- **Isolated DOM Node Reset:** The `check_is_animated` IPC command now returns `AnimationInfo` (`{ is_animated: bool, no_loop: bool }`). The frontend DOM node swap logic in `viewerRender.js` that restarts single-play GIFs is now strictly gated by `state.noLoop === true`, preventing heavy re-mounts and stuttering for standard looping GIFs.
+- **Live Pump No-Loop Support:** Updated the WebCodecs frame pump in `viewerPipelines.js` to clamp the `frameIndex` at the last frame if `state.noLoop` is true, ensuring no-loop GIFs do not endlessly loop when filters or WebGL Lanczos are active.
+
 ### Anime4K GLSL Pipeline (2026-08-29)
 - **Upstream Shader Porting:** Implemented a true Anime4K pipeline by porting the official v4.x shaders (Fast and Normal variants) to WebGL2, replacing the placeholder Laplacian pass.
 - **WebGL Runtime Extensions:** Extended `glRuntime.js` to support multi-pass texture buffering, `image`-space resolution passes, dynamic scaling (`outputScale`), named texture inputs/saves (`SAVE`/`BIND` equivalents from mpv), and native Y-flipping (`u_renderTargetFlipY`) for FBO alignment.

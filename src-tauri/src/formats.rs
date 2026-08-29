@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use crate::models::AnimationInfo;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FormatCategory {
@@ -67,30 +69,99 @@ pub fn is_metadata_ext(ext: &str) -> bool {
     ext.eq_ignore_ascii_case("xml") || ext.eq_ignore_ascii_case("opf")
 }
 
-pub fn is_animated(bytes: &[u8]) -> bool {
+pub fn check_animation_status(bytes: &[u8]) -> AnimationInfo {
     if bytes.len() < 8 {
-        return false;
+        return AnimationInfo { is_animated: false, no_loop: false };
     }
 
     if bytes.starts_with(b"GIF8") {
         return check_gif(bytes);
     } else if bytes.starts_with(b"RIFF") && bytes.len() > 12 && &bytes[8..12] == b"WEBP" {
-        return check_webp(bytes);
+        return AnimationInfo { is_animated: check_webp(bytes), no_loop: false };
     } else if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return check_apng(bytes);
+        return AnimationInfo { is_animated: check_apng(bytes), no_loop: false };
     } else if bytes.windows(4).any(|w| w == b"<svg") {
-        return check_svg(bytes);
+        return AnimationInfo { is_animated: check_svg(bytes), no_loop: false };
     }
 
-    false
+    AnimationInfo { is_animated: false, no_loop: false }
 }
 
-fn check_gif(bytes: &[u8]) -> bool {
-    // NETSCAPE2.0 looping block is within first ~1 KiB; bound scan to 2 KiB header.
-    // Note: A single-frame GIF with a NETSCAPE loop extension is treated as animated
-    // which is an acceptable false-positive per spec. The alternative would require a full frame-count parse.
-    let end = bytes.len().min(2048);
-    bytes[..end].windows(14).any(|w| w == b"\x21\xFF\x0BNETSCAPE2.0")
+fn check_gif(bytes: &[u8]) -> AnimationInfo {
+    if bytes.len() < 13 || !bytes.starts_with(b"GIF") {
+        return AnimationInfo { is_animated: false, no_loop: false };
+    }
+
+    let mut pos = 13;
+    let flags = bytes[10];
+    if (flags & 0x80) != 0 {
+        let gct_size = 2_usize.pow((flags & 0x07) as u32 + 1);
+        pos += 3 * gct_size;
+    }
+
+    let mut frame_count: u32 = 0;
+    let mut loop_count: Option<u16> = None;
+    let scan_limit = bytes.len().min(262_144); // 256 KiB
+
+    while pos < scan_limit {
+        let block_type = bytes[pos];
+        if block_type == 0x2C {
+            frame_count += 1;
+            // Early exit: we know it's animated and already found loop status
+            if frame_count > 1 && loop_count.is_some() {
+                break;
+            }
+            pos += 1;
+            if pos + 9 > bytes.len() { break; }
+            let lct_flags = bytes[pos + 8];
+            pos += 9;
+            if (lct_flags & 0x80) != 0 {
+                let lct_size = 2_usize.pow((lct_flags & 0x07) as u32 + 1);
+                pos += 3 * lct_size;
+            }
+            if pos < bytes.len() {
+                pos += 1; // LZW code size
+                while pos < bytes.len() {
+                    let block_size = bytes[pos] as usize;
+                    pos += 1;
+                    if block_size == 0 { break; }
+                    pos += block_size;
+                }
+            }
+        } else if block_type == 0x21 {
+            pos += 1;
+            if pos < bytes.len() {
+                let ext_label = bytes[pos];
+                pos += 1;
+                if ext_label == 0xFF {
+                    if pos + 12 <= bytes.len() && &bytes[pos..pos+12] == b"\x0BNETSCAPE2.0" {
+                        if pos + 16 <= bytes.len() && bytes[pos + 12] == 0x03 && bytes[pos + 13] == 0x01 {
+                            loop_count = Some(u16::from_le_bytes([bytes[pos + 14], bytes[pos + 15]]));
+                        } else {
+                            loop_count = Some(0);
+                        }
+                    }
+                }
+                while pos < bytes.len() {
+                    let block_size = bytes[pos] as usize;
+                    pos += 1;
+                    if block_size == 0 { break; }
+                    pos += block_size;
+                }
+            }
+        } else if block_type == 0x3B {
+            break;
+        } else {
+            break;
+        }
+    }
+
+    let is_animated = frame_count > 1 || loop_count.is_some();
+    // no_loop only meaningful for animated content.
+    // loop_count 0 = infinite, 1+ = finite, None = no NETSCAPE block = play once.
+    let no_loop = is_animated && loop_count.unwrap_or(1) != 0;
+
+    AnimationInfo { is_animated, no_loop }
 }
 
 fn check_webp(bytes: &[u8]) -> bool {
