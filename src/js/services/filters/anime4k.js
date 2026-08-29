@@ -17,7 +17,7 @@ const drawPass = {
         outColor = vec4(0.0);
         return;
       }
-      outColor = texture(u_texture, vec2(texUV.x, 1.0 - texUV.y));
+      outColor = texture(u_texture, texUV);
     }
   `
 };

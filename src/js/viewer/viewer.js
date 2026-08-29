@@ -24,9 +24,13 @@ createViewerRenderer(viewportState, (img) => {
 });
 createViewerGestures(viewportState);
 
-window.addEventListener('quivit-panel-resized', () => {
-  viewportState.applyFitMode();
-});
+const vpEl = document.getElementById('viewport');
+if (vpEl) {
+  const ro = new ResizeObserver(() => {
+    viewportState.applyFitMode();
+  });
+  ro.observe(vpEl);
+}
 
 function _getViewportCenter() {
   const vp = document.getElementById('viewport');

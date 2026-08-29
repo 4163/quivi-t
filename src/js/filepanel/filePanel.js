@@ -894,7 +894,6 @@ export function initFilePanel(deps) {
       const newWidth = Math.min(480, Math.max(120, e.clientX));
       document.documentElement.style.setProperty('--panel-w', `${newWidth}px`);
       normalizeColumnWidths('name', getColumnWidth('name') + (newWidth - oldWidth));
-      window.dispatchEvent(new CustomEvent('quivit-panel-resized'));
     }
 
     if (resizingCol) {

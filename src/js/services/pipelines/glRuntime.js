@@ -20,8 +20,9 @@ export function createGlRuntime(canvas) {
   const vsSource = `#version 300 es
     in vec2 a_position;
     out vec2 v_screenCoord;
+    uniform float u_renderTargetFlipY;
     void main() {
-      gl_Position = vec4(a_position, 0.0, 1.0);
+      gl_Position = vec4(a_position.x, a_position.y * u_renderTargetFlipY, 0.0, 1.0);
       v_screenCoord = vec2(a_position.x * 0.5 + 0.5, 0.5 - a_position.y * 0.5);
     }
   `;
@@ -118,6 +119,7 @@ export function createGlRuntime(canvas) {
         input: pass.input || 'previous',
         posLoc: _gl.getAttribLocation(prog, 'a_position'),
         applyUniforms: pass.applyUniforms,
+        renderTargetFlipYLoc: _gl.getUniformLocation(prog, 'u_renderTargetFlipY'),
         standardLocs: {
           texture:   _gl.getUniformLocation(prog, 'u_texture'),
           viewport:  _gl.getUniformLocation(prog, 'u_viewport'),
@@ -261,6 +263,10 @@ export function createGlRuntime(canvas) {
       _gl.uniform2f(p.standardLocs.translate, tx, ty);
       _gl.uniform1f(p.standardLocs.rotation, geomExt.rotation * Math.PI / 180.0);
       _gl.uniform2f(p.standardLocs.flip, geomExt.flipX, geomExt.flipY);
+      
+      if (p.renderTargetFlipYLoc !== null) {
+        _gl.uniform1f(p.renderTargetFlipYLoc, isLast ? 1.0 : -1.0);
+      }
 
       if (p.applyUniforms) {
         p.applyUniforms(_gl, p.customLocs, geomExt, vpExt, { inW, inH, outW, outH });
