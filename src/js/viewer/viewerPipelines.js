@@ -15,12 +15,17 @@ export function createViewerPipelines(viewportState) {
   let _rafPending = false;
   let _renderGeneration = 0;
   let _renderTimeout = null;
+  
+  let _livePumpRaf = null;
+  let _livePumpSrc = null;
+  let _livePumpImg = null;
+  const _liveStagingCanvas = document.createElement('canvas');
 
   const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
   const filterCanvas = document.getElementById('viewer-filter-canvas');
 
   function _resolveActiveFilter(state) {
-    if (!state || !!state.isAnimated) return null;
+    if (!state) return null;
     const fd = state.config?.frontend_data;
     if (!fd) return null;
     return activeFilterId(fd);
@@ -156,8 +161,7 @@ export function createViewerPipelines(viewportState) {
   function _triggerRender() {
     const live = Core.getState();
     const liveAnimated = !!live?.isAnimated;
-    let scaling = live?.scalingMode;
-    if (liveAnimated && scaling === 'lanczos') scaling = 'bilinear';
+    const scaling = getEffectiveScaling(live?.scalingMode, liveAnimated);
     
     const activeFilter = _resolveActiveFilter(live);
     const usesWebgl = activeFilter !== null;
@@ -198,6 +202,148 @@ export function createViewerPipelines(viewportState) {
     }
   }
 
+  function _stopLivePump() {
+    if (_livePumpRaf) {
+      cancelAnimationFrame(_livePumpRaf);
+      _livePumpRaf = null;
+    }
+    if (_livePumpImg) {
+      if (_livePumpImg.close) _livePumpImg.close();
+      _livePumpImg = null;
+    }
+    _livePumpSrc = null;
+  }
+
+  async function _syncLivePump() {
+    const live = Core.getState();
+    const isAnimated = !!live?.isAnimated;
+    const scaling = getEffectiveScaling(live?.scalingMode, isAnimated);
+    const activeFilter = _resolveActiveFilter(live);
+    const useLivePump = isAnimated && (activeFilter !== null || scaling === 'lanczos');
+
+    if (!useLivePump || !_activeSource) {
+      _stopLivePump();
+      return;
+    }
+
+    const currentSrc = _activeSource.src;
+    if (_livePumpSrc === currentSrc && _livePumpRaf) return;
+
+    _stopLivePump();
+    _livePumpSrc = currentSrc;
+
+    // ImageDecoder gives us composited VideoFrames from the byte stream.
+    // No DOM images, no taint, direct WebGL upload via texImage2D.
+    if (typeof ImageDecoder === 'undefined') return;
+
+    const resp = await fetch(currentSrc);
+    if (_livePumpSrc !== currentSrc) return;
+    const contentType = resp.headers.get('content-type') || 'image/gif';
+
+    let decoder;
+    try {
+      decoder = new ImageDecoder({ data: resp.body, type: contentType });
+      await decoder.completed;
+    } catch (e) {
+      console.warn('[pump] ImageDecoder failed:', e.message);
+      return;
+    }
+    if (_livePumpSrc !== currentSrc) { decoder.close(); return; }
+
+    const track = decoder.tracks.selectedTrack;
+    const frameCount = track.frameCount;
+    if (frameCount < 2) { decoder.close(); return; }
+
+    _livePumpImg = decoder;
+
+    console.log('[pump] started (ImageDecoder)', {
+      src: currentSrc.slice(-40),
+      frameCount,
+      repetitionCount: track.repetitionCount,
+    });
+
+    const ANIME4K_MAX_EDGE = 2048;
+    let pumpVisible = false;
+    let stagingCtx = null;
+    let frameIndex = 0;
+    let lastFrameTime = performance.now();
+    let frameDurationMs = 100;
+    let tickCount = 0;
+    let lastPixelSample = null;
+
+    async function pumpTick() {
+      if (_livePumpSrc !== currentSrc) return;
+
+      const now = performance.now();
+      const elapsed = now - lastFrameTime;
+
+      // Advance frame when enough time has passed
+      if (elapsed >= frameDurationMs) {
+        frameIndex = (frameIndex + 1) % frameCount;
+        lastFrameTime = now;
+      }
+
+      let vf;
+      try {
+        const result = await decoder.decode({ frameIndex });
+        vf = result.image;
+      } catch {
+        _livePumpRaf = requestAnimationFrame(pumpTick);
+        return;
+      }
+      if (_livePumpSrc !== currentSrc) { vf.close(); return; }
+
+      // Update frame duration from this frame's metadata (microseconds → ms)
+      if (vf.duration) frameDurationMs = Math.max(10, vf.duration / 1000);
+
+      const sw = vf.displayWidth;
+      const sh = vf.displayHeight;
+      let drawW = sw, drawH = sh;
+
+      if (_lastActiveFilter === 'anime4k') {
+        const maxEdge = Math.max(sw, sh);
+        if (maxEdge > ANIME4K_MAX_EDGE) {
+          const ratio = ANIME4K_MAX_EDGE / maxEdge;
+          drawW = Math.round(sw * ratio);
+          drawH = Math.round(sh * ratio);
+        }
+      }
+
+      if (_liveStagingCanvas.width !== drawW) _liveStagingCanvas.width = drawW;
+      if (_liveStagingCanvas.height !== drawH) _liveStagingCanvas.height = drawH;
+      if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d', { willReadFrequently: true });
+
+      stagingCtx.drawImage(vf, 0, 0, drawW, drawH);
+      vf.close();
+
+      // Debug: sample a pixel every 60 ticks
+      if (tickCount % 60 === 0) {
+        const px = stagingCtx.getImageData(Math.floor(drawW / 2), Math.floor(drawH / 2), 1, 1).data;
+        const sample = `${px[0]},${px[1]},${px[2]},${px[3]}`;
+        const changed = lastPixelSample !== null && lastPixelSample !== sample;
+        console.log('[pump] tick', { tick: tickCount, frame: frameIndex, pixel: sample, pixelChanged: lastPixelSample === null ? 'first' : changed });
+        lastPixelSample = sample;
+      }
+
+      if (pipeline && pipeline.type === 'webgl') {
+        pipeline.updateSource(_liveStagingCanvas);
+        pipeline.render(_activeSource, viewportState.getGeometry(), true);
+
+        if (!pumpVisible) {
+          pumpVisible = true;
+          if (filterCanvas) filterCanvas.setAttribute('data-render-ready', 'true');
+          const vp = document.getElementById('viewport');
+          if (vp && _lastActiveFilter) vp.setAttribute('data-filter', _lastActiveFilter);
+          console.log('[pump] visible', { filter: _lastActiveFilter });
+        }
+      }
+
+      tickCount++;
+      _livePumpRaf = requestAnimationFrame(pumpTick);
+    }
+    _livePumpRaf = requestAnimationFrame(pumpTick);
+  }
+
   Core.onStateChange((state) => {
     const newFilter = _resolveActiveFilter(state);
     const newIsAnimated = !!state.isAnimated;
@@ -209,6 +355,7 @@ export function createViewerPipelines(viewportState) {
       _applyScaling(newFilter, newIsAnimated);
       _scheduleTransform();
       _triggerRender();
+      _syncLivePump();
     }
   });
 
@@ -226,6 +373,7 @@ export function createViewerPipelines(viewportState) {
       _applyScaling();
       _scheduleTransform();
       _triggerRender();
+      _syncLivePump();
     },
     forceRender() {
       _cancelRender();
@@ -239,6 +387,7 @@ export function createViewerPipelines(viewportState) {
     clear() {
       _activeSource = null;
       _cancelRender();
+      _stopLivePump();
       if (pipeline) {
         _teardownWebglCanvas();
         pipeline.dispose();

@@ -78,7 +78,10 @@ export async function getLiveImage(src) {
       const blobUrl = URL.createObjectURL(blob);
       const liveImg = new Image();
       liveImg.src = blobUrl;
-      await liveImg.decode();
+      await new Promise((resolve, reject) => {
+        liveImg.onload = resolve;
+        liveImg.onerror = reject;
+      });
       
       _cachedLiveBlobUrl = blobUrl;
       _cachedLiveImg = liveImg;

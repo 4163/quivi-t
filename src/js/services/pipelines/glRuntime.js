@@ -140,26 +140,11 @@ export function createGlRuntime(canvas) {
     }
   }
 
-  async function render(imgElement, geometry) {
-    if (!_active || !_gl || _programs.length === 0) return null;
-
-    const nw = imgElement.naturalWidth;
-    const nh = imgElement.naturalHeight;
-    if (nw <= 0 || nh <= 0) return null;
-
-    let cleanImg;
-    try {
-      cleanImg = await getCleanImage(imgElement.src);
-    } catch { return null; }
-    if (!_active) return null;
+  function updateSource(canvasOrImage) {
+    if (!_active || !_gl) return;
     
-    // Support both HTMLImageElement (naturalWidth) and ImageBitmap (width)
-    const cleanW = cleanImg.naturalWidth || cleanImg.width;
-    const cleanH = cleanImg.naturalHeight || cleanImg.height;
-    if (!cleanW || cleanW <= 0 || !cleanH || cleanH <= 0) return null;
-
-    const sourceIdentity = imgElement.src + '|' + nw + '|' + nh;
-
+    const sourceIdentity = 'live_pump';
+    
     if (_texSrc !== sourceIdentity || !_sourceTexture) {
       if (_sourceTexture) _gl.deleteTexture(_sourceTexture);
       _sourceTexture = _gl.createTexture();
@@ -168,13 +153,55 @@ export function createGlRuntime(canvas) {
       _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, _gl.LINEAR);
       _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, _gl.CLAMP_TO_EDGE);
       _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, _gl.CLAMP_TO_EDGE);
-      try {
-        _gl.texImage2D(_gl.TEXTURE_2D, 0, _gl.RGBA, _gl.RGBA, _gl.UNSIGNED_BYTE, cleanImg);
-      } catch (e) {
-        console.warn('WebGL texImage2D failed', e);
-        return null;
-      }
       _texSrc = sourceIdentity;
+    } else {
+      _gl.bindTexture(_gl.TEXTURE_2D, _sourceTexture);
+    }
+    
+    try {
+      _gl.texImage2D(_gl.TEXTURE_2D, 0, _gl.RGBA, _gl.RGBA, _gl.UNSIGNED_BYTE, canvasOrImage);
+    } catch (e) {
+      console.warn('WebGL texImage2D live update failed', e);
+    }
+  }
+
+  async function render(imgElement, geometry, skipUpload = false) {
+    if (!_active || !_gl || _programs.length === 0) return null;
+
+    const nw = imgElement.naturalWidth;
+    const nh = imgElement.naturalHeight;
+    if (nw <= 0 || nh <= 0) return null;
+
+    if (!skipUpload) {
+      let cleanImg;
+      try {
+        cleanImg = await getCleanImage(imgElement.src);
+      } catch { return null; }
+      if (!_active) return null;
+      
+      // Support both HTMLImageElement (naturalWidth) and ImageBitmap (width)
+      const cleanW = cleanImg.naturalWidth || cleanImg.width;
+      const cleanH = cleanImg.naturalHeight || cleanImg.height;
+      if (!cleanW || cleanW <= 0 || !cleanH || cleanH <= 0) return null;
+
+      const sourceIdentity = imgElement.src + '|' + nw + '|' + nh;
+
+      if (_texSrc !== sourceIdentity || !_sourceTexture) {
+        if (_sourceTexture) _gl.deleteTexture(_sourceTexture);
+        _sourceTexture = _gl.createTexture();
+        _gl.bindTexture(_gl.TEXTURE_2D, _sourceTexture);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, _gl.LINEAR);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, _gl.LINEAR);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, _gl.CLAMP_TO_EDGE);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, _gl.CLAMP_TO_EDGE);
+        try {
+          _gl.texImage2D(_gl.TEXTURE_2D, 0, _gl.RGBA, _gl.RGBA, _gl.UNSIGNED_BYTE, cleanImg);
+        } catch (e) {
+          console.warn('WebGL texImage2D failed', e);
+          return null;
+        }
+        _texSrc = sourceIdentity;
+      }
     }
 
     const vpW = geometry.viewport.clientWidth;
@@ -291,6 +318,7 @@ export function createGlRuntime(canvas) {
     type: 'webgl',
     setFilter,
     render,
+    updateSource,
     cancel() {},
     dispose() {
       _active = false;
