@@ -444,8 +444,8 @@ li:hover > .fav-remove,
 }
 
 .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-ext  { min-width: 38px; }
-.col-date { min-width: 92px; font-size: var(--fs-10); }
+.col-ext  { }
+.col-date { font-size: var(--fs-10); }
 
 #file-list {
   flex: 1;
