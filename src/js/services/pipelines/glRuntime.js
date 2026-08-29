@@ -257,6 +257,8 @@ export function createGlRuntime(canvas) {
       if (isLast) {
         _gl.bindFramebuffer(_gl.FRAMEBUFFER, null);
         _gl.viewport(0, 0, vpW, vpH);
+        _gl.clearColor(0, 0, 0, 0);
+        _gl.clear(_gl.COLOR_BUFFER_BIT);
       } else {
         outputFboData = getFbo(outputKey, outW, outH);
         _gl.bindFramebuffer(_gl.FRAMEBUFFER, outputFboData.fbo);

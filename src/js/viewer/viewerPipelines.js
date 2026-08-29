@@ -1,6 +1,7 @@
 import { Core } from '../core.js';
 import { getEffectiveScaling } from '../services/viewerMath.js';
 import { createLanczosPipeline } from '../services/scaling/lanczos.js';
+import { filter as lanczosWebGlModule } from '../services/scaling/lanczosWebGL.js';
 import { createGlRuntime } from '../services/pipelines/glRuntime.js';
 import { activeFilterId, getFilterModule } from '../services/registry.js';
 
@@ -81,7 +82,9 @@ export function createViewerPipelines(viewportState) {
     const scaling = getEffectiveScaling(live?.scalingMode, isAnimated, isSvg);
 
     const activeFilter = incomingFilter !== undefined ? incomingFilter : _resolveActiveFilter(live);
-    const usesWebgl = activeFilter !== null;
+    
+    const useWebGlForLanczos = scaling === 'lanczos' && isAnimated && !isSvg && activeFilter === null;
+    const usesWebgl = activeFilter !== null || useWebGlForLanczos;
     const usesLanczos = scaling === 'lanczos' && !usesWebgl;
     
     if (_activeSource) {
@@ -121,6 +124,7 @@ export function createViewerPipelines(viewportState) {
     const filterChanged = activeFilter !== _lastActiveFilter;
     const anime4kVariant = activeFilter === 'anime4k' ? live?.config?.frontend_data?.filter_options?.anime4k?.variant : null;
     const variantChanged = anime4kVariant !== _lastAnime4kVariant;
+    const scalingChanged = scaling !== _lastScalingMode;
 
     if (needsNewPipeline) {
       if (pipeline) {
@@ -129,14 +133,24 @@ export function createViewerPipelines(viewportState) {
       }
       if (usesWebgl) {
         pipeline = createGlRuntime(filterCanvas);
-        pipeline.setFilter(getFilterModule(activeFilter, live?.config?.frontend_data));
-        pipeline.filter = activeFilter;
+        if (useWebGlForLanczos) {
+          pipeline.setFilter(lanczosWebGlModule);
+          pipeline.filter = 'lanczos';
+        } else {
+          pipeline.setFilter(getFilterModule(activeFilter, live?.config?.frontend_data));
+          pipeline.filter = activeFilter;
+        }
       } else if (usesLanczos) {
         pipeline = createLanczosPipeline();
       }
-    } else if (usesWebgl && (filterChanged || variantChanged)) {
-      pipeline.setFilter(getFilterModule(activeFilter, live?.config?.frontend_data));
-      pipeline.filter = activeFilter;
+    } else if (usesWebgl && (filterChanged || variantChanged || scalingChanged)) {
+      if (useWebGlForLanczos) {
+        pipeline.setFilter(lanczosWebGlModule);
+        pipeline.filter = 'lanczos';
+      } else {
+        pipeline.setFilter(getFilterModule(activeFilter, live?.config?.frontend_data));
+        pipeline.filter = activeFilter;
+      }
     }
     
     _lastScalingMode = scaling;
