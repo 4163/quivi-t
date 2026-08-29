@@ -24,11 +24,23 @@ export function createViewerPipelines(viewportState) {
   const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
   const filterCanvas = document.getElementById('viewer-filter-canvas');
 
+  function isSvgSource(src) {
+    if (!src) return false;
+    try {
+      const url = new URL(src);
+      return url.pathname.toLowerCase().endsWith('.svg');
+    } catch {
+      return src.toLowerCase().endsWith('.svg');
+    }
+  }
+
   function _resolveActiveFilter(state) {
     if (!state) return null;
     const fd = state.config?.frontend_data;
     if (!fd) return null;
-    return activeFilterId(fd);
+    const active = activeFilterId(fd);
+    if (active === 'anime4k' && isSvgSource(_activeSource?.src)) return null;
+    return active;
   }
 
   function _cancelRender() {
@@ -65,7 +77,8 @@ export function createViewerPipelines(viewportState) {
   function _applyScaling(incomingFilter, incomingIsAnimated) {
     const live = Core.getState();
     const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : !!live?.isAnimated;
-    const scaling = getEffectiveScaling(live?.scalingMode, isAnimated);
+    const isSvg = isSvgSource(_activeSource?.src);
+    const scaling = getEffectiveScaling(live?.scalingMode, isAnimated, isSvg);
 
     const activeFilter = incomingFilter !== undefined ? incomingFilter : _resolveActiveFilter(live);
     const usesWebgl = activeFilter !== null;
@@ -209,6 +222,7 @@ export function createViewerPipelines(viewportState) {
     }
     if (_livePumpImg) {
       if (_livePumpImg.close) _livePumpImg.close();
+      if (_livePumpImg.parentNode) _livePumpImg.parentNode.removeChild(_livePumpImg);
       _livePumpImg = null;
     }
     _livePumpSrc = null;
@@ -217,7 +231,8 @@ export function createViewerPipelines(viewportState) {
   async function _syncLivePump() {
     const live = Core.getState();
     const isAnimated = !!live?.isAnimated;
-    const scaling = getEffectiveScaling(live?.scalingMode, isAnimated);
+    const isSvg = isSvgSource(_activeSource?.src);
+    const scaling = getEffectiveScaling(live?.scalingMode, isAnimated, isSvg);
     const activeFilter = _resolveActiveFilter(live);
     const useLivePump = isAnimated && (activeFilter !== null || scaling === 'lanczos');
 
@@ -232,8 +247,94 @@ export function createViewerPipelines(viewportState) {
     _stopLivePump();
     _livePumpSrc = currentSrc;
 
-    // ImageDecoder gives us composited VideoFrames from the byte stream.
-    // No DOM images, no taint, direct WebGL upload via texImage2D.
+    // --- SVG DOM Fallback Pump ---
+    if (isSvg) {
+      // SVGs cannot be parsed by WebCodecs ImageDecoder.
+      // Fallback to DOM <img> drawing technique.
+      const resp = await fetch(currentSrc);
+      if (_livePumpSrc !== currentSrc) return;
+      const blob = await resp.blob();
+      if (_livePumpSrc !== currentSrc) return;
+
+      const blobUrl = URL.createObjectURL(blob);
+      const liveImg = document.createElement('img');
+
+      const viewport = document.getElementById('viewport');
+      liveImg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;pointer-events:none;opacity:0.001;';
+      viewport.insertBefore(liveImg, document.getElementById('viewer-filter-canvas'));
+      liveImg.src = blobUrl;
+      _livePumpImg = liveImg;
+
+      await new Promise((resolve, reject) => {
+        if (liveImg.complete && liveImg.naturalWidth) resolve();
+        else { liveImg.onload = resolve; liveImg.onerror = reject; }
+      });
+      if (_livePumpSrc !== currentSrc) {
+        liveImg.remove();
+        URL.revokeObjectURL(blobUrl);
+        return;
+      }
+
+      let pumpVisible = false;
+      let stagingCtx = null;
+
+      function pumpTickSvg() {
+        if (_livePumpSrc !== currentSrc) return;
+
+        let sw = liveImg.naturalWidth;
+        let sh = liveImg.naturalHeight;
+        if (!sw || !sh) {
+          _livePumpRaf = requestAnimationFrame(pumpTickSvg);
+          return;
+        }
+
+        // Scale up the rasterization size to match the viewport to keep the SVG sharp.
+        const vp = document.getElementById('viewport');
+        if (vp) {
+          const SVG_MAX_EDGE = 512;
+          const targetW = Math.min(vp.clientWidth || 1024, SVG_MAX_EDGE);
+          const targetH = Math.min(vp.clientHeight || 1024, SVG_MAX_EDGE);
+          
+          let multiplier = Math.max(targetW / sw, targetH / sh);
+          
+          // Strictly cap at SVG_MAX_EDGE to prevent CPU exhaustion
+          if (sw * multiplier > SVG_MAX_EDGE) multiplier = SVG_MAX_EDGE / sw;
+          if (sh * multiplier > SVG_MAX_EDGE) multiplier = Math.min(multiplier, SVG_MAX_EDGE / sh);
+          
+          // Never scale down below natural size unless natural size is > SVG_MAX_EDGE
+          if (sw <= SVG_MAX_EDGE && sh <= SVG_MAX_EDGE) {
+            multiplier = Math.max(1, multiplier);
+          }
+
+          sw = Math.round(sw * multiplier);
+          sh = Math.round(sh * multiplier);
+        }
+
+        if (_liveStagingCanvas.width !== sw) _liveStagingCanvas.width = sw;
+        if (_liveStagingCanvas.height !== sh) _liveStagingCanvas.height = sh;
+        if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d', { willReadFrequently: true });
+
+        stagingCtx.clearRect(0, 0, sw, sh);
+        stagingCtx.drawImage(liveImg, 0, 0, sw, sh);
+
+        if (pipeline && pipeline.type === 'webgl') {
+          pipeline.updateSource(_liveStagingCanvas);
+          pipeline.render(_activeSource, viewportState.getGeometry(), true);
+
+          if (!pumpVisible) {
+            pumpVisible = true;
+            if (filterCanvas) filterCanvas.setAttribute('data-render-ready', 'true');
+            const vp = document.getElementById('viewport');
+            if (vp && _lastActiveFilter) vp.setAttribute('data-filter', _lastActiveFilter);
+          }
+        }
+        _livePumpRaf = requestAnimationFrame(pumpTickSvg);
+      }
+      _livePumpRaf = requestAnimationFrame(pumpTickSvg);
+      return;
+    }
+
+    // --- Raster WebCodecs Pump (GIF/APNG/WebP) ---
     if (typeof ImageDecoder === 'undefined') return;
 
     const resp = await fetch(currentSrc);
@@ -256,20 +357,12 @@ export function createViewerPipelines(viewportState) {
 
     _livePumpImg = decoder;
 
-    console.log('[pump] started (ImageDecoder)', {
-      src: currentSrc.slice(-40),
-      frameCount,
-      repetitionCount: track.repetitionCount,
-    });
-
     const ANIME4K_MAX_EDGE = 2048;
     let pumpVisible = false;
     let stagingCtx = null;
     let frameIndex = 0;
     let lastFrameTime = performance.now();
     let frameDurationMs = 100;
-    let tickCount = 0;
-    let lastPixelSample = null;
 
     async function pumpTick() {
       if (_livePumpSrc !== currentSrc) return;
@@ -317,15 +410,6 @@ export function createViewerPipelines(viewportState) {
       stagingCtx.drawImage(vf, 0, 0, drawW, drawH);
       vf.close();
 
-      // Debug: sample a pixel every 60 ticks
-      if (tickCount % 60 === 0) {
-        const px = stagingCtx.getImageData(Math.floor(drawW / 2), Math.floor(drawH / 2), 1, 1).data;
-        const sample = `${px[0]},${px[1]},${px[2]},${px[3]}`;
-        const changed = lastPixelSample !== null && lastPixelSample !== sample;
-        console.log('[pump] tick', { tick: tickCount, frame: frameIndex, pixel: sample, pixelChanged: lastPixelSample === null ? 'first' : changed });
-        lastPixelSample = sample;
-      }
-
       if (pipeline && pipeline.type === 'webgl') {
         pipeline.updateSource(_liveStagingCanvas);
         pipeline.render(_activeSource, viewportState.getGeometry(), true);
@@ -335,11 +419,9 @@ export function createViewerPipelines(viewportState) {
           if (filterCanvas) filterCanvas.setAttribute('data-render-ready', 'true');
           const vp = document.getElementById('viewport');
           if (vp && _lastActiveFilter) vp.setAttribute('data-filter', _lastActiveFilter);
-          console.log('[pump] visible', { filter: _lastActiveFilter });
         }
       }
 
-      tickCount++;
       _livePumpRaf = requestAnimationFrame(pumpTick);
     }
     _livePumpRaf = requestAnimationFrame(pumpTick);

@@ -174,7 +174,8 @@ export function createViewportState({ getViewport }) {
   };
 }
 
-export function getEffectiveScaling(scalingMode, isAnimated) {
+export function getEffectiveScaling(scalingMode, isAnimated, isSvg = false) {
+  if (isSvg && scalingMode === 'lanczos') return 'bilinear';
   if (isAnimated && scalingMode === 'lanczos') return 'bilinear';
   return scalingMode;
 }

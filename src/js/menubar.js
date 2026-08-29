@@ -122,8 +122,9 @@ function bindMenus() {
 
 export function syncViewMenu(state) {
   const isAnimated = !!state.isAnimated;
+  const isSvg = state.currentFile ? state.currentFile.name.toLowerCase().endsWith('.svg') : false;
   const currentFilter = activeFilterId(state.config?.frontend_data || {});
-  const displayScaling = getEffectiveScaling(state.scalingMode, isAnimated);
+  const displayScaling = getEffectiveScaling(state.scalingMode, isAnimated, isSvg);
 
   for (const f of FILTERS) {
     const el = document.getElementById(f.actionId);
