@@ -313,6 +313,7 @@ export function createViewerPipelines(viewportState) {
       if (_liveStagingCanvas.height !== drawH) _liveStagingCanvas.height = drawH;
       if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d', { willReadFrequently: true });
 
+      stagingCtx.clearRect(0, 0, drawW, drawH);
       stagingCtx.drawImage(vf, 0, 0, drawW, drawH);
       vf.close();
 
