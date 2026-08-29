@@ -202,8 +202,9 @@ export function createViewerPipelines(viewportState) {
     const newFilter = _resolveActiveFilter(state);
     const newIsAnimated = !!state.isAnimated;
     const newScaling = getEffectiveScaling(state.scalingMode, newIsAnimated);
+    const newVariant = newFilter === 'anime4k' ? state?.config?.frontend_data?.filter_options?.anime4k?.variant : null;
     
-    if (newFilter !== _lastActiveFilter || newIsAnimated !== _lastIsAnimated || newScaling !== _lastScalingMode) {
+    if (newFilter !== _lastActiveFilter || newIsAnimated !== _lastIsAnimated || newScaling !== _lastScalingMode || newVariant !== _lastAnime4kVariant) {
       _cancelRender();
       _applyScaling(newFilter, newIsAnimated);
       _scheduleTransform();
@@ -224,6 +225,15 @@ export function createViewerPipelines(viewportState) {
       _cancelRender();
       _applyScaling();
       _scheduleTransform();
+      _triggerRender();
+    },
+    forceRender() {
+      _cancelRender();
+      if (pipeline && pipeline.type === 'webgl') {
+        _applyTransform();
+      } else {
+        _scheduleTransform();
+      }
       _triggerRender();
     },
     clear() {

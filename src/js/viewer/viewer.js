@@ -28,6 +28,7 @@ const vpEl = document.getElementById('viewport');
 if (vpEl) {
   const ro = new ResizeObserver(() => {
     viewportState.applyFitMode();
+    pipelines.forceRender();
   });
   ro.observe(vpEl);
 }

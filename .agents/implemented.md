@@ -8,6 +8,12 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Anime4K GLSL Pipeline (2026-08-29)
+- **Upstream Shader Porting:** Implemented a true Anime4K pipeline by porting the official v4.x shaders (Fast and Normal variants) to WebGL2, replacing the placeholder Laplacian pass.
+- **WebGL Runtime Extensions:** Extended `glRuntime.js` to support multi-pass texture buffering, `image`-space resolution passes, dynamic scaling (`outputScale`), named texture inputs/saves (`SAVE`/`BIND` equivalents from mpv), and native Y-flipping (`u_renderTargetFlipY`) for FBO alignment.
+- **Real-Time Variant Switching:** Updated the options UI to allow selecting the active Anime4K variant. Integrated variant detection in `viewerPipelines.js` via `Core.onStateChange` so switching variants instantly resolves the new filter chain without requiring an image reload.
+- **Subpixel Blur & Jumping Fixes:** Addressed a critical 1-frame layout sync jump by updating `viewer.js`'s `ResizeObserver` to forcefully invoke a synchronous WebGL render before browser paint. Replaced stretching/transform-based canvas centering in CSS with `margin: auto`, perfectly aligning the WebGL canvas to the pixel grid and preserving pixel-art scanlines that were previously destroyed by browser-level subpixel blurring.
+
 ### Scaling & Filter Decoupling - Slice 6 (2026-08-29)
 - **Frontend IPC Centralization:** Replaced manual `invoke('check_is_animated')` and `try-catch` blocks in `fsUtils.js` `loadFile` and `loadArchive` with a unified `Core.checkIsAnimated(srcPath, archivePath)` helper in `core.js`. This centralizes the `_animMemo` caching layer.
 - **Backend Format Tests:** Expanded `format_tests.rs` to validate the heuristics of `is_animated` in `formats.rs`. Added tests for detecting `NETSCAPE2.0` in GIFs (including the single-frame loop false-positive), checking the `ANIM` bit within the `VP8X` chunk for WebP, and validating the `acTL`/`IDAT` chunk order for APNGs.
