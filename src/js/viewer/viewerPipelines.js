@@ -1,13 +1,13 @@
 import { Core } from '../core.js';
 import { getEffectiveScaling } from '../services/viewerMath.js';
-import { createScalingPipeline } from '../services/scalingPipeline.js';
+import { createLanczosPipeline } from '../services/scaling/lanczos.js';
 import { createGlRuntime } from '../services/pipelines/glRuntime.js';
 import { activeFilterId, getFilterModule } from '../services/registry.js';
 
 export function createViewerPipelines(viewportState) {
   let _activeSource = null;
   let pipeline = null;
-  let _lastScalingMode = viewportState.getScaling();
+  let _lastScalingMode = Core.getState().scalingMode;
   let _lastActiveFilter = _resolveActiveFilter(Core.getState());
   let _lastIsAnimated = !!Core.getState()?.isAnimated;
   
@@ -59,11 +59,15 @@ export function createViewerPipelines(viewportState) {
   function _applyScaling(incomingFilter, incomingIsAnimated) {
     const live = Core.getState();
     const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : !!live?.isAnimated;
-    const scaling = getEffectiveScaling(viewportState.getScaling(), isAnimated);
+    const scaling = getEffectiveScaling(live?.scalingMode, isAnimated);
 
     const activeFilter = incomingFilter !== undefined ? incomingFilter : _resolveActiveFilter(live);
     const usesWebgl = activeFilter !== null;
     const usesLanczos = scaling === 'lanczos' && !usesWebgl;
+    
+    if (_activeSource) {
+      _activeSource.dataset.scaling = scaling;
+    }
     
     const viewportNode = document.getElementById('viewport');
     if (viewportNode) {
@@ -111,7 +115,7 @@ export function createViewerPipelines(viewportState) {
         pipeline.setFilter(getFilterModule(activeFilter));
         pipeline.filter = activeFilter;
       } else if (usesLanczos) {
-        pipeline = createScalingPipeline(scaling);
+        pipeline = createLanczosPipeline();
       }
     } else if (usesWebgl && filterChanged) {
       pipeline.setFilter(getFilterModule(activeFilter));
@@ -150,7 +154,7 @@ export function createViewerPipelines(viewportState) {
   function _triggerRender() {
     const live = Core.getState();
     const liveAnimated = !!live?.isAnimated;
-    let scaling = viewportState.getScaling();
+    let scaling = live?.scalingMode;
     if (liveAnimated && scaling === 'lanczos') scaling = 'bilinear';
     
     const activeFilter = _resolveActiveFilter(live);
@@ -195,8 +199,9 @@ export function createViewerPipelines(viewportState) {
   Core.onStateChange((state) => {
     const newFilter = _resolveActiveFilter(state);
     const newIsAnimated = !!state.isAnimated;
+    const newScaling = getEffectiveScaling(state.scalingMode, newIsAnimated);
     
-    if (newFilter !== _lastActiveFilter || newIsAnimated !== _lastIsAnimated) {
+    if (newFilter !== _lastActiveFilter || newIsAnimated !== _lastIsAnimated || newScaling !== _lastScalingMode) {
       _cancelRender();
       _applyScaling(newFilter, newIsAnimated);
       _scheduleTransform();

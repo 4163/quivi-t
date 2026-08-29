@@ -23,7 +23,6 @@ import { initLifecycle } from './lifecycle.js';
 import { initMetadataBadge, openMetadataWindow } from './metadataBadge.js';
 import { initDropZone } from './dropzone.js';
 
-let _lastAnimated = false;
 
 // Reset the options tab on startup so each session starts on General.
 localStorage.removeItem('options-active-tab');
@@ -48,7 +47,6 @@ const fileListUl = document.getElementById('file-list');
 const resizeHandle = document.getElementById('panel-resize-handle');
 const metadataBadgeEl = document.getElementById('status-metadata-badge');
 
-let activeScaling = '';
 let _uiInitialized = false;
 let keyboardPanStep = DEFAULT_KEYBOARD_PAN_STEP;
 let wheelPanStep = DEFAULT_WHEEL_PAN_STEP;
@@ -156,16 +154,6 @@ Core.onStateChange((state) => {
 
   // Update standard statusbar fields.
   Statusbar.update(state);
-
-  const isAnimated = !!state.isAnimated;
-
-  if (state.scalingMode !== activeScaling || _lastAnimated !== isAnimated) {
-    if (state.scalingMode !== activeScaling) {
-      activeScaling = state.scalingMode;
-      Viewer.setScaling(activeScaling);
-    }
-    _lastAnimated = isAnimated;
-  }
 
   syncViewMenu(state);
   updateHistoryMenu();

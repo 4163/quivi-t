@@ -46,7 +46,6 @@ export const Viewer = {
   rotate: viewportState.rotate,
   flipHorizontal: () => viewportState.flip('x'),
   flipVertical: () => viewportState.flip('y'),
-  setScaling: viewportState.setScaling,
   setZoom: (exactScale) => {
     const c = _getViewportCenter();
     if (!c) return;

@@ -1,5 +1,5 @@
-import { getCleanImage } from '../shared/blobImage.js';
-import { invertViewport } from './viewerMath.js';
+import { getCleanImage } from '../../shared/blobImage.js';
+import { invertViewport } from '../viewerMath.js';
 
 let _resampler = null;
 function getResampler() {
@@ -12,7 +12,7 @@ const PICA_OPTIONS = {
   unsharpThreshold: 2
 };
 
-export function createScalingPipeline(mode) {
+export function createLanczosPipeline() {
   const _destCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
   const _srcCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
   let _activePromise = null;
@@ -25,12 +25,8 @@ export function createScalingPipeline(mode) {
     cancel();
   }
 
-  if (mode === 'none' || mode === 'bilinear') {
-    return { type: mode, render: () => Promise.resolve(null), cancel, dispose };
-  }
-
   return {
-    type: mode,
+    type: 'lanczos',
     render: async (sourceImg, geom) => {
       const { scale, tx, ty, rotation, flipX, flipY, viewport } = geom;
       cancel();

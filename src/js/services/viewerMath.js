@@ -1,4 +1,4 @@
-import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from '../keybinds.js';
+import { DEFAULT_FIT_MODE } from '../keybinds.js';
 
 export function createViewportState({ getViewport }) {
   let _scale = 1;
@@ -9,7 +9,6 @@ export function createViewportState({ getViewport }) {
   let _rotation = 0;
   let _flipX = 1;
   let _flipY = 1;
-  let _scaling = DEFAULT_SCALING_MODE;
   let _currentFitMode = DEFAULT_FIT_MODE;
 
   const listeners = [];
@@ -137,11 +136,6 @@ export function createViewportState({ getViewport }) {
     if (axis === 'y') _flipY *= -1;
     notify();
   }
-
-  function setScaling(mode) {
-    _scaling = mode;
-    notify();
-  }
   
   function resetGeometry() {
     _rotation = 0;
@@ -158,8 +152,6 @@ export function createViewportState({ getViewport }) {
     getRotation: () => _rotation,
     getFlipX: () => _flipX,
     getFlipY: () => _flipY,
-    getScaling: () => _scaling,
-    setScaling: (s) => { _scaling = s; notify(); },
     getGeometry: () => ({
       scale: _scale,
       tx: _tx,
@@ -179,7 +171,6 @@ export function createViewportState({ getViewport }) {
     panTo,
     rotate,
     flip,
-    setScaling,
   };
 }
 

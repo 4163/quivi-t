@@ -2,9 +2,16 @@
 
 Date started: 2026-08-01
 
-Shipped, verified work (features / fixes / reports / optimizations).
+Shipped, verified work (features / fixes / reports / optimizations). 
+
+Note: This file is essentially a changelog dump. Past entries are not actively maintained and may be stale.
 
 ## Fully Implemented
+
+### Scaling & Filter Decoupling - Slice 5 (2026-08-29)
+- **Lanczos Pipeline Extraction:** Moved `scalingPipeline.js` to `services/scaling/lanczos.js` and removed the dummy `none` and `bilinear` classes. It now uses `OffscreenCanvas` for the Web Worker path where available.
+- **CSS Scaling Modes:** Restored the `data-scaling` DOM attribute setter onto the active `.viewer-img` pool node within `viewerPipelines.js` so that CSS `image-rendering` applies correctly for the `Pixelated` and `Bilinear` modes.
+- **State Cleanup:** Dropped `bicubic` CSS remnants, deleted `viewportState.setScaling` / `getScaling` from `viewerMath.js`, and removed the mirrored `activeScaling` / `_lastAnimated` variables from `main.js`. The active scaling mode is now read exclusively from `Core.getState().scalingMode`.
 
 ### Scaling & Filter Decoupling - Slice 4 (2026-08-29)
 - **Overlay Ownership Extraction:** Extracted all overlay orchestration out of `viewerRender.js` and into a new `viewerPipelines.js` file. `viewerRender.js` now exclusively handles DOM image pooling, while `viewerPipelines.js` holds the reference to the active `TexImageSource` and orchestrates the Lanczos and WebGL pipelines.
