@@ -45,3 +45,52 @@ export async function getCleanImage(src) {
   
   return _pendingPromise;
 }
+
+let _cachedLiveSrc = null;
+let _cachedLiveBlobUrl = null;
+let _cachedLiveImg = null;
+
+export function evictLiveBlobCache() {
+  if (_cachedLiveBlobUrl) URL.revokeObjectURL(_cachedLiveBlobUrl);
+  if (_cachedLiveImg) {
+    _cachedLiveImg.src = '';
+    _cachedLiveImg = null;
+  }
+  _cachedLiveSrc = null;
+  _cachedLiveBlobUrl = null;
+}
+
+let _pendingLivePromise = null;
+let _pendingLiveSrc = null;
+
+export async function getLiveImage(src) {
+  if (_cachedLiveSrc === src && _cachedLiveImg) return _cachedLiveImg;
+  if (_pendingLiveSrc === src && _pendingLivePromise) return _pendingLivePromise;
+  
+  evictLiveBlobCache();
+  
+  _pendingLiveSrc = src;
+  _pendingLivePromise = (async () => {
+    try {
+      const resp = await fetch(src);
+      const blob = await resp.blob();
+      
+      const blobUrl = URL.createObjectURL(blob);
+      const liveImg = new Image();
+      liveImg.src = blobUrl;
+      await liveImg.decode();
+      
+      _cachedLiveBlobUrl = blobUrl;
+      _cachedLiveImg = liveImg;
+      _cachedLiveSrc = src;
+      return liveImg;
+    } finally {
+      if (_pendingLiveSrc === src) {
+        _pendingLiveSrc = null;
+        _pendingLivePromise = null;
+      }
+    }
+  })();
+  
+  return _pendingLivePromise;
+}
