@@ -33,7 +33,7 @@ These are the repo's common blast-radius zones. Not every change touches all of 
 - **IPC commands** (`src-tauri/src/commands/`): changed return types, renamed commands, or shifted payloads break the JS caller.
 - **Config schema** (`src-tauri/src/config.rs`): changed keys, types, or defaults break existing user config files and portable-mode paths.
 - **Archive & format readers** (`src-tauri/src/archives/`, `src-tauri/src/formats.rs`): changed entry shapes, sort orders, or cache keys break virtual directory traversal and viewer navigation.
-- **Protocol URLs** (`src-tauri/src/protocol.rs` handling `asset://`, `quivi://`): changed routes or response headers break image loading and cross-window preview.
+- **Protocol URLs** (`src-tauri/src/protocol.rs` handling `asset://`, `quivit://`): changed routes or response headers break image loading and cross-window preview.
 - **Platform & Windowing** (`src-tauri/src/platform/`, `src-tauri/src/windows.rs`): changed native integrations, file associations, or window spawning logic break OS-level behaviors.
 - **Cross-window state** (`localStorage`, theme, preview payload): changed shapes or keys break secondary windows that read what the primary writes.
 - **CSS tokens** (`global.css` `:root`): changed or removed custom properties break downstream page sheets and theme application.

@@ -21,8 +21,8 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Archives**: Read compressed files directly as folders, including image navigation and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Ctrl`+wheel.
-- **Scaling**: Choose from Pixelated, Bilinear, and high-quality Lanczos scaling. (Animated images automatically fall back to Bilinear).
-- **Filters**: Toggle real-time WebGL filters including a true Anime4K pipeline (Mode A Fast/HQ upscaling), Retro CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or simple Scanlines. Filter toggles are muted for animated images.
+- **Scaling**: Choose from Pixelated, Bilinear, and Lanczos scaling.
+- **Filters**: WebGL filters for Anime4K (Mode A Fast/HQ), CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or Scanlines.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
 - **Persistent State**: Persists favorites, single-instance handoff, optional auto-open behavior, and the last opened image.
 - **Windows Integration**: Use native file/folder icons and register file associations per-user for Windows Default Apps.
@@ -141,8 +141,9 @@ See the [Releases](../../releases) page for version history and release notes.
 The following system defaults are used:
 
 - **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
-- **Scaling Mode:** `bicubic`
-- **Anime4K Variant:** Defaults to `fast` (upstream Mode A Fast). Configurable in **Options → General → Anime4K**.
+- **Scaling Mode:** `bilinear`
+- **Filters:** Defaults to none active, only one filter can be active at a time. SVGs are rasterized at a capped resolution (2048px static, 512px animated); Anime4K and Lanczos fall back to Bilinear for SVGs.
+- **Filter: Anime4K** Defaults to `fast` (upstream Mode A Fast). Configurable in **Options → General → Anime4K**.
 - **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in **Options → General → Panning**.
 - **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge shows whether scroll zoom is latched or which bound modifier keys are currently held.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
@@ -314,19 +315,36 @@ QuiviT/
 │     │  └─ associationsUi.js    # File-type association UI
 │     ├─ services/
 │     │  ├─ actions.js           # ACTION_REGISTRY + dispatch
+│     │  ├─ filterModules.js     # Filter module resolution
 │     │  ├─ keyCombo.js          # Combo normalize / format
 │     │  ├─ keybindDomain.js     # Locked binds, conflicts, categories
+│     │  ├─ registry.js          # Filter and scaling definitions
 │     │  ├─ sorting.js           # naturalCompare / applySort
 │     │  ├─ viewerMath.js        # Zoom / pan / fit math
-│     │  └─ webglPipeline.js     # WebGL rendering pipeline
+│     │  ├─ filters/
+│     │  │  ├─ anime4k.js        # Anime4K filter definition
+│     │  │  ├─ crt.js            # Retro CRT filter definition
+│     │  │  ├─ phosphor.js       # Phosphor dot-matrix filter definition
+│     │  │  ├─ scanlines.js      # Simple scanlines filter definition
+│     │  │  └─ anime4k/          # Anime4K WebGL shader chains
+│     │  ├─ pipelines/
+│     │  │  ├─ glCommon.js       # WebGL utility and shader compilation functions
+│     │  │  └─ glRuntime.js      # Filter pipeline orchestrator and quad renderer
+│     │  └─ scaling/
+│     │     ├─ lanczos.js        # Off-thread Pica/Canvas2D Lanczos scaling
+│     │     └─ lanczosWebGL.js   # Real-time WebGL Lanczos for animated images
 │     ├─ shared/
 │     │  ├─ theme.js             # applyTheme / applyCustomCss
 │     │  ├─ themePrePaint.js     # Synchronous pre-paint injector
+│     │  ├─ blobImage.js         # Shared ImageBitmap cache for origins
 │     │  ├─ configPreview.js     # Live preview + emergency CSS reset
 │     │  └─ windowFit.js         # Options / metadata content fit
+│     ├─ vendors/
+│     │  └─ pica.js              # High quality image resizing
 │     └─ viewer/
 │        ├─ viewer.js            # Facade
 │        ├─ viewerRender.js      # Image pool + transforms
+│        ├─ viewerPipelines.js   # Overlay canvas and WebGL owner
 │        └─ viewerGestures.js    # Pan input
 ├─ src-tauri/
 │  ├─ capabilities/

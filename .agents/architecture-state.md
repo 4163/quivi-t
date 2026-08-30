@@ -69,7 +69,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `lib.rs` & `main.rs`: bootstrap, config watcher, and main-window build.
 - `tests/`: in-tree testing for archives, config, formats, and protocol.
 - `config.rs`: `AppConfig` / persistence / portable / pending promotion.
-- `commands/`: Tauri command surface (directory, archives, watcher, associations, shell).
+- `commands/`: Tauri command surface (directory, archives, animation, watcher, associations, shell).
 - `archives/` & `formats.rs`: archive readers + `ArchiveCache` and format / animation registry.
 - `protocol.rs`: `quivit://` and `asset://` handler logic.
 - `platform/` & `windows.rs`: OS-level integrations (including shell icons and hidden-path logic), window lifecycle (including size constants).
