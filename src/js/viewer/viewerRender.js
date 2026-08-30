@@ -157,6 +157,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     }
 
     img = el;
+    img.dataset.played = 'true';
     img.classList.add('active');
     img.alt = filename || '';
     img.title = filename || '';
@@ -235,7 +236,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     }
 
     const desiredSrcs = new Set([state.src]);
-    if (_isVisibleImage(img)) desiredSrcs.add(img.src);
+    if (_isVisibleImage(img) && img.dataset.poolSrc) desiredSrcs.add(img.dataset.poolSrc);
 
     const neighborSrcs = FsUtils.neighborEntries(state, state.index, PRELOAD_HALF);
 
@@ -250,12 +251,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     let activeEl = _activeNodes.get(state.src);
     const activeChanged = activeEl && activeEl !== img;
     const hasPreviousBridge = !!(img && img !== activeEl && _isVisibleImage(img));
-
-    // Force frame-0 start for animated images by recycling the node to bypass Chromium's timeline cache.
-    if (activeChanged && state.isAnimated) {
-      _recyclePoolNode(state.src);
-      activeEl = _getPoolNode(state.src);
-    }
 
     if (activeChanged) {
       const activation = _activationGeneration;
@@ -279,13 +274,9 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         _targetLoadTimer = null;
         
         if (activeEl) {
-          if (state.isAnimated) {
-            const resetParam = `_reset=${Date.now()}`;
-            const newSrc = state.src.includes('?') ? `${state.src}&${resetParam}` : `${state.src}?${resetParam}`;
-            _loadPoolNode(activeEl, newSrc, state.src);
-          } else {
-            _loadPoolNode(activeEl, state.src, state.src);
-          }
+          const isReEntry = state.isAnimated && activeEl.dataset.played === 'true';
+          const newSrc = isReEntry ? (state.src.includes('?') ? `${state.src}&_reset=${Date.now()}` : `${state.src}?_reset=${Date.now()}`) : state.src;
+          _loadPoolNode(activeEl, newSrc, state.src);
         }
 
         const skipDecode = state.src.toLowerCase().endsWith('.ico') || state.src.includes('.ico?') || 

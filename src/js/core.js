@@ -209,8 +209,6 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     }
   }
 
-  _notify();
-
   if (_state.mode === 'archive') {
     FsUtils.prefetchAhead(_state.archivePath, index, direction);
   }
