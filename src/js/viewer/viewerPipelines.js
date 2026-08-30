@@ -5,6 +5,9 @@ import { filter as lanczosWebGlModule } from '../services/scaling/lanczosWebGL.j
 import { createGlRuntime } from '../services/pipelines/glRuntime.js';
 import { activeFilterId, getFilterModule } from '../services/registry.js';
 
+const SVG_ANIMATED_MAX_EDGE = 512;
+const SVG_STATIC_MAX_EDGE = 2048;
+
 export function createViewerPipelines(viewportState) {
   let _activeSource = null;
   let pipeline = null;
@@ -333,54 +336,59 @@ export function createViewerPipelines(viewportState) {
       let pumpVisible = false;
       let stagingCtx = null;
 
+      const maxEdge = isAnimated ? SVG_ANIMATED_MAX_EDGE : SVG_STATIC_MAX_EDGE;
+
       function pumpTickSvg() {
         if (_livePumpSrc !== currentSrc) return;
 
-        let sw = liveImg.naturalWidth;
-        let sh = liveImg.naturalHeight;
-        if (!sw || !sh) {
-          _livePumpRaf = requestAnimationFrame(pumpTickSvg);
-          return;
-        }
-
-        // Scale up the rasterization size to match the viewport to keep the SVG sharp.
         const vp = document.getElementById('viewport');
-        if (vp) {
-          const SVG_MAX_EDGE = 512;
-          const targetW = Math.min(vp.clientWidth || 1024, SVG_MAX_EDGE);
-          const targetH = Math.min(vp.clientHeight || 1024, SVG_MAX_EDGE);
-          
-          let multiplier = Math.max(targetW / sw, targetH / sh);
-          
-          // Strictly cap at SVG_MAX_EDGE to prevent CPU exhaustion
-          if (sw * multiplier > SVG_MAX_EDGE) multiplier = SVG_MAX_EDGE / sw;
-          if (sh * multiplier > SVG_MAX_EDGE) multiplier = Math.min(multiplier, SVG_MAX_EDGE / sh);
-          
-          // Never scale down below natural size unless natural size is > SVG_MAX_EDGE
-          if (sw <= SVG_MAX_EDGE && sh <= SVG_MAX_EDGE) {
-            multiplier = Math.max(1, multiplier);
-          }
+        const vpW = vp?.clientWidth || 1024;
+        const vpH = vp?.clientHeight || 1024;
+        const natW = liveImg.naturalWidth;
+        const natH = liveImg.naturalHeight;
+        // 150×150 and 300×150 are CSS replaced-element defaults, not real intrinsic SVG dimensions
+        const isBrowserDefault = (natW === 150 && natH === 150) || (natW === 300 && natH === 150);
+        const hasIntrinsic = natW > 0 && natH > 0 && !isBrowserDefault;
 
-          sw = Math.round(sw * multiplier);
-          sh = Math.round(sh * multiplier);
+        let sw, sh;
+        if (hasIntrinsic) {
+          // Fit to viewport, preserving aspect ratio, capped at maxEdge
+          const scale = Math.min(maxEdge / natW, maxEdge / natH, Math.max(vpW / natW, vpH / natH));
+          sw = Math.max(1, Math.round(natW * scale));
+          sh = Math.max(1, Math.round(natH * scale));
+        } else {
+          // No intrinsic dimensions — use the display element's layout aspect ratio
+          const cw = _activeSource?.clientWidth || 150;
+          const ch = _activeSource?.clientHeight || 150;
+          const scale = Math.min(maxEdge / cw, maxEdge / ch, Math.max(vpW / cw, vpH / ch));
+          sw = Math.max(1, Math.round(cw * scale));
+          sh = Math.max(1, Math.round(ch * scale));
         }
 
         if (_liveStagingCanvas.width !== sw) _liveStagingCanvas.width = sw;
         if (_liveStagingCanvas.height !== sh) _liveStagingCanvas.height = sh;
         if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d');
 
+        liveImg.width = sw;
+        liveImg.height = sh;
+
         stagingCtx.clearRect(0, 0, sw, sh);
         stagingCtx.drawImage(liveImg, 0, 0, sw, sh);
 
         if (pipeline && pipeline.type === 'webgl') {
           pipeline.updateSource(_liveStagingCanvas);
-          pipeline.render(_activeSource, viewportState.getGeometry(), true);
+          // Use CSS display dimensions (set by _applySvgBounds) so the WebGL
+          // geometry matches the pool image's actual display box, not the
+          // browser-default naturalWidth which can be 150 for dimensionless SVGs.
+          const cw = _activeSource.clientWidth || _activeSource.naturalWidth;
+          const ch = _activeSource.clientHeight || _activeSource.naturalHeight;
+          pipeline.render({ naturalWidth: cw, naturalHeight: ch }, viewportState.getGeometry(), true);
 
           if (!pumpVisible) {
             pumpVisible = true;
             if (filterCanvas) filterCanvas.setAttribute('data-render-ready', 'true');
-            const vp = document.getElementById('viewport');
-            if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
+            const vpEl = document.getElementById('viewport');
+            if (vpEl && (_lastActiveFilter || pipeline.filter === 'lanczos')) vpEl.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
           }
         }
         _livePumpRaf = requestAnimationFrame(pumpTickSvg);

@@ -326,7 +326,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
     if (_lastFitModeGen !== state.fitModeGen) {
       _lastFitModeGen = state.fitModeGen;
-      if (img) viewportState.applyFitMode(state.fitMode, img.naturalWidth, img.naturalHeight, img.clientWidth, img.clientHeight);
+      if (img) {
+        const bounds = _applySvgBounds(img);
+        viewportState.applyFitMode(state.fitMode, bounds.natW, bounds.natH, bounds.clientW ?? img.clientWidth, bounds.clientH ?? img.clientHeight);
+      }
     }
   });
 
@@ -341,6 +344,9 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   });
 
   window.addEventListener('resize', () => {
-    if (img) viewportState.applyFitMode(undefined, img.naturalWidth, img.naturalHeight, img.clientWidth, img.clientHeight);
+    if (img) {
+      const bounds = _applySvgBounds(img);
+      viewportState.applyFitMode(undefined, bounds.natW, bounds.natH, bounds.clientW ?? img.clientWidth, bounds.clientH ?? img.clientHeight);
+    }
   });
 }

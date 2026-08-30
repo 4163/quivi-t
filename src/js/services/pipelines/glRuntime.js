@@ -170,8 +170,8 @@ export function createGlRuntime(canvas) {
   async function render(imgElement, geometry, skipUpload = false) {
     if (!_active || !_gl || _programs.length === 0) return null;
 
-    const nw = imgElement.naturalWidth;
-    const nh = imgElement.naturalHeight;
+    const nw = imgElement.naturalWidth || imgElement.width;
+    const nh = imgElement.naturalHeight || imgElement.height;
     if (nw <= 0 || nh <= 0) return null;
     
     const token = _cancelToken;
