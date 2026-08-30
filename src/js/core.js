@@ -171,30 +171,34 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   FsUtils.revokeIfObjectURL(_state.src);
   _state.src = newSrc;
 
-  // Optimistic fallback while checking
-  _state.isAnimated = false; 
-  _state.noLoop = false;
-  _notify();
-
+  let animPromise = null;
   if (FsUtils.isImageEntry(file)) {
     const cacheKey = `${_state.mode === 'archive' ? _state.archivePath : ''}::${file.path}`;
     if (_animMemo.has(cacheKey)) {
       const cached = _animMemo.get(cacheKey);
       _state.isAnimated = cached.is_animated;
       _state.noLoop = cached.no_loop;
-      _notify();
     } else {
+      // Leave previous flags alone until checked, to prevent pipeline teardown flash
       const pathArg = _state.mode === 'archive' ? file.name : file.path;
       const archiveArg = _state.mode === 'archive' ? _state.archivePath : null;
-      Core.checkIsAnimated(pathArg, archiveArg).then(animStatus => {
-        if (_state.index === index) {
-          _state.isAnimated = animStatus.is_animated;
-          _state.noLoop = animStatus.no_loop;
-          _notify();
-        }
-      });
+      animPromise = Core.checkIsAnimated(pathArg, archiveArg);
     }
+  } else {
+    _state.isAnimated = false;
+    _state.noLoop = false;
+  }
 
+  _notify();
+
+  if (animPromise) {
+    animPromise.then(animStatus => {
+      if (_state.index === index && _state.src === newSrc) {
+        _state.isAnimated = animStatus.is_animated;
+        _state.noLoop = animStatus.no_loop;
+        _notify();
+      }
+    });
   }
 
   if (_state.config?.frontend_data?.remember_last_image && _state.src !== '') {

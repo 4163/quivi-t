@@ -140,11 +140,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     }
   }
 
-  function _loadPoolNode(el, src) {
-    if (!el || !src) return;
-    el.dataset.poolSrc = src;
-    if (el.getAttribute('src') === src || el.src === src) return;
-    el.src = src;
+  function _loadPoolNode(el, actualSrc, poolSrc) {
+    if (!el || !actualSrc) return;
+    el.dataset.poolSrc = poolSrc || actualSrc;
+    if (el.getAttribute('src') === actualSrc || el.src === actualSrc) return;
+    el.src = actualSrc;
   }
 
   function _isVisibleImage(el) {
@@ -154,28 +154,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   function _activatePoolNode(el, filename, state) {
     if (img && img !== el) {
       img.classList.remove('active');
-    }
-
-    // Chromium won't reset its internal GIF timer on a src re-assignment,
-    // so replacing the DOM node entirely forces a frame-0 restart on re-entry.
-    // This fixes the legacy bug where non-looping GIFs stuck on their last frame forever.
-    const isNoLoopGif = img && img !== el && el.src && state.filename?.toLowerCase().endsWith('.gif') && state.noLoop === true;
-    if (isNoLoopGif) {
-      const fresh = document.createElement('img');
-      fresh.className = 'viewer-img';
-      fresh.draggable = false;
-      fresh.crossOrigin = 'anonymous';
-      fresh.decoding = 'async';
-      fresh.dataset.poolSrc = el.dataset.poolSrc;
-      el.parentNode.replaceChild(fresh, el);
-      _activeNodes.set(el.dataset.poolSrc, fresh);
-      _attachLoadHandler(fresh);
-      fresh.setAttribute('data-load-attached', 'true');
-      
-      const resetParam = `_reset=${Date.now()}`;
-      fresh.src = el.src.includes('?') ? `${el.src}&${resetParam}` : `${el.src}?${resetParam}`;
-      
-      el = fresh;
     }
 
     img = el;
@@ -269,9 +247,15 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _getPoolNode(src);
     }
 
-    const activeEl = _activeNodes.get(state.src);
+    let activeEl = _activeNodes.get(state.src);
     const activeChanged = activeEl && activeEl !== img;
     const hasPreviousBridge = !!(img && img !== activeEl && _isVisibleImage(img));
+
+    // Force frame-0 start for animated images by recycling the node to bypass Chromium's timeline cache.
+    if (activeChanged && state.isAnimated) {
+      _recyclePoolNode(state.src);
+      activeEl = _getPoolNode(state.src);
+    }
 
     if (activeChanged) {
       const activation = _activationGeneration;
@@ -289,12 +273,42 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       }
 
       const loadTarget = () => {
-        if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+        if (activation !== _activationGeneration || Core.getState().src !== state.src) {
+           return;
+        }
         _targetLoadTimer = null;
-        if (activeEl) _loadPoolNode(activeEl, state.src);
+        
+        if (activeEl) {
+          if (state.isAnimated) {
+            const resetParam = `_reset=${Date.now()}`;
+            const newSrc = state.src.includes('?') ? `${state.src}&${resetParam}` : `${state.src}?${resetParam}`;
+            _loadPoolNode(activeEl, newSrc, state.src);
+          } else {
+            _loadPoolNode(activeEl, state.src, state.src);
+          }
+        }
 
-        const ready = activeEl && activeEl.complete && (activeEl.naturalWidth > 0 || state.src.toLowerCase().endsWith('.svg') || state.src.includes('.svg?'));
-        const decodePromise = (ready || !activeEl || !activeEl.decode) ? Promise.resolve() : activeEl.decode();
+        const skipDecode = state.src.toLowerCase().endsWith('.ico') || state.src.includes('.ico?') || 
+                           state.src.toLowerCase().endsWith('.svg') || state.src.includes('.svg?');
+        const ready = activeEl && activeEl.complete && (activeEl.naturalWidth > 0 || skipDecode);
+
+        let decodePromise;
+        if (ready || !activeEl) {
+          decodePromise = Promise.resolve();
+        } else if (!activeEl.decode || skipDecode) {
+          decodePromise = new Promise((resolve) => {
+            if (activeEl.complete) { resolve(); return; }
+            const handler = () => {
+              activeEl.removeEventListener('load', handler);
+              activeEl.removeEventListener('error', handler);
+              resolve();
+            };
+            activeEl.addEventListener('load', handler);
+            activeEl.addEventListener('error', handler);
+          });
+        } else {
+          decodePromise = activeEl.decode();
+        }
         
         decodePromise.then(() => {
           if (activation !== _activationGeneration || Core.getState().src !== state.src) return;

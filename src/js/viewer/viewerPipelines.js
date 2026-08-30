@@ -20,10 +20,24 @@ export function createViewerPipelines(viewportState) {
   let _livePumpRaf = null;
   let _livePumpSrc = null;
   let _livePumpImg = null;
+  let _livePumpLastDrawnFrameIndex = -1;
   const _liveStagingCanvas = document.createElement('canvas');
 
   const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
   const filterCanvas = document.getElementById('viewer-filter-canvas');
+  if (filterCanvas) {
+    filterCanvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+    });
+    filterCanvas.addEventListener('webglcontextrestored', () => {
+      _cancelRender();
+      if (pipeline) pipeline.dispose();
+      pipeline = null;
+      _applyScaling();
+      _scheduleTransform();
+      _triggerRender();
+    });
+  }
 
   function isSvgSource(src) {
     if (!src) return false;
@@ -46,7 +60,7 @@ export function createViewerPipelines(viewportState) {
 
   function _cancelRender() {
     _renderGeneration++;
-    if (pipeline && pipeline.type !== 'webgl') pipeline.cancel();
+    if (pipeline) pipeline.cancel();
     if (_renderTimeout) clearTimeout(_renderTimeout);
     _renderTimeout = null;
     if (lanczosCanvas) {
@@ -127,6 +141,7 @@ export function createViewerPipelines(viewportState) {
     const scalingChanged = scaling !== _lastScalingMode;
 
     if (needsNewPipeline) {
+      _livePumpLastDrawnFrameIndex = -1;
       if (pipeline) {
         _teardownWebglCanvas();
         pipeline.dispose();
@@ -144,6 +159,7 @@ export function createViewerPipelines(viewportState) {
         pipeline = createLanczosPipeline();
       }
     } else if (usesWebgl && (filterChanged || variantChanged || scalingChanged)) {
+      _livePumpLastDrawnFrameIndex = -1;
       if (useWebGlForLanczos) {
         pipeline.setFilter(lanczosWebGlModule);
         pipeline.filter = 'lanczos';
@@ -240,7 +256,13 @@ export function createViewerPipelines(viewportState) {
     }
   }
 
+  let _visibilityListener = null;
+
   function _stopLivePump() {
+    if (_visibilityListener) {
+      document.removeEventListener('visibilitychange', _visibilityListener);
+      _visibilityListener = null;
+    }
     if (_livePumpRaf) {
       cancelAnimationFrame(_livePumpRaf);
       _livePumpRaf = null;
@@ -337,7 +359,7 @@ export function createViewerPipelines(viewportState) {
 
         if (_liveStagingCanvas.width !== sw) _liveStagingCanvas.width = sw;
         if (_liveStagingCanvas.height !== sh) _liveStagingCanvas.height = sh;
-        if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d', { willReadFrequently: true });
+        if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d');
 
         stagingCtx.clearRect(0, 0, sw, sh);
         stagingCtx.drawImage(liveImg, 0, 0, sw, sh);
@@ -360,11 +382,19 @@ export function createViewerPipelines(viewportState) {
     }
 
     // --- Raster WebCodecs Pump (GIF/APNG/WebP) ---
-    if (typeof ImageDecoder === 'undefined') return;
+    if (typeof ImageDecoder === 'undefined') {
+      _lastIsAnimated = false;
+      _scheduleTransform();
+      _triggerRender();
+      return;
+    }
 
     const resp = await fetch(currentSrc);
     if (_livePumpSrc !== currentSrc) return;
-    const contentType = resp.headers.get('content-type') || 'image/gif';
+    const ext = currentSrc.split('.').pop().toLowerCase().split('?')[0];
+    let contentType = 'image/gif';
+    if (ext === 'webp') contentType = 'image/webp';
+    else if (ext === 'png' || ext === 'apng') contentType = 'image/png';
 
     let decoder;
     try {
@@ -372,13 +402,22 @@ export function createViewerPipelines(viewportState) {
       await decoder.completed;
     } catch (e) {
       console.warn('[pump] ImageDecoder failed:', e.message);
+      _lastIsAnimated = false;
+      _scheduleTransform();
+      _triggerRender();
       return;
     }
     if (_livePumpSrc !== currentSrc) { decoder.close(); return; }
 
     const track = decoder.tracks.selectedTrack;
     const frameCount = track.frameCount;
-    if (frameCount < 2) { decoder.close(); return; }
+    if (frameCount < 2) { 
+      decoder.close();
+      _lastIsAnimated = false;
+      _scheduleTransform();
+      _triggerRender();
+      return; 
+    }
 
     _livePumpImg = decoder;
 
@@ -388,22 +427,39 @@ export function createViewerPipelines(viewportState) {
     let frameDurationMs = 100;
     let pumpVisible = false;
     let stagingCtx = null;
+    let lastGeometryHash = '';
+
+    _visibilityListener = () => {
+      if (document.visibilityState === 'visible') lastFrameTime = performance.now();
+    };
+    document.addEventListener('visibilitychange', _visibilityListener);
 
     async function pumpTick() {
       if (_livePumpSrc !== currentSrc) return;
 
       const now = performance.now();
-      const elapsed = now - lastFrameTime;
+      let elapsed = now - lastFrameTime;
 
-      // Advance frame when enough time has passed
-      if (elapsed >= frameDurationMs) {
+      if (elapsed > 1000) {
+        lastFrameTime = now;
+        elapsed = 0;
+      }
+
+      let frameChanged = false;
+      while (elapsed >= frameDurationMs) {
         if (frameIndex < frameCount - 1) {
           frameIndex++;
-          lastFrameTime = now;
         } else if (!live.noLoop) {
           frameIndex = 0;
-          lastFrameTime = now;
+        } else {
+          break;
         }
+        elapsed -= frameDurationMs;
+        frameChanged = true;
+      }
+
+      if (frameChanged) {
+        lastFrameTime = now - elapsed;
       }
 
       let vf;
@@ -416,7 +472,16 @@ export function createViewerPipelines(viewportState) {
       }
       if (_livePumpSrc !== currentSrc) { vf.close(); return; }
 
-      // Update frame duration from this frame's metadata (microseconds → ms)
+      const geom = viewportState.getGeometry();
+      const geomHash = `${geom.scale}_${geom.tx}_${geom.ty}_${geom.rotation}_${geom.flipX}_${geom.flipY}`;
+      
+      const needsRender = frameIndex !== _livePumpLastDrawnFrameIndex || geomHash !== lastGeometryHash;
+      if (!needsRender) {
+        vf.close();
+        _livePumpRaf = requestAnimationFrame(pumpTick);
+        return;
+      }
+
       if (vf.duration) frameDurationMs = Math.max(10, vf.duration / 1000);
 
       const sw = vf.displayWidth;
@@ -434,15 +499,19 @@ export function createViewerPipelines(viewportState) {
 
       if (_liveStagingCanvas.width !== drawW) _liveStagingCanvas.width = drawW;
       if (_liveStagingCanvas.height !== drawH) _liveStagingCanvas.height = drawH;
-      if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d', { willReadFrequently: true });
+      if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d');
 
-      stagingCtx.clearRect(0, 0, drawW, drawH);
-      stagingCtx.drawImage(vf, 0, 0, drawW, drawH);
+      if (frameIndex !== _livePumpLastDrawnFrameIndex) {
+        stagingCtx.clearRect(0, 0, drawW, drawH);
+        stagingCtx.drawImage(vf, 0, 0, drawW, drawH);
+        if (pipeline && pipeline.type === 'webgl') {
+          pipeline.updateSource(_liveStagingCanvas);
+        }
+      }
       vf.close();
 
       if (pipeline && pipeline.type === 'webgl') {
-        pipeline.updateSource(_liveStagingCanvas);
-        pipeline.render(_activeSource, viewportState.getGeometry(), true);
+        pipeline.render(_activeSource, geom, true);
 
         if (!pumpVisible) {
           pumpVisible = true;
@@ -451,6 +520,9 @@ export function createViewerPipelines(viewportState) {
           if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
         }
       }
+
+      _livePumpLastDrawnFrameIndex = frameIndex;
+      lastGeometryHash = geomHash;
 
       _livePumpRaf = requestAnimationFrame(pumpTick);
     }
@@ -481,7 +553,21 @@ export function createViewerPipelines(viewportState) {
 
   return {
     setSource(img) {
+      if (img && _activeSource === img) {
+        _cancelRender();
+        _applyScaling();
+        _scheduleTransform();
+        _triggerRender();
+        return;
+      }
+      
       _activeSource = img;
+      
+      const vp = document.getElementById('viewport');
+      if (vp) vp.removeAttribute('data-filter');
+      if (filterCanvas) filterCanvas.removeAttribute('data-render-ready');
+      if (lanczosCanvas) lanczosCanvas.removeAttribute('data-render-ready');
+      
       _cancelRender();
       _applyScaling();
       _scheduleTransform();

@@ -8,6 +8,19 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Animated Pipeline Jank - Slice 2 (2026-08-30)
+- **Pump Clock Catch-Up & Limits**: Rewrote the `viewerPipelines` frame clock to use a `while` loop, allowing it to accurately skip frames to catch up if a tick is delayed, while clamping delays >1000ms to prevent CPU hangs on resume.
+- **Visibility & Background Pausing**: Added a `visibilitychange` listener that resets `lastFrameTime` upon returning to the app, preventing massive time-skips when Alt-Tabbing back into an animated image.
+- **WebGL Context Recovery**: `filterCanvas` now actively listens for `webglcontextlost` and `webglcontextrestored`. On restore, the pipeline is fully torn down and rebuilt to properly recompile shaders and upload textures.
+- **Render Optimization**: The WebCodecs pump now skips `drawImage` staging and WebGL texture upload/render if neither the `frameIndex` nor the viewport geometry has changed since the last tick, saving massive CPU/GPU overhead for low-framerate GIFs on >60fps monitors.
+- **Consistent Native Reset**: Updated `viewerRender.js` to unconditionally replace the DOM node for all animated files on re-entry (rather than only no-loop GIFs), enforcing a consistent frame-0 start for native rendering and the live pump.
+
+### Animated Pipeline Jank - Slice 1 (2026-08-30)
+- **Honest `isAnimated` Notifications:** Fixed a false-flash in `core.js` during source changes. The state machine now leaves previous animation flags alone on cache misses, preventing `viewerPipelines` from needlessly tearing down and rebuilding WebGL contexts before the native DOM image completes loading.
+- **Pipeline Cancellation Token:** Added a `_cancelToken` to `glRuntime.js` so background texture uploads from stale still renders are cleanly aborted, fixing leftover "ghost" frames when switching away from an animated image.
+- **Clean Pump Shutdown:** Updated `viewerPipelines.js` to reliably hide overlay canvases and fall back to the still path when `ImageDecoder` fails or lacks multiple frames.
+- **Cache Race Condition:** Resolved a race condition in `blobImage.js` where overlapping image fetches could pollute the clean-image cache.
+
 ### Scaling & Filter Decoupling - Slice 5 (2026-08-30)
 - **GIF Header Scanner:** Replaced the naive `NETSCAPE2.0` string scan in `formats.rs` with an accurate GIF chunk scanner (up to 8 KiB) that counts `0x2C` Image Descriptor frames to detect multi-frame no-loop GIFs.
 - **Isolated DOM Node Reset:** The `check_is_animated` IPC command now returns `AnimationInfo` (`{ is_animated: bool, no_loop: bool }`). The frontend DOM node swap logic in `viewerRender.js` that restarts single-play GIFs is now strictly gated by `state.noLoop === true`, preventing heavy re-mounts and stuttering for standard looping GIFs.

@@ -11,9 +11,10 @@ export function createGlRuntime(canvas) {
 
   if (!_gl) {
     console.warn('WebGL2 not supported');
-    return { type: 'webgl', render: () => Promise.resolve(null), setFilter() {}, cancel() {}, dispose() {} };
+    return { type: 'webgl', render: () => Promise.resolve(null), updateSource() {}, setFilter() {}, cancel() {}, dispose() {} };
   }
 
+  let _cancelToken = 0;
   let _sourceTexture = null;
   let _texSrc = null;
 
@@ -171,13 +172,15 @@ export function createGlRuntime(canvas) {
     const nw = imgElement.naturalWidth;
     const nh = imgElement.naturalHeight;
     if (nw <= 0 || nh <= 0) return null;
+    
+    const token = _cancelToken;
 
     if (!skipUpload) {
       let cleanImg;
       try {
         cleanImg = await getCleanImage(imgElement.src);
       } catch { return null; }
-      if (!_active) return null;
+      if (!_active || token !== _cancelToken) return null;
       
       // Support both HTMLImageElement (naturalWidth) and ImageBitmap (width)
       const cleanW = cleanImg.naturalWidth || cleanImg.width;
@@ -321,7 +324,10 @@ export function createGlRuntime(canvas) {
     setFilter,
     render,
     updateSource,
-    cancel() {},
+    cancel() {
+      _cancelToken++;
+      _texSrc = null;
+    },
     dispose() {
       _active = false;
       if (_gl) {

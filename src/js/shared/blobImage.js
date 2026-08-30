@@ -31,6 +31,12 @@ export async function getCleanImage(src) {
       const blobUrl = URL.createObjectURL(blob);
       const cleanImg = await createImageBitmap(blob);
       
+      if (_pendingSrc !== src) {
+        URL.revokeObjectURL(blobUrl);
+        if (cleanImg && cleanImg.close) cleanImg.close();
+        return cleanImg;
+      }
+      
       _cachedBlobUrl = blobUrl;
       _cachedCleanImg = cleanImg;
       _cachedSrc = src;
@@ -82,6 +88,12 @@ export async function getLiveImage(src) {
         liveImg.onload = resolve;
         liveImg.onerror = reject;
       });
+      
+      if (_pendingLiveSrc !== src) {
+        URL.revokeObjectURL(blobUrl);
+        liveImg.src = '';
+        return liveImg;
+      }
       
       _cachedLiveBlobUrl = blobUrl;
       _cachedLiveImg = liveImg;
