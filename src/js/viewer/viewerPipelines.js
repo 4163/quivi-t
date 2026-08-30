@@ -3,7 +3,8 @@ import { getEffectiveScaling } from '../services/viewerMath.js';
 import { createLanczosPipeline } from '../services/scaling/lanczos.js';
 import { filter as lanczosWebGlModule } from '../services/scaling/lanczosWebGL.js';
 import { createGlRuntime } from '../services/pipelines/glRuntime.js';
-import { activeFilterId, getFilterModule } from '../services/registry.js';
+import { activeFilterId } from '../services/registry.js';
+import { getFilterModule } from '../services/filterModules.js';
 
 const SVG_ANIMATED_MAX_EDGE = 512;
 const SVG_STATIC_MAX_EDGE = 2048;
@@ -548,7 +549,8 @@ export function createViewerPipelines(viewportState) {
   Core.onStateChange((state) => {
     const newFilter = _resolveActiveFilter(state);
     const newIsAnimated = !!state.isAnimated;
-    const newScaling = getEffectiveScaling(state.scalingMode, newIsAnimated);
+    const newIsSvg = _activeSource?.src?.toLowerCase().includes('.svg') ?? false;
+    const newScaling = getEffectiveScaling(state.scalingMode, newIsAnimated, newIsSvg);
     const newVariant = newFilter === 'anime4k' ? state?.config?.frontend_data?.filter_options?.anime4k?.variant : null;
     
     if (newFilter !== _lastActiveFilter || newIsAnimated !== _lastIsAnimated || newScaling !== _lastScalingMode || newVariant !== _lastAnime4kVariant) {

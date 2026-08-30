@@ -724,20 +724,20 @@ cargo check
 See `.agents/implementation-plan - additions.md` for the active backlog and sequencing.
 
 ### UI Module Decoupling
-- Decoupled \menubar.js\ logic and DOM bindings.
-- Decoupled \keybindUi.js\ from the options window, isolating configuration rendering and conflict tracking.
-- Decoupled \keyboardNav.js\ to manage accessible tab navigation across menus and options uniformly.
+- Decoupled `menubar.js` logic and DOM bindings.
+- Decoupled `keybindUi.js` from the options window, isolating configuration rendering and conflict tracking.
+- Decoupled `keyboardNav.js` to manage accessible tab navigation across menus and options uniformly.
 
 ### Options Tab Accessibility (Tab Navigation)
-- Implemented accessible keyboard navigation flows (\Tab\/\Shift+Tab\) across all Options tabs.
-- Added global \Home\ and \End\ shortcut jumps for immediately focusing the first and last tabbable elements within active scopes.
-- Fixed \Enter\/\Space\ activation for dropdowns in the main menubar.
+- Implemented accessible keyboard navigation flows (`Tab`/`Shift+Tab`) across all Options tabs.
+- Added global `Home` and `End` shortcut jumps for immediately focusing the first and last tabbable elements within active scopes.
+- Fixed `Enter`/`Space` activation for dropdowns in the main menubar.
 
 ### Customization Tab & Custom CSS
 - Added Theme selection (System / Light / Dark) that applies instantly and auto-saves to config to prevent state drift on window close.
 - Added a Custom CSS textarea to inject raw styles into both windows dynamically.
-- Implemented \Ctrl+S\ auto-save-and-apply shortcut while editing the CSS text area.
-- Implemented a robust \Ctrl+Shift+Alt+C\ global emergency CSS reset that clears broken styles, broadcasts immediately across main and options windows, and persists to backend storage.
+- Implemented `Ctrl+S` auto-save-and-apply shortcut while editing the CSS text area.
+- Implemented a robust `Ctrl+Shift+Alt+C` global emergency CSS reset that clears broken styles, broadcasts immediately across main and options windows, and persists to backend storage.
 
 ### File Panel Actions
 - Added 'Reveal in File Explorer' and 'Open Folder in Explorer' actions.
@@ -793,25 +793,25 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 
 ### Archive Performance Overhaul
 
-- **Instant archive listing**: Added \list_archive\ Tauri command that reads only archive headers (central directory) for ZIP/CBZ/RAR/CBR, returning file lists instantly without extracting images.
+- **Instant archive listing**: Added `list_archive` Tauri command that reads only archive headers (central directory) for ZIP/CBZ/RAR/CBR, returning file lists instantly without extracting images.
 - **Hybrid caching strategy**:
-  - ZIP/CBZ: On-demand in-memory LRU cache (20 images) with \prefetch_archive_entries\ command for background prefetching (7 ahead / 3 behind).
-  - RAR/CBR: Background sequential extraction to OS temp directory (\%TEMP%\\QuiviT\\<hash>\\) via spawned thread; \quivit://\ protocol polls temp disk with 3-second timeout.
-- **Unified protocol handler**: \quivit://archive/<base64_path>/<entry>\ now routes seamlessly: serves from LRU cache (ZIP) or temp disk (RAR), with on-demand extraction fallback for ZIP cache misses.
-- **Seamless image swapping**: \iewer.js\ uses off-screen \Image\ preloader: retains previous image on screen until new image fully loads, eliminating flicker/black frames during navigation.
-- **Prefetch integration**: \core.js\ triggers \prefetchAhead\ on navigation; \sUtils.js\ triggers initial prefetch on archive load.
-- **Dependencies**: Added \md5\ crate for deterministic temp directory naming.
+  - ZIP/CBZ: On-demand in-memory LRU cache (20 images) with `prefetch_archive_entries` command for background prefetching (7 ahead / 3 behind).
+  - RAR/CBR: Background sequential extraction to OS temp directory (`%TEMP%\QuiviT\<hash>\`) via spawned thread; `quivit://` protocol polls temp disk with 3-second timeout.
+- **Unified protocol handler**: `quivit://archive/<base64_path>/<entry>` now routes seamlessly: serves from LRU cache (ZIP) or temp disk (RAR), with on-demand extraction fallback for ZIP cache misses.
+- **Seamless image swapping**: `viewer.js` uses off-screen `Image` preloader: retains previous image on screen until new image fully loads, eliminating flicker/black frames during navigation.
+- **Prefetch integration**: `core.js` triggers `prefetchAhead` on navigation; `fsUtils.js` triggers initial prefetch on archive load.
+- **Dependencies**: Added `md5` crate for deterministic temp directory naming.
 - **Cleanup**: Old RAR temp directories cleaned up on new archive load; ZIP LRU evicts oldest entries at capacity.
 
 ### 7Z/CB7 and TAR/CBT Archive Support
 
 - **New formats**: `list_archive` now handles 7z, cb7, cbt, and tar in addition to zip/cbz/rar/cbr; `SUPPORTED_ARCHIVES` updated in Rust and `fsUtils.js`; file panel icons map 7z/cb7/cbt/tar to the cbz archive icon.
-- **7Z/CB7 (7z, cb7)**: Added \list_7z_entries\ (header-only via `sevenz-rust2` file metadata: instant, no decompression) and \extract_7z_to_temp\. Solid 7z archives are single-block and not seekable, so they use the same background sequential extraction to the deterministic md5 temp dir as RAR (no ZIP-style random access). Background extraction runs in a spawned thread; protocol handler serves from temp disk with a 3-second poll, then on-demand extraction fallback for cache misses.
-- **TAR/CBT (tar, cbt)**: TAR is uncompressed and seekable, so \list_tar_entries\ lists on demand and \extract_tar_entry\ seeks + reads individual entries directly: no temp copy, no full extraction.
-- **Dependencies**: Added \sevenz-rust2 = "0.21"\ and \tar = "0.4"\.
-- **ArchiveCache**: \rar_temp_dir\ generalized to \extract_temp_dir\ for the 7z/RAR shared temp-disk path.
-- **Tests**: Added \archive_tests\ module (6 tests) covering solid 7z listing + nested extraction to temp, cb7 alias routing, tar listing + entry extraction, RAR5/CBR listing, and supported-format registration. Verified \cargo test\ (6/6 pass), \cargo check\, and \node --check\ on frontend files.
-- **Test fixtures**: \test-files/archives/7z.7z\ (solid LZMA2, 14 files incl. `New folder/` nesting) and \test-files/archives/cbr.cbr\ (non-solid RAR5). The \test-files/archives/cbt.cbt\ fixture is self-provisioned by the \ensure_cbt()\ test helper, which rebuilds it (validating 3 entries) from images re-packed out of the 7z fixture via the \tar\ builder: no external 7z/7za tool needed in tests.
+- **7Z/CB7 (7z, cb7)**: Added `list_7z_entries` (header-only via `sevenz-rust2` file metadata: instant, no decompression) and `extract_7z_to_temp`. Solid 7z archives are single-block and not seekable, so they use the same background sequential extraction to the deterministic md5 temp dir as RAR (no ZIP-style random access). Background extraction runs in a spawned thread; protocol handler serves from temp disk with a 3-second poll, then on-demand extraction fallback for cache misses.
+- **TAR/CBT (tar, cbt)**: TAR is uncompressed and seekable, so `list_tar_entries` lists on demand and `extract_tar_entry` seeks + reads individual entries directly: no temp copy, no full extraction.
+- **Dependencies**: Added `sevenz-rust2 = "0.21"` and `tar = "0.4"`.
+- **ArchiveCache**: `rar_temp_dir` generalized to `extract_temp_dir` for the 7z/RAR shared temp-disk path.
+- **Tests**: Added `archive_tests` module (6 tests) covering solid 7z listing + nested extraction to temp, cb7 alias routing, tar listing + entry extraction, RAR5/CBR listing, and supported-format registration. Verified `cargo test` (6/6 pass), `cargo check`, and `node --check` on frontend files.
+- **Test fixtures**: `test-files/archives/7z.7z` (solid LZMA2, 14 files incl. `New folder/` nesting) and `test-files/archives/cbr.cbr` (non-solid RAR5). The `test-files/archives/cbt.cbt` fixture is self-provisioned by the `ensure_cbt()` test helper, which rebuilds it (validating 3 entries) from images re-packed out of the 7z fixture via the `tar` builder: no external 7z/7za tool needed in tests.
 
 ### Non-Blocking Archive Protocol & Loading States
 
@@ -848,3 +848,4 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 - **Scaling/Filter Animated Guard:** Animated images (GIF, WebP, APNG) now automatically fall back to Bilinear scaling. The Anime4K and Retro CRT filters are now strictly muted and disabled when an animated image is active, preventing performance degradation or frame destruction. Menu items and keyboard shortcut handling in `actions.js` were updated to respect these animated guards dynamically.
 - **JS Ownership Cleanup:** Decoupled `viewerRender.js` from config persistence and business logic. Consolidated scaling fallback decisions into a shared `getEffectiveScaling` helper in `viewerMath.js`, and deduplicated inverse projection logic with `invertViewport`. Replaced global `window._lastAnimated` assignments with module-scoped state. Filter toggles were updated to use a unified `Core.setFilter()` action, eliminating inline state mutations in the shortcut registry.
 - **Architecture Integrity:** Restored `shellBackground.js` injection into `index.html` after accidental omission. Removed duplicate scripts and unified shared geometry math. Updated `architecture-state.md` to reflect `blobImage.js` and animation checks, and updated `README.md` to document the scaling/filter fallbacks for animated images.
+- **Configuration Graph Separation**: Removed heavy WebGL shader imports from the configuration module graph (`registry.js`, `keybinds.js`) by isolating module resolution into `filterModules.js`. This eliminates a significant blocking performance hit when opening the Options window. Restored the missing `isSvg` parameter to the `getEffectiveScaling` check in `viewerPipelines.js`.
