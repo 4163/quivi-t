@@ -122,9 +122,10 @@ function bindMenus() {
 
 export function syncViewMenu(state) {
   const isAnimated = !!state.isAnimated;
-  const isSvg = state.currentFile ? state.currentFile.name.toLowerCase().endsWith('.svg') : false;
+  // The renderer silently falls back to Bilinear for SVGs.
+  // Ignore SVG status here so the user's preferred scaling mode remains visually checked (intended UX).
   const currentFilter = activeFilterId(state.config?.frontend_data || {});
-  const displayScaling = getEffectiveScaling(state.scalingMode, isAnimated, isSvg);
+  const displayScaling = getEffectiveScaling(state.scalingMode, isAnimated, false);
 
   for (const f of FILTERS) {
     const el = document.getElementById(f.actionId);

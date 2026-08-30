@@ -757,8 +757,8 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 .drop-hint span{ font-size: 0.75rem; opacity: 0.5; letter-spacing: 0.04em; text-align: center; }
 
 /* Viewer image wrapper. */
-/* The wrapper is the positioned/transformed element. Both the
-   image and the overlay live inside so CSS aligns them for free. */
+/* The wrapper is the positioned/transformed element. The image and
+   the Lanczos canvas live inside; the WebGL filter canvas is a sibling. */
 #viewer-img-wrapper {
   position: absolute;
   top: 50%;

@@ -16,8 +16,8 @@ export const FILTERS = [
 ];
 
 export const SCALERS = [
-  { id: 'none', label: 'Pixelated', css: 'pixelated', actionId: 'cmd-scale-none' },
-  { id: 'bilinear', label: 'Bilinear', css: 'auto', actionId: 'cmd-scale-bilinear' },
+  { id: 'none', label: 'Pixelated', actionId: 'cmd-scale-none' },
+  { id: 'bilinear', label: 'Bilinear', actionId: 'cmd-scale-bilinear' },
   { id: 'lanczos', label: 'Lanczos', pipeline: 'lanczos', actionId: 'cmd-scale-lanczos' }
 ];
 

@@ -54,6 +54,8 @@ export function createViewerPipelines(viewportState) {
     const fd = state.config?.frontend_data;
     if (!fd) return null;
     const active = activeFilterId(fd);
+    // Anime4K does not support SVGs; silently fall back to no filter.
+    // The UI intentionally ignores this fallback to keep the user's selection checked (intended UX).
     if (active === 'anime4k' && isSvgSource(_activeSource?.src)) return null;
     return active;
   }

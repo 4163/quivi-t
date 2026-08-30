@@ -62,8 +62,7 @@ fn test_is_animated_gif() {
     buf.extend_from_slice(b"\x21\xFF\x0BNETSCAPE2.0\x03\x01\x00\x00\x00");
     assert!(check_animation_status(&buf).is_animated);
     
-    // Test case mapping for single-frame with NETSCAPE loop 
-    // Documented as a false-positive in formats.rs
+    // Test case mapping for single-frame with NETSCAPE loop
     assert!(check_animation_status(&buf).is_animated);
 
     let static_buf = b"GIF89a\x01\x00\x01\x00\x00\x00\x00\x2C\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3B";

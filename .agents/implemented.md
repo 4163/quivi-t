@@ -8,6 +8,10 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Stale Code and References Cleanup (2026-08-30)
+- **Dead Code Removal:** Removed unused live image blob cache functions (`getLiveImage`, `evictLiveBlobCache`) and unexported `evictBlobCache` in `blobImage.js`. Removed the dead `css` property from `SCALERS` items in `registry.js`.
+- **UI & Documentation Sync:** Intentionally ignored SVG status in `menubar.js` during view menu sync so users can select Lanczos and retain their choice visually, while it silently falls back in the renderer. Updated `options.html` to rename "Scale None" to "Scale Pixelated" for consistency with the view menu. Fixed stale comments in `core.js`, `main.css`, and `format_tests.rs`.
+
 ### Animated Pipeline Jank - Slice 2 (2026-08-30)
 - **Pump Clock Catch-Up & Limits**: Rewrote the `viewerPipelines` frame clock to use a `while` loop, allowing it to accurately skip frames to catch up if a tick is delayed, while clamping delays >1000ms to prevent CPU hangs on resume.
 - **Visibility & Background Pausing**: Added a `visibilitychange` listener that resets `lastFrameTime` upon returning to the app, preventing massive time-skips when Alt-Tabbing back into an animated image.

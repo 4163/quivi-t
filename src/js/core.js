@@ -70,7 +70,7 @@ const _state = {
   /** If mode === 'archive', the filenames of any metadata files found */
   archiveMetadataFiles: [],
 
-  /** True if the current image is an animated format (bypasses WebGL/Lanczos) */
+  /** True if the current image is an animated format */
   isAnimated: false,
 
   /** True if the current image is specifically a no-loop animated GIF */
