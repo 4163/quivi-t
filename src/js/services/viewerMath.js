@@ -1,4 +1,4 @@
-import { DEFAULT_FIT_MODE, DEFAULT_SCALING_MODE } from '../keybinds.js';
+import { DEFAULT_FIT_MODE } from '../keybinds.js';
 
 export function createViewportState({ getViewport }) {
   let _scale = 1;
@@ -9,7 +9,6 @@ export function createViewportState({ getViewport }) {
   let _rotation = 0;
   let _flipX = 1;
   let _flipY = 1;
-  let _scaling = DEFAULT_SCALING_MODE;
   let _currentFitMode = DEFAULT_FIT_MODE;
 
   const listeners = [];
@@ -137,11 +136,6 @@ export function createViewportState({ getViewport }) {
     if (axis === 'y') _flipY *= -1;
     notify();
   }
-
-  function setScaling(mode) {
-    _scaling = mode;
-    notify();
-  }
   
   function resetGeometry() {
     _rotation = 0;
@@ -158,7 +152,15 @@ export function createViewportState({ getViewport }) {
     getRotation: () => _rotation,
     getFlipX: () => _flipX,
     getFlipY: () => _flipY,
-    getScaling: () => _scaling,
+    getGeometry: () => ({
+      scale: _scale,
+      tx: _tx,
+      ty: _ty,
+      rotation: _rotation,
+      flipX: _flipX,
+      flipY: _flipY,
+      viewport: getViewport()
+    }),
     getNaturalW: () => _naturalW,
     getNaturalH: () => _naturalH,
     resetGeometry,
@@ -169,6 +171,29 @@ export function createViewportState({ getViewport }) {
     panTo,
     rotate,
     flip,
-    setScaling,
+  };
+}
+
+export function getEffectiveScaling(scalingMode, isAnimated, isSvg = false) {
+  if (isSvg && scalingMode === 'lanczos') return 'bilinear';
+  return scalingMode;
+}
+
+export function invertViewport(px, py, geom, naturalW, naturalH) {
+  const { scale, tx, ty, rotation, flipX, flipY } = geom;
+  const rad = -(rotation || 0) * (Math.PI / 180);
+  const cosR = Math.cos(rad);
+  const sinR = Math.sin(rad);
+
+  const rx = px - tx;
+  const ry = py - ty;
+  const sx = rx * cosR - ry * sinR;
+  const sy = rx * sinR + ry * cosR;
+  const lx = (sx / scale) * (flipX || 1);
+  const ly = (sy / scale) * (flipY || 1);
+  
+  return {
+    x: lx + (naturalW / 2),
+    y: ly + (naturalH / 2)
   };
 }

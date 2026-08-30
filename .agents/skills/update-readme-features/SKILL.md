@@ -12,7 +12,7 @@ Read and apply `.agents/skills/unslop/SKILL.md` to all edits. Keep the writing c
 
 ## Scope
 
-- `README.md` sections: `## Features`, `## Shortcuts & Controls`, `## Custom CSS`.
+- `README.md` sections: `## Features`, `## Shortcuts & Controls`, `## Custom CSS`, `## Attributions`.
 - Git: working tree, recent commits, current branch, or a user-specified range.
 
 ## Instructions

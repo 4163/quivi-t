@@ -108,3 +108,43 @@ pub(crate) fn extract_zip_entry(archive_path: &str, entry_name: &str) -> Result<
     let mut archive = open_zip_archive(archive_path)?;
     read_zip_entry_by_decoded_name(&mut archive, entry_name)
 }
+
+pub(crate) fn read_zip_entry_header<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    entry_name: &str,
+    limit: usize,
+) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+
+    let try_limited = |entry: &mut zip::read::ZipFile<'_, R>| -> Result<Vec<u8>, String> {
+        let mut buf = Vec::with_capacity(limit.min(entry.size() as usize));
+        let mut take = entry.take(limit as u64);
+        take.read_to_end(&mut buf)
+            .map_err(|e| format!("Error reading ZIP entry header: {e}"))?;
+        Ok(buf)
+    };
+
+    if let Ok(mut entry) = archive.by_name(entry_name) {
+        return try_limited(&mut entry);
+    }
+
+    let mut matching_index = None;
+    for i in 0..archive.len() {
+        if let Ok(entry) = archive.by_index(i) {
+            let decoded_name = decode_zip_entry_name(&entry);
+            if decoded_name == entry_name {
+                matching_index = Some(i);
+                break;
+            }
+        }
+    }
+
+    if let Some(index) = matching_index {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|e| format!("Error reading ZIP entry: {e}"))?;
+        return try_limited(&mut entry);
+    }
+
+    Err(format!("Cannot find ZIP entry: {}", entry_name))
+}

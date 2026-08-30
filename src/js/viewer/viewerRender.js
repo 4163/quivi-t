@@ -6,25 +6,28 @@ const PRELOAD_HALF = 7;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
 const LOADING_LABEL = 'Loading...';
 
-export function createViewerRenderer(viewportState) {
+export function createViewerRenderer(viewportState, onActiveImageChanged = () => {}) {
   const _activeNodes = new Map();
   const _freeNodes = [];
   const POOL_SIZE = 2; 
 
   const imgWrapper = document.getElementById('viewer-img-wrapper');
   if (imgWrapper) {
-    const oldImg = document.getElementById('viewer-img');
-    if (oldImg) oldImg.remove();
     const existingNodes = Array.from(document.querySelectorAll('.viewer-img:not(.is-placeholder)'));
-    existingNodes.slice(POOL_SIZE).forEach(el => el.remove());
-    existingNodes.slice(0, POOL_SIZE).forEach(el => {
-      el.classList.remove('active');
-      _freeNodes.push(el);
-    });
+    // Reuse existing nodes, don't remove and recreate
+    for (let i = 0; i < existingNodes.length; i++) {
+      if (i < POOL_SIZE) {
+        existingNodes[i].classList.remove('active');
+        _freeNodes.push(existingNodes[i]);
+      } else {
+        existingNodes[i].remove();
+      }
+    }
     for (let i = _freeNodes.length; i < POOL_SIZE; i++) {
       const el = document.createElement('img');
       el.className = 'viewer-img';
       el.draggable = false;
+      el.crossOrigin = 'anonymous';
       el.decoding = 'async';
       imgWrapper.appendChild(el);
       _freeNodes.push(el);
@@ -32,7 +35,6 @@ export function createViewerRenderer(viewportState) {
   }
 
   let img = null;
-  let _rafPending = false;
   let _poolGeneration = 0;
   let _activationGeneration = 0;
   let _targetLoadTimer = null;
@@ -40,42 +42,6 @@ export function createViewerRenderer(viewportState) {
   const _preloadImages = [];
   let _lastFitModeGen = -1;
 
-  function _applyTransform() {
-    if (imgWrapper) {
-      imgWrapper.style.transform = viewportState.getTransform();
-      imgWrapper.style.setProperty('--zoom-scale', viewportState.getScale());
-    }
-    // Only report zoom when an image is active. This prevents the
-    // "100%" flash on startup before any image is displayed.
-    if (img && img.src) {
-      Statusbar.setZoom(viewportState.getScale());
-    }
-  }
-
-  function _scheduleTransform() {
-    if (_rafPending) return;
-    _rafPending = true;
-    requestAnimationFrame(() => {
-      _rafPending = false;
-      _applyTransform();
-    });
-  }
-
-  viewportState.subscribe(() => {
-    _applyScaling();
-    _scheduleTransform();
-  });
-
-  function _applyScaling() {
-    if (!img) return;
-    const scaling = viewportState.getScaling();
-    img.dataset.scaling = scaling;
-  }
-
-  // Percentage-based SVGs (width="100%" height="100%") collapse to 0×0
-  // clientWidth inside the shrink-wrap wrapper. Detect the collapse and
-  // assign a concrete base resolution via CSS custom properties consumed
-  // by the .viewer-img[data-svg-bounds] rule.
   function _applySvgBounds(el) {
     el.removeAttribute('data-svg-bounds');
     el.style.removeProperty('--svg-base-w');
@@ -119,8 +85,6 @@ export function createViewerRenderer(viewportState) {
       el.classList.add('active');
       const bounds = _applySvgBounds(el);
 
-      _applyScaling();
-
       const displayW = el.naturalWidth > 0 ? el.naturalWidth : 'SVG';
       const displayH = el.naturalHeight > 0 ? el.naturalHeight : 'SVG';
       Statusbar.setImage({ filename: state.filename || '', dims: `${displayW} × ${displayH}`, zoom: viewportState.getScale() });
@@ -129,6 +93,8 @@ export function createViewerRenderer(viewportState) {
         state.fitMode, bounds.natW, bounds.natH,
         bounds.clientW ?? el.clientWidth, bounds.clientH ?? el.clientHeight
       );
+      
+      onActiveImageChanged(el);
     });
   }
 
@@ -141,6 +107,7 @@ export function createViewerRenderer(viewportState) {
       el = document.createElement('img');
       el.className = 'viewer-img';
       el.draggable = false;
+      el.crossOrigin = 'anonymous';
       el.decoding = 'async';
       imgWrapper.appendChild(el);
     }
@@ -161,8 +128,13 @@ export function createViewerRenderer(viewportState) {
     if (el) {
       el.removeAttribute('src');
       el.removeAttribute('data-pool-src');
+      el.removeAttribute('data-played');
+      el.removeAttribute('data-scaling');
       el.classList.remove('active');
-      if (el === img) img = null;
+      if (el === img) {
+        img = null;
+        onActiveImageChanged(null);
+      }
       _activeNodes.delete(src);
       _freeNodes.push(el);
       FsUtils.revokeIfObjectURL(src);
@@ -170,11 +142,11 @@ export function createViewerRenderer(viewportState) {
     }
   }
 
-  function _loadPoolNode(el, src) {
-    if (!el || !src) return;
-    el.dataset.poolSrc = src;
-    if (el.getAttribute('src') === src || el.src === src) return;
-    el.src = src;
+  function _loadPoolNode(el, actualSrc, poolSrc) {
+    if (!el || !actualSrc) return;
+    el.dataset.poolSrc = poolSrc || actualSrc;
+    if (el.getAttribute('src') === actualSrc || el.src === actualSrc) return;
+    el.src = actualSrc;
   }
 
   function _isVisibleImage(el) {
@@ -185,12 +157,13 @@ export function createViewerRenderer(viewportState) {
     if (img && img !== el) {
       img.classList.remove('active');
     }
+
     img = el;
+    img.dataset.played = 'true';
     img.classList.add('active');
     img.alt = filename || '';
     img.title = filename || '';
     
-    _applyScaling();
     viewportState.resetGeometry();
 
     const bounds = _applySvgBounds(img);
@@ -203,6 +176,8 @@ export function createViewerRenderer(viewportState) {
       state.fitMode, bounds.natW, bounds.natH,
       bounds.clientW ?? img.clientWidth, bounds.clientH ?? img.clientHeight
     );
+    
+    onActiveImageChanged(el);
   }
 
   function _clearTargetLoadTimer() {
@@ -227,6 +202,7 @@ export function createViewerRenderer(viewportState) {
         if (generation !== _poolGeneration) return;
         const preloader = new Image();
         preloader.decoding = 'async';
+        preloader.crossOrigin = 'anonymous';
         _preloadImages.push(preloader);
         preloader.onload = () => {
           const idx = _preloadImages.indexOf(preloader);
@@ -247,6 +223,7 @@ export function createViewerRenderer(viewportState) {
     _clearScheduledPreloads();
     for (const src of _activeNodes.keys()) _recyclePoolNode(src);
     img = null;
+    onActiveImageChanged(null);
   }
 
   Core.onStateChange((state) => {
@@ -261,7 +238,7 @@ export function createViewerRenderer(viewportState) {
     }
 
     const desiredSrcs = new Set([state.src]);
-    if (_isVisibleImage(img)) desiredSrcs.add(img.src);
+    if (_isVisibleImage(img) && img.dataset.poolSrc) desiredSrcs.add(img.dataset.poolSrc);
 
     const neighborSrcs = FsUtils.neighborEntries(state, state.index, PRELOAD_HALF);
 
@@ -273,7 +250,7 @@ export function createViewerRenderer(viewportState) {
       _getPoolNode(src);
     }
 
-    const activeEl = _activeNodes.get(state.src);
+    let activeEl = _activeNodes.get(state.src);
     const activeChanged = activeEl && activeEl !== img;
     const hasPreviousBridge = !!(img && img !== activeEl && _isVisibleImage(img));
 
@@ -293,12 +270,38 @@ export function createViewerRenderer(viewportState) {
       }
 
       const loadTarget = () => {
-        if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+        if (activation !== _activationGeneration || Core.getState().src !== state.src) {
+           return;
+        }
         _targetLoadTimer = null;
-        if (activeEl) _loadPoolNode(activeEl, state.src);
+        
+        if (activeEl) {
+          const isReEntry = state.isAnimated && activeEl.dataset.played === 'true';
+          const newSrc = isReEntry ? (state.src.includes('?') ? `${state.src}&_reset=${Date.now()}` : `${state.src}?_reset=${Date.now()}`) : state.src;
+          _loadPoolNode(activeEl, newSrc, state.src);
+        }
 
-        const ready = activeEl && activeEl.complete && (activeEl.naturalWidth > 0 || state.src.toLowerCase().endsWith('.svg') || state.src.includes('.svg?'));
-        const decodePromise = (ready || !activeEl || !activeEl.decode) ? Promise.resolve() : activeEl.decode();
+        const skipDecode = state.src.toLowerCase().endsWith('.ico') || state.src.includes('.ico?') || 
+                           state.src.toLowerCase().endsWith('.svg') || state.src.includes('.svg?');
+        const ready = activeEl && activeEl.complete && (activeEl.naturalWidth > 0 || skipDecode);
+
+        let decodePromise;
+        if (ready || !activeEl) {
+          decodePromise = Promise.resolve();
+        } else if (!activeEl.decode || skipDecode) {
+          decodePromise = new Promise((resolve) => {
+            if (activeEl.complete) { resolve(); return; }
+            const handler = () => {
+              activeEl.removeEventListener('load', handler);
+              activeEl.removeEventListener('error', handler);
+              resolve();
+            };
+            activeEl.addEventListener('load', handler);
+            activeEl.addEventListener('error', handler);
+          });
+        } else {
+          decodePromise = activeEl.decode();
+        }
         
         decodePromise.then(() => {
           if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
@@ -323,11 +326,27 @@ export function createViewerRenderer(viewportState) {
 
     if (_lastFitModeGen !== state.fitModeGen) {
       _lastFitModeGen = state.fitModeGen;
-      if (img) viewportState.applyFitMode(state.fitMode, img.naturalWidth, img.naturalHeight, img.clientWidth, img.clientHeight);
+      if (img) {
+        const bounds = _applySvgBounds(img);
+        viewportState.applyFitMode(state.fitMode, bounds.natW, bounds.natH, bounds.clientW ?? img.clientWidth, bounds.clientH ?? img.clientHeight);
+      }
+    }
+  });
+
+  viewportState.subscribe(() => {
+    if (imgWrapper) {
+      imgWrapper.style.transform = viewportState.getTransform();
+      imgWrapper.style.setProperty('--zoom-scale', viewportState.getScale());
+    }
+    if (img && img.src) {
+      Statusbar.setZoom(viewportState.getScale());
     }
   });
 
   window.addEventListener('resize', () => {
-    if (img) viewportState.applyFitMode(undefined, img.naturalWidth, img.naturalHeight, img.clientWidth, img.clientHeight);
+    if (img) {
+      const bounds = _applySvgBounds(img);
+      viewportState.applyFitMode(undefined, bounds.natW, bounds.natH, bounds.clientW ?? img.clientWidth, bounds.clientH ?? img.clientHeight);
+    }
   });
 }

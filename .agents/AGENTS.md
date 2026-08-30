@@ -5,7 +5,8 @@ These rules apply to the AI coding assistant.
 - Keep responses concise and focused on the task.
 - Follow existing code style and formatting for each directory and its associated files.
 - For writing work, read `.agents/skills/unslop/SKILL.md` and follow it even if the harness does not auto-load always-active skills. This applies to docs, prompts, comments, and user-facing copy.
-- When completing an implementation slice, read `.agents/skills/verify-implementation/SKILL.md` and follow its workflow. This applies even if the harness does not auto-load always-active skills.
+- **Verify:** Run `.agents/skills/verify-implementation/SKILL.md` when finishing a slice or when asked to "verify".
+- **Validate:** Run `.agents/skills/validate-changes/SKILL.md` when explicitly asked to "validate" code. Do not confuse "verify" (tests and docs) with "validate" (architecture review).
 - NEVER (unless instructed otherwise) execute git commit commands or automate git commits. The user handles all commits manually or through the commit pipeline.
 
 ## Code Guidelines
@@ -54,7 +55,7 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 
 ### JS Module Ownership
 - The state machine owns app state and has no DOM. UI modules subscribe to it and render themselves.
-- Domain logic lives in pure service modules (no `document`). Action ids, labels, defaults, and handlers have one registry; other files derive from it.
+- Domain logic lives in pure service modules (no `document`). Action ids, labels, defaults, and handlers have one registry; other files derive from it. Filter and scaler methods live under `services/filters` and `services/scaling`; the GL runtime does not know their names; overlay canvases have one UI owner.
 - Each UI feature owns its DOM and self-subscribes. Bootstrap stays thin: init + a slim state fan-out. It does not render another module's surface.
 - Shared cross-window helpers (theme, preview, window fit) stay out of the state machine and out of feature UI files.
 - New frontend work extends this layering. Do not dump new DOM into bootstrap or new domain logic into a UI file.
@@ -62,6 +63,6 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 ### Rust Module Ownership
 - The crate root is bootstrap: plugin wiring, command registration, main-window construction, config-watcher start. It does not grow archive, protocol, command, or test bodies.
 - Domain logic lives in `archives/` (readers + `ArchiveCache` facade), `formats.rs`, and `ico.rs`. Callers use facade methods, not another module's internals.
-- `commands/` is the Tauri IPC surface. Each command file owns one family (directory, archives, watchers, associations, shell) and adapts domain modules. It does not grow archive, window, or config internals.
+- `commands/` is the Tauri IPC surface. Each command file owns one family (directory, archives, animation, watchers, associations, shell) and adapts domain modules. It does not grow archive, window, or config internals.
 - Protocol, windows, platform, and config stay out of bootstrap and out of each other: `protocol.rs` owns `quivit://`, `windows.rs` owns window lifecycle and size constants, `platform/` owns OS integrations, `config.rs` is persistence only. `models.rs` is the IPC contract. Tests live under `tests/` via `#[path]`; do not widen visibility for tests.
 - New backend work extends this layering. Do not dump new domain into `lib.rs`, new window code into `config.rs`, or a second copy of a helper that already exists. Keep IPC command names, JSON shapes, and `quivit://` URLs stable unless the change is a practical function or performance win.

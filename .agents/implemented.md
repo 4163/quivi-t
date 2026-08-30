@@ -2,9 +2,113 @@
 
 Date started: 2026-08-01
 
-Shipped, verified work (features / fixes / reports / optimizations).
+Shipped, verified work (features / fixes / reports / optimizations). 
+
+Note: This file is essentially a changelog dump. Past entries are not actively maintained and may be stale.
 
 ## Fully Implemented
+
+### Stale Code and References Cleanup (2026-08-30)
+- **Dead Code Removal:** Removed unused live image blob cache functions (`getLiveImage`, `evictLiveBlobCache`) and unexported `evictBlobCache` in `blobImage.js`. Removed the dead `css` property from `SCALERS` items in `registry.js`.
+- **UI & Documentation Sync:** Intentionally ignored SVG status in `menubar.js` during view menu sync so users can select Lanczos and retain their choice visually, while it silently falls back in the renderer. Updated `options.html` to rename "Scale None" to "Scale Pixelated" for consistency with the view menu. Fixed stale comments in `core.js`, `main.css`, and `format_tests.rs`.
+
+### Animated Pipeline Jank - Slice 2 (2026-08-30)
+- **Pump Clock Catch-Up & Limits**: Rewrote the `viewerPipelines` frame clock to use a `while` loop, allowing it to accurately skip frames to catch up if a tick is delayed, while clamping delays >1000ms to prevent CPU hangs on resume.
+- **Visibility & Background Pausing**: Added a `visibilitychange` listener that resets `lastFrameTime` upon returning to the app, preventing massive time-skips when Alt-Tabbing back into an animated image.
+- **WebGL Context Recovery**: `filterCanvas` now actively listens for `webglcontextlost` and `webglcontextrestored`. On restore, the pipeline is fully torn down and rebuilt to properly recompile shaders and upload textures.
+- **Render Optimization**: The WebCodecs pump now skips `drawImage` staging and WebGL texture upload/render if neither the `frameIndex` nor the viewport geometry has changed since the last tick, saving massive CPU/GPU overhead for low-framerate GIFs on >60fps monitors.
+- **Consistent Native Reset**: Updated `viewerRender.js` to unconditionally replace the DOM node for all animated files on re-entry (rather than only no-loop GIFs), enforcing a consistent frame-0 start for native rendering and the live pump.
+
+### Animated Pipeline Jank - Slice 1 (2026-08-30)
+- **Honest `isAnimated` Notifications:** Fixed a false-flash in `core.js` during source changes. The state machine now leaves previous animation flags alone on cache misses, preventing `viewerPipelines` from needlessly tearing down and rebuilding WebGL contexts before the native DOM image completes loading.
+- **Pipeline Cancellation Token:** Added a `_cancelToken` to `glRuntime.js` so background texture uploads from stale still renders are cleanly aborted, fixing leftover "ghost" frames when switching away from an animated image.
+- **Clean Pump Shutdown:** Updated `viewerPipelines.js` to reliably hide overlay canvases and fall back to the still path when `ImageDecoder` fails or lacks multiple frames.
+- **Cache Race Condition:** Resolved a race condition in `blobImage.js` where overlapping image fetches could pollute the clean-image cache.
+
+### Scaling & Filter Decoupling - Slice 5 (2026-08-30)
+- **GIF Header Scanner:** Replaced the naive `NETSCAPE2.0` string scan in `formats.rs` with an accurate GIF chunk scanner (up to 8 KiB) that counts `0x2C` Image Descriptor frames to detect multi-frame no-loop GIFs.
+- **Isolated DOM Node Reset:** The `check_is_animated` IPC command now returns `AnimationInfo` (`{ is_animated: bool, no_loop: bool }`). The frontend DOM node swap logic in `viewerRender.js` that restarts single-play GIFs is now strictly gated by `state.noLoop === true`, preventing heavy re-mounts and stuttering for standard looping GIFs.
+- **Live Pump No-Loop Support:** Updated the WebCodecs frame pump in `viewerPipelines.js` to clamp the `frameIndex` at the last frame if `state.noLoop` is true, ensuring no-loop GIFs do not endlessly loop when filters or WebGL Lanczos are active.
+
+### Anime4K GLSL Pipeline (2026-08-29)
+- **Upstream Shader Porting:** Implemented a true Anime4K pipeline by porting the official v4.x shaders (Fast and Normal variants) to WebGL2, replacing the placeholder Laplacian pass.
+- **WebGL Runtime Extensions:** Extended `glRuntime.js` to support multi-pass texture buffering, `image`-space resolution passes, dynamic scaling (`outputScale`), named texture inputs/saves (`SAVE`/`BIND` equivalents from mpv), and native Y-flipping (`u_renderTargetFlipY`) for FBO alignment.
+- **Real-Time Variant Switching:** Updated the options UI to allow selecting the active Anime4K variant. Integrated variant detection in `viewerPipelines.js` via `Core.onStateChange` so switching variants instantly resolves the new filter chain without requiring an image reload.
+- **Subpixel Blur & Jumping Fixes:** Addressed a critical 1-frame layout sync jump by updating `viewer.js`'s `ResizeObserver` to forcefully invoke a synchronous WebGL render before browser paint. Replaced stretching/transform-based canvas centering in CSS with `margin: auto`, perfectly aligning the WebGL canvas to the pixel grid and preserving pixel-art scanlines that were previously destroyed by browser-level subpixel blurring.
+
+### Scaling & Filter Decoupling - Slice 6 (2026-08-29)
+- **Frontend IPC Centralization:** Replaced manual `invoke('check_is_animated')` and `try-catch` blocks in `fsUtils.js` `loadFile` and `loadArchive` with a unified `Core.checkIsAnimated(srcPath, archivePath)` helper in `core.js`. This centralizes the `_animMemo` caching layer.
+- **Backend Format Tests:** Expanded `format_tests.rs` to validate the heuristics of `is_animated` in `formats.rs`. Added tests for detecting `NETSCAPE2.0` in GIFs (including the single-frame loop false-positive), checking the `ANIM` bit within the `VP8X` chunk for WebP, and validating the `acTL`/`IDAT` chunk order for APNGs.
+- **Architecture Note:** Added comments in `archives/mod.rs` clarifying that `read_temp_entry_header` waits for full extraction for RAR/7Z/TAR files as a known design choice, unlike ZIP files which stream the header directly.
+
+### Scaling & Filter Decoupling - Slice 5 (2026-08-29)
+- **Lanczos Pipeline Extraction:** Moved `scalingPipeline.js` to `services/scaling/lanczos.js` and removed the dummy `none` and `bilinear` classes. It now uses `OffscreenCanvas` for the Web Worker path where available.
+- **CSS Scaling Modes:** Restored the `data-scaling` DOM attribute setter onto the active `.viewer-img` pool node within `viewerPipelines.js` so that CSS `image-rendering` applies correctly for the `Pixelated` and `Bilinear` modes.
+- **State Cleanup:** Dropped `bicubic` CSS remnants, deleted `viewportState.setScaling` / `getScaling` from `viewerMath.js`, and removed the mirrored `activeScaling` / `_lastAnimated` variables from `main.js`. The active scaling mode is now read exclusively from `Core.getState().scalingMode`.
+
+### Scaling & Filter Decoupling - Slice 4 (2026-08-29)
+- **Overlay Ownership Extraction:** Extracted all overlay orchestration out of `viewerRender.js` and into a new `viewerPipelines.js` file. `viewerRender.js` now exclusively handles DOM image pooling, while `viewerPipelines.js` holds the reference to the active `TexImageSource` and orchestrates the Lanczos and WebGL pipelines.
+- **Uncoupled Lifecycles:** `viewerPipelines.js` handles the Lanczos 80ms delay timer and the WebGL `requestAnimationFrame` loop entirely on its own.
+- **Zero-Copy WebGL Context:** Added `preserveDrawingBuffer: false` to the WebGL context setup to eliminate the heavy buffer-copy hit on every frame.
+- **WebGL Rendering Optimizations:** Replaced the every-frame `canvas.width` re-assignment with a delta check. Modified the `texImage2D` loop to check a `sourceIdentity` string, meaning `texImage2D` now only runs once per image load instead of on every pan frame.
+- **Native ImageBitmaps:** Replaced the heavy `HTMLImageElement` workaround in the `blobImage.js` cache with native `ImageBitmap` generation via `createImageBitmap(blob)`. Modified cache eviction to immediately invoke `bitmap.close()` when memory needs to be freed, reducing VRAM overhead.
+- **Status Indicator Class Rename:** Renamed `zoom-held` and `zoom-latched` CSS classes to `action-held` and `action-latched` to better reflect their generic usage for pan/zoom actions.
+
+### Scaling & Filter Decoupling - Slice 3 (2026-08-28)
+- **WebGL Pipeline Extraction:** Broke `webglPipeline.js` into `pipelines/glRuntime.js` and individual filter modules in `filters/`. 
+- **FBO Ping-Pong & Runtime Abstraction:** `glRuntime.js` now manages context lifecycle, shader compilation, and a two-FBO ping-pong loop for multi-pass support. The runtime is agnostic to filter logic.
+- **Filter Modules:** Ported Anime4K, Retro CRT, Phosphor, and Scanlines into standalone files. Each exports an `init` hook (for uniform caching) and an `applyUniforms` hook.
+- **Transparency Bleed Fix:** Applied the `d3cfd7f` alpha premultiplication fix to the Phosphor and Scanlines shaders, matching the prior fixes for CRT and Anime4K.
+- **Consumer Decoupling:** `registry.js` now acts as the single JS import hub for filter modules. `viewerRender.js` was simplified to interact with `glRuntime` via `.setFilter(module)`, eliminating redundant pipeline teardowns.
+
+### Scaling & Filter Decoupling - Slice 2 (2026-08-28)
+- **Single Filter Canvas:** Consolidated WebGL overlay targets by deleting `#viewer-crt-canvas` and renaming `#viewer-anime4k-canvas` to `#viewer-filter-canvas`. All WebGL filters now render into a single canvas, eliminating dual-context GPU lifecycle issues.
+- **Viewport Host State:** Replaced `:has([data-render-ready])` hacks in CSS with `#viewport[data-filter] #viewer-img-wrapper .viewer-img { opacity: 0 !important; }`. `viewerRender.js` manages `data-filter` directly on `#viewport` when a filter is active, keeping base image visibility scoped to the viewport host.
+- **Dead CSS Removal:** Removed legacy `[data-scaling="bicubic"]` selector remnants from `main.css`.
+
+### Scaling & Filter Decoupling - Slice 1 (2026-08-28)
+- **Catalog & Configuration Migration:** Centralized filter and scaler definitions into `registry.js` (`FILTERS`, `SCALERS`). Replaced the four legacy boolean filter keys (`crt_filter`, `anime4k_filter`, etc.) with a single mutually exclusive `active_filter` string key (and `filter_options` bag) in `frontend_data`.
+- **Dynamic Action Injection:** Removed static toggle definitions from `ACTION_REGISTRY`. Filter toggles are now dynamically mapped from the `FILTERS` catalog, enforcing `Core.setActiveFilter` usage and the mutual exclusivity rule.
+- **Unified Menu Synchronization:** Shifted View menu checkmark/muted class assignments from `main.js` to `syncViewMenu` in `menubar.js`. `main.js` now simply delegates `syncViewMenu(state)` on `Core.onStateChange` instead of duplicating toggle logic.
+- **Legacy Fallback Removed:** Hard removed the legacy boolean fallbacks per user confirmation, finalizing the migration to `active_filter`.
+
+
+### Phosphor Filter Shader (2026-08-25)
+- **WebGL Pipeline:** Implemented a new RetroZone Phosphor fragment shader (`phosphorFsSource`) inside `webglPipeline.js`, integrating scanlines and phosphor dot grid effects.
+- **Continuous Render:** Leverages the existing WebGL pipeline, applying the shader continuously during pan/zoom on the standard viewer canvas.
+- **Mutual Exclusivity:** Wired the new filter into `core.js`, `actions.js`, and the UI (`index.html`) to ensure it toggles exclusively alongside the existing Anime4K and CRT filters.
+
+### CRT Filter Port Completion & Fixes (2026-08-25)
+- **Viewport-Sized Canvas Restoration:** Reverted the CRT canvas to be viewport-sized (like Anime4K), allowing the shader to handle its own clipping and black-border rendering natively.
+- **Dynamic Axis Latching (`u_clamp`):** Re-implemented the experimental logic where the barrel distortion and vignette latch onto the image bounds when zoomed out, but smoothly transfer to the viewport bounds when the image overflows the screen.
+- **Curved Dynamic Scanlines:** Restored the scanline curve to match the barrel distortion (unlike the experimental branch's straight lines), while preserving the experimental logic that scales scanlines physically with the image when zoomed out and latches them to the viewport when zoomed in.
+- **Vignette Bug Fixes:** Fixed a bug where the unlatched axis vignette would disappear when the other axis latched (by mapping `vxImg`/`vyImg` to `sampledUV` instead of `barrelUV`). Fixed the viewport-latched vignette failing to darken transparent pixels by properly mixing the alpha channel.
+
+### Duplicate Cache & Pipeline Refactoring (2026-08-25)
+- **Shared Blob Cache:** Extracted the duplicate same-origin `fetch`/`createObjectURL` blob caching logic from `scalingPipeline.js` and `webglPipeline.js` into a shared `src/js/shared/blobImage.js` helper.
+- **Lazy Pica Initialization:** Changed `window.pica()` from a top-level global to a lazy singleton initialized only when `createScalingPipeline` is first invoked, removing race conditions against vendor script load order.
+- **Pipeline Singletons:** Moved the shared `_srcCanvas` and `_destCanvas` inside the `createScalingPipeline` factory so that concurrent scaling renders don't conflict. Removed left-over debug drawing code.
+- **GIF Header Search Bounding:** Adjusted the `check_gif` `NETSCAPE2.0` header scan limit in `formats.rs` from 8 KiB down to 2 KiB as an optimization, and documented the acceptable single-frame GIF false-positive behavior.
+
+### Animated Images, Header-Only Archive Reads & Scaling Fallback (2026-08-23/25)
+- **Fast Backend Header Detection:** Domain logic in `formats.rs` (`is_animated`) detects GIF (`NETSCAPE2.0`), WebP (`VP8X ANIMATION`), and APNG (`acTL` before `IDAT`) formats in microseconds. Exposed via `check_is_animated` Tauri command, reading local paths or fetching 8 KiB headers directly from `ArchiveCache::read_entry_header` for archived entries without decompressing full files.
+- **Frontend Sync & UI Rules:** `core.js` tracks `state.isAnimated` on image selection. When an animated format is detected, `main.js` adds `.muted` to Lanczos, Anime4K, and Retro CRT filter menu items, while preserving their active checkmarks.
+- **Scaling Visual Override & Bridge Guards:** If Lanczos is selected and an animated image is viewed, the UI visually switches the checkmark to Bilinear (`effectiveScaling`), and `viewerRender.js` natively falls back to standard bilinear canvas scaling while bypassing the WebGL and WASM pipelines. Filter transitions are deferred during two-image DOM bridge swaps to hold previous pixels until new image decode completes, preventing intermediate render ghosts and canvas leaks.
+- **HTML & Native Shell Background Fixes:** Restored `shellBackground.js` in `index.html` to mirror `--surface` onto the native window and pruned redundant `viewer.js` script tag.
+
+### Experimental WebGL Retro CRT Filter (Ad-hoc)
+- **Shader Pipeline:** Implemented an experimental WebGL pipeline (`webglPipeline.js`) to apply a Retro CRT filter overlay. It applies barrel distortion, chromatic aberration, scanlines, and vignette effects.
+- **Inverse Transform Geometry:** The shader natively handles inverse transformation (`screenToTexUV`), calculating coordinates from the CSS screen viewport back to the original image texture. This completely decouples WebGL from CSS `transform` bugs.
+- **Dynamic Bezels & Transparency:** The CRT bezel dynamically adapts to the image's physical bounds, rendering an opaque black outer border when the image fills the screen, or defaulting to a transparent edge (revealing the QuiviT checkerboard) when zoomed out.
+- **Continuous 60FPS Panning:** The pipeline runs in real-time during panning and zooming without debounce timers, relying on `requestAnimationFrame` and URL blob caches to ensure zero layout-thrashing.
+- **Menu Decoupling:** Added a dedicated 'Filter' section in the View menu, separating the CRT toggle from standard scaling modes. Base image hiding is purely CSS-driven via `:has([data-crt="true"])`.
+
+### Lanczos Scaling Pipeline (Viewport-Based)
+- **Lanczos Scaling Support:** Added the `pica` WebAssembly resampler for Lanczos scaling. It replaces native upscaling.
+- **Viewport-Based Partial Rendering (Tiling):** The pipeline calculates the viewport intersection and resizes only the visible crop. This stops main-thread hangs and memory exhaustion at high zoom levels.
+- **Web Worker Offload:** Enabled `pica` Web Workers using a `blob:` URL cache for source images, bypassing Tauri `quivit://` canvas tainting and `DataCloneError`. WASM math runs on background threads. The UI stays responsive during pan/zoom, and the overlay renders 80ms after movement stops.
+- **CSS Precision Overlay:** CSS custom properties (`--crop-top`, `--crop-left`) position the partial Lanczos canvas over the browser image. This keeps the CSS source of truth intact.
+- **Scaling Keybinds:** Added scaling mode keybinds (`cmd-scale-none`, `cmd-scale-bilinear`, `cmd-scale-lanczos`), mapped to `[`/`]` to cycle between them. The active mode persists in config and shows in the file menu.
 
 ### CSS / JS Decoupling & HTML-First Specs (landed on `refactor/decoupling`)
 - **CSS decoupling:** `src/css/global.css` holds tokens, resets, and shared rules. `main.css`, `options.css`, and `metadata.css` are page-only. Every HTML page loads `global.css` first.
@@ -620,20 +724,20 @@ cargo check
 See `.agents/implementation-plan - additions.md` for the active backlog and sequencing.
 
 ### UI Module Decoupling
-- Decoupled \menubar.js\ logic and DOM bindings.
-- Decoupled \keybindUi.js\ from the options window, isolating configuration rendering and conflict tracking.
-- Decoupled \keyboardNav.js\ to manage accessible tab navigation across menus and options uniformly.
+- Decoupled `menubar.js` logic and DOM bindings.
+- Decoupled `keybindUi.js` from the options window, isolating configuration rendering and conflict tracking.
+- Decoupled `keyboardNav.js` to manage accessible tab navigation across menus and options uniformly.
 
 ### Options Tab Accessibility (Tab Navigation)
-- Implemented accessible keyboard navigation flows (\Tab\/\Shift+Tab\) across all Options tabs.
-- Added global \Home\ and \End\ shortcut jumps for immediately focusing the first and last tabbable elements within active scopes.
-- Fixed \Enter\/\Space\ activation for dropdowns in the main menubar.
+- Implemented accessible keyboard navigation flows (`Tab`/`Shift+Tab`) across all Options tabs.
+- Added global `Home` and `End` shortcut jumps for immediately focusing the first and last tabbable elements within active scopes.
+- Fixed `Enter`/`Space` activation for dropdowns in the main menubar.
 
 ### Customization Tab & Custom CSS
 - Added Theme selection (System / Light / Dark) that applies instantly and auto-saves to config to prevent state drift on window close.
 - Added a Custom CSS textarea to inject raw styles into both windows dynamically.
-- Implemented \Ctrl+S\ auto-save-and-apply shortcut while editing the CSS text area.
-- Implemented a robust \Ctrl+Shift+Alt+C\ global emergency CSS reset that clears broken styles, broadcasts immediately across main and options windows, and persists to backend storage.
+- Implemented `Ctrl+S` auto-save-and-apply shortcut while editing the CSS text area.
+- Implemented a robust `Ctrl+Shift+Alt+C` global emergency CSS reset that clears broken styles, broadcasts immediately across main and options windows, and persists to backend storage.
 
 ### File Panel Actions
 - Added 'Reveal in File Explorer' and 'Open Folder in Explorer' actions.
@@ -689,25 +793,25 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 
 ### Archive Performance Overhaul
 
-- **Instant archive listing**: Added \list_archive\ Tauri command that reads only archive headers (central directory) for ZIP/CBZ/RAR/CBR, returning file lists instantly without extracting images.
+- **Instant archive listing**: Added `list_archive` Tauri command that reads only archive headers (central directory) for ZIP/CBZ/RAR/CBR, returning file lists instantly without extracting images.
 - **Hybrid caching strategy**:
-  - ZIP/CBZ: On-demand in-memory LRU cache (20 images) with \prefetch_archive_entries\ command for background prefetching (7 ahead / 3 behind).
-  - RAR/CBR: Background sequential extraction to OS temp directory (\%TEMP%\\QuiviT\\<hash>\\) via spawned thread; \quivit://\ protocol polls temp disk with 3-second timeout.
-- **Unified protocol handler**: \quivit://archive/<base64_path>/<entry>\ now routes seamlessly: serves from LRU cache (ZIP) or temp disk (RAR), with on-demand extraction fallback for ZIP cache misses.
-- **Seamless image swapping**: \iewer.js\ uses off-screen \Image\ preloader: retains previous image on screen until new image fully loads, eliminating flicker/black frames during navigation.
-- **Prefetch integration**: \core.js\ triggers \prefetchAhead\ on navigation; \sUtils.js\ triggers initial prefetch on archive load.
-- **Dependencies**: Added \md5\ crate for deterministic temp directory naming.
+  - ZIP/CBZ: On-demand in-memory LRU cache (20 images) with `prefetch_archive_entries` command for background prefetching (7 ahead / 3 behind).
+  - RAR/CBR: Background sequential extraction to OS temp directory (`%TEMP%\QuiviT\<hash>\`) via spawned thread; `quivit://` protocol polls temp disk with 3-second timeout.
+- **Unified protocol handler**: `quivit://archive/<base64_path>/<entry>` now routes seamlessly: serves from LRU cache (ZIP) or temp disk (RAR), with on-demand extraction fallback for ZIP cache misses.
+- **Seamless image swapping**: `viewer.js` uses off-screen `Image` preloader: retains previous image on screen until new image fully loads, eliminating flicker/black frames during navigation.
+- **Prefetch integration**: `core.js` triggers `prefetchAhead` on navigation; `fsUtils.js` triggers initial prefetch on archive load.
+- **Dependencies**: Added `md5` crate for deterministic temp directory naming.
 - **Cleanup**: Old RAR temp directories cleaned up on new archive load; ZIP LRU evicts oldest entries at capacity.
 
 ### 7Z/CB7 and TAR/CBT Archive Support
 
 - **New formats**: `list_archive` now handles 7z, cb7, cbt, and tar in addition to zip/cbz/rar/cbr; `SUPPORTED_ARCHIVES` updated in Rust and `fsUtils.js`; file panel icons map 7z/cb7/cbt/tar to the cbz archive icon.
-- **7Z/CB7 (7z, cb7)**: Added \list_7z_entries\ (header-only via `sevenz-rust2` file metadata: instant, no decompression) and \extract_7z_to_temp\. Solid 7z archives are single-block and not seekable, so they use the same background sequential extraction to the deterministic md5 temp dir as RAR (no ZIP-style random access). Background extraction runs in a spawned thread; protocol handler serves from temp disk with a 3-second poll, then on-demand extraction fallback for cache misses.
-- **TAR/CBT (tar, cbt)**: TAR is uncompressed and seekable, so \list_tar_entries\ lists on demand and \extract_tar_entry\ seeks + reads individual entries directly: no temp copy, no full extraction.
-- **Dependencies**: Added \sevenz-rust2 = "0.21"\ and \tar = "0.4"\.
-- **ArchiveCache**: \rar_temp_dir\ generalized to \extract_temp_dir\ for the 7z/RAR shared temp-disk path.
-- **Tests**: Added \archive_tests\ module (6 tests) covering solid 7z listing + nested extraction to temp, cb7 alias routing, tar listing + entry extraction, RAR5/CBR listing, and supported-format registration. Verified \cargo test\ (6/6 pass), \cargo check\, and \node --check\ on frontend files.
-- **Test fixtures**: \test-files/archives/7z.7z\ (solid LZMA2, 14 files incl. `New folder/` nesting) and \test-files/archives/cbr.cbr\ (non-solid RAR5). The \test-files/archives/cbt.cbt\ fixture is self-provisioned by the \ensure_cbt()\ test helper, which rebuilds it (validating 3 entries) from images re-packed out of the 7z fixture via the \tar\ builder: no external 7z/7za tool needed in tests.
+- **7Z/CB7 (7z, cb7)**: Added `list_7z_entries` (header-only via `sevenz-rust2` file metadata: instant, no decompression) and `extract_7z_to_temp`. Solid 7z archives are single-block and not seekable, so they use the same background sequential extraction to the deterministic md5 temp dir as RAR (no ZIP-style random access). Background extraction runs in a spawned thread; protocol handler serves from temp disk with a 3-second poll, then on-demand extraction fallback for cache misses.
+- **TAR/CBT (tar, cbt)**: TAR is uncompressed and seekable, so `list_tar_entries` lists on demand and `extract_tar_entry` seeks + reads individual entries directly: no temp copy, no full extraction.
+- **Dependencies**: Added `sevenz-rust2 = "0.21"` and `tar = "0.4"`.
+- **ArchiveCache**: `rar_temp_dir` generalized to `extract_temp_dir` for the 7z/RAR shared temp-disk path.
+- **Tests**: Added `archive_tests` module (6 tests) covering solid 7z listing + nested extraction to temp, cb7 alias routing, tar listing + entry extraction, RAR5/CBR listing, and supported-format registration. Verified `cargo test` (6/6 pass), `cargo check`, and `node --check` on frontend files.
+- **Test fixtures**: `test-files/archives/7z.7z` (solid LZMA2, 14 files incl. `New folder/` nesting) and `test-files/archives/cbr.cbr` (non-solid RAR5). The `test-files/archives/cbt.cbt` fixture is self-provisioned by the `ensure_cbt()` test helper, which rebuilds it (validating 3 entries) from images re-packed out of the 7z fixture via the `tar` builder: no external 7z/7za tool needed in tests.
 
 ### Non-Blocking Archive Protocol & Loading States
 
@@ -732,3 +836,16 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 
 ### Metadata Window Credit SVGs (2026-08-23)
 - **Change:** Replaced emoji-based credit icons in `metadata-window.js` with inline SVGs matching the Feather/Lucide icon style used elsewhere in the app. Updated `applyValue` to support rendering an array of DOM nodes. Added UI icon attributions (Feather/Lucide) to `README.md`.
+
+### Anime4K Refactored as a Mutually Exclusive WebGL Filter (Ad-hoc)
+- **Structural Re-alignment:** Removed Anime4K from the standard base scaling cycle (`cmd-cycle-scaling`) and converted it into a dedicated, toggleable WebGL filter (`anime4k_filter`). This resolves shader collisions when users attempted to apply both Anime4K and CRT filters simultaneously.
+- **Underlying Scaling Preservation:** Anime4K now operates as an override. Activating the filter replaces the base scaling pipeline, but the user's underlying preference (e.g. Lanczos) remains untouched. Deactivating Anime4K immediately drops back to the exact base scaling mode without needing to re-cycle.
+- **Mutual Exclusivity:** The Anime4K and CRT filters now strictly toggle each other off when activated via keybinds or menu interactions.
+- **UI & Keybinds Reorganization:** Extracted `Scaling Method` and `Filters` into their own dedicated sub-headers within the Options → Keys menu for clearer UX. Moved the Anime4K toggle into the View dropdown's Filters block, complete with a visual separator bar.
+
+### Feature Filters Validation Remediation (2026-08-25)
+- **Animation Check Optimization:** Reduced duplicate Rust IPC calls for `check_is_animated` by implementing an optimistic `notify()` in `core.js` and an in-memory memoization cache `_animMemo`. Images now load and render immediately while the animation check runs in the background.
+- **Scaling/Filter Animated Guard:** Animated images (GIF, WebP, APNG) now automatically fall back to Bilinear scaling. The Anime4K and Retro CRT filters are now strictly muted and disabled when an animated image is active, preventing performance degradation or frame destruction. Menu items and keyboard shortcut handling in `actions.js` were updated to respect these animated guards dynamically.
+- **JS Ownership Cleanup:** Decoupled `viewerRender.js` from config persistence and business logic. Consolidated scaling fallback decisions into a shared `getEffectiveScaling` helper in `viewerMath.js`, and deduplicated inverse projection logic with `invertViewport`. Replaced global `window._lastAnimated` assignments with module-scoped state. Filter toggles were updated to use a unified `Core.setFilter()` action, eliminating inline state mutations in the shortcut registry.
+- **Architecture Integrity:** Restored `shellBackground.js` injection into `index.html` after accidental omission. Removed duplicate scripts and unified shared geometry math. Updated `architecture-state.md` to reflect `blobImage.js` and animation checks, and updated `README.md` to document the scaling/filter fallbacks for animated images.
+- **Configuration Graph Separation**: Removed heavy WebGL shader imports from the configuration module graph (`registry.js`, `keybinds.js`) by isolating module resolution into `filterModules.js`. This eliminates a significant blocking performance hit when opening the Options window. Restored the missing `isSvg` parameter to the `getEffectiveScaling` check in `viewerPipelines.js`.

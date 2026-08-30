@@ -35,9 +35,6 @@
   - **Performance First (Zero-Overhead):** Bypassed entirely when `0` (Disabled). During active movement, use a lightweight debounced single-timer reset without dynamic allocations or garbage collection churn in the `mousemove` hot path.
 - **Emergency Boss Key:** Add an "Emergency Button" to hide the application into the system tray, with a configurable keybind.
 - **Initial HTML Loading (LCP):** Completely remove the blank page time on initial loading of both HTML pages before the main UI renders. It's currently acting this way because we are optimizing for LCP on the flickering of themes. Refer to the way LCP is handled on `E:\Projects\PixiJS Live2D Spine (Springfield)` for reference.
-- **Scaling Modes (Bicubic vs Lanczos):** Implement a proper way to scale via Bicubic and Lanczos (using external API or JS library if CSS doesn't support Lanczos). Doing this should also provide us the initial entry for using more advanced custom scaling methods.
-  - This also means we need to make each scaling method available as a settable keybind.
-  - https://canvasui.dev/ esque. html in canvas?
 
 ### CSS, Styling & Code Structure (Refactoring)
 - **Persistent Root Column Sizes:** Treat CSS root column sizes as persistent data saved via WebView2. Add a reset column sizes button in the options (under General).
@@ -75,6 +72,11 @@
 ## Post-Release Backlog (Future Considerations)
 
 *Items deliberately deferred until after the initial release. Low priority by design: do not start without re-validating the need.*
+
+### Animated Images Support for Lanczos & WebGL
+- Investigate and implement support for running Lanczos scaling and WebGL filters (Retro CRT, Anime4K) on animated image formats (WebP, APNG, GIF) without destroying frame timing or incurring severe performance penalties.
+- Currently, these pipelines are bypassed natively via bilinear canvas fallbacks when an animated format is detected to maintain application performance and animation playback integrity.
+
 
 ### File List Relocation, Detach & Drag-and-Drop
 - Add a way to change the location of the file list (left default, top, bottom, right). Detached as well? Maybe drag-and-droppable: how practical would the implementation be?

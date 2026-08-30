@@ -120,7 +120,9 @@ fn parse_archive_url(url: &str) -> Result<(String, String), String> {
 
     let archive_path = crate::utils::base64_decode(archive_path_encoded)
         .ok_or_else(|| "Invalid base64 archive path".to_string())?;
-    let entry_name = crate::utils::url_decode(entry_name_encoded);
+    
+    let entry_clean = entry_name_encoded.split('?').next().unwrap_or(entry_name_encoded);
+    let entry_name = crate::utils::url_decode(entry_clean);
     Ok((archive_path, entry_name))
 }
 

@@ -2,6 +2,8 @@
  * actions.js: central registry for user commands and shortcuts.
  */
 
+import { FILTERS, activeFilterId } from './registry.js';
+
 export const ACTION_REGISTRY = [
   // Navigation
   { id: 'cmd-next', label: 'Next Item', defaultBinds: ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'], category: 'Navigation',
@@ -60,28 +62,45 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-fit-window-if-larger', label: 'Fit Window If Larger', description: 'Shrink to fit the viewport, but never enlarge small images', defaultBinds: 'f', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('window-if-larger', { persist: true })
   },
-  { id: 'cmd-scale-none', label: 'Scale None', defaultBinds: [], category: 'View',
+  { id: 'cmd-scale-none', label: 'Scale Pixelated', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.setScalingMode('none', { persist: true })
   },
-  { id: 'cmd-scale-bicubic', label: 'Scale Bicubic', defaultBinds: [], category: 'View',
-    run: (ctx) => ctx.Core.setScalingMode('bicubic', { persist: true })
+  { id: 'cmd-scale-bilinear', label: 'Scale Bilinear', defaultBinds: [], category: 'View',
+    run: (ctx) => ctx.Core.setScalingMode('bilinear', { persist: true })
   },
   { id: 'cmd-scale-lanczos', label: 'Scale Lanczos', defaultBinds: [], category: 'View',
-    run: (ctx) => ctx.Core.setScalingMode('lanczos', { persist: true })
+    run: (ctx) => {
+      ctx.Core.setScalingMode('lanczos', { persist: true });
+    }
   },
+  ...FILTERS.map(f => ({
+    id: f.actionId,
+    label: `Toggle ${f.label} Filter`,
+    defaultBinds: [],
+    category: 'View',
+    run: (ctx) => {
+      const state = ctx.Core.getState();
+      const current = activeFilterId(state.config.frontend_data);
+      ctx.Core.setActiveFilter(current === f.id ? null : f.id);
+    }
+  })),
   { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
     run: (ctx) => {
-      const modes = ['none', 'bicubic', 'lanczos'];
-      const current = ctx.Core.getState().scalingMode;
-      const next = modes[(modes.indexOf(current) - 1 + modes.length) % modes.length];
+      const state = ctx.Core.getState();
+      const modes = ['none', 'bilinear', 'lanczos'];
+      const current = state.scalingMode;
+      const idx = modes.indexOf(current);
+      const next = idx > 0 ? modes[idx - 1] : modes[modes.length - 1];
       ctx.Core.setScalingMode(next, { persist: true });
     }
   },
   { id: 'cmd-cycle-scaling', label: 'Scale: Next', defaultBinds: ']', category: 'View',
     run: (ctx) => {
-      const modes = ['none', 'bicubic', 'lanczos'];
-      const current = ctx.Core.getState().scalingMode;
-      const next = modes[(modes.indexOf(current) + 1) % modes.length];
+      const state = ctx.Core.getState();
+      const modes = ['none', 'bilinear', 'lanczos'];
+      const current = state.scalingMode;
+      const idx = modes.indexOf(current);
+      const next = modes[(idx + 1) % modes.length];
       ctx.Core.setScalingMode(next, { persist: true });
     }
   },

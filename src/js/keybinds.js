@@ -5,6 +5,7 @@
  */
 
 import { normalizeCombo, normalizeList } from './services/keyCombo.js';
+import { activeFilterId, normalizeFilterOptions } from './services/registry.js';
 
 import { DEFAULT_KEYBINDS as REGISTRY_DEFAULTS } from './services/actions.js';
 
@@ -19,7 +20,8 @@ export const DEFAULT_KEYBOARD_PAN_STEP = 72;
 export const DEFAULT_WHEEL_PAN_STEP = 120;
 
 export const DEFAULT_FIT_MODE = 'height-if-larger';
-export const DEFAULT_SCALING_MODE = 'bicubic';
+export const DEFAULT_SCALING_MODE = 'bilinear';
+
 
 // persistence: frontend_data is merged here with normalized defaults. Preference
 // flags (theme, keybinds, scroll_zoom_modifier) belong in quivit_config.json;
@@ -56,6 +58,8 @@ export function mergeConfig(loaded) {
       hide_chrome_on_fullscreen: fd.hide_chrome_on_fullscreen !== false,
       menu_visible: fd.menu_visible !== false,
       status_visible: fd.status_visible !== false,
+      active_filter: activeFilterId(fd),
+      filter_options: normalizeFilterOptions(fd.filter_options),
       keybinds: (() => {
         const defaultClone = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
         const userBinds = fd.keybinds || {};

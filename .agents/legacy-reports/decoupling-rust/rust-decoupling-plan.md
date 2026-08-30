@@ -1,7 +1,6 @@
-user note for initial slice:
-"
-refer to '.agents/rust-decoupling-plan.md' and begin planning and discussion for next refactor/decoupling slice.
-"
+```text
+refer to '.agents/rust-decoupling-plan.md' and begin planning plus discussion for the next refactor/decoupling slice.
+```
 
 # Rust Backend Decoupling: Architecture & Implementation Plan
 

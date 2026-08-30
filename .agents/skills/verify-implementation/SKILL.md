@@ -1,6 +1,6 @@
 ---
 name: verify-implementation
-description: "When an implementation slice is finished: run static checks, verify config/portable mode, hand the user a manual verification list, and port documentation."
+description: "Trigger when finishing a slice or when asked to 'verify'. Runs static checks, verifies config, and ports docs. Do not trigger validate-changes instead."
 argument-hint: "<slice or change description>"
 ---
 
@@ -45,9 +45,16 @@ Produce a numbered checklist of things that genuinely require human eyes or inte
 
 Only include items relevant to the current change set. Do not pad with generic checks.
 
+Each checklist item must be human-readable and self-contained so a tester with no prior context can follow it:
+
+- Write as a concrete instruction: where to go, what to do, what to observe.
+- State the expected result in plain language (what the tester should see happen).
+- Do not assume the tester knows file names, function names, or internal implementation details; keep code references out of the checklist itself.
+- Keep each item to 1 to 3 short sentences. Use plain verbs (Open, Click, Press, Observe, Confirm).
+
 ### 4. Documentation porting
 
-Run only after steps 1–3 pass (checks green, user confirms manual checks or no blockers remain).
+Run only after steps 1 to 3 pass (checks green, user confirms manual checks or no blockers remain).
 
 - Check `.agents/additions.md` for items completed in this slice. Port each completed item to `.agents/implemented.md`, preserving its description and any implementation notes worth keeping.
 - For work not tracked in `additions.md` (ad-hoc fixes, refactors, user-requested changes), add a corresponding entry to `.agents/implemented.md` so the record stays complete.

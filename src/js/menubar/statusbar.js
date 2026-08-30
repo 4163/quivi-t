@@ -97,17 +97,17 @@ export const Statusbar = {
   },
 
   // Scroll-zoom indicator: toggles classes on #statusbar to match CSS selectors
-  // (#statusbar.zoom-held / #statusbar.zoom-latched).
+  // (#statusbar.action-held / #statusbar.action-latched).
   setScrollIndicatorState(text, held, latched) {
     if (!statusbar || !statusScrollZoom) return;
 
     if (statusScrollZoom.textContent !== text) statusScrollZoom.textContent = text;
 
-    if (statusbar.classList.contains('zoom-held') !== held) {
-      statusbar.classList.toggle('zoom-held', held);
+    if (statusbar.classList.contains('action-held') !== held) {
+      statusbar.classList.toggle('action-held', held);
     }
-    if (statusbar.classList.contains('zoom-latched') !== latched) {
-      statusbar.classList.toggle('zoom-latched', latched);
+    if (statusbar.classList.contains('action-latched') !== latched) {
+      statusbar.classList.toggle('action-latched', latched);
     }
   }
 };

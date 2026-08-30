@@ -21,6 +21,8 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Archives**: Read compressed files directly as folders, including image navigation and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Ctrl`+wheel.
+- **Scaling**: Choose from Pixelated, Bilinear, and Lanczos scaling.
+- **Filters**: WebGL filters for Anime4K (Mode A Fast/HQ), CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or Scanlines.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
 - **Persistent State**: Persists favorites, single-instance handoff, optional auto-open behavior, and the last opened image.
 - **Windows Integration**: Use native file/folder icons and register file associations per-user for Windows Default Apps.
@@ -33,6 +35,8 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 ## Shortcuts & Controls
 
 The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`), native mouse inputs (`MouseMiddle`, `MouseForward`), double-click gestures (`DoubleClick`), and scroll-wheel capture with modifiers (`Ctrl+ScrollUp`). All keybinds can be configured dynamically in the Options menu with built-in conflict highlighting.
+
+> Table lists only mapped defaults. You can assign keybinds to unmapped actions in **Options**.
 
 | Action | Default Shortcut(s) |
 |---|---|
@@ -49,7 +53,8 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Fit window | `Shift+F` |
 | Fit width / height if larger | `Q` / `E` |
 | Fit window if larger | `F` |
-| Cycle scaling mode | `[` / `]` |
+| **Scaling Method** | |
+| Scale: Previous / Next | `[` / `]` |
 | **Zoom** | |
 | Zoom in / out | `C` / `Z` |
 | Zoom in / out (Scroll) | `Ctrl+ScrollUp` / `Ctrl+ScrollDown` |
@@ -136,7 +141,9 @@ See the [Releases](../../releases) page for version history and release notes.
 The following system defaults are used:
 
 - **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
-- **Scaling Mode:** `bicubic`
+- **Scaling Mode:** `bilinear`
+- **Filters:** Defaults to none active, only one filter can be active at a time. SVGs are rasterized at a capped resolution (2048px static, 512px animated); Anime4K and Lanczos fall back to Bilinear for SVGs.
+- **Filter: Anime4K** Defaults to `fast` (upstream Mode A Fast). Configurable in **Options → General → Anime4K**.
 - **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in **Options → General → Panning**.
 - **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge shows whether scroll zoom is latched or which bound modifier keys are currently held.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
@@ -179,9 +186,9 @@ Data is split across five files:
 The frontend is split into a state machine, pure services, and single-owner UI modules that talk through `Core.onStateChange` instead of writing each other's DOM:
 
 - `core.js`: App state and configuration. No DOM.
-- `services/`: Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), key combos, keybind rules, sorting, viewer math.
+- `services/`: Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), key combos, keybind rules, sorting, viewer math. Filter logic lives in `filters/`, scaling in `scaling/`, and the WebGL runtime/catalog in `pipelines/`.
 - `shared/`: Cross-window theme/CSS apply, pre-paint injector, config preview / emergency reset, window fit.
-- `viewer/`: Facade plus render pool and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
+- `viewer/`: Facade plus render pool, overlay canvas owner (`viewerPipelines.js`), and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
 - `filepanel/`: File list (virtualized), columns, breadcrumb, resize. Favorites persistence is `favoritesStore.js`.
 - `menubar/`: Chrome visibility and the sole `#statusbar` writer. `menubar.js` owns dropdown interaction.
 - `main/`: Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge.
@@ -308,18 +315,36 @@ QuiviT/
 │     │  └─ associationsUi.js    # File-type association UI
 │     ├─ services/
 │     │  ├─ actions.js           # ACTION_REGISTRY + dispatch
+│     │  ├─ filterModules.js     # Filter module resolution
 │     │  ├─ keyCombo.js          # Combo normalize / format
 │     │  ├─ keybindDomain.js     # Locked binds, conflicts, categories
+│     │  ├─ registry.js          # Filter and scaling definitions
 │     │  ├─ sorting.js           # naturalCompare / applySort
-│     │  └─ viewerMath.js        # Zoom / pan / fit math
+│     │  ├─ viewerMath.js        # Zoom / pan / fit math
+│     │  ├─ filters/
+│     │  │  ├─ anime4k.js        # Anime4K filter definition
+│     │  │  ├─ crt.js            # Retro CRT filter definition
+│     │  │  ├─ phosphor.js       # Phosphor dot-matrix filter definition
+│     │  │  ├─ scanlines.js      # Simple scanlines filter definition
+│     │  │  └─ anime4k/          # Anime4K WebGL shader chains
+│     │  ├─ pipelines/
+│     │  │  ├─ glCommon.js       # WebGL utility and shader compilation functions
+│     │  │  └─ glRuntime.js      # Filter pipeline orchestrator and quad renderer
+│     │  └─ scaling/
+│     │     ├─ lanczos.js        # Off-thread Pica/Canvas2D Lanczos scaling
+│     │     └─ lanczosWebGL.js   # Real-time WebGL Lanczos for animated images
 │     ├─ shared/
 │     │  ├─ theme.js             # applyTheme / applyCustomCss
 │     │  ├─ themePrePaint.js     # Synchronous pre-paint injector
+│     │  ├─ blobImage.js         # Shared ImageBitmap cache for origins
 │     │  ├─ configPreview.js     # Live preview + emergency CSS reset
 │     │  └─ windowFit.js         # Options / metadata content fit
+│     ├─ vendors/
+│     │  └─ pica.js              # High quality image resizing
 │     └─ viewer/
 │        ├─ viewer.js            # Facade
 │        ├─ viewerRender.js      # Image pool + transforms
+│        ├─ viewerPipelines.js   # Overlay canvas and WebGL owner
 │        └─ viewerGestures.js    # Pan input
 ├─ src-tauri/
 │  ├─ capabilities/
@@ -352,4 +377,5 @@ QuiviT/
 - Icons: [Flaticon (Cosplayer, Webp, Gif, Cbz, Cbr, Svg)](https://www.flaticon.com)
 - UI Icons: [Feather](https://feathericons.com) / [Lucide](https://lucide.dev)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
+- WebGL Shaders: [Bloc97/Anime4K](https://github.com/bloc97/Anime4K) / [stefanlegg/crt-fx](https://github.com/stefanlegg/crt-fx) / [TheMarco/RetroZone](https://github.com/TheMarco/RetroZone) / Scanlines (Geom-inspired beam, original WebGL implementation; concept from [cgwg CRT-Geom](https://github.com/libretro/common-shaders))
 - Agent Skills: Adapted from [poteto - pstack](https://github.com/cursor/plugins/tree/main/pstack) and [mattpocock/skills](https://github.com/mattpocock/skills)

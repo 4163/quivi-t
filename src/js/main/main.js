@@ -11,7 +11,7 @@ import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrol
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from '../keybinds.js';
 import { Statusbar } from '../menubar/statusbar.js';
-import { initMenuBar } from '../menubar.js';
+import { initMenuBar, syncViewMenu } from '../menubar.js';
 import * as Chrome from '../menubar/chrome.js';
 import { initFullscreen, toggleFullscreen, syncFullscreenState, isFullscreenActive, syncKeyLabel } from './fullscreen.js';
 
@@ -22,6 +22,7 @@ import { ACTION_REGISTRY, dispatch } from '../services/actions.js';
 import { initLifecycle } from './lifecycle.js';
 import { initMetadataBadge, openMetadataWindow } from './metadataBadge.js';
 import { initDropZone } from './dropzone.js';
+
 
 // Reset the options tab on startup so each session starts on General.
 localStorage.removeItem('options-active-tab');
@@ -46,16 +47,9 @@ const fileListUl = document.getElementById('file-list');
 const resizeHandle = document.getElementById('panel-resize-handle');
 const metadataBadgeEl = document.getElementById('status-metadata-badge');
 
-let activeScaling = '';
 let _uiInitialized = false;
 let keyboardPanStep = DEFAULT_KEYBOARD_PAN_STEP;
 let wheelPanStep = DEFAULT_WHEEL_PAN_STEP;
-
-function updateScalingMenu() {
-  document.querySelectorAll('[data-scaling]').forEach(item => {
-    item.classList.toggle('checked', item.dataset.scaling === activeScaling);
-  });
-}
 
 function setMenuItemMuted(id, muted) {
   const item = document.getElementById(id);
@@ -104,7 +98,7 @@ function bindMenuCommands() {
     }
   }
 
-  updateScalingMenu();
+  syncViewMenu(Core.getState());
   updateHistoryMenu();
 }
 
@@ -161,12 +155,7 @@ Core.onStateChange((state) => {
   // Update standard statusbar fields.
   Statusbar.update(state);
 
-  if (state.scalingMode !== activeScaling) {
-    activeScaling = state.scalingMode;
-    Viewer.setScaling(activeScaling);
-    updateScalingMenu();
-  }
-
+  syncViewMenu(state);
   updateHistoryMenu();
 });
 

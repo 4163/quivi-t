@@ -63,9 +63,14 @@
           <li role="menuitem" id="cmd-fit-height-if-larger" tabindex="0" title="Shrink to viewport height, but never enlarge small images">Fit height if larger<span class="shortcut">E</span></li>
           <li role="menuitem" id="cmd-fit-window-if-larger" tabindex="0" title="Shrink to fit the viewport, but never enlarge small images">Fit window if larger<span class="shortcut">F</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none" title="Cycle modes with ] / [">Scaling: None</li>
-          <li role="menuitem" id="cmd-scale-bicubic" tabindex="0" data-scaling="bicubic" title="Cycle modes with ] / [">Scaling: Bicubic</li>
+          <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none" title="Cycle modes with ] / [">Scaling: Pixelated</li>
+          <li role="menuitem" id="cmd-scale-bilinear" tabindex="0" data-scaling="bilinear" title="Cycle modes with ] / [">Scaling: Bilinear</li>
           <li role="menuitem" id="cmd-scale-lanczos" tabindex="0" data-scaling="lanczos" title="Cycle modes with ] / [">Scaling: Lanczos</li>
+          <li class="separator"></li>
+          <li role="menuitem" id="cmd-toggle-anime4k-filter" tabindex="0" data-checked="false">Filter: Anime4K</li>
+          <li role="menuitem" id="cmd-toggle-scanlines-filter" tabindex="0" data-checked="false" title="Straight scanlines, no curvature (Geom-inspired)">Filter: Scanlines</li>
+          <li role="menuitem" id="cmd-toggle-phosphor-filter" tabindex="0" data-checked="false">Filter: Phosphor</li>
+          <li role="menuitem" id="cmd-toggle-crt-filter" tabindex="0" data-checked="false">Filter: Retro CRT</li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-rotate-cw" tabindex="0">Rotate clockwise<span class="shortcut">H</span></li>
           <li role="menuitem" id="cmd-rotate-ccw" tabindex="0">Rotate counter-clockwise<span class="shortcut">G</span></li>
@@ -172,7 +177,11 @@
           <div id="img-grill-border"></div>
           <img class="viewer-img" decoding="async" alt="" draggable="false">
           <img class="viewer-img" decoding="async" alt="" draggable="false">
+          <canvas id="viewer-lanczos-canvas"></canvas>
         </div>
+        
+        <img id="viewer-svg-pump" class="svg-pump-live hidden">
+        <canvas id="viewer-filter-canvas"></canvas>
 
       </div>
 
@@ -210,7 +219,8 @@
 
     <!-- Scripts, decoupled load order -->
     <div id="measure-probe" class="measure-probe" aria-hidden="true"></div>
-    <script type="module" src="/js/main/main.js"></script>
+    <script src="js/vendors/pica.js"></script>
     <script type="module" src="/js/shellBackground.js"></script>
+    <script type="module" src="/js/main/main.js"></script>
   </body>
 </html>

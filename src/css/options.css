@@ -141,7 +141,7 @@ body > * {
 .pan-step-row {
   display: flex;
   align-items: flex-start;
-  gap: 32px;
+  gap: 16px;
 }
 
 .pan-step-col {
@@ -395,6 +395,11 @@ button {
 .scroll-mode-label {
   flex: 1;
   font-size: var(--fs-12);
+}
+
+.scroll-mode-controls {
+  display: flex;
+  gap: 6px;
 }
 
 .scroll-mode-btn {

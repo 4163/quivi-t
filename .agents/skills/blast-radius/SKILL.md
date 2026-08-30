@@ -33,7 +33,7 @@ These are the repo's common blast-radius zones. Not every change touches all of 
 - **IPC commands** (`src-tauri/src/commands/`): changed return types, renamed commands, or shifted payloads break the JS caller.
 - **Config schema** (`src-tauri/src/config.rs`): changed keys, types, or defaults break existing user config files and portable-mode paths.
 - **Archive & format readers** (`src-tauri/src/archives/`, `src-tauri/src/formats.rs`): changed entry shapes, sort orders, or cache keys break virtual directory traversal and viewer navigation.
-- **Protocol URLs** (`src-tauri/src/protocol.rs` handling `asset://`, `quivi://`): changed routes or response headers break image loading and cross-window preview.
+- **Protocol URLs** (`src-tauri/src/protocol.rs` handling `asset://`, `quivit://`): changed routes or response headers break image loading and cross-window preview.
 - **Platform & Windowing** (`src-tauri/src/platform/`, `src-tauri/src/windows.rs`): changed native integrations, file associations, or window spawning logic break OS-level behaviors.
 - **Cross-window state** (`localStorage`, theme, preview payload): changed shapes or keys break secondary windows that read what the primary writes.
 - **CSS tokens** (`global.css` `:root`): changed or removed custom properties break downstream page sheets and theme application.
@@ -45,5 +45,5 @@ These are the repo's common blast-radius zones. Not every change touches all of 
 1. Read the change.
 2. For each modified function, struct, command, token, or contract: trace who consumes it. Go beyond direct callers to indirect readers (config files on disk, other windows, the protocol handler, CSS selectors that match on a class you renamed).
 3. For each consumer, determine the failure mode if the change is wrong.
-4. Climb the confidence ladder. Prove safety with code where cheap. Flag anything stuck at step 1–2.
+4. Climb the confidence ladder. Prove safety with code where cheap. Flag anything stuck at steps 1 and 2.
 5. Act on the findings. Fix any broken downstream consumers in the same slice. If you cannot reach confidence step 4 for a critical safety fact, explicitly warn the user and explain what needs manual validation before considering the task done.

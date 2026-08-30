@@ -43,6 +43,8 @@ const invoke = window.__TAURI__?.core?.invoke;
 
 // Internal state.
 
+const _animMemo = new Map();
+
 const _state = {
   /** @type {'empty'|'image'|'archive'} */
   mode: 'empty',
@@ -67,6 +69,12 @@ const _state = {
 
   /** If mode === 'archive', the filenames of any metadata files found */
   archiveMetadataFiles: [],
+
+  /** True if the current image is an animated format */
+  isAnimated: false,
+
+  /** True if the current image is specifically a no-loop animated GIF */
+  noLoop: false,
 
   /** File list panel visibility. */
   fileListVisible: true,
@@ -156,15 +164,45 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     newSrc = clampPreview ? _state.src : '';
   } else if (_state.mode === 'archive') {
     newSrc = await FsUtils.buildArchiveEntrySrc(_state.archivePath, file.name);
+    if (_state.index !== index) return;
   } else {
     newSrc = await FsUtils.buildFileSrc(file.path);
+    if (_state.index !== index) return;
   }
-
-  // Ignore stale ICO results if the user navigated away while frames loaded.
-  if (_state.index !== index) return;
 
   FsUtils.revokeIfObjectURL(_state.src);
   _state.src = newSrc;
+
+  let animPromise = null;
+  if (FsUtils.isImageEntry(file)) {
+    const pathArg = _state.mode === 'archive' ? file.name : file.path;
+    const archiveArg = _state.mode === 'archive' ? _state.archivePath : null;
+    const cacheKey = `${archiveArg || ''}::${pathArg}`;
+    
+    if (_animMemo.has(cacheKey)) {
+      const cached = _animMemo.get(cacheKey);
+      _state.isAnimated = cached.is_animated;
+      _state.noLoop = cached.no_loop;
+    } else {
+      // Leave previous flags alone until checked, to prevent pipeline teardown flash
+      animPromise = Core.checkIsAnimated(pathArg, archiveArg);
+    }
+  } else {
+    _state.isAnimated = false;
+    _state.noLoop = false;
+  }
+
+  _notify();
+
+  if (animPromise) {
+    animPromise.then(animStatus => {
+      if (_state.index === index && _state.src === newSrc) {
+        _state.isAnimated = animStatus.is_animated;
+        _state.noLoop = animStatus.no_loop;
+        _notify();
+      }
+    });
+  }
 
   if (_state.config?.frontend_data?.remember_last_image && _state.src !== '') {
     const container = _state.mode === 'archive' ? _state.archivePath : _state.directory;
@@ -173,8 +211,6 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
       _scheduleConfigFlush(1500);
     }
   }
-
-  _notify();
 
   if (_state.mode === 'archive') {
     FsUtils.prefetchAhead(_state.archivePath, index, direction);
@@ -217,6 +253,19 @@ export const Core = {
     if (options.notify !== false) _notify();
   },
 
+  async checkIsAnimated(pathArg, archiveArg = null) {
+    const cacheKey = `${archiveArg || ''}::${pathArg}`;
+    if (_animMemo.has(cacheKey)) return _animMemo.get(cacheKey);
+    try {
+      const animStatus = await invoke('check_is_animated', { path: pathArg, archivePath: archiveArg });
+      _animMemo.set(cacheKey, animStatus);
+      return animStatus;
+    } catch (err) {
+      console.warn('[Core] Failed to check animation header:', err);
+      return { is_animated: false, no_loop: false };
+    }
+  },
+
   toggleTransparentBg() {
     _state.config.frontend_data.transparent_bg = !_state.config.frontend_data.transparent_bg;
     _scheduleConfigFlush(1500);
@@ -239,6 +288,12 @@ export const Core = {
       _state.config.frontend_data.scaling_mode = mode;
       _scheduleConfigFlush(1500);
     }
+    _notify();
+  },
+
+  setActiveFilter(id) {
+    _state.config.frontend_data.active_filter = id;
+    _scheduleConfigFlush();
     _notify();
   },
 
@@ -302,7 +357,6 @@ export const Core = {
       
       _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
       _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
-      
       
 
       // Refresh when show_hidden changes.

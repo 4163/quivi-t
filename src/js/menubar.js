@@ -5,6 +5,10 @@
 
 let activeMenu = null;
 
+import { FILTERS, SCALERS, activeFilterId } from './services/registry.js';
+import { getEffectiveScaling } from './services/viewerMath.js';
+
+
 export function initMenuBar() {
   bindMenus();
 }
@@ -114,4 +118,24 @@ function bindMenus() {
       item.addEventListener('click', closeMenus);
     });
   });
+}
+
+export function syncViewMenu(state) {
+  const isAnimated = !!state.isAnimated;
+  // The renderer silently falls back to Bilinear for SVGs.
+  // Ignore SVG status here so the user's preferred scaling mode remains visually checked (intended UX).
+  const currentFilter = activeFilterId(state.config?.frontend_data || {});
+  const displayScaling = getEffectiveScaling(state.scalingMode, isAnimated, false);
+
+  for (const f of FILTERS) {
+    const el = document.getElementById(f.actionId);
+    if (!el) continue;
+    el.classList.toggle('checked', currentFilter === f.id);
+  }
+
+  for (const s of SCALERS) {
+    const el = document.getElementById(s.actionId);
+    if (!el) continue;
+    el.classList.toggle('checked', displayScaling === s.id);
+  }
 }

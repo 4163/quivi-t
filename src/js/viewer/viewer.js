@@ -1,6 +1,7 @@
 import { createViewportState } from '../services/viewerMath.js';
 import { createViewerRenderer } from './viewerRender.js';
 import { createViewerGestures } from './viewerGestures.js';
+import { createViewerPipelines } from './viewerPipelines.js';
 
 const viewportState = createViewportState({
   getViewport: () => {
@@ -16,12 +17,21 @@ const viewportState = createViewportState({
   }
 });
 
-createViewerRenderer(viewportState);
+const pipelines = createViewerPipelines(viewportState);
+createViewerRenderer(viewportState, (img) => {
+  if (img) pipelines.setSource(img);
+  else pipelines.clear();
+});
 createViewerGestures(viewportState);
 
-window.addEventListener('quivit-panel-resized', () => {
-  viewportState.applyFitMode();
-});
+const vpEl = document.getElementById('viewport');
+if (vpEl) {
+  const ro = new ResizeObserver(() => {
+    viewportState.applyFitMode();
+    pipelines.forceRender();
+  });
+  ro.observe(vpEl);
+}
 
 function _getViewportCenter() {
   const vp = document.getElementById('viewport');
@@ -41,7 +51,6 @@ export const Viewer = {
   rotate: viewportState.rotate,
   flipHorizontal: () => viewportState.flip('x'),
   flipVertical: () => viewportState.flip('y'),
-  setScaling: viewportState.setScaling,
   setZoom: (exactScale) => {
     const c = _getViewportCenter();
     if (!c) return;

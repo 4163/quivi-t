@@ -15,6 +15,13 @@ body.cursor-move { cursor: move !important; }
 body.resizing-panel { cursor: ew-resize !important; }
 body.resizing-col { cursor: col-resize !important; }
 
+.offscreen-measure {
+  position: absolute !important;
+  visibility: hidden !important;
+  width: max-content !important;
+  min-width: 0 !important;
+}
+
 /* Menu bar. */
 #menubar {
   display: flex;
@@ -444,8 +451,7 @@ li:hover > .fav-remove,
 }
 
 .col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-ext  { min-width: 38px; }
-.col-date { min-width: 92px; font-size: var(--fs-10); }
+.col-date { font-size: var(--fs-10); }
 
 #file-list {
   flex: 1;
@@ -758,8 +764,8 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 .drop-hint span{ font-size: 0.75rem; opacity: 0.5; letter-spacing: 0.04em; text-align: center; }
 
 /* Viewer image wrapper. */
-/* The wrapper is the positioned/transformed element. Both the
-   image and the overlay live inside so CSS aligns them for free. */
+/* The wrapper is the positioned/transformed element. The image and
+   the Lanczos canvas live inside; the WebGL filter canvas is a sibling. */
 #viewer-img-wrapper {
   position: absolute;
   top: 50%;
@@ -787,6 +793,65 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 
 .viewer-img[data-scaling="none"] {
   image-rendering: pixelated;
+}
+
+.viewer-img[data-scaling="bilinear"],
+.viewer-img[data-scaling="lanczos"] {
+  image-rendering: auto;
+}
+
+/* ── SVG Live Pump Fallback ── */
+.svg-pump-live {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+#viewer-svg-pump.hidden {
+  display: none;
+}
+
+.svg-pump-live {
+  pointer-events: none;
+  opacity: 0.001;
+}
+
+/* ── Lanczos Overlay Canvas (inside img-wrapper) ── */
+#viewer-lanczos-canvas {
+  position: absolute;
+  top: var(--crop-top, 0px);
+  left: var(--crop-left, 0px);
+  width: var(--crop-w);
+  height: var(--crop-h);
+  opacity: 0;
+}
+
+#viewer-lanczos-canvas[data-render-ready="true"] {
+  opacity: 1;
+}
+
+/* ── WebGL Overlay Canvas ── */
+#viewer-filter-canvas {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: auto;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#viewer-filter-canvas[data-render-ready="true"] {
+  opacity: 1;
+}
+
+#viewport[data-filter] #viewer-img-wrapper .viewer-img,
+#viewer-img-wrapper:has(#viewer-lanczos-canvas[data-render-ready="true"]) .viewer-img {
+  opacity: 0 !important;
 }
 
 /* SVGs with percentage-based dimensions collapse in the shrink-wrap wrapper.
@@ -897,8 +962,8 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   white-space: nowrap;
 }
 
-#statusbar.zoom-held .status-scroll-zoom,
-#statusbar.zoom-latched .status-scroll-zoom {
+#statusbar.action-held .status-scroll-zoom,
+#statusbar.action-latched .status-scroll-zoom {
   display: inline-block;
 }
 

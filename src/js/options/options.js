@@ -97,6 +97,13 @@ async function init() {
     document.getElementById('opt-custom-css').value = customCss;
     applyCustomCss(customCss);
     
+    // Anime4K UI
+    const anime4kVariant = config.frontend_data?.filter_options?.anime4k?.variant || 'fast';
+    document.querySelectorAll('[data-anime4k-variant]').forEach(btn => {
+      btn.classList.toggle('primary', btn.dataset.anime4kVariant === anime4kVariant);
+      btn.classList.toggle('secondary', btn.dataset.anime4kVariant !== anime4kVariant);
+    });
+
     keybindUiInstance = initKeybindUi('keybinds-container', config, showStatus);
     initAssociationsUi('associations-container', showStatus);
   } catch (err) {
@@ -129,7 +136,13 @@ if (_savedTab && document.getElementById(_savedTab)) switchTab(_savedTab);
 
 document.getElementById('btn-reset-keybinds').addEventListener('click', () => {
   config.frontend_data.keybinds = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
-  if (keybindUiInstance) keybindUiInstance.renderKeybinds();
+  config.frontend_data.scroll_zoom_modifier = 'hold';
+  // Latch is runtime state (quivit_state.json) tied to the modifier — clear together so Toggle starts unlatched.
+  config.frontend_data.scroll_zoom_latched = false;
+  if (keybindUiInstance) {
+    keybindUiInstance.renderKeybinds();
+    keybindUiInstance.syncScrollModeToggle?.();
+  }
   showStatus('Keybindings reset to defaults.');
 });
 
@@ -178,6 +191,22 @@ document.querySelectorAll('.theme-btn').forEach((btn) => {
   });
 });
 makeListNavigable(document.querySelectorAll('.theme-btn'), { horizontal: true, vertical: false });
+
+// Anime4K variant buttons
+document.querySelectorAll('[data-anime4k-variant]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const variant = btn.dataset.anime4kVariant;
+    if (!config.frontend_data.filter_options) config.frontend_data.filter_options = {};
+    if (!config.frontend_data.filter_options.anime4k) config.frontend_data.filter_options.anime4k = {};
+    config.frontend_data.filter_options.anime4k.variant = variant;
+
+    document.querySelectorAll('[data-anime4k-variant]').forEach(b => {
+      b.classList.toggle('primary', b.dataset.anime4kVariant === variant);
+      b.classList.toggle('secondary', b.dataset.anime4kVariant !== variant);
+    });
+  });
+});
+makeListNavigable(document.querySelectorAll('[data-anime4k-variant]'), { horizontal: true, vertical: false });
 
 async function closeOptionsWindow() {
   forceClose = true;
@@ -276,8 +305,13 @@ function buildConfigFromForm(baseConfig) {
   newConfig.frontend_data.keyboard_pan_step = parseInt(document.getElementById('opt-keyboard-pan-step').value, 10);
   newConfig.frontend_data.wheel_pan_step = parseInt(document.getElementById('opt-wheel-pan-step').value, 10);
   newConfig.frontend_data.start_dir = document.getElementById('opt-start-dir').value;
+  // Wheel Behaviour (Keys tab) is owned by keybindUi.js and mutated directly on `config`.
+  // Preserve the current value through the shallow copy so Save persists the toggle.
+  newConfig.frontend_data.scroll_zoom_modifier = baseConfig.frontend_data.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold';
   newConfig.frontend_data.theme = currentTheme;
   newConfig.frontend_data.custom_css = document.getElementById('opt-custom-css').value;
+  // Preserve filter options which are mutated in memory directly.
+  newConfig.frontend_data.filter_options = JSON.parse(JSON.stringify(baseConfig.frontend_data.filter_options || {}));
   
   if (!newConfig.frontend_data.continue_last) {
     delete newConfig.frontend_data.last_opened_path;

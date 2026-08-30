@@ -14,11 +14,25 @@ import {
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 
-const MIN_COL_WIDTHS = {
-  name: 64,
-  ext: 38,
-  date: 92,
-};
+let MIN_COL_WIDTHS = {};
+
+function recalculateMinColWidths() {
+  ['name', 'ext', 'date'].forEach(col => {
+    const el = document.querySelector(`.header-cell.col-${col}`);
+    if (el) {
+      const clone = el.cloneNode(true);
+      clone.classList.add('offscreen-measure');
+      
+      // Ensure we leave room for the sort icon, even if it's currently inactive
+      const icon = clone.querySelector('.sort-icon');
+      if (icon) icon.textContent = '▼';
+      
+      document.body.appendChild(clone);
+      MIN_COL_WIDTHS[col] = Math.ceil(clone.getBoundingClientRect().width);
+      document.body.removeChild(clone);
+    }
+  });
+}
 
 let filePanel = null;
 let breadcrumbEl = null;
@@ -128,9 +142,11 @@ function initializeColumns() {
   if (columnsInitialized) return;
   columnsInitialized = true;
 
+  recalculateMinColWidths();
+
   const panelWidth = Math.max(filePanel.getBoundingClientRect().width - 8, 120);
-  const date = 92;
-  const ext = 46;
+  const date = MIN_COL_WIDTHS.date;
+  const ext = MIN_COL_WIDTHS.ext;
   setColumnWidth('date', date);
   setColumnWidth('ext', ext);
   setColumnWidth('name', Math.max(MIN_COL_WIDTHS.name, panelWidth - date - ext));
@@ -800,6 +816,8 @@ export function initFilePanel(deps) {
   window.addEventListener('quivit-css-applied', () => {
     // Re-measure rows for live CSS previews.
     ROW_HEIGHT = 0;
+    recalculateMinColWidths();
+    normalizeColumnWidths('name');
     if (Core) renderFilePanel(Core.getState());
   });
 
@@ -894,7 +912,6 @@ export function initFilePanel(deps) {
       const newWidth = Math.min(480, Math.max(120, e.clientX));
       document.documentElement.style.setProperty('--panel-w', `${newWidth}px`);
       normalizeColumnWidths('name', getColumnWidth('name') + (newWidth - oldWidth));
-      window.dispatchEvent(new CustomEvent('quivit-panel-resized'));
     }
 
     if (resizingCol) {

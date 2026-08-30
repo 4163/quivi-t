@@ -277,8 +277,18 @@ export const FsUtils = {
 
     this.revokeIfObjectURL(state.src);
 
-    const selectedSrc = this.isImageEntry(files[index]) ? await this.buildFileSrc(files[index].path) : '';
+    const selectedEntry = files[index];
+    const selectedSrc = this.isImageEntry(selectedEntry) ? await this.buildFileSrc(selectedEntry.path) : '';
     if (!_isCurrentGeneration(options.generation)) return;
+
+    let isAnimated = false;
+    let noLoop = false;
+    if (this.isImageEntry(selectedEntry)) {
+      const animStatus = await Core.checkIsAnimated(selectedEntry.path, null);
+      isAnimated = animStatus.is_animated;
+      noLoop = animStatus.no_loop;
+      if (!_isCurrentGeneration(options.generation)) return;
+    }
 
     Core.setState({
       mode: 'image',
@@ -286,8 +296,10 @@ export const FsUtils = {
       index,
       directory: result.directory,
       archivePath: '',
-      filename: files[index]?.name || '',
+      filename: selectedEntry?.name || '',
       src: selectedSrc,
+      isAnimated,
+      noLoop,
     });
     recordNavigation(options.previousEntry, Core.getState(), options);
 
@@ -356,10 +368,20 @@ export const FsUtils = {
         index = this.firstImageIndex(files, 1);
       }
 
-      const selectedSrc = this.isImageEntry(files[index])
-        ? await this.buildArchiveEntrySrc(result.archive_path, files[index].name)
+      const selectedEntry = files[index];
+      const selectedSrc = this.isImageEntry(selectedEntry)
+        ? await this.buildArchiveEntrySrc(result.archive_path, selectedEntry.name)
         : '';
       if (!_isCurrentGeneration(options.generation)) return;
+
+      let isAnimated = false;
+      let noLoop = false;
+      if (this.isImageEntry(selectedEntry)) {
+        const animStatus = await Core.checkIsAnimated(selectedEntry.name, result.archive_path);
+        isAnimated = animStatus.is_animated;
+        noLoop = animStatus.no_loop;
+        if (!_isCurrentGeneration(options.generation)) return;
+      }
 
       Core.setState({
         mode: 'archive',
@@ -368,8 +390,10 @@ export const FsUtils = {
         archivePath: result.archive_path,
         archiveMetadataFiles: metaFiles,
         directory: '',
-        filename: files[index]?.name || '',
-        src: selectedSrc
+        filename: selectedEntry?.name || '',
+        src: selectedSrc,
+        isAnimated,
+        noLoop,
       });
       recordNavigation(options.previousEntry, Core.getState(), options);
       if (!_isCurrentGeneration(options.generation)) return;
@@ -391,6 +415,7 @@ export const FsUtils = {
           mode: state.mode === 'empty' ? 'image' : state.mode,
           src: '',
           filename: `Failed to open archive: ${basename(archivePath) || archivePath}`,
+          isAnimated: false,
         });
       }
       throw err;

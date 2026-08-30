@@ -34,6 +34,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `AppConfig` uses `#[serde(default)]`; `frontend_data` is untyped JSON so unknown keys round-trip. `mergeConfig()` fills missing keys from defaults.
 - User-chosen prefs → `quivit_config.json`. Last-known runtime → `quivit_state.json`. Restart-gated settings are staged as `pending_<key>` and promoted at startup.
 - `default_sort` is config-file-only; the UI writes only per-directory sort prefs. Archive cache budget is config-file-only, no UI.
+- Filter preference is stored as `active_filter` (id) and `filter_options` (bag), replacing individual booleans.
 - Theme/CSS live previews are ephemeral until Options Apply. They must not persist to `localStorage` while previewing.
 
 **CSS:**
@@ -42,11 +43,11 @@ If the tree looks the same and ownership did not change, leave this file alone.
 
 **JavaScript:**
 - `core.js`: state machine. No DOM. UI modules subscribe via `onStateChange`.
-- `services/`: pure domain: `actions.js` (single `cmd-*` registry + dispatch), `keyCombo.js`, `keybindDomain.js`, `sorting.js`, `viewerMath.js`. No `document`.
-- `shared/`: cross-window: `theme.js` / `themePrePaint.js`, `configPreview.js`, `windowFit.js`.
+- `services/`: pure domain: `actions.js` (single `cmd-*` registry + dispatch), `keyCombo.js`, `keybindDomain.js`, `sorting.js`, `viewerMath.js`. Filter/scaler methods live in `filters/` and `scaling/lanczos.js`; WebGL is orchestrated by `pipelines/glRuntime.js`. No `document` querying.
+- `shared/`: cross-window: `theme.js` / `themePrePaint.js`, `configPreview.js`, `windowFit.js`, `blobImage.js`.
 - `keybinds.js`: `mergeConfig` + pan/zoom defaults. `DEFAULT_KEYBINDS` is derived from `ACTION_REGISTRY`.
 - `shortcuts.js`: keyboard / mouse / wheel dispatch. Does not write the statusbar.
-- `viewer/`: `viewer.js` facade; `viewerRender.js` owns the image pool; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
+- `viewer/`: `viewer.js` facade; `viewerRender.js` owns the image pool; `viewerPipelines.js` owns the overlay canvases; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
 - `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. `favoritesStore.js` is persistence only (no DOM).
 - `fsUtils.js`: filesystem / archive navigation. No DOM.
 - `directoryPrefs.js`: per-directory sort prefs. Sort math is in `services/sorting.js`.
@@ -68,8 +69,8 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `lib.rs` & `main.rs`: bootstrap, config watcher, and main-window build.
 - `tests/`: in-tree testing for archives, config, formats, and protocol.
 - `config.rs`: `AppConfig` / persistence / portable / pending promotion.
-- `commands/`: Tauri command surface (directory, archives, watcher, associations, shell).
-- `archives/` & `formats.rs`: archive readers + `ArchiveCache` and format registry.
+- `commands/`: Tauri command surface (directory, archives, animation, watcher, associations, shell).
+- `archives/` & `formats.rs`: archive readers + `ArchiveCache` and format / animation registry.
 - `protocol.rs`: `quivit://` and `asset://` handler logic.
 - `platform/` & `windows.rs`: OS-level integrations (including shell icons and hidden-path logic), window lifecycle (including size constants).
 - `ico.rs`: ICO spritesheets.
