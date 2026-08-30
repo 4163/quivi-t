@@ -293,6 +293,7 @@ export function createViewerPipelines(viewportState) {
 
     _stopLivePump();
     _livePumpSrc = currentSrc;
+    _livePumpLastDrawnFrameIndex = -1;
 
     // --- SVG DOM Fallback Pump ---
     if (isSvg) {
@@ -307,7 +308,7 @@ export function createViewerPipelines(viewportState) {
       const liveImg = document.createElement('img');
 
       const viewport = document.getElementById('viewport');
-      liveImg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;pointer-events:none;opacity:0.001;';
+      liveImg.className = 'svg-pump-live';
       viewport.insertBefore(liveImg, document.getElementById('viewer-filter-canvas'));
       liveImg.src = blobUrl;
       _livePumpImg = liveImg;
@@ -467,7 +468,7 @@ export function createViewerPipelines(viewportState) {
         const result = await decoder.decode({ frameIndex });
         vf = result.image;
       } catch {
-        _livePumpRaf = requestAnimationFrame(pumpTick);
+        // If decoding fails (e.g. decoder closed or corrupt frame), stop the pump.
         return;
       }
       if (_livePumpSrc !== currentSrc) { vf.close(); return; }
@@ -563,9 +564,6 @@ export function createViewerPipelines(viewportState) {
       
       _activeSource = img;
       
-      const vp = document.getElementById('viewport');
-      if (vp) vp.removeAttribute('data-filter');
-      if (filterCanvas) filterCanvas.removeAttribute('data-render-ready');
       if (lanczosCanvas) lanczosCanvas.removeAttribute('data-render-ready');
       
       _cancelRender();

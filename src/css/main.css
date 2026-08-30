@@ -793,6 +793,18 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   image-rendering: auto;
 }
 
+/* ── SVG Live Pump Fallback ── */
+.svg-pump-live {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  opacity: 0.001;
+}
+
 /* ── Lanczos Overlay Canvas (inside img-wrapper) ── */
 #viewer-lanczos-canvas {
   position: absolute;
