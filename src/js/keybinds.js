@@ -5,7 +5,7 @@
  */
 
 import { normalizeCombo, normalizeList } from './services/keyCombo.js';
-import { activeFilterId } from './services/registry.js';
+import { activeFilterId, normalizeFilterOptions } from './services/registry.js';
 
 import { DEFAULT_KEYBINDS as REGISTRY_DEFAULTS } from './services/actions.js';
 
@@ -21,12 +21,6 @@ export const DEFAULT_WHEEL_PAN_STEP = 120;
 
 export const DEFAULT_FIT_MODE = 'height-if-larger';
 export const DEFAULT_SCALING_MODE = 'bilinear';
-
-export const DEFAULT_ANIME4K_VARIANT = 'fast';
-
-export function normalizeAnime4kVariant(value) {
-  return value === 'normal' ? 'normal' : DEFAULT_ANIME4K_VARIANT;
-}
 
 
 // persistence: frontend_data is merged here with normalized defaults. Preference
@@ -65,17 +59,7 @@ export function mergeConfig(loaded) {
       menu_visible: fd.menu_visible !== false,
       status_visible: fd.status_visible !== false,
       active_filter: activeFilterId(fd),
-      filter_options: (() => {
-        const fo = fd.filter_options && typeof fd.filter_options === 'object' ? fd.filter_options : {};
-        const existingAnime4k = fo.anime4k || {};
-        return {
-          ...fo,
-          anime4k: {
-            ...existingAnime4k,
-            variant: normalizeAnime4kVariant(existingAnime4k.variant)
-          }
-        };
-      })(),
+      filter_options: normalizeFilterOptions(fd.filter_options),
       keybinds: (() => {
         const defaultClone = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
         const userBinds = fd.keybinds || {};

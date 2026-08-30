@@ -186,7 +186,8 @@ fn check_apng(bytes: &[u8]) -> bool {
 }
 
 fn check_svg(bytes: &[u8]) -> bool {
+    // <animate matches <animate, <animateMotion, and <animateTransform
     bytes.windows(8).any(|w| w == b"<animate")
-        || bytes.windows(4).any(|w| w == b"<set")
-        || bytes.windows(16).any(|w| w == b"animateTransform")
+        || bytes.windows(5).any(|w| w == b"<set " || w == b"<set>")
+        || bytes.windows(6).any(|w| w == b"<set\t\n" || w == b"<set\r\n") // Just in case, though <set > is enough usually
 }

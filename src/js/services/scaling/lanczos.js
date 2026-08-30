@@ -12,9 +12,9 @@ const PICA_OPTIONS = {
   unsharpThreshold: 2
 };
 
-export function createLanczosPipeline() {
-  const _destCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
-  const _srcCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
+export function createLanczosPipeline(fallbackDestCanvas, fallbackSrcCanvas) {
+  const _destCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : fallbackDestCanvas;
+  const _srcCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : fallbackSrcCanvas;
   let _activePromise = null;
 
   function cancel() {

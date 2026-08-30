@@ -164,8 +164,10 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     newSrc = clampPreview ? _state.src : '';
   } else if (_state.mode === 'archive') {
     newSrc = await FsUtils.buildArchiveEntrySrc(_state.archivePath, file.name);
+    if (_state.index !== index) return;
   } else {
     newSrc = await FsUtils.buildFileSrc(file.path);
+    if (_state.index !== index) return;
   }
 
   FsUtils.revokeIfObjectURL(_state.src);
@@ -173,15 +175,16 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
 
   let animPromise = null;
   if (FsUtils.isImageEntry(file)) {
-    const cacheKey = `${_state.mode === 'archive' ? _state.archivePath : ''}::${file.path}`;
+    const pathArg = _state.mode === 'archive' ? file.name : file.path;
+    const archiveArg = _state.mode === 'archive' ? _state.archivePath : null;
+    const cacheKey = `${archiveArg || ''}::${pathArg}`;
+    
     if (_animMemo.has(cacheKey)) {
       const cached = _animMemo.get(cacheKey);
       _state.isAnimated = cached.is_animated;
       _state.noLoop = cached.no_loop;
     } else {
       // Leave previous flags alone until checked, to prevent pipeline teardown flash
-      const pathArg = _state.mode === 'archive' ? file.name : file.path;
-      const archiveArg = _state.mode === 'archive' ? _state.archivePath : null;
       animPromise = Core.checkIsAnimated(pathArg, archiveArg);
     }
   } else {

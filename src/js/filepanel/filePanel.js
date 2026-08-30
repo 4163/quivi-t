@@ -21,10 +21,7 @@ function recalculateMinColWidths() {
     const el = document.querySelector(`.header-cell.col-${col}`);
     if (el) {
       const clone = el.cloneNode(true);
-      clone.style.position = 'absolute';
-      clone.style.visibility = 'hidden';
-      clone.style.width = 'max-content';
-      clone.style.minWidth = '0';
+      clone.classList.add('offscreen-measure');
       
       // Ensure we leave room for the sort icon, even if it's currently inactive
       const icon = clone.querySelector('.sort-icon');

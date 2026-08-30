@@ -1,10 +1,13 @@
 import { inverseTransformGLSL } from '../pipelines/glCommon.js';
 import { FAST_CHAIN, NORMAL_CHAIN } from './anime4k/chains.js';
 
+export const DEBUG_TINT = false; // Testing constant to visually distinguish 'fast' (yellow) vs 'normal' (blue) Anime4K variants during QA.
+
 export const filter = {
   resolve(filterOptions) {
     const variant = filterOptions?.anime4k?.variant === 'normal' ? 'normal' : 'fast';
     const chain = variant === 'normal' ? NORMAL_CHAIN : FAST_CHAIN;
+    const tintGLSL = DEBUG_TINT ? (variant === 'normal' ? 'outColor *= vec4(0.0, 0.0, 1.0, 1.0);' : 'outColor *= vec4(1.0, 1.0, 0.0, 1.0);') : '';
 
     const drawPass = {
       name: 'DrawToViewport',
@@ -23,6 +26,7 @@ export const filter = {
             return;
           }
           outColor = texture(u_texture, texUV);
+          ${tintGLSL}
         }
       `
     };

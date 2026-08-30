@@ -65,6 +65,7 @@ export function createGlRuntime(canvas) {
   let _programs = [];
   
   let _fbos = new Map(); // key -> { fbo, tex, width, height }
+  let _savedTextures = new Map();
 
   function clearFbos() {
     for (const fboData of _fbos.values()) {
@@ -224,7 +225,7 @@ export function createGlRuntime(canvas) {
     _gl.bindBuffer(_gl.ARRAY_BUFFER, posBuffer);
 
     let currentInputTex = _sourceTexture;
-    let _savedTextures = new Map();
+    _savedTextures.clear();
     let currentInputSize = { w: nw, h: nh };
 
     function resolveInput(input) {

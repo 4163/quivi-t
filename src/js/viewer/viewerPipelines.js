@@ -20,6 +20,7 @@ export function createViewerPipelines(viewportState) {
   let _livePumpRaf = null;
   let _livePumpSrc = null;
   let _livePumpImg = null;
+  let _livePumpBlobUrl = null;
   let _livePumpLastDrawnFrameIndex = -1;
   const _liveStagingCanvas = document.createElement('canvas');
 
@@ -36,6 +37,7 @@ export function createViewerPipelines(viewportState) {
       _applyScaling();
       _scheduleTransform();
       _triggerRender();
+      _syncLivePump();
     });
   }
 
@@ -158,7 +160,9 @@ export function createViewerPipelines(viewportState) {
           pipeline.filter = activeFilter;
         }
       } else if (usesLanczos) {
-        pipeline = createLanczosPipeline();
+        const fallback1 = typeof OffscreenCanvas !== 'undefined' ? null : document.createElement('canvas');
+        const fallback2 = typeof OffscreenCanvas !== 'undefined' ? null : document.createElement('canvas');
+        pipeline = createLanczosPipeline(fallback1, fallback2);
       }
     } else if (usesWebgl && (filterChanged || variantChanged || scalingChanged)) {
       _livePumpLastDrawnFrameIndex = -1;
@@ -206,8 +210,8 @@ export function createViewerPipelines(viewportState) {
   function _triggerRender() {
     const live = Core.getState();
     const liveAnimated = !!live?.isAnimated;
-    const scaling = getEffectiveScaling(live?.scalingMode, liveAnimated);
     const isSvg = isSvgSource(_activeSource?.src);
+    const scaling = getEffectiveScaling(live?.scalingMode, liveAnimated, isSvg);
     
     let activeFilter = _resolveActiveFilter(live);
     let usesWebgl = activeFilter !== null;
@@ -271,8 +275,12 @@ export function createViewerPipelines(viewportState) {
     }
     if (_livePumpImg) {
       if (_livePumpImg.close) _livePumpImg.close();
-      if (_livePumpImg.parentNode) _livePumpImg.parentNode.removeChild(_livePumpImg);
+      if (_livePumpImg.tagName === 'IMG') _livePumpImg.classList.add('hidden');
       _livePumpImg = null;
+    }
+    if (_livePumpBlobUrl) {
+      URL.revokeObjectURL(_livePumpBlobUrl);
+      _livePumpBlobUrl = null;
     }
     _livePumpSrc = null;
   }
@@ -283,7 +291,7 @@ export function createViewerPipelines(viewportState) {
     const isSvg = isSvgSource(_activeSource?.src);
     const scaling = getEffectiveScaling(live?.scalingMode, isAnimated, isSvg);
     const activeFilter = _resolveActiveFilter(live);
-    const useLivePump = isAnimated && (activeFilter !== null || scaling === 'lanczos');
+    const useLivePump = (isAnimated || isSvg) && (activeFilter !== null || scaling === 'lanczos');
 
     if (!useLivePump || !_activeSource) {
       _stopLivePump();
@@ -307,11 +315,9 @@ export function createViewerPipelines(viewportState) {
       if (_livePumpSrc !== currentSrc) return;
 
       const blobUrl = URL.createObjectURL(blob);
-      const liveImg = document.createElement('img');
-
-      const viewport = document.getElementById('viewport');
-      liveImg.className = 'svg-pump-live';
-      viewport.insertBefore(liveImg, document.getElementById('viewer-filter-canvas'));
+      _livePumpBlobUrl = blobUrl;
+      const liveImg = document.getElementById('viewer-svg-pump');
+      liveImg.classList.remove('hidden');
       liveImg.src = blobUrl;
       _livePumpImg = liveImg;
 
@@ -320,8 +326,7 @@ export function createViewerPipelines(viewportState) {
         else { liveImg.onload = resolve; liveImg.onerror = reject; }
       });
       if (_livePumpSrc !== currentSrc) {
-        liveImg.remove();
-        URL.revokeObjectURL(blobUrl);
+        liveImg.classList.add('hidden');
         return;
       }
 

@@ -32,3 +32,15 @@ export function getFilterModule(id, frontendData = {}) {
   if (!f) return null;
   return f.module.resolve ? (f.module.resolve(frontendData.filter_options) ?? f.module) : f.module;
 }
+
+export function normalizeFilterOptions(fo) {
+  const options = fo && typeof fo === 'object' ? fo : {};
+  const anime4k = options.anime4k || {};
+  return {
+    ...options,
+    anime4k: {
+      ...anime4k,
+      variant: anime4k.variant === 'normal' ? 'normal' : 'fast'
+    }
+  };
+}

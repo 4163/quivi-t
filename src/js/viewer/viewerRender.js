@@ -128,6 +128,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     if (el) {
       el.removeAttribute('src');
       el.removeAttribute('data-pool-src');
+      el.removeAttribute('data-played');
+      el.removeAttribute('data-scaling');
       el.classList.remove('active');
       if (el === img) {
         img = null;
