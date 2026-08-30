@@ -45,5 +45,5 @@ These are the repo's common blast-radius zones. Not every change touches all of 
 1. Read the change.
 2. For each modified function, struct, command, token, or contract: trace who consumes it. Go beyond direct callers to indirect readers (config files on disk, other windows, the protocol handler, CSS selectors that match on a class you renamed).
 3. For each consumer, determine the failure mode if the change is wrong.
-4. Climb the confidence ladder. Prove safety with code where cheap. Flag anything stuck at step 1–2.
+4. Climb the confidence ladder. Prove safety with code where cheap. Flag anything stuck at steps 1 and 2.
 5. Act on the findings. Fix any broken downstream consumers in the same slice. If you cannot reach confidence step 4 for a critical safety fact, explicitly warn the user and explain what needs manual validation before considering the task done.
