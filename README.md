@@ -143,7 +143,7 @@ The following system defaults are used:
 - **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
 - **Scaling Mode:** `bilinear`
 - **Filters:** Defaults to none active, only one filter can be active at a time. SVGs are rasterized at a capped resolution (2048px static, 512px animated); Anime4K and Lanczos fall back to Bilinear for SVGs.
-- **Filter: Anime4K** Defaults to `fast` (upstream Mode A Fast). Configurable in **Options → General → Anime4K**.
+- **Filter: Anime4K** Defaults to `fast` (upstream Mode A Fast). Configurable in **Options → General → Filters**.
 - **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in **Options → General → Panning**.
 - **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge shows whether scroll zoom is latched or which bound modifier keys are currently held.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
@@ -257,6 +257,9 @@ node --check src/js/options/options.js
 | **Backend** | Rust | Core logic and filesystem operations |
 | **Frontend** | Vanilla HTML/CSS/JS | ES modules-based user interface |
 | **Desktop Webview** | WebView2 | Native Windows web rendering |
+| **Lanczos Scaling** | `pica` | Off-thread still-image Lanczos resize |
+| **WebGL Filters** | WebGL2 | Anime4K, CRT, Phosphor, Scanlines, and per-frame Lanczos on animated images |
+| **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG playback under filters and Lanczos |
 | **Archives (ZIP/CBZ)** | `zip` | Fast on-demand extraction |
 | **Archives (RAR/CBR)** | `unrar` | Legacy archive support |
 | **Archives (7Z/CB7)** | `sevenz-rust2` | Solid LZMA archive support |
@@ -377,5 +380,5 @@ QuiviT/
 - Icons: [Flaticon (Cosplayer, Webp, Gif, Cbz, Cbr, Svg)](https://www.flaticon.com)
 - UI Icons: [Feather](https://feathericons.com) / [Lucide](https://lucide.dev)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
-- WebGL Shaders: [Bloc97/Anime4K](https://github.com/bloc97/Anime4K) / [stefanlegg/crt-fx](https://github.com/stefanlegg/crt-fx) / [TheMarco/RetroZone](https://github.com/TheMarco/RetroZone) / Scanlines (Geom-inspired beam, original WebGL implementation; concept from [cgwg CRT-Geom](https://github.com/libretro/common-shaders))
+- WebGL Shaders: [Bloc97/Anime4K](https://github.com/bloc97/Anime4K) / [stefanlegg/crt-fx](https://github.com/stefanlegg/crt-fx) / [TheMarco/RetroZone](https://github.com/TheMarco/RetroZone) (Custom phosphor WebGL implementation) / [cgwg CRT-Geom](https://github.com/libretro/common-shaders) (Geom-inspired beam, custom WebGL implementation)
 - Agent Skills: Adapted from [poteto - pstack](https://github.com/cursor/plugins/tree/main/pstack) and [mattpocock/skills](https://github.com/mattpocock/skills)

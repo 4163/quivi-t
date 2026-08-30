@@ -73,11 +73,6 @@
 
 *Items deliberately deferred until after the initial release. Low priority by design: do not start without re-validating the need.*
 
-### Animated Images Support for Lanczos & WebGL
-- Investigate and implement support for running Lanczos scaling and WebGL filters (Retro CRT, Anime4K) on animated image formats (WebP, APNG, GIF) without destroying frame timing or incurring severe performance penalties.
-- Currently, these pipelines are bypassed natively via bilinear canvas fallbacks when an animated format is detected to maintain application performance and animation playback integrity.
-
-
 ### File List Relocation, Detach & Drag-and-Drop
 - Add a way to change the location of the file list (left default, top, bottom, right). Detached as well? Maybe drag-and-droppable: how practical would the implementation be?
 - Using a JS library sounds ideal; this has been done before on a smaller scale at `E:\Projects\x4163-apps\dither-app` (not sure if it's the best/most-used library: performance-first). Prioritize clean/snappy user interaction with no jank.
