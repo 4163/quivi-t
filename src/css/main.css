@@ -824,7 +824,8 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   opacity: 1;
 }
 
-#viewport[data-filter] #viewer-img-wrapper .viewer-img {
+#viewport[data-filter] #viewer-img-wrapper .viewer-img,
+#viewer-img-wrapper:has(#viewer-lanczos-canvas[data-render-ready="true"]) .viewer-img {
   opacity: 0 !important;
 }
 

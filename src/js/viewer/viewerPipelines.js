@@ -171,7 +171,7 @@ export function createViewerPipelines(viewportState) {
       if (ok && filterCanvas) {
         filterCanvas.setAttribute('data-render-ready', 'true');
         const vp = document.getElementById('viewport');
-        if (vp && _lastActiveFilter) vp.setAttribute('data-filter', _lastActiveFilter);
+        if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
       }
     });
   }
@@ -189,10 +189,21 @@ export function createViewerPipelines(viewportState) {
     const live = Core.getState();
     const liveAnimated = !!live?.isAnimated;
     const scaling = getEffectiveScaling(live?.scalingMode, liveAnimated);
+    const isSvg = isSvgSource(_activeSource?.src);
     
-    const activeFilter = _resolveActiveFilter(live);
-    const usesWebgl = activeFilter !== null;
+    let activeFilter = _resolveActiveFilter(live);
+    let usesWebgl = activeFilter !== null;
     const usesLanczos = scaling === 'lanczos' && !usesWebgl;
+    const useWebGlForLanczos = usesLanczos && liveAnimated && !isSvg;
+    
+    if (useWebGlForLanczos) {
+      usesWebgl = true;
+      activeFilter = 'lanczos';
+    }
+
+    if (lanczosCanvas && usesWebgl) {
+      lanczosCanvas.removeAttribute('data-render-ready');
+    }
     
     if (usesLanczos && _activeSource) {
       const gen = _renderGeneration;
@@ -339,7 +350,7 @@ export function createViewerPipelines(viewportState) {
             pumpVisible = true;
             if (filterCanvas) filterCanvas.setAttribute('data-render-ready', 'true');
             const vp = document.getElementById('viewport');
-            if (vp && _lastActiveFilter) vp.setAttribute('data-filter', _lastActiveFilter);
+            if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
           }
         }
         _livePumpRaf = requestAnimationFrame(pumpTickSvg);
@@ -437,7 +448,7 @@ export function createViewerPipelines(viewportState) {
           pumpVisible = true;
           if (filterCanvas) filterCanvas.setAttribute('data-render-ready', 'true');
           const vp = document.getElementById('viewport');
-          if (vp && _lastActiveFilter) vp.setAttribute('data-filter', _lastActiveFilter);
+          if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
         }
       }
 
