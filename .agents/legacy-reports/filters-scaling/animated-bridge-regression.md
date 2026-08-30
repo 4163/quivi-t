@@ -164,3 +164,11 @@ One slice. This is identity and lifecycle, not a new pump.
 - Showing two `.active` images at once.
 - Pump clock, `ImageDecoder`, Lanczos. That is the other report.
 - Deleting `_reset` support in `_loadPoolNode`. The split of `actualSrc` / `poolSrc` can stay. The keep-alive set has to use `poolSrc`.
+
+---
+
+## Intentional Decisions
+
+**Keeping the WebGL overlay active during swap:** The original report noted that `data-filter` was being aggressively dropped during `setSource`, causing a flash of the native `<img>` tag before the new overlay frame was ready. 
+While we restored the DOM bridge, we intentionally *stopped* dropping `data-filter` in `setSource` for animated WebGL files. Dropping it exposed Chromium's native GIF player, which would instantly race ahead playing frames 0-2 while the background `ImageDecoder` initialized, resulting in a visible "time-rollback" jitter when the filter finally took over at frame 0.
+By keeping the overlay on, the WebGL canvas natively acts as a visual bridge (displaying the old filtered image scaled to the new geometry) until the new decoder pushes its first frame, guaranteeing a completely seamless, jitter-free swap.

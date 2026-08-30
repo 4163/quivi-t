@@ -255,3 +255,11 @@ Use `test-files/` plus any looping GIF you already know. Filter on (CRT is enoug
 - Changing GIF NETSCAPE false-positive policy in `formats.rs`. Slice 1 already has to survive `frameCount < 2`.
 - Deleting unused `getLiveImage` unless `blobImage.js` is already open.
 - The SVG `style.cssText` pump, except if slice 1 touches that function.
+
+---
+
+## Intentional Decisions
+
+**SVG `style.cssText`:** As noted in the out-of-scope/AGENTS notes, this inline styling violation was left untouched during the primary logic overhaul. It was finally cleaned up and moved into `main.css` under the `.svg-pump-live` class during the final bug-squashing nit phase.
+**`getLiveImage`:** Confirmed strictly scrubbed from `blobImage.js`.
+**`isAnimated` Double-Render:** Cleaned up by stripping out the trailing redundant `_notify()` in `core.js` so it doesn't slam the pipelines with an unnecessary double render pass on every click.
