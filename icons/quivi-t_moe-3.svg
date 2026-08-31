@@ -1,0 +1,36 @@
+<svg id="bird-kawaii" xmlns="http://www.w3.org/2000/svg" viewBox="10 50 430 430" width="100%" height="100%">
+  <defs>
+    <path id="body-path-k" d="M 220 80 C 300 80, 340 160, 340 220 C 340 260, 410 260, 380 320 C 350 380, 280 400, 220 400 C 140 400, 120 300, 120 220 C 120 140, 160 80, 220 80 Z" />
+  </defs>
+
+  <!-- Legs -->
+  <path d="M 260 380 L 260 440 L 200 440" fill="none" stroke="#3B2508" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M 190 390 L 190 450 L 130 450" fill="none" stroke="#3B2508" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
+  
+  <!-- Base Body -->
+  <use href="#body-path-k" fill="#FDE4A9" />
+  <g fill="#fef8ec">
+    <ellipse cx="170" cy="115" rx="25" ry="10" transform="rotate(-30 170 115)" />
+    <ellipse cx="220" cy="100" rx="10" ry="6" transform="rotate(-15 220 100)" />
+  </g>
+  
+  <!-- Outline -->
+  <use href="#body-path-k" fill="none" stroke="#3B2508" stroke-width="24" stroke-linejoin="round" />
+  
+  <!-- Beak -->
+  <path d="M 120 170 L 30 200 L 120 215 Z" fill="#3B2508" stroke="#3B2508" stroke-width="16" stroke-linejoin="round" />
+  
+  <!-- Excited >< Eyes (Non-upscaled, hand-adjusted for native viewBox) -->
+  <g fill="none" stroke="#3B2508" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 140 137 L 165 152 L 140 167" />
+    <path d="M 215 137 L 190 152 L 215 167" />
+  </g>
+  
+  <!-- Blush (Matched to native scale) -->
+  <g stroke="#FF7799" stroke-width="12" stroke-linecap="round">
+    <path d="M 115 195 L 125 180" />
+    <path d="M 135 195 L 145 180" />
+    <path d="M 205 185 L 215 170" />
+    <path d="M 225 185 L 235 170" />
+  </g>
+</svg>

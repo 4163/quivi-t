@@ -137,9 +137,6 @@
 - Future optional dependencies could follow the same drop-in pattern: they act like non-required modules.
 - Document this on the README under documentation after it is implemented.
 
-### Custom QuiviT Icons
-- Create custom QuiviT icons for each file type (incorporating the mascot) rather than using generic ones.
-
 ### Windows Thumbnails (APNG/WebP)
 - Add working Windows thumbnails (including preview pane) for APNG and animated WebP.
   - Antigravity IDE actually adds multiple things that Windows doesn't natively have, SVG thumbnails, code and MD files for the preview pane/animated thumbnail/icons. It would be great if we can support APNG/WebP files in a similar way that's practical to the project scope.

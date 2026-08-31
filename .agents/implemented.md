@@ -8,6 +8,12 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Custom Format Icons (2026-08-31)
+- **Custom Mascot Icons:** Created 18 custom QuiviT format icons (`jpg`, `png`, `jpeg`, `bmp`, `ico`, `gif`, `webp`, `apng`, `svg`, `avif`, `zip`, `rar`, `7z`, `tar`, `cbt`, `cbz`, `cbr`, `cb7`) featuring the QuiviT mascot holding a labeled sign.
+- **Grill Texture:** Added the app's -45 degree diagonal opaque canvas grill pattern to the sign face with darkened outlines for contrast.
+- **Catppuccin Palette:** Styled badges with distinct hues from the Catppuccin palette, using Nunito ExtraBold text with manual vertical offsets for visual balance.
+- **Asset Pipeline:** Added a portable generator script (`icons/format-template/generate_formats.py`) and vector SVG masters in `icons/formats/svg/`, outputting multi-size ICO binaries (256, 128, 64, 48, 32, 16px) with Lanczos downscaling to `icons/formats/`.
+
 ### Stale Code and References Cleanup (2026-08-30)
 - **Dead Code Removal:** Removed unused live image blob cache functions (`getLiveImage`, `evictLiveBlobCache`) and unexported `evictBlobCache` in `blobImage.js`. Removed the dead `css` property from `SCALERS` items in `registry.js`.
 - **UI & Documentation Sync:** Intentionally ignored SVG status in `menubar.js` during view menu sync so users can select Lanczos and retain their choice visually, while it silently falls back in the renderer. Updated `options.html` to rename "Scale None" to "Scale Pixelated" for consistency with the view menu. Fixed stale comments in `core.js`, `main.css`, and `format_tests.rs`.
