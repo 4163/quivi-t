@@ -8,6 +8,12 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Animated AVIF through filters and Lanczos (2026-08-31)
+- **Detection:** `check_animation_status` now walks ISO BMFF boxes on `ftyp` files. A `.avif` is animated if `ftyp` lists the `avis` brand, or if an AVIF-family file (`avif` / `avis` / `mif1` / `miaf`) has a top-level `moov`. Still AVIF (`avif` without `avis` or `moov`) stays still. MP4-like `isom`+`moov` is ignored. `no_loop` stays false, same as WebP/APNG.
+- **Pump MIME:** `viewerPipelines.js` maps `.avif` to `image/avif` so `ImageDecoder` takes the same raster pump as GIF/WebP/APNG instead of defaulting to `image/gif`.
+- **Tests:** `test_is_animated_avif` covers `avis` major, `avis` compatible, still `avif`, `avif`+`moov`, non-AVIF `moov`, and `test-files/export_1788174887667.avif`. `cargo test format_tests` 9/9.
+- **Follow-up:** `.agents/no-loop-animation.md` outlines finite-repeat support for WebP, APNG, and AVIF. Not part of this slice.
+
 ### Custom Format Icons (2026-08-31)
 - **Custom Mascot Icons:** Created 18 custom QuiviT format icons (`jpg`, `png`, `jpeg`, `bmp`, `ico`, `gif`, `webp`, `apng`, `svg`, `avif`, `zip`, `rar`, `7z`, `tar`, `cbt`, `cbz`, `cbr`, `cb7`) featuring the QuiviT mascot holding a labeled sign.
 - **Grill Texture:** Added the app's -45 degree diagonal opaque canvas grill pattern to the sign face with darkened outlines for contrast.

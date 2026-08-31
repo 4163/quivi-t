@@ -80,6 +80,8 @@ pub fn check_animation_status(bytes: &[u8]) -> AnimationInfo {
         return AnimationInfo { is_animated: check_webp(bytes), no_loop: false };
     } else if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         return AnimationInfo { is_animated: check_apng(bytes), no_loop: false };
+    } else if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
+        return AnimationInfo { is_animated: check_avif(bytes), no_loop: false };
     } else if bytes.windows(4).any(|w| w == b"<svg") {
         return AnimationInfo { is_animated: check_svg(bytes), no_loop: false };
     }
@@ -183,6 +185,88 @@ fn check_apng(bytes: &[u8]) -> bool {
         (Some(_), None) => true,
         _ => false,
     }
+}
+
+fn be_u32(bytes: &[u8], offset: usize) -> Option<u32> {
+    bytes.get(offset..offset + 4)?.try_into().ok().map(u32::from_be_bytes)
+}
+
+/// Next ISO BMFF box at `pos`: (total size, header length, type).
+fn isobmff_box(bytes: &[u8], pos: usize) -> Option<(usize, usize, [u8; 4])> {
+    let size32 = be_u32(bytes, pos)? as usize;
+    let typ: [u8; 4] = bytes.get(pos + 4..pos + 8)?.try_into().ok()?;
+    if size32 == 1 {
+        let hi = be_u32(bytes, pos + 8)? as u64;
+        let lo = be_u32(bytes, pos + 12)? as u64;
+        let size = ((hi << 32) | lo) as usize;
+        if size < 16 {
+            return None;
+        }
+        Some((size, 16, typ))
+    } else if size32 == 0 {
+        Some((bytes.len() - pos, 8, typ))
+    } else if size32 < 8 {
+        None
+    } else {
+        Some((size32, 8, typ))
+    }
+}
+
+fn is_avif_family_brand(brand: &[u8]) -> bool {
+    brand == b"avif" || brand == b"avis" || brand == b"mif1" || brand == b"miaf"
+}
+
+/// Animated AVIF is still a `.avif` file. Two in-file signals, either is enough:
+/// `avis` in `ftyp` (the spec brand for a sequence) or a top-level `moov`
+/// (the movie timeline) on an AVIF-family file. Still AVIF is `avif` without
+/// `avis` and without `moov`. Walk boxes; do not scan payload bytes for the
+/// four-character codes.
+fn check_avif(bytes: &[u8]) -> bool {
+    let mut pos = 0;
+    let mut avis = false;
+    let mut avif_family = false;
+    let mut has_moov = false;
+
+    while pos + 8 <= bytes.len() {
+        let Some((size, header, typ)) = isobmff_box(bytes, pos) else {
+            break;
+        };
+        if size < header || pos.checked_add(size).is_none() {
+            break;
+        }
+        let box_end = (pos + size).min(bytes.len());
+
+        if &typ == b"ftyp" {
+            let payload = pos + header;
+            if payload + 4 <= box_end {
+                let major = &bytes[payload..payload + 4];
+                avis |= major == b"avis";
+                avif_family |= is_avif_family_brand(major);
+                let mut i = payload + 8;
+                while i + 4 <= box_end {
+                    let brand = &bytes[i..i + 4];
+                    avis |= brand == b"avis";
+                    avif_family |= is_avif_family_brand(brand);
+                    i += 4;
+                }
+            }
+            if avis {
+                return true;
+            }
+        } else if &typ == b"moov" {
+            has_moov = true;
+            if avif_family {
+                return true;
+            }
+        }
+
+        if pos + size > bytes.len() {
+            break;
+        }
+        pos += size;
+    }
+
+    avis || (avif_family && has_moov)
 }
 
 fn check_svg(bytes: &[u8]) -> bool {

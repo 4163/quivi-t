@@ -6,7 +6,7 @@
   <img src="icons/quivi-t_moe-2.svg" alt="QuiviT mascot" width="25%" />
 </p>
 
-A lightweight standalone (performance-first*) port of Quivi, built with Tauri and Vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
+A lightweight standalone (performance-first*) port of Quivi, built with Tauri and Vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, AVIF, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
 
 ## Quivi
 
@@ -17,7 +17,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 
 ## Features
 
-- **Formats**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `svg`, `bmp`, `ico`, `avif`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
+- **Formats**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
 - **Archives**: Read compressed files directly as folders, including image navigation and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Ctrl`+wheel.
@@ -259,7 +259,7 @@ node --check src/js/options/options.js
 | **Desktop Webview** | WebView2 | Native Windows web rendering |
 | **Lanczos Scaling** | `pica` | Off-thread still-image Lanczos resize |
 | **WebGL Filters** | WebGL2 | Anime4K, CRT, Phosphor, Scanlines, and per-frame Lanczos on animated images |
-| **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG playback under filters and Lanczos |
+| **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG/AVIF playback under filters and Lanczos |
 | **Archives (ZIP/CBZ)** | `zip` | Fast on-demand extraction |
 | **Archives (RAR/CBR)** | `unrar` | Legacy archive support |
 | **Archives (7Z/CB7)** | `sevenz-rust2` | Solid LZMA archive support |

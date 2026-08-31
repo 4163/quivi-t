@@ -103,10 +103,66 @@ fn test_is_animated_apng() {
     assert!(!check_animation_status(&static_buf).is_animated);
 }
 
+fn ftyp_box(major: &[u8; 4], compat: &[[u8; 4]]) -> Vec<u8> {
+    let size = 16 + compat.len() * 4;
+    let mut buf = Vec::with_capacity(size);
+    buf.extend_from_slice(&(size as u32).to_be_bytes());
+    buf.extend_from_slice(b"ftyp");
+    buf.extend_from_slice(major);
+    buf.extend_from_slice(&0u32.to_be_bytes());
+    for brand in compat {
+        buf.extend_from_slice(brand);
+    }
+    buf
+}
+
+fn empty_box(typ: &[u8; 4]) -> Vec<u8> {
+    let mut buf = Vec::from(8u32.to_be_bytes());
+    buf.extend_from_slice(typ);
+    buf
+}
+
+#[test]
+fn test_is_animated_avif() {
+    // Spec sequence: major brand avis.
+    let avis = ftyp_box(b"avis", &[*b"avis", *b"avif", *b"mif1", *b"miaf"]);
+    assert!(check_animation_status(&avis).is_animated);
+    assert!(!check_animation_status(&avis).no_loop);
+
+    // avis only in compatible brands.
+    let compat_avis = ftyp_box(b"avif", &[*b"mif1", *b"avis"]);
+    assert!(check_animation_status(&compat_avis).is_animated);
+
+    // Still AVIF: avif brand, no avis, no moov.
+    let still = ftyp_box(b"avif", &[*b"avif", *b"mif1", *b"miaf"]);
+    assert!(!check_animation_status(&still).is_animated);
+
+    // Misbranded sequence: avif brand, no avis, but a top-level moov.
+    let mut avif_moov = ftyp_box(b"avif", &[*b"avif", *b"mif1"]);
+    avif_moov.extend_from_slice(&empty_box(b"moov"));
+    assert!(check_animation_status(&avif_moov).is_animated);
+
+    // MP4-like ftyp + moov is not an AVIF-family file.
+    let mut mp4 = ftyp_box(b"isom", &[*b"mp41"]);
+    mp4.extend_from_slice(&empty_box(b"moov"));
+    assert!(!check_animation_status(&mp4).is_animated);
+
+    // Real sequence fixture (avis + moov).
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("test-files")
+        .join("export_1788174887667.avif");
+    let bytes = std::fs::read(&path).expect("test AVIF fixture");
+    let status = check_animation_status(&bytes);
+    assert!(status.is_animated);
+    assert!(!status.no_loop);
+}
+
 #[test]
 fn test_is_animated_truncated() {
     // Truncated buffer should fail gracefully
     assert!(!check_animation_status(b"GIF8").is_animated);
     assert!(!check_animation_status(b"RIFF").is_animated);
     assert!(!check_animation_status(b"\x89PNG").is_animated);
+    assert!(!check_animation_status(b"\0\0\0\x18ftyp").is_animated);
 }

@@ -398,7 +398,7 @@ export function createViewerPipelines(viewportState) {
       return;
     }
 
-    // --- Raster WebCodecs Pump (GIF/APNG/WebP) ---
+    // --- Raster WebCodecs Pump (GIF/APNG/WebP/AVIF) ---
     if (typeof ImageDecoder === 'undefined') {
       _lastIsAnimated = false;
       _scheduleTransform();
@@ -412,6 +412,7 @@ export function createViewerPipelines(viewportState) {
     let contentType = 'image/gif';
     if (ext === 'webp') contentType = 'image/webp';
     else if (ext === 'png' || ext === 'apng') contentType = 'image/png';
+    else if (ext === 'avif') contentType = 'image/avif';
 
     let decoder;
     try {
