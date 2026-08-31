@@ -1,23 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="14 68 394 394" width="100%" height="100%">
   <style>
     @font-face {
-      font-family: 'Nunito';
-      src: url('./Nunito/Nunito-ExtraBold.ttf');
+      font-family: 'Quicksand';
+      src: url('./Quicksand/Quicksand-Bold.ttf');
     }
     .format-text {
-      font-family: 'Nunito', sans-serif;
-      font-weight: 800;
+      font-family: 'Quicksand', sans-serif;
+      font-weight: 700;
       text-anchor: middle;
       dominant-baseline: central;
     }
   </style>
   <defs>
     <path id="body-path-k" d="M 220 80 C 300 80, 340 160, 340 220 C 340 260, 410 260, 380 320 C 350 380, 280 400, 220 400 C 140 400, 120 300, 120 220 C 120 140, 160 80, 220 80 Z" />
-    <clipPath id="sign-inner-clip">
-      <rect x="0" y="0" width="220" height="110" rx="15" />
+    <clipPath id="body-clip">
+      <use href="#body-path-k" />
     </clipPath>
-    <pattern id="sign-grill" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
-      <line x1="0" y1="0" x2="0" y2="12" stroke="{OUTLINE_COLOR}" stroke-width="3.8" stroke-opacity="0.40" />
+    <clipPath id="sign-inner-clip">
+      <rect x="5" y="5" width="210" height="100" rx="10" />
+    </clipPath>
+    <pattern id="sign-grill" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="10" stroke="#5A5A5A" stroke-width="7" />
     </pattern>
   </defs>
   <!-- Legs -->
@@ -25,9 +28,8 @@
   <path d="M 190 390 L 190 450 L 130 450" fill="none" stroke="#3B2508" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" />
   <!-- Base Body -->
   <use href="#body-path-k" fill="#FDE4A9" />
-  <g fill="#fef8ec">
-    <ellipse cx="170" cy="115" rx="25" ry="10" transform="rotate(-30 170 115)" />
-    <ellipse cx="220" cy="100" rx="10" ry="6" transform="rotate(-15 220 100)" />
+  <g clip-path="url(#body-clip)">
+    <path fill="none" stroke="#fef8ec" stroke-width="3.5" stroke-linecap="round" d="M 148.69 145.47 L 150.68 141.40 L 152.76 137.49 L 154.95 133.73 L 157.24 130.13 L 159.62 126.68 L 162.09 123.40 L 164.65 120.28 L 167.30 117.33 L 170.03 114.54 L 172.83 111.93 L 175.71 109.48 L 178.67 107.21 L 181.70 105.11 L 184.80 103.19 L 187.98 101.43 L 191.22 99.86 L 194.54 98.45 L 197.93 97.23 L 201.41 96.18 L 204.95 95.32 L 208.59 94.64 L 212.30 94.15 L 216.11 93.85 L 220.00 93.75" />
   </g>
   <!-- Outline -->
   <use href="#body-path-k" fill="none" stroke="#3B2508" stroke-width="24" stroke-linejoin="round" />
@@ -49,11 +51,12 @@
   <ellipse cx="215" cy="185" rx="18" ry="11" fill="#FF7799" opacity="0.6" transform="rotate(-15 215 185)" />
   <!-- The Sign (Adjusted height and position) -->
   <g transform="translate(30, 260)">
-    <rect x="0" y="0" width="220" height="110" rx="15" fill="{COLOR}" stroke="{OUTLINE_COLOR}" stroke-width="12" />
+    <rect x="0" y="0" width="220" height="110" rx="15" fill="#808080" />
     <g clip-path="url(#sign-inner-clip)">
       <rect x="0" y="0" width="220" height="110" fill="url(#sign-grill)" />
     </g>
-    <text x="110" y="52" class="format-text" fill="#fff" font-size="{FONT_SIZE}px">{FORMAT_TEXT}</text>
+    <rect x="0" y="0" width="220" height="110" rx="15" fill="none" stroke="#3A3A3A" stroke-width="10" />
+    <text x="110" y="55" class="format-text" fill="#fff" font-size="72px">GIF</text>
   </g>
   <!-- Tiny Stubby Hands Holding the Sign (Moved up with sign) -->
   <g fill="#FDE4A9" stroke="#3B2508" stroke-width="12">

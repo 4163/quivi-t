@@ -378,8 +378,7 @@ QuiviT/
 ## Attributions
 
 - UI Icons: [Feather](https://feathericons.com) / [Lucide](https://lucide.dev)
-- Format Icon Fonts: [Nunito](https://fonts.google.com/specimen/Nunito)
-- Format Palette: [Catppuccin](https://github.com/catppuccin/catppuccin)
+- Format Icons Font: [andrew-paglinawan/QuicksandFamily](https://github.com/andrew-paglinawan/QuicksandFamily)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
 - WebGL Shaders: [Bloc97/Anime4K](https://github.com/bloc97/Anime4K) / [stefanlegg/crt-fx](https://github.com/stefanlegg/crt-fx) / [TheMarco/RetroZone](https://github.com/TheMarco/RetroZone) (Custom phosphor WebGL implementation) / [cgwg CRT-Geom](https://github.com/libretro/common-shaders) (Geom-inspired beam, custom WebGL implementation)
 - Agent Skills: Adapted from [poteto - pstack](https://github.com/cursor/plugins/tree/main/pstack) and [mattpocock/skills](https://github.com/mattpocock/skills)
