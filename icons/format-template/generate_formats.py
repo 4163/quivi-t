@@ -16,12 +16,12 @@ import pathlib
 import cairosvg
 from PIL import Image, ImageDraw, ImageFont
 
-# Directory paths relative to this script
-SCRIPT_DIR   = pathlib.Path(__file__).resolve().parent
-FONT_PATH    = SCRIPT_DIR / "Nunito" / "Nunito-ExtraBold.ttf"
-FORMATS_DIR  = SCRIPT_DIR.parent / "formats"
-SVG_DIR      = FORMATS_DIR / "svg"
-PREVIEW_PATH = FORMATS_DIR / "formats_preview.png"
+SCRIPT_DIR       = pathlib.Path(__file__).resolve().parent
+FONT_PATH        = SCRIPT_DIR / "Nunito" / "Nunito-ExtraBold.ttf"
+FORMATS_DIR      = SCRIPT_DIR.parent / "formats"
+SVG_DIR          = FORMATS_DIR / "svg"
+PREVIEW_PATH     = FORMATS_DIR / "formats_preview.png"
+ASSETS_ICONS_DIR = SCRIPT_DIR.parent.parent / "src" / "assets" / "icons"
 
 # SVG geometry & render settings
 VB_X, VB_Y, VB_W, VB_H = 14, 68, 394, 394
@@ -117,6 +117,7 @@ def get_font_size_svg(label: str) -> int:
 def generate_icons():
     FORMATS_DIR.mkdir(parents=True, exist_ok=True)
     SVG_DIR.mkdir(parents=True, exist_ok=True)
+    ASSETS_ICONS_DIR.mkdir(parents=True, exist_ok=True)
 
     scale = RENDER_SIZE / VB_W
     sign_cx = (SIGN_X - VB_X + SIGN_W / 2) * scale
@@ -163,6 +164,11 @@ def generate_icons():
             ty = sign_cy - th / 2 - bbox[1] + (y_offset * scale)
             draw.text((tx, ty), fmt, fill=(255, 255, 255, 255), font=pil_font)
 
+            # Save UI raster PNG (128x128 for razor-sharp display at all UI DPIs)
+            ui_png_file = ASSETS_ICONS_DIR / f"{fmt}.png"
+            img_ui = img.resize((128, 128), Image.LANCZOS)
+            img_ui.save(str(ui_png_file), format="PNG", optimize=True)
+
             # Lanczos downsample -> Multi-size ICO
             frames = [img.resize((s, s), Image.LANCZOS) for s in ICO_SIZES]
             ico_file = FORMATS_DIR / f"{fmt}.ico"
@@ -172,7 +178,7 @@ def generate_icons():
                 sizes=[(s, s) for s in ICO_SIZES],
                 append_images=frames[1:],
             )
-            print(f"  {fmt:>4}  {fill} / {outline} -> {ico_file.name}")
+            print(f"  {fmt:>4}  {fill} / {outline} -> {ico_file.name}, {ui_png_file.name}")
 
         print(f"[{template_name}] complete\n")
 

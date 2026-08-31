@@ -70,28 +70,35 @@ pub fn get_format_status() -> Vec<FormatStatus> {
     statuses
 }
 
-const ICON_APNG: &[u8] = include_bytes!("../../../icons/apng.ico");
-const ICON_CBR: &[u8] = include_bytes!("../../../icons/cbr.ico");
-const ICON_CBZ: &[u8] = include_bytes!("../../../icons/cbz.ico");
-const ICON_GIF: &[u8] = include_bytes!("../../../icons/gif.ico");
-const ICON_SVG: &[u8] = include_bytes!("../../../icons/svg.ico");
-const ICON_WEBP: &[u8] = include_bytes!("../../../icons/webp.ico");
-const ICON_MOE: &[u8] = include_bytes!("../../../icons/quivi-t_moe-icon.ico");
+const FORMAT_ICONS: &[(&str, &[u8])] = &[
+    ("7z.ico", include_bytes!("../../../icons/formats/7z.ico")),
+    ("apng.ico", include_bytes!("../../../icons/formats/apng.ico")),
+    ("avif.ico", include_bytes!("../../../icons/formats/avif.ico")),
+    ("bmp.ico", include_bytes!("../../../icons/formats/bmp.ico")),
+    ("cb7.ico", include_bytes!("../../../icons/formats/cb7.ico")),
+    ("cbr.ico", include_bytes!("../../../icons/formats/cbr.ico")),
+    ("cbt.ico", include_bytes!("../../../icons/formats/cbt.ico")),
+    ("cbz.ico", include_bytes!("../../../icons/formats/cbz.ico")),
+    ("gif.ico", include_bytes!("../../../icons/formats/gif.ico")),
+    ("ico.ico", include_bytes!("../../../icons/formats/ico.ico")),
+    ("jpeg.ico", include_bytes!("../../../icons/formats/jpeg.ico")),
+    ("jpg.ico", include_bytes!("../../../icons/formats/jpg.ico")),
+    ("png.ico", include_bytes!("../../../icons/formats/png.ico")),
+    ("rar.ico", include_bytes!("../../../icons/formats/rar.ico")),
+    ("svg.ico", include_bytes!("../../../icons/formats/svg.ico")),
+    ("tar.ico", include_bytes!("../../../icons/formats/tar.ico")),
+    ("webp.ico", include_bytes!("../../../icons/formats/webp.ico")),
+    ("zip.ico", include_bytes!("../../../icons/formats/zip.ico")),
+];
 
 pub fn dump_icons(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     let config_dir = crate::config::roaming_dir(app);
     let icon_dir = config_dir.join("icons");
     std::fs::create_dir_all(&icon_dir).map_err(|e| e.to_string())?;
 
-    if let Err(e) = std::fs::write(icon_dir.join("apng.ico"), ICON_APNG) {
-        return Err(e.to_string());
+    for (name, bytes) in FORMAT_ICONS {
+        let _ = std::fs::write(icon_dir.join(name), bytes);
     }
-    let _ = std::fs::write(icon_dir.join("cbr.ico"), ICON_CBR);
-    let _ = std::fs::write(icon_dir.join("cbz.ico"), ICON_CBZ);
-    let _ = std::fs::write(icon_dir.join("gif.ico"), ICON_GIF);
-    let _ = std::fs::write(icon_dir.join("svg.ico"), ICON_SVG);
-    let _ = std::fs::write(icon_dir.join("webp.ico"), ICON_WEBP);
-    let _ = std::fs::write(icon_dir.join("quivi-t_moe-icon.ico"), ICON_MOE);
 
     Ok(icon_dir)
 }
@@ -112,7 +119,7 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             let display_name = format_info.map(|f| f.name).unwrap_or("QuiviT File");
             let icon_name = format_info
                 .map(|f| f.icon)
-                .unwrap_or("quivi-t_moe-icon.ico");
+                .unwrap_or("jpg.ico");
 
             let progid = format!("QuiviT.{}", lower_ext);
 

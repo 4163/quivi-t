@@ -12,7 +12,8 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 - **Custom Mascot Icons:** Created 18 custom QuiviT format icons (`jpg`, `png`, `jpeg`, `bmp`, `ico`, `gif`, `webp`, `apng`, `svg`, `avif`, `zip`, `rar`, `7z`, `tar`, `cbt`, `cbz`, `cbr`, `cb7`) featuring the QuiviT mascot holding a labeled sign.
 - **Grill Texture:** Added the app's -45 degree diagonal opaque canvas grill pattern to the sign face with darkened outlines for contrast.
 - **Catppuccin Palette:** Styled badges with distinct hues from the Catppuccin palette, using Nunito ExtraBold text with manual vertical offsets for visual balance.
-- **Asset Pipeline:** Added a portable generator script (`icons/format-template/generate_formats.py`) and vector SVG masters in `icons/formats/svg/`, outputting multi-size ICO binaries (256, 128, 64, 48, 32, 16px) with Lanczos downscaling to `icons/formats/`.
+- **Asset Pipeline:** Added a portable generator script (`icons/format-template/generate_formats.py`) and vector SVG masters in `icons/formats/svg/`, outputting multi-size ICO binaries (256, 128, 64, 48, 32, 16px) with Lanczos downscaling to `icons/formats/`, as well as 128x128 high-DPI raster PNGs to `src/assets/icons/`.
+- **Options UI & Associations Wiring:** Connected all 18 dedicated `.ico` files to `SUPPORTED_FORMATS` in `formats.rs` and `dump_icons` in `registry.rs` for Windows file association registration, and updated `options.html` to display the raster format badge PNGs for every image and archive type.
 
 ### Stale Code and References Cleanup (2026-08-30)
 - **Dead Code Removal:** Removed unused live image blob cache functions (`getLiveImage`, `evictLiveBlobCache`) and unexported `evictBlobCache` in `blobImage.js`. Removed the dead `css` property from `SCALERS` items in `registry.js`.

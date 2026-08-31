@@ -33,25 +33,25 @@ pub struct FileFormat {
 
 pub const SUPPORTED_FORMATS: &[FileFormat] = &[
     // Images
-    FileFormat { ext: "jpg",  name: "JPEG Image",     icon: "quivi-t_moe-icon.ico", category: FormatCategory::Image },
-    FileFormat { ext: "jpeg", name: "JPEG Image",     icon: "quivi-t_moe-icon.ico", category: FormatCategory::Image },
-    FileFormat { ext: "png",  name: "PNG Image",      icon: "quivi-t_moe-icon.ico", category: FormatCategory::Image },
-    FileFormat { ext: "gif",  name: "GIF Image",      icon: "gif.ico",              category: FormatCategory::Image },
-    FileFormat { ext: "webp", name: "WebP Image",     icon: "webp.ico",             category: FormatCategory::Image },
-    FileFormat { ext: "apng", name: "APNG Image",     icon: "apng.ico",             category: FormatCategory::Image },
-    FileFormat { ext: "svg",  name: "SVG Image",      icon: "svg.ico",              category: FormatCategory::Image },
-    FileFormat { ext: "bmp",  name: "BMP Image",      icon: "quivi-t_moe-icon.ico", category: FormatCategory::Image },
-    FileFormat { ext: "ico",  name: "Icon Image",     icon: "quivi-t_moe-icon.ico", category: FormatCategory::Image },
-    FileFormat { ext: "avif", name: "AVIF Image",     icon: "quivi-t_moe-icon.ico", category: FormatCategory::Image },
+    FileFormat { ext: "jpg",  name: "JPEG Image",     icon: "jpg.ico",  category: FormatCategory::Image },
+    FileFormat { ext: "jpeg", name: "JPEG Image",     icon: "jpeg.ico", category: FormatCategory::Image },
+    FileFormat { ext: "png",  name: "PNG Image",      icon: "png.ico",  category: FormatCategory::Image },
+    FileFormat { ext: "gif",  name: "GIF Image",      icon: "gif.ico",  category: FormatCategory::Image },
+    FileFormat { ext: "webp", name: "WebP Image",     icon: "webp.ico", category: FormatCategory::Image },
+    FileFormat { ext: "apng", name: "APNG Image",     icon: "apng.ico", category: FormatCategory::Image },
+    FileFormat { ext: "svg",  name: "SVG Image",      icon: "svg.ico",  category: FormatCategory::Image },
+    FileFormat { ext: "bmp",  name: "BMP Image",      icon: "bmp.ico",  category: FormatCategory::Image },
+    FileFormat { ext: "ico",  name: "Icon Image",     icon: "ico.ico",  category: FormatCategory::Image },
+    FileFormat { ext: "avif", name: "AVIF Image",     icon: "avif.ico", category: FormatCategory::Image },
     // Archives
-    FileFormat { ext: "zip",  name: "ZIP Archive",    icon: "quivi-t_moe-icon.ico", category: FormatCategory::Archive },
-    FileFormat { ext: "cbz",  name: "Comic Book ZIP", icon: "cbz.ico",              category: FormatCategory::Archive },
-    FileFormat { ext: "rar",  name: "RAR Archive",    icon: "quivi-t_moe-icon.ico", category: FormatCategory::Archive },
-    FileFormat { ext: "cbr",  name: "Comic Book RAR", icon: "cbr.ico",              category: FormatCategory::Archive },
-    FileFormat { ext: "7z",   name: "7z Archive",     icon: "quivi-t_moe-icon.ico", category: FormatCategory::Archive },
-    FileFormat { ext: "cb7",  name: "Comic Book 7z",  icon: "quivi-t_moe-icon.ico", category: FormatCategory::Archive },
-    FileFormat { ext: "cbt",  name: "Comic Book TAR", icon: "quivi-t_moe-icon.ico", category: FormatCategory::Archive },
-    FileFormat { ext: "tar",  name: "TAR Archive",    icon: "quivi-t_moe-icon.ico", category: FormatCategory::Archive },
+    FileFormat { ext: "zip",  name: "ZIP Archive",    icon: "zip.ico",  category: FormatCategory::Archive },
+    FileFormat { ext: "cbz",  name: "Comic Book ZIP", icon: "cbz.ico",  category: FormatCategory::Archive },
+    FileFormat { ext: "rar",  name: "RAR Archive",    icon: "rar.ico",  category: FormatCategory::Archive },
+    FileFormat { ext: "cbr",  name: "Comic Book RAR", icon: "cbr.ico",  category: FormatCategory::Archive },
+    FileFormat { ext: "7z",   name: "7z Archive",     icon: "7z.ico",   category: FormatCategory::Archive },
+    FileFormat { ext: "cb7",  name: "Comic Book 7z",  icon: "cb7.ico",  category: FormatCategory::Archive },
+    FileFormat { ext: "cbt",  name: "Comic Book TAR", icon: "cbt.ico",  category: FormatCategory::Archive },
+    FileFormat { ext: "tar",  name: "TAR Archive",    icon: "tar.ico",  category: FormatCategory::Archive },
 ];
 
 #[inline]
