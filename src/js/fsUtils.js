@@ -282,11 +282,11 @@ export const FsUtils = {
     if (!_isCurrentGeneration(options.generation)) return;
 
     let isAnimated = false;
-    let noLoop = false;
+    let loopCount = 0;
     if (this.isImageEntry(selectedEntry)) {
       const animStatus = await Core.checkIsAnimated(selectedEntry.path, null);
       isAnimated = animStatus.is_animated;
-      noLoop = animStatus.no_loop;
+      loopCount = animStatus.loop_count;
       if (!_isCurrentGeneration(options.generation)) return;
     }
 
@@ -299,7 +299,7 @@ export const FsUtils = {
       filename: selectedEntry?.name || '',
       src: selectedSrc,
       isAnimated,
-      noLoop,
+      loopCount,
     });
     recordNavigation(options.previousEntry, Core.getState(), options);
 
@@ -375,11 +375,11 @@ export const FsUtils = {
       if (!_isCurrentGeneration(options.generation)) return;
 
       let isAnimated = false;
-      let noLoop = false;
+      let loopCount = 0;
       if (this.isImageEntry(selectedEntry)) {
         const animStatus = await Core.checkIsAnimated(selectedEntry.name, result.archive_path);
         isAnimated = animStatus.is_animated;
-        noLoop = animStatus.no_loop;
+        loopCount = animStatus.loop_count;
         if (!_isCurrentGeneration(options.generation)) return;
       }
 
@@ -393,7 +393,7 @@ export const FsUtils = {
         filename: selectedEntry?.name || '',
         src: selectedSrc,
         isAnimated,
-        noLoop,
+        loopCount,
       });
       recordNavigation(options.previousEntry, Core.getState(), options);
       if (!_isCurrentGeneration(options.generation)) return;

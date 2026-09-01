@@ -8,6 +8,12 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Exact Loop Counts for Animations (2026-09-01)
+- **Rust IPC & Normalization:** Replaced `no_loop` with a `total_plays` normalized `loop_count: u32` in the `AnimationInfo` struct. The `formats.rs` parsers now intercept exact play counts directly from `NETSCAPE2.0` (GIF), `ANIM` (WebP), and `acTL` (APNG). Values are strictly normalized to match native Chromium `<img>` total-play counts before crossing IPC: GIF/WebP counts (`N`) return `N + 1`, APNG counts return exactly `N`.
+- **AVIF Sequences:** Rewrote `check_avif` to recursively walk ISO BMFF boxes. `moov/trak/edts` are traversed to find the `elst` (edit list) box. If present, the AVIF sequence is conservatively treated as a finite loop (`loop_count = 1`).
+- **WebGL Frame Pump Sync:** Upgraded `pumpTick` in `viewerPipelines.js` to track `currentLoopIteration`. The live GPU pump correctly pauses and holds the exact final frame once the iteration wraps and meets the normalized `loop_count`, preventing animation drift between native HTML and the Lanczos/filter pipelines.
+- **Verification:** Updated `format_tests.rs` with synthetic buffer assertions to prove accurate offset parsing and +1 integer normalization. Verified `loopCount` tracking in `core.js` and `fsUtils.js` frontend layers.
+
 ### Animated AVIF through filters and Lanczos (2026-08-31)
 - **Detection:** `check_animation_status` now walks ISO BMFF boxes on `ftyp` files. A `.avif` is animated if `ftyp` lists the `avis` brand, or if an AVIF-family file (`avif` / `avis` / `mif1` / `miaf`) has a top-level `moov`. Still AVIF (`avif` without `avis` or `moov`) stays still. MP4-like `isom`+`moov` is ignored. `no_loop` stays false, same as WebP/APNG.
 - **Pump MIME:** `viewerPipelines.js` maps `.avif` to `image/avif` so `ImageDecoder` takes the same raster pump as GIF/WebP/APNG instead of defaulting to `image/gif`.

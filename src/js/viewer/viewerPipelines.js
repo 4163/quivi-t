@@ -441,6 +441,7 @@ export function createViewerPipelines(viewportState) {
 
     const ANIME4K_MAX_EDGE = 2048;
     let frameIndex = 0;
+    let currentLoopIteration = 1;
     let lastFrameTime = performance.now();
     let frameDurationMs = 100;
     let pumpVisible = false;
@@ -467,8 +468,9 @@ export function createViewerPipelines(viewportState) {
       while (elapsed >= frameDurationMs) {
         if (frameIndex < frameCount - 1) {
           frameIndex++;
-        } else if (!live.noLoop) {
+        } else if (live.loopCount === 0 || currentLoopIteration < live.loopCount) {
           frameIndex = 0;
+          currentLoopIteration++;
         } else {
           break;
         }

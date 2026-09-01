@@ -74,7 +74,7 @@ fn test_is_animated_gif_no_loop() {
     let buf = b"GIF89a\x01\x00\x01\x00\x00\x00\x00\x2C\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x2C\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3B".to_vec();
     let status = check_animation_status(&buf);
     assert!(status.is_animated);
-    assert!(status.no_loop);
+    assert_eq!(status.loop_count, 1);
 }
 
 #[test]
@@ -93,6 +93,23 @@ fn test_is_animated_webp() {
 }
 
 #[test]
+fn test_is_animated_webp_loop_count() {
+    let mut buf = b"RIFF....WEBPVP8X".to_vec();
+    buf.extend_from_slice(&[10, 0, 0, 0]);
+    buf.push(0b0000_0010); // ANIM flag
+    buf.extend_from_slice(&[0; 9]); // Pad VP8X
+    buf.extend_from_slice(b"ANIM");
+    buf.extend_from_slice(&[6, 0, 0, 0]);
+    buf.extend_from_slice(&[0, 0, 0, 0]); // bg color
+    buf.extend_from_slice(&[1, 0]); // loop_count = 1
+    
+    let status = check_animation_status(&buf);
+    assert!(status.is_animated);
+    assert_eq!(status.loop_count, 2); // 1 + 1 normalization
+
+}
+
+#[test]
 fn test_is_animated_apng() {
     let mut buf = b"\x89PNG\r\n\x1a\n...".to_vec();
     buf.extend_from_slice(b"acTL...IDAT");
@@ -101,6 +118,19 @@ fn test_is_animated_apng() {
     let mut static_buf = b"\x89PNG\r\n\x1a\n...".to_vec();
     static_buf.extend_from_slice(b"IDAT...acTL");
     assert!(!check_animation_status(&static_buf).is_animated);
+}
+
+#[test]
+fn test_is_animated_apng_loop_count() {
+    let mut buf = b"\x89PNG\r\n\x1a\n...".to_vec();
+    buf.extend_from_slice(b"acTL");
+    buf.extend_from_slice(&[0, 0, 0, 0]); // num_frames
+    buf.extend_from_slice(&[0, 0, 0, 3]); // num_plays = 3
+    buf.extend_from_slice(b"IDAT");
+    
+    let status = check_animation_status(&buf);
+    assert!(status.is_animated);
+    assert_eq!(status.loop_count, 3);
 }
 
 fn ftyp_box(major: &[u8; 4], compat: &[[u8; 4]]) -> Vec<u8> {
@@ -127,7 +157,7 @@ fn test_is_animated_avif() {
     // Spec sequence: major brand avis.
     let avis = ftyp_box(b"avis", &[*b"avis", *b"avif", *b"mif1", *b"miaf"]);
     assert!(check_animation_status(&avis).is_animated);
-    assert!(!check_animation_status(&avis).no_loop);
+    assert_eq!(check_animation_status(&avis).loop_count, 0);
 
     // avis only in compatible brands.
     let compat_avis = ftyp_box(b"avif", &[*b"mif1", *b"avis"]);
@@ -156,7 +186,21 @@ fn test_is_animated_avif() {
     let bytes = std::fs::read(&path).expect("test AVIF fixture");
     let status = check_animation_status(&bytes);
     assert!(status.is_animated);
-    assert!(!status.no_loop);
+    assert_eq!(status.loop_count, 0);
+
+    // Test elst
+    let mut avif_elst = ftyp_box(b"avif", &[*b"avif", *b"mif1"]);
+    let mut moov = empty_box(b"moov");
+    moov.extend_from_slice(&empty_box(b"trak"));
+    moov.extend_from_slice(&empty_box(b"edts"));
+    moov.extend_from_slice(&empty_box(b"elst"));
+    // Update moov size (8 + 8 + 8 + 8 = 32)
+    moov[0..4].copy_from_slice(&32u32.to_be_bytes());
+    avif_elst.extend_from_slice(&moov);
+    
+    let status_elst = check_animation_status(&avif_elst);
+    assert!(status_elst.is_animated);
+    assert_eq!(status_elst.loop_count, 1);
 }
 
 #[test]

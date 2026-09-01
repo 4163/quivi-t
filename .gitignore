@@ -39,3 +39,6 @@ DEBUG_REG
 
 # Too large to host on GitHub (>100 MB), kept local only
 test-files/export_1785548648565.apng
+
+# Animated format test files duplicated into one directory for manual testing
+test-files/animated/

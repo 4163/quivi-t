@@ -73,8 +73,8 @@ const _state = {
   /** True if the current image is an animated format */
   isAnimated: false,
 
-  /** True if the current image is specifically a no-loop animated GIF */
-  noLoop: false,
+  /** Total times to play the animation (0 = infinite). Syncs with native <img>. */
+  loopCount: 0,
 
   /** File list panel visibility. */
   fileListVisible: true,
@@ -182,14 +182,14 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     if (_animMemo.has(cacheKey)) {
       const cached = _animMemo.get(cacheKey);
       _state.isAnimated = cached.is_animated;
-      _state.noLoop = cached.no_loop;
+      _state.loopCount = cached.loop_count;
     } else {
       // Leave previous flags alone until checked, to prevent pipeline teardown flash
       animPromise = Core.checkIsAnimated(pathArg, archiveArg);
     }
   } else {
     _state.isAnimated = false;
-    _state.noLoop = false;
+    _state.loopCount = 0;
   }
 
   _notify();
@@ -198,7 +198,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     animPromise.then(animStatus => {
       if (_state.index === index && _state.src === newSrc) {
         _state.isAnimated = animStatus.is_animated;
-        _state.noLoop = animStatus.no_loop;
+        _state.loopCount = animStatus.loop_count;
         _notify();
       }
     });
@@ -262,7 +262,7 @@ export const Core = {
       return animStatus;
     } catch (err) {
       console.warn('[Core] Failed to check animation header:', err);
-      return { is_animated: false, no_loop: false };
+      return { is_animated: false, loop_count: 0 };
     }
   },
 

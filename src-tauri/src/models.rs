@@ -54,5 +54,5 @@ pub struct FormatStatus {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnimationInfo {
     pub is_animated: bool,
-    pub no_loop: bool,
+    pub loop_count: u32,
 }
