@@ -9,7 +9,7 @@ fn test_file(name: &str) -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("test-files")
-        .join("archives")
+        .join("_archives")
         .join(name)
 }
 

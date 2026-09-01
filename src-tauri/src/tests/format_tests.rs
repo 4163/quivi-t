@@ -151,6 +151,7 @@ fn test_is_animated_avif() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("test-files")
+        .join("avif")
         .join("export_1788174887667.avif");
     let bytes = std::fs::read(&path).expect("test AVIF fixture");
     let status = check_animation_status(&bytes);
