@@ -22,6 +22,7 @@ These rules apply to the AI coding assistant.
 - **Work in logical slices.** Prioritize small, precise code changes rather than big blocks to prevent tooling and scope failures, especially during large refactors. Be surgical!
 - **YAGNI.** Do not add abstractions, features, or complexity without a clear need.
 - **Blast radius.** When modifying core cross-cutting surfaces (IPC, configs, cross-window state, protocol URLs, or archives), stop and prove you haven't broken downstream consumers. Do not rely on speculation or writeups. Use the `.agents/skills/blast-radius/SKILL.md` workflow to execute actual checks and confirm safety.
+- **Targeted testing via blast radius.** Do not run the full `cargo test` suite on minor or localized changes. Full suite runs incur high linker and archive extraction overhead (30+ seconds). Derive targeted test commands directly from the diff's blast radius (e.g., `cargo test format_tests` or `cargo test <filter>`). Use `cargo check --tests` during iteration to validate types and test signatures in 2 to 4 seconds. Reserve full suite runs for final slice verification.
 
 ## Architecture Rules
 
