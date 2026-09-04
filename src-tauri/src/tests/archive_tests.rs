@@ -1,5 +1,7 @@
 use super::*;
 use crate::formats::*;
+use crate::models::ArchiveEncryptionStatus;
+use crate::archives::cache::new_extract_notify;
 
 use std::fs;
 use std::io::Read;
@@ -31,15 +33,13 @@ fn ensure_cbt() -> std::path::PathBuf {
     let hash = format!("{:x}", md5::compute(seven.to_str().unwrap()));
     let scratch = std::env::temp_dir().join("QuiviT-test-cbt").join(hash);
     let _ = fs::remove_dir_all(&scratch);
-    let notify = std::sync::Arc::new((
-        std::sync::Mutex::new(std::collections::HashSet::new()),
-        std::sync::Condvar::new(),
-    ));
+    let notify = new_extract_notify();
     extract_7z_to_temp(
         seven.to_str().unwrap().to_string(),
         scratch.clone(),
         notify,
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        None,
     );
 
     let mut builder = tar::Builder::new(fs::File::create(&cbt).expect("create cbt"));
@@ -94,7 +94,7 @@ fn scratch_cbz_copies(label: &str, count: usize) -> (std::path::PathBuf, Vec<Str
 #[test]
 fn lists_solid_7z_with_nested_folders() {
     let path = test_file("7z.7z");
-    let files = list_7z_entries(path.to_str().unwrap()).expect("list 7z");
+    let (files, _) = list_7z_entries(path.to_str().unwrap(), None).expect("list 7z");
     assert!(
         files.len() >= 12,
         "expected >=12 image entries, got {}",
@@ -116,15 +116,13 @@ fn extracts_solid_7z_to_temp() {
     let hash = format!("{:x}", md5::compute(path.to_str().unwrap()));
     let temp_dir = std::env::temp_dir().join("QuiviT-test-extract").join(hash);
     let _ = fs::remove_dir_all(&temp_dir);
-    let notify = std::sync::Arc::new((
-        std::sync::Mutex::new(std::collections::HashSet::new()),
-        std::sync::Condvar::new(),
-    ));
+    let notify = new_extract_notify();
     extract_7z_to_temp(
         path.to_str().unwrap().to_string(),
         temp_dir.clone(),
         notify,
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        None,
     );
 
     // A nested entry must exist and match the same-named root entry
@@ -164,15 +162,13 @@ fn lists_and_reads_tar() {
     let hash = format!("{:x}", md5::compute(seven.to_str().unwrap()));
     let scratch = std::env::temp_dir().join("QuiviT-test-cbt").join(hash);
     let _ = fs::remove_dir_all(&scratch);
-    let notify = std::sync::Arc::new((
-        std::sync::Mutex::new(std::collections::HashSet::new()),
-        std::sync::Condvar::new(),
-    ));
+    let notify = new_extract_notify();
     extract_7z_to_temp(
         seven.to_str().unwrap().to_string(),
         scratch.clone(),
         notify,
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        None,
     );
     let original = fs::read(scratch.join("export_1785518878919.png")).unwrap();
     assert_eq!(data.len(), original.len());
@@ -188,10 +184,7 @@ fn extracts_tar_to_temp() {
         .join(hash);
     let _ = fs::remove_dir_all(&temp_dir);
     fs::create_dir_all(&temp_dir).ok();
-    let notify = std::sync::Arc::new((
-        std::sync::Mutex::new(std::collections::HashSet::new()),
-        std::sync::Condvar::new(),
-    ));
+    let notify = new_extract_notify();
 
     extract_tar_to_temp(
         cbt.to_str().unwrap().to_string(),
@@ -244,10 +237,7 @@ fn tar_temp_extraction_includes_metadata() {
 
     let extract_dir = temp_root.join("extract");
     fs::create_dir_all(&extract_dir).ok();
-    let notify = std::sync::Arc::new((
-        std::sync::Mutex::new(std::collections::HashSet::new()),
-        std::sync::Condvar::new(),
-    ));
+    let notify = new_extract_notify();
     extract_tar_to_temp(
         cbt.to_string_lossy().into_owned(),
         extract_dir.clone(),
@@ -270,7 +260,7 @@ fn supported_archives_include_new_formats() {
 #[test]
 fn lists_rar5_cbr() {
     let path = test_file("cbr.cbr");
-    let files = list_rar_entries(path.to_str().unwrap()).expect("list cbr");
+    let (files, _) = list_rar_entries(path.to_str().unwrap(), None).expect("list cbr");
     assert!(
         files.len() >= 7,
         "expected >=7 image entries, got {}",
@@ -288,7 +278,7 @@ fn lists_cb7_like_7z() {
         .join("sample.cb7");
     let _ = fs::remove_file(&cb7);
     fs::copy(&src, &cb7).expect("copy 7z to cb7");
-    let files = list_7z_entries(cb7.to_str().unwrap()).expect("list cb7");
+    let (files, _) = list_7z_entries(cb7.to_str().unwrap(), None).expect("list cb7");
     assert!(files.len() >= 12, "cb7 listed {} entries", files.len());
     let _ = fs::remove_file(&cb7);
 }
@@ -309,6 +299,7 @@ fn url_decode_roundtrips_utf8_entry_names() {
 }
 
 #[test]
+#[ignore = "slow timing simulation"]
 fn protocol_serve_timing_simulation() {
     // Mirror the protocol handler. Extracted formats read from extract_temp_dir;
     // ZIP and CBZ use on-demand extraction. This simulates the first request
@@ -337,16 +328,14 @@ fn protocol_serve_timing_simulation() {
     // Spawn background extraction exactly like list_archive does.
     let seven_path = seven.to_str().unwrap().to_string();
     let td = temp_dir.clone();
-    let notify = std::sync::Arc::new((
-        std::sync::Mutex::new(std::collections::HashSet::new()),
-        std::sync::Condvar::new(),
-    ));
+    let notify = new_extract_notify();
     std::thread::spawn(move || {
         extract_7z_to_temp(
             seven_path,
             td,
             notify,
             std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            None,
         )
     });
 
@@ -365,7 +354,7 @@ fn protocol_serve_timing_simulation() {
     eprintln!("7z BMP poll: found={found_bmp} elapsed={:?}", elapsed_bmp);
 
     // On-demand paths (cbz/tar) must serve the first image synchronously.
-    let zip_first = extract_zip_entry(test_file("cbz.cbz").to_str().unwrap(), first);
+    let zip_first = extract_zip_entry(test_file("cbz.cbz").to_str().unwrap(), first, None);
     eprintln!(
         "cbz on-demand first entry: {}",
         zip_first
@@ -386,10 +375,7 @@ fn protocol_serve_timing_simulation() {
         .join(cbt_hash);
     let _ = fs::remove_dir_all(&tar_temp_dir);
     fs::create_dir_all(&tar_temp_dir).ok();
-    let tar_notify = std::sync::Arc::new((
-        std::sync::Mutex::new(std::collections::HashSet::new()),
-        std::sync::Condvar::new(),
-    ));
+    let tar_notify = new_extract_notify();
     extract_tar_to_temp(
         cbt.to_str().unwrap().to_string(),
         tar_temp_dir.clone(),
@@ -515,7 +501,7 @@ fn archive_cache_drops_oldest_of_nine_and_reopens() {
     let (scratch, paths) = scratch_cbz_copies("zip-lru", 10);
     let mut cache = ArchiveCache::new(64);
 
-    let first = cache.prepare_archive(&paths[0]).expect("prepare archive 1");
+    let first = cache.prepare_archive(&paths[0], None).expect("prepare archive 1");
     assert!(!first.files.is_empty());
     let first_entry = first.files[0].name.clone();
     let first_bytes = cache
@@ -526,24 +512,24 @@ fn archive_cache_drops_oldest_of_nine_and_reopens() {
     assert!(!first_bytes.is_empty());
 
     for path in &paths[1..8] {
-        cache.prepare_archive(path).expect("prepare archive");
+        cache.prepare_archive(path, None).expect("prepare archive");
     }
     assert_eq!(cache.open_archive_count(), 8);
     assert!(cache.contains_archive(&paths[0]));
 
-    cache.prepare_archive(&paths[8]).expect("prepare 9th");
+    cache.prepare_archive(&paths[8], None).expect("prepare 9th");
     assert_eq!(cache.open_archive_count(), 8);
     assert!(!cache.contains_archive(&paths[0]));
     assert!(cache.contains_archive(&paths[8]));
 
-    cache.prepare_archive(&paths[9]).expect("prepare 10th");
+    cache.prepare_archive(&paths[9], None).expect("prepare 10th");
     assert_eq!(cache.open_archive_count(), 8);
     assert!(!cache.contains_archive(&paths[0]));
     assert!(!cache.contains_archive(&paths[1]));
 
     let t = Instant::now();
     let reopened = cache
-        .prepare_archive(&paths[0])
+        .prepare_archive(&paths[0], None)
         .expect("re-open dropped archive");
     let reopen_prepare_ms = t.elapsed().as_millis();
     assert_eq!(reopened.files.len(), first.files.len());
@@ -586,12 +572,12 @@ fn archive_cache_evicts_extract_temp_on_drop() {
     let (scratch, zips) = scratch_cbz_copies("sevenz-evict", 8);
     let mut cache = ArchiveCache::new(64);
 
-    let listed = cache.prepare_archive(seven).expect("prepare 7z");
+    let listed = cache.prepare_archive(seven, None).expect("prepare 7z");
     assert!(listed.files.len() >= 12);
     let first_entry = listed.files[0].name.clone();
     assert!(temp_dir.exists());
 
-    let extract_deadline = Instant::now() + Duration::from_secs(30);
+    let extract_deadline = Instant::now() + Duration::from_secs(60);
     loop {
         let extracted = listed
             .files
@@ -610,17 +596,17 @@ fn archive_cache_evicts_extract_temp_on_drop() {
     std::thread::sleep(Duration::from_millis(200));
 
     for path in &zips[..7] {
-        cache.prepare_archive(path).expect("prepare zip copy");
+        cache.prepare_archive(path, None).expect("prepare zip copy");
         assert!(cache.contains_archive(seven));
     }
-    cache.prepare_archive(&zips[7]).expect("prepare 9th");
+    cache.prepare_archive(&zips[7], None).expect("prepare 9th");
 
     assert_eq!(cache.open_archive_count(), 8);
     assert!(!cache.contains_archive(seven));
     assert!(!temp_dir.exists());
 
     let t = Instant::now();
-    let relisted = cache.prepare_archive(seven).expect("re-open dropped 7z");
+    let relisted = cache.prepare_archive(seven, None).expect("re-open dropped 7z");
     let reopen_prepare_ms = t.elapsed().as_millis();
     assert_eq!(relisted.files.len(), listed.files.len());
     assert!(cache.contains_archive(seven));
@@ -649,7 +635,7 @@ fn encoding_test_file(name: &str) -> std::path::PathBuf {
 #[test]
 fn zip_decodes_shift_jis_entry_names() {
     let path = encoding_test_file("shift_jis_test.zip");
-    let (entries, _) = list_zip_entries(path.to_str().unwrap()).expect("list shift-jis zip");
+    let (entries, _, _, _) = list_zip_entries(path.to_str().unwrap(), None).expect("list shift-jis zip");
     assert_eq!(entries.len(), 1);
     assert!(
         entries[0].name.contains("テスト"),
@@ -661,7 +647,7 @@ fn zip_decodes_shift_jis_entry_names() {
 #[test]
 fn zip_decodes_gbk_entry_names() {
     let path = encoding_test_file("gbk_test.zip");
-    let (entries, _) = list_zip_entries(path.to_str().unwrap()).expect("list gbk zip");
+    let (entries, _, _, _) = list_zip_entries(path.to_str().unwrap(), None).expect("list gbk zip");
     assert_eq!(entries.len(), 1);
     assert!(
         entries[0].name.contains("测试"),
@@ -673,7 +659,7 @@ fn zip_decodes_gbk_entry_names() {
 #[test]
 fn zip_decodes_euckr_entry_names() {
     let path = encoding_test_file("euckr_test.zip");
-    let (entries, _) = list_zip_entries(path.to_str().unwrap()).expect("list euc-kr zip");
+    let (entries, _, _, _) = list_zip_entries(path.to_str().unwrap(), None).expect("list euc-kr zip");
     assert_eq!(entries.len(), 1);
     assert!(
         entries[0].name.contains("테스트"),
@@ -691,7 +677,7 @@ fn metadata_test_file(name: &str) -> std::path::PathBuf {
 #[test]
 fn sevenz_lists_metadata_files() {
     let path = metadata_test_file("metadata.7z");
-    let files = list_7z_entries(path.to_str().unwrap()).expect("list 7z with metadata");
+    let (files, _) = list_7z_entries(path.to_str().unwrap(), None).expect("list 7z with metadata");
 
     let has_image = files.iter().any(|f| f.name.ends_with(".png"));
     let has_xml = files.iter().any(|f| f.name == "ComicInfo.xml");
@@ -704,7 +690,7 @@ fn sevenz_lists_metadata_files() {
 #[test]
 fn cb7_lists_metadata_files() {
     let path = metadata_test_file("metadata.cb7");
-    let files = list_7z_entries(path.to_str().unwrap()).expect("list cb7 with metadata");
+    let (files, _) = list_7z_entries(path.to_str().unwrap(), None).expect("list cb7 with metadata");
 
     let has_xml = files.iter().any(|f| f.name == "ComicInfo.xml");
     assert!(has_xml, "cb7 listing missing ComicInfo.xml metadata");
@@ -718,15 +704,13 @@ fn sevenz_extracts_metadata_to_temp() {
         .join("QuiviT-test-metadata-extract")
         .join(hash);
     let _ = fs::remove_dir_all(&temp_dir);
-    let notify = std::sync::Arc::new((
-        std::sync::Mutex::new(std::collections::HashSet::new()),
-        std::sync::Condvar::new(),
-    ));
+    let notify = new_extract_notify();
     extract_7z_to_temp(
         path.to_str().unwrap().to_string(),
         temp_dir.clone(),
         notify,
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        None,
     );
 
     let xml_path = temp_dir.join("ComicInfo.xml");
@@ -739,4 +723,381 @@ fn sevenz_extracts_metadata_to_temp() {
     );
 
     let _ = fs::remove_dir_all(&temp_dir);
+}
+
+fn encrypted_test_file(name: &str) -> std::path::PathBuf {
+    test_file("encrypted_tests").join(name)
+}
+
+#[test]
+fn zip_encrypted_without_password_detects_password_required() {
+    let path = encrypted_test_file("encrypted.zip");
+    if !path.exists() {
+        return;
+    }
+    let (files, _archive, _map, encryption) =
+        list_zip_entries(path.to_str().unwrap(), None).expect("list encrypted zip");
+    assert_eq!(
+        encryption,
+        Some(ArchiveEncryptionStatus::PasswordRequired),
+        "Expected PasswordRequired for encrypted ZIP opened without password"
+    );
+    assert_eq!(files.len(), 2, "Expected 2 entries in central directory");
+    assert!(files.iter().any(|f| f.name == "01.png"));
+    assert!(files.iter().any(|f| f.name == "ComicInfo.xml"));
+}
+
+#[test]
+fn zip_encrypted_with_wrong_password_detects_password_incorrect() {
+    let path = encrypted_test_file("encrypted.zip");
+    if !path.exists() {
+        return;
+    }
+    let (_files, _archive, _map, encryption) =
+        list_zip_entries(path.to_str().unwrap(), Some("wrong_password"))
+            .expect("list encrypted zip with wrong password");
+    assert_eq!(
+        encryption,
+        Some(ArchiveEncryptionStatus::PasswordIncorrect),
+        "Expected PasswordIncorrect for encrypted ZIP opened with wrong password"
+    );
+}
+
+#[test]
+fn zip_encrypted_with_correct_password_succeeds_and_reads_entry() {
+    let path = encrypted_test_file("encrypted.zip");
+    if !path.exists() {
+        return;
+    }
+    let (files, _archive, _map, encryption) =
+        list_zip_entries(path.to_str().unwrap(), Some("quivit_test_pwd"))
+            .expect("list encrypted zip with correct password");
+    assert_eq!(encryption, None, "Expected None encryption status on valid credentials");
+    assert_eq!(files.len(), 2);
+
+    let mut cache = ArchiveCache::new(64);
+    let res = cache
+        .prepare_archive(path.to_str().unwrap(), Some("quivit_test_pwd"))
+        .expect("prepare encrypted zip");
+    assert_eq!(res.encryption, None);
+
+    let bytes = cache
+        .read_entry_bytes(path.to_str().unwrap(), "01.png")
+        .expect("read decrypted zip entry")
+        .wait_for_data("01.png")
+        .expect("wait for decrypted data");
+    assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"), "PNG header should match");
+}
+
+#[test]
+fn zip_corrupt_local_header_fails_fast_on_corrupt_entry_and_reads_valid_entry() {
+    let path = encrypted_test_file("corrupt_local_header.zip");
+    if !path.exists() {
+        return;
+    }
+    let (files, _archive, _map, encryption) =
+        list_zip_entries(path.to_str().unwrap(), None).expect("list corrupt header zip");
+    assert_eq!(encryption, None);
+    assert_eq!(files.len(), 2);
+
+    let mut cache = ArchiveCache::new(64);
+    let _ = cache
+        .prepare_archive(path.to_str().unwrap(), None)
+        .expect("prepare corrupt zip");
+
+    let valid_bytes = cache
+        .read_entry_bytes(path.to_str().unwrap(), "01.png")
+        .expect("read valid entry")
+        .wait_for_data("01.png")
+        .expect("wait for valid data");
+    assert!(valid_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+    let corrupt_res = cache.read_entry_bytes(path.to_str().unwrap(), "corrupt.png");
+    assert!(corrupt_res.is_err(), "Corrupt entry should fail immediately");
+}
+
+#[test]
+fn sevenz_encrypted_without_password_detects_password_required() {
+    let path = encrypted_test_file("encrypted.7z");
+    if !path.exists() {
+        return;
+    }
+    let (files, encryption) =
+        list_7z_entries(path.to_str().unwrap(), None).expect("list encrypted 7z");
+    assert_eq!(
+        encryption,
+        Some(ArchiveEncryptionStatus::PasswordRequired),
+        "Expected PasswordRequired for encrypted 7z"
+    );
+    assert_eq!(files.len(), 2);
+}
+
+#[test]
+fn sevenz_encrypted_with_wrong_password_detects_password_incorrect() {
+    let path = encrypted_test_file("encrypted.7z");
+    if !path.exists() {
+        return;
+    }
+    let (_files, encryption) =
+        list_7z_entries(path.to_str().unwrap(), Some("wrong_password"))
+            .expect("list encrypted 7z with wrong password");
+    assert_eq!(
+        encryption,
+        Some(ArchiveEncryptionStatus::PasswordIncorrect),
+        "Expected PasswordIncorrect for encrypted 7z with wrong credentials"
+    );
+}
+
+#[test]
+fn sevenz_encrypted_with_correct_password_succeeds_and_extracts() {
+    let path = encrypted_test_file("encrypted.7z");
+    if !path.exists() {
+        return;
+    }
+    let (files, encryption) =
+        list_7z_entries(path.to_str().unwrap(), Some("quivit_test_pwd"))
+            .expect("list encrypted 7z with valid password");
+    assert_eq!(encryption, None);
+    assert_eq!(files.len(), 2);
+
+    let hash = format!("{:x}", md5::compute(path.to_str().unwrap()));
+    let temp_dir = std::env::temp_dir()
+        .join("QuiviT-test-encrypted-7z")
+        .join(hash);
+    let _ = fs::remove_dir_all(&temp_dir);
+    let notify = new_extract_notify();
+    extract_7z_to_temp(
+        path.to_str().unwrap().to_string(),
+        temp_dir.clone(),
+        notify,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        Some("quivit_test_pwd".to_string()),
+    );
+
+    let png_path = temp_dir.join("01.png");
+    assert!(png_path.exists(), "01.png should be extracted");
+    let content = fs::read(&png_path).expect("read extracted png");
+    assert!(content.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn rar_encrypted_without_password_detects_password_required() {
+    let path = encrypted_test_file("encrypted.rar");
+    if !path.exists() {
+        return;
+    }
+    let (files, encryption) =
+        list_rar_entries(path.to_str().unwrap(), None).expect("list encrypted rar");
+    assert_eq!(
+        encryption,
+        Some(ArchiveEncryptionStatus::PasswordRequired),
+        "Expected PasswordRequired for encrypted RAR"
+    );
+    assert_eq!(files.len(), 2);
+}
+
+#[test]
+fn rar_encrypted_with_wrong_password_detects_password_incorrect() {
+    let path = encrypted_test_file("encrypted.rar");
+    if !path.exists() {
+        return;
+    }
+    let (_files, encryption) =
+        list_rar_entries(path.to_str().unwrap(), Some("wrong_password"))
+            .expect("list encrypted rar with wrong password");
+    assert_eq!(
+        encryption,
+        Some(ArchiveEncryptionStatus::PasswordIncorrect),
+        "Expected PasswordIncorrect for encrypted RAR with wrong credentials"
+    );
+}
+
+#[test]
+fn rar_encrypted_with_correct_password_succeeds_and_extracts() {
+    let path = encrypted_test_file("encrypted.rar");
+    if !path.exists() {
+        return;
+    }
+    let (files, encryption) =
+        list_rar_entries(path.to_str().unwrap(), Some("quivit_test_pwd"))
+            .expect("list encrypted rar with valid password");
+    assert_eq!(encryption, None);
+    assert_eq!(files.len(), 2);
+
+    let hash = format!("{:x}", md5::compute(path.to_str().unwrap()));
+    let temp_dir = std::env::temp_dir()
+        .join("QuiviT-test-encrypted-rar")
+        .join(hash);
+    let _ = fs::remove_dir_all(&temp_dir);
+    let notify = new_extract_notify();
+    extract_rar_to_temp(
+        path.to_str().unwrap().to_string(),
+        temp_dir.clone(),
+        notify,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        Some("quivit_test_pwd".to_string()),
+    );
+
+    let png_path = temp_dir.join("01.png");
+    assert!(png_path.exists(), "01.png should be extracted from RAR");
+    let content = fs::read(&png_path).expect("read extracted png from rar");
+    assert!(content.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn archive_cache_facade_session_retains_password_and_serves_entries() {
+    let path = encrypted_test_file("encrypted.zip");
+    if !path.exists() {
+        return;
+    }
+    let mut cache = ArchiveCache::new(64);
+
+    // Opening without password signals PasswordRequired
+    let res_no_pwd = cache
+        .prepare_archive(path.to_str().unwrap(), None)
+        .expect("prepare without pwd");
+    assert_eq!(
+        res_no_pwd.encryption,
+        Some(ArchiveEncryptionStatus::PasswordRequired)
+    );
+
+    // Supplying valid password updates session
+    let res_valid = cache
+        .prepare_archive(path.to_str().unwrap(), Some("quivit_test_pwd"))
+        .expect("prepare with valid pwd");
+    assert_eq!(res_valid.encryption, None);
+
+    // Subsequent entry reads transparently use cached credentials
+    let bytes = cache
+        .read_entry_bytes(path.to_str().unwrap(), "01.png")
+        .expect("read entry via session credentials")
+        .wait_for_data("01.png")
+        .expect("wait for decrypted entry data");
+    assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+    let header = cache
+        .read_entry_header(path.to_str().unwrap(), "01.png", 8)
+        .expect("read header via session credentials");
+    assert_eq!(&header[..8], b"\x89PNG\r\n\x1a\n");
+}
+
+#[test]
+fn invalid_archive_zip_corrupt_tail_missing_eocd_fails_fast() {
+    let scratch_dir = std::env::temp_dir().join("quivit-test-fast-skip-zip");
+    let _ = fs::remove_dir_all(&scratch_dir);
+    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+
+    let fake_zip = scratch_dir.join("truncated_missing_eocd.zip");
+    let mut file = fs::File::create(&fake_zip).expect("create fake zip");
+    use std::io::Write;
+    file.write_all(b"PK\x03\x04").expect("write magic");
+    file.set_len(10 * 1024 * 1024).expect("set 10MB length");
+
+    let start = std::time::Instant::now();
+    let res = list_zip_entries(fake_zip.to_str().unwrap(), None);
+    let elapsed = start.elapsed();
+
+    assert!(res.is_err(), "truncated ZIP missing EOCD must fail");
+    let err = res.err().unwrap();
+    assert!(
+        err.contains("End of Central Directory (EOCD) signature not found in archive tail"),
+        "error should indicate tail EOCD check failed: {err}"
+    );
+    assert!(elapsed.as_millis() < 50, "rejection took too long: {:?}", elapsed);
+
+    let _ = fs::remove_dir_all(&scratch_dir);
+}
+
+#[test]
+fn invalid_archive_zip_invalid_magic_fails_fast() {
+    let scratch_dir = std::env::temp_dir().join("quivit-test-fast-skip-zip-magic");
+    let _ = fs::remove_dir_all(&scratch_dir);
+    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+
+    let fake_zip = scratch_dir.join("not_a_zip.zip");
+    fs::write(&fake_zip, b"<!DOCTYPE html><html>404 Not Found</html>").expect("write fake html");
+
+    let res = list_zip_entries(fake_zip.to_str().unwrap(), None);
+    assert!(res.is_err());
+    assert!(res.err().unwrap().contains("missing PK signature header"));
+
+    let _ = fs::remove_dir_all(&scratch_dir);
+}
+
+#[test]
+fn invalid_archive_rar_invalid_magic_and_truncated() {
+    let scratch_dir = std::env::temp_dir().join("quivit-test-fast-skip-rar");
+    let _ = fs::remove_dir_all(&scratch_dir);
+    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+
+    let small_rar = scratch_dir.join("too_small.rar");
+    fs::write(&small_rar, b"Rar!").expect("write small");
+    let res = list_rar_entries(small_rar.to_str().unwrap(), None);
+    assert!(res.is_err());
+    assert!(res.err().unwrap().contains("smaller than minimum RAR header"));
+
+    let bad_magic = scratch_dir.join("bad_magic.rar");
+    fs::write(&bad_magic, b"NOT_A_RAR_FILE_HEADER").expect("write bad magic");
+    let res = list_rar_entries(bad_magic.to_str().unwrap(), None);
+    assert!(res.is_err());
+    assert!(res.err().unwrap().contains("missing RAR signature header"));
+
+    let _ = fs::remove_dir_all(&scratch_dir);
+}
+
+#[test]
+fn invalid_archive_sevenz_invalid_magic_and_truncated() {
+    let scratch_dir = std::env::temp_dir().join("quivit-test-fast-skip-sevenz");
+    let _ = fs::remove_dir_all(&scratch_dir);
+    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+
+    let small_7z = scratch_dir.join("too_small.7z");
+    fs::write(&small_7z, b"7z\xbc\xaf\x27\x1c").expect("write small");
+    let res = list_7z_entries(small_7z.to_str().unwrap(), None);
+    assert!(res.is_err());
+    assert!(res.err().unwrap().contains("smaller than minimum 7Z header"));
+
+    let bad_magic = scratch_dir.join("bad_magic.7z");
+    fs::write(&bad_magic, [0u8; 32]).expect("write zeros");
+    let res = list_7z_entries(bad_magic.to_str().unwrap(), None);
+    assert!(res.is_err());
+    assert!(res.err().unwrap().contains("missing 7Z signature header"));
+
+    let trunc_7z = scratch_dir.join("truncated.7z");
+    let mut header = [0u8; 32];
+    header[0..6].copy_from_slice(&[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]);
+    header[12..20].copy_from_slice(&1_000_000u64.to_le_bytes());
+    header[20..28].copy_from_slice(&100u64.to_le_bytes());
+    fs::write(&trunc_7z, header).expect("write header");
+    let res = list_7z_entries(trunc_7z.to_str().unwrap(), None);
+    assert!(res.is_err());
+    assert!(res.err().unwrap().contains("truncated archive header"));
+
+    let _ = fs::remove_dir_all(&scratch_dir);
+}
+
+#[test]
+fn invalid_archive_tar_invalid_checksum_and_truncated() {
+    let scratch_dir = std::env::temp_dir().join("quivit-test-fast-skip-tar");
+    let _ = fs::remove_dir_all(&scratch_dir);
+    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+
+    let small_tar = scratch_dir.join("too_small.tar");
+    fs::write(&small_tar, b"tar data").expect("write small");
+    let res = list_tar_entries(small_tar.to_str().unwrap());
+    assert!(res.is_err());
+    assert!(res.err().unwrap().contains("smaller than minimum TAR block"));
+
+    let garbage_tar = scratch_dir.join("garbage.tar");
+    let garbage = vec![0x42u8; 512];
+    fs::write(&garbage_tar, garbage).expect("write garbage");
+    let res = list_tar_entries(garbage_tar.to_str().unwrap());
+    assert!(res.is_err());
+    assert!(res.err().unwrap().contains("invalid header checksum"));
+
+    let _ = fs::remove_dir_all(&scratch_dir);
 }

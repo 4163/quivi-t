@@ -36,10 +36,20 @@ pub struct DirectoryReadResult {
     pub parent_directory: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArchiveEncryptionStatus {
+    None,
+    PasswordRequired,
+    PasswordIncorrect,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArchiveReadResult {
     pub files: Vec<FileEntry>,
     pub archive_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encryption: Option<ArchiveEncryptionStatus>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

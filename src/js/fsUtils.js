@@ -335,6 +335,63 @@ export const FsUtils = {
       const result = await invoke('list_archive', { archivePath });
       if (!_isCurrentGeneration(options.generation)) return;
 
+      const isPasswordBlocked = result.encryption === 'password_required' || result.encryption === 'password_incorrect';
+      if (isPasswordBlocked) {
+        if (options.skipLocked) {
+          throw new Error(`Archive is password-protected: ${result.archive_path}`);
+        }
+        const archiveName = basename(result.archive_path) || result.archive_path;
+        const lockLabel = result.encryption === 'password_required'
+          ? `Password required: ${archiveName}`
+          : `Password incorrect! ${archiveName}`;
+
+        const state = Core.getState();
+        this.revokeIfObjectURL(state.src);
+
+        if (state.mode === 'directory' && state.directory) {
+          const archiveEntryIndex = state.list?.findIndex(f => f.path === result.archive_path || f.name === archiveName);
+          Core.setState({
+            index: archiveEntryIndex !== -1 && archiveEntryIndex !== undefined ? archiveEntryIndex : state.index,
+            filename: lockLabel,
+            src: '',
+            isAnimated: false,
+          });
+          return;
+        }
+
+        const parentDir = parentOf(result.archive_path);
+        if (parentDir && parentDir !== result.archive_path) {
+          try {
+            const dirResult = await invoke('read_directory', {
+              path: parentDir,
+              showHidden: this.showHidden(),
+              targetName: archiveName,
+            });
+            if (!_isCurrentGeneration(options.generation)) return;
+            this.applyDirectoryResult(dirResult, { ...options, targetName: archiveName });
+            Core.setState({
+              filename: lockLabel,
+              src: '',
+              isAnimated: false,
+            });
+            return;
+          } catch (dirErr) {
+            console.warn('[Archive] Could not load parent directory for locked archive:', dirErr);
+          }
+        }
+
+        Core.setState({
+          mode: 'empty',
+          list: [],
+          index: -1,
+          archivePath: '',
+          filename: lockLabel,
+          src: '',
+          isAnimated: false,
+        });
+        return;
+      }
+
       const metaFiles = result.files.filter(f => /\.(xml|opf)$/i.test(f.name)).map(f => f.name);
       const imgFiles = result.files.filter(f => !/\.(xml|opf)$/i.test(f.name));
 
@@ -389,6 +446,7 @@ export const FsUtils = {
         index,
         archivePath: result.archive_path,
         archiveMetadataFiles: metaFiles,
+        archiveEncryption: result.encryption,
         directory: '',
         filename: selectedEntry?.name || '',
         src: selectedSrc,
@@ -408,7 +466,7 @@ export const FsUtils = {
         console.error(`[Core] Startup loadArchive failed for ${archivePath}, falling back:`, err);
         return this.loadFallbackAncestor(archivePath, options);
       }
-      if (_isCurrentGeneration(options.generation)) {
+      if (_isCurrentGeneration(options.generation) && !options.suppressErrorState) {
         const state = Core.getState();
         this.revokeIfObjectURL(state.src);
         Core.setState({
@@ -606,7 +664,11 @@ export const FsUtils = {
         if (currentIndexToCheck === currentIdx) break;
 
         try {
-          await this.loadFile(sorted[currentIndexToCheck].path, { generation });
+          await this.loadFile(sorted[currentIndexToCheck].path, {
+            generation,
+            skipLocked: true,
+            suppressErrorState: true,
+          });
           return;
         } catch (err) {
           console.error(`[Core] Skipping inaccessible sibling container: ${sorted[currentIndexToCheck].path}`, err);

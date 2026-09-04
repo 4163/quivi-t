@@ -163,8 +163,12 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   if (file.is_dir || file.is_parent || FsUtils.isArchiveEntry(file) || !FsUtils.isImageEntry(file)) {
     newSrc = clampPreview ? _state.src : '';
   } else if (_state.mode === 'archive') {
-    newSrc = await FsUtils.buildArchiveEntrySrc(_state.archivePath, file.name);
-    if (_state.index !== index) return;
+    if (_state.archiveEncryption === 'password_required' || _state.archiveEncryption === 'password_incorrect') {
+      newSrc = '';
+    } else {
+      newSrc = await FsUtils.buildArchiveEntrySrc(_state.archivePath, file.name);
+      if (_state.index !== index) return;
+    }
   } else {
     newSrc = await FsUtils.buildFileSrc(file.path);
     if (_state.index !== index) return;
@@ -174,7 +178,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   _state.src = newSrc;
 
   let animPromise = null;
-  if (FsUtils.isImageEntry(file)) {
+  if (FsUtils.isImageEntry(file) && _state.archiveEncryption !== 'password_required' && _state.archiveEncryption !== 'password_incorrect') {
     const pathArg = _state.mode === 'archive' ? file.name : file.path;
     const archiveArg = _state.mode === 'archive' ? _state.archivePath : null;
     const cacheKey = `${archiveArg || ''}::${pathArg}`;

@@ -3,37 +3,73 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 
+#[derive(Default)]
+pub struct ExtractState {
+    pub extracted: HashSet<String>,
+    pub finished: bool,
+}
+
 pub(crate) type ZipArchive = zip::ZipArchive<std::io::BufReader<std::fs::File>>;
-pub(crate) type ExtractNotify = Arc<(Mutex<HashSet<String>>, Condvar)>;
+pub(crate) type ExtractNotify = Arc<(Mutex<ExtractState>, Condvar)>;
 pub(crate) type SharedEntryBytes = Arc<[u8]>;
+
+pub(crate) fn new_extract_notify() -> ExtractNotify {
+    Arc::new((Mutex::new(ExtractState::default()), Condvar::new()))
+}
 
 pub(crate) struct SingleArchiveCache {
     zip_entries: HashMap<String, SharedEntryBytes>,
     zip_archive: Option<ZipArchive>,
+    zip_index_map: Option<HashMap<String, usize>>,
+    password: Option<String>,
+    encryption: Option<crate::models::ArchiveEncryptionStatus>,
     extract_temp_dir: Option<PathBuf>,
     extract_notify: ExtractNotify,
     extract_cancel: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl SingleArchiveCache {
-    pub(crate) fn with_zip_archive(zip_archive: Option<ZipArchive>) -> Self {
+    pub(crate) fn with_zip_archive(
+        zip_archive: Option<ZipArchive>,
+        zip_index_map: Option<HashMap<String, usize>>,
+        password: Option<String>,
+        encryption: Option<crate::models::ArchiveEncryptionStatus>,
+    ) -> Self {
         Self {
             zip_entries: HashMap::new(),
             zip_archive,
+            zip_index_map,
+            password,
+            encryption,
             extract_temp_dir: None,
-            extract_notify: Arc::new((Mutex::new(HashSet::new()), Condvar::new())),
+            extract_notify: new_extract_notify(),
             extract_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
-    pub(crate) fn with_temp_dir(extract_temp_dir: PathBuf) -> Self {
+    pub(crate) fn with_temp_dir(
+        extract_temp_dir: PathBuf,
+        password: Option<String>,
+        encryption: Option<crate::models::ArchiveEncryptionStatus>,
+    ) -> Self {
         Self {
             zip_entries: HashMap::new(),
             zip_archive: None,
+            zip_index_map: None,
+            password,
+            encryption,
             extract_temp_dir: Some(extract_temp_dir),
-            extract_notify: Arc::new((Mutex::new(HashSet::new()), Condvar::new())),
+            extract_notify: new_extract_notify(),
             extract_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
+    }
+
+    pub(crate) fn is_password_required(&self) -> bool {
+        matches!(
+            self.encryption,
+            Some(crate::models::ArchiveEncryptionStatus::PasswordRequired)
+                | Some(crate::models::ArchiveEncryptionStatus::PasswordIncorrect)
+        )
     }
 
     pub(crate) fn notify(&self) -> ExtractNotify {
@@ -97,12 +133,14 @@ impl ArchiveCache {
         archive_path: &str,
         entry_name: &str,
     ) -> Option<SharedEntryBytes> {
-        self.archives
-            .get_mut(archive_path)?
+        let single = self.archives.get_mut(archive_path)?;
+        let index_map = single.zip_index_map.as_ref();
+        let password = single.password.as_deref();
+        single
             .zip_archive
             .as_mut()
             .and_then(|archive| {
-                crate::archives::zip::read_zip_entry_by_decoded_name(archive, entry_name).ok()
+                crate::archives::zip::read_zip_entry_by_decoded_name(archive, entry_name, index_map, password).ok()
             })
             .map(Vec::into)
     }
@@ -113,12 +151,14 @@ impl ArchiveCache {
         entry_name: &str,
         limit: usize,
     ) -> Option<Vec<u8>> {
-        self.archives
-            .get_mut(archive_path)?
+        let single = self.archives.get_mut(archive_path)?;
+        let index_map = single.zip_index_map.as_ref();
+        let password = single.password.as_deref();
+        single
             .zip_archive
             .as_mut()
             .and_then(|archive| {
-                crate::archives::zip::read_zip_entry_header(archive, entry_name, limit).ok()
+                crate::archives::zip::read_zip_entry_header(archive, entry_name, limit, index_map, password).ok()
             })
     }
 
@@ -205,6 +245,20 @@ impl ArchiveCache {
         self.evict_idle_archives(&archive_path);
     }
 
+    pub(crate) fn drop_archive(&mut self, archive_path: &str) {
+        self.remove_archive_zip_entries(archive_path);
+        self.archives.remove(archive_path);
+        let mut lru = self.lru.lock().unwrap();
+        lru.archive_lru.retain(|p| p != archive_path);
+    }
+
+    pub(crate) fn is_archive_password_required(&self, archive_path: &str) -> bool {
+        self.archives
+            .get(archive_path)
+            .map(|s| s.is_password_required())
+            .unwrap_or(false)
+    }
+
     pub(crate) fn get_zip_entry(
         &self,
         archive_path: &str,
@@ -253,7 +307,7 @@ impl ArchiveCache {
     pub(crate) fn register_test_archive(&mut self, archive_path: &str) {
         self.register_archive(
             archive_path.to_string(),
-            SingleArchiveCache::with_zip_archive(None),
+            SingleArchiveCache::with_zip_archive(None, None, None, None),
         );
     }
 
@@ -328,7 +382,32 @@ pub(crate) fn write_temp_entry(
 // written, waking any protocol/IPC thread waiting on that file.
 pub(crate) fn notify_extracted(notify: &ExtractNotify, entry_name: &str) {
     let (lock, cvar) = &**notify;
-    let mut set = lock.lock().unwrap();
-    set.insert(entry_name.to_string());
+    {
+        let mut state = match lock.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        state.extracted.insert(entry_name.to_string());
+    }
     cvar.notify_all();
+}
+
+pub(crate) fn notify_finished(notify: &ExtractNotify) {
+    let (lock, cvar) = &**notify;
+    {
+        let mut state = match lock.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        state.finished = true;
+    }
+    cvar.notify_all();
+}
+
+pub(crate) struct FinishGuard<'a>(pub &'a ExtractNotify);
+
+impl<'a> Drop for FinishGuard<'a> {
+    fn drop(&mut self) {
+        notify_finished(self.0);
+    }
 }

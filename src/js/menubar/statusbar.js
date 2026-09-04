@@ -61,7 +61,10 @@ export const Statusbar = {
     if (!isImage) {
       if (statusDims) statusDims.textContent = 'N/A';
       if (statusZoom) statusZoom.textContent = 'N/A';
-      if (statusName) statusName.textContent = state.filename || '';
+      if (statusName) {
+        statusName.textContent = state.filename || '';
+        statusName.title = state.filename || '';
+      }
     }
   },
 

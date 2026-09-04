@@ -14,10 +14,11 @@ pub fn get_ico_frames(path: String) -> Result<String, String> {
 #[tauri::command(async)]
 pub fn list_archive(
     archive_path: String,
+    password: Option<String>,
     state: tauri::State<'_, RwLock<ArchiveCache>>,
 ) -> Result<ArchiveReadResult, String> {
     let mut cache = state.write().map_err(|e| e.to_string())?;
-    cache.prepare_archive(&archive_path)
+    cache.prepare_archive(&archive_path, password.as_deref())
 }
 
 #[tauri::command(async)]

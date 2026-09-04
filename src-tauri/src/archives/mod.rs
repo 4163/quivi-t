@@ -1,4 +1,4 @@
-mod cache;
+pub(crate) mod cache;
 mod encoding;
 mod rar;
 mod sevenz;
@@ -15,6 +15,8 @@ use crate::models::ArchiveReadResult;
 pub(crate) use cache::archive_entry_temp_path;
 pub(crate) use cache::archive_temp_dir;
 pub use cache::ArchiveCache;
+#[cfg(test)]
+pub(crate) use rar::extract_rar_to_temp;
 #[cfg(test)]
 pub(crate) use rar::list_rar_entries;
 #[cfg(test)]
@@ -71,46 +73,99 @@ impl ArchiveEntryData {
             Self::Ready(data) => Ok(data.to_vec()),
             Self::PendingExtraction { file_path, notify } => {
                 let (lock, cvar) = &*notify;
-                let set = lock.lock().map_err(|e| e.to_string())?;
-                let _ = cvar
-                    .wait_timeout_while(set, Duration::from_secs(30), |pending| {
-                        !pending.contains(entry_name)
-                    })
-                    .map_err(|e| e.to_string())?;
+                let mut guard = match lock.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner(),
+                };
+                let timeout = Duration::from_secs(30);
+                let start = std::time::Instant::now();
 
-                fs::read(&file_path)
-                    .map_err(|e| format!("Cannot read extracted archive entry {entry_name}: {e}"))
+                while !guard.extracted.contains(entry_name) && !guard.finished {
+                    let elapsed = start.elapsed();
+                    if elapsed >= timeout {
+                        break;
+                    }
+                    let rem = timeout - elapsed;
+                    let (next_guard, timeout_res) = cvar.wait_timeout(guard, rem).map_err(|e| e.to_string())?;
+                    guard = next_guard;
+                    if timeout_res.timed_out() {
+                        break;
+                    }
+                }
+
+                if guard.extracted.contains(entry_name) {
+                    fs::read(&file_path)
+                        .map_err(|e| format!("Cannot read extracted archive entry {entry_name}: {e}"))
+                } else {
+                    Err(format!("Archive entry {entry_name} not available or extraction finished"))
+                }
             }
         }
     }
 }
 
 impl ArchiveCache {
-    pub fn prepare_archive(&mut self, archive_path: &str) -> Result<ArchiveReadResult, String> {
+    pub fn prepare_archive(
+        &mut self,
+        archive_path: &str,
+        password: Option<&str>,
+    ) -> Result<ArchiveReadResult, String> {
         let kind = ArchiveKind::from_path(archive_path)?;
-        let files = match kind {
+        let (files, encryption) = match kind {
             ArchiveKind::Zip => {
-                let (files, zip_archive) = zip::list_zip_entries(archive_path)?;
-                self.prepare_archive_state(archive_path, kind, Some(zip_archive));
-                files
+                let (files, zip_archive, index_map, enc) = zip::list_zip_entries(archive_path, password)?;
+                self.prepare_archive_state(
+                    archive_path,
+                    kind,
+                    Some(zip_archive),
+                    Some(index_map),
+                    password.map(|s| s.to_string()),
+                    enc,
+                );
+                (files, enc)
             }
             ArchiveKind::Rar => {
-                self.prepare_archive_state(archive_path, kind, None);
-                rar::list_rar_entries(archive_path)?
+                let (files, enc) = rar::list_rar_entries(archive_path, password)?;
+                self.prepare_archive_state(
+                    archive_path,
+                    kind,
+                    None,
+                    None,
+                    password.map(|s| s.to_string()),
+                    enc,
+                );
+                (files, enc)
             }
             ArchiveKind::SevenZ => {
-                self.prepare_archive_state(archive_path, kind, None);
-                sevenz::list_7z_entries(archive_path)?
+                let (files, enc) = sevenz::list_7z_entries(archive_path, password)?;
+                self.prepare_archive_state(
+                    archive_path,
+                    kind,
+                    None,
+                    None,
+                    password.map(|s| s.to_string()),
+                    enc,
+                );
+                (files, enc)
             }
             ArchiveKind::Tar => {
-                self.prepare_archive_state(archive_path, kind, None);
-                tar::list_tar_entries(archive_path)?
+                let files = tar::list_tar_entries(archive_path)?;
+                self.prepare_archive_state(
+                    archive_path,
+                    kind,
+                    None,
+                    None,
+                    password.map(|s| s.to_string()),
+                    None,
+                );
+                (files, None)
             }
         };
 
         Ok(ArchiveReadResult {
             files,
             archive_path: archive_path.to_string(),
+            encryption,
         })
     }
 
@@ -161,6 +216,10 @@ impl ArchiveCache {
         entry_name: &str,
         limit: usize,
     ) -> Result<Vec<u8>, String> {
+        if self.is_archive_password_required(archive_path) {
+            return Err(format!("Archive is password-protected: {archive_path}"));
+        }
+
         if let Some(cached) = self.get_zip_entry(archive_path, entry_name) {
             let end = cached.len().min(limit);
             return Ok(cached[..end].to_vec());
@@ -173,7 +232,7 @@ impl ArchiveCache {
         }
 
         let mut archive = zip::open_zip_archive(archive_path)?;
-        zip::read_zip_entry_header(&mut archive, entry_name, limit)
+        zip::read_zip_entry_header(&mut archive, entry_name, limit, None, None)
     }
 
     // Architectural Note: RAR, 7Z, and TAR formats currently wait for the entire entry
@@ -186,6 +245,10 @@ impl ArchiveCache {
         entry_name: &str,
         limit: usize,
     ) -> Result<Vec<u8>, String> {
+        if self.is_archive_password_required(archive_path) {
+            return Err(format!("Archive is password-protected: {archive_path}"));
+        }
+
         let data = self.read_temp_entry_bytes(archive_path, entry_name)?;
         let bytes = data.wait_for_data(entry_name)?;
         let end = bytes.len().min(limit);
@@ -197,25 +260,37 @@ impl ArchiveCache {
         archive_path: &str,
         kind: ArchiveKind,
         zip_archive: Option<cache::ZipArchive>,
+        zip_index_map: Option<std::collections::HashMap<String, usize>>,
+        password: Option<String>,
+        encryption: Option<crate::models::ArchiveEncryptionStatus>,
     ) {
         if self.contains_archive(archive_path) {
-            self.touch_archive(archive_path);
-            return;
+            if password.is_some() {
+                self.drop_archive(archive_path);
+            } else {
+                self.touch_archive(archive_path);
+                return;
+            }
         }
 
         let single = match kind {
-            ArchiveKind::Zip => cache::SingleArchiveCache::with_zip_archive(zip_archive),
+            ArchiveKind::Zip => {
+                cache::SingleArchiveCache::with_zip_archive(zip_archive, zip_index_map, password, encryption)
+            }
             ArchiveKind::Rar | ArchiveKind::SevenZ | ArchiveKind::Tar => {
                 let temp_dir = archive_temp_dir(archive_path);
-                fs::create_dir_all(&temp_dir).ok();
-                let single = cache::SingleArchiveCache::with_temp_dir(temp_dir.clone());
-                spawn_temp_extractor(
-                    kind,
-                    archive_path.to_string(),
-                    temp_dir,
-                    single.notify(),
-                    single.cancel_flag(),
-                );
+                let single = cache::SingleArchiveCache::with_temp_dir(temp_dir.clone(), password.clone(), encryption);
+                if !single.is_password_required() {
+                    fs::create_dir_all(&temp_dir).ok();
+                    spawn_temp_extractor(
+                        kind,
+                        archive_path.to_string(),
+                        temp_dir,
+                        single.notify(),
+                        single.cancel_flag(),
+                        password,
+                    );
+                }
                 single
             }
         };
@@ -228,16 +303,20 @@ impl ArchiveCache {
         archive_path: &str,
         entry_name: &str,
     ) -> Result<cache::SharedEntryBytes, String> {
+        if self.is_archive_password_required(archive_path) {
+            return Err(format!("Archive is password-protected: {archive_path}"));
+        }
+
         if let Some(cached) = self.get_zip_entry(archive_path, entry_name) {
             return Ok(cached);
         }
 
-        self.prepare_archive_state(archive_path, ArchiveKind::Zip, None);
+        self.prepare_archive_state(archive_path, ArchiveKind::Zip, None, None, None, None);
 
         let shared = if let Some(data) = self.read_from_open_zip(archive_path, entry_name) {
             data
         } else {
-            zip::extract_zip_entry(archive_path, entry_name)
+            zip::extract_zip_entry(archive_path, entry_name, None)
                 .map(cache::SharedEntryBytes::from)
                 .map_err(|_| format!("Cannot find ZIP entry: {entry_name}"))?
         };
@@ -251,8 +330,12 @@ impl ArchiveCache {
         archive_path: &str,
         entry_name: &str,
     ) -> Result<ArchiveEntryData, String> {
+        if self.is_archive_password_required(archive_path) {
+            return Err(format!("Archive is password-protected: {archive_path}"));
+        }
+
         let kind = ArchiveKind::from_path(archive_path)?;
-        self.prepare_archive_state(archive_path, kind, None);
+        self.prepare_archive_state(archive_path, kind, None, None, None, None);
 
         let (temp_dir, notify) = self.temp_extraction_state(archive_path).ok_or_else(|| {
             format!("Archive is not prepared for temporary extraction: {archive_path}")
@@ -274,11 +357,12 @@ fn spawn_temp_extractor(
     temp_dir: PathBuf,
     notify: cache::ExtractNotify,
     cancel_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    password: Option<String>,
 ) {
     std::thread::spawn(move || match kind {
-        ArchiveKind::Rar => rar::extract_rar_to_temp(archive_path, temp_dir, notify, cancel_flag),
+        ArchiveKind::Rar => rar::extract_rar_to_temp(archive_path, temp_dir, notify, cancel_flag, password),
         ArchiveKind::SevenZ => {
-            sevenz::extract_7z_to_temp(archive_path, temp_dir, notify, cancel_flag)
+            sevenz::extract_7z_to_temp(archive_path, temp_dir, notify, cancel_flag, password)
         }
         ArchiveKind::Tar => tar::extract_tar_to_temp(archive_path, temp_dir, notify, cancel_flag),
         ArchiveKind::Zip => {}
