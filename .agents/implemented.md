@@ -8,6 +8,44 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Viewer Engine Core: Transform Stability, Config Decoupling & Viewport Lifecycle - Slice 2 (2026-09-05)
+- **Closed from `additions.md`:**
+  - `Window & Panel Resize Transform Snap Fix` (formerly under View, Rendering & Window Enhancements).
+  - `Idle Cursor Auto-Hide (Canvas Only)` (formerly under View, Rendering & Window Enhancements).
+  - `Animated "Loading..." Broken-Image Feedback on Image Load` (formerly under Work Plan).
+- **Closed from `cl-refactor-report.md`:**
+  - `Window & Panel Resize Transform Snap Fix`
+  - `Animated "Loading..." Feedback`
+  - `Flickering Issue on Re-fetch`
+  - `Idle Cursor Auto-Hide`
+  - `Options Save Resets Fit/Zoom (Bug)`
+- **Viewport Mathematics & Resize Stability:**
+  - Added `_userTransformed` tracking and `handleViewportResize(newVw, newVh)` in `viewerMath.js`.
+  - Container resizes (dragging `.panel-resize-handle` or window resizing) smoothly maintain manual zoom scale and pan anchor positions instead of snapping back to fit mode defaults. Strict fit mode recalculates viewport scales on resize as expected.
+  - Routed container resize events through `ResizeObserver` in `viewer.js` and removed redundant `window.resize` listener from `viewerRender.js`.
+- **Application State & Config Decoupling:**
+  - In `core.js` `loadConfig()`, guarded `_state.fitModeGen` so saving unrelated settings in Options (keybindings, custom CSS, themes) does not trigger canvas fit resets.
+- **Idle Cursor Auto-Hide (Canvas Only):**
+  - Implemented canvas-only cursor auto-hide in `viewerGestures.js` after configurable inactivity delay (`hide_cursor_delay_sec`, default 2s; 0 = disabled).
+  - Wired instant cursor wake on `mousemove`, `pointermove`, or pan drag.
+  - Added `.cursor-hidden` class with `cursor: none !important;` in `main.css`.
+  - Registered `cmd-toggle-cursor-autohide` action in `actions.js`.
+  - Renamed Options section to `Viewport Controls` and added numeric delay input in `options.html` and `options.js`. Added `flex-wrap: wrap` to `.pan-step-row` in `options.css`.
+- **File Panel Hover Preload Gating:**
+  - In `filePanel.js`, gated hover preloading to reject files larger than 15 MB (`MAX_HOVER_PRELOAD_BYTES = 15 * 1024 * 1024`), eliminating UI stutter on massive uncompressed scans (e.g. `BDレーベル.bmp`).
+  - Increased hover debounce from 90ms to 150ms to ignore rapid casual sweeps.
+- **Preload Asymmetry & Memory Budget:**
+  - Lowered frontend DOM preloads from 7 to 2 (1 ahead, 1 behind) in `viewerRender.js`, eliminating WebView2 texture memory bloat.
+  - Retained the 14-entry prefetch window in Rust backend memory.
+  - Reduced default backend archive memory cache budget from 512 MB to 128 MB in `lib.rs`.
+  - Exposed `size: u64` on `FileEntry` across `models.rs`, `directory.rs`, `zip.rs`, `rar.rs`, `sevenz.rs`, and `tar.rs` with zero additional disk I/O.
+- **Image Pool & Double-Buffering Layer Retirement:**
+  - Expanded DOM image pool to a bounded 10-node LRU cache in `viewerRender.js` (`POOL_SIZE = 10`), bypassing the 45ms debounce for recently viewed images.
+  - Added animated loading feedback (`Loading.` -> `Loading..` -> `Loading...`) while preserving previous bridge image during longer fetches.
+  - Implemented double-RAF layer retirement: outgoing image transitions to `.bridge` layer (`position: absolute; z-index: 0;`) underneath the incoming active image (`position: relative; z-index: 1;`) in `main.css` and `viewerRender.js`, preventing 1-frame compositor texture flashes.
+- **Test Harness:**
+  - Added native Node test suite in `src/js/tests/viewerMath.test.mjs` running via `node:test` (`npm test`) covering fit calculations, container resize in fit mode, manual zoom/pan retention, and coordinate inversion.
+
 ### Fast-Skip Invalid & Corrupted Archives Across All Formats (2026-09-05)
 - **Root Cause Resolution for 392 MB ZIP Freezes:** In `zip` crate 8.6.0, missing an End of Central Directory (EOCD) record caused `zip::ZipArchive::new` to scan backwards across the entire file from EOF down to byte 0. On 392 MB truncated files, this resulted in scanning 392 MB of disk while holding the Tauri exclusive cache lock. Per PKZIP specifications, the EOCD cannot be further than 65,557 bytes from the end of the file. `validate_zip_header` now inspects up to the trailing 128 KB for `PK\x05\x06`, rejecting truncated ZIPs in <1 ms and bypassing full-file backward scans.
 - **Microsecond Header & Boundary Validation Across All Formats:**

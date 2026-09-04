@@ -7,11 +7,6 @@
 
 *Easiest and least invasive first.*
 
-### Animated "Loading..." Broken-Image Feedback on Image Load
-- Re-introduce the animated `alt="Loading..."` broken-image visual whenever an image is in the loading state: i.e. when `.status-filename` shows `Loading...` (`viewerRender.js` already writes that on `activeChanged`).
-- Currently `_setElementLoadingLabel` sets only a static `alt = 'Loading...'`, and the broken-image frame is only actually visible on the first-display placeholder; seamless swaps (previous image held as a bridge) show no loading feedback at all.
-- Easy emulation: create an `img` element whose `src` purposefully points at a non-existent target (or a broken base64-encoded image) so the browser renders its built-in broken-image frame, and animate its `alt` text (`Loading. → Loading.. → Loading...`, reuse/restore the earlier `startLoadingAltAnimation`-style helper in `viewerRender.js`) while loading.
-
 ### Favorites & Bookmarks System (Medium Logic)
 - **From clipboard notes (2026-08-13):**
   - Middle-click removes a favorite directly: intentionally NOT mappable to a keybind; just document it in the README Features section where favorites is covered.
@@ -25,15 +20,8 @@
 - **Fullscreen Focus & Shortcut Loss Fix:** Fix bug where shortcut keys (including `Escape` / `F11`) occasionally stop functioning while in fullscreen mode (e.g., when switching focus to another monitor or Alt-Tabbing away and back).
   - **Investigation Needed:** The exact trigger and root cause are unconfirmed. Candidates to test during implementation include `activeKeys` remaining latched due to missed `keyup` events during window focus switches, WebView2 losing document focus to window chrome, or Tauri fullscreen event listeners.
   - **Target Outcome:** Ensure keyboard shortcuts and `Escape` always work reliably in fullscreen mode across multi-monitor setups and focus changes.
-- **Window & Panel Resize Transform Snap Fix:** Fix issue where dragging `.panel-resize-handle` or resizing the main app window causes active zoom level and pan position to unexpectedly snap/reset.
-  - **Fix:** Preserve relative zoom scale and pan offset relative to container viewport bounds during panel and window resize events in `viewerMath.js` / `viewerRender.js`.
-- **Idle Cursor Auto-Hide (Canvas Only):** Hide mouse cursor after `X` seconds of inactivity when hovering over the viewport/canvas.
-  - **Configurable Delay:** Settable in Options under Interface (`hide_cursor_delay_sec`, e.g., default `2s` or `3s`).
-  - **Semantics of `0`:** `0` = Disabled (cursor never auto-hides). This prevents cursor disappearance during active hover/use.
-  - **Keybind Support (`cmd-toggle-cursor-autohide`):** Add a configurable keybind to toggle the auto-hide feature on/off or force-hide the cursor immediately until mouse movement. IMPORTANT: Discuss what is the most intuitive behaviour for best user experience.
-  - **Edge Cases & Panning:** Panning or dragging triggers `mousemove` / input events which naturally reset the idle timer, keeping the cursor visible throughout active panning and hiding only after panning stops and the mouse remains still for `X` seconds. `mouseleave` or UI chrome hover restores standard cursor styling.
-  - **Performance First (Zero-Overhead):** Bypassed entirely when `0` (Disabled). During active movement, use a lightweight debounced single-timer reset without dynamic allocations or garbage collection churn in the `mousemove` hot path.
 - **Emergency Boss Key:** Add an "Emergency Button" to hide the application into the system tray, with a configurable keybind.
+- **Synchronous Canvas Double-Buffer for Zero-Flicker Viewport Transitions (Future Consideration):** Evaluate replacing DOM-element image swapping with an offscreen or double-buffered WebGL / 2D canvas flip when transitioning images or rendering complex multi-image layouts. This eliminates any remaining compositor texture-upload latency at the cost of managing a unified canvas rendering pipeline. Revisit during or after Double Page View and Manga Spread implementation in the Component Library.
 - **Initial HTML Loading (LCP):** Completely remove the blank page time on initial loading of both HTML pages before the main UI renders. It's currently acting this way because we are optimizing for LCP on the flickering of themes. Refer to the way LCP is handled on `E:\Projects\PixiJS Live2D Spine (Springfield)` for reference.
 
 ### CSS, Styling & Code Structure (Refactoring)
