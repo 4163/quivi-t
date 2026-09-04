@@ -35,12 +35,12 @@ These items modify the Rust backend or the OS integration. They do not affect th
 ### Priority 1: High-Impact / Core Reliability
 *   **Instrumentation System (Test Harness):** Writing `cargo test` coverage for archive parsing, caching, and config schemas. This is the safety net required before major backend refactoring.
 *   **.ico Spritesheet & Windows Icon Resolution:** Reworking how the backend fetches `SHGFI_LARGEICON` and how it passes those buffers to the frontend. The CL will just receive an array of URLs or a spritesheet image; the backend must do the heavy lifting of extracting and packing them.
-*   **[PENDING] Archive Loading Bottlenecks:** Fixing the seek cost in corrupted archives and optimizing the `Mutex` lock during extraction.
+*   **[COMPLETED] Archive Loading Bottlenecks:** Fixed seek costs and backward scans in corrupted archives (O(1) entry map, trailing EOCD scan, microsecond header and boundary validation across ZIP, RAR, 7Z, and TAR) and eliminated condition variable / mutex lock contention during extraction.
 
 ### Priority 2: New Features
 *   **Thumbnail View & High-Res Icons:** Fetching `SHGFI_LARGEICON` via the Rust backend to render higher-resolution Windows icons in the file list.
 *   **Extended Format Support (PSD, XCF, PDF):** Implementing Rust-side decoders to turn these formats into raw pixels or standard web formats before passing them to the CL.
-*   **[PENDING] Password-Protected Archives:** Passing credentials through the IPC layer to `unrar` and `sevenz`.
+*   **[COMPLETED] Password-Protected Archives:** Passing credentials through the IPC layer to `zip`, `unrar`, and `sevenz-rust2`, with frontend status signaling and locked container handling.
 *   **Additional Metadata Formats:** Parsing `comicinfo.json` alongside the existing metadata parsers.
 *   **Native 7-Zip Sidecar:** Using `7zr.exe` for faster LZMA2 extraction.
 

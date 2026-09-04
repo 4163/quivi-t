@@ -8,6 +8,37 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Fast-Skip Invalid & Corrupted Archives Across All Formats (2026-09-05)
+- **Root Cause Resolution for 392 MB ZIP Freezes:** In `zip` crate 8.6.0, missing an End of Central Directory (EOCD) record caused `zip::ZipArchive::new` to scan backwards across the entire file from EOF down to byte 0. On 392 MB truncated files, this resulted in scanning 392 MB of disk while holding the Tauri exclusive cache lock. Per PKZIP specifications, the EOCD cannot be further than 65,557 bytes from the end of the file. `validate_zip_header` now inspects up to the trailing 128 KB for `PK\x05\x06`, rejecting truncated ZIPs in <1 ms and bypassing full-file backward scans.
+- **Microsecond Header & Boundary Validation Across All Formats:**
+  - **ZIP / CBZ:** Minimum 22-byte check, `PK\x03\x04` / `PK\x05\x06` / `PK\x07\x08` signature check, and trailing EOCD verification.
+  - **RAR / CBR:** Minimum 14-byte check, `b"Rar!\x1a\x07"` signature check, and format version validation (RAR4 `0x00` vs RAR5 `0x01`). Rejects non-RAR and truncated files in 0 ms before invoking `unrar_sys` C++ library.
+  - **7Z / CB7:** Minimum 32-byte check, `7z\xBC\xAF\x27\x1C` signature check, and header bounds verification (`32 + NextHeaderOffset + NextHeaderSize <= len`) to instantly reject truncated archives.
+  - **TAR / CBT:** Minimum 512-byte block check, all-zero EOF marker check, `ustar` magic check, or 512-byte header octal checksum verification.
+- **Zero-Flicker Sibling Probing in Frontend:** Updated `openSibling` in `fsUtils.js` to pass `{ generation, skipLocked: true, suppressErrorState: true }`. When probing candidate sibling containers, invalid archives or password-locked archives are skipped without blanking out `state.src` or setting error text on the status bar.
+- **Automated Tests:** Added 5 targeted automated tests in `archive_tests.rs` covering fast rejection of synthetic 10 MB truncated ZIPs missing EOCD (<50 ms), invalid magic headers, truncated RARs, truncated 7Zs, and corrupted TAR checksum blocks.
+
+### Archive Engine Optimization & Password Architecture - Slice 1 (2026-09-05)
+- **Closed from `additions.md`:** `Password-Protected Archives` (formerly under Supported Formats & Advanced Icons: "Add support for password-protected archives").
+- **Closed from `cl-refactor-report.md`:** Backend Priority 1 `Archive Loading Bottlenecks` and Backend Priority 2 `Password-Protected Archives`.
+- **Multi-Format Password Support (Backend):**
+  - Extended `models.rs` with `ArchiveEncryptionStatus` (`PasswordRequired`, `PasswordIncorrect`) and added an optional `encryption` field to `ArchiveReadResult`.
+  - Updated `list_archive` IPC command in `commands/archives.rs` to accept an optional `password: Option<String>` and forward it to `prepare_archive`.
+  - **ZIP / CBZ Decryption:** Integrated password decryption via `by_name_decrypt` and `by_index_decrypt` in `zip.rs`. Flags password-protected archives and invalid credentials without panicking or looping.
+  - **RAR / CBR Decryption:** Integrated password credentials with `unrar::Archive::with_password` in `rar.rs`. Implemented header testing via `header.test()` to detect `PasswordRequired` and `PasswordIncorrect`.
+  - **7Z / CB7 Decryption:** Supported passwords through `sevenz_rust2::ArchiveReader::open` in `sevenz.rs`. Detects header encryption block `[0x06, 0xf1, 0x07, 0x01]` and reports `PasswordRequired` or `PasswordIncorrect`.
+- **Archive Loading Bottlenecks & O(1) Index Lookup:**
+  - Built an `O(1)` central directory lookup table `HashMap<String, usize>` during initial ZIP central directory traversal, eliminating the legacy `O(N)` linear search loop (`0..archive.len()`) in `read_zip_entry_by_decoded_name` and `read_zip_entry_header`.
+  - Stored `zip_index_map` and credentials per-archive inside `SingleArchiveCache` to prevent re-parsing headers on subsequent entry reads.
+- **Extraction Thread Coordination & Lock Contention:**
+  - Refactored `ExtractNotify` state into `ExtractState` (`extracted: HashSet<String>`, `finished: bool`).
+  - Added `FinishGuard` RAII drop guard to ensure background extraction threads unconditionally signal completion, eliminating hangs in `read_temp_entry_bytes` when extraction aborts or completes without finding a file.
+  - Reduced mutex lock hold times to brief synchronization pulses, avoiding contention between the Tauri IPC thread and background decompression workers.
+- **Frontend Locked Container Handling:**
+  - Updated `loadArchive` in `fsUtils.js` to inspect `result.encryption`. When password-protected, formats status label to `Password required: <name>` or `Password incorrect! <name>` without entering broken image states.
+  - When navigating sibling containers (`openSibling`), locked archives are automatically bypassed via `skipLocked: true` and `suppressErrorState: true`.
+- **Automated Tests:** Added 9 targeted tests in `archive_tests.rs` verifying password requirement detection, invalid password rejection, and successful extraction with valid passwords across ZIP, RAR, and 7Z formats.
+
 ### Exact Loop Counts for Animations (2026-09-01)
 - **Rust IPC & Normalization:** Replaced `no_loop` with a `total_plays` normalized `loop_count: u32` in the `AnimationInfo` struct. The `formats.rs` parsers now intercept exact play counts directly from `NETSCAPE2.0` (GIF), `ANIM` (WebP), and `acTL` (APNG). Values are strictly normalized to match native Chromium `<img>` total-play counts before crossing IPC: GIF/WebP counts (`N`) return `N + 1`, APNG counts return exactly `N`.
 - **AVIF Sequences:** Rewrote `check_avif` to recursively walk ISO BMFF boxes. `moov/trak/edts` are traversed to find the `elst` (edit list) box. If present, the AVIF sequence is conservatively treated as a finite loop (`loop_count = 1`).

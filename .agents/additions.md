@@ -53,7 +53,6 @@
   6. The remaining smaller sizes are just a shadow of the main ico element, layed out (with space between them) in the spritesheet order. This means that it follows the main ico file whilst not having any hitbox/bounding calculations.
   7. Render out the 'opaque canvas' option for every ico element.
 - **Extended Format Support:** Support PSD, XCF, and PDF files (decide whether to process via JS or backend, performance-first).
-- **Password-Protected Archives:** Add support for password-protected archives.
 
 ### Documentation & GitHub (Project Health)
 - **Contributing Section:** Add a contributing section to the github page, for general contributions to the project, but more on documenting how new languages should be created for the language settings.
