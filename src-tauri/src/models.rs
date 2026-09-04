@@ -8,22 +8,24 @@ pub struct FileEntry {
     pub date: String,
     pub is_dir: bool,
     pub is_hidden: bool,
+    #[serde(default)]
+    pub size: u64,
 }
 
 impl FileEntry {
     #[inline(always)]
-    pub fn new_file(name: String, path: String, ext: String, date: String, is_hidden: bool) -> Self {
-        Self { name, path, ext, date, is_dir: false, is_hidden }
+    pub fn new_file(name: String, path: String, ext: String, date: String, is_hidden: bool, size: u64) -> Self {
+        Self { name, path, ext, date, is_dir: false, is_hidden, size }
     }
 
     #[inline(always)]
     pub fn new_directory(name: String, path: String, date: String, is_hidden: bool) -> Self {
-        Self { name, path, ext: String::new(), date, is_dir: true, is_hidden }
+        Self { name, path, ext: String::new(), date, is_dir: true, is_hidden, size: 0 }
     }
 
     #[inline(always)]
-    pub fn new_archive_entry(name: String, path: String, ext: String, date: String) -> Self {
-        Self { name, path, ext, date, is_dir: false, is_hidden: false }
+    pub fn new_archive_entry(name: String, path: String, ext: String, date: String, size: u64) -> Self {
+        Self { name, path, ext, date, is_dir: false, is_hidden: false, size }
     }
 }
 

@@ -10,6 +10,9 @@ export function createViewportState({ getViewport }) {
   let _flipX = 1;
   let _flipY = 1;
   let _currentFitMode = DEFAULT_FIT_MODE;
+  let _userTransformed = false;
+  let _prevVw = 0;
+  let _prevVh = 0;
 
   const listeners = [];
   function notify() { listeners.forEach(fn => fn()); }
@@ -40,6 +43,7 @@ export function createViewportState({ getViewport }) {
   }
 
   function applyFitMode(mode, naturalW, naturalH, clientW, clientH) {
+    _userTransformed = false;
     if (mode !== undefined) _currentFitMode = mode;
     if (naturalW !== undefined) {
       _naturalW = naturalW;
@@ -49,6 +53,8 @@ export function createViewportState({ getViewport }) {
     const vp = getViewport();
     const vw = vp.clientWidth;
     const vh = vp.clientHeight;
+    _prevVw = vw;
+    _prevVh = vh;
     
     if (!_naturalW || !_naturalH) {
       const prevScale = _scale || 1;
@@ -85,7 +91,26 @@ export function createViewportState({ getViewport }) {
     notify();
   }
 
+  function handleViewportResize(newVw, newVh) {
+    if (!_naturalW || !_naturalH) return;
+    if (!_prevVw || !_prevVh) {
+      _prevVw = newVw;
+      _prevVh = newVh;
+      return;
+    }
+
+    if (!_userTransformed) {
+      applyFitMode(undefined, _naturalW, _naturalH);
+    } else {
+      _clampPan();
+      notify();
+    }
+    _prevVw = newVw;
+    _prevVh = newVh;
+  }
+
   function zoomTo(exactScale, cx, cy) {
+    _userTransformed = true;
     const prevScale = _scale;
     const targetScale = Math.min(32, Math.max(0.05, exactScale));
     _scale = targetScale;
@@ -112,6 +137,7 @@ export function createViewportState({ getViewport }) {
   }
 
   function panBy(dx, dy) {
+    _userTransformed = true;
     _tx += dx;
     _ty += dy;
     _clampPan();
@@ -119,6 +145,7 @@ export function createViewportState({ getViewport }) {
   }
 
   function panTo(tx, ty) {
+    _userTransformed = true;
     _tx = tx;
     _ty = ty;
     _clampPan();
@@ -138,6 +165,10 @@ export function createViewportState({ getViewport }) {
   }
   
   function resetGeometry() {
+    _userTransformed = false;
+    _scale = 1;
+    _tx = 0;
+    _ty = 0;
     _rotation = 0;
     _flipX = 1;
     _flipY = 1;
@@ -163,6 +194,8 @@ export function createViewportState({ getViewport }) {
     }),
     getNaturalW: () => _naturalW,
     getNaturalH: () => _naturalH,
+    getUserTransformed: () => _userTransformed,
+    handleViewportResize,
     resetGeometry,
     applyFitMode,
     zoomTo,

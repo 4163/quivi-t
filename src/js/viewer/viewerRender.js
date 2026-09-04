@@ -2,14 +2,14 @@ import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
-const PRELOAD_HALF = 7;
+const PRELOAD_HALF = 1;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
 const LOADING_LABEL = 'Loading...';
 
 export function createViewerRenderer(viewportState, onActiveImageChanged = () => {}) {
   const _activeNodes = new Map();
   const _freeNodes = [];
-  const POOL_SIZE = 2; 
+  const POOL_SIZE = 10; 
 
   const imgWrapper = document.getElementById('viewer-img-wrapper');
   if (imgWrapper) {
@@ -41,6 +41,39 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   const _preloadTimers = [];
   const _preloadImages = [];
   let _lastFitModeGen = -1;
+  let _loadingAnimTimer = null;
+  let _loadingDots = 0;
+  let _retiringNode = null;
+  let _retireRaf = null;
+
+  function _cancelRetiringNode() {
+    if (_retireRaf) {
+      cancelAnimationFrame(_retireRaf);
+      _retireRaf = null;
+    }
+    if (_retiringNode) {
+      _retiringNode.classList.remove('bridge');
+      _retiringNode = null;
+    }
+  }
+
+  function _startLoadingAnimation(el) {
+    _stopLoadingAnimation();
+    _loadingDots = 0;
+    _loadingAnimTimer = setInterval(() => {
+      _loadingDots = (_loadingDots + 1) % 4;
+      const dots = '.'.repeat(_loadingDots || 1);
+      if (el) el.alt = `Loading${dots}`;
+      Statusbar.setImage({ isLoading: true });
+    }, 250);
+  }
+
+  function _stopLoadingAnimation() {
+    if (_loadingAnimTimer) {
+      clearInterval(_loadingAnimTimer);
+      _loadingAnimTimer = null;
+    }
+  }
 
   function _applySvgBounds(el) {
     el.removeAttribute('data-svg-bounds');
@@ -126,11 +159,12 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   function _recyclePoolNode(src) {
     const el = _activeNodes.get(src);
     if (el) {
+      if (el === _retiringNode) _cancelRetiringNode();
       el.removeAttribute('src');
       el.removeAttribute('data-pool-src');
       el.removeAttribute('data-played');
       el.removeAttribute('data-scaling');
-      el.classList.remove('active');
+      el.classList.remove('active', 'bridge');
       if (el === img) {
         img = null;
         onActiveImageChanged(null);
@@ -155,11 +189,25 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
   function _activatePoolNode(el, filename, state) {
     if (img && img !== el) {
-      img.classList.remove('active');
+      _cancelRetiringNode();
+      const outgoing = img;
+      outgoing.classList.remove('active');
+      outgoing.classList.add('bridge');
+      _retiringNode = outgoing;
+      _retireRaf = requestAnimationFrame(() => {
+        _retireRaf = requestAnimationFrame(() => {
+          if (_retiringNode === outgoing) {
+            outgoing.classList.remove('bridge');
+            _retiringNode = null;
+          }
+          _retireRaf = null;
+        });
+      });
     }
 
     img = el;
     img.dataset.played = 'true';
+    img.classList.remove('bridge');
     img.classList.add('active');
     img.alt = filename || '';
     img.title = filename || '';
@@ -217,6 +265,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   }
 
   function clearDisplayedImage() {
+    _cancelRetiringNode();
+    _stopLoadingAnimation();
     _poolGeneration += 1;
     _activationGeneration += 1;
     _clearTargetLoadTimer();
@@ -241,9 +291,15 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     if (_isVisibleImage(img) && img.dataset.poolSrc) desiredSrcs.add(img.dataset.poolSrc);
 
     const neighborSrcs = FsUtils.neighborEntries(state, state.index, PRELOAD_HALF);
+    for (const nSrc of neighborSrcs) desiredSrcs.add(nSrc);
 
-    for (const src of _activeNodes.keys()) {
-      if (!desiredSrcs.has(src)) _recyclePoolNode(src);
+    if (_activeNodes.size > POOL_SIZE) {
+      for (const src of _activeNodes.keys()) {
+        if (!desiredSrcs.has(src)) {
+          _recyclePoolNode(src);
+          if (_activeNodes.size <= POOL_SIZE) break;
+        }
+      }
     }
 
     for (const src of desiredSrcs) {
@@ -259,6 +315,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       Statusbar.setImage({ isLoading: true });
       if (activeEl) activeEl.alt = LOADING_LABEL;
 
+      const isAlreadyLoaded = activeEl && activeEl.complete && activeEl.naturalWidth > 0;
+      if (!isAlreadyLoaded) {
+        _startLoadingAnimation(activeEl);
+      }
+
       if (!hasPreviousBridge) {
         if (img && img !== activeEl) {
           img.classList.remove('active');
@@ -271,6 +332,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
       const loadTarget = () => {
         if (activation !== _activationGeneration || Core.getState().src !== state.src) {
+           _stopLoadingAnimation();
            return;
         }
         _targetLoadTimer = null;
@@ -305,17 +367,19 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         
         decodePromise.then(() => {
           if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+          _stopLoadingAnimation();
           if (activeEl) _activatePoolNode(activeEl, state.filename, state);
           _schedulePoolPreloads(neighborSrcs, generation);
         }).catch((err) => {
           if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+          _stopLoadingAnimation();
           if (activeEl) _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
           Statusbar.setImage({ isError: true });
           _schedulePoolPreloads(neighborSrcs, generation);
         });
       };
 
-      if (hasPreviousBridge) {
+      if (hasPreviousBridge && !isAlreadyLoaded) {
         _targetLoadTimer = setTimeout(loadTarget, TARGET_LOAD_DEBOUNCE_MS);
       } else {
         loadTarget();
@@ -340,13 +404,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     }
     if (img && img.src) {
       Statusbar.setZoom(viewportState.getScale());
-    }
-  });
-
-  window.addEventListener('resize', () => {
-    if (img) {
-      const bounds = _applySvgBounds(img);
-      viewportState.applyFitMode(undefined, bounds.natW, bounds.natH, bounds.clientW ?? img.clientWidth, bounds.clientH ?? img.clientHeight);
     }
   });
 }

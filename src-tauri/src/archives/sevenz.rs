@@ -85,11 +85,13 @@ pub(crate) fn list_7z_entries(
             continue;
         }
 
+        let size = entry.size();
         files.push(FileEntry::new_archive_entry(
             name.clone(),
             format!("{}|{}", archive_path, name),
             ext.to_uppercase(),
             "".to_string(),
+            size,
         ));
     }
 

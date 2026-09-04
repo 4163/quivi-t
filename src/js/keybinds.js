@@ -18,6 +18,7 @@ export const DEFAULT_KEYBOARD_PAN_STEP = 72;
 // Pixel distance moved per scroll-wheel notch when the wheel is bound to pan.
 // Default: 120px. Configurable via Options > Interface.
 export const DEFAULT_WHEEL_PAN_STEP = 120;
+export const DEFAULT_HIDE_CURSOR_DELAY_SEC = 2;
 
 export const DEFAULT_FIT_MODE = 'height-if-larger';
 export const DEFAULT_SCALING_MODE = 'bilinear';
@@ -34,6 +35,7 @@ export function mergeConfig(loaded) {
   const fdBase = { ...fd };
   delete fdBase.keyboard_pan_step;
   delete fdBase.wheel_pan_step;
+  delete fdBase.hide_cursor_delay_sec;
 
   const result = {
     portable_mode: !!loaded?.portable_mode,
@@ -54,6 +56,7 @@ export function mergeConfig(loaded) {
       scaling_mode: fd.scaling_mode || DEFAULT_SCALING_MODE,
       keyboard_pan_step: typeof fd.keyboard_pan_step === 'number' ? fd.keyboard_pan_step : DEFAULT_KEYBOARD_PAN_STEP,
       wheel_pan_step: typeof fd.wheel_pan_step === 'number' ? fd.wheel_pan_step : DEFAULT_WHEEL_PAN_STEP,
+      hide_cursor_delay_sec: typeof fd.hide_cursor_delay_sec === 'number' ? fd.hide_cursor_delay_sec : DEFAULT_HIDE_CURSOR_DELAY_SEC,
       show_hidden: fd.show_hidden === true,
       hide_chrome_on_fullscreen: fd.hide_chrome_on_fullscreen !== false,
       menu_visible: fd.menu_visible !== false,

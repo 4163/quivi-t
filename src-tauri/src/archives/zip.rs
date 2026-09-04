@@ -99,11 +99,13 @@ pub(crate) fn list_zip_entries(
                     continue;
                 }
 
+                let size = entry.size();
                 files.push(FileEntry::new_archive_entry(
                     decoded_name.clone(),
                     format!("{}|{}", archive_path, decoded_name),
                     ext.to_uppercase(),
                     "".to_string(),
+                    size,
                 ));
             }
             Err(zip::result::ZipError::InvalidPassword) => {
@@ -120,6 +122,7 @@ pub(crate) fn list_zip_entries(
                         format!("{}|{}", archive_path, name),
                         ext.to_uppercase(),
                         "".to_string(),
+                        0,
                     ));
                 }
             }
@@ -137,6 +140,7 @@ pub(crate) fn list_zip_entries(
                         format!("{}|{}", archive_path, name),
                         ext.to_uppercase(),
                         "".to_string(),
+                        0,
                     ));
                 }
             }
@@ -154,6 +158,7 @@ pub(crate) fn list_zip_entries(
                         format!("{}|{}", archive_path, name),
                         ext.to_uppercase(),
                         "".to_string(),
+                        0,
                     ));
                 }
                 skipped_count += 1;

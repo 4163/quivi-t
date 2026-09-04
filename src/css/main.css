@@ -594,6 +594,11 @@ li:hover > .fav-remove,
   background: var(--bg);
 }
 
+#viewport.cursor-hidden,
+#viewport.cursor-hidden * {
+  cursor: none !important;
+}
+
 /* Fullscreen exit button. */
 #fullscreen-exit-hint {
   position: fixed;
@@ -789,6 +794,18 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 
 .viewer-img.active {
   display: block;
+  position: relative;
+  z-index: 1;
+}
+
+.viewer-img.bridge {
+  display: block;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .viewer-img[data-scaling="none"] {

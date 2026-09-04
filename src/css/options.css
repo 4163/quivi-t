@@ -142,6 +142,7 @@ body > * {
   display: flex;
   align-items: flex-start;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .pan-step-col {

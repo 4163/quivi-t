@@ -71,6 +71,7 @@ let highlightedFavoritePath = '';
 let refreshPulseTimer = null;
 let hoverPreloadImg = null;
 let hoverPreloadTimer = null;
+const MAX_HOVER_PRELOAD_BYTES = 15 * 1024 * 1024;
 
 let columnsInitialized = false;
 
@@ -553,6 +554,7 @@ function initDomPool() {
       const item = state.list[index];
 
       if (item && !item.is_dir && !item.is_parent && FsUtils.isImageEntry(item)) {
+        if (item.size && item.size > MAX_HOVER_PRELOAD_BYTES) return;
         hoverPreloadTimer = setTimeout(() => {
           let src;
           if (state.mode === 'archive') {
@@ -566,7 +568,7 @@ function initDomPool() {
             hoverPreloadImg.src = src;
             if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
           }
-        }, 90);
+        }, 150);
       }
     });
 

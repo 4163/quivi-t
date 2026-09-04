@@ -85,6 +85,8 @@ pub fn read_directory_impl(
                         "".to_string()
                     };
 
+                    let size = metadata_res.as_ref().map(|m| m.len()).unwrap_or(0);
+
                     if is_dir {
                         files.push(FileEntry::new_directory(
                             name.clone(),
@@ -99,6 +101,7 @@ pub fn read_directory_impl(
                             ext_upper,
                             date,
                             is_hidden,
+                            size,
                         ));
                     }
                 }

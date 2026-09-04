@@ -190,6 +190,11 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-fullscreen', label: 'Toggle Fullscreen', defaultBinds: ['4', 'Alt+Enter'], category: 'Window & UI',
     run: (ctx) => ctx.toggleFullscreen()
   },
+  { id: 'cmd-toggle-cursor-autohide', label: 'Toggle Cursor Auto-Hide', defaultBinds: [], category: 'Window & UI',
+    run: (ctx) => {
+      ctx.Viewer?.toggleCursorAutoHide?.();
+    }
+  },
   { id: 'cmd-exit-fullscreen-hold', label: 'Exit Fullscreen (Hold)', defaultBinds: 'Escape', category: 'Window & UI',
     run: () => {} // Handled purely by fullscreen gestures
   },

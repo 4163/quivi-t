@@ -68,11 +68,13 @@ pub(crate) fn list_rar_entries(
                 if !entry.is_directory() {
                     let ext = name.rsplit('.').next().unwrap_or("");
                     if is_image_ext(ext) || is_metadata_ext(ext) {
+                        let size = entry.unpacked_size as u64;
                         files.push(FileEntry::new_archive_entry(
                             name.clone(),
                             format!("{}|{}", archive_path, name),
                             ext.to_uppercase(),
                             "".to_string(),
+                            size,
                         ));
                     }
                 }

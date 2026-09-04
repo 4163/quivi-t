@@ -26,7 +26,7 @@ pub fn run() {
         .get("single_instance")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
-    let cache_mb = config.archive_cache_mb.unwrap_or(512);
+    let cache_mb = config.archive_cache_mb.unwrap_or(128);
 
     let mut builder = tauri::Builder::default();
 

@@ -37,7 +37,74 @@ export function createViewerGestures(viewportState) {
       }
     }
   }
-  window.addEventListener('quivit-config-loaded', _updatePanKeysCache);
+
+  // Idle cursor auto-hide
+  let _idleCursorTimer = null;
+  let _cursorHidden = false;
+  let _isMouseOverViewport = false;
+  let _autoHideToggleOverride = null;
+
+  function _isAutoHideEnabled() {
+    if (_autoHideToggleOverride !== null) return _autoHideToggleOverride;
+    const delaySec = Core.getState().config?.frontend_data?.hide_cursor_delay_sec ?? 2;
+    return delaySec > 0;
+  }
+
+  function _getDelayMs() {
+    const delaySec = Core.getState().config?.frontend_data?.hide_cursor_delay_sec;
+    const sec = (typeof delaySec === 'number' && delaySec > 0) ? delaySec : 2;
+    return sec * 1000;
+  }
+
+  function _showCursor() {
+    if (_cursorHidden) {
+      _cursorHidden = false;
+      const vp = document.getElementById('viewport');
+      vp?.classList.remove('cursor-hidden');
+    }
+  }
+
+  function _hideCursor() {
+    if (!_isMouseOverViewport) return;
+    if (!_cursorHidden && !_isPanning && _panButtonsDown.size === 0 && !_keyPanHeld(null)) {
+      _cursorHidden = true;
+      const vp = document.getElementById('viewport');
+      vp?.classList.add('cursor-hidden');
+    }
+  }
+
+  function _armIdleCursorTimer() {
+    clearTimeout(_idleCursorTimer);
+    if (!_isAutoHideEnabled()) {
+      _showCursor();
+      return;
+    }
+    _idleCursorTimer = setTimeout(_hideCursor, _getDelayMs());
+  }
+
+  function toggleCursorAutoHide() {
+    const enabled = _isAutoHideEnabled();
+    _autoHideToggleOverride = !enabled;
+    if (!_autoHideToggleOverride) {
+      clearTimeout(_idleCursorTimer);
+      _showCursor();
+    } else {
+      if (_isMouseOverViewport) {
+        _armIdleCursorTimer();
+      }
+    }
+  }
+
+  function _onConfigLoaded() {
+    _updatePanKeysCache();
+    _autoHideToggleOverride = null;
+    if (_isMouseOverViewport) {
+      _armIdleCursorTimer();
+    } else {
+      _showCursor();
+    }
+  }
+  window.addEventListener('quivit-config-loaded', _onConfigLoaded);
   _updatePanKeysCache();
 
   function _keyPanHeld(exceptKey) {
@@ -70,6 +137,9 @@ export function createViewerGestures(viewportState) {
     _panButtonsDown.clear();
     _stopCursorPoll();
     document.body.classList.toggle('cursor-move', false);
+    if (_isMouseOverViewport) {
+      _armIdleCursorTimer();
+    }
   }
 
   let _cursorPolling = false;
@@ -181,10 +251,33 @@ export function createViewerGestures(viewportState) {
 
   const viewport = document.getElementById('viewport');
   if (viewport) {
-    viewport.addEventListener('mousedown', _onMouseDown);
+    viewport.addEventListener('mousedown', (e) => {
+      _showCursor();
+      _armIdleCursorTimer();
+      _onMouseDown(e);
+    });
     viewport.addEventListener('contextmenu', (e) => {
       if (_panMouseButtons.has(2)) e.preventDefault();
     });
+    viewport.addEventListener('mouseenter', () => {
+      _isMouseOverViewport = true;
+      _showCursor();
+      _armIdleCursorTimer();
+    });
+    viewport.addEventListener('pointermove', () => {
+      _isMouseOverViewport = true;
+      _showCursor();
+      _armIdleCursorTimer();
+    });
+    viewport.addEventListener('mouseleave', () => {
+      _isMouseOverViewport = false;
+      clearTimeout(_idleCursorTimer);
+      _showCursor();
+    });
+    viewport.addEventListener('wheel', () => {
+      _showCursor();
+      _armIdleCursorTimer();
+    }, { passive: true });
   }
   window.addEventListener('mousemove', _onMouseMove);
   window.addEventListener('mouseup', _onMouseUp);
@@ -205,5 +298,13 @@ export function createViewerGestures(viewportState) {
 
   window.addEventListener('blur', () => {
     if (_isPanning && _panButtonsDown.size === 0) _stopPan();
+    _showCursor();
+    clearTimeout(_idleCursorTimer);
   });
+
+  return {
+    toggleCursorAutoHide,
+    showCursor: _showCursor,
+    hideCursor: _hideCursor
+  };
 }

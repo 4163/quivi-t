@@ -359,7 +359,11 @@ export const Core = {
         delete _state.config.frontend_data.last_active_images;
       }
       
-      _state.fitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
+      const newFitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
+      if (_state.fitMode !== newFitMode) {
+        _state.fitMode = newFitMode;
+        _state.fitModeGen++;
+      }
       _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
       
 

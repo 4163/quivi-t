@@ -22,13 +22,18 @@ createViewerRenderer(viewportState, (img) => {
   if (img) pipelines.setSource(img);
   else pipelines.clear();
 });
-createViewerGestures(viewportState);
+const gestures = createViewerGestures(viewportState);
 
 const vpEl = document.getElementById('viewport');
 if (vpEl) {
-  const ro = new ResizeObserver(() => {
-    viewportState.applyFitMode();
-    pipelines.forceRender();
+  const ro = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) {
+        viewportState.handleViewportResize(width, height);
+        pipelines.forceRender();
+      }
+    }
   });
   ro.observe(vpEl);
 }
@@ -42,6 +47,7 @@ function _getViewportCenter() {
 
 export const Viewer = { 
   applyFitMode: (mode) => viewportState.applyFitMode(mode),
+  handleViewportResize: (w, h) => viewportState.handleViewportResize(w, h),
   zoomAt: viewportState.zoomAt,
   zoomCenter: (delta) => {
     const c = _getViewportCenter();
@@ -56,5 +62,6 @@ export const Viewer = {
     if (!c) return;
     viewportState.applyFitMode('none');
     viewportState.zoomTo(exactScale, c.x, c.y);
-  }
+  },
+  toggleCursorAutoHide: () => gestures.toggleCursorAutoHide()
 };

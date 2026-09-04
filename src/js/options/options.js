@@ -79,6 +79,7 @@ async function init() {
     document.getElementById('opt-single-instance').checked = singleInstanceValue !== false;
     document.getElementById('opt-show-hidden').checked = config.frontend_data.show_hidden === true;
     document.getElementById('opt-hide-chrome-fullscreen').checked = config.frontend_data.hide_chrome_on_fullscreen !== false;
+    document.getElementById('opt-hide-cursor-delay').value = typeof config.frontend_data.hide_cursor_delay_sec === 'number' ? config.frontend_data.hide_cursor_delay_sec : 2;
     document.getElementById('opt-keyboard-pan-step').value = config.frontend_data.keyboard_pan_step || 72;
     document.getElementById('opt-wheel-pan-step').value = config.frontend_data.wheel_pan_step || 120;
     document.getElementById('opt-start-dir').value = config.frontend_data.start_dir || '';
@@ -302,6 +303,8 @@ function buildConfigFromForm(baseConfig) {
   newConfig.frontend_data.pending_single_instance = document.getElementById('opt-single-instance').checked;
   newConfig.frontend_data.show_hidden = document.getElementById('opt-show-hidden').checked;
   newConfig.frontend_data.hide_chrome_on_fullscreen = document.getElementById('opt-hide-chrome-fullscreen').checked;
+  const hideCursorVal = parseFloat(document.getElementById('opt-hide-cursor-delay').value);
+  newConfig.frontend_data.hide_cursor_delay_sec = Number.isFinite(hideCursorVal) && hideCursorVal >= 0 ? hideCursorVal : 0;
   newConfig.frontend_data.keyboard_pan_step = parseInt(document.getElementById('opt-keyboard-pan-step').value, 10);
   newConfig.frontend_data.wheel_pan_step = parseInt(document.getElementById('opt-wheel-pan-step').value, 10);
   newConfig.frontend_data.start_dir = document.getElementById('opt-start-dir').value;

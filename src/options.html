@@ -62,7 +62,7 @@
         </label>
       </div>
       <div class="options-section">
-        <h3>Panning</h3>
+        <h3>Viewport</h3>
         <div class="pan-step">
           <div class="pan-step-row">
             <div class="pan-step-col">
@@ -77,6 +77,13 @@
               <div class="pan-step-input-wrap">
                 <input type="number" id="opt-wheel-pan-step" min="1" max="500" value="120" />
                 <span class="pan-step-unit">px</span>
+              </div>
+            </div>
+            <div class="pan-step-col">
+              <label for="opt-hide-cursor-delay" title="Seconds of inactivity before hiding cursor over viewport (0 to disable)">Hide cursor delay</label>
+              <div class="pan-step-input-wrap">
+                <input type="number" id="opt-hide-cursor-delay" min="0" max="60" step="0.5" value="2" />
+                <span class="pan-step-unit">sec</span>
               </div>
             </div>
           </div>

@@ -75,11 +75,13 @@ pub(crate) fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, Str
             continue;
         }
 
+        let size = entry.header().size().unwrap_or(0);
         files.push(FileEntry::new_archive_entry(
             name.clone(),
             format!("{}|{}", archive_path, name),
             ext.to_uppercase(),
             "".to_string(),
+            size,
         ));
     }
 
