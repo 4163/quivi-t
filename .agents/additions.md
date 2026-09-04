@@ -30,7 +30,7 @@
 - **Custom CSS Persistence Bugs:** Fix custom CSS persistence. Fix the bug where it sometimes doesn't apply on restart, or applies even when it was removed. **Note: Unsure if this bug still exists, as it has not been encountered since the major syncing refactor.**
 
 ### Supported Formats & Advanced Icons (Complex)
-- **File Association Prompt:** Add a prompt notification at the center of the screen pointing users to the File Associations tab (reminding them that they can and should set file associations).
+- **File Association Prompt:** Add a prompt notification at the center of the screen pointing users to the File Associations tab (reminding them that they can and should set file associations). On-boarding experinece.
 - **Missing .ico Spritesheets:** Fix bug where certain ICO files (like `test-files/endfield.ico`) do not get the spritesheet treatment.
 - **Advanced .ico Processing:** Improve .ico processing (performance-first). Change the .ico processing and rendering spec:
   1. Add a 'ICO Spritesheet' to the view dropdown under 'opaque canvas' (make sure this is configurable in the keybinds option). Default: ON.
@@ -44,17 +44,6 @@
 
 ### Documentation & GitHub (Project Health)
 - **Contributing Section:** Add a contributing section to the github page, for general contributions to the project, but more on documenting how new languages should be created for the language settings.
-
-### Instrumentation System: Test Harness
-- Main job after the HTML/CSS/JS and Rust refactors: rewrite and decouple functions that have no honest test seam, then write a proper test harness covering a decent portion of QuiviT's functions.
-- For each behavior worth keeping, write a targeted cargo test (or extend an existing one) that exercises the real code path and fails loud if the behavior is wrong.
-- Focus on: functions, commands, and public APIs; config schema (defaults, key renames, type shifts); archive entry parsing, sort order, and cache-key logic; state machine transitions and callback contracts.
-- Do not write tests for pure presentation (CSS, layout, visual rendering). Those stay on the manual verify checklist.
-- Place new tests alongside existing test infrastructure (`src-tauri/src/tests/`, in-tree `#[path]` tests). If a seam has no home yet, discuss placement before inventing a new tree. Throwaway scripts are fine for fixture generation, environment probes, or one-off coverage sweeps. They are not the harness.
-- Run `cargo test` in `src-tauri`. Fix the implementation or the test. Do not proceed with failing tests.
-- **Skill allocation.** The harness work belongs on the next branch inside `diagnose`. One explicit skill. Same lock style as `update-architecture-state`.
-- **Scope boundary.** `blast-radius` stays "prove this change did not break a consumer." It does not build the harness.
-- **Deferred, after the harness exists.** Do not start Python instrumentation in the same slice as the rewrite. Once the cargo tests cover a decent portion of the app, add JS and Rust timing and call-count logs (processing time in ms, hot spots / call counts). Python then drives the benches and collects the output. `diagnose` still owns that later slice. Trigger on "it's slow," "it's flaky," or "measure X."
 
 ## Post-Release Backlog (Future Considerations)
 
@@ -140,3 +129,14 @@
   - **(b) OS-abstraction pipeline in this codebase:** put a structure/system/pipeline in place so OS-specific API/function calls sit behind platform layers where Windows APIs are currently used directly: e.g. a Rust `platform` module/trait behind the Tauri commands (Windows impl today, stub/fallback impls for other targets) plus a JS-side capability switch, so other targets at least compile and degrade gracefully.
   - **(c) Hybrid:** abstract only where the seam is cheap (path handling, protocol routing, config locations), and keep separate projects where the gap is too large (file associations, native icons).
 - Do not start this without first securing at least one non-Windows test device or CI runner: verification is impossible otherwise.
+
+### Instrumentation System: Test Harness
+- Main job after the HTML/CSS/JS and Rust refactors: rewrite and decouple functions that have no honest test seam, then write a proper test harness covering a decent portion of QuiviT's functions.
+- For each behavior worth keeping, write a targeted cargo test (or extend an existing one) that exercises the real code path and fails loud if the behavior is wrong.
+- Focus on: functions, commands, and public APIs; config schema (defaults, key renames, type shifts); archive entry parsing, sort order, and cache-key logic; state machine transitions and callback contracts.
+- Do not write tests for pure presentation (CSS, layout, visual rendering). Those stay on the manual verify checklist.
+- Place new tests alongside existing test infrastructure (`src-tauri/src/tests/`, in-tree `#[path]` tests). If a seam has no home yet, discuss placement before inventing a new tree. Throwaway scripts are fine for fixture generation, environment probes, or one-off coverage sweeps. They are not the harness.
+- Run `cargo test` in `src-tauri`. Fix the implementation or the test. Do not proceed with failing tests.
+- **Skill allocation.** The harness work belongs on the next branch inside `diagnose`. One explicit skill. Same lock style as `update-architecture-state`.
+- **Scope boundary.** `blast-radius` stays "prove this change did not break a consumer." It does not build the harness.
+- **Deferred, after the harness exists.** Do not start Python instrumentation in the same slice as the rewrite. Once the cargo tests cover a decent portion of the app, add JS and Rust timing and call-count logs (processing time in ms, hot spots / call counts). Python then drives the benches and collects the output. `diagnose` still owns that later slice. Trigger on "it's slow," "it's flaky," or "measure X."

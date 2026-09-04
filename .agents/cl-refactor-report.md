@@ -42,7 +42,7 @@ These items modify the Rust backend or the OS integration. They do not affect th
 *   **Extended Format Support (PSD, XCF, PDF):** Implementing Rust-side decoders to turn these formats into raw pixels or standard web formats before passing them to the CL.
 *   **[COMPLETED] Password-Protected Archives:** Passing credentials through the IPC layer to `zip`, `unrar`, and `sevenz-rust2`, with frontend status signaling and locked container handling.
 *   **Additional Metadata Formats:** Parsing `comicinfo.json` alongside the existing metadata parsers.
-*   **Native 7-Zip Sidecar:** Using `7zr.exe` for faster LZMA2 extraction.
+*   **[OUT OF SCOPE] Native 7-Zip Sidecar:** Using `7zr.exe` for faster LZMA2 extraction.
 
 ### Priority 3: Shelved / Low Value
 *   **Windows Thumbnails (APNG/WebP/AVIF):** Explicitly marked out of scope.
