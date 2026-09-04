@@ -128,14 +128,7 @@
 - Audio assets should be small and fast-loading, or even script-generated (e.g. 8-bit style SFX).
 
 ### Native 7-Zip Sidecar Extraction (7Z/CB7 speed)
-- Replace the pure-Rust `sevenz-rust2` extraction with the native 7-Zip engine (`7zr.exe` bundled as a Tauri sidecar) for 2-5x faster LZMA2 extraction.
-- Full plan: `.agents/7z_implementation.md` (retained for future reference; has a `Status: Shelved` note).
-- **Why shelved:** the original UI-blocking bug was already solved in pure Rust. The speed gap does not manifest as a real UX problem, and the sidecar adds deployment complexity plus re-introduces partial-file race concerns.
-- If picked up later: keep the pure-Rust path as a fallback, and prefer single-entry `7zr` extraction over the full-extraction + watcher design in the current plan.
-- **Optional single-file engine:** Ship the 7z/cb7 DLL as a drop-in sidecar: if it's present next to the exe, use it; otherwise fall back to the optimized pure-Rust path. Keeps the app portable for users who don't use 7z/cb7.
-- **Placement (leaning):** require the DLL to be either next to the exe or in the roaming folder to take effect. Not storing it as a portable-mode config item.
-- Future optional dependencies could follow the same drop-in pattern: they act like non-required modules.
-- Document this on the README under documentation after it is implemented.
+- **Note.** Out of scope. The original UI-blocking bug was already solved in pure Rust. The speed gap does not manifest as a real UX problem, and the sidecar adds deployment complexity plus re-introduces partial-file race concerns.
 
 ### Windows Thumbnails (APNG/WebP/AVIF)
 - **Note.** Out of scope. Thumbnails would just hide the cute mascots on the icons. Thus value is really, really low.
