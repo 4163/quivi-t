@@ -15,7 +15,7 @@ Read and follow `.agents/skills/unslop/SKILL.md` for all written output.
 - `.agents/architecture-state.md`
 - `.agents/AGENTS.md` section: `## Architecture Rules` (and its subsections: see specs below)
 - `README.md` sections: `## Documentation` (and its subsections: see specs below), `## Project Structure`.
-- `.agents/skills/blast-radius/SKILL.md` section `## QuiviT surfaces to check`. Treat it as architecture state, not a standalone checklist. Keep its zone list, file paths, and failure modes aligned with the current code and with `architecture-state.md`.
+- `.agents/skills/blast-radius/SKILL.md` sections `## QuiviT surfaces to check` and `### Surface to targeted test matrix`. Treat them as architecture state, not a standalone checklist. Keep zone lists, file paths, failure modes, and targeted test commands aligned with the current code and with `architecture-state.md`.
 - Git: working tree, recent commits, current branch, or a user-specified range.
 
 ### README Documentation subsection specs
@@ -45,21 +45,21 @@ Each subsection under `## Documentation` has a fixed purpose. Update content wit
 
 ### Blast-radius surfaces spec
 
-`## QuiviT surfaces to check` in `.agents/skills/blast-radius/SKILL.md` is the blast-radius contract list. Update it when the code moves a source of truth.
+`## QuiviT surfaces to check` and `### Surface to targeted test matrix` in `.agents/skills/blast-radius/SKILL.md` form the blast-radius contract list. Update both when the code moves a source of truth or adds new components.
 
-| Zone | Keep in sync with |
-|---|---|
-| IPC commands | `src-tauri/src/commands/` and the JS caller in `src/js/` |
-| Config schema | `src-tauri/src/config.rs`, `architecture-state.md` Config & Persistence |
-| Archive & format readers | `src-tauri/src/archives/`, `src-tauri/src/formats.rs` |
-| Protocol URLs | `src-tauri/src/protocol.rs` (`quivit://`, `asset://`) |
-| Platform & Windowing | `src-tauri/src/platform/`, `src-tauri/src/windows.rs` |
-| Cross-window state | `localStorage` keys, `architecture-state.md` Config & Persistence |
-| CSS tokens | `src/css/global.css` `:root` and `AGENTS.md` CSS Source of Truth |
-| Action registry | `src/js/services/actions.js` and `AGENTS.md` JS Module Ownership |
-| State machine | `src/js/core.js` and `AGENTS.md` Shared / JS Module Ownership |
+| Zone | Keep in sync with | Targeted test command in matrix |
+|---|---|---|
+| IPC commands | `src-tauri/src/commands/` and the JS caller in `src/js/` | Relevant command test or caller check |
+| Config schema | `src-tauri/src/config.rs`, `architecture-state.md` Config & Persistence | `cargo test --manifest-path src-tauri/Cargo.toml config::tests` |
+| Archive & format readers | `src-tauri/src/archives/`, `src-tauri/src/formats.rs` | `cargo test --manifest-path src-tauri/Cargo.toml format_tests` or archive filter (`zip_`, `rar_`, `sevenz_`, `tar_`, `archive_cache_`) |
+| Protocol URLs | `src-tauri/src/protocol.rs` (`quivit://`, `asset://`) | `cargo test --manifest-path src-tauri/Cargo.toml protocol::tests` |
+| Platform & Windowing | `src-tauri/src/platform/`, `src-tauri/src/windows.rs` | Targeted platform test or window check |
+| Cross-window state | `localStorage` keys, `architecture-state.md` Config & Persistence | Cross-window preview test / UI check |
+| CSS tokens | `src/css/global.css` `:root` and `AGENTS.md` CSS Source of Truth | Theme / styling inspection |
+| Action registry | `src/js/services/actions.js` and `AGENTS.md` JS Module Ownership | Shortcut & menu dispatch checks |
+| State machine | `src/js/core.js` and `AGENTS.md` Shared / JS Module Ownership | `node --check src/js/core.js` |
 
-When a zone's path, shape, or consumer changes, rewrite the stale bullet in the blast-radius skill the same way you would rewrite a stale bullet in `architecture-state.md`. Do not append a second bullet that restates it.
+When a zone's path, shape, or consumer changes, rewrite the stale bullet in the blast-radius skill the same way you would rewrite a stale bullet in `architecture-state.md`. Keep the test matrix updated with the exact targeted test commands that prove that zone safe.
 
 ## Instructions
 
@@ -67,5 +67,5 @@ When a zone's path, shape, or consumer changes, rewrite the stale bullet in the 
 2. **Surgical Updates:** Edit only the specific lines, lists, or paragraphs that govern the module or logic that changed. Do not rewrite entire sections.
 3. **Verify Project Structure:** If files or directories were added, moved, or deleted, update the ASCII tree under `## Project Structure` in the `README.md` to match the current filesystem.
 4. **Architecture Rules:** If ownership or layering moved, update the matching subsection in `.agents/AGENTS.md` so the rule still describes the current contract. Prefer replacing a stale line over adding a clarifying paragraph.
-5. **Blast-radius surfaces:** If a blast-radius zone changed (new command, config key, archive path, protocol route, window helper, storage key, CSS token, action id, or state shape), update `## QuiviT surfaces to check` in `.agents/skills/blast-radius/SKILL.md` to match. Apply the same surgical rule as above. If the diff touched a live contract, also run `blast-radius` steps 2-4 to trace consumers and climb the confidence ladder before documenting the new shape as settled.
+5. **Blast-radius surfaces:** If a blast-radius zone changed (new command, config key, archive path, protocol route, window helper, storage key, CSS token, action id, or state shape), update both `## QuiviT surfaces to check` and `### Surface to targeted test matrix` in `.agents/skills/blast-radius/SKILL.md` to match. Apply the same surgical rule as above. If the diff touched a live contract, also run `blast-radius` steps 2-4 to trace consumers and climb the confidence ladder with targeted tests before documenting the new shape as settled.
 6. **Maintain Principles:** New descriptions in `architecture-state.md`, README, and `blast-radius` still have to match those rules after the edit.

@@ -40,10 +40,28 @@ These are the repo's common blast-radius zones. Not every change touches all of 
 - **Action registry** (JS service modules): changed action ids, labels, or handler signatures break menus, shortcuts, and context menus.
 - **State machine** (JS core): changed state shapes or callback contracts break every UI subscriber.
 
+### Surface to targeted test matrix
+
+Match touched files to their targeted test command to prove safety in 1 to 2 seconds instead of running the full 58-test suite:
+
+| Touched surface | Targeted test command | Typical runtime |
+|---|---|---|
+| `src-tauri/src/config.rs` | `cargo test --manifest-path src-tauri/Cargo.toml config::tests` | ~1.2s |
+| `src-tauri/src/formats.rs`, `commands/animation.rs` | `cargo test --manifest-path src-tauri/Cargo.toml format_tests` | ~1.3s |
+| `src-tauri/src/protocol.rs` | `cargo test --manifest-path src-tauri/Cargo.toml protocol::tests` | ~1.2s |
+| `src-tauri/src/archives/zip.rs` | `cargo test --manifest-path src-tauri/Cargo.toml zip_` | ~1.2s |
+| `src-tauri/src/archives/rar.rs` | `cargo test --manifest-path src-tauri/Cargo.toml rar_` | ~1.5s |
+| `src-tauri/src/archives/sevenz.rs` | `cargo test --manifest-path src-tauri/Cargo.toml sevenz_` | ~2.0s |
+| `src-tauri/src/archives/tar.rs` | `cargo test --manifest-path src-tauri/Cargo.toml tar_` | ~2.0s |
+| `src-tauri/src/archives/cache.rs` | `cargo test --manifest-path src-tauri/Cargo.toml archive_cache_` | ~1.5s |
+| Invalid archive validation (all formats) | `cargo test --manifest-path src-tauri/Cargo.toml invalid_archive_` | ~1.2s |
+| Fast compile & borrow check (iteration) | `cargo check --tests --manifest-path src-tauri/Cargo.toml` | ~3.0s |
+| Any modified JS module | `node --check <file>` | ~0.1s |
+
 ## Steps
 
 1. Read the change.
 2. For each modified function, struct, command, token, or contract: trace who consumes it. Go beyond direct callers to indirect readers (config files on disk, other windows, the protocol handler, CSS selectors that match on a class you renamed).
 3. For each consumer, determine the failure mode if the change is wrong.
-4. Climb the confidence ladder. Prove safety with code where cheap. Flag anything stuck at steps 1 and 2.
+4. Climb the confidence ladder. Prove safety with code where cheap. Use the surface-to-test matrix above to select and run the targeted test suite matching the diff. For compile validation during iteration, use `cargo check --tests`. Flag anything stuck at steps 1 and 2.
 5. Act on the findings. Fix any broken downstream consumers in the same slice. If you cannot reach confidence step 4 for a critical safety fact, explicitly warn the user and explain what needs manual validation before considering the task done.

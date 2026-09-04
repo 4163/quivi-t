@@ -16,12 +16,14 @@ Everything changed since the last clean state. `git diff "@{u}" --name-only` giv
 
 ## Workflow
 
-### 1. Static checks
+### 1. Static checks & automated tests
 
 Run on every touched file:
 
 - `node --check <file>` for each modified JS module.
-- `cargo check` in `src-tauri`.
+- `cargo check --tests --manifest-path src-tauri/Cargo.toml` if Rust files were touched.
+- Run the targeted test suite mapped from `.agents/skills/blast-radius/SKILL.md` (e.g. `cargo test format_tests`). Do not run the full test suite during slice iteration.
+- Run the full suite (`cargo test --manifest-path src-tauri/Cargo.toml`) only when finishing a slice that touches core cross-cutting contracts (`lib.rs`, `models.rs`) or during final slice signoff.
 
 Stop and report failures. Do not proceed until they pass.
 
