@@ -6,14 +6,14 @@ This report classifies the backlog from `additions.md` and `user-notes` through 
 
 These items directly affect the viewer engine. They must be built into the CL or exposed via its public API.
 
-*   **Window & Panel Resize Transform Snap Fix:** Preserving relative zoom and pan during container resize. This is a core mathematics fix for the CL's layout engine.
+*   **[PENDING] Window & Panel Resize Transform Snap Fix:** Preserving relative zoom and pan during container resize. This is a core mathematics fix for the CL's layout engine.
 *   **Double Page View & Manga Spread Mode:** Rendering two images side-by-side or splitting wide images. This is a primary rendering mode the CL must support via its configuration object.
 *   **Manhwa Mode (Continuous Vertical Strip):** Rendering a continuous list of images. The CL needs a mode to handle virtualized vertical stacking.
-*   **Animated "Loading..." Feedback:** Visual feedback during image fetch. The CL must handle its own loading states and placeholder visuals.
-*   **Flickering Issue on Re-fetch:** Optimizing the browser image cache. The CL must manage its internal `Blob` or `ImageBitmap` lifecycle without redundant network requests.
-*   **Idle Cursor Auto-Hide:** Hiding the cursor over the canvas. The CL should handle its own interaction idle state.
+*   **[PENDING] Animated "Loading..." Feedback:** Visual feedback during image fetch. The CL must handle its own loading states and placeholder visuals.
+*   **[PENDING] Flickering Issue on Re-fetch:** Optimizing the browser image cache. The CL must manage its internal `Blob` or `ImageBitmap` lifecycle without redundant network requests.
+*   **[PENDING] Idle Cursor Auto-Hide:** Hiding the cursor over the canvas. The CL should handle its own interaction idle state.
 *   **Animated Frame Timeline:** A scrubber for WebCodecs/animated formats. The CL should either render this timeline or expose the exact frame state (`currentFrame`, `totalFrames`, `seek()`) so the host application can render it.
-*   **Options Save Resets Fit/Zoom (Bug):** The CL needs a clean configuration update path (e.g. `viewer.setConfig(...)`) that does not destroy current transform state unless explicitly requested.
+*   **[PENDING] Options Save Resets Fit/Zoom (Bug):** The CL needs a clean configuration update path (e.g. `viewer.setConfig(...)`) that does not destroy current transform state unless explicitly requested.
 *   **Lanczos Memory & Instrumentation:** Reducing memory usage in the WebGL and Canvas pools, and measuring scaling delays. This is entirely internal to the CL.
 
 ## 2. Host Application (Desktop / UI / Routing)
