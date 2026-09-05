@@ -13,6 +13,14 @@ globalThis.window = {
 };
 
 const { Core } = await import('../core.js');
+const { DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_MODE, mergeConfig } = await import('../keybinds.js');
+
+test('Core: default spread mode is off', () => {
+  assert.equal(DEFAULT_SPREAD_ENABLED, false);
+  assert.equal(DEFAULT_SPREAD_MODE, 'off');
+  const merged = mergeConfig({});
+  assert.equal(merged.frontend_data.spread_enabled, false);
+});
 
 test('Core: spread state initialization and dimension detection', () => {
   Core.setImageDimensions(2000, 1000);

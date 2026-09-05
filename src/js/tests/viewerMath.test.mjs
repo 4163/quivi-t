@@ -85,6 +85,7 @@ test('viewerMath: initial state and fit modes', () => {
   const state = createViewportState({ getViewport: () => vp });
 
   assert.equal(state.getUserTransformed(), false);
+  assert.equal(state.getSpreadEnabled(), false);
   assert.equal(state.getScale(), 1);
 
   // Apply fit 'window' with 2000x1000 image in 1000x800 viewport

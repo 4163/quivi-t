@@ -490,7 +490,7 @@ export const Core = {
         _state.fitModeGen++;
       }
       _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
-      _state.spreadEnabled = _state.config.frontend_data.spread_enabled !== false;
+      _state.spreadEnabled = _state.config.frontend_data.spread_enabled === true;
       _state.spreadDirection = _state.config.frontend_data.spread_direction || DEFAULT_SPREAD_DIRECTION;
       
 

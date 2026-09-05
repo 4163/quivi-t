@@ -473,8 +473,13 @@ export function syncViewMenu(state) {
     el.classList.toggle('checked', displayScaling === s.id);
   }
 
-  const spreadEnabled = state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? (state.spreadMode !== 'off');
+  const spreadEnabled = !!(state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? (state.spreadMode && state.spreadMode !== 'off'));
   const spreadDirection = state.spreadDirection ?? state.config?.frontend_data?.spread_direction ?? 'rtl';
+
+  const spreadLabelEl = document.getElementById('spread-current-label');
+  if (spreadLabelEl) {
+    spreadLabelEl.textContent = !spreadEnabled ? 'Off' : (spreadDirection === 'ltr' ? 'LTR' : 'RTL');
+  }
 
   const toggleSpreadEl = document.getElementById('cmd-toggle-spread');
   if (toggleSpreadEl) {

@@ -42,7 +42,7 @@ export const Statusbar = {
   syncSpreadIndicator(state) {
     if (!statusSpread && !spreadIndicator) return;
     const s = state || Core.getState();
-    const spreadEnabled = s.spreadEnabled ?? s.config?.frontend_data?.spread_enabled ?? (s.spreadMode !== 'off' && s.config?.frontend_data?.spread_mode !== 'off');
+    const spreadEnabled = !!(s.spreadEnabled ?? s.config?.frontend_data?.spread_enabled ?? (s.spreadMode && s.spreadMode !== 'off'));
     const isSpreadActive = spreadEnabled && !!s.isSpread && ['width', 'width-if-larger'].includes(s.fitMode);
     const spreadText = isSpreadActive ? `[Spread ${s.spreadStep || 1}/2]` : '';
     const isStatusBarHidden = !statusbar || statusbar.classList.contains('hidden');

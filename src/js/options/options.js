@@ -1,4 +1,4 @@
-import { mergeConfig, DEFAULT_KEYBINDS } from '../keybinds.js';
+import { mergeConfig, DEFAULT_KEYBINDS, DEFAULT_SPREAD_ENABLED } from '../keybinds.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { makeListNavigable, handleTabJump } from '../keyboardNav.js';
 import { initKeybindUi } from './keybindUi.js';
@@ -314,7 +314,7 @@ function buildConfigFromForm(baseConfig) {
   newConfig.frontend_data.theme = currentTheme;
   newConfig.frontend_data.custom_css = document.getElementById('opt-custom-css').value;
   // Spread View settings are controlled via the View menu; preserve them across Options saves.
-  newConfig.frontend_data.spread_enabled = baseConfig.frontend_data?.spread_enabled ?? true;
+  newConfig.frontend_data.spread_enabled = baseConfig.frontend_data?.spread_enabled ?? DEFAULT_SPREAD_ENABLED;
   newConfig.frontend_data.spread_direction = baseConfig.frontend_data?.spread_direction || 'rtl';
   newConfig.frontend_data.spread_mode = newConfig.frontend_data.spread_enabled ? newConfig.frontend_data.spread_direction : 'off';
   // Preserve filter options which are mutated in memory directly.

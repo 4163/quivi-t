@@ -15,7 +15,7 @@ export function createViewportState({ getViewport }) {
   let _flipX = 1;
   let _flipY = 1;
   let _currentFitMode = DEFAULT_FIT_MODE;
-  let _spreadEnabled = true;
+  let _spreadEnabled = false;
   let _spreadDirection = 'rtl';
   let _spreadStep = 1;
   let _userTransformed = false;
