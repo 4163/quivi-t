@@ -53,13 +53,20 @@ let pendingClickIndex = -1;
 
 let currentPath = '';
 
-// Virtualization
-let domPool = [];
+// Virtualization (VS Code RowCache pattern)
+let activeRows = new Map();
+let freePool = [];
 let scrollSpacer = null;
 let ROW_HEIGHT = 0;
-let POOL_SIZE = 0;
 let currentViewMode = null;
 let btnToggleViewMode = null;
+const OVERSCAN = 10;
+
+// Deduplication tokens
+let lastRenderedIndex = -1;
+let lastRenderedViewMode = null;
+let lastRenderedVisible = null;
+let lastRenderedDirectory = null;
 
 // Favorites
 let favoritesExpanded = false;
@@ -225,9 +232,19 @@ function fetchNativeIcon(path, ext, size = 'small') {
       } else {
         const isFolder = ext === '__folder__' || ext.includes('\\') || ext.includes('/');
         const svgDim = size === 'large' ? 32 : 14;
-        img.outerHTML = isFolder
+        const svgContent = isFolder
           ? `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`
           : `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`;
+        const svgSlot = img.parentElement?.querySelector('.item-icon-svg');
+        if (svgSlot) {
+          img.style.display = 'none';
+          img.removeAttribute('data-icon-key');
+          img.removeAttribute('data-ext');
+          svgSlot.innerHTML = svgContent;
+          svgSlot.style.display = '';
+        } else {
+          img.outerHTML = svgContent;
+        }
       }
     });
   };
@@ -519,227 +536,360 @@ function measureRowHeight() {
   const sentinelId = isThumbnail ? 'file-list-thumbnail-sentinel' : 'file-list-sentinel';
   const sentinel = document.getElementById(sentinelId);
   const fallback = isThumbnail ? 52 : 22;
-  ROW_HEIGHT = sentinel ? sentinel.getBoundingClientRect().height || fallback : fallback;
+  const measured = sentinel ? Math.round(sentinel.getBoundingClientRect().height) : 0;
+  ROW_HEIGHT = measured > 0 ? measured : fallback;
+  return ROW_HEIGHT;
+}
+
+const TRANSPARENT_PIXEL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+';
+
+function getFallbackSvg(type, svgDim = 14) {
+  if (type === 'drive') {
+    return `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>`;
+  }
+  if (type === 'folder') {
+    return `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+  }
+  return `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`;
+}
+
+function updateRowIcon(slots, item) {
+  const ext = FsUtils.getIconExtKey(item);
+  const isFolder = item.is_dir || item.is_parent;
+
+  const showSvg = (type) => {
+    slots.iconImg.style.display = 'none';
+    slots.iconImg.removeAttribute('data-icon-key');
+    slots.iconImg.removeAttribute('data-ext');
+    slots.iconSvg.style.display = '';
+    if (slots.iconSvg._type !== type) {
+      slots.iconSvg.innerHTML = getFallbackSvg(type, 14);
+      slots.iconSvg._type = type;
+    }
+  };
+
+  const showImg = (src, isPending = false) => {
+    slots.iconSvg.style.display = 'none';
+    slots.iconImg.style.display = '';
+    if (isPending) {
+      slots.iconImg.dataset.ext = ext;
+      slots.iconImg.dataset.iconKey = ext;
+    } else {
+      slots.iconImg.removeAttribute('data-icon-key');
+      slots.iconImg.removeAttribute('data-ext');
+    }
+    if (slots.iconImg.getAttribute('src') !== src) {
+      slots.iconImg.src = src;
+    }
+  };
+
+  if (item.is_drive) {
+    showSvg('drive');
+    return;
+  }
+
+  if (iconCache.has(ext)) {
+    const cached = iconCache.get(ext);
+    if (cached === 'pending') {
+      showImg(TRANSPARENT_PIXEL, true);
+      return;
+    }
+    if (cached) {
+      showImg(cached);
+      return;
+    }
+    showSvg(isFolder ? 'folder' : 'file');
+    return;
+  }
+
+  const stored = localStorage.getItem('icon:' + ext);
+  if (stored !== null) {
+    iconCache.set(ext, stored);
+    if (stored) {
+      showImg(stored);
+      return;
+    }
+    showSvg(isFolder ? 'folder' : 'file');
+    return;
+  }
+
+  fetchNativeIcon(item.path, ext, 'small');
+  showImg(TRANSPARENT_PIXEL, true);
+}
+
+function ensureSpacer() {
+  if (!scrollSpacer) {
+    scrollSpacer = fileListUl?.querySelector('.scroll-spacer');
+    if (!scrollSpacer && fileListUl) {
+      scrollSpacer = document.createElement('div');
+      scrollSpacer.className = 'scroll-spacer';
+      scrollSpacer.setAttribute('aria-hidden', 'true');
+      fileListUl.appendChild(scrollSpacer);
+    }
+  }
+}
+
+function wireRowListeners(li) {
+  li.addEventListener('mousedown', () => {
+    const idxStr = li.dataset.index;
+    pendingClickIndex = idxStr ? parseInt(idxStr, 10) : -1;
+  });
+
+  li.addEventListener('click', () => {
+    const index = pendingClickIndex;
+    if (index === -1) return;
+    fileListUl?.focus({ preventScroll: true });
+    if (Core.getState().index !== index) {
+      Core.selectIndex(index);
+    }
+    const now = Date.now();
+    if (lastClickIndex === index && (now - lastClickTime < 400)) {
+      panelKeyboardActive = true;
+      Core.jumpToIndex(index);
+      lastClickTime = 0;
+      lastClickIndex = -1;
+    } else {
+      lastClickTime = now;
+      lastClickIndex = index;
+    }
+  });
+
+  li.addEventListener('mouseenter', () => {
+    clearTimeout(hoverPreloadTimer);
+    if (hoverPreloadImg) {
+      hoverPreloadImg.removeAttribute('src');
+      hoverPreloadImg = null;
+    }
+
+    const idxStr = li.dataset.index;
+    if (!idxStr) return;
+    const index = parseInt(idxStr, 10);
+    const state = Core.getState();
+    const item = state.list?.[index];
+
+    if (item && !item.is_dir && !item.is_parent && FsUtils.isImageEntry(item)) {
+      if (item.size && item.size > MAX_HOVER_PRELOAD_BYTES) return;
+      hoverPreloadTimer = setTimeout(() => {
+        let src;
+        if (state.mode === 'archive') {
+          src = FsUtils.isIco(item.name) ? null : FsUtils.buildArchiveSrc(state.archivePath, item.name);
+        } else {
+          src = FsUtils.isIco(item.path) ? null : FsUtils.buildFileSrcSync(item.path);
+        }
+        if (src && Core.getState().index !== index) {
+          hoverPreloadImg = new Image();
+          hoverPreloadImg.decoding = 'async';
+          hoverPreloadImg.src = src;
+          if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
+        }
+      }, 150);
+    }
+  });
+
+  li.addEventListener('mouseleave', () => {
+    clearTimeout(hoverPreloadTimer);
+    if (hoverPreloadImg) {
+      hoverPreloadImg.removeAttribute('src');
+      hoverPreloadImg = null;
+    }
+  });
+}
+
+function createPoolRow() {
+  const li = document.createElement('li');
+  li.style.display = 'none';
+  li.setAttribute('role', 'option');
+
+  // List mode elements
+  const itemName = document.createElement('span');
+  itemName.className = 'item-name';
+
+  const iconImg = document.createElement('img');
+  iconImg.draggable = false;
+  iconImg.style.display = 'none';
+
+  const iconSvg = document.createElement('span');
+  iconSvg.className = 'item-icon-svg';
+  iconSvg.style.display = 'none';
+
+  const itemLabel = document.createElement('span');
+  itemLabel.className = 'item-label';
+
+  itemName.appendChild(iconImg);
+  itemName.appendChild(iconSvg);
+  itemName.appendChild(itemLabel);
+
+  const itemExt = document.createElement('span');
+  itemExt.className = 'item-ext';
+
+  const itemDate = document.createElement('span');
+  itemDate.className = 'item-date';
+
+  li.appendChild(itemName);
+  li.appendChild(itemExt);
+  li.appendChild(itemDate);
+
+  // Thumbnail mode elements
+  const thumbWrapper = document.createElement('div');
+  thumbWrapper.className = 'item-thumbnail-wrapper';
+  const thumbImg = document.createElement('img');
+  thumbImg.className = 'item-thumbnail-img';
+  thumbImg.draggable = false;
+  thumbWrapper.appendChild(thumbImg);
+
+  const thumbInfo = document.createElement('div');
+  thumbInfo.className = 'item-thumbnail-info';
+  const thumbTitle = document.createElement('span');
+  thumbTitle.className = 'item-thumbnail-title';
+  const thumbMeta = document.createElement('span');
+  thumbMeta.className = 'item-thumbnail-meta';
+  thumbInfo.appendChild(thumbTitle);
+  thumbInfo.appendChild(thumbMeta);
+
+  li.appendChild(thumbWrapper);
+  li.appendChild(thumbInfo);
+
+  li._slots = {
+    itemName,
+    iconImg,
+    iconSvg,
+    label: itemLabel,
+    ext: itemExt,
+    date: itemDate,
+    thumbWrapper,
+    thumbImg,
+    thumbTitle,
+    thumbMeta,
+  };
+
+  wireRowListeners(li);
+  if (fileListUl) fileListUl.appendChild(li);
+  return li;
 }
 
 function initDomPool() {
-  // Clear existing pool elements after config reloads.
-  domPool.forEach(li => li.remove());
-  domPool = [];
-  if (scrollSpacer) {
-    scrollSpacer.remove();
-    scrollSpacer = null;
+  ensureSpacer();
+
+  for (const li of activeRows.values()) {
+    li.remove();
   }
+  activeRows.clear();
 
-  const minRowH = 22;
-  POOL_SIZE = Math.ceil(window.screen.height / minRowH) + 20;
-  
-  for (let i = 0; i < POOL_SIZE; i++) {
-    const li = document.createElement('li');
-    li.style.display = 'none';
-    
-    // List mode elements
-    const itemName = document.createElement('span');
-    itemName.className = 'item-name';
-    
-    const itemLabel = document.createElement('span');
-    itemLabel.className = 'item-label';
-    itemName.appendChild(itemLabel);
-    
-    const itemExt = document.createElement('span');
-    itemExt.className = 'item-ext';
-    
-    const itemDate = document.createElement('span');
-    itemDate.className = 'item-date';
-    
-    li.appendChild(itemName);
-    li.appendChild(itemExt);
-    li.appendChild(itemDate);
-
-    // Thumbnail mode elements
-    const thumbWrapper = document.createElement('div');
-    thumbWrapper.className = 'item-thumbnail-wrapper';
-    const thumbImg = document.createElement('img');
-    thumbImg.className = 'item-thumbnail-img';
-    thumbImg.draggable = false;
-    thumbWrapper.appendChild(thumbImg);
-
-    const thumbInfo = document.createElement('div');
-    thumbInfo.className = 'item-thumbnail-info';
-    const thumbTitle = document.createElement('span');
-    thumbTitle.className = 'item-thumbnail-title';
-    const thumbMeta = document.createElement('span');
-    thumbMeta.className = 'item-thumbnail-meta';
-    thumbInfo.appendChild(thumbTitle);
-    thumbInfo.appendChild(thumbMeta);
-
-    li.appendChild(thumbWrapper);
-    li.appendChild(thumbInfo);
-    
-    li.setAttribute('role', 'option');
-
-    li.addEventListener('mousedown', () => {
-      const idxStr = li.dataset.index;
-      pendingClickIndex = idxStr ? parseInt(idxStr, 10) : -1;
-    });
-
-    li.addEventListener('click', () => {
-      const index = pendingClickIndex;
-      if (index === -1) return;
-      fileListUl?.focus({ preventScroll: true });
-      if (Core.getState().index !== index) {
-        Core.selectIndex(index);
-      }
-      const now = Date.now();
-      if (lastClickIndex === index && (now - lastClickTime < 400)) {
-        panelKeyboardActive = true;
-        Core.jumpToIndex(index);
-        lastClickTime = 0;
-        lastClickIndex = -1;
-      } else {
-        lastClickTime = now;
-        lastClickIndex = index;
-      }
-    });
-
-    li.addEventListener('mouseenter', () => {
-      clearTimeout(hoverPreloadTimer);
-      if (hoverPreloadImg) {
-        hoverPreloadImg.removeAttribute('src');
-        hoverPreloadImg = null;
-      }
-      
-      const idxStr = li.dataset.index;
-      if (!idxStr) return;
-      const index = parseInt(idxStr, 10);
-      const state = Core.getState();
-      const item = state.list[index];
-
-      if (item && !item.is_dir && !item.is_parent && FsUtils.isImageEntry(item)) {
-        if (item.size && item.size > MAX_HOVER_PRELOAD_BYTES) return;
-        hoverPreloadTimer = setTimeout(() => {
-          let src;
-          if (state.mode === 'archive') {
-            src = FsUtils.isIco(item.name) ? null : FsUtils.buildArchiveSrc(state.archivePath, item.name);
-          } else {
-            src = FsUtils.isIco(item.path) ? null : FsUtils.buildFileSrcSync(item.path);
-          }
-          if (src && Core.getState().index !== index) {
-            hoverPreloadImg = new Image();
-            hoverPreloadImg.decoding = 'async';
-            hoverPreloadImg.src = src;
-            if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
-          }
-        }, 150);
-      }
-    });
-
-    li.addEventListener('mouseleave', () => {
-      clearTimeout(hoverPreloadTimer);
-      if (hoverPreloadImg) {
-        hoverPreloadImg.removeAttribute('src');
-        hoverPreloadImg = null;
-      }
-    });
-
-    domPool.push(li);
-    fileListUl.appendChild(li);
+  for (const li of freePool) {
+    li.remove();
   }
-  
-  scrollSpacer = document.createElement('div');
-  scrollSpacer.className = 'scroll-spacer';
-  fileListUl.appendChild(scrollSpacer);
+  freePool = [];
 }
 
 function updateEntry(li, item, index) {
+  if (!li || !item) return;
   li.dataset.index = index;
-  li.title = item.name !== '..' ? item.name : '';
+  li.title = item.name && item.name !== '..' ? item.name : '';
   li.classList.toggle('is-hidden-entry', !!item.is_hidden);
 
   const state = Core.getState();
   const isThumbnail = state.fileListViewMode === 'thumbnail';
+  const slots = li._slots;
+  if (!slots) return;
 
   if (isThumbnail) {
-    const thumbImg = li.querySelector('.item-thumbnail-img');
-    const thumbTitle = li.querySelector('.item-thumbnail-title');
-    const thumbMeta = li.querySelector('.item-thumbnail-meta');
-
-    if (thumbTitle) thumbTitle.textContent = item.name;
-    if (thumbMeta) {
+    if (slots.thumbTitle) slots.thumbTitle.textContent = item.name || '';
+    if (slots.thumbMeta) {
       if (item.is_parent) {
-        thumbMeta.textContent = 'Parent folder';
+        slots.thumbMeta.textContent = 'Parent folder';
       } else if (item.is_drive) {
-        thumbMeta.textContent = 'Drive';
+        slots.thumbMeta.textContent = 'Drive';
       } else if (item.is_dir) {
-        thumbMeta.textContent = item.date ? `Folder • ${item.date}` : 'Folder';
+        slots.thumbMeta.textContent = item.date ? `Folder • ${item.date}` : 'Folder';
       } else {
         const ext = (item.ext || '').toUpperCase();
-        thumbMeta.textContent = ext ? (item.date ? `${ext} • ${item.date}` : ext) : (item.date || '');
+        slots.thumbMeta.textContent = ext ? (item.date ? `${ext} • ${item.date}` : ext) : (item.date || '');
       }
     }
 
-    if (thumbImg) {
+    if (slots.thumbImg) {
       const ext = FsUtils.getIconExtKey(item);
       const targetSrc = FsUtils.buildThumbnailSrc(item, state);
 
-      thumbImg.onerror = () => {
-        thumbImg.onerror = null;
-        thumbImg.src = FsUtils.buildNativeIconSrc(item.path, ext, 'large');
+      slots.thumbImg.onerror = () => {
+        slots.thumbImg.onerror = null;
+        slots.thumbImg.src = FsUtils.buildNativeIconSrc(item.path, ext, 'large');
       };
 
-      if (thumbImg.getAttribute('src') !== targetSrc) {
-        thumbImg.loading = 'lazy';
-        thumbImg.src = targetSrc;
+      if (slots.thumbImg.getAttribute('src') !== targetSrc) {
+        slots.thumbImg.loading = 'lazy';
+        slots.thumbImg.src = targetSrc;
       }
     }
   } else {
-    const itemName = li.querySelector('.item-name');
-    itemName.innerHTML = getIconHtml(item);
-
-    const itemLabel = document.createElement('span');
-    itemLabel.className = 'item-label';
-    itemLabel.textContent = item.name;
-    itemName.appendChild(itemLabel);
-
-    li.querySelector('.item-ext').textContent = item.ext || '';
-    li.querySelector('.item-date').textContent = item.date || '';
+    updateRowIcon(slots, item);
+    if (slots.label) slots.label.textContent = item.name || '';
+    if (slots.ext) slots.ext.textContent = item.is_dir ? 'DIR' : (item.ext || '');
+    if (slots.date) slots.date.textContent = item.date || '';
   }
 
-  li.style.transform = `translateY(${index * ROW_HEIGHT}px)`;
+  li.style.top = `${index * ROW_HEIGHT}px`;
   li.style.display = '';
 }
 
 function renderVisibleSlice() {
+  if (!fileListUl) return;
+  ensureSpacer();
+
   if (!lastRenderedList || lastRenderedList.length === 0) {
-    domPool.forEach(li => li.style.display = 'none');
+    for (const li of activeRows.values()) {
+      li.style.display = 'none';
+      li.style.top = '';
+      li.dataset.index = '';
+      li.classList.remove('selected');
+      freePool.push(li);
+    }
+    activeRows.clear();
     if (scrollSpacer) scrollSpacer.style.height = '0px';
     return;
   }
-  
+
   const state = Core.getState();
   const list = state.list;
-  
-  if (scrollSpacer) {
-    scrollSpacer.style.height = `${list.length * ROW_HEIGHT}px`;
+  if (!list) return;
+  const total = list.length;
+
+  if (!ROW_HEIGHT) measureRowHeight();
+
+  // Set single static sizer height
+  const totalHeight = `${total * ROW_HEIGHT}px`;
+  if (scrollSpacer && scrollSpacer.style.height !== totalHeight) {
+    scrollSpacer.style.height = totalHeight;
   }
-  
+
   const scrollTop = fileListUl.scrollTop;
-  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - 5);
-  
-  for (let i = 0; i < POOL_SIZE; i++) {
-    const dataIndex = startIndex + i;
-    const li = domPool[i];
-    
-    if (dataIndex >= 0 && dataIndex < list.length) {
-      if (li.dataset.index !== String(dataIndex)) {
-        updateEntry(li, list[dataIndex], dataIndex);
-      }
-      li.style.display = '';
-      li.classList.toggle('selected', dataIndex === state.index);
-    } else {
+  const clientH = fileListUl.clientHeight || 600;
+  const rawStart = Math.floor(scrollTop / ROW_HEIGHT);
+  const visibleCount = Math.ceil(clientH / ROW_HEIGHT);
+  const startIndex = Math.max(0, rawStart - OVERSCAN);
+  const endIndex = Math.min(total, rawStart + visibleCount + OVERSCAN);
+
+  // Phase 1: Reclaim offscreen rows into freePool (VS Code RowCache pattern)
+  for (const [idx, li] of activeRows) {
+    if (idx < startIndex || idx >= endIndex) {
+      activeRows.delete(idx);
       li.style.display = 'none';
+      li.style.top = '';
       li.dataset.index = '';
+      li.classList.remove('selected');
+      freePool.push(li);
     }
+  }
+
+  // Phase 2: Allocate or update only rows not already rendered
+  for (let i = startIndex; i < endIndex; i++) {
+    let li = activeRows.get(i);
+    if (!li) {
+      li = freePool.pop() || createPoolRow();
+      updateEntry(li, list[i], i);
+      activeRows.set(i, li);
+    }
+    li.classList.toggle('selected', i === state.index);
   }
 }
 
@@ -751,22 +901,35 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
     (document.activeElement && fileListUl.contains(document.activeElement)) ||
     (isDefaultFocus && Core.getState().fileListVisible);
 
-  if (selectedIndex >= 0 && selectedIndex < lastRenderedList.length && selectedIndex !== lastScrolledIndex) {
-    lastScrolledIndex = selectedIndex;
-    const itemTop = selectedIndex * ROW_HEIGHT;
-    const itemBottom = itemTop + ROW_HEIGHT;
-    const viewTop = fileListUl.scrollTop;
-    const viewBottom = viewTop + fileListUl.clientHeight;
-    
-    if (itemTop < viewTop) {
-      fileListUl.scrollTop = itemTop;
-    } else if (itemBottom > viewBottom) {
-      fileListUl.scrollTop = itemBottom - fileListUl.clientHeight;
+  let didScroll = false;
+  if (selectedIndex >= 0 && selectedIndex < lastRenderedList.length) {
+    if (selectedIndex !== lastScrolledIndex) {
+      lastScrolledIndex = selectedIndex;
+      const itemTop = selectedIndex * ROW_HEIGHT;
+      const itemBottom = itemTop + ROW_HEIGHT;
+      const viewTop = fileListUl.scrollTop;
+      const clientH = fileListUl.clientHeight || 600;
+      const viewBottom = viewTop + clientH;
+
+      if (itemTop < viewTop) {
+        fileListUl.scrollTop = itemTop;
+        didScroll = true;
+      } else if (itemBottom > viewBottom) {
+        fileListUl.scrollTop = itemBottom - clientH;
+        didScroll = true;
+      }
     }
   }
-  
-  renderVisibleSlice();
-  
+
+  if (didScroll) {
+    renderVisibleSlice();
+  } else {
+    // Surgical update: directly update .selected on active elements without re-rendering
+    for (const [idx, li] of activeRows) {
+      li.classList.toggle('selected', idx === selectedIndex);
+    }
+  }
+
   if (wasFocused) {
     fileListUl?.focus({ preventScroll: true });
   }
@@ -812,15 +975,33 @@ export function renderFilePanel(state) {
     currentViewMode = viewMode;
     measureRowHeight();
     lastRenderedList = null;
-    domPool.forEach(li => li.dataset.index = '');
+    initDomPool();
     renderFavorites();
+  }
+
+  if (!ROW_HEIGHT) {
+    measureRowHeight();
+    ensureSpacer();
+  }
+
+  const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
+
+  // Deduplication guard: if file list state has not changed, exit early
+  if (
+    lastRenderedList === state.list &&
+    lastRenderedIndex === state.index &&
+    lastRenderedViewMode === viewMode &&
+    lastRenderedVisible === state.fileListVisible &&
+    lastRenderedDirectory === currentDir
+  ) {
+    return;
   }
 
   renderBreadcrumb(state);
 
   // Update the favorite star for the current entry. Skip `..`.
   {
-    const entry = state.list[state.index];
+    const entry = state.list?.[state.index];
     if (entry && !entry.is_parent) {
       updateFavoriteBtn(entry.path);
       if (favoritesBtnEl) favoritesBtnEl.disabled = false;
@@ -837,26 +1018,10 @@ export function renderFilePanel(state) {
   // Sync Favorites highlighting to the active file-panel item.
   updateFavoritesSelection(state);
 
-  const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
   if (currentDir !== currentPath) {
     currentPath = currentDir;
     updateSortIcons();
   }
-
-  if (!ROW_HEIGHT) {
-    measureRowHeight();
-    initDomPool();
-  }
-
-  if (lastRenderedList === state.list) {
-    updateSelection(state.index);
-    return;
-  }
-  lastRenderedList = state.list;
-  lastScrolledIndex = -1;
-  lastClickTime = 0;
-  lastClickIndex = -1;
-  domPool.forEach(li => li.dataset.index = '');
 
   const forceFocus = focusMainListOnNextRender;
   focusMainListOnNextRender = false;
@@ -864,6 +1029,26 @@ export function renderFilePanel(state) {
   const wasFocused = panelKeyboardActive || forceFocus ||
     (document.activeElement && filePanel.contains(document.activeElement)) ||
     (isDefaultFocus && state.fileListVisible);
+
+  // If only the selection index changed (same list)
+  if (lastRenderedList === state.list) {
+    lastRenderedIndex = state.index;
+    lastRenderedViewMode = viewMode;
+    lastRenderedVisible = state.fileListVisible;
+    lastRenderedDirectory = currentDir;
+    updateSelection(state.index, forceFocus, wasFocused);
+    return;
+  }
+
+  lastRenderedList = state.list;
+  lastRenderedIndex = state.index;
+  lastRenderedViewMode = viewMode;
+  lastRenderedVisible = state.fileListVisible;
+  lastRenderedDirectory = currentDir;
+  lastScrolledIndex = -1;
+  lastClickTime = 0;
+  lastClickIndex = -1;
+  initDomPool();
 
   renderVisibleSlice();
 
@@ -894,9 +1079,15 @@ function isPointerOverActiveViewport() {
 export function initFilePanel(deps) {
   ({ filePanel, breadcrumbEl, fileListUl, resizeHandle } = deps);
 
+  ensureSpacer();
+
   fileListUl.addEventListener('scroll', () => {
-    if (ROW_HEIGHT) renderVisibleSlice();
-  });
+    renderVisibleSlice();
+  }, { passive: true });
+
+  window.addEventListener('resize', () => {
+    renderVisibleSlice();
+  }, { passive: true });
 
   Core.onStateChange(() => renderFilePanel(Core.getState()));
 
@@ -960,13 +1151,21 @@ export function initFilePanel(deps) {
     favoritesExpanded = !getFavoritesCollapsed();
     renderFavorites();
     // Re-measure rows so custom CSS font sizes apply.
-    ROW_HEIGHT = 0;
+    const oldHeight = ROW_HEIGHT;
+    measureRowHeight();
+    if (oldHeight !== ROW_HEIGHT) {
+      initDomPool();
+    }
     if (Core) renderFilePanel(Core.getState());
   });
 
   window.addEventListener('quivit-css-applied', () => {
     // Re-measure rows for live CSS previews.
-    ROW_HEIGHT = 0;
+    const oldHeight = ROW_HEIGHT;
+    measureRowHeight();
+    if (oldHeight !== ROW_HEIGHT) {
+      initDomPool();
+    }
     recalculateMinColWidths();
     normalizeColumnWidths('name');
     if (Core) renderFilePanel(Core.getState());

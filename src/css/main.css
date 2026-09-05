@@ -549,9 +549,7 @@ li:hover > .fav-remove,
 }
 
 #file-list .scroll-spacer {
-  position: absolute;
-  top: 0;
-  left: 0;
+  display: block;
   width: 1px;
   pointer-events: none;
 }
@@ -559,6 +557,9 @@ li:hover > .fav-remove,
 #file-list-sentinel {
   visibility: hidden;
   pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
 }
 
 #file-list-thumbnail-sentinel {
@@ -596,7 +597,6 @@ li:hover > .fav-remove,
 
 #file-list li {
   position: absolute;
-  top: 0;
   left: 0;
   width: 100%;
   box-sizing: border-box;
@@ -641,11 +641,13 @@ li:hover > .fav-remove,
 
 #file-list .item-name, #favorites-list .item-name { min-width: 0; overflow: hidden; padding-left: 8px; display: flex; align-items: center; gap: 4px; }
 #file-list .item-name > svg, #favorites-list .item-name > svg,
-#file-list .item-name > img, #favorites-list .item-name > img { width: var(--fs-14); height: var(--fs-14); flex: 0 0 var(--fs-14); object-fit: contain; }
+#file-list .item-name > img, #favorites-list .item-name > img,
+#file-list .item-icon-svg, #file-list .item-icon-svg > svg { width: var(--fs-14); height: var(--fs-14); flex: 0 0 var(--fs-14); object-fit: contain; }
 #file-list .is-hidden-entry .item-name > svg,
 #favorites-list .is-hidden-entry .item-name > svg,
 #file-list .is-hidden-entry .item-name > img,
-#favorites-list .is-hidden-entry .item-name > img { opacity: 0.65; }
+#favorites-list .is-hidden-entry .item-name > img,
+#file-list .is-hidden-entry .item-icon-svg { opacity: 0.65; }
 #file-list .item-label, #favorites-list .item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #file-list .item-ext, #favorites-list .item-ext  { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); padding-left: 8px; }
 #file-list .item-date, #favorites-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-10); color: var(--text-dim); padding-left: 8px; }
