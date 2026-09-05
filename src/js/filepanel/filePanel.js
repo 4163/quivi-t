@@ -1036,3 +1036,14 @@ export function initFilePanel(deps) {
     }
   });
 }
+
+export function focusFileList() {
+  if (fileListUl) {
+    fileListUl.focus();
+  }
+}
+
+export function isFileListFocused() {
+  return !!(fileListUl && document.activeElement && fileListUl.contains(document.activeElement));
+}
+

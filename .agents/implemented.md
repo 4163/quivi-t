@@ -8,6 +8,21 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Password-Protected Archive UI & Architectural Hardening (2026-09-05)
+- **Password Prompt Overlay:**
+  - Added `#password-overlay` with autofocus password input field, submit unlocking, error message on incorrect password, and Escape return to parent container.
+  - Isolated keyboard and mouse events so typing in the password field cannot trigger viewer panning or navigation shortcuts.
+  - Sibling navigation safely displays password prompt without stealing list focus.
+- **Surface Ownership & Cross-Module Encapsulation:**
+  - Encapsulated `#file-list` DOM focus in `filePanel.js` by exporting `focusFileList()` and `isFileListFocused()`.
+  - Injected focus helpers into `passwordOverlay.js` via `main.js`, eliminating direct cross-module DOM queries.
+- **CSS Source of Truth for Submenus:**
+  - Refactored `menubar.js` submenu positioning to set CSS custom properties (`--submenu-top`, `--submenu-left`, `--submenu-max-height`) on the submenu host element, eliminating direct inline `.style.top`, `.style.left`, and `.style.maxHeight` assignments.
+  - Bound positioning and viewport-clamping rules declaratively in `main.css`.
+- **Bounded In-Memory Session Caching:**
+  - Replaced unbounded `Map` instances in `fsUtils.js` with `BoundedMap` (50 max for unlocked passwords, 100 max for encryption statuses) with FIFO eviction on oldest keys.
+  - Added unit test suite `boundedMap.test.mjs` verifying capacity limits and eviction.
+
 ### Menubar Reorganization: View Menu Flyout Submenus (2026-09-05)
 - **Nested Flyout Submenus**:
   - Reorganized the monolithic `#menu-view` dropdown into structured flyout submenus for **Scaling** (Pixelated, Bilinear, Lanczos), **Filter** (Off, Anime4K, Scanlines, Phosphor, Retro CRT), **Rotate & Flip** (Rotate CW/CCW, Flip H/V), and **Spread View** (Off, RTL, LTR).

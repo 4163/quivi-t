@@ -15,11 +15,26 @@ function _ext(name) {
   return name.split('.').pop().toLowerCase();
 }
 
+export class BoundedMap extends Map {
+  constructor(maxSize = 50) {
+    super();
+    this.maxSize = maxSize;
+  }
+
+  set(key, value) {
+    if (this.size >= this.maxSize && !this.has(key)) {
+      const oldestKey = this.keys().next().value;
+      this.delete(oldestKey);
+    }
+    return super.set(key, value);
+  }
+}
+
 let _navigationGeneration = 0;
 let _archivePrefetchTimer = null;
 let _archivePrefetchSeq = 0;
-const _unlockedArchivePasswords = new Map();
-const _archiveEncryptionCache = new Map();
+const _unlockedArchivePasswords = new BoundedMap(50);
+const _archiveEncryptionCache = new BoundedMap(100);
 
 function _nextNavigationGeneration() {
   _navigationGeneration += 1;

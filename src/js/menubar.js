@@ -103,9 +103,9 @@ function activateItem(item, dropdown) {
         sub.setAttribute('aria-expanded', 'false');
         const flyout = sub.querySelector(':scope > .submenu');
         if (flyout) {
-          flyout.style.top = '';
-          flyout.style.left = '';
-          flyout.style.maxHeight = '';
+          flyout.style.removeProperty('--submenu-top');
+          flyout.style.removeProperty('--submenu-left');
+          flyout.style.removeProperty('--submenu-max-height');
         }
       }
     });
@@ -121,13 +121,13 @@ function activateItem(item, dropdown) {
     if (aimState.activeSubmenu) {
       const rect = item.getBoundingClientRect();
       const topPos = Math.max(4, rect.top - 4);
-      aimState.activeSubmenu.style.top = `${topPos}px`;
-      aimState.activeSubmenu.style.left = `${rect.right}px`;
+      aimState.activeSubmenu.style.setProperty('--submenu-top', `${topPos}px`);
+      aimState.activeSubmenu.style.setProperty('--submenu-left', `${rect.right}px`);
       const maxH = window.innerHeight - topPos - 8;
-      aimState.activeSubmenu.style.maxHeight = `${Math.max(120, maxH)}px`;
+      aimState.activeSubmenu.style.setProperty('--submenu-max-height', `${Math.max(120, maxH)}px`);
       const subW = aimState.activeSubmenu.offsetWidth || 180;
       if (rect.right + subW > window.innerWidth) {
-        aimState.activeSubmenu.style.left = `${Math.max(0, rect.left - subW)}px`;
+        aimState.activeSubmenu.style.setProperty('--submenu-left', `${Math.max(0, rect.left - subW)}px`);
       }
     }
   } else {
@@ -157,9 +157,9 @@ export function closeMenus() {
     s.setAttribute('aria-expanded', 'false');
     const flyout = s.querySelector(':scope > .submenu');
     if (flyout) {
-      flyout.style.top = '';
-      flyout.style.left = '';
-      flyout.style.maxHeight = '';
+      flyout.style.removeProperty('--submenu-top');
+      flyout.style.removeProperty('--submenu-left');
+      flyout.style.removeProperty('--submenu-max-height');
     }
   });
   activeMenu = null;

@@ -6,7 +6,7 @@ import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { Viewer } from '../viewer/viewer.js';
 import * as NavigationHistory from '../navigationHistory.js';
-import { initFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite } from '../filepanel/filePanel.js';
+import { initFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite, focusFileList, isFileListFocused } from '../filepanel/filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from '../shortcuts.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from '../keybinds.js';
@@ -177,7 +177,7 @@ initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resize
 initMenuBar();
 bindMenuCommands();
 initDropZone({ dropOverlay, FsUtils });
-initPasswordOverlay({ overlay: passwordOverlay, Core, FsUtils });
+initPasswordOverlay({ overlay: passwordOverlay, Core, FsUtils, focusFileList, isFileListFocused });
 initMetadataBadge({ Core, FsUtils, badgeEl: metadataBadgeEl });
 initLifecycle({ Core, FsUtils });
 

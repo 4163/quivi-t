@@ -161,9 +161,11 @@ body.resizing-col { cursor: col-resize !important; }
 .menu-dropdown .submenu {
   display: none;
   position: fixed;
+  top: var(--submenu-top, 0);
+  left: var(--submenu-left, 0);
   min-width: 180px;
   width: max-content;
-  max-height: calc(100vh - var(--fs-28) - 8px);
+  max-height: var(--submenu-max-height, calc(100vh - var(--fs-28) - 8px));
   overflow-y: auto;
   overflow-x: hidden;
   direction: ltr;

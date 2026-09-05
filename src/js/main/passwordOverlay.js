@@ -13,6 +13,8 @@ let _FsUtils = null;
 let _Core = null;
 
 let _lockedArchivePath = '';
+let _focusFileList = null;
+let _isFileListFocused = null;
 
 function _show(archivePath, encryption, shouldFocus = true) {
   _lockedArchivePath = archivePath;
@@ -48,10 +50,12 @@ async function _submit() {
   _FsUtils.loadArchive(_lockedArchivePath, '', { password });
 }
 
-export function initPasswordOverlay({ overlay, Core, FsUtils }) {
+export function initPasswordOverlay({ overlay, Core, FsUtils, focusFileList, isFileListFocused }) {
   _overlay = overlay;
   _Core = Core;
   _FsUtils = FsUtils;
+  _focusFileList = focusFileList || (() => {});
+  _isFileListFocused = isFileListFocused || (() => false);
   _input = overlay.querySelector('#password-input');
   _errorEl = overlay.querySelector('.password-error');
 
@@ -82,7 +86,7 @@ export function initPasswordOverlay({ overlay, Core, FsUtils }) {
       if (state.mode === 'archive') {
         _FsUtils.openParent();
       } else {
-        document.getElementById('file-list')?.focus();
+        _focusFileList();
       }
     }
   });
@@ -93,9 +97,8 @@ export function initPasswordOverlay({ overlay, Core, FsUtils }) {
 
     if (isLocked && state.archivePath) {
       if (!_overlay.classList.contains('active') || _lockedArchivePath !== state.archivePath || enc === 'password_incorrect') {
-        const fileListUl = document.getElementById('file-list');
-        const isFileListFocused = !!(fileListUl && document.activeElement && fileListUl.contains(document.activeElement));
-        const shouldFocus = (state.mode === 'archive' && !state.isSiblingNavigation) || (!isFileListFocused && enc === 'password_incorrect');
+        const isFocused = _isFileListFocused();
+        const shouldFocus = (state.mode === 'archive' && !state.isSiblingNavigation) || (!isFocused && enc === 'password_incorrect');
         _show(state.archivePath, enc, shouldFocus);
       }
     } else {
