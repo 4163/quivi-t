@@ -477,10 +477,14 @@ li:hover > .fav-remove,
   pointer-events: none;
 }
 
-/* File-list focus ring belongs on the container, not each item. */
+#file-list {
+  cursor: default;
+  outline: none;
+}
+#file-list:focus,
 #file-list:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 1px var(--accent);
+  box-shadow: none;
 }
 
 #file-list li,
@@ -952,6 +956,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   color: var(--text);
 }
 
+.status-spread,
 .status-dims,
 .status-index,
 .status-zoom,
@@ -965,6 +970,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   color: var(--text-dim);
 }
 
+.status-spread:not(:empty)::before { content: '·'; margin-right: 12px; color: var(--border); }
 .status-dims::before  { content: '·'; margin-right: 12px; color: var(--border); }
 .status-index::before { content: '·'; margin-right: 12px; color: var(--border); }
 .status-zoom::before  { content: '·'; margin-right: 12px; color: var(--border); }

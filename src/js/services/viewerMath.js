@@ -1,5 +1,10 @@
 import { DEFAULT_FIT_MODE } from '../keybinds.js';
 
+export function checkIsSpread(w, h) {
+  if (!w || !h) return false;
+  return (w / h) >= 1.2;
+}
+
 export function createViewportState({ getViewport }) {
   let _scale = 1;
   let _tx = 0;
@@ -10,6 +15,9 @@ export function createViewportState({ getViewport }) {
   let _flipX = 1;
   let _flipY = 1;
   let _currentFitMode = DEFAULT_FIT_MODE;
+  let _spreadEnabled = true;
+  let _spreadDirection = 'rtl';
+  let _spreadStep = 1;
   let _userTransformed = false;
   let _prevVw = 0;
   let _prevVh = 0;
@@ -25,6 +33,10 @@ export function createViewportState({ getViewport }) {
       width: baseW * _scale,
       height: baseH * _scale,
     };
+  }
+
+  function isSpreadActive() {
+    return _spreadEnabled && checkIsSpread(_naturalW, _naturalH) && ['width', 'width-if-larger'].includes(_currentFitMode);
   }
 
   function _clampPan() {
@@ -64,7 +76,9 @@ export function createViewportState({ getViewport }) {
     if (!_naturalW || !_naturalH) return;
 
     const padding = 0;
-    const scaleX = (vw - padding * 2) / _naturalW;
+    const isSpread = isSpreadActive();
+    const effectiveW = isSpread ? (_naturalW / 2) : _naturalW;
+    const scaleX = (vw - padding * 2) / effectiveW;
     const scaleY = (vh - padding * 2) / _naturalH;
 
     switch (_currentFitMode) {
@@ -79,11 +93,21 @@ export function createViewportState({ getViewport }) {
     }
 
     if (_currentFitMode !== 'none') {
-      _tx = 0;
       if (['width', 'width-if-larger'].includes(_currentFitMode)) {
-        const { height } = _visualSize();
+        const { width, height } = _visualSize();
         _ty = height > vh ? (height - vh) / 2 : 0;
+        if (isSpread && width > vw) {
+          const maxX = (width - vw) / 2;
+          if (_spreadDirection === 'rtl') {
+            _tx = _spreadStep === 1 ? -maxX : maxX;
+          } else {
+            _tx = _spreadStep === 1 ? maxX : -maxX;
+          }
+        } else {
+          _tx = 0;
+        }
       } else {
+        _tx = 0;
         _ty = 0;
       }
     }
@@ -172,6 +196,64 @@ export function createViewportState({ getViewport }) {
     _rotation = 0;
     _flipX = 1;
     _flipY = 1;
+    _spreadStep = 1;
+  }
+
+  function setSpreadEnabled(enabled) {
+    _spreadEnabled = !!enabled;
+  }
+
+  function getSpreadEnabled() {
+    return _spreadEnabled;
+  }
+
+  function setSpreadDirection(direction) {
+    _spreadDirection = direction === 'ltr' ? 'ltr' : 'rtl';
+  }
+
+  function getSpreadDirection() {
+    return _spreadDirection;
+  }
+
+  function setSpreadMode(mode) {
+    if (mode === 'off') {
+      _spreadEnabled = false;
+    } else {
+      _spreadEnabled = true;
+      _spreadDirection = mode === 'ltr' ? 'ltr' : 'rtl';
+    }
+  }
+
+  function getSpreadMode() {
+    return _spreadEnabled ? _spreadDirection : 'off';
+  }
+
+  function setSpreadStep(step) {
+    _spreadStep = step === 2 ? 2 : 1;
+    _userTransformed = false;
+    if (isSpreadActive()) {
+      const vp = getViewport();
+      const vw = vp.clientWidth;
+      const vh = vp.clientHeight;
+      const { width, height } = _visualSize();
+      if (width > vw) {
+        const maxX = (width - vw) / 2;
+        if (_spreadDirection === 'rtl') {
+          _tx = _spreadStep === 1 ? -maxX : maxX;
+        } else {
+          _tx = _spreadStep === 1 ? maxX : -maxX;
+        }
+      } else {
+        _tx = 0;
+      }
+      _ty = height > vh ? (height - vh) / 2 : 0;
+      _clampPan();
+      notify();
+    }
+  }
+
+  function getSpreadStep() {
+    return _spreadStep;
   }
 
   return {
@@ -204,6 +286,15 @@ export function createViewportState({ getViewport }) {
     panTo,
     rotate,
     flip,
+    setSpreadEnabled,
+    getSpreadEnabled,
+    setSpreadDirection,
+    getSpreadDirection,
+    setSpreadMode,
+    getSpreadMode,
+    setSpreadStep,
+    getSpreadStep,
+    isSpreadActive,
   };
 }
 

@@ -36,7 +36,7 @@
  *   ephemeral within a session     -> in-memory state (or cleared localStorage)
  */
 
-import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, mergeConfig } from './keybinds.js';
+import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_DIRECTION, DEFAULT_SPREAD_MODE, mergeConfig } from './keybinds.js';
 import { FsUtils } from './fsUtils.js';
 
 const invoke = window.__TAURI__?.core?.invoke;
@@ -87,6 +87,20 @@ const _state = {
 
   /** Current image scaling mode. */
   scalingMode: DEFAULT_SCALING_MODE,
+
+  /** Natural dimensions and spread state of the currently loaded image */
+  naturalWidth: 0,
+  naturalHeight: 0,
+  isSpread: false,
+
+  /** Spread View enabled */
+  spreadEnabled: DEFAULT_SPREAD_ENABLED,
+
+  /** Spread reading direction: 'rtl' | 'ltr' */
+  spreadDirection: DEFAULT_SPREAD_DIRECTION,
+
+  /** Current reading step on a 2-page spread: 1 or 2 */
+  spreadStep: 1,
   
   /** Options configuration */
   config: {
@@ -96,6 +110,8 @@ const _state = {
       start_dir: '',
       fit_mode: DEFAULT_FIT_MODE,
       scaling_mode: DEFAULT_SCALING_MODE,
+      spread_enabled: DEFAULT_SPREAD_ENABLED,
+      spread_direction: DEFAULT_SPREAD_DIRECTION,
       keybinds: { ...DEFAULT_KEYBINDS },
     }
   }
@@ -158,6 +174,10 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
 
   _state.index = index;
   _state.filename = file.name;
+  _state.spreadStep = direction < 0 ? 2 : 1;
+  _state.isSpread = false;
+  _state.naturalWidth = 0;
+  _state.naturalHeight = 0;
 
   let newSrc = '';
   if (file.is_dir || file.is_parent || FsUtils.isArchiveEntry(file) || !FsUtils.isImageEntry(file)) {
@@ -244,6 +264,7 @@ export const Core = {
   setListAndIndex(newList, newIndex) {
     _state.list = newList;
     if (newIndex !== undefined && newIndex !== -1) _state.index = newIndex;
+    _state.spreadStep = 1;
     _notify();
   },
 
@@ -301,10 +322,88 @@ export const Core = {
     _notify();
   },
 
+  setImageDimensions(natW, natH) {
+    _state.naturalWidth = natW || 0;
+    _state.naturalHeight = natH || 0;
+    _state.isSpread = (natW && natH) ? (natW / natH >= 1.2) : false;
+    if (!_state.isSpread) {
+      _state.spreadStep = 1;
+    }
+    _notify();
+  },
+
+  setSpreadStep(step) {
+    _state.spreadStep = step === 2 ? 2 : 1;
+    _notify();
+  },
+
+  setSpreadEnabled(enabled, options = {}) {
+    _state.spreadEnabled = !!enabled;
+    if (_state.config?.frontend_data) {
+      _state.config.frontend_data.spread_enabled = _state.spreadEnabled;
+    }
+    if (options.persist) {
+      _scheduleConfigFlush(1500);
+    }
+    _notify();
+  },
+
+  toggleSpreadEnabled(options = {}) {
+    const current = _state.spreadEnabled ?? _state.config?.frontend_data?.spread_enabled ?? DEFAULT_SPREAD_ENABLED;
+    this.setSpreadEnabled(!current, options);
+  },
+
+  setSpreadDirection(direction, options = {}) {
+    const valid = direction === 'ltr' ? 'ltr' : 'rtl';
+    _state.spreadDirection = valid;
+    if (_state.config?.frontend_data) {
+      _state.config.frontend_data.spread_direction = valid;
+    }
+    if (options.persist) {
+      _scheduleConfigFlush(1500);
+    }
+    _notify();
+  },
+
+  setSpreadMode(mode, options = {}) {
+    if (mode === 'off') {
+      this.setSpreadEnabled(false, options);
+    } else {
+      this.setSpreadEnabled(true, options);
+      this.setSpreadDirection(mode, options);
+    }
+  },
+
+  cycleSpreadMode(options = {}) {
+    if (!_state.spreadEnabled) {
+      this.setSpreadEnabled(true, options);
+      this.setSpreadDirection('rtl', options);
+    } else if (_state.spreadDirection === 'rtl') {
+      this.setSpreadDirection('ltr', options);
+    } else {
+      this.setSpreadEnabled(false, options);
+    }
+  },
+
   /**
    * Navigate delta items forward or backward.
    */
   navigate(delta) {
+    const isSpreadActive = (_state.spreadEnabled ?? _state.config?.frontend_data?.spread_enabled ?? DEFAULT_SPREAD_ENABLED)
+      && _state.isSpread
+      && ['width', 'width-if-larger'].includes(_state.fitMode);
+
+    if (isSpreadActive) {
+      if (delta > 0 && _state.spreadStep === 1) {
+        this.setSpreadStep(2);
+        return;
+      }
+      if (delta < 0 && _state.spreadStep === 2) {
+        this.setSpreadStep(1);
+        return;
+      }
+    }
+
     if (_state.list.length <= 1) return;
 
     let clampPreview = false;
@@ -365,6 +464,8 @@ export const Core = {
         _state.fitModeGen++;
       }
       _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
+      _state.spreadEnabled = _state.config.frontend_data.spread_enabled !== false;
+      _state.spreadDirection = _state.config.frontend_data.spread_direction || DEFAULT_SPREAD_DIRECTION;
       
 
       // Refresh when show_hidden changes.

@@ -1,4 +1,5 @@
 import { FsUtils } from '../fsUtils.js';
+import { Core } from '../core.js';
 
 const FIT_LABELS = Object.freeze({
   'window': 'Window',
@@ -21,6 +22,8 @@ let statusIndex;
 let statusZoom;
 let statusFit;
 let statusScrollZoom;
+let statusSpread;
+let spreadIndicator;
 
 export const Statusbar = {
   init() {
@@ -31,6 +34,34 @@ export const Statusbar = {
     statusZoom = document.querySelector('.status-zoom');
     statusFit = document.querySelector('.status-fit');
     statusScrollZoom = document.querySelector('.status-scroll-zoom');
+    statusSpread = document.querySelector('.status-spread');
+    spreadIndicator = document.getElementById('spread-indicator');
+    this.syncSpreadIndicator(Core.getState());
+  },
+
+  syncSpreadIndicator(state) {
+    if (!statusSpread && !spreadIndicator) return;
+    const s = state || Core.getState();
+    const spreadEnabled = s.spreadEnabled ?? s.config?.frontend_data?.spread_enabled ?? (s.spreadMode !== 'off' && s.config?.frontend_data?.spread_mode !== 'off');
+    const isSpreadActive = spreadEnabled && !!s.isSpread && ['width', 'width-if-larger'].includes(s.fitMode);
+    const spreadText = isSpreadActive ? `[Spread ${s.spreadStep || 1}/2]` : '';
+    const isStatusBarHidden = !statusbar || statusbar.classList.contains('hidden');
+
+    if (isStatusBarHidden) {
+      if (spreadIndicator && spreadIndicator.textContent !== spreadText) {
+        spreadIndicator.textContent = spreadText;
+      }
+      if (statusSpread && statusSpread.textContent !== '') {
+        statusSpread.textContent = '';
+      }
+    } else {
+      if (statusSpread && statusSpread.textContent !== spreadText) {
+        statusSpread.textContent = spreadText;
+      }
+      if (spreadIndicator && spreadIndicator.textContent !== '') {
+        spreadIndicator.textContent = '';
+      }
+    }
   },
 
   // Called from Core.onStateChange. Owns fit mode, formatted index,
@@ -38,6 +69,7 @@ export const Statusbar = {
   // since viewer.js won't fire for those.
   update(state) {
     if (!statusbar) return;
+    this.syncSpreadIndicator(state);
 
     if (statusFit) {
       const mode = state.fitMode ?? 'window';
@@ -89,6 +121,7 @@ export const Statusbar = {
     if (statusZoom && zoom !== undefined) {
       statusZoom.textContent = `${Math.round(zoom * 100)}%`;
     }
+    this.syncSpreadIndicator(Core.getState());
   },
 
   // Hot-path zoom update from _applyTransform.

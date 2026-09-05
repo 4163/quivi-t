@@ -81,6 +81,10 @@
           <li role="menuitem" id="cmd-toggle-transparent" tabindex="0" data-checked="false" title="Render an opaque backdrop behind transparent images to see image bounds">
             Opaque Canvas<span class="shortcut"></span>
           </li>
+          <li role="menuitem" id="cmd-toggle-spread" tabindex="0" title="Toggle half-width spread view for 2-page scans">Spread View<span class="shortcut"></span></li>
+          <li class="separator"></li>
+          <li role="menuitem" id="cmd-spread-direction-rtl" tabindex="0" title="Right to left reading order (Manga)">Right to Left (RTL)<span class="shortcut"></span></li>
+          <li role="menuitem" id="cmd-spread-direction-ltr" tabindex="0" title="Left to right reading order (Western)">Left to Right (LTR)<span class="shortcut"></span></li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-toggle-filelist" tabindex="0">File list<span class="shortcut">1</span></li>
           <li role="menuitem" id="cmd-toggle-menubar" tabindex="0">Menu bar<span class="shortcut">2</span></li>
@@ -95,7 +99,6 @@
         </svg>
         GitHub
       </button>
-
     </nav>
 
     <!-- Workspace (file panel + viewport) -->
@@ -126,7 +129,7 @@
             <div class="col-resizer"></div>
           </div>
         </div>
-        <ul id="file-list" role="listbox" aria-label="Images in current directory">
+        <ul id="file-list" role="listbox" aria-label="Images in current directory" tabindex="-1">
           <!-- Sentinel: invisible layout probe for row height measurement and pool cloning -->
           <li id="file-list-sentinel" aria-hidden="true">
             <span class="item-name"><span class="item-label">&nbsp;</span></span>
@@ -154,7 +157,8 @@
 
       <!-- Viewer viewport -->
       <div id="viewport">
-
+        <!-- Overlay indicator for spread mode when statusbar is hidden (unstyled) -->
+        <div id="spread-indicator" class="spread-indicator"></div>
 
         <!-- Drop overlay, shown when no image is loaded -->
         <div id="drop-overlay" class="active">
@@ -209,13 +213,13 @@
         <span class="status-filename">Loading...</span>
       </div>
       <span class="status-scroll-zoom"></span>
+      <span class="status-spread"></span>
       <span class="status-dims">Loading...</span>
       <span class="status-index">Loading...</span>
       <span class="status-zoom">Loading...</span>
       <span class="status-fit">Loading...</span>
       <span class="status-version">v1.0.0</span>
     </footer>
-
 
     <!-- Scripts, decoupled load order -->
     <div id="measure-probe" class="measure-probe" aria-hidden="true"></div>

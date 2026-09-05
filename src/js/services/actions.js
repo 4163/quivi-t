@@ -107,6 +107,15 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-toggle-transparent', label: 'Opaque Canvas', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.toggleTransparentBg()
   },
+  { id: 'cmd-toggle-spread', label: 'Spread View', defaultBinds: [], category: 'View',
+    run: (ctx) => ctx.Core.toggleSpreadEnabled({ persist: true })
+  },
+  { id: 'cmd-spread-direction-rtl', label: 'Right to Left (RTL)', defaultBinds: [], category: 'View',
+    run: (ctx) => ctx.Core.setSpreadDirection('rtl', { persist: true })
+  },
+  { id: 'cmd-spread-direction-ltr', label: 'Left to Right (LTR)', defaultBinds: [], category: 'View',
+    run: (ctx) => ctx.Core.setSpreadDirection('ltr', { persist: true })
+  },
   
   // Zoom
   { id: 'cmd-zoom-in', label: 'Zoom In', defaultBinds: ['c', 'Ctrl+ScrollUp'], category: 'Zoom',

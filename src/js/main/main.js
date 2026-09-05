@@ -94,7 +94,10 @@ function bindMenuCommands() {
   for (const action of ACTION_REGISTRY) {
     const el = document.getElementById(action.id);
     if (el) {
-      el.addEventListener('click', (e) => dispatch(action.id, e, actionCtx));
+      el.addEventListener('click', (e) => {
+        if (el.classList.contains('muted') || el.getAttribute('aria-disabled') === 'true') return;
+        dispatch(action.id, e, actionCtx);
+      });
     }
   }
 

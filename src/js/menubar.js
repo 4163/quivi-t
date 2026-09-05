@@ -115,7 +115,13 @@ function bindMenus() {
           trigger.dispatchEvent(event);
         }
       });
-      item.addEventListener('click', closeMenus);
+      item.addEventListener('click', (e) => {
+        if (item.classList.contains('muted') || item.getAttribute('aria-disabled') === 'true') {
+          e.stopPropagation();
+          return;
+        }
+        closeMenus();
+      });
     });
   });
 }
@@ -137,5 +143,27 @@ export function syncViewMenu(state) {
     const el = document.getElementById(s.actionId);
     if (!el) continue;
     el.classList.toggle('checked', displayScaling === s.id);
+  }
+
+  const spreadEnabled = state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? (state.spreadMode !== 'off');
+  const spreadDirection = state.spreadDirection ?? state.config?.frontend_data?.spread_direction ?? 'rtl';
+
+  const toggleSpreadEl = document.getElementById('cmd-toggle-spread');
+  if (toggleSpreadEl) {
+    toggleSpreadEl.classList.toggle('checked', spreadEnabled);
+  }
+
+  const rtlEl = document.getElementById('cmd-spread-direction-rtl');
+  if (rtlEl) {
+    rtlEl.classList.toggle('checked', spreadDirection === 'rtl');
+    rtlEl.classList.toggle('muted', !spreadEnabled);
+    rtlEl.setAttribute('aria-disabled', !spreadEnabled ? 'true' : 'false');
+  }
+
+  const ltrEl = document.getElementById('cmd-spread-direction-ltr');
+  if (ltrEl) {
+    ltrEl.classList.toggle('checked', spreadDirection === 'ltr');
+    ltrEl.classList.toggle('muted', !spreadEnabled);
+    ltrEl.setAttribute('aria-disabled', !spreadEnabled ? 'true' : 'false');
   }
 }

@@ -5,6 +5,7 @@
 
 import { Core } from '../core.js';
 import { closeMenus } from '../menubar.js';
+import { Statusbar } from './statusbar.js';
 
 let menuBarVisible = true;
 let statusBarVisible = true;
@@ -36,6 +37,7 @@ export function applyStatusBarVisibility() {
   } else {
     statusbarEl.classList.toggle('hidden', !statusBarVisible);
   }
+  Statusbar.syncSpreadIndicator(state);
 }
 
 export function setStatusBarVisible(visible, { persist = false } = {}) {

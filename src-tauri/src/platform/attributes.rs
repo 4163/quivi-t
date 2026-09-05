@@ -56,17 +56,42 @@ pub fn set_hidden_attribute(_path: &Path, _hidden: bool) -> Result<(), String> {
 }
 
 pub fn is_hidden_path(name: &str, metadata: Option<&fs::Metadata>) -> bool {
-    if name.starts_with('.') {
-        return true;
-    }
-
     #[cfg(windows)]
     {
+        // On Windows, leading-dot names (e.g. .gitignore) are not hidden files by default.
+        // Files are only considered hidden if the Win32 FILE_ATTRIBUTE_HIDDEN flag is set on filesystem metadata.
+        let _ = name;
         const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
         if let Some(meta) = metadata {
             return meta.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0;
         }
     }
 
+    #[cfg(not(windows))]
+    {
+        if name.starts_with('.') {
+            return true;
+        }
+    }
+
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_hidden_path() {
+        #[cfg(windows)]
+        {
+            assert!(!is_hidden_path(".hidden_dotfile", None));
+            assert!(!is_hidden_path("normal_file.png", None));
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(is_hidden_path(".hidden_dotfile", None));
+            assert!(!is_hidden_path("normal_file.png", None));
+        }
+    }
 }

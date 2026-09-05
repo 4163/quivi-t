@@ -41,8 +41,30 @@ export function createViewerGestures(viewportState) {
   // Idle cursor auto-hide
   let _idleCursorTimer = null;
   let _cursorHidden = false;
-  let _isMouseOverViewport = false;
   let _autoHideToggleOverride = null;
+
+  function _isMouseOverViewportNow() {
+    const state = Core.getState();
+    if (!state.src || state.mode === 'empty') return false;
+
+    const dropOverlay = document.getElementById('drop-overlay');
+    if (dropOverlay && !dropOverlay.classList.contains('hidden') && dropOverlay.classList.contains('active')) {
+      return false;
+    }
+
+    const vp = document.getElementById('viewport');
+    if (!vp) return false;
+
+    if (_lastMouseX !== 0 || _lastMouseY !== 0) {
+      const target = document.elementFromPoint(_lastMouseX, _lastMouseY);
+      if (!target || target.closest('#drop-overlay') || target.closest('#file-panel, #menubar, #statusbar')) {
+        return false;
+      }
+      return !!target.closest('#viewport');
+    }
+
+    return vp.matches(':hover');
+  }
 
   function _isAutoHideEnabled() {
     if (_autoHideToggleOverride !== null) return _autoHideToggleOverride;
@@ -65,7 +87,7 @@ export function createViewerGestures(viewportState) {
   }
 
   function _hideCursor() {
-    if (!_isMouseOverViewport) return;
+    if (!_isMouseOverViewportNow()) return;
     if (!_cursorHidden && !_isPanning && _panButtonsDown.size === 0 && !_keyPanHeld(null)) {
       _cursorHidden = true;
       const vp = document.getElementById('viewport');
@@ -89,7 +111,7 @@ export function createViewerGestures(viewportState) {
       clearTimeout(_idleCursorTimer);
       _showCursor();
     } else {
-      if (_isMouseOverViewport) {
+      if (_isMouseOverViewportNow()) {
         _armIdleCursorTimer();
       }
     }
@@ -98,7 +120,7 @@ export function createViewerGestures(viewportState) {
   function _onConfigLoaded() {
     _updatePanKeysCache();
     _autoHideToggleOverride = null;
-    if (_isMouseOverViewport) {
+    if (_isMouseOverViewportNow()) {
       _armIdleCursorTimer();
     } else {
       _showCursor();
@@ -220,6 +242,7 @@ export function createViewerGestures(viewportState) {
   }
 
   function _onMouseDown(e) {
+    if (!_isMouseOverViewportNow()) return;
     const isPanKey = _isMousePanKey(e) || (e.button === 0 && _keyPanHeld(null));
     if (!isPanKey) return;
     e.preventDefault();
@@ -239,6 +262,7 @@ export function createViewerGestures(viewportState) {
       return;
     }
     if (!_isPanning) {
+      if (!_isMouseOverViewportNow()) return;
       _startPan(e.clientX, e.clientY);
     }
     _updatePan(e.clientX, e.clientY);
@@ -260,19 +284,18 @@ export function createViewerGestures(viewportState) {
       if (_panMouseButtons.has(2)) e.preventDefault();
     });
     viewport.addEventListener('mouseenter', () => {
-      _isMouseOverViewport = true;
       _showCursor();
       _armIdleCursorTimer();
     });
     viewport.addEventListener('pointermove', () => {
-      _isMouseOverViewport = true;
       _showCursor();
       _armIdleCursorTimer();
     });
     viewport.addEventListener('mouseleave', () => {
-      _isMouseOverViewport = false;
-      clearTimeout(_idleCursorTimer);
-      _showCursor();
+      if (!_isMouseOverViewportNow()) {
+        clearTimeout(_idleCursorTimer);
+        _showCursor();
+      }
     });
     viewport.addEventListener('wheel', () => {
       _showCursor();
@@ -285,6 +308,7 @@ export function createViewerGestures(viewportState) {
   window.addEventListener('keydown', (e) => {
     if (e.repeat) return;
     setTimeout(() => {
+      if (!_isMouseOverViewportNow()) return;
       if (!_isPanning && _panButtonsDown.size === 0 && _keyPanHeld(null)) {
         _startPan(_lastMouseX, _lastMouseY);
       }

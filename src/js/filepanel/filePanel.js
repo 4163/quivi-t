@@ -507,16 +507,6 @@ function initDomPool() {
     li.appendChild(itemDate);
     
     li.setAttribute('role', 'option');
-    li.setAttribute('tabindex', '0');
-    
-    li.addEventListener('focus', () => {
-      const idxStr = li.dataset.index;
-      if (!idxStr) return;
-      const index = parseInt(idxStr, 10);
-      if (Core.getState().index !== index) {
-        Core.selectIndex(index);
-      }
-    });
 
     li.addEventListener('mousedown', () => {
       const idxStr = li.dataset.index;
@@ -526,11 +516,13 @@ function initDomPool() {
     li.addEventListener('click', () => {
       const index = pendingClickIndex;
       if (index === -1) return;
+      fileListUl?.focus({ preventScroll: true });
       if (Core.getState().index !== index) {
         Core.selectIndex(index);
       }
       const now = Date.now();
       if (lastClickIndex === index && (now - lastClickTime < 400)) {
+        panelKeyboardActive = true;
         Core.jumpToIndex(index);
         lastClickTime = 0;
         lastClickIndex = -1;
@@ -645,8 +637,10 @@ function renderVisibleSlice() {
 function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) {
   if (!lastRenderedList) return;
 
+  const isDefaultFocus = !document.activeElement || document.activeElement === document.body;
   wasFocused = wasFocused || panelKeyboardActive || forceFocus ||
-    (document.activeElement && fileListUl.contains(document.activeElement));
+    (document.activeElement && fileListUl.contains(document.activeElement)) ||
+    (isDefaultFocus && Core.getState().fileListVisible);
 
   if (selectedIndex >= 0 && selectedIndex < lastRenderedList.length && selectedIndex !== lastScrolledIndex) {
     lastScrolledIndex = selectedIndex;
@@ -664,11 +658,8 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
   
   renderVisibleSlice();
   
-  if (wasFocused && selectedIndex >= 0) {
-    const activeLi = domPool.find(li => li.dataset.index === String(selectedIndex));
-    if (activeLi && forceFocus) {
-      activeLi.focus({ preventScroll: true });
-    }
+  if (wasFocused) {
+    fileListUl?.focus({ preventScroll: true });
   }
 }
 
@@ -686,13 +677,13 @@ function setRefreshingVisual(active) {
     return;
   }
 
-  refreshPulseTimer = setTimeout(() => {
-    fileListUl?.classList.remove('refreshing');
-    favoritesListUl?.classList.remove('refreshing');
-  }, 60);
+  fileListUl?.classList.remove('refreshing');
+  favoritesListUl?.classList.remove('refreshing');
 }
 
-function renderFilePanel(state) {
+export function renderFilePanel(state) {
+  if (!filePanel) return;
+
   filePanel.classList.toggle('hidden', !state.fileListVisible);
   if (!state.fileListVisible) return;
   renderBreadcrumb(state);
@@ -739,14 +730,31 @@ function renderFilePanel(state) {
 
   const forceFocus = focusMainListOnNextRender;
   focusMainListOnNextRender = false;
+  const isDefaultFocus = !document.activeElement || document.activeElement === document.body;
   const wasFocused = panelKeyboardActive || forceFocus ||
-    (document.activeElement && fileListUl.contains(document.activeElement));
+    (document.activeElement && filePanel.contains(document.activeElement)) ||
+    (isDefaultFocus && state.fileListVisible);
 
   renderVisibleSlice();
 
   if (state.index >= 0) {
     updateSelection(state.index, forceFocus, wasFocused);
+  } else if (wasFocused) {
+    fileListUl?.focus({ preventScroll: true });
   }
+}
+
+function isPointerOverActiveViewport() {
+  const state = Core.getState();
+  if (!state.src || state.mode === 'empty') return false;
+
+  const dropOverlay = document.getElementById('drop-overlay');
+  if (dropOverlay && !dropOverlay.classList.contains('hidden') && dropOverlay.classList.contains('active')) {
+    return false;
+  }
+
+  const vp = document.getElementById('viewport');
+  return !!(vp && vp.matches(':hover'));
 }
 
 export function initFilePanel(deps) {
@@ -831,6 +839,11 @@ export function initFilePanel(deps) {
 
   fileListUl.addEventListener('click', (e) => {
     if (e.target === fileListUl) {
+      fileListUl.focus({ preventScroll: true });
+      const state = Core.getState();
+      if (state.list?.length === 1 && state.list[0].is_parent) {
+        return;
+      }
       Core.selectIndex(-1);
     }
   });
@@ -841,24 +854,99 @@ export function initFilePanel(deps) {
     highlightedFavoritePath = '';
   });
 
-  // File-list keyboard navigation.
-  makeContainerNavigable(fileListUl, 'li', {
-    vertical: true,
-    horizontal: false,
-    loop: false,
-    onAction: (index, item, e) => {
-      panelKeyboardActive = true;
-      Core.jumpToIndex(index);
-    },
-    onCancel: () => {
-      panelKeyboardActive = false;
-      Core.selectIndex(-1);
-      if (document.activeElement && fileListUl.contains(document.activeElement)) {
-        document.activeElement.blur();
+  // File-list keyboard navigation for virtualized list.
+  fileListUl.addEventListener('keydown', (e) => {
+    const state = Core.getState();
+    const list = state.list;
+    if (!list || !list.length) return;
+
+    if (['ArrowDown', 'ArrowUp', ' '].includes(e.key) && isPointerOverActiveViewport()) {
+      return;
+    }
+
+    let targetIdx = null;
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        e.stopPropagation();
+        panelKeyboardActive = true;
+        targetIdx = state.index === -1 ? 0 : Math.min(state.index + 1, list.length - 1);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        e.stopPropagation();
+        panelKeyboardActive = true;
+        targetIdx = state.index === -1 ? list.length - 1 : Math.max(state.index - 1, 0);
+        break;
+      case 'PageDown':
+        e.preventDefault();
+        e.stopPropagation();
+        panelKeyboardActive = true;
+        targetIdx = Math.min((state.index === -1 ? 0 : state.index) + 10, list.length - 1);
+        break;
+      case 'PageUp':
+        e.preventDefault();
+        e.stopPropagation();
+        panelKeyboardActive = true;
+        targetIdx = Math.max((state.index === -1 ? 0 : state.index) - 10, 0);
+        break;
+      case 'Home':
+        e.preventDefault();
+        e.stopPropagation();
+        panelKeyboardActive = true;
+        targetIdx = 0;
+        break;
+      case 'End':
+        e.preventDefault();
+        e.stopPropagation();
+        panelKeyboardActive = true;
+        targetIdx = list.length - 1;
+        break;
+      case 'Enter': {
+        if (state.index < 0 || state.index >= list.length) {
+          break;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        panelKeyboardActive = true;
+
+        const entry = list[state.index];
+        if (entry.is_parent || entry.is_dir || FsUtils.isArchiveEntry(entry)) {
+          Core.jumpToIndex(state.index);
+        } else if (FsUtils.isImageEntry(entry)) {
+          Core.selectIndex(state.index);
+          document.getElementById('viewport')?.focus();
+        }
+        break;
       }
-    },
-    onSelectionChange: (nextIndex, nextItem) => {
-      Core.selectIndex(nextIndex);
+      case ' ': {
+        if (state.index < 0 || state.index >= list.length) {
+          break;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        panelKeyboardActive = true;
+
+        const entry = list[state.index];
+        if (entry.is_parent || entry.is_dir || FsUtils.isArchiveEntry(entry)) {
+          Core.jumpToIndex(state.index);
+        }
+        break;
+      }
+      case 'Escape':
+        e.preventDefault();
+        e.stopPropagation();
+        panelKeyboardActive = false;
+        Core.selectIndex(-1);
+        if (document.activeElement && fileListUl.contains(document.activeElement)) {
+          document.activeElement.blur();
+        }
+        break;
+    }
+
+    if (targetIdx !== null && targetIdx !== state.index) {
+      Core.selectIndex(targetIdx);
+      updateSelection(targetIdx, true, true);
     }
   });
 

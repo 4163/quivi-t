@@ -248,9 +248,20 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
   window.addEventListener('keydown', (e) => {
     const config = Core.getState().config;
-    // Don't hijack Space/arrows when an interactive element (e.g. a button)
-    // has focus. Space should still activate the button natively.
     const onInteractive = isInteractiveKeyTarget(e);
+
+    if (e.key === 'Enter' && (!document.activeElement || document.activeElement === document.body)) {
+      const state = Core.getState();
+      if (state.fileListVisible) {
+        const fileListUl = document.getElementById('file-list');
+        if (fileListUl) {
+          fileListUl.focus({ preventScroll: true });
+          fileListUl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+          e.preventDefault();
+          return;
+        }
+      }
+    }
 
     if (!onInteractive && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Alt'].includes(e.key)) {
       e.preventDefault();

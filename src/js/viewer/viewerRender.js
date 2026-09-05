@@ -41,6 +41,9 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   const _preloadTimers = [];
   const _preloadImages = [];
   let _lastFitModeGen = -1;
+  let _lastSpreadEnabled = null;
+  let _lastSpreadDirection = null;
+  let _lastSpreadStep = null;
   let _loadingAnimTimer = null;
   let _loadingDots = 0;
   let _retiringNode = null;
@@ -109,25 +112,41 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     return { natW, natH, clientW, clientH };
   }
 
+  function _syncActiveImage(el, filename, state) {
+    if (!el) return;
+    const bounds = _applySvgBounds(el);
+    Core.setImageDimensions(bounds.natW, bounds.natH);
+    const liveState = Core.getState();
+
+    const spreadEnabled = liveState.spreadEnabled ?? liveState.config?.frontend_data?.spread_enabled ?? true;
+    const spreadDirection = liveState.spreadDirection ?? liveState.config?.frontend_data?.spread_direction ?? 'rtl';
+    _lastSpreadEnabled = spreadEnabled;
+    _lastSpreadDirection = spreadDirection;
+    _lastSpreadStep = liveState.spreadStep || 1;
+    viewportState.setSpreadEnabled(spreadEnabled);
+    viewportState.setSpreadDirection(spreadDirection);
+    viewportState.setSpreadStep(liveState.spreadStep || 1);
+
+    const displayW = el.naturalWidth > 0 ? el.naturalWidth : 'SVG';
+    const displayH = el.naturalHeight > 0 ? el.naturalHeight : 'SVG';
+
+    viewportState.applyFitMode(
+      liveState.fitMode, bounds.natW, bounds.natH,
+      bounds.clientW ?? el.clientWidth, bounds.clientH ?? el.clientHeight
+    );
+
+    Statusbar.setImage({ filename: filename || liveState.filename || '', dims: `${displayW} × ${displayH}`, zoom: viewportState.getScale() });
+    Statusbar.syncSpreadIndicator(liveState);
+
+    onActiveImageChanged(el);
+  }
+
   function _attachLoadHandler(el) {
     el.addEventListener('load', () => {
       if (el !== img) return;
       if (!el.src) return;
-      const state = Core.getState();
-
       el.classList.add('active');
-      const bounds = _applySvgBounds(el);
-
-      const displayW = el.naturalWidth > 0 ? el.naturalWidth : 'SVG';
-      const displayH = el.naturalHeight > 0 ? el.naturalHeight : 'SVG';
-      Statusbar.setImage({ filename: state.filename || '', dims: `${displayW} × ${displayH}`, zoom: viewportState.getScale() });
-
-      viewportState.applyFitMode(
-        state.fitMode, bounds.natW, bounds.natH,
-        bounds.clientW ?? el.clientWidth, bounds.clientH ?? el.clientHeight
-      );
-      
-      onActiveImageChanged(el);
+      _syncActiveImage(el, Core.getState().filename, Core.getState());
     });
   }
 
@@ -213,19 +232,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     img.title = filename || '';
     
     viewportState.resetGeometry();
-
-    const bounds = _applySvgBounds(img);
-
-    const displayW = img.naturalWidth > 0 ? img.naturalWidth : 'SVG';
-    const displayH = img.naturalHeight > 0 ? img.naturalHeight : 'SVG';
-
-    Statusbar.setImage({ filename: filename || '', dims: `${displayW} × ${displayH}`, zoom: viewportState.getScale() });
-    viewportState.applyFitMode(
-      state.fitMode, bounds.natW, bounds.natH,
-      bounds.clientW ?? img.clientWidth, bounds.clientH ?? img.clientHeight
-    );
-    
-    onActiveImageChanged(el);
+    _syncActiveImage(img, filename, state);
   }
 
   function _clearTargetLoadTimer() {
@@ -394,6 +401,24 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         const bounds = _applySvgBounds(img);
         viewportState.applyFitMode(state.fitMode, bounds.natW, bounds.natH, bounds.clientW ?? img.clientWidth, bounds.clientH ?? img.clientHeight);
       }
+    }
+
+    const spreadEnabled = state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? true;
+    const spreadDirection = state.spreadDirection ?? state.config?.frontend_data?.spread_direction ?? 'rtl';
+    if (_lastSpreadEnabled !== spreadEnabled || _lastSpreadDirection !== spreadDirection) {
+      _lastSpreadEnabled = spreadEnabled;
+      _lastSpreadDirection = spreadDirection;
+      viewportState.setSpreadEnabled(spreadEnabled);
+      viewportState.setSpreadDirection(spreadDirection);
+      if (img && img.src) {
+        const bounds = _applySvgBounds(img);
+        viewportState.applyFitMode(state.fitMode, bounds.natW, bounds.natH, bounds.clientW ?? img.clientWidth, bounds.clientH ?? img.clientHeight);
+      }
+    }
+
+    if (_lastSpreadStep !== state.spreadStep) {
+      _lastSpreadStep = state.spreadStep;
+      viewportState.setSpreadStep(state.spreadStep);
     }
   });
 

@@ -1,6 +1,84 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createViewportState, getEffectiveScaling, invertViewport } from '../services/viewerMath.js';
+import { createViewportState, getEffectiveScaling, invertViewport, checkIsSpread } from '../services/viewerMath.js';
+
+test('viewerMath: checkIsSpread ratio detection', () => {
+  assert.equal(checkIsSpread(2000, 1000), true);
+  assert.equal(checkIsSpread(1200, 1000), true);
+  assert.equal(checkIsSpread(1199, 1000), false);
+  assert.equal(checkIsSpread(1000, 1500), false);
+  assert.equal(checkIsSpread(0, 1000), false);
+  assert.equal(checkIsSpread(1000, 0), false);
+  assert.equal(checkIsSpread(null, null), false);
+});
+
+test('viewerMath: spread mode half-width fit and step alignment (RTL)', () => {
+  let vp = { clientWidth: 1000, clientHeight: 800, left: 0, top: 0 };
+  const state = createViewportState({ getViewport: () => vp });
+
+  state.setSpreadMode('rtl');
+  state.setSpreadStep(1);
+
+  // 2000x1000 image in 1000x800 viewport.
+  // In width fit mode with spread active:
+  // effective width = 1000, so scale = 1000 / 1000 = 1.0.
+  // Rendered width = 2000 * 1.0 = 2000.
+  // maxX = (2000 - 1000) / 2 = 500.
+  state.applyFitMode('width', 2000, 1000);
+  assert.equal(state.getScale(), 1.0);
+  // RTL Step 1: Right half -> tx = -maxX (-500)
+  assert.equal(state.getTx(), -500);
+
+  // Advance to Step 2
+  state.setSpreadStep(2);
+  // RTL Step 2: Left half -> tx = +maxX (+500)
+  assert.equal(state.getTx(), 500);
+  assert.equal(state.getScale(), 1.0);
+
+  // Step back to Step 1
+  state.setSpreadStep(1);
+  assert.equal(state.getTx(), -500);
+});
+
+test('viewerMath: spread mode half-width fit and step alignment (LTR)', () => {
+  let vp = { clientWidth: 1000, clientHeight: 800, left: 0, top: 0 };
+  const state = createViewportState({ getViewport: () => vp });
+
+  state.setSpreadMode('ltr');
+  state.setSpreadStep(1);
+
+  state.applyFitMode('width', 2000, 1000);
+  assert.equal(state.getScale(), 1.0);
+  // LTR Step 1: Left half -> tx = +maxX (+500)
+  assert.equal(state.getTx(), 500);
+
+  // Advance to Step 2
+  state.setSpreadStep(2);
+  // LTR Step 2: Right half -> tx = -maxX (-500)
+  assert.equal(state.getTx(), -500);
+});
+
+test('viewerMath: spread mode disabled or non-spread image', () => {
+  let vp = { clientWidth: 1000, clientHeight: 800, left: 0, top: 0 };
+  const state = createViewportState({ getViewport: () => vp });
+
+  // Mode 'off': normal full-width scale (1000 / 2000 = 0.5)
+  state.setSpreadMode('off');
+  state.applyFitMode('width', 2000, 1000);
+  assert.equal(state.getScale(), 0.5);
+  assert.equal(state.getTx(), 0);
+
+  // Mode 'rtl', but image is portrait (1000x1500) -> not a spread
+  state.setSpreadMode('rtl');
+  state.applyFitMode('width', 1000, 1500);
+  assert.equal(state.getScale(), 1.0); // 1000 / 1000
+  assert.equal(state.getTx(), 0);
+
+  // Fit 'window' on spread image keeps full 2-page spread uncropped
+  state.applyFitMode('window', 2000, 1000);
+  assert.equal(state.getScale(), 0.5); // min(1000/2000, 800/1000)
+  assert.equal(state.getTx(), 0);
+});
 
 test('viewerMath: initial state and fit modes', () => {
   let vp = { clientWidth: 1000, clientHeight: 800, left: 0, top: 0 };
