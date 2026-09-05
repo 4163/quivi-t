@@ -73,6 +73,9 @@ export const ACTION_REGISTRY = [
       ctx.Core.setScalingMode('lanczos', { persist: true });
     }
   },
+  { id: 'cmd-filter-off', label: 'Filter: Off', defaultBinds: [], category: 'View',
+    run: (ctx) => ctx.Core.setActiveFilter(null)
+  },
   ...FILTERS.map(f => ({
     id: f.actionId,
     label: `Toggle ${f.label} Filter`,
@@ -110,11 +113,14 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-toggle-spread', label: 'Spread View', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.toggleSpreadEnabled({ persist: true })
   },
+  { id: 'cmd-spread-off', label: 'Spread Off', defaultBinds: [], category: 'View',
+    run: (ctx) => ctx.Core.setSpreadMode('off', { persist: true })
+  },
   { id: 'cmd-spread-direction-rtl', label: 'Right to Left (RTL)', defaultBinds: [], category: 'View',
-    run: (ctx) => ctx.Core.setSpreadDirection('rtl', { persist: true })
+    run: (ctx) => ctx.Core.setSpreadMode('rtl', { persist: true })
   },
   { id: 'cmd-spread-direction-ltr', label: 'Left to Right (LTR)', defaultBinds: [], category: 'View',
-    run: (ctx) => ctx.Core.setSpreadDirection('ltr', { persist: true })
+    run: (ctx) => ctx.Core.setSpreadMode('ltr', { persist: true })
   },
   
   // Zoom

@@ -770,14 +770,14 @@ fn zip_encrypted_with_correct_password_succeeds_and_reads_entry() {
         return;
     }
     let (files, _archive, _map, encryption) =
-        list_zip_entries(path.to_str().unwrap(), Some("quivit_test_pwd"))
+        list_zip_entries(path.to_str().unwrap(), Some("123"))
             .expect("list encrypted zip with correct password");
     assert_eq!(encryption, None, "Expected None encryption status on valid credentials");
     assert_eq!(files.len(), 2);
 
     let mut cache = ArchiveCache::new(64);
     let res = cache
-        .prepare_archive(path.to_str().unwrap(), Some("quivit_test_pwd"))
+        .prepare_archive(path.to_str().unwrap(), Some("123"))
         .expect("prepare encrypted zip");
     assert_eq!(res.encryption, None);
 
@@ -855,7 +855,7 @@ fn sevenz_encrypted_with_correct_password_succeeds_and_extracts() {
         return;
     }
     let (files, encryption) =
-        list_7z_entries(path.to_str().unwrap(), Some("quivit_test_pwd"))
+        list_7z_entries(path.to_str().unwrap(), Some("123"))
             .expect("list encrypted 7z with valid password");
     assert_eq!(encryption, None);
     assert_eq!(files.len(), 2);
@@ -871,7 +871,7 @@ fn sevenz_encrypted_with_correct_password_succeeds_and_extracts() {
         temp_dir.clone(),
         notify,
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        Some("quivit_test_pwd".to_string()),
+        Some("123".to_string()),
     );
 
     let png_path = temp_dir.join("01.png");
@@ -921,7 +921,7 @@ fn rar_encrypted_with_correct_password_succeeds_and_extracts() {
         return;
     }
     let (files, encryption) =
-        list_rar_entries(path.to_str().unwrap(), Some("quivit_test_pwd"))
+        list_rar_entries(path.to_str().unwrap(), Some("123"))
             .expect("list encrypted rar with valid password");
     assert_eq!(encryption, None);
     assert_eq!(files.len(), 2);
@@ -937,7 +937,7 @@ fn rar_encrypted_with_correct_password_succeeds_and_extracts() {
         temp_dir.clone(),
         notify,
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        Some("quivit_test_pwd".to_string()),
+        Some("123".to_string()),
     );
 
     let png_path = temp_dir.join("01.png");
@@ -967,7 +967,7 @@ fn archive_cache_facade_session_retains_password_and_serves_entries() {
 
     // Supplying valid password updates session
     let res_valid = cache
-        .prepare_archive(path.to_str().unwrap(), Some("quivit_test_pwd"))
+        .prepare_archive(path.to_str().unwrap(), Some("123"))
         .expect("prepare with valid pwd");
     assert_eq!(res_valid.encryption, None);
 

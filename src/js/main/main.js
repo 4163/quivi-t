@@ -22,6 +22,7 @@ import { ACTION_REGISTRY, dispatch } from '../services/actions.js';
 import { initLifecycle } from './lifecycle.js';
 import { initMetadataBadge, openMetadataWindow } from './metadataBadge.js';
 import { initDropZone } from './dropzone.js';
+import { initPasswordOverlay } from './passwordOverlay.js';
 
 
 // Reset the options tab on startup so each session starts on General.
@@ -39,6 +40,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 const dropOverlay = document.getElementById('drop-overlay');
+const passwordOverlay = document.getElementById('password-overlay');
 const viewport = document.getElementById('viewport');
 const statusbar = document.getElementById('statusbar');
 const filePanel = document.getElementById('file-panel');
@@ -124,7 +126,9 @@ Core.onStateChange((state) => {
 
   updateMenuShortcuts(state.config);
 
-  if (state.mode === 'empty') {
+  const isPasswordBlocked = state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect';
+
+  if (state.mode === 'empty' && !isPasswordBlocked) {
     dropOverlay.classList.add('active');
     viewport.classList.add('empty');
     statusbar.classList.add('hidden');
@@ -132,7 +136,7 @@ Core.onStateChange((state) => {
   }
 
   if (!state.src) {
-    dropOverlay.classList.add('active');
+    dropOverlay.classList.toggle('active', !isPasswordBlocked);
     viewport.classList.add('empty');
   } else {
     dropOverlay.classList.remove('active');
@@ -173,6 +177,7 @@ initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resize
 initMenuBar();
 bindMenuCommands();
 initDropZone({ dropOverlay, FsUtils });
+initPasswordOverlay({ overlay: passwordOverlay, Core, FsUtils });
 initMetadataBadge({ Core, FsUtils, badgeEl: metadataBadgeEl });
 initLifecycle({ Core, FsUtils });
 

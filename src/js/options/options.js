@@ -105,24 +105,6 @@ async function init() {
       btn.classList.toggle('secondary', btn.dataset.anime4kVariant !== anime4kVariant);
     });
 
-    // Spread View UI
-    const spreadEnabled = config.frontend_data?.spread_enabled !== undefined
-      ? config.frontend_data.spread_enabled !== false
-      : (config.frontend_data?.spread_mode !== 'off');
-    const spreadDirection = config.frontend_data?.spread_direction === 'ltr' || config.frontend_data?.spread_mode === 'ltr'
-      ? 'ltr'
-      : 'rtl';
-
-    const spreadCheckbox = document.getElementById('opt-spread-enabled');
-    if (spreadCheckbox) {
-      spreadCheckbox.checked = spreadEnabled;
-    }
-    document.querySelectorAll('[data-spread-direction]').forEach(btn => {
-      btn.classList.toggle('primary', btn.dataset.spreadDirection === spreadDirection);
-      btn.classList.toggle('secondary', btn.dataset.spreadDirection !== spreadDirection);
-      btn.disabled = !spreadEnabled;
-    });
-
     keybindUiInstance = initKeybindUi('keybinds-container', config, showStatus);
     initAssociationsUi('associations-container', showStatus);
   } catch (err) {
@@ -226,31 +208,6 @@ document.querySelectorAll('[data-anime4k-variant]').forEach(btn => {
   });
 });
 makeListNavigable(document.querySelectorAll('[data-anime4k-variant]'), { horizontal: true, vertical: false });
-
-// Spread View controls.
-const spreadCheckbox = document.getElementById('opt-spread-enabled');
-if (spreadCheckbox) {
-  spreadCheckbox.addEventListener('change', () => {
-    const enabled = spreadCheckbox.checked;
-    config.frontend_data.spread_enabled = enabled;
-    document.querySelectorAll('[data-spread-direction]').forEach(btn => {
-      btn.disabled = !enabled;
-    });
-  });
-}
-
-document.querySelectorAll('[data-spread-direction]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (btn.disabled) return;
-    const direction = btn.dataset.spreadDirection;
-    config.frontend_data.spread_direction = direction;
-    document.querySelectorAll('[data-spread-direction]').forEach(b => {
-      b.classList.toggle('primary', b.dataset.spreadDirection === direction);
-      b.classList.toggle('secondary', b.dataset.spreadDirection !== direction);
-    });
-  });
-});
-makeListNavigable(document.querySelectorAll('[data-spread-direction]'), { horizontal: true, vertical: false });
 
 async function closeOptionsWindow() {
   forceClose = true;
@@ -356,7 +313,7 @@ function buildConfigFromForm(baseConfig) {
   newConfig.frontend_data.scroll_zoom_modifier = baseConfig.frontend_data.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold';
   newConfig.frontend_data.theme = currentTheme;
   newConfig.frontend_data.custom_css = document.getElementById('opt-custom-css').value;
-  newConfig.frontend_data.spread_enabled = document.getElementById('opt-spread-enabled')?.checked ?? true;
+  newConfig.frontend_data.spread_enabled = baseConfig.frontend_data.spread_enabled ?? true;
   newConfig.frontend_data.spread_direction = baseConfig.frontend_data.spread_direction || 'rtl';
   newConfig.frontend_data.spread_mode = newConfig.frontend_data.spread_enabled ? newConfig.frontend_data.spread_direction : 'off';
   // Preserve filter options which are mutated in memory directly.

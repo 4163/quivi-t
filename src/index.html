@@ -63,28 +63,47 @@
           <li role="menuitem" id="cmd-fit-height-if-larger" tabindex="0" title="Shrink to viewport height, but never enlarge small images">Fit height if larger<span class="shortcut">E</span></li>
           <li role="menuitem" id="cmd-fit-window-if-larger" tabindex="0" title="Shrink to fit the viewport, but never enlarge small images">Fit window if larger<span class="shortcut">F</span></li>
           <li class="separator"></li>
-          <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none" title="Cycle modes with ] / [">Scaling: Pixelated</li>
-          <li role="menuitem" id="cmd-scale-bilinear" tabindex="0" data-scaling="bilinear" title="Cycle modes with ] / [">Scaling: Bilinear</li>
-          <li role="menuitem" id="cmd-scale-lanczos" tabindex="0" data-scaling="lanczos" title="Cycle modes with ] / [">Scaling: Lanczos</li>
-          <li class="separator"></li>
-          <li role="menuitem" id="cmd-toggle-anime4k-filter" tabindex="0" data-checked="false">Filter: Anime4K</li>
-          <li role="menuitem" id="cmd-toggle-scanlines-filter" tabindex="0" data-checked="false" title="Straight scanlines, no curvature (Geom-inspired)">Filter: Scanlines</li>
-          <li role="menuitem" id="cmd-toggle-phosphor-filter" tabindex="0" data-checked="false">Filter: Phosphor</li>
-          <li role="menuitem" id="cmd-toggle-crt-filter" tabindex="0" data-checked="false">Filter: Retro CRT</li>
-          <li class="separator"></li>
-          <li role="menuitem" id="cmd-rotate-cw" tabindex="0">Rotate clockwise<span class="shortcut">H</span></li>
-          <li role="menuitem" id="cmd-rotate-ccw" tabindex="0">Rotate counter-clockwise<span class="shortcut">G</span></li>
-          <li role="menuitem" id="cmd-flip-horizontal" tabindex="0">Flip horizontal<span class="shortcut">V</span></li>
-          <li role="menuitem" id="cmd-flip-vertical" tabindex="0">Flip vertical<span class="shortcut">B</span></li>
+          <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
+            <span>Scaling: <span id="scaling-current-label">Bilinear</span></span><span class="submenu-arrow">›</span>
+            <ul class="menu-dropdown submenu" role="menu">
+              <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none" title="Cycle modes with ] / [">Pixelated<span class="shortcut"></span></li>
+              <li role="menuitem" id="cmd-scale-bilinear" tabindex="0" data-scaling="bilinear" title="Cycle modes with ] / [">Bilinear<span class="shortcut"></span></li>
+              <li role="menuitem" id="cmd-scale-lanczos" tabindex="0" data-scaling="lanczos" title="Cycle modes with ] / [">Lanczos<span class="shortcut"></span></li>
+            </ul>
+          </li>
+          <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
+            <span>Filter: <span id="filter-current-label">Off</span></span><span class="submenu-arrow">›</span>
+            <ul class="menu-dropdown submenu" role="menu">
+              <li role="menuitem" id="cmd-filter-off" tabindex="0" data-checked="false">Off<span class="shortcut"></span></li>
+              <li role="menuitem" id="cmd-toggle-anime4k-filter" tabindex="0" data-checked="false">Anime4K<span class="shortcut"></span></li>
+              <li role="menuitem" id="cmd-toggle-scanlines-filter" tabindex="0" data-checked="false" title="Straight scanlines, no curvature (Geom-inspired)">Scanlines<span class="shortcut"></span></li>
+              <li role="menuitem" id="cmd-toggle-phosphor-filter" tabindex="0" data-checked="false">Phosphor<span class="shortcut"></span></li>
+              <li role="menuitem" id="cmd-toggle-crt-filter" tabindex="0" data-checked="false">Retro CRT<span class="shortcut"></span></li>
+            </ul>
+          </li>
+          <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
+            <span>Rotate &amp; Flip</span><span class="submenu-arrow">›</span>
+            <ul class="menu-dropdown submenu" role="menu">
+              <li role="menuitem" id="cmd-rotate-cw" tabindex="0">Rotate clockwise<span class="shortcut">H</span></li>
+              <li role="menuitem" id="cmd-rotate-ccw" tabindex="0">Rotate counter-clockwise<span class="shortcut">G</span></li>
+              <li class="separator"></li>
+              <li role="menuitem" id="cmd-flip-horizontal" tabindex="0">Flip horizontal<span class="shortcut">V</span></li>
+              <li role="menuitem" id="cmd-flip-vertical" tabindex="0">Flip vertical<span class="shortcut">B</span></li>
+            </ul>
+          </li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-fullscreen" tabindex="0">Full screen<span class="shortcut">4</span></li>
           <li role="menuitem" id="cmd-toggle-transparent" tabindex="0" data-checked="false" title="Render an opaque backdrop behind transparent images to see image bounds">
             Opaque Canvas<span class="shortcut"></span>
           </li>
-          <li role="menuitem" id="cmd-toggle-spread" tabindex="0" title="Toggle half-width spread view for 2-page scans">Spread View<span class="shortcut"></span></li>
-          <li class="separator"></li>
-          <li role="menuitem" id="cmd-spread-direction-rtl" tabindex="0" title="Right to left reading order (Manga)">Right to Left (RTL)<span class="shortcut"></span></li>
-          <li role="menuitem" id="cmd-spread-direction-ltr" tabindex="0" title="Left to right reading order (Western)">Left to Right (LTR)<span class="shortcut"></span></li>
+          <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
+            <span>Spread View</span><span class="submenu-arrow">›</span>
+            <ul class="menu-dropdown submenu" role="menu">
+              <li role="menuitem" id="cmd-spread-off" tabindex="0" title="Disable spread view">Off<span class="shortcut"></span></li>
+              <li role="menuitem" id="cmd-spread-direction-rtl" tabindex="0" title="Right to left reading order (Manga)">Right to Left (RTL)<span class="shortcut"></span></li>
+              <li role="menuitem" id="cmd-spread-direction-ltr" tabindex="0" title="Left to right reading order (Western)">Left to Right (LTR)<span class="shortcut"></span></li>
+            </ul>
+          </li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-toggle-filelist" tabindex="0">File list<span class="shortcut">1</span></li>
           <li role="menuitem" id="cmd-toggle-menubar" tabindex="0">Menu bar<span class="shortcut">2</span></li>
@@ -171,6 +190,22 @@
             <p>Drop files here, or click to open a folder</p>
             <span>Images, archives, and folders are supported</span>
           </div>
+        </div>
+
+        <!-- Password overlay for encrypted archives -->
+        <div id="password-overlay">
+          <form class="password-prompt" autocomplete="off">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <p>This archive is password-protected</p>
+            <div class="password-field">
+              <input type="password" id="password-input" placeholder="Enter password" spellcheck="false">
+              <button type="submit">Unlock</button>
+            </div>
+            <span class="password-error"></span>
+          </form>
         </div>
 
         <!-- Image wrapper. It contains the image, grill, and border.

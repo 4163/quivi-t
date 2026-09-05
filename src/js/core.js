@@ -70,6 +70,12 @@ const _state = {
   /** If mode === 'archive', the filenames of any metadata files found */
   archiveMetadataFiles: [],
 
+  /** Archive encryption status: null, 'password_required', or 'password_incorrect' */
+  archiveEncryption: null,
+
+  /** True if container was loaded via sibling (next/prev folder) navigation */
+  isSiblingNavigation: false,
+
   /** True if the current image is an animated format */
   isAnimated: false,
 
@@ -178,6 +184,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   _state.isSpread = false;
   _state.naturalWidth = 0;
   _state.naturalHeight = 0;
+  _state.isSiblingNavigation = false;
 
   let newSrc = '';
   if (file.is_dir || file.is_parent || FsUtils.isArchiveEntry(file) || !FsUtils.isImageEntry(file)) {
@@ -192,6 +199,25 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   } else {
     newSrc = await FsUtils.buildFileSrc(file.path);
     if (_state.index !== index) return;
+  }
+
+  if (_state.mode !== 'archive') {
+    if (FsUtils.isArchiveEntry(file)) {
+      const enc = await FsUtils.checkArchiveEncryption(file.path);
+      if (_state.index !== index) return;
+      if (enc === 'password_required' || enc === 'password_incorrect') {
+        _state.archivePath = file.path;
+        _state.archiveEncryption = enc;
+        _state.filename = `Password required: ${file.name}`;
+        newSrc = '';
+      } else {
+        _state.archivePath = '';
+        _state.archiveEncryption = null;
+      }
+    } else {
+      _state.archivePath = '';
+      _state.archiveEncryption = null;
+    }
   }
 
   FsUtils.revokeIfObjectURL(_state.src);

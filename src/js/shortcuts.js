@@ -247,8 +247,11 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   };
 
   window.addEventListener('keydown', (e) => {
+    if (isInteractiveKeyTarget(e)) {
+      return;
+    }
+
     const config = Core.getState().config;
-    const onInteractive = isInteractiveKeyTarget(e);
 
     if (e.key === 'Enter' && (!document.activeElement || document.activeElement === document.body)) {
       const state = Core.getState();
@@ -263,7 +266,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
       }
     }
 
-    if (!onInteractive && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Alt'].includes(e.key)) {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Alt'].includes(e.key)) {
       e.preventDefault();
     }
 
@@ -280,14 +283,14 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
     activeKeys.add(e.key.toLowerCase());
     const actionId = findAction(config, formatKeysCombo(activeKeys, activeButtons));
-    if (!onInteractive && actionId && !KEYBOARD_PAN_VECTORS[actionId]) {
+    if (actionId && !KEYBOARD_PAN_VECTORS[actionId]) {
       handleShortcut(e);
       if (isModifierKey(e.key)) _updateScrollIndicator(config);
       return;
     }
 
     const keyboardPanVector = readKeyboardPanVector();
-    if (!onInteractive && (keyboardPanVector.x !== 0 || keyboardPanVector.y !== 0)) {
+    if (keyboardPanVector.x !== 0 || keyboardPanVector.y !== 0) {
       e.preventDefault();
       dispatchKeyboardPan?.(keyboardPanVector.x, keyboardPanVector.y);
       if (isModifierKey(e.key)) _updateScrollIndicator(config);
@@ -299,6 +302,10 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   });
 
   window.addEventListener('keyup', (e) => {
+    if (isInteractiveKeyTarget(e)) {
+      activeKeys.clear();
+      return;
+    }
     const config = Core.getState().config;
     if (_cachedToggleKeys.includes(e.key)) {
       // A standalone toggle-key press/release (no other key in between)

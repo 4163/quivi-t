@@ -51,13 +51,17 @@ export function createViewerGestures(viewportState) {
     if (dropOverlay && !dropOverlay.classList.contains('hidden') && dropOverlay.classList.contains('active')) {
       return false;
     }
+    const pwOverlay = document.getElementById('password-overlay');
+    if (pwOverlay && pwOverlay.classList.contains('active')) {
+      return false;
+    }
 
     const vp = document.getElementById('viewport');
     if (!vp) return false;
 
     if (_lastMouseX !== 0 || _lastMouseY !== 0) {
       const target = document.elementFromPoint(_lastMouseX, _lastMouseY);
-      if (!target || target.closest('#drop-overlay') || target.closest('#file-panel, #menubar, #statusbar')) {
+      if (!target || target.closest('#drop-overlay') || target.closest('#password-overlay') || target.closest('#file-panel, #menubar, #statusbar')) {
         return false;
       }
       return !!target.closest('#viewport');

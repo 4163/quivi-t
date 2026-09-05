@@ -8,6 +8,20 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Menubar Reorganization: Split View & Image Menus with Flyout Submenus (2026-09-05)
+- **Menu Hierarchy Split**:
+  - Divided monolithic `#menu-view` dropdown into two distinct menus: **View** (`#menu-view`) for viewport/window controls and **Image** (`#menu-image`) for rendering, filters, scaling, and orientation.
+  - View menu retains: Zoom In/Out/100%, Fit flyout submenu, Full screen, Opaque Canvas, Spread View, Reading Direction flyout submenu, and Panels flyout submenu.
+  - Image menu houses: Scaling flyout submenu (Pixelated, Bilinear, Lanczos), Filter flyout submenu (Anime4K, Scanlines, Phosphor, Retro CRT), Rotate CW/CCW, and Flip horizontal/vertical.
+- **Nested Flyout Submenus & Accessibility**:
+  - Styled `.has-submenu`, `.submenu-arrow`, and `.submenu` with pure CSS flyout and unclipped overflow handling.
+  - Keyboard navigation in `menubar.js`: `ArrowRight` expands `.has-submenu` and focuses its first child item; `ArrowLeft` collapses `.submenu` back to the parent item; `Escape` collapses submenus hierarchically.
+  - Item iteration is scoped to direct children (`:scope > li[role="menuitem"]`) so deep menus do not leak focus cycles.
+  - Mouse hover automatically clears open sibling submenus.
+- **Active State Synchronization**:
+  - Extended `syncViewMenu(state)` to update checkmarks for both menus simultaneously, including `fitMode` (`none`, `width`, `height`, `window`, etc.), `scalingMode`, filters, and spread direction.
+  - Exported `syncImageMenu` alias for API symmetry.
+
 ### Manga Spread Mode & Navigation Ergonomics - Slice 3 (2026-09-05)
 - **Closed from `additions.md`:**
   - `Manga Spread Mode (Half-Width Fit & Step Navigation)` (formerly under Post-Release Backlog, Double Page View & Manga Spread Mode).

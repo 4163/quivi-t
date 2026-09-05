@@ -18,6 +18,8 @@ function _ext(name) {
 let _navigationGeneration = 0;
 let _archivePrefetchTimer = null;
 let _archivePrefetchSeq = 0;
+const _unlockedArchivePasswords = new Map();
+const _archiveEncryptionCache = new Map();
 
 function _nextNavigationGeneration() {
   _navigationGeneration += 1;
@@ -65,6 +67,24 @@ export const FsUtils = {
   isIco(name) { return _ext(name) === 'ico'; },
   isArchiveEntry(entry) { return entry && !entry.is_dir && this.isArchive(entry.name); },
   isImageEntry(entry) { return entry && !entry.is_dir && this.isImage(entry.name); },
+
+  async checkArchiveEncryption(archivePath) {
+    if (!archivePath || !this.isArchive(archivePath)) return null;
+    if (_unlockedArchivePasswords.has(archivePath)) return null;
+    if (_archiveEncryptionCache.has(archivePath)) {
+      return _archiveEncryptionCache.get(archivePath);
+    }
+    try {
+      const result = await invoke('list_archive', { archivePath, password: null });
+      const enc = (result.encryption === 'password_required' || result.encryption === 'password_incorrect')
+        ? result.encryption
+        : null;
+      _archiveEncryptionCache.set(archivePath, enc);
+      return enc;
+    } catch {
+      return null;
+    }
+  },
 
   revokeIfObjectURL(src) {
     if (src && src.startsWith('blob:')) URL.revokeObjectURL(src);
@@ -290,16 +310,31 @@ export const FsUtils = {
       if (!_isCurrentGeneration(options.generation)) return;
     }
 
+    let archivePath = '';
+    let archiveEncryption = null;
+    let filename = selectedEntry?.name || '';
+    if (this.isArchiveEntry(selectedEntry)) {
+      const enc = await this.checkArchiveEncryption(selectedEntry.path);
+      if (!_isCurrentGeneration(options.generation)) return;
+      if (enc === 'password_required' || enc === 'password_incorrect') {
+        archivePath = selectedEntry.path;
+        archiveEncryption = enc;
+        filename = `Password required: ${selectedEntry.name}`;
+      }
+    }
+
     Core.setState({
       mode: 'image',
       list: files,
       index,
       directory: result.directory,
-      archivePath: '',
-      filename: selectedEntry?.name || '',
+      archivePath,
+      archiveEncryption,
+      filename,
       src: selectedSrc,
       isAnimated,
       loopCount,
+      isSiblingNavigation: !!options.isSiblingNavigation,
     });
     recordNavigation(options.previousEntry, Core.getState(), options);
 
@@ -332,64 +367,16 @@ export const FsUtils = {
     }
 
     try {
-      const result = await invoke('list_archive', { archivePath });
+      const password = options.password ?? _unlockedArchivePasswords.get(archivePath) ?? null;
+      const result = await invoke('list_archive', { archivePath, password });
       if (!_isCurrentGeneration(options.generation)) return;
 
-      const isPasswordBlocked = result.encryption === 'password_required' || result.encryption === 'password_incorrect';
-      if (isPasswordBlocked) {
-        if (options.skipLocked) {
-          throw new Error(`Archive is password-protected: ${result.archive_path}`);
-        }
-        const archiveName = basename(result.archive_path) || result.archive_path;
-        const lockLabel = result.encryption === 'password_required'
-          ? `Password required: ${archiveName}`
-          : `Password incorrect! ${archiveName}`;
-
-        const state = Core.getState();
-        this.revokeIfObjectURL(state.src);
-
-        if (state.mode === 'directory' && state.directory) {
-          const archiveEntryIndex = state.list?.findIndex(f => f.path === result.archive_path || f.name === archiveName);
-          Core.setState({
-            index: archiveEntryIndex !== -1 && archiveEntryIndex !== undefined ? archiveEntryIndex : state.index,
-            filename: lockLabel,
-            src: '',
-            isAnimated: false,
-          });
-          return;
-        }
-
-        const parentDir = parentOf(result.archive_path);
-        if (parentDir && parentDir !== result.archive_path) {
-          try {
-            const dirResult = await invoke('read_directory', {
-              path: parentDir,
-              showHidden: this.showHidden(),
-              targetName: archiveName,
-            });
-            if (!_isCurrentGeneration(options.generation)) return;
-            this.applyDirectoryResult(dirResult, { ...options, targetName: archiveName });
-            Core.setState({
-              filename: lockLabel,
-              src: '',
-              isAnimated: false,
-            });
-            return;
-          } catch (dirErr) {
-            console.warn('[Archive] Could not load parent directory for locked archive:', dirErr);
-          }
-        }
-
-        Core.setState({
-          mode: 'empty',
-          list: [],
-          index: -1,
-          archivePath: '',
-          filename: lockLabel,
-          src: '',
-          isAnimated: false,
-        });
-        return;
+      if (result.encryption === 'password_incorrect') {
+        _unlockedArchivePasswords.delete(result.archive_path);
+        _archiveEncryptionCache.set(result.archive_path, 'password_incorrect');
+      } else if (password && (!result.encryption || result.encryption === 'none')) {
+        _unlockedArchivePasswords.set(result.archive_path, password);
+        _archiveEncryptionCache.set(result.archive_path, null);
       }
 
       const metaFiles = result.files.filter(f => /\.(xml|opf)$/i.test(f.name)).map(f => f.name);
@@ -401,6 +388,32 @@ export const FsUtils = {
 
       const state = Core.getState();
       this.revokeIfObjectURL(state.src);
+
+      const isPasswordBlocked = result.encryption === 'password_required' || result.encryption === 'password_incorrect';
+      if (isPasswordBlocked) {
+        const archiveName = basename(result.archive_path) || result.archive_path;
+        const lockLabel = result.encryption === 'password_required'
+          ? `Password required: ${archiveName}`
+          : `Password incorrect! ${archiveName}`;
+
+        Core.setState({
+          mode: 'archive',
+          list: files,
+          index: files.length > 1 ? 1 : (files.length > 0 ? 0 : -1),
+          archivePath: result.archive_path,
+          archiveMetadataFiles: metaFiles,
+          archiveEncryption: result.encryption,
+          directory: '',
+          filename: lockLabel,
+          src: '',
+          isAnimated: false,
+          loopCount: 0,
+          isSiblingNavigation: !!options.isSiblingNavigation,
+        });
+        recordNavigation(options.previousEntry, Core.getState(), options);
+        this.persistLastOpened(result.archive_path);
+        return;
+      }
 
       let index = 1;
       const fd = state.config?.frontend_data || {};
@@ -452,6 +465,7 @@ export const FsUtils = {
         src: selectedSrc,
         isAnimated,
         loopCount,
+        isSiblingNavigation: !!options.isSiblingNavigation,
       });
       recordNavigation(options.previousEntry, Core.getState(), options);
       if (!_isCurrentGeneration(options.generation)) return;
@@ -666,8 +680,8 @@ export const FsUtils = {
         try {
           await this.loadFile(sorted[currentIndexToCheck].path, {
             generation,
-            skipLocked: true,
             suppressErrorState: true,
+            isSiblingNavigation: true,
           });
           return;
         } catch (err) {

@@ -99,8 +99,13 @@ body.resizing-col { cursor: col-resize !important; }
   top: 100%;
   left: 0;
   min-width: 200px;
-  max-height: calc(100vh - var(--fs-28));
+  width: max-content;
+  max-height: calc(100vh - var(--fs-28) - 8px);
   overflow-y: auto;
+  overflow-x: hidden;
+  direction: rtl; /* Scrollbar on the left side */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
   background: var(--menu-bg);
   border: 1px solid var(--border);
   box-shadow: var(--menu-shadow);
@@ -109,7 +114,11 @@ body.resizing-col { cursor: col-resize !important; }
   z-index: 200;
 }
 
-.menu-item.open .menu-dropdown {
+.menu-dropdown > * {
+  direction: ltr; /* Items and layout stay left-to-right */
+}
+
+.menu-item.open > .menu-dropdown {
   display: block;
 }
 
@@ -123,10 +132,71 @@ body.resizing-col { cursor: col-resize !important; }
   cursor: default;
   white-space: nowrap;
   color: var(--text);
+  direction: ltr;
 }
 
-#menu-view .menu-dropdown li[role="menuitem"] {
+#menu-view .menu-dropdown li[role="menuitem"],
+#menu-image .menu-dropdown li[role="menuitem"] {
   padding-left: var(--fs-24);
+}
+
+/* Submenu Flyout */
+.menu-dropdown li.has-submenu {
+  position: relative;
+}
+
+.menu-dropdown li.has-submenu .submenu-arrow {
+  margin-left: auto;
+  font-size: var(--fs-14);
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.menu-dropdown li.has-submenu:hover > .submenu-arrow,
+.menu-dropdown li.has-submenu:focus-visible > .submenu-arrow,
+.menu-dropdown li.has-submenu.open > .submenu-arrow {
+  color: inherit;
+  opacity: 1;
+}
+
+.menu-dropdown .submenu {
+  display: none;
+  position: fixed;
+  min-width: 180px;
+  width: max-content;
+  max-height: calc(100vh - var(--fs-28) - 8px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  direction: ltr;
+  background: var(--menu-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--menu-shadow);
+  list-style: none;
+  padding: 3px 0;
+  z-index: 210;
+  color: var(--text);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.menu-dropdown li.has-submenu.open > .submenu {
+  display: block;
+}
+
+.menu-dropdown li.has-submenu.open {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* While mouse is moving diagonally towards an open submenu, suppress hover on sibling items */
+.menu-dropdown.submenu-aiming > li[role="menuitem"]:not(.open):hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.menu-dropdown.submenu-aiming > li[role="menuitem"]:not(.open):hover > .shortcut {
+  color: var(--text);
+  opacity: 0.65;
 }
 
 .menu-dropdown li[role="menuitem"].checked::before {
@@ -154,14 +224,16 @@ body.resizing-col { cursor: col-resize !important; }
   color: var(--text-muted);
 }
 
-.menu-dropdown li[role="menuitem"]:hover .shortcut,
-.menu-dropdown li[role="menuitem"]:focus-visible .shortcut {
-  color: rgba(255,255,255,0.75);
+.menu-dropdown li[role="menuitem"]:hover > .shortcut,
+.menu-dropdown li[role="menuitem"]:focus-visible > .shortcut {
+  color: #fff;
+  opacity: 1;
 }
 
-.menu-dropdown li[role="menuitem"].muted:hover .shortcut,
-.menu-dropdown li[role="menuitem"].muted:focus-visible .shortcut {
-  color: var(--text-muted);
+.menu-dropdown li[role="menuitem"].muted:hover > .shortcut,
+.menu-dropdown li[role="menuitem"].muted:focus-visible > .shortcut {
+  color: var(--text);
+  opacity: 0.35;
 }
 
 .menu-dropdown li.separator {
@@ -173,7 +245,9 @@ body.resizing-col { cursor: col-resize !important; }
 
 .shortcut {
   font-size: var(--fs-11);
-  color: var(--text-muted);
+  color: var(--text);
+  opacity: 0.65;
+  margin-left: auto;
   flex-shrink: 0;
 }
 
@@ -771,6 +845,116 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 .drop-hint svg { width: var(--fs-40); height: var(--fs-40); opacity: 0.55; }
 .drop-hint p   { font-size: 0.95rem; font-weight: 500; text-align: center; }
 .drop-hint span{ font-size: 0.75rem; opacity: 0.5; letter-spacing: 0.04em; text-align: center; }
+
+/* Password overlay for encrypted archives. */
+#password-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+#password-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.password-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 52px;
+  border: 1.5px dashed var(--border);
+  margin: 0 25px;
+  border-radius: 10px;
+  color: var(--text-muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.password-prompt svg { width: var(--fs-40); height: var(--fs-40); opacity: 0.55; }
+.password-prompt p   { font-size: 0.95rem; font-weight: 500; text-align: center; }
+
+.password-field {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.password-field input {
+  padding: 5px 10px;
+  font-size: var(--fs-13);
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--field-bg);
+  color: var(--text);
+  outline: none;
+  min-width: 180px;
+}
+
+.password-field input:focus {
+  border-color: var(--accent);
+}
+
+.password-field button {
+  padding: 5px 16px;
+  font-size: var(--fs-13);
+  font-family: inherit;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.password-field button:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.password-error {
+  font-size: 0.75rem;
+  min-height: 1em;
+  color: var(--danger);
+  letter-spacing: 0.02em;
+}
+
+#password-overlay.error .password-prompt {
+  border-color: var(--danger);
+}
+
+#password-overlay.error .password-field input {
+  border-color: var(--danger);
+}
+
+/* Spread mode overlay (visible when statusbar is hidden). */
+#spread-indicator:empty {
+  display: none;
+}
+
+#spread-indicator {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 4;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  color: var(--text-muted);
+  font-size: var(--fs-11-5);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  pointer-events: none;
+  user-select: none;
+}
 
 /* Viewer image wrapper. */
 /* The wrapper is the positioned/transformed element. The image and

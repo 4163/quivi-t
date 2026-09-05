@@ -2,9 +2,9 @@
 """
 Generates test fixtures for archive encryption and corruption unit tests.
 Creates:
-  - encrypted.zip (password: quivit_test_pwd)
-  - encrypted.7z  (password: quivit_test_pwd)
-  - encrypted.rar (password: quivit_test_pwd)
+  - encrypted.zip (password: 123)
+  - encrypted.7z  (password: 123)
+  - encrypted.rar (password: 123)
   - corrupt_local_header.zip (valid 01.png, corrupt local header on corrupt.png)
 """
 
@@ -15,7 +15,7 @@ import sys
 import tempfile
 import zipfile
 
-PASSWORD = "quivit_test_pwd"
+PASSWORD = "123"
 
 # Minimal valid 1x1 PNG byte sequence
 PNG_BYTES = (

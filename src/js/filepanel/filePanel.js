@@ -752,6 +752,10 @@ function isPointerOverActiveViewport() {
   if (dropOverlay && !dropOverlay.classList.contains('hidden') && dropOverlay.classList.contains('active')) {
     return false;
   }
+  const pwOverlay = document.getElementById('password-overlay');
+  if (pwOverlay && pwOverlay.classList.contains('active')) {
+    return false;
+  }
 
   const vp = document.getElementById('viewport');
   return !!(vp && vp.matches(':hover'));
