@@ -14,7 +14,7 @@ Key capabilities in this slice:
    - **Symmetrical Reverse (`Prev`)**: Moving backward into a spread enters at Step 2 and pans backward.
 3. **Dual Indicator Architecture**:
    - Status bar: `<span class="status-spread"></span>` in `footer#statusbar` displays `[Spread 1/2]` or `[Spread 2/2]` when the status bar is visible.
-   - Viewport overlay: `<div id="spread-indicator" class="spread-indicator"></div>` in `#viewport` displays `[Spread 1/2]` or `[Spread 2/2]` when `#statusbar` is hidden (via `cmd-toggle-statusbar` or fullscreen). Zero aesthetic CSS applied to ensure user customizability.
+   - Viewport overlay: `<div id="spread-indicator" class="spread-indicator"></div>` in `#viewport` displays `[Spread 1/2]` or `[Spread 2/2]` when `#statusbar` is hidden (via `cmd-toggle-statusbar` or fullscreen). Introduced unstyled for the time being, to be styled in a subsequent polish pass.
    - Supported fit gating: Indicators display only when spread mode is active, the image is a wide scan, and fit mode is set to `width` or `width-if-larger`.
 4. **Desktop Navigation Ergonomics & Shell Fixes**:
    - **Windows Dotfile Visibility**: Verified and documented `attributes.rs` so leading-dot files on Windows are not treated as hidden unless the Win32 `FILE_ATTRIBUTE_HIDDEN` flag is set on filesystem metadata.
@@ -29,7 +29,7 @@ Key capabilities in this slice:
 > [!IMPORTANT]
 > ## User Review Required
 > - **Default Reading Direction**: Defaults to `'rtl'` (Right to Left Manga order).
-> - **Indicator Styling Invariant**: `#spread-indicator` has **zero aesthetic styling** added in CSS (no colors, borders, fonts, or padding); it is placed strictly as an unstyled DOM hook for user customization.
+> - **Indicator Styling**: `#spread-indicator` was introduced unstyled for the time being during Slice 3, with visual styling deferred to a subsequent pass.
 > - **Fit Mode Gating**: Spread mode indicators and half-width scaling only activate in supported fit modes (`width` and `width-if-larger`). In Fit-to-Window (`window`), the entire spread displays without cropping.
 > - **Viewport Gating Priority**: When hovering over `#viewport` with an active image, arrow keys and Space belong to the viewport. When hovering over `#file-panel` or when no image is loaded, arrow keys navigate the file list.
 
@@ -47,7 +47,7 @@ Every item in this plan follows [.agents/AGENTS.md](file:///E:/Projects/QuiviT/.
    - The state machine ([core.js](file:///E:/Projects/QuiviT/src/js/core.js)) and domain mathematics ([viewerMath.js](file:///E:/Projects/QuiviT/src/js/services/viewerMath.js)) maintain zero DOM imports and communicate via state callbacks.
    - Single owner per surface: [statusbar.js](file:///E:/Projects/QuiviT/src/js/menubar/statusbar.js) owns status bar text and `#spread-indicator` textContent, [viewerMath.js](file:///E:/Projects/QuiviT/src/js/services/viewerMath.js) owns pan offsets and fit scales, and [filePanel.js](file:///E:/Projects/QuiviT/src/js/filepanel/filePanel.js) owns file list DOM and keyboard selection.
    - HTML-first rendering: `#spread-indicator` is declared in [index.html](file:///E:/Projects/QuiviT/src/index.html). No runtime element creation or teardown.
-   - CSS source of truth: `#spread-indicator` has zero custom aesthetic CSS declarations, leaving visual styling entirely to user custom CSS.
+   - CSS source of truth: `#spread-indicator` was introduced unstyled for the time being, keeping functional display logic decoupled from subsequent visual styling.
 
 2. **Performance First & Hot Path Invariants:**
    - **Zero Re-Fetch Step Navigation**: Stepping between spread halves (`Spread 1/2` <-> `Spread 2/2`) updates the pan transform offset directly in memory via `viewportState.applyFitMode()` without re-fetching, re-decoding, or resetting image DOM nodes.
@@ -93,7 +93,7 @@ Every item in this plan follows [.agents/AGENTS.md](file:///E:/Projects/QuiviT/.
 
 ### 3. Chrome, Status Bar & Viewport Overlay
 #### [MODIFY] [index.html](file:///E:/Projects/QuiviT/src/index.html)
-- [COMPLETED] `[Observable change]` Add unstyled `<div id="spread-indicator" class="spread-indicator"></div>` inside `#viewport`.
+- [COMPLETED] `[Observable change]` Add `<div id="spread-indicator" class="spread-indicator"></div>` inside `#viewport` (initially unstyled for the time being).
 - [COMPLETED] `[Observable change]` Add `<span class="status-spread"></span>` in `footer#statusbar`.
 - [COMPLETED] `[Observable change]` Add Spread View toggle and RTL/LTR direction controls to View menu in menubar.
 - [COMPLETED] `[Observable change]` Set `tabindex="-1"` on `<ul id="file-list">` so sequential Tab navigation skips the list.
@@ -189,8 +189,7 @@ Every item in this plan follows [.agents/AGENTS.md](file:///E:/Projects/QuiviT/.
      - Press `Prev`: Returns to Left half (`[Spread 2/2]`), then `Prev` goes to Right half (`[Spread 1/2]`).
 2. **Hidden Status Bar Indicator**:
    - Press `3` to hide status bar (or enter fullscreen without status bar):
-     - Confirm `#spread-indicator` in `#viewport` displays `[Spread 1/2]` or `[Spread 2/2]`.
-     - Confirm `#spread-indicator` has zero custom aesthetic styles.
+     - Confirm `#spread-indicator` in `#viewport` displays `[Spread 1/2]` or `[Spread 2/2]` (initially unstyled for the time being).
 3. **Spread Mode (Western LTR)**:
    - Switch Spread Mode to LTR: Step 1 shows Left half (`[Spread 1/2]`), Step 2 shows Right half (`[Spread 2/2]`).
 4. **Fit-to-Window Parity**:

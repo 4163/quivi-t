@@ -135,8 +135,7 @@ body.resizing-col { cursor: col-resize !important; }
   direction: ltr;
 }
 
-#menu-view .menu-dropdown li[role="menuitem"],
-#menu-image .menu-dropdown li[role="menuitem"] {
+#menu-view .menu-dropdown li[role="menuitem"] {
   padding-left: var(--fs-24);
 }
 

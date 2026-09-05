@@ -313,8 +313,9 @@ function buildConfigFromForm(baseConfig) {
   newConfig.frontend_data.scroll_zoom_modifier = baseConfig.frontend_data.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold';
   newConfig.frontend_data.theme = currentTheme;
   newConfig.frontend_data.custom_css = document.getElementById('opt-custom-css').value;
-  newConfig.frontend_data.spread_enabled = baseConfig.frontend_data.spread_enabled ?? true;
-  newConfig.frontend_data.spread_direction = baseConfig.frontend_data.spread_direction || 'rtl';
+  // Spread View settings are controlled via the View menu; preserve them across Options saves.
+  newConfig.frontend_data.spread_enabled = baseConfig.frontend_data?.spread_enabled ?? true;
+  newConfig.frontend_data.spread_direction = baseConfig.frontend_data?.spread_direction || 'rtl';
   newConfig.frontend_data.spread_mode = newConfig.frontend_data.spread_enabled ? newConfig.frontend_data.spread_direction : 'off';
   // Preserve filter options which are mutated in memory directly.
   newConfig.frontend_data.filter_options = JSON.parse(JSON.stringify(baseConfig.frontend_data.filter_options || {}));

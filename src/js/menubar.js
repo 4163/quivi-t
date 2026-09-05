@@ -497,5 +497,3 @@ export function syncViewMenu(state) {
   }
 }
 
-export const syncImageMenu = syncViewMenu;
-
