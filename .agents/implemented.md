@@ -8,6 +8,38 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Manga Spread Mode & Navigation Ergonomics - Slice 3 (2026-09-05)
+- **Closed from `additions.md`:**
+  - `Manga Spread Mode (Half-Width Fit & Step Navigation)` (formerly under Post-Release Backlog, Double Page View & Manga Spread Mode).
+- **Closed from `cl-refactor-report.md`:**
+  - `Manga Spread Mode (Half-Width Fit & Step Navigation)` (under Component Library Features).
+  - `File List & Navigation (Partial)`: Windows dotfile visibility documentation, virtualized list keyboard navigation, Space on files no-op, unselected Enter/Space no-op, Tab navigation order, viewport gating for arrow keys and space, and drop-overlay pan isolation.
+- **Manga Spread Detection & Half-Width Fit:**
+  - Added aspect ratio detection for two-page scans (`naturalWidth / naturalHeight >= 1.2`) in `viewerMath.js` and `core.js`.
+  - In fit-to-width modes (`width` and `width-if-larger`), viewport zoom scale is calculated using half width (`width / 2`), matching the magnification of single portrait pages.
+- **Two-Step Spread Navigation (Reading Steps):**
+  - Integrated two-step navigation across spread halves (`Spread 1/2` and `Spread 2/2`) into `Core.selectNext()` and `Core.selectPrev()`.
+  - Unified spread mode and reading direction into `spread_mode` (`'rtl' | 'ltr' | 'off'`), defaulting to `'rtl'` (Manga).
+  - RTL mode: Step 1 displays the right half, `Next` pans to the left half, and a subsequent `Next` advances to the next file.
+  - LTR mode: Step 1 displays the left half, `Next` pans to the right half, and a subsequent `Next` advances to the next file.
+  - Symmetrical reverse: Navigating backwards (`Prev`) into a spread enters on Step 2 and steps to Step 1 before leaving the file.
+  - Action `cmd-cycle-spread-mode` registered in `actions.js` and exposed in the View menu and Options > Viewport Controls.
+- **Dual Indicator Architecture:**
+  - Status bar: Added `.status-spread` in `#statusbar` displaying `[Spread 1/2]` or `[Spread 2/2]` when the status bar is visible.
+  - Viewport overlay: Added `#spread-indicator` in `#viewport` displaying the spread step when `#statusbar` is hidden (via `cmd-toggle-statusbar` or fullscreen). Zero aesthetic CSS applied to maintain user customizability.
+  - Gated to supported fits: Indicators display only when spread mode is active, the image is a wide scan, and fit mode is set to `width` or `width-if-larger`.
+- **Desktop Navigation Ergonomics & Isolation:**
+  - Viewport keyboard gating: When hovering over `#viewport` with an active loaded image, `#file-list` yields on `ArrowUp`, `ArrowDown`, and `Space` so they drive viewport keyboard panning (`cmd-pan-*`) and canvas pan drag.
+  - File list navigation: When hovering over `#file-panel` or when no image is loaded, arrow keys navigate list rows. `Space` on an image or regular file is strictly a no-op, while `Space` on a container (`..`, folders, archives) opens it.
+  - Unselected safety: When nothing is selected in the file list (`state.index === -1`), both `Enter` and `Space` strictly no-op rather than defaulting to item 0 (`..`).
+  - Initial load auto-focus: `#file-list` automatically acquires focus on initial boot or directory change when focus is unassigned or on `document.body`, with fallback `Enter` delegation.
+  - Tab navigation order: Set `tabindex="-1"` on `#file-list` so sequential Tab navigation skips the list, jumping directly from the `Modified` column header (`.col-date`) to `#cmd-open-explorer`.
+  - Drop-overlay pan isolation: Disabled mouse-drag and Spacebar pan on `#drop-overlay` and empty states.
+- **Windows Dotfile Visibility:**
+  - Verified and documented `is_hidden_path` in `src-tauri/src/platform/attributes.rs` so leading dot names on Windows are not treated as hidden unless the Win32 `FILE_ATTRIBUTE_HIDDEN` flag is set on filesystem metadata.
+- **Test Harness:**
+  - Added unit test suite `src/js/tests/coreSpread.test.mjs` and extended `viewerMath.test.mjs` covering spread ratio detection, half-width scaling, RTL/LTR stepping, and fit-to-window bypass.
+
 ### Viewer Engine Core: Transform Stability, Config Decoupling & Viewport Lifecycle - Slice 2 (2026-09-05)
 - **Closed from `additions.md`:**
   - `Window & Panel Resize Transform Snap Fix` (formerly under View, Rendering & Window Enhancements).

@@ -61,15 +61,6 @@
 - **Placement TBD:** the toggle-button location is unresolved: `.file-panel-actions` (the bottom action strip holding Open Explorer / Open Folder / Favorite / metadata badge) feels iffy. Alternatives to explore: a view-mode control in the file-panel header (above the column-header row), a View-menu item, or a `cmd-*` keybind like the existing view toggles.
 - **Performance-first:** only load thumbnails for visible rows (lazy/virtualized), never decode full-size images for the preview, and no overhead in the normal list mode.
 
-### Double Page View & Manga Spread Mode
-- **Reading Orientation (LTR / RTL):**
-  - Ability to set reading mode to Left-to-Right (LTR) or Right-to-Left (RTL).
-  - Alignment control for `Fit None` (currently defaults to top-center; support top-left or top-right positioning based on reading direction for manga/comics).
-- **Spread Page Viewing (Half-Width Fit-to-Width):**
-  - When enabled and an image is wider than it is tall (`width > height`), calculate Fit-to-Width using half of the image width (`width / 2`) instead of full width. This maintains a consistent zoom level across single pages and 2-page spread images.
-- **Implementation Challenges & Considerations:**
-  1. **Reading Direction Sync:** Must align with the active LTR / RTL setting to determine which side of the spread to display first (e.g. top-right start for RTL manga spread, top-left start for LTR comic spread).
-  2. **Visual Spread Indicator:** Provide a clear visual indicator/badge (both in the status bar and in fullscreen overlay) showing that the active image is a spread page rendered in half-width mode, so the user knows they are viewing a zoomed-in spread section.
 
 ### Manhwa Mode (Continuous Vertical Strip)
 - Automatically append pages together vertically on the same canvas page.
