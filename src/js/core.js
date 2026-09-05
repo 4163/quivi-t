@@ -36,7 +36,7 @@
  *   ephemeral within a session     -> in-memory state (or cleared localStorage)
  */
 
-import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_DIRECTION, DEFAULT_SPREAD_MODE, mergeConfig } from './keybinds.js';
+import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_DIRECTION, DEFAULT_SPREAD_MODE, DEFAULT_FILE_LIST_VIEW_MODE, mergeConfig } from './keybinds.js';
 import { FsUtils } from './fsUtils.js';
 
 const invoke = window.__TAURI__?.core?.invoke;
@@ -107,6 +107,9 @@ const _state = {
 
   /** Current reading step on a 2-page spread: 1 or 2 */
   spreadStep: 1,
+
+  /** File list view mode: 'list' | 'thumbnail' */
+  fileListViewMode: DEFAULT_FILE_LIST_VIEW_MODE,
   
   /** Options configuration */
   config: {
@@ -118,6 +121,7 @@ const _state = {
       scaling_mode: DEFAULT_SCALING_MODE,
       spread_enabled: DEFAULT_SPREAD_ENABLED,
       spread_direction: DEFAULT_SPREAD_DIRECTION,
+      file_list_view_mode: DEFAULT_FILE_LIST_VIEW_MODE,
       keybinds: { ...DEFAULT_KEYBINDS },
     }
   }
@@ -411,6 +415,23 @@ export const Core = {
     }
   },
 
+  setFileListViewMode(mode, options = {}) {
+    const valid = mode === 'thumbnail' ? 'thumbnail' : 'list';
+    _state.fileListViewMode = valid;
+    if (_state.config?.frontend_data) {
+      _state.config.frontend_data.file_list_view_mode = valid;
+    }
+    if (options.persist) {
+      _scheduleConfigFlush(1500);
+    }
+    _notify();
+  },
+
+  toggleFileListViewMode(options = {}) {
+    const next = _state.fileListViewMode === 'thumbnail' ? 'list' : 'thumbnail';
+    this.setFileListViewMode(next, options);
+  },
+
   /**
    * Navigate delta items forward or backward.
    */
@@ -492,6 +513,7 @@ export const Core = {
       _state.scalingMode = _state.config.frontend_data.scaling_mode || DEFAULT_SCALING_MODE;
       _state.spreadEnabled = _state.config.frontend_data.spread_enabled === true;
       _state.spreadDirection = _state.config.frontend_data.spread_direction || DEFAULT_SPREAD_DIRECTION;
+      _state.fileListViewMode = _state.config.frontend_data.file_list_view_mode || DEFAULT_FILE_LIST_VIEW_MODE;
       
 
       // Refresh when show_hidden changes.

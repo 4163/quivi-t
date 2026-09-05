@@ -38,10 +38,17 @@ fn parse_icon_url_decodes_path_and_extension_key() {
     let encoded_ext = crate::utils::base64_encode(ext_key.as_bytes());
     let url = format!("http://quivit.localhost/icon/{encoded_path}/{encoded_ext}");
 
-    let (parsed_path, parsed_ext) = parse_icon_url(&url).expect("parse icon URL");
+    let (parsed_path, parsed_ext, size) = parse_icon_url(&url).expect("parse icon URL");
 
     assert_eq!(parsed_path, path);
     assert_eq!(parsed_ext, ext_key);
+    assert_eq!(size, crate::platform::icons::IconSize::Small);
+
+    let url_large = format!("http://quivit.localhost/icon/{encoded_path}/{encoded_ext}?size=large");
+    let (p2, e2, s2) = parse_icon_url(&url_large).expect("parse large icon URL");
+    assert_eq!(p2, path);
+    assert_eq!(e2, ext_key);
+    assert_eq!(s2, crate::platform::icons::IconSize::Large);
 }
 
 #[test]

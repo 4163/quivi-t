@@ -5,8 +5,8 @@ use crate::models::FormatStatus;
 use winreg::{enums::*, RegKey};
 
 #[tauri::command(async)]
-pub fn get_native_icon(path: String, ext_key: String) -> Result<Option<String>, String> {
-    crate::platform::icons::get_cached_native_icon(&path, &ext_key)
+pub fn get_native_icon(path: String, ext_key: String, size: Option<String>) -> Result<Option<String>, String> {
+    crate::platform::icons::get_cached_native_icon(&path, &ext_key, size.as_deref())
 }
 
 #[tauri::command]

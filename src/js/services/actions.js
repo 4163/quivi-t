@@ -196,6 +196,9 @@ export const ACTION_REGISTRY = [
       document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', visible);
     }
   },
+  { id: 'cmd-toggle-file-list-view-mode', label: 'Toggle Thumbnail / List View', defaultBinds: [], category: 'Window & UI',
+    run: (ctx) => ctx.Core.toggleFileListViewMode({ persist: true })
+  },
   { id: 'cmd-toggle-menubar', label: 'Toggle Menu Bar', defaultBinds: '2', category: 'Window & UI',
     run: (ctx) => ctx.Chrome.toggleMenuBar()
   },

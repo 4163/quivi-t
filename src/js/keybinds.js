@@ -25,6 +25,7 @@ export const DEFAULT_SCALING_MODE = 'bilinear';
 export const DEFAULT_SPREAD_ENABLED = false;
 export const DEFAULT_SPREAD_DIRECTION = 'rtl';
 export const DEFAULT_SPREAD_MODE = 'off';
+export const DEFAULT_FILE_LIST_VIEW_MODE = 'list';
 
 
 // persistence: frontend_data is merged here with normalized defaults. Preference
@@ -68,6 +69,7 @@ export function mergeConfig(loaded) {
       hide_chrome_on_fullscreen: fd.hide_chrome_on_fullscreen !== false,
       menu_visible: fd.menu_visible !== false,
       status_visible: fd.status_visible !== false,
+      file_list_view_mode: fd.file_list_view_mode === 'thumbnail' ? 'thumbnail' : DEFAULT_FILE_LIST_VIEW_MODE,
       active_filter: activeFilterId(fd),
       filter_options: normalizeFilterOptions(fd.filter_options),
       keybinds: (() => {

@@ -500,5 +500,10 @@ export function syncViewMenu(state) {
   if (ltrEl) {
     ltrEl.classList.toggle('checked', spreadEnabled && spreadDirection === 'ltr');
   }
+
+  const thumbnailViewEl = document.getElementById('cmd-toggle-file-list-view-mode');
+  if (thumbnailViewEl) {
+    thumbnailViewEl.classList.toggle('checked', state.fileListViewMode === 'thumbnail');
+  }
 }
 

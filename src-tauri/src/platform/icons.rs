@@ -21,7 +21,7 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL};
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{
-    SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_SMALLICON, SHGFI_USEFILEATTRIBUTES,
+    SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_SMALLICON, SHGFI_USEFILEATTRIBUTES,
 };
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -111,8 +111,18 @@ pub fn warmup() {
     }
 }
 
-pub fn get_cached_native_icon(path: &str, ext_key: &str) -> Result<Option<String>, String> {
-    let Some(png_bytes) = get_cached_native_icon_png(path, ext_key)? else {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IconSize {
+    Small,
+    Large,
+}
+
+pub fn get_cached_native_icon(path: &str, ext_key: &str, size: Option<&str>) -> Result<Option<String>, String> {
+    let icon_size = match size {
+        Some(s) if s.eq_ignore_ascii_case("large") || s == "32" => IconSize::Large,
+        _ => IconSize::Small,
+    };
+    let Some(png_bytes) = get_cached_native_icon_png_with_size(path, ext_key, icon_size)? else {
         return Ok(None);
     };
 
@@ -127,16 +137,29 @@ pub fn get_cached_native_icon(path: &str, ext_key: &str) -> Result<Option<String
 }
 
 pub fn get_cached_native_icon_png(path: &str, ext_key: &str) -> Result<Option<Vec<u8>>, String> {
+    get_cached_native_icon_png_with_size(path, ext_key, IconSize::Small)
+}
+
+pub fn get_cached_native_icon_png_with_size(
+    path: &str,
+    ext_key: &str,
+    size: IconSize,
+) -> Result<Option<Vec<u8>>, String> {
     #[cfg(not(windows))]
     return Ok(None);
 
     #[cfg(windows)]
     {
         let lower_ext = ext_key.to_string();
+        let cache_key = match size {
+            IconSize::Small => lower_ext.clone(),
+            IconSize::Large => format!("large:{}", lower_ext),
+        };
+
         {
             let mut cache_guard = NATIVE_ICON_CACHE.lock().map_err(|e| e.to_string())?;
             if let Some(cache) = cache_guard.as_mut() {
-                if let Some(png_bytes) = cache.get(&lower_ext) {
+                if let Some(png_bytes) = cache.get(&cache_key) {
                     return Ok(Some(png_bytes.clone()));
                 }
             } else {
@@ -150,25 +173,30 @@ pub fn get_cached_native_icon_png(path: &str, ext_key: &str) -> Result<Option<Ve
         let is_real_path = lower_ext.contains('\\') || lower_ext.contains('/') || lower_ext.contains(':');
         let is_generic_folder = lower_ext == "__folder__";
 
+        let size_flag = match size {
+            IconSize::Small => SHGFI_SMALLICON,
+            IconSize::Large => SHGFI_LARGEICON,
+        };
+
         let (query_name, attrs, flags) = if is_real_path {
             let wide: Vec<u16> = OsStr::new(path)
                 .encode_wide()
                 .chain(std::iter::once(0))
                 .collect();
-            (wide, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON)
+            (wide, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | size_flag)
         } else if is_generic_folder {
             let wide: Vec<u16> = OsStr::new("dummy")
                 .encode_wide()
                 .chain(std::iter::once(0))
                 .collect();
-            (wide, FILE_ATTRIBUTE_DIRECTORY, SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON)
+            (wide, FILE_ATTRIBUTE_DIRECTORY, SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | size_flag)
         } else {
             let name = format!("dummy.{}", ext_key.trim_start_matches('.'));
             let wide: Vec<u16> = OsStr::new(&name)
                 .encode_wide()
                 .chain(std::iter::once(0))
                 .collect();
-            (wide, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON)
+            (wide, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | size_flag)
         };
 
         let mut shfi = SHFILEINFOW::default();
@@ -320,7 +348,7 @@ pub fn get_cached_native_icon_png(path: &str, ext_key: &str) -> Result<Option<Ve
         {
             let mut cache_guard = NATIVE_ICON_CACHE.lock().map_err(|e| e.to_string())?;
             if let Some(cache) = cache_guard.as_mut() {
-                cache.insert(lower_ext, png_bytes.clone());
+                cache.insert(cache_key, png_bytes.clone());
             }
         }
 

@@ -106,6 +106,7 @@
           </li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-toggle-filelist" tabindex="0">File list<span class="shortcut">1</span></li>
+          <li role="menuitem" id="cmd-toggle-file-list-view-mode" tabindex="0">Thumbnail view<span class="shortcut"></span></li>
           <li role="menuitem" id="cmd-toggle-menubar" tabindex="0">Menu bar<span class="shortcut">2</span></li>
           <li role="menuitem" id="cmd-toggle-statusbar" tabindex="0">Status bar<span class="shortcut">3</span></li>
         </ul>
@@ -155,8 +156,23 @@
             <span class="item-ext">&nbsp;</span>
             <span class="item-date">&nbsp;</span>
           </li>
+          <li id="file-list-thumbnail-sentinel" class="thumbnail-sentinel" aria-hidden="true">
+            <div class="item-thumbnail-wrapper"></div>
+            <div class="item-thumbnail-info">
+              <span class="item-thumbnail-title">&nbsp;</span>
+              <span class="item-thumbnail-meta">&nbsp;</span>
+            </div>
+          </li>
         </ul>
         <div class="file-panel-actions">
+          <button id="btn-toggle-view-mode" class="icon-btn" title="Toggle Thumbnail View" aria-label="Toggle Thumbnail View">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+          </button>
           <button id="cmd-open-explorer" class="icon-btn" title="Open in File Explorer">
             <svg id="cmd-file" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
           </button>

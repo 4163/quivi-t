@@ -66,71 +66,71 @@ Every item in this plan follows [.agents/AGENTS.md](file:///E:/Projects/QuiviT/.
 
 ### 1. Backend Shell Icon Resolution & Caching
 #### [MODIFY] [platform/icons.rs](file:///E:/Projects/QuiviT/src-tauri/src/platform/icons.rs)
-- [ ] `[PENDING]` `[Observable change]` Define an `IconSize` enum (`Small = 16`, `Large = 32`).
-- [ ] `[PENDING]` `[Observable change]` Update `get_cached_native_icon_png` to accept `size: IconSize`.
-- [ ] `[PENDING]` `[Observable change]` Use `SHGFI_LARGEICON` when `IconSize::Large` is requested, and ensure `FILE_ATTRIBUTE_DIRECTORY` retrieves the closed folder icon without `SHGFI_OPENICON`.
-- [ ] `[PENDING]` `[Observable change]` Partition `NATIVE_ICON_CACHE` by size (composite keys `format!("{}:{}", size, ext_key)`) so small and large icons are cached separately without collisions.
-- [ ] `[PENDING]` `[Observable change]` Keep default `get_cached_native_icon` behavior returning small icons.
+- [COMPLETED] `[Observable change]` Define an `IconSize` enum (`Small = 16`, `Large = 32`).
+- [COMPLETED] `[Observable change]` Update `get_cached_native_icon_png` to accept `size: IconSize`.
+- [COMPLETED] `[Observable change]` Use `SHGFI_LARGEICON` when `IconSize::Large` is requested, and ensure `FILE_ATTRIBUTE_DIRECTORY` retrieves the closed folder icon without `SHGFI_OPENICON`.
+- [COMPLETED] `[Observable change]` Partition `NATIVE_ICON_CACHE` by size (composite keys `format!("{}:{}", size, ext_key)`) so small and large icons are cached separately without collisions.
+- [COMPLETED] `[Observable change]` Keep default `get_cached_native_icon` behavior returning small icons.
 
 #### [MODIFY] [commands/registry.rs](file:///E:/Projects/QuiviT/src-tauri/src/commands/registry.rs)
-- [ ] `[PENDING]` `[Observable change]` Update `get_native_icon(path: String, ext_key: String, size: Option<String>)` to pass the parsed size to the icon cache facade.
+- [COMPLETED] `[Observable change]` Update `get_native_icon(path: String, ext_key: String, size: Option<String>)` to pass the parsed size to the icon cache facade.
 
 #### [MODIFY] [protocol.rs](file:///E:/Projects/QuiviT/src-tauri/src/protocol.rs)
-- [ ] `[PENDING]` `[Observable change]` Parse query parameter `size` in `parse_icon_url` (`quivit://icon/...?...&size=large`).
-- [ ] `[PENDING]` `[Observable change]` Request `IconSize::Large` from `get_cached_native_icon_png` when `size=large` is present in the icon URL.
+- [COMPLETED] `[Observable change]` Parse query parameter `size` in `parse_icon_url` (`quivit://icon/...?...&size=large`).
+- [COMPLETED] `[Observable change]` Request `IconSize::Large` from `get_cached_native_icon_png` when `size=large` is present in the icon URL.
 
 ---
 
 ### 2. Frontend Services & State Machine
 #### [MODIFY] [services/actions.js](file:///E:/Projects/QuiviT/src/js/services/actions.js)
-- [ ] `[PENDING]` `[Observable change]` Register action `cmd-toggle-file-list-view-mode` with label `Toggle Thumbnail / List View` in category `View`.
+- [COMPLETED] `[Observable change]` Register action `cmd-toggle-file-list-view-mode` with label `Toggle Thumbnail / List View` in category `View`.
 
 #### [MODIFY] [core.js](file:///E:/Projects/QuiviT/src/js/core.js)
-- [ ] `[PENDING]` `[Observable change]` Add `fileListViewMode: 'list' | 'thumbnail'` to default state.
-- [ ] `[PENDING]` `[Observable change]` Add `Core.setFileListViewMode(mode)` and `Core.toggleFileListViewMode()`.
-- [ ] `[PENDING]` `[Observable change]` In `loadConfig()` and `buildConfigFromState()`, read and persist `file_list_view_mode` under `frontend_data`.
+- [COMPLETED] `[Observable change]` Add `fileListViewMode: 'list' | 'thumbnail'` to default state.
+- [COMPLETED] `[Observable change]` Add `Core.setFileListViewMode(mode)` and `Core.toggleFileListViewMode()`.
+- [COMPLETED] `[Observable change]` In `loadConfig()` and `buildConfigFromState()`, read and persist `file_list_view_mode` under `frontend_data`.
 
 #### [MODIFY] [fsUtils.js](file:///E:/Projects/QuiviT/src/js/fsUtils.js)
-- [ ] `[PENDING]` `[Observable change]` Update `buildNativeIconSrc(path, extKey, size = 'small')` to include `?size=large` when requested.
-- [ ] `[PENDING]` `[Observable change]` Add `buildThumbnailSrc(item, state)` helper that returns the image preview URL for image files or the large shell icon for non-images.
+- [COMPLETED] `[Observable change]` Update `buildNativeIconSrc(path, extKey, size = 'small')` to include `?size=large` when requested.
+- [COMPLETED] `[Observable change]` Add `buildThumbnailSrc(item, state)` helper that returns the image preview URL for image files or the large shell icon for non-images.
 
 ---
 
 ### 3. File Panel Markup & Menu Chrome
 #### [MODIFY] [index.html](file:///E:/Projects/QuiviT/src/index.html)
-- [ ] `[PENDING]` `[Observable change]` Add view mode toggle button on the very left side of `.file-panel-actions` as the first item (`#btn-toggle-view-mode`), positioned before `#cmd-open-explorer`.
-- [ ] `[PENDING]` `[Observable change]` Add View Mode toggle menuitem in menubar **View** dropdown.
-- [ ] `[PENDING]` `[Observable change]` Add sentinel element `#file-list-thumbnail-sentinel` for measuring thumbnail row height.
+- [COMPLETED] `[Observable change]` Add view mode toggle button on the very left side of `.file-panel-actions` as the first item (`#btn-toggle-view-mode`), positioned before `#cmd-open-explorer`.
+- [COMPLETED] `[Observable change]` Add View Mode toggle menuitem in menubar **View** dropdown.
+- [COMPLETED] `[Observable change]` Add sentinel element `#file-list-thumbnail-sentinel` for measuring thumbnail row height.
 
 #### [MODIFY] [menubar.js](file:///E:/Projects/QuiviT/src/js/menubar.js)
-- [ ] `[PENDING]` `[Observable change]` Wire `cmd-toggle-file-list-view-mode` in the View menu and synchronize checkmark state based on `state.fileListViewMode`.
+- [COMPLETED] `[Observable change]` Wire `cmd-toggle-file-list-view-mode` in the View menu and synchronize checkmark state based on `state.fileListViewMode`.
 
 ---
 
 ### 4. Virtualized File Panel Rendering & Layout
 #### [MODIFY] [filepanel/filePanel.js](file:///E:/Projects/QuiviT/src/js/filepanel/filePanel.js)
-- [ ] `[PENDING]` `[Observable change]` Measure `ROW_HEIGHT` dynamically based on active view mode (using `#file-list-sentinel` in list mode and `#file-list-thumbnail-sentinel` in thumbnail mode).
-- [ ] `[PENDING]` `[Observable change]` When `fileListViewMode` changes, toggle `.view-mode-thumbnail` on `#file-panel`, recalculate pool size, re-measure `ROW_HEIGHT`, and re-render the visible slice.
-- [ ] `[PENDING]` `[Observable change]` In thumbnail mode:
+- [COMPLETED] `[Observable change]` Measure `ROW_HEIGHT` dynamically based on active view mode (using `#file-list-sentinel` in list mode and `#file-list-thumbnail-sentinel` in thumbnail mode).
+- [COMPLETED] `[Observable change]` When `fileListViewMode` changes, toggle `.view-mode-thumbnail` on `#file-panel`, recalculate pool size, re-measure `ROW_HEIGHT`, and re-render the visible slice.
+- [COMPLETED] `[Observable change]` In thumbnail mode:
   - For image entries, render a dedicated thumbnail preview container with `loading="lazy"`, `decoding="async"`, and an `onerror` fallback to the 32px shell icon.
   - For non-image entries (folders, archives, `..`, text files, drives), render the crisp 32×32 shell icon.
   - Layout file name and metadata in a multi-line format beside the thumbnail preview.
-- [ ] `[PENDING]` `[Observable change]` In list mode, keep existing 16px icon rendering and 3-column grid layout completely unchanged.
-- [ ] `[PENDING]` `[Observable change]` Preserve keyboard arrow navigation, selection scroll, double-click entry, and breadcrumb updating across mode transitions.
+- [COMPLETED] `[Observable change]` In list mode, keep existing 16px icon rendering and 3-column grid layout completely unchanged.
+- [COMPLETED] `[Observable change]` Preserve keyboard arrow navigation, selection scroll, double-click entry, and breadcrumb updating across mode transitions.
 
 #### [MODIFY] [css/main.css](file:///E:/Projects/QuiviT/src/css/main.css)
-- [ ] `[PENDING]` `[Observable change]` Add styles for `#file-panel.view-mode-thumbnail`:
-  - Hide column headers (`#file-list-header`).
+- [COMPLETED] `[Observable change]` Add styles for `#file-panel.view-mode-thumbnail`:
   - Style thumbnail rows with fixed height (~52px to 56px), flexbox row layout, and smooth hover/selected states.
   - Style `.item-thumbnail-wrapper` with a square centered container and `object-fit: contain`.
   - Style `.item-thumbnail-info` with title on top and extension/date metadata beneath.
+  - Preserved `#file-panel-header` visible across both modes for full sorting functionality.
 
 ---
 
 ### 5. Documentation & Backlog Tracking
 #### [MODIFY] [.agents/cl-refactor-report.md](file:///E:/Projects/QuiviT/.agents/cl-refactor-report.md) & [.agents/implemented.md](file:///E:/Projects/QuiviT/.agents/implemented.md)
-- [ ] `[PENDING]` `[Observable change]` Mark High-Resolution Shell Icons and Thumbnail View Mode as implemented in `cl-refactor-report.md` upon completion.
-- [ ] `[PENDING]` `[Observable change]` Document the new view mode in `implemented.md`.
+- [COMPLETED] `[Observable change]` Mark High-Resolution Shell Icons and Thumbnail View Mode as implemented in `cl-refactor-report.md` upon completion.
+- [DEFERRED] `[No observable change]` Porting to `additions.md` and `implemented.md` deferred while subsequent 4.X passes are in flight.
 
 ---
 
@@ -154,7 +154,7 @@ Every item in this plan follows [.agents/AGENTS.md](file:///E:/Projects/QuiviT/.
    - Confirm row height and selection behavior match previous behavior.
 2. **Thumbnail View Mode Toggle**:
    - Click the view mode toggle button on the far left of `.file-panel-actions` (or select **View → Thumbnail View** in the menubar).
-   - Confirm the file panel switches to thumbnail mode and the column header row hides.
+   - Confirm the file panel switches to thumbnail mode and preserves column header sorting.
    - Confirm pressing the shortcut or toggle button again switches back to list mode seamlessly.
 3. **Image Preview Thumbnails**:
    - In thumbnail mode, navigate to a directory containing image files (`jpg`, `png`, `webp`, `gif`, etc.).
@@ -181,4 +181,9 @@ Every item in this plan follows [.agents/AGENTS.md](file:///E:/Projects/QuiviT/.
 
 ## Deviations, Violations & Runtime Fixes
 
-*(Reserved for tracking issues, scope adjustments, or AGENTS.md compliance audits during implementation.)*
+1. **Preserved Column Headers in Thumbnail Mode**:
+   - Retained `#file-panel-header` display in thumbnail mode to allow sorting files by Name, Extension, and Modified date across both view modes.
+2. **Virtualization Overhaul Decoupled (Slice 4.1)**:
+   - High-performance VS Code `RowCache` pattern, static `.scroll-spacer` sizer, and leaf coordinate layout were cleanly separated into a dedicated follow-up slice ([`slice-4.1_file-list-virtualization-plan.md`](file:///E:/Projects/QuiviT/.agents/slice-4.1_file-list-virtualization-plan.md)).
+3. **Deferred Changelog Porting**:
+   - Synchronizing `additions.md` and `implemented.md` was deferred until subsequent 4.X passes are completed.

@@ -112,12 +112,51 @@ export const FsUtils = {
     return `${base}/archive/${encoded}/${encodeURIComponent(entryName)}`;
   },
 
-  buildNativeIconSrc(path, extKey) {
+  buildNativeIconSrc(path, extKey, size = 'small') {
     const encodedPath = _base64Encode(path || '');
     const encodedExt = _base64Encode(extKey || '');
-    const isWindows = navigator.userAgent.includes('Windows');
+    const isWindows = typeof navigator !== 'undefined' && navigator.userAgent ? navigator.userAgent.includes('Windows') : true;
     const base = isWindows ? 'http://quivit.localhost' : 'quivit://localhost';
-    return `${base}/icon/${encodedPath}/${encodedExt}`;
+    const query = size === 'large' ? '?size=large' : '';
+    return `${base}/icon/${encodedPath}/${encodedExt}${query}`;
+  },
+
+  getIconExtKey(item) {
+    if (!item) return '';
+    if (item.is_drive) return item.path;
+    if (item.is_dir || item.is_parent) {
+      const specialFolders = ['Downloads', 'Pictures', 'Documents', 'Music', 'Videos', 'Desktop'];
+      if (!item.is_parent && specialFolders.includes(item.name)) {
+        return item.path;
+      }
+      return '__folder__';
+    }
+    return (item.ext || _ext(item.name || item.path || '')).toLowerCase();
+  },
+
+  buildThumbnailSrc(item, state) {
+    if (!item) return '';
+    if (this.isImageEntry(item)) {
+      if (item.path && item.path.includes('|')) {
+        const sep = item.path.indexOf('|');
+        const archivePath = item.path.slice(0, sep);
+        const entryName = item.path.slice(sep + 1);
+        if (!this.isIco(entryName)) {
+          return this.buildArchiveSrc(archivePath, entryName);
+        }
+      } else if (state?.mode === 'archive') {
+        if (!this.isIco(item.name)) {
+          return this.buildArchiveSrc(state.archivePath, item.name);
+        }
+      } else if (item.path) {
+        if (!this.isIco(item.path)) {
+          return this.buildFileSrcSync(item.path);
+        }
+      }
+    }
+    const ext = this.getIconExtKey(item);
+    const cleanPath = item.path && item.path.includes('|') ? item.path.slice(0, item.path.indexOf('|')) : item.path;
+    return this.buildNativeIconSrc(cleanPath, ext, 'large');
   },
 
   async buildArchiveEntrySrc(archivePath, entryName) {

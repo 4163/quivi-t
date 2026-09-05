@@ -20,7 +20,7 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             .map(str::to_string);
 
         if url.contains("/icon/") {
-            let (path, ext_key) = match parse_icon_url(&url) {
+            let (path, ext_key, size) = match parse_icon_url(&url) {
                 Ok(parts) => parts,
                 Err(message) => {
                     let response = Response::builder()
@@ -33,8 +33,8 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             };
 
             tauri::async_runtime::spawn_blocking(move || {
-                let response = match crate::platform::icons::get_cached_native_icon_png(
-                    &path, &ext_key,
+                let response = match crate::platform::icons::get_cached_native_icon_png_with_size(
+                    &path, &ext_key, size,
                 ) {
                     Ok(Some(bytes)) => png_response(bytes),
                     _ => Response::builder()
@@ -93,20 +93,32 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
     })
 }
 
-fn parse_icon_url(url: &str) -> Result<(String, String), String> {
+fn parse_icon_url(url: &str) -> Result<(String, String, crate::platform::icons::IconSize), String> {
     let Some((_, icon_path)) = url.split_once("/icon/") else {
         return Err(format!("Invalid quivit icon URL: {url}"));
     };
 
-    let Some((path_encoded, ext_encoded)) = icon_path.split_once('/') else {
+    let Some((path_encoded, ext_with_query)) = icon_path.split_once('/') else {
         return Err("Missing icon path or extension key".to_string());
+    };
+
+    let (ext_encoded, size) = match ext_with_query.split_once('?') {
+        Some((ext_part, query)) => {
+            let icon_size = if query.contains("size=large") || query.contains("size=32") {
+                crate::platform::icons::IconSize::Large
+            } else {
+                crate::platform::icons::IconSize::Small
+            };
+            (ext_part, icon_size)
+        }
+        None => (ext_with_query, crate::platform::icons::IconSize::Small),
     };
 
     let path = crate::utils::base64_decode(path_encoded)
         .ok_or_else(|| "Invalid base64 icon path".to_string())?;
     let ext_key = crate::utils::base64_decode(ext_encoded)
         .ok_or_else(|| "Invalid base64 icon extension key".to_string())?;
-    Ok((path, ext_key))
+    Ok((path, ext_key, size))
 }
 
 fn parse_archive_url(url: &str) -> Result<(String, String), String> {

@@ -58,6 +58,8 @@ let domPool = [];
 let scrollSpacer = null;
 let ROW_HEIGHT = 0;
 let POOL_SIZE = 0;
+let currentViewMode = null;
+let btnToggleViewMode = null;
 
 // Favorites
 let favoritesExpanded = false;
@@ -204,37 +206,43 @@ const iconCache = new Map();
 
 
 
-function fetchNativeIcon(path, ext) {
-  if (iconCache.has(ext)) return;
-  iconCache.set(ext, 'pending');
+function fetchNativeIcon(path, ext, size = 'small') {
+  const cacheKey = size === 'large' ? `large:${ext}` : ext;
+  if (iconCache.has(cacheKey)) return;
+  iconCache.set(cacheKey, 'pending');
 
   const applyIconSrc = (src) => {
     const finalSrc = src || '';
-    iconCache.set(ext, finalSrc);
-    try { localStorage.setItem('icon:' + ext, finalSrc); } catch (e) {}
-    document.querySelectorAll(`img[data-ext="${CSS.escape(ext)}"]`).forEach(img => {
+    iconCache.set(cacheKey, finalSrc);
+    try { localStorage.setItem('icon:' + cacheKey, finalSrc); } catch (e) {}
+    const selector = `img[data-icon-key="${CSS.escape(cacheKey)}"], img[data-ext="${CSS.escape(ext)}"]`;
+    document.querySelectorAll(selector).forEach(img => {
+      if (img.dataset.iconKey && img.dataset.iconKey !== cacheKey) return;
       if (src) {
         img.src = src;
+        img.removeAttribute('data-icon-key');
         img.removeAttribute('data-ext');
       } else {
-        // Generic fallback icon.
         const isFolder = ext === '__folder__' || ext.includes('\\') || ext.includes('/');
+        const svgDim = size === 'large' ? 32 : 14;
         img.outerHTML = isFolder
-          ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
-          : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+          ? `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`
+          : `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`;
       }
     });
   };
 
   const fetchIconViaIpc = () => {
     if (!window.__TAURI__) return;
-    window.__TAURI__.core.invoke('get_native_icon', { path: path, extKey: ext })
+    const args = { path, extKey: ext };
+    if (size === 'large') args.size = 'large';
+    window.__TAURI__.core.invoke('get_native_icon', args)
       .then(src => applyIconSrc(src || ''))
       .catch(err => console.error('Failed to get native icon:', err));
   };
 
   if (window.__TAURI__) {
-    const protocolSrc = FsUtils.buildNativeIconSrc(path, ext);
+    const protocolSrc = FsUtils.buildNativeIconSrc(path, ext, size);
     const probe = new Image();
     probe.onload = () => applyIconSrc(protocolSrc);
     probe.onerror = fetchIconViaIpc;
@@ -242,31 +250,26 @@ function fetchNativeIcon(path, ext) {
   }
 }
 
-function getIconHtml(item) {
-  let ext;
-  let fallbackSvg;
+function getIconHtml(item, size = 'small') {
+  const ext = FsUtils.getIconExtKey(item);
+  const cacheKey = size === 'large' ? `large:${ext}` : ext;
+  const isFolder = item.is_dir || item.is_parent;
+  const svgDim = size === 'large' ? 32 : 14;
 
+  let fallbackSvg;
   if (item.is_drive) {
-    ext = item.path;
-    fallbackSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>';
-  } else if (item.is_dir || item.is_parent) {
-    const specialFolders = ['Downloads', 'Pictures', 'Documents', 'Music', 'Videos', 'Desktop'];
-    if (!item.is_parent && specialFolders.includes(item.name)) {
-      ext = item.path;
-    } else {
-      ext = '__folder__';
-    }
-    fallbackSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>';
+    fallbackSvg = `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>`;
+  } else if (isFolder) {
+    fallbackSvg = `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
   } else {
-    ext = (item.ext || '').toLowerCase();
-    fallbackSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>';
+    fallbackSvg = `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`;
     if (!ext) return fallbackSvg;
   }
 
-  if (iconCache.has(ext)) {
-    const src = iconCache.get(ext);
+  if (iconCache.has(cacheKey)) {
+    const src = iconCache.get(cacheKey);
     if (src === 'pending') {
-      return `<img data-ext="${CSS.escape(ext)}" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
+      return `<img data-ext="${CSS.escape(ext)}" data-icon-key="${CSS.escape(cacheKey)}" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
     }
     if (src) {
       return `<img src="${src}" draggable="false">`;
@@ -274,17 +277,17 @@ function getIconHtml(item) {
     return fallbackSvg;
   }
 
-  const stored = localStorage.getItem('icon:' + ext);
+  const stored = localStorage.getItem('icon:' + cacheKey);
   if (stored !== null) {
-    iconCache.set(ext, stored);
+    iconCache.set(cacheKey, stored);
     if (stored) {
       return `<img src="${stored}" draggable="false">`;
     }
     return fallbackSvg;
   }
 
-  fetchNativeIcon(item.path, ext);
-  return `<img data-ext="${CSS.escape(ext)}" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
+  fetchNativeIcon(item.path, ext, size);
+  return `<img data-ext="${CSS.escape(ext)}" data-icon-key="${CSS.escape(cacheKey)}" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
 }
 
 function openFavorite(fav) {
@@ -307,6 +310,9 @@ function buildFavoriteEntry(fav) {
   
   li.classList.toggle('is-hidden-entry', !!fav.is_hidden);
 
+  const state = Core.getState();
+
+  // List mode elements
   const itemName = document.createElement('span');
   itemName.className = 'item-name';
   itemName.innerHTML = getIconHtml(fav);
@@ -322,6 +328,43 @@ function buildFavoriteEntry(fav) {
   
   const itemDate = document.createElement('span');
   itemDate.className = 'item-date';
+
+  // Thumbnail mode elements
+  const thumbWrapper = document.createElement('div');
+  thumbWrapper.className = 'item-thumbnail-wrapper';
+  const thumbImg = document.createElement('img');
+  thumbImg.className = 'item-thumbnail-img';
+  thumbImg.draggable = false;
+  thumbWrapper.appendChild(thumbImg);
+
+  const thumbInfo = document.createElement('div');
+  thumbInfo.className = 'item-thumbnail-info';
+  const thumbTitle = document.createElement('span');
+  thumbTitle.className = 'item-thumbnail-title';
+  thumbTitle.textContent = fav.name;
+  const thumbMeta = document.createElement('span');
+  thumbMeta.className = 'item-thumbnail-meta';
+
+  if (fav.is_drive) {
+    thumbMeta.textContent = 'Drive';
+  } else if (fav.is_dir) {
+    thumbMeta.textContent = fav.date ? `Folder • ${fav.date}` : 'Folder';
+  } else {
+    const ext = (fav.ext || '').toUpperCase();
+    thumbMeta.textContent = ext ? (fav.date ? `${ext} • ${fav.date}` : ext) : (fav.date || '');
+  }
+  thumbInfo.appendChild(thumbTitle);
+  thumbInfo.appendChild(thumbMeta);
+
+  const ext = FsUtils.getIconExtKey(fav);
+  const targetSrc = FsUtils.buildThumbnailSrc(fav, state);
+  thumbImg.onerror = () => {
+    thumbImg.onerror = null;
+    const cleanPath = fav.path && fav.path.includes('|') ? fav.path.slice(0, fav.path.indexOf('|')) : fav.path;
+    thumbImg.src = FsUtils.buildNativeIconSrc(cleanPath, ext, 'large');
+  };
+  thumbImg.loading = 'lazy';
+  thumbImg.src = targetSrc;
 
   const removeBtn = document.createElement('button');
   removeBtn.className = 'fav-remove';
@@ -339,6 +382,8 @@ function buildFavoriteEntry(fav) {
   li.appendChild(itemName);
   li.appendChild(itemExt);
   li.appendChild(itemDate);
+  li.appendChild(thumbWrapper);
+  li.appendChild(thumbInfo);
   li.appendChild(removeBtn);
 
   li.addEventListener('focus', () => {
@@ -470,8 +515,11 @@ export function navigateHighlightedFavorite(delta) {
 }
 
 function measureRowHeight() {
-  const sentinel = document.getElementById('file-list-sentinel');
-  ROW_HEIGHT = sentinel ? sentinel.getBoundingClientRect().height || 22 : 22;
+  const isThumbnail = (Core ? Core.getState().fileListViewMode : 'list') === 'thumbnail';
+  const sentinelId = isThumbnail ? 'file-list-thumbnail-sentinel' : 'file-list-sentinel';
+  const sentinel = document.getElementById(sentinelId);
+  const fallback = isThumbnail ? 52 : 22;
+  ROW_HEIGHT = sentinel ? sentinel.getBoundingClientRect().height || fallback : fallback;
 }
 
 function initDomPool() {
@@ -483,12 +531,14 @@ function initDomPool() {
     scrollSpacer = null;
   }
 
-  POOL_SIZE = Math.ceil(window.screen.height / ROW_HEIGHT) + 20;
+  const minRowH = 22;
+  POOL_SIZE = Math.ceil(window.screen.height / minRowH) + 20;
   
   for (let i = 0; i < POOL_SIZE; i++) {
     const li = document.createElement('li');
     li.style.display = 'none';
     
+    // List mode elements
     const itemName = document.createElement('span');
     itemName.className = 'item-name';
     
@@ -505,6 +555,26 @@ function initDomPool() {
     li.appendChild(itemName);
     li.appendChild(itemExt);
     li.appendChild(itemDate);
+
+    // Thumbnail mode elements
+    const thumbWrapper = document.createElement('div');
+    thumbWrapper.className = 'item-thumbnail-wrapper';
+    const thumbImg = document.createElement('img');
+    thumbImg.className = 'item-thumbnail-img';
+    thumbImg.draggable = false;
+    thumbWrapper.appendChild(thumbImg);
+
+    const thumbInfo = document.createElement('div');
+    thumbInfo.className = 'item-thumbnail-info';
+    const thumbTitle = document.createElement('span');
+    thumbTitle.className = 'item-thumbnail-title';
+    const thumbMeta = document.createElement('span');
+    thumbMeta.className = 'item-thumbnail-meta';
+    thumbInfo.appendChild(thumbTitle);
+    thumbInfo.appendChild(thumbMeta);
+
+    li.appendChild(thumbWrapper);
+    li.appendChild(thumbInfo);
     
     li.setAttribute('role', 'option');
 
@@ -584,21 +654,59 @@ function initDomPool() {
 function updateEntry(li, item, index) {
   li.dataset.index = index;
   li.title = item.name !== '..' ? item.name : '';
-  
-  const itemName = li.querySelector('.item-name');
-  itemName.innerHTML = getIconHtml(item);
   li.classList.toggle('is-hidden-entry', !!item.is_hidden);
-  
-  const itemLabel = document.createElement('span');
-  itemLabel.className = 'item-label';
-  itemLabel.textContent = item.name;
-  itemName.appendChild(itemLabel);
-  
-  li.querySelector('.item-ext').textContent = item.ext || '';
-  li.querySelector('.item-date').textContent = item.date || '';
-  
+
+  const state = Core.getState();
+  const isThumbnail = state.fileListViewMode === 'thumbnail';
+
+  if (isThumbnail) {
+    const thumbImg = li.querySelector('.item-thumbnail-img');
+    const thumbTitle = li.querySelector('.item-thumbnail-title');
+    const thumbMeta = li.querySelector('.item-thumbnail-meta');
+
+    if (thumbTitle) thumbTitle.textContent = item.name;
+    if (thumbMeta) {
+      if (item.is_parent) {
+        thumbMeta.textContent = 'Parent folder';
+      } else if (item.is_drive) {
+        thumbMeta.textContent = 'Drive';
+      } else if (item.is_dir) {
+        thumbMeta.textContent = item.date ? `Folder • ${item.date}` : 'Folder';
+      } else {
+        const ext = (item.ext || '').toUpperCase();
+        thumbMeta.textContent = ext ? (item.date ? `${ext} • ${item.date}` : ext) : (item.date || '');
+      }
+    }
+
+    if (thumbImg) {
+      const ext = FsUtils.getIconExtKey(item);
+      const targetSrc = FsUtils.buildThumbnailSrc(item, state);
+
+      thumbImg.onerror = () => {
+        thumbImg.onerror = null;
+        thumbImg.src = FsUtils.buildNativeIconSrc(item.path, ext, 'large');
+      };
+
+      if (thumbImg.getAttribute('src') !== targetSrc) {
+        thumbImg.loading = 'lazy';
+        thumbImg.src = targetSrc;
+      }
+    }
+  } else {
+    const itemName = li.querySelector('.item-name');
+    itemName.innerHTML = getIconHtml(item);
+
+    const itemLabel = document.createElement('span');
+    itemLabel.className = 'item-label';
+    itemLabel.textContent = item.name;
+    itemName.appendChild(itemLabel);
+
+    li.querySelector('.item-ext').textContent = item.ext || '';
+    li.querySelector('.item-date').textContent = item.date || '';
+  }
+
   li.style.transform = `translateY(${index * ROW_HEIGHT}px)`;
-  li.style.display = 'grid';
+  li.style.display = '';
 }
 
 function renderVisibleSlice() {
@@ -626,6 +734,7 @@ function renderVisibleSlice() {
       if (li.dataset.index !== String(dataIndex)) {
         updateEntry(li, list[dataIndex], dataIndex);
       }
+      li.style.display = '';
       li.classList.toggle('selected', dataIndex === state.index);
     } else {
       li.style.display = 'none';
@@ -686,6 +795,27 @@ export function renderFilePanel(state) {
 
   filePanel.classList.toggle('hidden', !state.fileListVisible);
   if (!state.fileListVisible) return;
+
+  const viewMode = state.fileListViewMode || 'list';
+  const isThumbnail = viewMode === 'thumbnail';
+  filePanel.classList.toggle('view-mode-thumbnail', isThumbnail);
+
+  if (!btnToggleViewMode) {
+    btnToggleViewMode = document.getElementById('btn-toggle-view-mode');
+  }
+  if (btnToggleViewMode) {
+    btnToggleViewMode.classList.toggle('active', isThumbnail);
+    btnToggleViewMode.setAttribute('aria-pressed', isThumbnail ? 'true' : 'false');
+  }
+
+  if (currentViewMode !== viewMode) {
+    currentViewMode = viewMode;
+    measureRowHeight();
+    lastRenderedList = null;
+    domPool.forEach(li => li.dataset.index = '');
+    renderFavorites();
+  }
+
   renderBreadcrumb(state);
 
   // Update the favorite star for the current entry. Skip `..`.
@@ -786,6 +916,13 @@ export function initFilePanel(deps) {
   if (favoritesBtnEl) {
     favoritesBtnEl.disabled = true;
     favoritesBtnEl.addEventListener('click', toggleFavoriteCurrent);
+  }
+
+  btnToggleViewMode = document.getElementById('btn-toggle-view-mode');
+  if (btnToggleViewMode) {
+    btnToggleViewMode.addEventListener('click', () => {
+      Core.toggleFileListViewMode({ persist: true });
+    });
   }
 
   if (favoritesHeaderEl) {
