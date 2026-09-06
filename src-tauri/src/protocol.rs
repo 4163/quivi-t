@@ -158,6 +158,7 @@ fn png_response(data: Vec<u8>) -> Response<Vec<u8>> {
         .status(200)
         .header("Content-Type", "image/png")
         .header("Content-Length", data.len().to_string())
+        .header("Cache-Control", "public, max-age=86400")
         .header("Access-Control-Allow-Origin", "*")
         .body(data)
         .unwrap()

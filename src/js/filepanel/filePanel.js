@@ -13,6 +13,18 @@ import {
 } from './favoritesStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
+import { BoundedMap } from '../services/cache.js';
+
+// Bounded in-memory thumbnail cache: 250 items covers ~14 full screens (1080p) or entire manga volumes under ~10 MB RAM
+export const THUMB_CACHE_CAPACITY = 250;
+export const thumbnailCache = new BoundedMap(THUMB_CACHE_CAPACITY);
+
+export const FAVORITES_CACHE_CAPACITY = 250;
+export const favoritesThumbnailCache = new BoundedMap(FAVORITES_CACHE_CAPACITY);
+
+// Canonical large format/folder icons (~20 entries).
+// Separate from thumbnailCache so image scrolling can't evict them.
+const staticIconCache = new Map();
 
 let MIN_COL_WIDTHS = {};
 
@@ -61,6 +73,21 @@ let ROW_HEIGHT = 0;
 let currentViewMode = null;
 let btnToggleViewMode = null;
 const OVERSCAN = 10;
+
+// Thumbnail scroll settling
+let isScrolling = false;
+let scrollDebounceTimer = null;
+const THUMB_SCROLL_DEBOUNCE_MS = 100;
+const TRANSPARENT_PIXEL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+';
+const PLACEHOLDER_HTML = '<svg class="placeholder-icon icon-image" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><svg class="placeholder-icon icon-folder" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg><svg class="placeholder-icon icon-archive" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></svg><svg class="placeholder-icon icon-file" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+
+export function getPlaceholderType(item) {
+  if (!item) return 'file';
+  if (item.is_dir || item.is_parent || item.is_drive) return 'folder';
+  if (FsUtils.isArchiveEntry(item) || FsUtils.isArchive(item.name || item.path || '')) return 'archive';
+  if (FsUtils.isImageEntry(item) || FsUtils.isImage(item.name || item.path || '')) return 'image';
+  return 'file';
+}
 
 // Deduplication tokens
 let lastRenderedIndex = -1;
@@ -306,7 +333,7 @@ function getIconHtml(item, size = 'small') {
     return fallbackSvg;
   }
 
-  fetchNativeIcon(item.path, ext, size);
+  fetchNativeIcon(FsUtils._isPathSpecificIcon(ext) ? item.path : '', ext, size);
   return `<img data-ext="${CSS.escape(ext)}" data-icon-key="${CSS.escape(cacheKey)}" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
 }
 
@@ -330,7 +357,6 @@ function buildFavoriteEntry(fav) {
   
   li.classList.toggle('is-hidden-entry', !!fav.is_hidden);
 
-  const state = Core.getState();
 
   // List mode elements
   const itemName = document.createElement('span');
@@ -355,7 +381,19 @@ function buildFavoriteEntry(fav) {
   const thumbImg = document.createElement('img');
   thumbImg.className = 'item-thumbnail-img';
   thumbImg.draggable = false;
+  thumbImg.onload = () => {
+    if (thumbImg.getAttribute('src') && !thumbImg.getAttribute('src').startsWith('data:image/svg+xml')) {
+      thumbImg.classList.add('is-loaded');
+    }
+  };
   thumbWrapper.appendChild(thumbImg);
+
+  const thumbPlaceholder = document.createElement('span');
+  thumbPlaceholder.className = 'item-thumbnail-placeholder';
+  thumbPlaceholder.setAttribute('aria-hidden', 'true');
+  thumbPlaceholder.dataset.type = getPlaceholderType(fav);
+  thumbPlaceholder.innerHTML = PLACEHOLDER_HTML;
+  thumbWrapper.appendChild(thumbPlaceholder);
 
   const thumbInfo = document.createElement('div');
   thumbInfo.className = 'item-thumbnail-info';
@@ -377,14 +415,37 @@ function buildFavoriteEntry(fav) {
   thumbInfo.appendChild(thumbMeta);
 
   const ext = FsUtils.getIconExtKey(fav);
-  const targetSrc = FsUtils.buildThumbnailSrc(fav, state);
+  const targetSrc = FsUtils.buildThumbnailSrc(fav, null);
   thumbImg.onerror = () => {
     thumbImg.onerror = null;
-    const cleanPath = fav.path && fav.path.includes('|') ? fav.path.slice(0, fav.path.indexOf('|')) : fav.path;
-    thumbImg.src = FsUtils.buildNativeIconSrc(cleanPath, ext, 'large');
+    const iconPath = FsUtils._isPathSpecificIcon(ext) ? fav.path : '';
+    const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
+    favoritesThumbnailCache.set(targetSrc, fallbackSrc);
+    thumbImg.src = fallbackSrc;
   };
-  thumbImg.loading = 'lazy';
-  thumbImg.src = targetSrc;
+  thumbImg.onload = () => {
+    const src = thumbImg.getAttribute('src');
+    if (src && !src.startsWith('data:image/svg+xml')) {
+      thumbImg.classList.add('is-loaded');
+      if (!favoritesThumbnailCache.has(src)) {
+        if (typeof Image !== 'undefined') {
+          const retain = new Image();
+          retain.src = src;
+          favoritesThumbnailCache.set(src, retain);
+        } else {
+          favoritesThumbnailCache.set(src, true);
+        }
+      }
+    }
+  };
+  const cachedFav = favoritesThumbnailCache.get(targetSrc);
+  if (cachedFav !== undefined) {
+    thumbImg.src = typeof cachedFav === 'string' ? cachedFav : targetSrc;
+    thumbImg.classList.add('is-loaded');
+  } else {
+    thumbImg.loading = 'lazy';
+    thumbImg.src = targetSrc;
+  }
 
   const removeBtn = document.createElement('button');
   removeBtn.className = 'fav-remove';
@@ -544,8 +605,6 @@ function measureRowHeight() {
   return ROW_HEIGHT;
 }
 
-const TRANSPARENT_PIXEL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+';
-
 function getFallbackSvg(type, svgDim = 14) {
   if (type === 'drive') {
     return `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>`;
@@ -616,7 +675,7 @@ function updateRowIcon(slots, item) {
     return;
   }
 
-  fetchNativeIcon(item.path, ext, 'small');
+  fetchNativeIcon(FsUtils._isPathSpecificIcon(ext) ? item.path : '', ext, 'small');
   showImg(TRANSPARENT_PIXEL, true);
 }
 
@@ -738,7 +797,29 @@ function createPoolRow() {
   const thumbImg = document.createElement('img');
   thumbImg.className = 'item-thumbnail-img';
   thumbImg.draggable = false;
+  thumbImg.onload = () => {
+    const src = thumbImg.getAttribute('src');
+    if (src && !src.startsWith('data:image/svg+xml')) {
+      thumbImg.classList.add('is-loaded');
+      if (!thumbnailCache.has(src)) {
+        if (typeof Image !== 'undefined') {
+          const retain = new Image();
+          retain.src = src;
+          thumbnailCache.set(src, retain);
+        } else {
+          thumbnailCache.set(src, true);
+        }
+      }
+    }
+  };
   thumbWrapper.appendChild(thumbImg);
+
+  const thumbPlaceholder = document.createElement('span');
+  thumbPlaceholder.className = 'item-thumbnail-placeholder';
+  thumbPlaceholder.setAttribute('aria-hidden', 'true');
+  thumbPlaceholder.dataset.type = 'image';
+  thumbPlaceholder.innerHTML = PLACEHOLDER_HTML;
+  thumbWrapper.appendChild(thumbPlaceholder);
 
   const thumbInfo = document.createElement('div');
   thumbInfo.className = 'item-thumbnail-info';
@@ -761,6 +842,7 @@ function createPoolRow() {
     date: itemDate,
     thumbWrapper,
     thumbImg,
+    thumbPlaceholder,
     thumbTitle,
     thumbMeta,
   };
@@ -810,21 +892,72 @@ function updateEntry(li, item, index) {
       }
     }
 
+    if (slots.thumbPlaceholder) {
+      const pType = getPlaceholderType(item);
+      if (slots.thumbPlaceholder.dataset.type !== pType) {
+        slots.thumbPlaceholder.dataset.type = pType;
+      }
+    }
+
     if (slots.thumbImg) {
       const ext = FsUtils.getIconExtKey(item);
+      const isImage = FsUtils.isImageEntry(item);
       let targetSrc = FsUtils.buildThumbnailSrc(item, state);
-      if (thumbRefreshTimestamp && FsUtils.isImageEntry(item) && targetSrc) {
+      if (thumbRefreshTimestamp && isImage && targetSrc) {
         targetSrc = targetSrc.includes('?') ? `${targetSrc}&_t=${thumbRefreshTimestamp}` : `${targetSrc}?_t=${thumbRefreshTimestamp}`;
       }
 
       slots.thumbImg.onerror = () => {
         slots.thumbImg.onerror = null;
-        slots.thumbImg.src = FsUtils.buildNativeIconSrc(item.path, ext, 'large');
+        const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
+        const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
+        thumbnailCache.set(targetSrc, fallbackSrc);
+        slots.thumbImg.src = fallbackSrc;
       };
 
-      if (slots.thumbImg.getAttribute('src') !== targetSrc) {
-        slots.thumbImg.loading = 'lazy';
-        slots.thumbImg.src = targetSrc;
+      const cachedEntry = thumbnailCache.get(targetSrc);
+      const isCached = cachedEntry !== undefined;
+
+      if (!isImage) {
+        delete slots.thumbImg.dataset.pendingSrc;
+        const isStaticCached = staticIconCache.has(targetSrc);
+        if (slots.thumbImg.getAttribute('src') !== targetSrc) {
+          slots.thumbImg.classList.remove('is-loaded');
+          slots.thumbImg.loading = 'lazy';
+          slots.thumbImg.src = targetSrc;
+        }
+        if (!isStaticCached) {
+          slots.thumbImg.onload = () => {
+            staticIconCache.set(targetSrc, true);
+            slots.thumbImg.classList.add('is-loaded');
+          };
+        } else {
+          slots.thumbImg.classList.add('is-loaded');
+        }
+      } else if (isCached) {
+        // Thumbnail was previously loaded and is cached in memory.
+        // Re-use immediately without deferral or skeleton placeholder flash.
+        delete slots.thumbImg.dataset.pendingSrc;
+        const finalSrc = typeof cachedEntry === 'string' ? cachedEntry : targetSrc;
+        if (slots.thumbImg.getAttribute('src') !== finalSrc) {
+          slots.thumbImg.src = finalSrc;
+        }
+        slots.thumbImg.classList.add('is-loaded');
+      } else if (isScrolling) {
+        // Uncached image thumbnail during rapid scrolling: defer decode to protect scroll performance
+        slots.thumbImg.dataset.pendingSrc = targetSrc;
+        if (slots.thumbImg.getAttribute('src') !== TRANSPARENT_PIXEL) {
+          slots.thumbImg.classList.remove('is-loaded');
+          slots.thumbImg.src = TRANSPARENT_PIXEL;
+        }
+      } else {
+        // Uncached image thumbnail when scroll is settled: initiate load
+        delete slots.thumbImg.dataset.pendingSrc;
+        if (slots.thumbImg.getAttribute('src') !== targetSrc) {
+          slots.thumbImg.classList.remove('is-loaded');
+          slots.thumbImg.loading = 'lazy';
+          slots.thumbImg.src = targetSrc;
+        }
       }
     }
   } else {
@@ -848,6 +981,12 @@ function renderVisibleSlice() {
       li.style.top = '';
       li.dataset.index = '';
       li.classList.remove('selected');
+      const img = li._slots?.thumbImg;
+      if (img) {
+        delete img.dataset.pendingSrc;
+        img.classList.remove('is-loaded');
+        img.src = TRANSPARENT_PIXEL;
+      }
       freePool.push(li);
     }
     activeRows.clear();
@@ -883,6 +1022,12 @@ function renderVisibleSlice() {
       li.style.top = '';
       li.dataset.index = '';
       li.classList.remove('selected');
+      const img = li._slots?.thumbImg;
+      if (img) {
+        delete img.dataset.pendingSrc;
+        img.classList.remove('is-loaded');
+        img.src = TRANSPARENT_PIXEL;
+      }
       freePool.push(li);
     }
   }
@@ -896,6 +1041,34 @@ function renderVisibleSlice() {
       activeRows.set(i, li);
     }
     li.classList.toggle('selected', i === state.index);
+  }
+}
+
+function onScrollSettle() {
+  isScrolling = false;
+  scrollDebounceTimer = null;
+  commitPendingThumbnails();
+}
+
+function commitPendingThumbnails() {
+  for (const li of activeRows.values()) {
+    const img = li._slots?.thumbImg;
+    if (img && img.dataset.pendingSrc) {
+      const targetSrc = img.dataset.pendingSrc;
+      delete img.dataset.pendingSrc;
+      const cachedEntry = thumbnailCache.get(targetSrc);
+      if (cachedEntry !== undefined) {
+        const finalSrc = typeof cachedEntry === 'string' ? cachedEntry : targetSrc;
+        if (img.getAttribute('src') !== finalSrc) {
+          img.src = finalSrc;
+        }
+        img.classList.add('is-loaded');
+      } else if (img.getAttribute('src') !== targetSrc) {
+        img.classList.remove('is-loaded');
+        img.loading = 'lazy';
+        img.src = targetSrc;
+      }
+    }
   }
 }
 
@@ -946,6 +1119,7 @@ function setRefreshingVisual(active) {
   clearTimeout(refreshPulseTimer);
 
   if (active) {
+    thumbnailCache.clear();
     thumbRefreshTimestamp = Date.now();
     refreshStartTime = performance.now();
     filePanel?.classList.remove('refreshing');
@@ -1069,6 +1243,9 @@ export function renderFilePanel(state) {
   lastScrolledIndex = -1;
   lastClickTime = 0;
   lastClickIndex = -1;
+  isScrolling = false;
+  clearTimeout(scrollDebounceTimer);
+  scrollDebounceTimer = null;
   initDomPool();
 
   renderVisibleSlice();
@@ -1103,8 +1280,20 @@ export function initFilePanel(deps) {
   ensureSpacer();
 
   fileListUl.addEventListener('scroll', () => {
+    const state = Core.getState();
+    if (state.fileListViewMode === 'thumbnail') {
+      isScrolling = true;
+      clearTimeout(scrollDebounceTimer);
+      scrollDebounceTimer = setTimeout(onScrollSettle, THUMB_SCROLL_DEBOUNCE_MS);
+    }
     renderVisibleSlice();
   }, { passive: true });
+
+  if ('onscrollend' in window) {
+    fileListUl.addEventListener('scrollend', () => {
+      if (isScrolling) onScrollSettle();
+    }, { passive: true });
+  }
 
   window.addEventListener('resize', () => {
     renderVisibleSlice();

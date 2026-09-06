@@ -329,3 +329,103 @@ test('Refresh: deleting password-protected item lands on nearest surviving neigh
   assert.equal(state.index, 2);
 });
 
+test('Navigation: opening directory with open_first_image OFF selects parent entry (..) with empty image', async () => {
+  Core.setState({
+    config: { frontend_data: { open_first_image: false } },
+    mode: 'empty',
+    list: [],
+    index: -1,
+  });
+
+  const directoryResult = {
+    directory: 'C:\\photos',
+    parent_directory: 'C:\\',
+    initial_index: 0,
+    target_filename: '',
+    files: [
+      { name: '1.png', path: 'C:\\photos\\1.png', is_dir: false, ext: 'png' },
+      { name: '2.png', path: 'C:\\photos\\2.png', is_dir: false, ext: 'png' },
+    ]
+  };
+
+  await FsUtils.applyDirectoryResult(directoryResult);
+
+  const state = Core.getState();
+  assert.equal(state.index, 0);
+  assert.equal(state.filename, '..');
+  assert.equal(state.src, '');
+});
+
+test('Navigation: opening directory with open_first_image ON selects first image', async () => {
+  Core.setState({
+    config: { frontend_data: { open_first_image: true } },
+    mode: 'empty',
+    list: [],
+    index: -1,
+  });
+
+  const directoryResult = {
+    directory: 'C:\\photos',
+    parent_directory: 'C:\\',
+    initial_index: 0,
+    target_filename: '',
+    files: [
+      { name: '1.png', path: 'C:\\photos\\1.png', is_dir: false, ext: 'png' },
+      { name: '2.png', path: 'C:\\photos\\2.png', is_dir: false, ext: 'png' },
+    ]
+  };
+
+  await FsUtils.applyDirectoryResult(directoryResult);
+
+  const state = Core.getState();
+  assert.equal(state.index, 1);
+  assert.equal(state.filename, '1.png');
+  assert.ok(state.src.includes('1.png'));
+});
+
+test('Navigation: opening archive with open_first_image OFF selects parent entry (..)', async () => {
+  Core.setState({
+    config: { frontend_data: { open_first_image: false } },
+    mode: 'image',
+    directory: 'C:\\photos',
+    filename: 'test.zip',
+    index: 3,
+    list: [
+      { name: '..', is_dir: true, is_parent: true },
+      { name: '1.png', path: 'C:\\photos\\1.png', is_dir: false },
+      { name: '2.png', path: 'C:\\photos\\2.png', is_dir: false },
+      { name: 'test.zip', path: 'C:\\photos\\test.zip', is_dir: false },
+    ],
+  });
+
+  await FsUtils.loadArchive('C:\\photos\\test.zip');
+
+  const state = Core.getState();
+  assert.equal(state.index, 0);
+  assert.equal(state.filename, '..');
+  assert.equal(state.src, '');
+});
+
+test('Navigation: opening archive with open_first_image ON selects first image', async () => {
+  Core.setState({
+    config: { frontend_data: { open_first_image: true } },
+    mode: 'image',
+    directory: 'C:\\photos',
+    filename: 'test.zip',
+    index: 3,
+    list: [
+      { name: '..', is_dir: true, is_parent: true },
+      { name: '1.png', path: 'C:\\photos\\1.png', is_dir: false },
+      { name: '2.png', path: 'C:\\photos\\2.png', is_dir: false },
+      { name: 'test.zip', path: 'C:\\photos\\test.zip', is_dir: false },
+    ],
+  });
+
+  await FsUtils.loadArchive('C:\\photos\\test.zip');
+
+  const state = Core.getState();
+  assert.equal(state.index, 1);
+  assert.equal(state.filename, 'page2.jpg');
+  assert.ok(state.src.length > 0);
+});
+

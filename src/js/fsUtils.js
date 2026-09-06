@@ -15,20 +15,8 @@ function _ext(name) {
   return name.split('.').pop().toLowerCase();
 }
 
-export class BoundedMap extends Map {
-  constructor(maxSize = 50) {
-    super();
-    this.maxSize = maxSize;
-  }
-
-  set(key, value) {
-    if (this.size >= this.maxSize && !this.has(key)) {
-      const oldestKey = this.keys().next().value;
-      this.delete(oldestKey);
-    }
-    return super.set(key, value);
-  }
-}
+import { BoundedMap } from './services/cache.js';
+export { BoundedMap };
 
 let _navigationGeneration = 0;
 let _archivePrefetchTimer = null;
@@ -190,7 +178,7 @@ export const FsUtils = {
         if (!this.isIco(entryName)) {
           return this.buildArchiveSrc(archivePath, entryName);
         }
-      } else if (state?.mode === 'archive') {
+      } else if (state?.mode === 'archive' && !this._isAbsolutePath(item.path)) {
         if (!this.isIco(item.name)) {
           return this.buildArchiveSrc(state.archivePath, item.name);
         }
@@ -201,8 +189,17 @@ export const FsUtils = {
       }
     }
     const ext = this.getIconExtKey(item);
-    const cleanPath = item.path && item.path.includes('|') ? item.path.slice(0, item.path.indexOf('|')) : item.path;
-    return this.buildNativeIconSrc(cleanPath, ext, 'large');
+    const iconPath = this._isPathSpecificIcon(ext) ? item.path : '';
+    return this.buildNativeIconSrc(iconPath, ext, 'large');
+  },
+
+  _isAbsolutePath(p) {
+    if (!p) return false;
+    return /^[a-zA-Z]:/.test(p) || p.startsWith('\\\\');
+  },
+
+  _isPathSpecificIcon(extKey) {
+    return extKey.includes('\\') || extKey.includes('/') || extKey.includes(':');
   },
 
   async buildArchiveEntrySrc(archivePath, entryName) {
@@ -383,7 +380,9 @@ export const FsUtils = {
         preferredIndex = files.findIndex(f => f.name === result.target_filename || f.name === cleanResult);
       }
 
-      if (preferredIndex === -1) {
+      const hasTargetEntry = preferredIndex !== -1;
+
+      if (preferredIndex === -1 && options.preferInitial) {
         const offset = result.parent_directory ? 1 : 0;
         preferredIndex = Math.min(files.length - 1, Math.max(0, result.initial_index + offset));
       }
@@ -391,15 +390,24 @@ export const FsUtils = {
       // preferInitial highlights the target entry, such as the archive you came
       // back from. forceFirstImage picks the first image, with a first-item
       // fallback for hidden archives. Otherwise config decides: ON opens the
-      // first image, OFF highlights the target entry.
+      // first image, OFF highlights the target entry (or '..' at index 0 when
+      // opening a folder without a target entry).
       if (options.forceFirstImage) {
-        const idx = this.firstImageIndex(files, preferredIndex);
+        const idx = this.firstImageIndex(files, preferredIndex !== -1 ? preferredIndex : 1);
         index = idx === 0 && files.length > 1 ? 1 : idx;
-      } else if (options.preferInitial || !fd.open_first_image) {
-        index = preferredIndex;
+      } else if (hasTargetEntry || options.preferInitial) {
+        index = options.preferInitial || !fd.open_first_image
+          ? preferredIndex
+          : this.firstImageIndex(files, preferredIndex);
+      } else if (fd.open_first_image) {
+        index = this.firstImageIndex(files, 1);
       } else {
-        index = this.firstImageIndex(files, preferredIndex);
+        index = 0;
       }
+    }
+
+    if (files.length === 0) {
+      index = -1;
     }
 
     this.revokeIfObjectURL(state.src);
@@ -522,7 +530,7 @@ export const FsUtils = {
         return;
       }
 
-      let index = 1;
+      let index = 0;
       const fd = state.config?.frontend_data || {};
       let preferredIndex = -1;
 
@@ -536,12 +544,18 @@ export const FsUtils = {
         preferredIndex = files.findIndex(f => f.path === targetPath);
       }
 
-      if (preferredIndex !== -1) {
-        index = preferredIndex;
-      } else if (state.list && state.index >= 0) {
+      if (options.isRefresh && preferredIndex === -1 && state.list && state.index >= 0) {
         index = findNearestSurvivingIndex(state.list, state.index, files);
-      } else if (fd.open_first_image) {
+      } else if (preferredIndex !== -1) {
+        index = preferredIndex;
+      } else if (options.forceFirstImage || fd.open_first_image) {
         index = this.firstImageIndex(files, 1);
+      } else {
+        index = 0;
+      }
+
+      if (files.length === 0) {
+        index = -1;
       }
 
       const selectedEntry = files[index];

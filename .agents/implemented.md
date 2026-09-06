@@ -8,6 +8,51 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Thumbnail Virtualization Polish, Caching & Container Navigation (2026-09-07)
+- **Scroll Debouncing & Settle Tracking:**
+  - Added `THUMB_SCROLL_DEBOUNCE_MS = 100` in `filePanel.js` with native `scrollend` event fallback to throttle image decoding during rapid scrollbar movements.
+  - Implemented two-phase virtualization: coordinates, text metadata, selection, and shell icons update immediately on scroll ticks, while media thumbnail loading is deferred until scrolling settles.
+  - Bypassed debouncing on initial directory open, list changes, and explicit selection jumps to render visible thumbnails immediately without latency.
+- **Distinct Skeleton Placeholders & Zero DOM Allocation:**
+  - Pre-allocated 24x24 SVG icons for images, folders, archive containers, and generic files on `li._slots.thumbPlaceholder` inside `createPoolRow` and `buildFavoriteEntry`.
+  - Added pure helper `getPlaceholderType(item)` in `filePanel.js` and `.item-thumbnail-placeholder[data-type]` CSS rules in `main.css` to toggle between image, folder, archive, and file skeletons without string parsing or runtime DOM allocations on scroll ticks.
+  - The placeholder centers inside the 44x44 slot and hides cleanly via `.is-loaded + .item-thumbnail-placeholder` once `thumbImg.onload` fires.
+  - Zero runtime DOM elements are allocated or queried on scroll ticks.
+- **Offscreen Decode Cancellation:**
+  - In `renderVisibleSlice()` Phase 1, rows reclaimed into `freePool` have their `dataset.pendingSrc` stripped and their image source reset to `TRANSPARENT_PIXEL`, halting queued Chromium/backend decode work.
+- **In-Memory Frontend Thumbnail Caching:**
+  - Exported named constant `THUMB_CACHE_CAPACITY = 250` and `thumbnailCache = new BoundedMap(THUMB_CACHE_CAPACITY)` in `filePanel.js` to retain verified loaded thumbnail URLs in memory (~14 full screens on 1080p, covering entire manga volumes under ~10 MB RAM).
+  - In `updateEntry()`, cached thumbnail entries assign `.src` and add `.is-loaded` synchronously on the same paint frame even during active scrolling, eliminating placeholder flashing when scrolling back and forth.
+  - Cached native shell icon fallbacks on `onerror` to avoid repeated decode attempts on broken media.
+  - Cleared `thumbnailCache` inside `setRefreshingVisual(active)` so manual refreshes (`F5` / `Ctrl+R`) pull fresh images.
+- **Container Open Default Selection Fix:**
+  - Restricted `findNearestSurvivingIndex` in `fsUtils.js` exclusively to `options.isRefresh`.
+  - When navigating into a folder or archive without an explicit target: selects the first image via `this.firstImageIndex(files, 1)` if `open_first_image` is enabled, or defaults to entry 0 (`..`) with blank image when `open_first_image` is disabled.
+- **Verification & Automated Tests:**
+  - Added unit tests in `fileListViewMode.test.mjs` verifying placeholder pre-allocation, deferred loading during scrolling, settlement commits, offscreen source cancellation, and synchronous `thumbnailCache` reuse.
+  - Added unit tests in `refresh.test.mjs` verifying container open selection with `open_first_image` enabled vs disabled.
+
+### Favorites Cache Isolation, Canonical Icon URLs & Cache Module Extraction (2026-09-07)
+- **Cache Module Extraction:**
+  - Extracted `BoundedMap` from `fsUtils.js` into `src/js/services/cache.js` as a standalone pure service module with zero DOM dependencies.
+  - `fsUtils.js` re-exports `BoundedMap` for backward compatibility. `filePanel.js` and `boundedMap.test.mjs` import from the new module directly.
+- **Canonical Icon URLs & HTTP Caching:**
+  - Added `Cache-Control: public, max-age=86400` to `png_response` in `protocol.rs` so WebView2 caches shell icon PNGs for 24 hours.
+  - Canonicalized non-image icon URLs in `buildThumbnailSrc`: generic folders and standard file extensions pass empty path to `buildNativeIconSrc`, producing one unique URL per icon type. Only drives and special shell folders (Downloads, Pictures, etc.) retain their real path.
+  - Canonicalized list mode icon probe URLs in `getIconHtml` and `updateRowIcon` via `_isPathSpecificIcon` helper.
+  - Canonicalized thumbnail fallback URLs in `updateEntry` onerror handler.
+  - Added `_isAbsolutePath(p)` and `_isPathSpecificIcon(extKey)` helpers to `FsUtils`.
+- **Favorites Cache Isolation:**
+  - Added `FAVORITES_CACHE_CAPACITY = 250` and `favoritesThumbnailCache` in `filePanel.js`, isolated from the main virtualized list `thumbnailCache`.
+  - Added `staticIconCache` (unbounded `Map`, ~20 entries) for canonical large format/folder icons. Image scrolling cannot evict these.
+  - Updated `buildFavoriteEntry` to use `favoritesThumbnailCache` and pass `null` state to `buildThumbnailSrc`, preventing favorites from inheriting the active viewer's archive context.
+  - Routed non-image thumbnail URLs in `updateEntry` through `staticIconCache` with `onload` registration so they survive scrolling past 250 images.
+  - `favoritesThumbnailCache` and `staticIconCache` are not cleared on refresh.
+- **Favorite Archive Mode Routing Fix:**
+  - Fixed `buildThumbnailSrc` so favorites with absolute disk paths (e.g., `C:\Photos\photo.jpg`) don't fall into `state.mode === 'archive'` routing when an archive is open.
+- **Verification & Automated Tests:**
+  - 7 new tests in `fileListViewMode.test.mjs`: canonical folder/archive URL deduplication, drive URL uniqueness, absolute path archive routing guard, `_isAbsolutePath`, `_isPathSpecificIcon`, and cache isolation proving favorites survive main cache overflow.
+
 ### Statusbar Initial Load Fix & Refresh UX Feedback (2026-09-06)
 - **Statusbar Initial Load Filename Fix:**
   - Removed hardcoded `'Loading...'` placeholder from `<span class="status-filename">` in `index.html`.

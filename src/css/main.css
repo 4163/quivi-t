@@ -763,6 +763,7 @@ li:hover > .fav-remove,
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-wrapper,
 #file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-wrapper {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -770,6 +771,48 @@ li:hover > .fav-remove,
   height: 44px;
   flex: 0 0 44px;
   overflow: hidden;
+}
+
+#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder,
+#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text-dim);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder .placeholder-icon,
+#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder .placeholder-icon {
+  display: none;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+}
+
+#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder:not([data-type]) .icon-image,
+#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="image"] .icon-image,
+#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="folder"] .icon-folder,
+#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="archive"] .icon-archive,
+#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="file"] .icon-file,
+#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder:not([data-type]) .icon-image,
+#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="image"] .icon-image,
+#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="folder"] .icon-folder,
+#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="archive"] .icon-archive,
+#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="file"] .icon-file {
+  display: block;
+}
+
+#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-img.is-loaded + .item-thumbnail-placeholder,
+#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-img.is-loaded + .item-thumbnail-placeholder {
+  display: none;
 }
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-wrapper img,

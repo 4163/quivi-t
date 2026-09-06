@@ -14,7 +14,7 @@ if (typeof window === 'undefined') {
   };
 }
 
-const { BoundedMap } = await import('../fsUtils.js');
+const { BoundedMap } = await import('../services/cache.js');
 
 test('BoundedMap: basic store and retrieval', () => {
   const map = new BoundedMap(3);

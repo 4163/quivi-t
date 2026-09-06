@@ -36,7 +36,7 @@ To prevent context creep and maintain surgical precision, Slice 4.3 is divided i
 
 | Sub-Slice | Focus Area | Primary Files | Status |
 | :--- | :--- | :--- | :--- |
-| **Slice 4.3.1** | Virtualization Debouncing & Placeholders | `filePanel.js`, `main.css` | `[PENDING]` |
+| **Slice 4.3.1** | Virtualization Debouncing & Placeholders | `filePanel.js`, `main.css`, `fsUtils.js`, `services/cache.js`, `protocol.rs` | `[COMPLETED]` |
 | **Slice 4.3.2** | Windows Shell Native Thumbnails | `platform/thumbnails.rs`, `protocol.rs`, `fsUtils.js` | `[PENDING]` |
 | **Slice 4.3.3** | Dual-Tier Archive Thumbnails | `archives/cache.rs`, `archives/mod.rs`, `protocol.rs` | `[PENDING]` |
 
@@ -81,5 +81,10 @@ cargo test --manifest-path src-tauri/Cargo.toml
 ---
 
 ## Deviations, Violations & Runtime Fixes
-
-- None recorded yet.
+ 
+- **Container Open Selection Default Fix (`src/js/fsUtils.js`)**: Fixed UX regression where opening an archive or folder defaulted selection to the previous directory index. Restricted `findNearestSurvivingIndex` strictly to `options.isRefresh`. Initial navigation into a container now correctly defaults to `..` (index 0) with blank image when `open_first_image` is off, or the first image entry when `open_first_image` is enabled.
+- **In-Memory Frontend Thumbnail Cache (`src/js/filepanel/filePanel.js`)**: Exported `THUMB_CACHE_CAPACITY = 250` and `thumbnailCache = new BoundedMap(THUMB_CACHE_CAPACITY)` to retain loaded thumbnail URLs (~14 full screens on 1080p, covering entire manga volumes under ~10 MB RAM). Revisiting previously loaded rows assigns `.src` and `.is-loaded` synchronously on the same frame, eliminating debounce delays and skeleton placeholder flashing during bidirectional scrolling. Cache is cleared on manual `F5` refresh.
+- **Distinct Skeleton Placeholders for Folders and Archives (`src/js/filepanel/filePanel.js`, `src/css/main.css`)**: Pre-allocated SVG icons for image, folder, archive, and file types inside `thumbPlaceholder`. Added `getPlaceholderType(item)` and CSS `data-type` switching to display dedicated folder and archive box skeletons instead of generic image icons while rows are loading or during scrolling, preserving zero runtime DOM allocation on scroll ticks.
+- **Cache Module Extraction (`src/js/services/cache.js`)**: Extract `BoundedMap` from `fsUtils.js` into a standalone pure service module for reuse by the image viewer. `fsUtils.js` re-exports for backward compatibility.
+- **Canonical Icon URLs and HTTP Caching (`src/js/fsUtils.js`, `src/js/filepanel/filePanel.js`, `src-tauri/src/protocol.rs`)**: Canonicalize non-image icon URLs to be path-agnostic across all three pipelines (list mode, thumbnail mode, favorites). Add `Cache-Control: public, max-age=86400` to `png_response`. Fix favorite routing so absolute paths don't fall into archive mode.
+- **Favorites Cache Isolation (`src/js/filepanel/filePanel.js`)**: Dedicated `favoritesThumbnailCache = new BoundedMap(250)` isolated from the main virtualized list. Permanent `staticIconCache` for ~20 canonical format/folder icon URLs. Favorites survive refresh and 14k-item scrolling.
