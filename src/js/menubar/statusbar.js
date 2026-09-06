@@ -24,6 +24,9 @@ let statusFit;
 let statusScrollZoom;
 let statusSpread;
 let spreadIndicator;
+const MIN_REFRESH_DURATION_MS = 200;
+let _refreshTimer = null;
+let _refreshStartTime = 0;
 
 export const Statusbar = {
   init() {
@@ -37,6 +40,26 @@ export const Statusbar = {
     statusSpread = document.querySelector('.status-spread');
     spreadIndicator = document.getElementById('spread-indicator');
     this.syncSpreadIndicator(Core.getState());
+
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('quivit-refresh-start', () => {
+        if (!statusbar) return;
+        clearTimeout(_refreshTimer);
+        _refreshStartTime = performance.now();
+        statusbar.classList.remove('refreshing');
+        if (statusbar) void statusbar.offsetWidth;
+        statusbar.classList.add('refreshing');
+      });
+
+      window.addEventListener('quivit-refresh-end', () => {
+        if (!statusbar) return;
+        const elapsed = performance.now() - _refreshStartTime;
+        const remaining = Math.max(0, MIN_REFRESH_DURATION_MS - elapsed);
+        _refreshTimer = setTimeout(() => {
+          statusbar?.classList.remove('refreshing');
+        }, remaining);
+      });
+    }
   },
 
   syncSpreadIndicator(state) {
@@ -97,6 +120,9 @@ export const Statusbar = {
         statusName.textContent = state.filename || '';
         statusName.title = state.filename || '';
       }
+    } else if (statusName && state.filename && statusName.textContent !== state.filename) {
+      statusName.textContent = state.filename;
+      statusName.title = state.filename;
     }
   },
 
@@ -104,16 +130,25 @@ export const Statusbar = {
   // dims, and zoom at the exact moment they become valid.
   setImage({ filename, dims, zoom, isError, isLoading }) {
     if (isLoading) {
-      if (statusName) statusName.textContent = 'Loading...';
+      if (statusName && !statusName.textContent) {
+        const liveName = filename || Core.getState().filename || '';
+        statusName.textContent = liveName;
+        statusName.title = liveName;
+      }
       return;
     }
     if (isError) {
       if (statusDims) statusDims.textContent = 'Error';
       if (statusZoom) statusZoom.textContent = 'N/A';
+      if (statusName && filename !== undefined) {
+        statusName.textContent = filename;
+        statusName.title = filename;
+      }
       return;
     }
     if (statusName && filename !== undefined) {
       statusName.textContent = filename;
+      statusName.title = filename;
     }
     if (statusDims && dims !== undefined) {
       statusDims.textContent = dims;

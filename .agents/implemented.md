@@ -8,6 +8,47 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Statusbar Initial Load Fix & Refresh UX Feedback (2026-09-06)
+- **Statusbar Initial Load Filename Fix:**
+  - Removed hardcoded `'Loading...'` placeholder from `<span class="status-filename">` in `index.html`.
+  - Updated `Statusbar.update(state)` in `statusbar.js` to populate `statusName` immediately whenever `state.filename` exists.
+  - Made `Statusbar.setImage({ isLoading: true })` preserve the current filename instead of replacing it with `'Loading...'`.
+  - In `viewerRender.js`, scoped activation generation increments (`_activationGeneration += 1`) and timer resets exclusively to genuine target source changes (`activeChanged`). Intermediate asynchronous checks (animation headers, dimension recalculation) no longer invalidate in-flight image decodes.
+  - Added unit test suite `statusbar.test.mjs` verifying initial binding, filename persistence during loading, dimension/zoom updates, and error handling.
+- **Refresh UX Feedback & Full Functionality Hardening:**
+  - Added visual cues on directory refresh (`6` / `Ctrl+R`): an accent line sweep along the panel header (`refresh-bar-sweep`), a container pulse on `#file-list` and `#favorites-list` (`refresh-list-pulse`), and a pulse on `#statusbar` (`statusbar-refresh-pulse`).
+  - Added `MIN_REFRESH_DURATION_MS = 200` in `filePanel.js` and `statusbar.js` to ensure the animation completes smoothly even when filesystem reads finish in ~2ms.
+  - Restored `Open Directory` (`cmd-open-dir`), `Open File / Archive` (`cmd-open-file`), and `Refresh` (`cmd-refresh`) under `File Operations` in `options.html`.
+  - Standardized the label for `cmd-refresh` to `'Refresh'` in `actions.js` matching the menubar item.
+  - **Viewer Image Reload on File Modification:** Added `quivit-refresh-start` listener and reload tracking in `viewerRender.js` that bypasses in-memory DOM bitmap caching with timestamp query params, forcing WebView2 to re-fetch and re-decode updated images from disk and recalculate dimensions, zoom scale, status bar text, and GL overlay textures.
+  - **Drives View Refresh:** Handled `state.directory === 'Drives'` in `fsUtils.js`, invoking `get_drives` via `loadFile('__DRIVES__')` rather than failing with `"Path does not exist"`.
+  - **Password-Protected Item Refresh Selection:** Added `cleanEntryName` helper in `fsUtils.js` to strip `Password required:`, `Password incorrect!`, and `Failed to open archive:` status prefixes when matching filenames. In `applyDirectoryResult`, `loadArchive`, and `refresh`, entries are resolved using `state.list?.[state.index]?.name || cleanEntryName(state.filename)`. In `findNearestSurvivingIndex`, the active item is preserved if it still exists in the new list before searching neighboring indices.
+  - **Deleted Active File Neighbor Tracking:** Added `findNearestSurvivingIndex` in `fsUtils.js`, searching forward from `state.index + 1` and backward from `state.index - 1` through the prior list to locate the first surviving neighbor in display order (e.g. deleting 3, 4, 5 in a 1..7 list lands cleanly on 6 rather than skipping to 7).
+  - **Archive Cache Invalidation:** Added `drop_archive_cache` Tauri command in `archives.rs` and wired cache clearing in `fsUtils.js` to drop stale ZIP handles and temp extraction directories on archive refresh.
+  - **Animation Memo Clearing:** Added `Core.clearAnimationMemo()` and wired it to `refresh()` to invalidate memoized animation detection headers.
+  - **Thumbnail Cache Busting:** Added `thumbRefreshTimestamp` cache-busting to `filePanel.js` in thumbnail mode when refresh starts.
+  - Added unit test suite `refresh.test.mjs` verifying drives refresh, archive cache dropping, deleted active file index clamping, and animation memo clearing.
+
+### Submenu Toggle-to-Off & Keybinding Parity Polish (2026-09-06)
+- **Submenu Toggle-to-Off:**
+  - Implemented toggle-to-off interaction across all submenus featuring an Off option (Filter and Spread View). Interacting with an already-checked option (via menu click or keyboard shortcut) clears the selection and transitions to Off.
+  - Added `Core.toggleSpreadMode(mode, options)` to `core.js` and wired `cmd-spread-direction-rtl` and `cmd-spread-direction-ltr` in `actions.js`.
+  - Registered `cmd-spread-off`, `cmd-spread-direction-rtl`, and `cmd-spread-direction-ltr` under category `Spread View` (scaling remains the sole feature with cycle actions).
+- **Options & Keybinding Grouping:**
+  - Added dedicated `Spread View` category in `options.html` containing `cmd-spread-off`, `cmd-spread-direction-rtl`, and `cmd-spread-direction-ltr`.
+  - Retained `cmd-toggle-file-list-view-mode` under category `File Operations`.
+- **Menubar Active Dropdown & Shortcut Isolation:**
+  - Fixed `isInteractiveKeyTarget(e)` in `shortcuts.js` so `.menu-trigger` buttons and `.menu-dropdown` items do not block keyboard shortcuts.
+  - Added menu dismissal (`closeMenus()`) and element blur when triggering shortcuts, keyboard pan, or mouse actions while dropdowns or menubar triggers are active.
+  - Added `e.stopPropagation()` in `menubar.js` for all handled menu navigation keys (`Enter`, `Space`, `Escape`, `ArrowDown`, `ArrowUp`, `ArrowRight`, `ArrowLeft`) to prevent menu navigation from leaking to canvas pan or viewer actions.
+  - Prevented viewport pan initiation and mouse action scheduling in `viewerGestures.js` and `shortcuts.js` when a menubar menu is open, ensuring clicks intended to dismiss dropdowns do not drag the canvas.
+  - Fixed `_isMouseOverViewportNow()` in `viewerGestures.js:166` resolving uncaught `ReferenceError` during `_stopPan`.
+  - Added unit test suite `menubarShortcuts.test.mjs` verifying shortcut routing and interactive target gating.
+- **UI & Accessibility Polish:**
+  - Standardized action and keybind naming across `options.html`, `index.html`, and `actions.js`: spaced slashes (`Folder / Archive`, `File / Archive`), added `Toggle` to `Toggle Opaque Canvas`, unified unhyphenated `Counterclockwise`, standardized `Fullscreen`, unified casing on minor conjunctions (`if`), and aligned `actions.js` registry labels to match visible UI names.
+  - Dynamically updated `title` and `aria-label` on `#btn-toggle-view-mode` in `filePanel.js` between `Toggle Thumbnail View` and `Switch to List View`.
+  - Removed dead `cmd-toggle-spread` lookup in `menubar.js`.
+
 ### Password-Protected Archive UI & Architectural Hardening (2026-09-05)
 - **Password Prompt Overlay:**
   - Added `#password-overlay` with autofocus password input field, submit unlocking, error message on incorrect password, and Escape return to parent container.

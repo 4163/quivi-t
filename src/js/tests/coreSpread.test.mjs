@@ -14,6 +14,7 @@ globalThis.window = {
 
 const { Core } = await import('../core.js');
 const { DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_MODE, mergeConfig } = await import('../keybinds.js');
+const { dispatch } = await import('../services/actions.js');
 
 test('Core: default spread mode is off', () => {
   assert.equal(DEFAULT_SPREAD_ENABLED, false);
@@ -58,12 +59,6 @@ test('Core: spread enabled and direction setting', () => {
   Core.setSpreadMode('rtl');
   assert.equal(Core.getState().spreadEnabled, true);
   assert.equal(Core.getState().spreadDirection, 'rtl');
-
-  Core.cycleSpreadMode();
-  assert.equal(Core.getState().spreadDirection, 'ltr');
-
-  Core.cycleSpreadMode();
-  assert.equal(Core.getState().spreadEnabled, false);
 });
 
 test('Core: step navigation on 2-page spreads', () => {
@@ -141,4 +136,64 @@ test('Core: spread stepping bypassed when mode is off or fit is window', () => {
   assert.equal(Core.getState().spreadStep, 1);
   Core.navigate(1);
   assert.equal(Core.getState().index, 2);
+});
+
+test('Core: toggleSpreadMode toggles active mode to off', () => {
+  Core.setSpreadMode('off');
+  assert.equal(Core.getState().spreadEnabled, false);
+
+  // When off, toggleSpreadMode('rtl') turns RTL on
+  Core.toggleSpreadMode('rtl');
+  assert.equal(Core.getState().spreadEnabled, true);
+  assert.equal(Core.getState().spreadDirection, 'rtl');
+
+  // When already in RTL, toggleSpreadMode('rtl') turns it off
+  Core.toggleSpreadMode('rtl');
+  assert.equal(Core.getState().spreadEnabled, false);
+
+  // When off, toggleSpreadMode('ltr') turns LTR on
+  Core.toggleSpreadMode('ltr');
+  assert.equal(Core.getState().spreadEnabled, true);
+  assert.equal(Core.getState().spreadDirection, 'ltr');
+
+  // When already in LTR, toggleSpreadMode('ltr') turns it off
+  Core.toggleSpreadMode('ltr');
+  assert.equal(Core.getState().spreadEnabled, false);
+
+  // Switching between directions keeps spread enabled
+  Core.toggleSpreadMode('rtl');
+  assert.equal(Core.getState().spreadEnabled, true);
+  assert.equal(Core.getState().spreadDirection, 'rtl');
+  Core.toggleSpreadMode('ltr');
+  assert.equal(Core.getState().spreadEnabled, true);
+  assert.equal(Core.getState().spreadDirection, 'ltr');
+
+  // 'off' directly disables
+  Core.toggleSpreadMode('off');
+  assert.equal(Core.getState().spreadEnabled, false);
+});
+
+test('Actions: dispatching spread actions toggles checked option to off', async () => {
+  const ctx = { Core };
+
+  Core.setSpreadMode('off');
+  assert.equal(Core.getState().spreadEnabled, false);
+
+  // Trigger cmd-spread-direction-rtl
+  await dispatch('cmd-spread-direction-rtl', {}, ctx);
+  assert.equal(Core.getState().spreadEnabled, true);
+  assert.equal(Core.getState().spreadDirection, 'rtl');
+
+  // Triggering again when already checked must go to off
+  await dispatch('cmd-spread-direction-rtl', {}, ctx);
+  assert.equal(Core.getState().spreadEnabled, false);
+
+  // Trigger cmd-spread-direction-ltr
+  await dispatch('cmd-spread-direction-ltr', {}, ctx);
+  assert.equal(Core.getState().spreadEnabled, true);
+  assert.equal(Core.getState().spreadDirection, 'ltr');
+
+  // Triggering again when already checked must go to off
+  await dispatch('cmd-spread-direction-ltr', {}, ctx);
+  assert.equal(Core.getState().spreadEnabled, false);
 });

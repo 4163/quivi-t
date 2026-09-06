@@ -73,7 +73,53 @@ function _base64Encode(str) {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function cleanEntryName(name) {
+  if (!name) return '';
+  return name.replace(/^(Password (required[:]?|incorrect[!:]?)|Failed to open archive:)\s*/i, '');
+}
 
+function findNearestSurvivingIndex(oldList, oldIndex, newFiles) {
+  if (!oldList || !oldList.length || oldIndex < 0) {
+    const clamped = Math.min(oldIndex >= 0 ? oldIndex : 0, newFiles.length - 1);
+    return (clamped === 0 && newFiles.length > 1) ? 1 : Math.max(0, clamped);
+  }
+
+  // 0. If the entry at oldIndex still exists in newFiles, preserve it
+  const currentOld = oldList[oldIndex];
+  if (currentOld && !currentOld.is_parent) {
+    const cleanOldName = cleanEntryName(currentOld.name);
+    const exactMatch = newFiles.findIndex(f => f.name === currentOld.name || f.name === cleanOldName);
+    if (exactMatch !== -1) {
+      return exactMatch;
+    }
+  }
+
+  // 1. Search forward in old list from oldIndex + 1
+  for (let i = oldIndex + 1; i < oldList.length; i++) {
+    const oldEntry = oldList[i];
+    if (!oldEntry || oldEntry.is_parent) continue;
+    const cleanOldName = cleanEntryName(oldEntry.name);
+    const found = newFiles.findIndex(f => f.name === oldEntry.name || f.name === cleanOldName);
+    if (found !== -1) {
+      return found;
+    }
+  }
+
+  // 2. Search backward in old list from oldIndex - 1 down to 0
+  for (let i = oldIndex - 1; i >= 0; i--) {
+    const oldEntry = oldList[i];
+    if (!oldEntry || oldEntry.is_parent) continue;
+    const cleanOldName = cleanEntryName(oldEntry.name);
+    const found = newFiles.findIndex(f => f.name === oldEntry.name || f.name === cleanOldName);
+    if (found !== -1) {
+      return found;
+    }
+  }
+
+  // 3. Fallback: clamp to bounds, preferring item 1 over '..' if items exist
+  const clamped = Math.min(oldIndex, newFiles.length - 1);
+  return (clamped === 0 && newFiles.length > 1) ? 1 : Math.max(0, clamped);
+}
 
 export const FsUtils = {
   basename,
@@ -304,9 +350,14 @@ export const FsUtils = {
 
     const state = Core.getState();
     let index = 0;
-    if (options.preserveFilename && state.filename) {
-      const found = files.findIndex(f => f.name === state.filename);
-      if (found !== -1) index = found;
+    if (options.preserveFilename && (state.filename || state.index >= 0)) {
+      const targetName = state.list?.[state.index]?.name || cleanEntryName(state.filename);
+      const found = files.findIndex(f => f.name === targetName || f.name === state.filename);
+      if (found !== -1) {
+        index = found;
+      } else {
+        index = findNearestSurvivingIndex(state.list, state.index, files);
+      }
     } else {
       const fd = state.config?.frontend_data || {};
       let preferredIndex = -1;
@@ -322,12 +373,14 @@ export const FsUtils = {
       }
 
       if (preferredIndex === -1 && options.targetName) {
-        preferredIndex = files.findIndex(f => f.name === options.targetName);
+        const cleanTarget = cleanEntryName(options.targetName);
+        preferredIndex = files.findIndex(f => f.name === options.targetName || f.name === cleanTarget);
       }
 
       if (preferredIndex === -1 && result.target_filename) {
         // Find by name after sorting. initial_index is stale if sort order differs.
-        preferredIndex = files.findIndex(f => f.name === result.target_filename);
+        const cleanResult = cleanEntryName(result.target_filename);
+        preferredIndex = files.findIndex(f => f.name === result.target_filename || f.name === cleanResult);
       }
 
       if (preferredIndex === -1) {
@@ -474,11 +527,8 @@ export const FsUtils = {
       let preferredIndex = -1;
 
       if (targetPath) {
-        preferredIndex = files.findIndex(f => f.path === targetPath);
-        // Also try matching by entry name (used by refresh/targetName)
-        if (preferredIndex === -1) {
-          preferredIndex = files.findIndex(f => f.name === targetPath);
-        }
+        const cleanTarget = cleanEntryName(targetPath);
+        preferredIndex = files.findIndex(f => f.path === targetPath || f.name === targetPath || f.name === cleanTarget || f.path === cleanTarget);
       }
 
       if (preferredIndex === -1 && options?.restoreLastImage && fd.remember_last_image && fd.last_active_image && fd.last_active_image.container === result.archive_path) {
@@ -488,6 +538,8 @@ export const FsUtils = {
 
       if (preferredIndex !== -1) {
         index = preferredIndex;
+      } else if (state.list && state.index >= 0) {
+        index = findNearestSurvivingIndex(state.list, state.index, files);
       } else if (fd.open_first_image) {
         index = this.firstImageIndex(files, 1);
       }
@@ -792,14 +844,26 @@ export const FsUtils = {
   async refresh() {
     const generation = _nextNavigationGeneration();
     const state = Core.getState();
+    Core.clearAnimationMemo();
     window.dispatchEvent(new CustomEvent('quivit-refresh-start'));
     try {
+      const targetName = state.list?.[state.index]?.name || cleanEntryName(state.filename);
       if (state.mode === 'archive' && state.archivePath) {
-        await this.loadFile(state.archivePath, { generation, history: 'skip', targetName: state.filename });
+        _archiveEncryptionCache.delete(state.archivePath);
+        if (window.__TAURI__) {
+          try {
+            await invoke('drop_archive_cache', { archivePath: state.archivePath });
+          } catch (e) {
+            console.warn('[Core] drop_archive_cache error:', e);
+          }
+        }
+        await this.loadFile(state.archivePath, { generation, history: 'skip', targetName, isRefresh: true });
+      } else if (state.directory === 'Drives') {
+        await this.loadFile('__DRIVES__', { generation, history: 'skip' });
       } else if (state.directory) {
-        const result = await invoke('read_directory', { path: state.directory, showHidden: this.showHidden(), targetName: state.filename });
+        const result = await invoke('read_directory', { path: state.directory, showHidden: this.showHidden(), targetName });
         if (!_isCurrentGeneration(generation)) return;
-        this.applyDirectoryResult(result, { preserveFilename: true, generation, history: 'skip' });
+        this.applyDirectoryResult(result, { preserveFilename: true, generation, history: 'skip', isRefresh: true });
       }
     } catch (err) {
       console.error('[Core] refresh error, navigating to parent:', err);

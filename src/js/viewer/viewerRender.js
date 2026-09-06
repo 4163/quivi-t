@@ -35,6 +35,9 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   }
 
   let img = null;
+  let _activeTargetSrc = null;
+  let _forceReloadTarget = false;
+  let _reloadTimestamp = 0;
   let _poolGeneration = 0;
   let _activationGeneration = 0;
   let _targetLoadTimer = null;
@@ -67,7 +70,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _loadingDots = (_loadingDots + 1) % 4;
       const dots = '.'.repeat(_loadingDots || 1);
       if (el) el.alt = `Loading${dots}`;
-      Statusbar.setImage({ isLoading: true });
     }, 250);
   }
 
@@ -145,6 +147,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     el.addEventListener('load', () => {
       if (el !== img) return;
       if (!el.src) return;
+      _stopLoadingAnimation();
       el.classList.add('active');
       _syncActiveImage(el, Core.getState().filename, Core.getState());
     });
@@ -274,6 +277,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   function clearDisplayedImage() {
     _cancelRetiringNode();
     _stopLoadingAnimation();
+    _activeTargetSrc = null;
     _poolGeneration += 1;
     _activationGeneration += 1;
     _clearTargetLoadTimer();
@@ -283,10 +287,16 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     onActiveImageChanged(null);
   }
 
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('quivit-refresh-start', () => {
+      _forceReloadTarget = true;
+      _reloadTimestamp = Date.now();
+      _activeTargetSrc = null;
+    });
+  }
+
   Core.onStateChange((state) => {
     const generation = ++_poolGeneration;
-    _activationGeneration += 1;
-    _clearTargetLoadTimer();
     _clearScheduledPreloads();
 
     if (state.mode === 'empty' || !state.src || !state.list || state.list.length === 0) {
@@ -314,15 +324,19 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     }
 
     let activeEl = _activeNodes.get(state.src);
-    const activeChanged = activeEl && activeEl !== img;
-    const hasPreviousBridge = !!(img && img !== activeEl && _isVisibleImage(img));
+    const isReload = _forceReloadTarget;
+    const activeChanged = state.src !== _activeTargetSrc || isReload;
+    const hasPreviousBridge = !isReload && !!(img && img !== activeEl && _isVisibleImage(img));
 
     if (activeChanged) {
-      const activation = _activationGeneration;
+      _activeTargetSrc = state.src;
+      _forceReloadTarget = false;
+      _clearTargetLoadTimer();
+      const activation = ++_activationGeneration;
       Statusbar.setImage({ isLoading: true });
       if (activeEl) activeEl.alt = LOADING_LABEL;
 
-      const isAlreadyLoaded = activeEl && activeEl.complete && activeEl.naturalWidth > 0;
+      const isAlreadyLoaded = !isReload && activeEl && activeEl.complete && activeEl.naturalWidth > 0;
       if (!isAlreadyLoaded) {
         _startLoadingAnimation(activeEl);
       }
@@ -346,13 +360,18 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         
         if (activeEl) {
           const isReEntry = state.isAnimated && activeEl.dataset.played === 'true';
-          const newSrc = isReEntry ? (state.src.includes('?') ? `${state.src}&_reset=${Date.now()}` : `${state.src}?_reset=${Date.now()}`) : state.src;
+          let newSrc = state.src;
+          if (isReload) {
+            newSrc = state.src.includes('?') ? `${state.src}&_t=${_reloadTimestamp}` : `${state.src}?_t=${_reloadTimestamp}`;
+          } else if (isReEntry) {
+            newSrc = state.src.includes('?') ? `${state.src}&_reset=${Date.now()}` : `${state.src}?_reset=${Date.now()}`;
+          }
           _loadPoolNode(activeEl, newSrc, state.src);
         }
 
         const skipDecode = state.src.toLowerCase().endsWith('.ico') || state.src.includes('.ico?') || 
                            state.src.toLowerCase().endsWith('.svg') || state.src.includes('.svg?');
-        const ready = activeEl && activeEl.complete && (activeEl.naturalWidth > 0 || skipDecode);
+        const ready = !isReload && activeEl && activeEl.complete && (activeEl.naturalWidth > 0 || skipDecode);
 
         let decodePromise;
         if (ready || !activeEl) {
@@ -373,12 +392,18 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         }
         
         decodePromise.then(() => {
-          if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+          if (activation !== _activationGeneration || Core.getState().src !== state.src) {
+            _stopLoadingAnimation();
+            return;
+          }
           _stopLoadingAnimation();
           if (activeEl) _activatePoolNode(activeEl, state.filename, state);
           _schedulePoolPreloads(neighborSrcs, generation);
         }).catch((err) => {
-          if (activation !== _activationGeneration || Core.getState().src !== state.src) return;
+          if (activation !== _activationGeneration || Core.getState().src !== state.src) {
+            _stopLoadingAnimation();
+            return;
+          }
           _stopLoadingAnimation();
           if (activeEl) _activatePoolNode(activeEl, state.filename ? `Failed to load ${state.filename}` : 'Failed to load image', state);
           Statusbar.setImage({ isError: true });

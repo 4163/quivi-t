@@ -123,11 +123,13 @@ function activateItem(item, dropdown) {
       const topPos = Math.max(4, rect.top - 4);
       aimState.activeSubmenu.style.setProperty('--submenu-top', `${topPos}px`);
       aimState.activeSubmenu.style.setProperty('--submenu-left', `${rect.right}px`);
+      aimState.activeSubmenu.dataset.side = 'right';
       const maxH = window.innerHeight - topPos - 8;
       aimState.activeSubmenu.style.setProperty('--submenu-max-height', `${Math.max(120, maxH)}px`);
       const subW = aimState.activeSubmenu.offsetWidth || 180;
       if (rect.right + subW > window.innerWidth) {
         aimState.activeSubmenu.style.setProperty('--submenu-left', `${Math.max(0, rect.left - subW)}px`);
+        aimState.activeSubmenu.dataset.side = 'left';
       }
     }
   } else {
@@ -200,12 +202,15 @@ function bindMenus() {
         if (firstItem) firstItem.focus();
       }
       if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
         closeMenus();
       }
       
       // Arrow navigation between top menubar triggers.
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         e.preventDefault();
+        e.stopPropagation();
         const triggers = Array.from(document.querySelectorAll('#menubar .menu-trigger'));
         const idx = triggers.indexOf(trigger);
         if (idx !== -1) {
@@ -321,6 +326,7 @@ function bindMenus() {
 
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
+          e.stopPropagation();
           if (isSubmenuTrigger) {
             activateItem(item, dropdown);
             item.querySelector('.submenu > li[role="menuitem"]')?.focus();
@@ -330,6 +336,7 @@ function bindMenus() {
         }
         if (e.key === 'Escape') {
           e.preventDefault();
+          e.stopPropagation();
           if (parentSubmenu) {
             const parentLi = item.closest('.has-submenu');
             if (parentLi) {
@@ -345,16 +352,19 @@ function bindMenus() {
         }
         if (e.key === 'ArrowDown') {
           e.preventDefault();
+          e.stopPropagation();
           const next = items[index + 1] || items[0];
           next.focus();
         }
         if (e.key === 'ArrowUp') {
           e.preventDefault();
+          e.stopPropagation();
           const prev = items[index - 1] || items[items.length - 1];
           prev.focus();
         }
         if (e.key === 'ArrowRight') {
           e.preventDefault();
+          e.stopPropagation();
           if (isSubmenuTrigger) {
             activateItem(item, dropdown);
             item.querySelector('.submenu > li[role="menuitem"]')?.focus();
@@ -369,6 +379,7 @@ function bindMenus() {
         }
         if (e.key === 'ArrowLeft') {
           e.preventDefault();
+          e.stopPropagation();
           if (parentSubmenu) {
             const parentLi = item.closest('.has-submenu');
             if (parentLi) {
@@ -481,11 +492,6 @@ export function syncViewMenu(state) {
     spreadLabelEl.textContent = !spreadEnabled ? 'Off' : (spreadDirection === 'ltr' ? 'LTR' : 'RTL');
   }
 
-  const toggleSpreadEl = document.getElementById('cmd-toggle-spread');
-  if (toggleSpreadEl) {
-    toggleSpreadEl.classList.toggle('checked', spreadEnabled);
-  }
-
   const spreadOffEl = document.getElementById('cmd-spread-off');
   if (spreadOffEl) {
     spreadOffEl.classList.toggle('checked', !spreadEnabled);
@@ -499,11 +505,6 @@ export function syncViewMenu(state) {
   const ltrEl = document.getElementById('cmd-spread-direction-ltr');
   if (ltrEl) {
     ltrEl.classList.toggle('checked', spreadEnabled && spreadDirection === 'ltr');
-  }
-
-  const thumbnailViewEl = document.getElementById('cmd-toggle-file-list-view-mode');
-  if (thumbnailViewEl) {
-    thumbnailViewEl.classList.toggle('checked', state.fileListViewMode === 'thumbnail');
   }
 }
 

@@ -77,7 +77,10 @@ let favoritesHeaderEl = null;
 let favLastClickPath = '';
 let favLastClickTime = 0;
 let highlightedFavoritePath = '';
+const MIN_REFRESH_DURATION_MS = 200;
 let refreshPulseTimer = null;
+let refreshStartTime = 0;
+let thumbRefreshTimestamp = 0;
 let hoverPreloadImg = null;
 let hoverPreloadTimer = null;
 const MAX_HOVER_PRELOAD_BYTES = 15 * 1024 * 1024;
@@ -809,7 +812,10 @@ function updateEntry(li, item, index) {
 
     if (slots.thumbImg) {
       const ext = FsUtils.getIconExtKey(item);
-      const targetSrc = FsUtils.buildThumbnailSrc(item, state);
+      let targetSrc = FsUtils.buildThumbnailSrc(item, state);
+      if (thumbRefreshTimestamp && FsUtils.isImageEntry(item) && targetSrc) {
+        targetSrc = targetSrc.includes('?') ? `${targetSrc}&_t=${thumbRefreshTimestamp}` : `${targetSrc}?_t=${thumbRefreshTimestamp}`;
+      }
 
       slots.thumbImg.onerror = () => {
         slots.thumbImg.onerror = null;
@@ -936,21 +942,33 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
 }
 
 function setRefreshingVisual(active) {
-  if (!fileListUl && !favoritesListUl) return;
+  if (!filePanel && !fileListUl && !favoritesListUl) return;
   clearTimeout(refreshPulseTimer);
 
   if (active) {
+    thumbRefreshTimestamp = Date.now();
+    refreshStartTime = performance.now();
+    filePanel?.classList.remove('refreshing');
     fileListUl?.classList.remove('refreshing');
     favoritesListUl?.classList.remove('refreshing');
-    requestAnimationFrame(() => {
-      fileListUl?.classList.add('refreshing');
-      favoritesListUl?.classList.add('refreshing');
-    });
+    if (filePanel) void filePanel.offsetWidth;
+    filePanel?.classList.add('refreshing');
+    fileListUl?.classList.add('refreshing');
+    favoritesListUl?.classList.add('refreshing');
+    if (Core && Core.getState().fileListViewMode === 'thumbnail') {
+      renderVisibleSlice();
+    }
     return;
   }
 
-  fileListUl?.classList.remove('refreshing');
-  favoritesListUl?.classList.remove('refreshing');
+  const elapsed = performance.now() - refreshStartTime;
+  const remaining = Math.max(0, MIN_REFRESH_DURATION_MS - elapsed);
+
+  refreshPulseTimer = setTimeout(() => {
+    filePanel?.classList.remove('refreshing');
+    fileListUl?.classList.remove('refreshing');
+    favoritesListUl?.classList.remove('refreshing');
+  }, remaining);
 }
 
 export function renderFilePanel(state) {
@@ -969,6 +987,9 @@ export function renderFilePanel(state) {
   if (btnToggleViewMode) {
     btnToggleViewMode.classList.toggle('active', isThumbnail);
     btnToggleViewMode.setAttribute('aria-pressed', isThumbnail ? 'true' : 'false');
+    const toggleLabel = isThumbnail ? 'Switch to List View' : 'Toggle Thumbnail View';
+    btnToggleViewMode.setAttribute('title', toggleLabel);
+    btnToggleViewMode.setAttribute('aria-label', toggleLabel);
   }
 
   if (currentViewMode !== viewMode) {

@@ -76,6 +76,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_directory,
             list_archive,
+            drop_archive_cache,
             prefetch_archive_entries,
             load_config,
             get_config_dir,

@@ -163,7 +163,7 @@ export function createViewerGestures(viewportState) {
     _panButtonsDown.clear();
     _stopCursorPoll();
     document.body.classList.toggle('cursor-move', false);
-    if (_isMouseOverViewport) {
+    if (_isMouseOverViewportNow()) {
       _armIdleCursorTimer();
     }
   }
@@ -246,6 +246,7 @@ export function createViewerGestures(viewportState) {
   }
 
   function _onMouseDown(e) {
+    if (document.querySelector('#menubar .menu-item.open')) return;
     if (!_isMouseOverViewportNow()) return;
     const isPanKey = _isMousePanKey(e) || (e.button === 0 && _keyPanHeld(null));
     if (!isPanKey) return;

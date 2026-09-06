@@ -180,6 +180,33 @@ body.resizing-col { cursor: col-resize !important; }
   scrollbar-color: var(--border) transparent;
 }
 
+.menu-dropdown .submenu[data-side="right"] {
+  box-shadow: 2px 2px 8px rgba(0,0,0,0.18);
+  clip-path: inset(-8px -8px -8px 0);
+}
+
+.menu-dropdown .submenu[data-side="left"] {
+  box-shadow: -2px 2px 8px rgba(0,0,0,0.18);
+  clip-path: inset(-8px 0 -8px -8px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .menu-dropdown .submenu[data-side="right"] {
+    box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+  }
+  :root:not([data-theme="light"]) .menu-dropdown .submenu[data-side="left"] {
+    box-shadow: -2px 2px 10px rgba(0,0,0,0.5);
+  }
+}
+
+:root[data-theme="dark"] .menu-dropdown .submenu[data-side="right"] {
+  box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+}
+
+:root[data-theme="dark"] .menu-dropdown .submenu[data-side="left"] {
+  box-shadow: -2px 2px 10px rgba(0,0,0,0.5);
+}
+
 .menu-dropdown li.has-submenu.open > .submenu {
   display: block;
 }
@@ -572,7 +599,6 @@ li:hover > .fav-remove,
 }
 
 #file-list {
-  cursor: default;
   outline: none;
 }
 #file-list:focus,
@@ -588,7 +614,6 @@ li:hover > .fav-remove,
   align-items: center;
   padding: 1.6015px 0;
   gap: 0;
-  cursor: default;
   font-size: var(--fs-12);
   color: var(--text);
   white-space: nowrap;
@@ -610,17 +635,74 @@ li:hover > .fav-remove,
   display: none;
 }
 
-#file-list.refreshing li,
-#favorites-list.refreshing li {
-  animation: refresh-pulse 0.14s ease-out;
+#file-panel-header-top {
+  position: relative;
 }
 
-@keyframes refresh-pulse {
-  0%, 100% {
+#file-panel.refreshing #file-panel-header-top::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  opacity: 1;
+  animation: refresh-bar-sweep 0.2s ease-out;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes refresh-bar-sweep {
+  0% {
+    transform: scaleX(0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scaleX(1);
     opacity: 1;
   }
-  45% {
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
+#file-panel.refreshing #file-list,
+#file-panel.refreshing #favorites-list,
+#file-list.refreshing,
+#favorites-list.refreshing {
+  animation: refresh-list-pulse 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes refresh-list-pulse {
+  0% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  25% {
+    opacity: 0.3;
+    filter: brightness(1.2);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+#statusbar.refreshing {
+  animation: statusbar-refresh-pulse 0.2s ease-out;
+}
+
+@keyframes statusbar-refresh-pulse {
+  0% {
+    opacity: 1;
+  }
+  25% {
     opacity: 0.45;
+  }
+  100% {
+    opacity: 1;
   }
 }
 
@@ -886,8 +968,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   outline: none;
 }
 
-/* Drop overlay. */
-#drop-overlay {
+#drop-overlay, #password-overlay {
   position: absolute;
   inset: 0;
   display: flex;
@@ -902,21 +983,29 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   container-name: box;
 }
 
-
-
-@container box (max-width: 240px) {
-  .drop-hint p,
-  .drop-hint span {
-    display: none;
-  }
-  .drop-hint {
-    width: calc(100% - (10.4167% * 2));
+@container box (max-width: 323px) {
+  .password-prompt {
+    width: calc(100% - 52px);
   }
 }
 
-@container box (max-width: 194px) {
+@container box (max-width: 260px) {
+  .drop-hint p,
+  .drop-hint span,
+  .password-prompt p {
+    display: none;
+  }
   .drop-hint {
-    padding: 21.6495% 0 !important;  /* emulates subtle squeeze */
+    width: calc(100% - 52px);
+  }
+  .password-prompt {
+    padding: 40px 0 !important;
+  }
+  .password-field {
+   width: calc(100% - 26px);
+  }
+  .password-field > * {
+    width: 100%;
   }
 }
 
@@ -957,20 +1046,6 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 .drop-hint p   { font-size: 0.95rem; font-weight: 500; text-align: center; }
 .drop-hint span{ font-size: 0.75rem; opacity: 0.5; letter-spacing: 0.04em; text-align: center; }
 
-/* Password overlay for encrypted archives. */
-#password-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-  z-index: 6;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
 #password-overlay.active {
   opacity: 1;
   pointer-events: all;
@@ -994,11 +1069,15 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 
 .password-field {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 6px;
   margin-top: 4px;
 }
 
 .password-field input {
+  max-width: var(--fs-169);
+  min-width: 0;
   padding: 5px 10px;
   font-size: var(--fs-13);
   font-family: inherit;
@@ -1007,7 +1086,9 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   background: var(--field-bg);
   color: var(--text);
   outline: none;
-  min-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .password-field input:focus {
@@ -1015,6 +1096,9 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 }
 
 .password-field button {
+  max-width: var(--fs-169);
+  flex-grow: 1;
+  min-width: 0;
   padding: 5px 16px;
   font-size: var(--fs-13);
   font-family: inherit;
@@ -1023,6 +1107,9 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   background: var(--accent);
   color: #fff;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .password-field button:hover {

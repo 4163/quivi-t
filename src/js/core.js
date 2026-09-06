@@ -321,6 +321,14 @@ export const Core = {
     }
   },
 
+  clearAnimationMemo(pathArg = null, archiveArg = null) {
+    if (pathArg) {
+      _animMemo.delete(`${archiveArg || ''}::${pathArg}`);
+    } else {
+      _animMemo.clear();
+    }
+  },
+
   toggleTransparentBg() {
     _state.config.frontend_data.transparent_bg = !_state.config.frontend_data.transparent_bg;
     _scheduleConfigFlush(1500);
@@ -404,14 +412,14 @@ export const Core = {
     }
   },
 
-  cycleSpreadMode(options = {}) {
-    if (!_state.spreadEnabled) {
-      this.setSpreadEnabled(true, options);
-      this.setSpreadDirection('rtl', options);
-    } else if (_state.spreadDirection === 'rtl') {
-      this.setSpreadDirection('ltr', options);
-    } else {
+  toggleSpreadMode(mode, options = {}) {
+    if (mode === 'off') {
       this.setSpreadEnabled(false, options);
+    } else if (_state.spreadEnabled && _state.spreadDirection === mode) {
+      this.setSpreadEnabled(false, options);
+    } else {
+      this.setSpreadEnabled(true, options);
+      this.setSpreadDirection(mode, options);
     }
   },
 

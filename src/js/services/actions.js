@@ -33,10 +33,10 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-parent', label: 'Open Parent Folder', defaultBinds: 'Backspace', category: 'Navigation',
     run: (ctx) => ctx.FsUtils.openParent()
   },
-  { id: 'cmd-open-next-container', label: 'Open Next Folder/Archive', defaultBinds: 'Ctrl+x', category: 'Navigation',
+  { id: 'cmd-open-next-container', label: 'Open Next Folder / Archive', defaultBinds: 'Ctrl+x', category: 'Navigation',
     run: (ctx) => ctx.FsUtils.openSibling(1)
   },
-  { id: 'cmd-open-prev-container', label: 'Open Previous Folder/Archive', defaultBinds: 'Ctrl+z', category: 'Navigation',
+  { id: 'cmd-open-prev-container', label: 'Open Previous Folder / Archive', defaultBinds: 'Ctrl+z', category: 'Navigation',
     run: (ctx) => ctx.FsUtils.openSibling(-1)
   },
   
@@ -53,22 +53,22 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-fit-best', label: 'Fit Window', description: 'Scale to fit entirely within the viewport, stretching small images', defaultBinds: 'Shift+f', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('window', { persist: true })
   },
-  { id: 'cmd-fit-width-if-larger', label: 'Fit Width If Larger', defaultBinds: 'q', category: 'View',
+  { id: 'cmd-fit-width-if-larger', label: 'Fit Width if Larger', defaultBinds: 'q', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('width-if-larger', { persist: true })
   },
-  { id: 'cmd-fit-height-if-larger', label: 'Fit Height If Larger', defaultBinds: 'e', category: 'View',
+  { id: 'cmd-fit-height-if-larger', label: 'Fit Height if Larger', defaultBinds: 'e', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('height-if-larger', { persist: true })
   },
-  { id: 'cmd-fit-window-if-larger', label: 'Fit Window If Larger', description: 'Shrink to fit the viewport, but never enlarge small images', defaultBinds: 'f', category: 'View',
+  { id: 'cmd-fit-window-if-larger', label: 'Fit Window if Larger', description: 'Shrink to fit the viewport, but never enlarge small images', defaultBinds: 'f', category: 'View',
     run: (ctx) => ctx.Core.setFitMode('window-if-larger', { persist: true })
   },
-  { id: 'cmd-scale-none', label: 'Scale Pixelated', defaultBinds: [], category: 'View',
+  { id: 'cmd-scale-none', label: 'Pixelated', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.setScalingMode('none', { persist: true })
   },
-  { id: 'cmd-scale-bilinear', label: 'Scale Bilinear', defaultBinds: [], category: 'View',
+  { id: 'cmd-scale-bilinear', label: 'Bilinear', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.setScalingMode('bilinear', { persist: true })
   },
-  { id: 'cmd-scale-lanczos', label: 'Scale Lanczos', defaultBinds: [], category: 'View',
+  { id: 'cmd-scale-lanczos', label: 'Lanczos', defaultBinds: [], category: 'View',
     run: (ctx) => {
       ctx.Core.setScalingMode('lanczos', { persist: true });
     }
@@ -83,7 +83,7 @@ export const ACTION_REGISTRY = [
     category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
-      const current = activeFilterId(state.config.frontend_data);
+      const current = activeFilterId(state.config?.frontend_data || {});
       ctx.Core.setActiveFilter(current === f.id ? null : f.id);
     }
   })),
@@ -107,20 +107,17 @@ export const ACTION_REGISTRY = [
       ctx.Core.setScalingMode(next, { persist: true });
     }
   },
-  { id: 'cmd-toggle-transparent', label: 'Opaque Canvas', defaultBinds: [], category: 'View',
+  { id: 'cmd-toggle-transparent', label: 'Toggle Opaque Canvas', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.toggleTransparentBg()
   },
-  { id: 'cmd-toggle-spread', label: 'Spread View', defaultBinds: [], category: 'View',
-    run: (ctx) => ctx.Core.toggleSpreadEnabled({ persist: true })
-  },
-  { id: 'cmd-spread-off', label: 'Spread Off', defaultBinds: [], category: 'View',
+  { id: 'cmd-spread-off', label: 'Spread Off', defaultBinds: [], category: 'Spread View',
     run: (ctx) => ctx.Core.setSpreadMode('off', { persist: true })
   },
-  { id: 'cmd-spread-direction-rtl', label: 'Right to Left (RTL)', defaultBinds: [], category: 'View',
-    run: (ctx) => ctx.Core.setSpreadMode('rtl', { persist: true })
+  { id: 'cmd-spread-direction-rtl', label: 'Toggle Right to Left (RTL)', defaultBinds: [], category: 'Spread View',
+    run: (ctx) => ctx.Core.toggleSpreadMode('rtl', { persist: true })
   },
-  { id: 'cmd-spread-direction-ltr', label: 'Left to Right (LTR)', defaultBinds: [], category: 'View',
-    run: (ctx) => ctx.Core.setSpreadMode('ltr', { persist: true })
+  { id: 'cmd-spread-direction-ltr', label: 'Toggle Left to Right (LTR)', defaultBinds: [], category: 'Spread View',
+    run: (ctx) => ctx.Core.toggleSpreadMode('ltr', { persist: true })
   },
   
   // Zoom
@@ -170,7 +167,7 @@ export const ACTION_REGISTRY = [
   },
 
   // Rotation
-  { id: 'cmd-rotate-ccw', label: 'Rotate Counter-clockwise', defaultBinds: 'g', category: 'Rotation',
+  { id: 'cmd-rotate-ccw', label: 'Rotate Counterclockwise', defaultBinds: 'g', category: 'Rotation',
     run: (ctx) => ctx.Viewer.rotate(-90)
   },
   { id: 'cmd-rotate-cw', label: 'Rotate Clockwise', defaultBinds: 'h', category: 'Rotation',
@@ -195,9 +192,6 @@ export const ACTION_REGISTRY = [
       ctx.Core.setFileListVisible(visible);
       document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', visible);
     }
-  },
-  { id: 'cmd-toggle-file-list-view-mode', label: 'Toggle Thumbnail / List View', defaultBinds: [], category: 'Window & UI',
-    run: (ctx) => ctx.Core.toggleFileListViewMode({ persist: true })
   },
   { id: 'cmd-toggle-menubar', label: 'Toggle Menu Bar', defaultBinds: '2', category: 'Window & UI',
     run: (ctx) => ctx.Chrome.toggleMenuBar()
@@ -235,19 +229,20 @@ export const ACTION_REGISTRY = [
     }
   },
 
-  // Files & Folders
-  { id: 'cmd-open-dir', label: 'Open Directory', defaultBinds: 'Ctrl+o', category: 'Files & Folders',
+  // File Operations
+  { id: 'cmd-open-dir', label: 'Open Directory', defaultBinds: 'Ctrl+o', category: 'File Operations',
     run: (ctx) => ctx.FsUtils.openDirectoryDialog()
   },
-  { id: 'cmd-open-file', label: 'Open File/Archive', defaultBinds: 'Ctrl+Shift+o', category: 'Files & Folders',
+  { id: 'cmd-open-file', label: 'Open File / Archive', defaultBinds: 'Ctrl+Shift+o', category: 'File Operations',
     run: (ctx) => ctx.FsUtils.openFileDialog()
   },
-  { id: 'cmd-refresh', label: 'Refresh Directory', defaultBinds: ['6', 'Ctrl+r'], category: 'Files & Folders',
+  { id: 'cmd-refresh', label: 'Refresh', defaultBinds: ['6', 'Ctrl+r'], category: 'File Operations',
     run: (ctx) => ctx.FsUtils.refresh()
   },
-
-  // File Operations
-  { id: 'cmd-open-explorer', label: 'Reveal in File Explorer', defaultBinds: [], category: 'File Operations',
+  { id: 'cmd-toggle-file-list-view-mode', label: 'Toggle Thumbnail / List View', defaultBinds: [], category: 'File Operations',
+    run: (ctx) => ctx.Core.toggleFileListViewMode({ persist: true })
+  },
+  { id: 'cmd-open-explorer', label: 'Show in Explorer', defaultBinds: [], category: 'File Operations',
     run: async (ctx) => {
       const state = ctx.Core.getState();
       if (!window.__TAURI__) return;
@@ -290,7 +285,7 @@ export const ACTION_REGISTRY = [
       }
     }
   },
-  { id: 'cmd-open-folder', label: 'Open Folder in Explorer', defaultBinds: [], category: 'File Operations',
+  { id: 'cmd-open-folder', label: 'Open Folder', defaultBinds: [], category: 'File Operations',
     run: async (ctx) => {
       const state = ctx.Core.getState();
       if (!window.__TAURI__) return;

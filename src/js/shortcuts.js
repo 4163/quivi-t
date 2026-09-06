@@ -4,6 +4,7 @@
 
 import { formatKeysCombo, findAction, rebuildBindMap, normalizeCombo, formatKeyName, normalizeList, isModifierKey } from './services/keyCombo.js';
 import { Statusbar } from './menubar/statusbar.js';
+import { closeMenus } from './menubar.js';
 export const activeKeys = new Set();
 export const activeButtons = new Set();
 
@@ -185,13 +186,17 @@ function readKeyboardPanVector() {
 
 function isInteractiveKeyTarget(e) {
   const target = e.target;
-  return !!(target && (
-    target.tagName === 'BUTTON'
-    || target.tagName === 'INPUT'
-    || target.tagName === 'TEXTAREA'
-    || target.tagName === 'SELECT'
-    || target.closest?.('button, input, textarea, select')
-  ));
+  if (!target) return false;
+  // Menubar triggers and dropdown items must not block global shortcuts.
+  if (target.closest?.('#menubar, .menu-dropdown')) return false;
+
+  const tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (target.isContentEditable) return true;
+  if (tag === 'BUTTON' || target.closest?.('button')) {
+    return e.key === ' ' || e.key === 'Enter';
+  }
+  return false;
 }
 
 export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPan }) {
@@ -210,6 +215,10 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
     e.preventDefault();
     e.stopPropagation();
+    closeMenus();
+    if (document.activeElement?.closest?.('#menubar, .menu-dropdown')) {
+      document.activeElement.blur();
+    }
     dispatchAction(actionId);
     return true;
   }
@@ -243,6 +252,10 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     if (!actionId) return;
 
     e.preventDefault();
+    closeMenus();
+    if (document.activeElement?.closest?.('#menubar, .menu-dropdown')) {
+      document.activeElement.blur();
+    }
     dispatchAction(actionId);
   };
 
@@ -292,6 +305,10 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     const keyboardPanVector = readKeyboardPanVector();
     if (keyboardPanVector.x !== 0 || keyboardPanVector.y !== 0) {
       e.preventDefault();
+      closeMenus();
+      if (document.activeElement?.closest?.('#menubar, .menu-dropdown')) {
+        document.activeElement.blur();
+      }
       dispatchKeyboardPan?.(keyboardPanVector.x, keyboardPanVector.y);
       if (isModifierKey(e.key)) _updateScrollIndicator(config);
       return;
@@ -330,6 +347,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   });
 
   window.addEventListener('mousedown', (e) => {
+    if (document.querySelector('#menubar .menu-item.open')) return;
     if (handleSideButtonPress(e)) return;
 
     // Mouse/double-click gestures are viewport actions, never over the file
@@ -385,6 +403,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
       const actionId = findAction(Core.getState().config, combo);
       if (actionId) {
         e.preventDefault();
+        closeMenus();
         dispatchAction(actionId);
       }
       return;
@@ -396,7 +415,10 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     clickState.timer = setTimeout(() => {
       clickState.timer = null;
       const actionId = findAction(Core.getState().config, combo);
-      if (actionId) dispatchAction(actionId);
+      if (actionId) {
+        closeMenus();
+        dispatchAction(actionId);
+      }
     }, DOUBLE_CLICK_MS);
   }
 
@@ -428,6 +450,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     if (!actionId) return;
 
     e.preventDefault();
+    closeMenus();
     dispatchAction(actionId, { wheel: true, clientX: e.clientX, clientY: e.clientY });
   }, { passive: false });
 }
