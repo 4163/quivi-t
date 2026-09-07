@@ -42,3 +42,8 @@ test-files/export_1785548648565.apng
 
 # Animated format test files duplicated into one directory for manual testing
 test-files/animated/
+
+# Playwright (copied from other project, local only)
+playwright/
+test-results/
+playwright-report/
