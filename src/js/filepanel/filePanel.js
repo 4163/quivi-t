@@ -26,6 +26,16 @@ export const favoritesThumbnailCache = new BoundedMap(FAVORITES_CACHE_CAPACITY);
 // Separate from thumbnailCache so image scrolling can't evict them.
 const staticIconCache = new Map();
 
+function isSvgSrc(src) {
+  if (!src) return false;
+  try { return new URL(src).pathname.toLowerCase().endsWith('.svg'); }
+  catch { return src.split('?')[0].split('#')[0].toLowerCase().endsWith('.svg'); }
+}
+
+function isDiskSvgTarget(targetSrc) {
+  return isSvgSrc(targetSrc) && !targetSrc.includes('/archive/');
+}
+
 let MIN_COL_WIDTHS = {};
 
 function recalculateMinColWidths() {
@@ -418,10 +428,24 @@ function buildFavoriteEntry(fav) {
   const targetSrc = FsUtils.buildThumbnailSrc(fav, null);
   thumbImg.onerror = () => {
     thumbImg.onerror = null;
-    const iconPath = FsUtils._isPathSpecificIcon(ext) ? fav.path : '';
-    const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
-    favoritesThumbnailCache.set(targetSrc, fallbackSrc);
-    thumbImg.src = fallbackSrc;
+    const currentSrc = thumbImg.getAttribute('src') || '';
+    if (currentSrc.includes('/thumb/')) {
+      thumbImg.onerror = () => {
+        thumbImg.onerror = null;
+        const iconPath = FsUtils._isPathSpecificIcon(ext) ? fav.path : '';
+        const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
+        favoritesThumbnailCache.set(targetSrc, fallbackSrc);
+        thumbImg.src = fallbackSrc;
+      };
+      const directSrc = FsUtils.buildFileSrcSync(fav.path);
+      favoritesThumbnailCache.set(targetSrc, directSrc);
+      thumbImg.src = directSrc;
+    } else {
+      const iconPath = FsUtils._isPathSpecificIcon(ext) ? fav.path : '';
+      const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
+      favoritesThumbnailCache.set(targetSrc, fallbackSrc);
+      thumbImg.src = fallbackSrc;
+    }
   };
   thumbImg.onload = () => {
     const src = thumbImg.getAttribute('src');
@@ -440,10 +464,19 @@ function buildFavoriteEntry(fav) {
   };
   const cachedFav = favoritesThumbnailCache.get(targetSrc);
   if (cachedFav !== undefined) {
+    if (isDiskSvgTarget(targetSrc)) {
+      thumbImg.loading = 'eager';
+    } else if (thumbImg.getAttribute('loading') === 'eager') {
+      thumbImg.loading = 'lazy';
+    }
     thumbImg.src = typeof cachedFav === 'string' ? cachedFav : targetSrc;
     thumbImg.classList.add('is-loaded');
   } else {
-    thumbImg.loading = 'lazy';
+    if (isDiskSvgTarget(targetSrc)) {
+      thumbImg.loading = 'eager';
+    } else {
+      thumbImg.loading = 'lazy';
+    }
     thumbImg.src = targetSrc;
   }
 
@@ -802,7 +835,10 @@ function createPoolRow() {
     if (src && !src.startsWith('data:image/svg+xml')) {
       thumbImg.classList.add('is-loaded');
       if (!thumbnailCache.has(src)) {
-        if (typeof Image !== 'undefined') {
+        if (isDiskSvgTarget(src)) {
+          // Disk SVG: store flag not Image to avoid poisoned SMIL timeline retain
+          thumbnailCache.set(src, true);
+        } else if (typeof Image !== 'undefined') {
           const retain = new Image();
           retain.src = src;
           thumbnailCache.set(src, retain);
@@ -868,6 +904,9 @@ function initDomPool() {
 
 function updateEntry(li, item, index) {
   if (!li || !item) return;
+  // Restore visibility before src assignment so animated SVGs start SMIL in visible context (disk SVG only)
+  li.style.top = `${index * ROW_HEIGHT}px`;
+  li.style.display = '';
   li.dataset.index = index;
   li.title = item.name && item.name !== '..' ? item.name : '';
   li.classList.toggle('is-hidden-entry', !!item.is_hidden);
@@ -909,10 +948,24 @@ function updateEntry(li, item, index) {
 
       slots.thumbImg.onerror = () => {
         slots.thumbImg.onerror = null;
-        const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
-        const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
-        thumbnailCache.set(targetSrc, fallbackSrc);
-        slots.thumbImg.src = fallbackSrc;
+        const currentSrc = slots.thumbImg.getAttribute('src') || '';
+        if (currentSrc.includes('/thumb/')) {
+          slots.thumbImg.onerror = () => {
+            slots.thumbImg.onerror = null;
+            const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
+            const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
+            thumbnailCache.set(targetSrc, fallbackSrc);
+            slots.thumbImg.src = fallbackSrc;
+          };
+          const directSrc = FsUtils.buildFileSrcSync(item.path);
+          thumbnailCache.set(targetSrc, directSrc);
+          slots.thumbImg.src = directSrc;
+        } else {
+          const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
+          const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
+          thumbnailCache.set(targetSrc, fallbackSrc);
+          slots.thumbImg.src = fallbackSrc;
+        }
       };
 
       const cachedEntry = thumbnailCache.get(targetSrc);
@@ -939,6 +992,11 @@ function updateEntry(li, item, index) {
         // Re-use immediately without deferral or skeleton placeholder flash.
         delete slots.thumbImg.dataset.pendingSrc;
         const finalSrc = typeof cachedEntry === 'string' ? cachedEntry : targetSrc;
+        if (isDiskSvgTarget(finalSrc)) {
+          slots.thumbImg.loading = 'eager';
+        } else if (slots.thumbImg.getAttribute('loading') === 'eager') {
+          slots.thumbImg.loading = 'lazy';
+        }
         if (slots.thumbImg.getAttribute('src') !== finalSrc) {
           slots.thumbImg.src = finalSrc;
         }
@@ -955,7 +1013,11 @@ function updateEntry(li, item, index) {
         delete slots.thumbImg.dataset.pendingSrc;
         if (slots.thumbImg.getAttribute('src') !== targetSrc) {
           slots.thumbImg.classList.remove('is-loaded');
-          slots.thumbImg.loading = 'lazy';
+          if (isDiskSvgTarget(targetSrc)) {
+            slots.thumbImg.loading = 'eager';
+          } else {
+            slots.thumbImg.loading = 'lazy';
+          }
           slots.thumbImg.src = targetSrc;
         }
       }
@@ -966,9 +1028,6 @@ function updateEntry(li, item, index) {
     if (slots.ext) slots.ext.textContent = item.is_dir ? 'DIR' : (item.ext || '');
     if (slots.date) slots.date.textContent = item.date || '';
   }
-
-  li.style.top = `${index * ROW_HEIGHT}px`;
-  li.style.display = '';
 }
 
 function renderVisibleSlice() {
@@ -984,6 +1043,7 @@ function renderVisibleSlice() {
       const img = li._slots?.thumbImg;
       if (img) {
         delete img.dataset.pendingSrc;
+        img.removeAttribute('loading');
         img.classList.remove('is-loaded');
         img.src = TRANSPARENT_PIXEL;
       }
@@ -1025,6 +1085,7 @@ function renderVisibleSlice() {
       const img = li._slots?.thumbImg;
       if (img) {
         delete img.dataset.pendingSrc;
+        img.removeAttribute('loading');
         img.classList.remove('is-loaded');
         img.src = TRANSPARENT_PIXEL;
       }
@@ -1059,13 +1120,22 @@ function commitPendingThumbnails() {
       const cachedEntry = thumbnailCache.get(targetSrc);
       if (cachedEntry !== undefined) {
         const finalSrc = typeof cachedEntry === 'string' ? cachedEntry : targetSrc;
+        if (isDiskSvgTarget(finalSrc)) {
+          img.loading = 'eager';
+        } else if (img.getAttribute('loading') === 'eager') {
+          img.loading = 'lazy';
+        }
         if (img.getAttribute('src') !== finalSrc) {
           img.src = finalSrc;
         }
         img.classList.add('is-loaded');
       } else if (img.getAttribute('src') !== targetSrc) {
         img.classList.remove('is-loaded');
-        img.loading = 'lazy';
+        if (isDiskSvgTarget(targetSrc)) {
+          img.loading = 'eager';
+        } else {
+          img.loading = 'lazy';
+        }
         img.src = targetSrc;
       }
     }
@@ -1592,4 +1662,3 @@ export function focusFileList() {
 export function isFileListFocused() {
   return !!(fileListUl && document.activeElement && fileListUl.contains(document.activeElement));
 }
-

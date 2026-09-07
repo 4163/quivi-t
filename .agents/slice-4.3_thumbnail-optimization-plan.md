@@ -37,7 +37,7 @@ To prevent context creep and maintain surgical precision, Slice 4.3 is divided i
 | Sub-Slice | Focus Area | Primary Files | Status |
 | :--- | :--- | :--- | :--- |
 | **Slice 4.3.1** | Virtualization Debouncing & Placeholders | `filePanel.js`, `main.css`, `fsUtils.js`, `services/cache.js`, `protocol.rs` | `[COMPLETED]` |
-| **Slice 4.3.2** | Windows Shell Native Thumbnails | `platform/thumbnails.rs`, `protocol.rs`, `fsUtils.js` | `[PENDING]` |
+| **Slice 4.3.2** | Windows Shell Native Thumbnails | `platform/thumbnails.rs`, `protocol.rs`, `fsUtils.js`, `filePanel.js` | `[COMPLETED]` |
 | **Slice 4.3.3** | Dual-Tier Archive Thumbnails | `archives/cache.rs`, `archives/mod.rs`, `protocol.rs` | `[PENDING]` |
 
 ---
@@ -88,3 +88,5 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - **Cache Module Extraction (`src/js/services/cache.js`)**: Extract `BoundedMap` from `fsUtils.js` into a standalone pure service module for reuse by the image viewer. `fsUtils.js` re-exports for backward compatibility.
 - **Canonical Icon URLs and HTTP Caching (`src/js/fsUtils.js`, `src/js/filepanel/filePanel.js`, `src-tauri/src/protocol.rs`)**: Canonicalize non-image icon URLs to be path-agnostic across all three pipelines (list mode, thumbnail mode, favorites). Add `Cache-Control: public, max-age=86400` to `png_response`. Fix favorite routing so absolute paths don't fall into archive mode.
 - **Favorites Cache Isolation (`src/js/filepanel/filePanel.js`)**: Dedicated `favoritesThumbnailCache = new BoundedMap(250)` isolated from the main virtualized list. Permanent `staticIconCache` for ~20 canonical format/folder icon URLs. Favorites survive refresh and 14k-item scrolling.
+- **[COMPLETED] Pre-existing: Animated SVG thumbnails intermittently freeze on refresh (disk, thumbnail only, `src/js/filepanel/filePanel.js`)** — Not introduced by Slice 4.3.2; not Lanczos/filters. Fix: scoped `loading='eager'` for disk SVG only (`updateEntry`, `commitPending`, `favorites`), visibility-before-src, `removeAttribute('loading')` on reclaim, `thumbnailCache` retain skip for SVG (`true` vs `new Image()`). Validated via 30× refresh/scroll/click + canvas pixel diff (`playing:true`). Temporary debug instrumentation cleanly removed.
+

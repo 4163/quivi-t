@@ -47,6 +47,32 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             return;
         }
 
+        if url.contains("/thumb/") {
+            let path = match parse_thumb_url(&url) {
+                Ok(path) => path,
+                Err(message) => {
+                    let response = Response::builder()
+                        .status(400)
+                        .body(message.into_bytes())
+                        .unwrap();
+                    responder.respond(response);
+                    return;
+                }
+            };
+
+            tauri::async_runtime::spawn_blocking(move || {
+                let response = match crate::platform::thumbnails::get_shell_thumbnail_png(&path, 96) {
+                    Ok(Some(bytes)) => png_response(bytes),
+                    _ => Response::builder()
+                        .status(404)
+                        .body(b"Thumbnail not found".to_vec())
+                        .unwrap(),
+                };
+                responder.respond(response);
+            });
+            return;
+        }
+
         let (archive_path, entry_name) = match parse_archive_url(&url) {
             Ok(parts) => parts,
             Err(message) => {
@@ -119,6 +145,15 @@ fn parse_icon_url(url: &str) -> Result<(String, String, crate::platform::icons::
     let ext_key = crate::utils::base64_decode(ext_encoded)
         .ok_or_else(|| "Invalid base64 icon extension key".to_string())?;
     Ok((path, ext_key, size))
+}
+
+fn parse_thumb_url(url: &str) -> Result<String, String> {
+    let Some((_, path_encoded)) = url.split_once("/thumb/") else {
+        return Err(format!("Invalid quivit thumbnail URL: {url}"));
+    };
+    let clean = path_encoded.split('?').next().unwrap_or(path_encoded);
+    crate::utils::base64_decode(clean)
+        .ok_or_else(|| "Invalid base64 thumbnail path".to_string())
 }
 
 fn parse_archive_url(url: &str) -> Result<(String, String), String> {

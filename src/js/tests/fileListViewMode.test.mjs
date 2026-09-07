@@ -47,10 +47,28 @@ test('FsUtils: buildNativeIconSrc handles small and large sizes', () => {
 });
 
 test('FsUtils: buildThumbnailSrc generates image previews and icon fallbacks', () => {
-  // Image file outside archive
+  // Shell-supported disk image → /thumb/ route
   const imgItem = { name: 'photo.jpg', path: 'C:\\images\\photo.jpg', ext: 'jpg' };
   const imgSrc = FsUtils.buildThumbnailSrc(imgItem, { mode: 'directory' });
-  assert.equal(imgSrc.startsWith('asset://') || imgSrc.includes('photo.jpg'), true);
+  assert.equal(imgSrc.includes('/thumb/'), true, 'jpg should route to /thumb/');
+
+  const pngItem = { name: 'shot.png', path: 'C:\\images\\shot.png', ext: 'png' };
+  const pngSrc = FsUtils.buildThumbnailSrc(pngItem, { mode: 'directory' });
+  assert.equal(pngSrc.includes('/thumb/'), true, 'png should route to /thumb/');
+
+  const bmpItem = { name: 'scan.bmp', path: 'C:\\images\\scan.bmp', ext: 'bmp' };
+  const bmpSrc = FsUtils.buildThumbnailSrc(bmpItem, { mode: 'directory' });
+  assert.equal(bmpSrc.includes('/thumb/'), true, 'bmp should route to /thumb/');
+
+  // Self-contained format → direct asset:// (bypasses shell)
+  const webpItem = { name: 'anim.webp', path: 'C:\\images\\anim.webp', ext: 'webp' };
+  const webpSrc = FsUtils.buildThumbnailSrc(webpItem, { mode: 'directory' });
+  assert.equal(webpSrc.includes('/thumb/'), false, 'webp should bypass /thumb/');
+  assert.equal(webpSrc.startsWith('asset://') || webpSrc.includes('anim.webp'), true);
+
+  const avifItem = { name: 'pic.avif', path: 'C:\\images\\pic.avif', ext: 'avif' };
+  const avifSrc = FsUtils.buildThumbnailSrc(avifItem, { mode: 'directory' });
+  assert.equal(avifSrc.includes('/thumb/'), false, 'avif should bypass /thumb/');
 
   // Non-image file
   const docItem = { name: 'document.txt', path: 'C:\\docs\\document.txt', ext: 'txt' };
@@ -62,7 +80,7 @@ test('FsUtils: buildThumbnailSrc generates image previews and icon fallbacks', (
   const dirSrc = FsUtils.buildThumbnailSrc(dirItem, { mode: 'directory' });
   assert.equal(dirSrc.includes('?size=large'), true);
 
-  // Archive entry image
+  // Archive entry image (stays on /archive/ route, not /thumb/)
   const archiveImgItem = { name: '01.png', path: 'inner/01.png', ext: 'png' };
   const archiveImgSrc = FsUtils.buildThumbnailSrc(archiveImgItem, { mode: 'archive', archivePath: 'C:\\test.zip' });
   assert.equal(archiveImgSrc.includes('/archive/'), true);
@@ -443,8 +461,8 @@ test('Canonical URLs: absolute path favorites do not route to archive protocol',
   const fav = { name: 'photo.jpg', path: 'C:\\Photos\\photo.jpg', ext: 'jpg', is_dir: false };
   const archiveState = { mode: 'archive', archivePath: 'E:\\comic.cbz' };
   const src = FsUtils.buildThumbnailSrc(fav, archiveState);
-  assert.ok(!src.includes('archive'), 'absolute path should not route through archive protocol');
-  assert.ok(src.includes('asset://') || src.includes('convertFileSrc'), 'should use file source');
+  assert.ok(!src.includes('/archive/'), 'absolute path should not route through archive protocol');
+  assert.ok(src.includes('/thumb/'), 'shell-supported format should route to /thumb/');
 });
 
 test('Helpers: _isAbsolutePath detects Windows absolute paths', () => {

@@ -11,6 +11,8 @@ export const SUPPORTED_IMAGES = new Set([
 
 export const SUPPORTED_ARCHIVES = new Set(['zip', 'cbz', 'rar', 'cbr', '7z', 'cb7', 'cbt', 'tar']);
 
+export const SHELL_THUMBNAIL_EXTS = new Set(['jpg', 'jpeg', 'png', 'bmp', 'dib', 'gif']);
+
 function _ext(name) {
   return name.split('.').pop().toLowerCase();
 }
@@ -155,6 +157,13 @@ export const FsUtils = {
     return `${base}/icon/${encodedPath}/${encodedExt}${query}`;
   },
 
+  buildShellThumbnailSrc(path) {
+    const encoded = _base64Encode(path);
+    const isWindows = navigator.userAgent.includes('Windows');
+    const base = isWindows ? 'http://quivit.localhost' : 'quivit://localhost';
+    return `${base}/thumb/${encoded}`;
+  },
+
   getIconExtKey(item) {
     if (!item) return '';
     if (item.is_drive) return item.path;
@@ -184,6 +193,10 @@ export const FsUtils = {
         }
       } else if (item.path) {
         if (!this.isIco(item.path)) {
+          const itemExt = _ext(item.path);
+          if (SHELL_THUMBNAIL_EXTS.has(itemExt)) {
+            return this.buildShellThumbnailSrc(item.path);
+          }
           return this.buildFileSrcSync(item.path);
         }
       }

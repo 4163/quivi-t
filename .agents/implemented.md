@@ -8,6 +8,21 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Windows Shell Native Thumbnails (2026-09-07)
+- **Windows Shell Native Thumbnail Extraction:**
+  - Implemented `src-tauri/src/platform/thumbnails.rs` using `IShellItemImageFactory` with `SIIGBF_BIGGERSIZEOK | SIIGBF_THUMBNAILONLY` to extract 96×96 pre-rendered thumbnails from Windows `thumbcache_*.db` in ~0.2ms.
+  - Added dedicated protocol route `quivit://thumb/<base64_path>` (or `http://quivit.localhost/thumb/...` on Windows) in `src-tauri/src/protocol.rs`.
+  - Added `parse_thumb_url` with base64 decoding and query string stripping, tested in `src-tauri/src/tests/protocol_tests.rs`.
+  - Added `SHELL_THUMBNAIL_EXTS` (`jpg`, `jpeg`, `png`, `bmp`, `dib`, `gif`) and `buildShellThumbnailSrc` in `src/js/fsUtils.js`. Self-contained formats (`webp`, `avif`, `svg`, `apng`) bypass shell extraction directly to WebView2.
+  - Implemented two-tier `onerror` fallback in `src/js/filepanel/filePanel.js` for both main file list and favorites: shell thumbnail failure falls back to direct file preview, and direct preview failure falls back to native large icon.
+  - Added regression tests `shell_thumbnail_png_serves_valid_image` and `shell_thumbnail_jpg_is_opaque` in `src-tauri/src/tests/thumbnails_tests.rs`.
+- **Pre-existing Animated SVG Thumbnail SMIL Freeze Fix:**
+  - Fixed SMIL animation stopping in file panel thumbnail view by scoping `loading='eager'` for disk SVGs across `updateEntry` (uncached and cached), `commitPendingThumbnails`, and `buildFavoriteEntry`.
+  - Restored row visibility (`li.style.top` and `li.style.display = ''`) before image `src` assignment in `updateEntry` so Chromium initializes SVG animation clocks in a visible layout context.
+  - Removed `loading` attribute on row reclamation in `renderVisibleSlice()`.
+  - Skipped `new Image()` retention for SVG entries in `thumbnailCache` (`thumbnailCache.set(src, true)`), preventing poisoned SMIL animation timelines from retained off-DOM Image instances.
+  - Cleaned up all temporary debug instrumentation.
+
 ### Thumbnail Virtualization Polish, Caching & Container Navigation (2026-09-07)
 - **Scroll Debouncing & Settle Tracking:**
   - Added `THUMB_SCROLL_DEBOUNCE_MS = 100` in `filePanel.js` with native `scrollend` event fallback to throttle image decoding during rapid scrollbar movements.

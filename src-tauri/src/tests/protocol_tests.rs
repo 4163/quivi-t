@@ -1,5 +1,6 @@
 use super::{
-    entry_response, guess_mime, parse_archive_url, parse_byte_range, parse_icon_url, ByteRange,
+    entry_response, guess_mime, parse_archive_url, parse_byte_range, parse_icon_url,
+    parse_thumb_url, ByteRange,
 };
 
 #[test]
@@ -56,6 +57,26 @@ fn parse_icon_url_rejects_malformed_urls() {
     assert!(parse_icon_url("quivit://localhost/not-icon/path").is_err());
     assert!(parse_icon_url("quivit://localhost/icon/only-path").is_err());
     assert!(parse_icon_url("quivit://localhost/icon/not-base64/Y2J6").is_err());
+}
+
+#[test]
+fn parse_thumb_url_decodes_path() {
+    let path = "E:\\Photos\\vacation.jpg";
+    let encoded = crate::utils::base64_encode(path.as_bytes());
+    let url = format!("http://quivit.localhost/thumb/{encoded}");
+
+    let parsed = parse_thumb_url(&url).expect("parse thumb URL");
+    assert_eq!(parsed, path);
+
+    let url_query = format!("http://quivit.localhost/thumb/{encoded}?_t=123");
+    let parsed2 = parse_thumb_url(&url_query).expect("parse thumb URL with query");
+    assert_eq!(parsed2, path);
+}
+
+#[test]
+fn parse_thumb_url_rejects_malformed_urls() {
+    assert!(parse_thumb_url("quivit://localhost/not-thumb/path").is_err());
+    assert!(parse_thumb_url("quivit://localhost/thumb/not-valid-base64!!!").is_err());
 }
 
 #[test]
