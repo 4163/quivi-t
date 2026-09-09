@@ -11,7 +11,7 @@ export const SUPPORTED_IMAGES = new Set([
 
 export const SUPPORTED_ARCHIVES = new Set(['zip', 'cbz', 'rar', 'cbr', '7z', 'cb7', 'cbt', 'tar']);
 
-export const SHELL_THUMBNAIL_EXTS = new Set(['jpg', 'jpeg', 'png', 'bmp', 'dib', 'gif']);
+export const SHELL_THUMBNAIL_EXTS = new Set(['jpg', 'jpeg', 'png', 'bmp', 'dib', 'gif', 'ico']);
 
 function _ext(name) {
   return name.split('.').pop().toLowerCase();
@@ -184,21 +184,17 @@ export const FsUtils = {
         const sep = item.path.indexOf('|');
         const archivePath = item.path.slice(0, sep);
         const entryName = item.path.slice(sep + 1);
-        if (!this.isIco(entryName)) {
-          return this.buildArchiveSrc(archivePath, entryName);
-        }
+        // Archive ico: serve full file via quivit://archive/ (shell cannot read inside archive)
+        return this.buildArchiveSrc(archivePath, entryName);
       } else if (state?.mode === 'archive' && !this._isAbsolutePath(item.path)) {
-        if (!this.isIco(item.name)) {
-          return this.buildArchiveSrc(state.archivePath, item.name);
-        }
+        // Archive ico: full file, disk ico falls through to shell path below
+        return this.buildArchiveSrc(state.archivePath, item.name);
       } else if (item.path) {
-        if (!this.isIco(item.path)) {
-          const itemExt = _ext(item.path);
-          if (SHELL_THUMBNAIL_EXTS.has(itemExt)) {
-            return this.buildShellThumbnailSrc(item.path);
-          }
-          return this.buildFileSrcSync(item.path);
+        const itemExt = _ext(item.path);
+        if (SHELL_THUMBNAIL_EXTS.has(itemExt)) {
+          return this.buildShellThumbnailSrc(item.path);
         }
+        return this.buildFileSrcSync(item.path);
       }
     }
     const ext = this.getIconExtKey(item);
@@ -292,9 +288,11 @@ export const FsUtils = {
       const entry = state.list[idx];
       if (!entry || entry.is_dir || entry.is_parent || !this.isImageEntry(entry)) return null;
       if (state.mode === 'archive') {
-        if (this.isIco(entry.name)) return null;
+        // Archive ico now serves full file (quivit://archive/...) like other archive images — shell cannot read inside archive
         return this.buildArchiveSrc(state.archivePath, entry.name);
       }
+      // Disk ico now serves shell thumb (buildThumbnailSrc handles it), but viewer still uses spritesheet via buildFileSrc async path
+      // For neighbor preload we keep ico excluded here because viewer ico is data: URL spritesheet, not asset://
       return this.isIco(entry.path) ? null : this.buildFileSrcSync(entry.path);
     };
 

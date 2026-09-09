@@ -213,6 +213,7 @@ fn entry_response(
             .header("Accept-Ranges", "bytes")
             .header("Content-Range", range.content_range(data.len()))
             .header("Content-Length", body.len().to_string())
+            .header("Cache-Control", "public, max-age=86400")
             .header("Access-Control-Allow-Origin", "*")
             .body(body)
             .unwrap();
@@ -223,6 +224,7 @@ fn entry_response(
         .header("Content-Type", mime)
         .header("Accept-Ranges", "bytes")
         .header("Content-Length", data.len().to_string())
+        .header("Cache-Control", "public, max-age=86400")
         .header("Access-Control-Allow-Origin", "*")
         .body(data.to_vec())
         .unwrap()

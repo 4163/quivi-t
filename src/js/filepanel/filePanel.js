@@ -19,6 +19,48 @@ import { BoundedMap } from '../services/cache.js';
 export const THUMB_CACHE_CAPACITY = 250;
 export const thumbnailCache = new BoundedMap(THUMB_CACHE_CAPACITY);
 
+const _thumbOrigSet = thumbnailCache.set.bind(thumbnailCache);
+thumbnailCache.set = function (key, value) {
+  if (this.size >= this.maxSize && !this.has(key)) {
+    const oldestKey = this.keys().next().value;
+    const evicted = this.get(oldestKey);
+    if (typeof evicted === 'string' && evicted.startsWith('blob:')) URL.revokeObjectURL(evicted);
+  }
+  return _thumbOrigSet(key, value);
+};
+
+// Archive blob deduplication: viewer, hover and thumbnails share the same quivit:// fetch.
+// Only one fetch per src, prioritized for viewer. Archive only — disk thumbs are shell 96px, different URL.
+const _archiveBlobPromises = new Map();
+export function ensureArchiveBlob(src) {
+  if (!src || !src.includes('/archive/')) return Promise.resolve(null);
+  const cached = thumbnailCache.get(src);
+  if (typeof cached === 'string' && cached.startsWith('blob:')) return Promise.resolve(cached);
+  if (_archiveBlobPromises.has(src)) return _archiveBlobPromises.get(src);
+  const p = fetch(src).then(r => r.blob()).then(blob => {
+    const existing = thumbnailCache.get(src);
+    if (typeof existing === 'string' && existing.startsWith('blob:')) {
+      _archiveBlobPromises.delete(src);
+      return existing;
+    }
+    if (thumbnailCache.has(src)) {
+      // Thumbnail already set to true/retain while fetch was in flight — do not overwrite warm flag
+      _archiveBlobPromises.delete(src);
+      return null;
+    }
+    const blobUrl = URL.createObjectURL(blob);
+    thumbnailCache.set(src, blobUrl);
+    _archiveBlobPromises.delete(src);
+    return blobUrl;
+  }).catch(() => {
+    if (!thumbnailCache.has(src)) thumbnailCache.set(src, true);
+    _archiveBlobPromises.delete(src);
+    return null;
+  });
+  _archiveBlobPromises.set(src, p);
+  return p;
+}
+
 export const FAVORITES_CACHE_CAPACITY = 250;
 export const favoritesThumbnailCache = new BoundedMap(FAVORITES_CACHE_CAPACITY);
 
@@ -32,8 +74,14 @@ function isSvgSrc(src) {
   catch { return src.split('?')[0].split('#')[0].toLowerCase().endsWith('.svg'); }
 }
 
-function isDiskSvgTarget(targetSrc) {
-  return isSvgSrc(targetSrc) && !targetSrc.includes('/archive/');
+const animatedSvgSrcs = new Set();
+
+async function markIfAnimatedSvg(targetSrc, filePath) {
+  if (animatedSvgSrcs.has(targetSrc)) return;
+  try {
+    const anim = await Core.checkIsAnimated(filePath, null);
+    if (anim.is_animated) animatedSvgSrcs.add(targetSrc);
+  } catch { /* detection failed, treat as static */ }
 }
 
 let MIN_COL_WIDTHS = {};
@@ -464,20 +512,15 @@ function buildFavoriteEntry(fav) {
   };
   const cachedFav = favoritesThumbnailCache.get(targetSrc);
   if (cachedFav !== undefined) {
-    if (isDiskSvgTarget(targetSrc)) {
-      thumbImg.loading = 'eager';
-    } else if (thumbImg.getAttribute('loading') === 'eager') {
-      thumbImg.loading = 'lazy';
-    }
+    if (animatedSvgSrcs.has(targetSrc)) thumbImg.loading = 'eager';
     thumbImg.src = typeof cachedFav === 'string' ? cachedFav : targetSrc;
     thumbImg.classList.add('is-loaded');
   } else {
-    if (isDiskSvgTarget(targetSrc)) {
-      thumbImg.loading = 'eager';
-    } else {
-      thumbImg.loading = 'lazy';
-    }
+    thumbImg.loading = 'lazy';
     thumbImg.src = targetSrc;
+  }
+  if (isSvgSrc(targetSrc) && fav.path) {
+    markIfAnimatedSvg(targetSrc, fav.path);
   }
 
   const removeBtn = document.createElement('button');
@@ -767,16 +810,38 @@ function wireRowListeners(li) {
       hoverPreloadTimer = setTimeout(() => {
         let src;
         if (state.mode === 'archive') {
-          src = FsUtils.isIco(item.name) ? null : FsUtils.buildArchiveSrc(state.archivePath, item.name);
+          // Archive ico now full file (quivit://archive/...) — allow hover preload (shell cannot thumb inside archive)
+          src = FsUtils.buildArchiveSrc(state.archivePath, item.name);
         } else {
           src = FsUtils.isIco(item.path) ? null : FsUtils.buildFileSrcSync(item.path);
         }
-        if (src && Core.getState().index !== index) {
+        if (!src || Core.getState().index === index) return;
+        // Archive only: reuse 1:1 thumb blob, dedupe viewer/hover/thumb to one quivit:// fetch.
+        const cached = thumbnailCache.get(src);
+        if (typeof cached === 'string' && cached.startsWith('blob:')) {
           hoverPreloadImg = new Image();
           hoverPreloadImg.decoding = 'async';
-          hoverPreloadImg.src = src;
+          hoverPreloadImg.src = cached;
           if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
+          return;
         }
+        if (src.includes('/archive/')) {
+          ensureArchiveBlob(src).then(blobUrl => {
+            if (!blobUrl || Core.getState().index === index) return;
+            // Only use blob if hover still relevant (mouse still over same index)
+            const currentHoverIdx = li.dataset.index ? parseInt(li.dataset.index, 10) : -1;
+            if (currentHoverIdx !== index) return;
+            hoverPreloadImg = new Image();
+            hoverPreloadImg.decoding = 'async';
+            hoverPreloadImg.src = blobUrl;
+            if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
+          });
+          return;
+        }
+        hoverPreloadImg = new Image();
+        hoverPreloadImg.decoding = 'async';
+        hoverPreloadImg.src = src;
+        if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
       }, 150);
     }
   });
@@ -835,9 +900,11 @@ function createPoolRow() {
     if (src && !src.startsWith('data:image/svg+xml')) {
       thumbImg.classList.add('is-loaded');
       if (!thumbnailCache.has(src)) {
-        if (isDiskSvgTarget(src)) {
-          // Disk SVG: store flag not Image to avoid poisoned SMIL timeline retain
+        if (isSvgSrc(src)) {
           thumbnailCache.set(src, true);
+        } else if (src.includes('/archive/')) {
+          // Archive only: 1:1 thumb == viewer/hover URL. Dedupe via shared promise, viewer prioritized.
+          ensureArchiveBlob(src);
         } else if (typeof Image !== 'undefined') {
           const retain = new Image();
           retain.src = src;
@@ -992,17 +1059,14 @@ function updateEntry(li, item, index) {
         // Re-use immediately without deferral or skeleton placeholder flash.
         delete slots.thumbImg.dataset.pendingSrc;
         const finalSrc = typeof cachedEntry === 'string' ? cachedEntry : targetSrc;
-        if (isDiskSvgTarget(finalSrc)) {
-          slots.thumbImg.loading = 'eager';
-        } else if (slots.thumbImg.getAttribute('loading') === 'eager') {
-          slots.thumbImg.loading = 'lazy';
-        }
+        if (animatedSvgSrcs.has(finalSrc)) slots.thumbImg.loading = 'eager';
         if (slots.thumbImg.getAttribute('src') !== finalSrc) {
           slots.thumbImg.src = finalSrc;
         }
         slots.thumbImg.classList.add('is-loaded');
-      } else if (isScrolling) {
+      } else if (isScrolling && index !== Core.getState().index) {
         // Uncached image thumbnail during rapid scrolling: defer decode to protect scroll performance
+        // Exception: viewer active item must not wait for scroll settle — prioritize viewer
         slots.thumbImg.dataset.pendingSrc = targetSrc;
         if (slots.thumbImg.getAttribute('src') !== TRANSPARENT_PIXEL) {
           slots.thumbImg.classList.remove('is-loaded');
@@ -1010,15 +1074,46 @@ function updateEntry(li, item, index) {
         }
       } else {
         // Uncached image thumbnail when scroll is settled: initiate load
+        // Viewer priority: active image loads immediately, others deferred to next tick so viewer fetch gets connection first
         delete slots.thumbImg.dataset.pendingSrc;
         if (slots.thumbImg.getAttribute('src') !== targetSrc) {
-          slots.thumbImg.classList.remove('is-loaded');
-          if (isDiskSvgTarget(targetSrc)) {
+          if (index === Core.getState().index) {
+            slots.thumbImg.classList.remove('is-loaded');
             slots.thumbImg.loading = 'eager';
+            slots.thumbImg.src = targetSrc;
+            if (isSvgSrc(targetSrc) && item.path) {
+              markIfAnimatedSvg(targetSrc, item.path);
+            }
+            // Archive only: also warm blob cache for viewer/hover reuse (deduplicated, low overhead)
+            if (targetSrc.includes('/archive/')) ensureArchiveBlob(targetSrc);
           } else {
+            slots.thumbImg.classList.remove('is-loaded');
             slots.thumbImg.loading = 'lazy';
+            // Defer non-active thumbs so viewer image (same tick via Core listener) starts fetch first
+            const pendingTarget = targetSrc;
+            const pendingItemPath = item.path;
+            setTimeout(() => {
+              if (slots.thumbImg.getAttribute('src') === pendingTarget) return;
+              // Check if still relevant (row may have been recycled)
+              const currentIdx = parseInt(slots.thumbImg.closest('li')?.dataset.index, 10);
+              if (!Number.isFinite(currentIdx) || currentIdx !== index) return;
+              // Yield if viewer is still loading the active image (archive blob not yet ready)
+              const viewerSrc = Core.getState().src;
+              const viewerBlobPending = viewerSrc && viewerSrc.includes('/archive/') && !thumbnailCache.has(viewerSrc);
+              if (viewerBlobPending) {
+                // Retry after viewer blob settles
+                setTimeout(() => {
+                  if (slots.thumbImg.getAttribute('src') !== pendingTarget && parseInt(slots.thumbImg.closest('li')?.dataset.index, 10) === index) {
+                    slots.thumbImg.src = pendingTarget;
+                    if (isSvgSrc(pendingTarget) && pendingItemPath) markIfAnimatedSvg(pendingTarget, pendingItemPath);
+                  }
+                }, 120);
+                return;
+              }
+              slots.thumbImg.src = pendingTarget;
+              if (isSvgSrc(pendingTarget) && pendingItemPath) markIfAnimatedSvg(pendingTarget, pendingItemPath);
+            }, 0);
           }
-          slots.thumbImg.src = targetSrc;
         }
       }
     }
@@ -1112,7 +1207,17 @@ function onScrollSettle() {
 }
 
 function commitPendingThumbnails() {
-  for (const li of activeRows.values()) {
+  // Prioritize viewer active item first so viewer does not wait for all thumbnails
+  const activeIdx = Core.getState().index;
+  const ordered = Array.from(activeRows.values()).sort((a, b) => {
+    const ai = parseInt(a.dataset.index, 10);
+    const bi = parseInt(b.dataset.index, 10);
+    if (ai === activeIdx) return -1;
+    if (bi === activeIdx) return 1;
+    return 0;
+  });
+  for (let orderIdx = 0; orderIdx < ordered.length; orderIdx++) {
+    const li = ordered[orderIdx];
     const img = li._slots?.thumbImg;
     if (img && img.dataset.pendingSrc) {
       const targetSrc = img.dataset.pendingSrc;
@@ -1120,23 +1225,53 @@ function commitPendingThumbnails() {
       const cachedEntry = thumbnailCache.get(targetSrc);
       if (cachedEntry !== undefined) {
         const finalSrc = typeof cachedEntry === 'string' ? cachedEntry : targetSrc;
-        if (isDiskSvgTarget(finalSrc)) {
-          img.loading = 'eager';
-        } else if (img.getAttribute('loading') === 'eager') {
-          img.loading = 'lazy';
-        }
+        if (animatedSvgSrcs.has(finalSrc)) img.loading = 'eager';
         if (img.getAttribute('src') !== finalSrc) {
           img.src = finalSrc;
         }
         img.classList.add('is-loaded');
       } else if (img.getAttribute('src') !== targetSrc) {
-        img.classList.remove('is-loaded');
-        if (isDiskSvgTarget(targetSrc)) {
+        const idx = parseInt(li.dataset.index, 10);
+        const isActive = idx === activeIdx;
+        if (isActive) {
+          img.classList.remove('is-loaded');
           img.loading = 'eager';
+          img.src = targetSrc;
+          if (isSvgSrc(targetSrc)) {
+            const item = Core.getState().list?.[idx];
+            if (item?.path) markIfAnimatedSvg(targetSrc, item.path);
+          }
+          if (targetSrc.includes('/archive/')) ensureArchiveBlob(targetSrc);
         } else {
+          // Defer non-active to let viewer fetch win connection race
+          img.classList.remove('is-loaded');
           img.loading = 'lazy';
+          const pendingSrc = targetSrc;
+          setTimeout(() => {
+            const currentIdx = parseInt(li.dataset.index, 10);
+            if (currentIdx !== idx) return;
+            if (img.getAttribute('src') === pendingSrc) return;
+            const viewerSrc = Core.getState().src;
+            const viewerBlobPending = viewerSrc && viewerSrc.includes('/archive/') && !thumbnailCache.has(viewerSrc);
+            if (viewerBlobPending) {
+              setTimeout(() => {
+                if (parseInt(li.dataset.index, 10) === idx && img.getAttribute('src') !== pendingSrc) {
+                  img.src = pendingSrc;
+                  if (isSvgSrc(pendingSrc)) {
+                    const it = Core.getState().list?.[idx];
+                    if (it?.path) markIfAnimatedSvg(pendingSrc, it.path);
+                  }
+                }
+              }, 120);
+              return;
+            }
+            img.src = pendingSrc;
+            if (isSvgSrc(pendingSrc)) {
+              const it = Core.getState().list?.[idx];
+              if (it?.path) markIfAnimatedSvg(pendingSrc, it.path);
+            }
+          }, 10 + orderIdx * 15);
         }
-        img.src = targetSrc;
       }
     }
   }

@@ -1,5 +1,6 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
+import { thumbnailCache, ensureArchiveBlob } from '../filepanel/filePanel.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 const PRELOAD_HALF = 1;
@@ -258,6 +259,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     srcs.forEach((src, index) => {
       const timer = setTimeout(() => {
         if (generation !== _poolGeneration) return;
+        // Reuse blob URL from file-panel thumbnail cache for archive entries.
+        // Avoids redundant quivit:// fetch for neighbors (next/prev) when thumb already loaded.
+        let actualSrc = src;
+        const cached = thumbnailCache.get(src);
+        if (typeof cached === 'string' && cached.startsWith('blob:')) actualSrc = cached;
         const preloader = new Image();
         preloader.decoding = 'async';
         preloader.crossOrigin = 'anonymous';
@@ -267,7 +273,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
           if (idx !== -1) _preloadImages.splice(idx, 1);
         };
         preloader.onerror = preloader.onload;
-        preloader.src = src;
+        preloader.src = actualSrc;
         if (preloader.decode) preloader.decode().catch(() => {});
       }, 100 + index * 45);
       _preloadTimers.push(timer);
@@ -337,7 +343,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       if (activeEl) activeEl.alt = LOADING_LABEL;
 
       const isAlreadyLoaded = !isReload && activeEl && activeEl.complete && activeEl.naturalWidth > 0;
-      if (!isAlreadyLoaded) {
+      const isCacheWarm = !isAlreadyLoaded && thumbnailCache.has(state.src);
+      if (!isAlreadyLoaded && !isCacheWarm) {
         _startLoadingAnimation(activeEl);
       }
 
@@ -365,6 +372,20 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
             newSrc = state.src.includes('?') ? `${state.src}&_t=${_reloadTimestamp}` : `${state.src}?_t=${_reloadTimestamp}`;
           } else if (isReEntry) {
             newSrc = state.src.includes('?') ? `${state.src}&_reset=${Date.now()}` : `${state.src}?_reset=${Date.now()}`;
+          } else {
+            const cached = thumbnailCache.get(state.src);
+            if (typeof cached === 'string' && cached.startsWith('blob:')) {
+              newSrc = cached;
+            } else if (state.src.includes('/archive/')) {
+              // Archive only: viewer is high priority. Use shared blob promise for dedupe, but paint quivit:// immediately for fastest first paint.
+              // Thumbnail for same src shares the same blob promise arrière — one quivit:// fetch for blob, viewer paints via quivit:// now.
+              ensureArchiveBlob(state.src).then(blobUrl => {
+                if (blobUrl && activation === _activationGeneration && Core.getState().src === state.src) {
+                  // Future navigations will hit blob directly; no need to repaint now if already painting quivit://
+                  // Keep blob in cache for next/prev/hover reuse
+                }
+              });
+            }
           }
           _loadPoolNode(activeEl, newSrc, state.src);
         }
@@ -411,7 +432,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         });
       };
 
-      if (hasPreviousBridge && !isAlreadyLoaded) {
+      if (hasPreviousBridge && !isAlreadyLoaded && !isCacheWarm) {
         _targetLoadTimer = setTimeout(loadTarget, TARGET_LOAD_DEBOUNCE_MS);
       } else {
         loadTarget();

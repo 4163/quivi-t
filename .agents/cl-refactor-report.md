@@ -10,7 +10,7 @@ These items directly affect the viewer engine. They must be built into the CL or
 *   **[COMPLETED] Manga Spread Mode (Half-Width Fit & Step Navigation):** Automatically detects wide landscape scans (`>= 1.2`), scales to match single-page zoom in Fit-to-Width mode (`width / 2`), steps across halves (RTL Manga / LTR Western), and shows dual indicators (`.status-spread` in status bar, `#spread-indicator` overlay when status bar is hidden). Simultaneous 2-file dual-page rendering, cover isolation, and dual-node DOM pooling are marked `[OUT OF SCOPE / REJECTED]`.
 *   **Manhwa Mode (Continuous Vertical Strip):** Rendering a continuous list of images. The CL needs a mode to handle virtualized vertical stacking.
 *   **[COMPLETED] Animated "Loading..." Feedback:** Visual feedback during image fetch. The CL must handle its own loading states and placeholder visuals.
-*   **[COMPLETED] Flickering Issue on Re-fetch:** Optimizing the browser image cache. The CL must manage its internal `Blob` or `ImageBitmap` lifecycle without redundant network requests.
+*   **[COMPLETED] Flickering Issue on Re-fetch (Slice 4.4):** Optimizing the browser image cache. The CL must manage its internal `Blob` or `ImageBitmap` lifecycle without redundant network requests.
 *   **[COMPLETED] Idle Cursor Auto-Hide:** Hiding the cursor over the canvas. The CL should handle its own interaction idle state.
 *   **Animated Frame Timeline:** A scrubber for WebCodecs/animated formats. The CL should either render this timeline or expose the exact frame state (`currentFrame`, `totalFrames`, `seek()`) so the host application can render it.
 *   **[COMPLETED] Options Save Resets Fit/Zoom (Bug):** The CL needs a clean configuration update path (e.g. `viewer.setConfig(...)`) that does not destroy current transform state unless explicitly requested.
@@ -21,7 +21,7 @@ These items directly affect the viewer engine. They must be built into the CL or
 These items belong to the consumer application. The CL does not know or care about them. For QuiviT Desktop, they stay in the frontend shell. For the portfolio, they are replaced by your custom gallery UI.
 
 *   **Favorites & Bookmarks System:** Sorting, saving, and displaying lists.
-*   **File List & Navigation (Partial / Slice 3 Shipped):** Completed Windows dotfile `.filename` visibility documentation and attribute checking, virtualized list keyboard navigation, Space on files no-op, unselected Enter/Space no-op, Tab navigation order, viewport gating for arrow keys and space, and drop-overlay pan isolation. Remaining backlog: continuous scroll, middle-click selection, and search filters.
+*   **File List & Navigation (Partial / Slice 3 Shipped + Slice 4.3 + Slice 4.4):** Completed Windows dotfile `.filename` visibility documentation and attribute checking, virtualized list keyboard navigation, Space on files no-op, unselected Enter/Space no-op, Tab navigation order, viewport gating for arrow keys and space, and drop-overlay pan isolation. Slice 4.3 added thumbnail view and scroll debouncing, Slice 4.4 added archive thumbnail sharing and viewer priority. Remaining backlog: continuous scroll, middle-click selection, and search filters.
 *   **Layout & Styling:** Persistent column sizes, custom CSS persistence, and syntax highlighting.
 *   **Window Management:** Detaching image windows, emergency boss keys, and fullscreen focus loss. (Note: Detaching images relies on Tauri window management because DOM elements cannot escape WebView2 bounds).
 *   **Web Fetching & Remote Routing:** Determining where URLs come from.
@@ -34,11 +34,11 @@ These items modify the Rust backend or the OS integration. They do not affect th
 
 ### Priority 1: High-Impact / Core Reliability
 *   **Instrumentation System (Test Harness):** Writing `cargo test` coverage for archive parsing, caching, and config schemas. This is the safety net required before major backend refactoring.
-*   **.ico Spritesheet & Windows Icon Resolution:** Reworking how the backend fetches `SHGFI_LARGEICON` and how it passes those buffers to the frontend. The CL will just receive an array of URLs or a spritesheet image; the backend must do the heavy lifting of extracting and packing them.
+*   **[COMPLETED] .ico Spritesheet & Windows Icon Resolution (Slice 4.4):** Reworking how the backend fetches `SHGFI_LARGEICON` and how it passes those buffers to the frontend. The CL will just receive an array of URLs or a spritesheet image; the backend must do the heavy lifting of extracting and packing them.
 *   **[COMPLETED] Archive Loading Bottlenecks:** Fixed seek costs and backward scans in corrupted archives (O(1) entry map, trailing EOCD scan, microsecond header and boundary validation across ZIP, RAR, 7Z, and TAR) and eliminated condition variable / mutex lock contention during extraction.
 
 ### Priority 2: New Features
-*   **Thumbnail View & High-Res Icons:** Fetching `SHGFI_LARGEICON` via the Rust backend to render higher-resolution Windows icons in the file list.
+*   **[COMPLETED] Thumbnail View & High-Res Icons (Slice 4.3 + Slice 4.4):** Fetching `SHGFI_LARGEICON` via the Rust backend to render higher-resolution Windows icons in the file list.
 *   **Extended Format Support (PSD, XCF, PDF):** Implementing Rust-side decoders to turn these formats into raw pixels or standard web formats before passing them to the CL.
 *   **[COMPLETED] Password-Protected Archives:** Passing credentials through the IPC layer to `zip`, `unrar`, and `sevenz-rust2`, with frontend status signaling and locked container handling.
 *   **Additional Metadata Formats:** Parsing `comicinfo.json` alongside the existing metadata parsers.

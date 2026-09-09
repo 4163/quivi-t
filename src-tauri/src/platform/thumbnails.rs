@@ -23,7 +23,7 @@ use windows::Win32::UI::Shell::{
 };
 
 #[cfg(windows)]
-const SHELL_THUMB_EXTS: &[&str] = &["jpg", "jpeg", "png", "bmp", "dib", "gif"];
+const SHELL_THUMB_EXTS: &[&str] = &["jpg", "jpeg", "png", "bmp", "dib", "gif", "ico"];
 
 // RAII guards matching the pattern in icons.rs (file-private there).
 
@@ -101,6 +101,17 @@ pub fn get_shell_thumbnail_png(path: &str, size: u32) -> Result<Option<Vec<u8>>,
 
         if !std::path::Path::new(path).exists() {
             return Ok(None);
+        }
+
+        // Animated GIFs: skip Shell extraction (static first-frame only).
+        // The frontend falls back to asset:// which plays animation natively.
+        if ext.as_ref().map_or(false, |e| e == "gif") {
+            let mut f = std::fs::File::open(path).map_err(|e| e.to_string())?;
+            let mut buf = vec![0u8; 262_144];
+            let n = std::io::Read::read(&mut f, &mut buf).unwrap_or(0);
+            if crate::formats::check_animation_status(&buf[..n]).is_animated {
+                return Ok(None);
+            }
         }
 
         // COM initialization. Only call CoUninitialize if this thread
@@ -222,6 +233,16 @@ pub fn get_shell_thumbnail_png(path: &str, size: u32) -> Result<Option<Vec<u8>>,
             chunk[2] = b;
         }
 
+        // Detect black matte: if the source has transparency but the Shell
+        // thumbnail is fully opaque, it was composited onto a black background.
+        let ext_str = ext.as_ref().unwrap();
+        if source_has_transparency(path, ext_str) {
+            let has_alpha = pixels.chunks_exact(4).any(|px| px[3] < 255);
+            if !has_alpha {
+                return Ok(None);
+            }
+        }
+
         let img =
             RgbaImage::from_raw(width, height, pixels).ok_or("Failed to create RgbaImage")?;
         let mut buf = Cursor::new(Vec::new());
@@ -237,4 +258,124 @@ pub fn get_shell_thumbnail_png(path: &str, size: u32) -> Result<Option<Vec<u8>>,
 
         Ok(Some(buf.into_inner()))
     }
+}
+
+/// Returns true if the source image file contains transparency data.
+/// Reads only the first 1024 bytes (header) to avoid full-file I/O.
+#[cfg(windows)]
+pub(crate) fn source_has_transparency(path: &str, ext: &str) -> bool {
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut hdr = [0u8; 1024];
+    let n = std::io::Read::read(&mut f, &mut hdr).unwrap_or(0);
+    let hdr = &hdr[..n];
+
+    match ext {
+        "png" => png_has_alpha(hdr),
+        "gif" => gif_has_transparency(hdr),
+        "ico" => ico_has_alpha(hdr),
+        _ => false,
+    }
+}
+
+/// PNG: color type 4 (grey+alpha) or 6 (RGBA) in IHDR, or a tRNS chunk
+/// before IDAT signals palette/grey transparency.
+#[cfg(windows)]
+fn png_has_alpha(hdr: &[u8]) -> bool {
+    // PNG signature (8) + IHDR length (4) + "IHDR" (4) + width (4) + height (4)
+    // + bit depth (1) + color type (1) = byte 25
+    if hdr.len() < 26 {
+        return false;
+    }
+    let color_type = hdr[25];
+    if color_type == 4 || color_type == 6 {
+        return true;
+    }
+    // Scan chunks for tRNS before IDAT
+    let mut pos = 8; // after PNG signature
+    while pos + 12 <= hdr.len() {
+        let chunk_len = u32::from_be_bytes([hdr[pos], hdr[pos + 1], hdr[pos + 2], hdr[pos + 3]]) as usize;
+        let chunk_type = &hdr[pos + 4..pos + 8];
+        if chunk_type == b"tRNS" {
+            return true;
+        }
+        if chunk_type == b"IDAT" {
+            break;
+        }
+        // 4 (length) + 4 (type) + chunk_len (data) + 4 (CRC)
+        pos += 12 + chunk_len;
+    }
+    false
+}
+
+/// GIF: check Graphic Control Extension for the transparent color flag.
+#[cfg(windows)]
+fn gif_has_transparency(hdr: &[u8]) -> bool {
+    if hdr.len() < 13 || !hdr.starts_with(b"GIF") {
+        return false;
+    }
+    let mut pos = 13;
+    let flags = hdr[10];
+    if (flags & 0x80) != 0 {
+        let gct_size = 2_usize.pow((flags & 0x07) as u32 + 1);
+        pos += 3 * gct_size;
+    }
+    while pos + 2 < hdr.len() {
+        if hdr[pos] == 0x21 && hdr[pos + 1] == 0xF9 {
+            // GCE block: introducer (0x21), label (0xF9), block size, packed flags
+            if pos + 4 < hdr.len() {
+                let packed = hdr[pos + 3];
+                return (packed & 0x01) != 0;
+            }
+        }
+        if hdr[pos] == 0x2C || hdr[pos] == 0x3B {
+            break; // image descriptor or trailer, stop scanning
+        }
+        // Skip extension block
+        if hdr[pos] == 0x21 {
+            pos += 2;
+            while pos < hdr.len() {
+                let block_size = hdr[pos] as usize;
+                pos += 1;
+                if block_size == 0 { break; }
+                pos += block_size;
+            }
+        } else {
+            break;
+        }
+    }
+    false
+}
+
+/// ICO: any entry with 32bpp contains alpha. Parse directory per ico.rs.
+#[cfg(windows)]
+fn ico_has_alpha(hdr: &[u8]) -> bool {
+    if hdr.len() < 6 {
+        return false;
+    }
+    // Reserved (0) + type (1 = icon) + count
+    if hdr[0..2] != [0, 0] || hdr[2..4] != [1, 0] {
+        return false;
+    }
+    let count = u16::from_le_bytes([hdr[4], hdr[5]]) as usize;
+    if count == 0 || hdr.len() < 6 + count * 16 {
+        return false;
+    }
+    for i in 0..count {
+        let off = 6 + i * 16;
+        let bpp = hdr[off + 6];
+        // bpp 0 means 256, but 32 indicates BGRA with alpha
+        if bpp == 32 {
+            return true;
+        }
+        // Also treat 0 bpp with PNG entry as alpha (PNG signature inside)
+        // Fallback: if entry size suggests PNG, assume alpha
+        let bytes_in_res = u32::from_le_bytes([hdr[off+8], hdr[off+9], hdr[off+10], hdr[off+11]]) as usize;
+        if bytes_in_res >= 8 && hdr.len() >= 22 {
+            // Heuristic: PNG entries are stored as PNG, which typically has alpha
+            // We cannot read entry data in header-only 1024, but 32bpp is reliable.
+        }
+    }
+    false
 }
