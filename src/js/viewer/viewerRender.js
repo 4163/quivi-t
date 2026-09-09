@@ -378,7 +378,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
               newSrc = cached;
             } else if (state.src.includes('/archive/')) {
               // Archive only: viewer is high priority. Use shared blob promise for dedupe, but paint quivit:// immediately for fastest first paint.
-              // Thumbnail for same src shares the same blob promise arrière — one quivit:// fetch for blob, viewer paints via quivit:// now.
+              // Thumbnail for same src shares the same blob promise arrière, one quivit:// fetch for blob, viewer paints via quivit:// now.
               ensureArchiveBlob(state.src).then(blobUrl => {
                 if (blobUrl && activation === _activationGeneration && Core.getState().src === state.src) {
                   // Future navigations will hit blob directly; no need to repaint now if already painting quivit://

@@ -30,7 +30,7 @@ thumbnailCache.set = function (key, value) {
 };
 
 // Archive blob deduplication: viewer, hover and thumbnails share the same quivit:// fetch.
-// Only one fetch per src, prioritized for viewer. Archive only — disk thumbs are shell 96px, different URL.
+// Only one fetch per src, prioritized for viewer. Archive only. Disk thumbs are shell 96px, different URL.
 const _archiveBlobPromises = new Map();
 export function ensureArchiveBlob(src) {
   if (!src || !src.includes('/archive/')) return Promise.resolve(null);
@@ -44,7 +44,7 @@ export function ensureArchiveBlob(src) {
       return existing;
     }
     if (thumbnailCache.has(src)) {
-      // Thumbnail already set to true/retain while fetch was in flight — do not overwrite warm flag
+      // Thumbnail already set to true/retain while fetch was in flight, do not overwrite warm flag
       _archiveBlobPromises.delete(src);
       return null;
     }
@@ -810,7 +810,7 @@ function wireRowListeners(li) {
       hoverPreloadTimer = setTimeout(() => {
         let src;
         if (state.mode === 'archive') {
-          // Archive ico now full file (quivit://archive/...) — allow hover preload (shell cannot thumb inside archive)
+          // Archive ico now full file (quivit://archive/...), allow hover preload (shell cannot thumb inside archive)
           src = FsUtils.buildArchiveSrc(state.archivePath, item.name);
         } else {
           src = FsUtils.isIco(item.path) ? null : FsUtils.buildFileSrcSync(item.path);
@@ -1066,7 +1066,7 @@ function updateEntry(li, item, index) {
         slots.thumbImg.classList.add('is-loaded');
       } else if (isScrolling && index !== Core.getState().index) {
         // Uncached image thumbnail during rapid scrolling: defer decode to protect scroll performance
-        // Exception: viewer active item must not wait for scroll settle — prioritize viewer
+        // Exception: viewer active item must not wait for scroll settle. Prioritize viewer
         slots.thumbImg.dataset.pendingSrc = targetSrc;
         if (slots.thumbImg.getAttribute('src') !== TRANSPARENT_PIXEL) {
           slots.thumbImg.classList.remove('is-loaded');

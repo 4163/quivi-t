@@ -288,7 +288,7 @@ export const FsUtils = {
       const entry = state.list[idx];
       if (!entry || entry.is_dir || entry.is_parent || !this.isImageEntry(entry)) return null;
       if (state.mode === 'archive') {
-        // Archive ico now serves full file (quivit://archive/...) like other archive images — shell cannot read inside archive
+        // Archive ico now serves full file (quivit://archive/...) like other archive images. Shell cannot read inside archive
         return this.buildArchiveSrc(state.archivePath, entry.name);
       }
       // Disk ico now serves shell thumb (buildThumbnailSrc handles it), but viewer still uses spritesheet via buildFileSrc async path
