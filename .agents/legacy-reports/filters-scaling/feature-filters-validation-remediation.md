@@ -1,8 +1,8 @@
-# Feature/Filters Validation — Remediation Plan
+# Feature/Filters Validation: Remediation Plan
 
-> **Target:** `feature/filters` (`f164275`) vs `main` (`ccb91ef`) — 31 files, `+2898/-53` (`git diff main...feature/filters --stat`).
+> **Target:** `feature/filters` (`f164275`) vs `main` (`ccb91ef`), 31 files, `+2898/-53` (`git diff main...feature/filters --stat`).
 > **Scope:** `src/js/services/webglPipeline.js`, `scalingPipeline.js`, `viewer/viewerRender.js`, `viewerMath.js`, `core.js`, `main/main.js`, `services/actions.js`, `animation.rs` + `commands/animation.rs`, `index.html`, `main.css`.
-> **Vendored constraint:** Keep `src/js/vendors/pica.js` vendored, no `npm:pica` dep. Practical fix is lazy `window.pica()` inside factory, not an ESM wrapper (YAGNI — see 4.2).
+> **Vendored constraint:** Keep `src/js/vendors/pica.js` vendored, no `npm:pica` dep. Practical fix is lazy `window.pica()` inside factory, not an ESM wrapper (YAGNI, see 4.2).
 > **How to use:** Work in slices 1→5. Each slice is deployable and verifiable. No behavior change except where noted.
 
 ---
@@ -19,9 +19,9 @@ Renames `bicubic→bilinear` (`keybinds.js:22`, `actions.js:63`), adds `Viewer.s
 
 ---
 
-## 2. Blocking — Fix First (Fail → Pass)
+## 2. Blocking: Fix First (Fail → Pass)
 
-### 2.1 `index.html:222-224` — `shellBackground.js` dropped
+### 2.1 `index.html:222-224`: `shellBackground.js` dropped
 
 **State:** `index.html:222` added `<script src="js/vendors/pica.js">` + `<script type="module" src="js/viewer/viewer.js">` and removed `<script type="module" src="/js/shellBackground.js">`.
 
@@ -30,15 +30,15 @@ Renames `bicubic→bilinear` (`keybinds.js:22`, `actions.js:63`), adds `Viewer.s
 **Rule:** `AGENTS.md:31` one owner per concern, `AGENTS.md:58` shared cross-window helpers stay out of state machine/UI files.
 
 **Fix (Slice 1, ~3 lines):**
-* Remove `index.html:223` viewer script tag (viewer is already `import { Viewer }` in `main.js:7` — double load, see 5.4).
+* Remove `index.html:223` viewer script tag (viewer is already `import { Viewer }` in `main.js:7`, causing a double load; see 5.4).
 * Re-add shell background as import in `main.js:1`, not HTML:
   ```js
   import "../shared/shellBackground.js";
   ```
-  or keep `index.html` tag but as `type="module" src="/js/shared/shellBackground.js"`. Prefer import — matches `AGENTS.md:59` thin bootstrap.
+  or keep `index.html` tag but as `type="module" src="/js/shared/shellBackground.js"`. Prefer import to match `AGENTS.md:59` thin bootstrap.
 * Verify: toggle theme light/dark, change `--surface` in custom CSS, confirm native window border repaints (compare `windows.rs` constant).
 
-### 2.2 `commands/animation.rs:17` — Full decompress per navigation
+### 2.2 `commands/animation.rs:17`: Full decompress per navigation
 
 **State:** Archive path builds `cache.read_entry_bytes(&arc_path, &path)?.wait_for_data(&path)?` full entry, then `animation::is_animated(&bytes)` scans whole buffer. 10 MiB JPEG inside CBZ decompressed just to read 8-byte header. Called from `core.js:168` on *every* image nav.
 
@@ -51,11 +51,11 @@ Renames `bicubic→bilinear` (`keybinds.js:22`, `actions.js:63`), adds `Viewer.s
   let header = cache.read_entry_header(&arc_path, &path, 8192)?;
   Ok(is_animated(&header))
   ```
-* Pass `src-tauri/src/animation.rs:5` whole-buffer scans limited to `&bytes[..8192]` — prevents `O(n)` on large files.
+* Pass `src-tauri/src/animation.rs:5` whole-buffer scans limited to `&bytes[..8192]`, preventing `O(n)` on large files.
 
-**Check:** `cargo test` add `animation_header_only` vectors (GIF with NETSCAPE past 8K — still detected because NETSCAPE is within 1K; WEBP VP8X at `pos+8` within header). Bench: nav 100 images in 500 MiB CBZ, no spike.
+**Check:** `cargo test` add `animation_header_only` vectors (GIF with NETSCAPE past 8K, still detected because NETSCAPE is within 1K; WEBP VP8X at `pos+8` within header). Bench: nav 100 images in 500 MiB CBZ, no spike.
 
-### 2.3 `core.js:166-185` — Navigation blocked on IPC
+### 2.3 `core.js:166-185`: Navigation blocked on IPC
 
 **State:** `_selectEntry` awaits `invoke('check_is_animated')` before setting `_state.isAnimated` and `notify()`. `viewerRender.js` can't show `src` until IPC returns. Feels sluggish even for static PNGs.
 
@@ -173,7 +173,7 @@ External mutation of service discriminator.
 
 ### 4.6 Duplicated inverse-project `scalingPipeline.js:78` vs `webglPipeline.js:65`
 
-Both map screen→texture with `cos/sin/unscale/unflip`. Extract `viewerMath.js:screenToImg(px,py, geom, nw,nh)` or `invertViewport(geom)`. Keep shader GLSL `inverseTransformGLSL` string in one place (`webglPipeline.js:57`) — JS helper for Lanczos crop only.
+Both map screen→texture with `cos/sin/unscale/unflip`. Extract `viewerMath.js:screenToImg(px,py, geom, nw,nh)` or `invertViewport(geom)`. Keep shader GLSL `inverseTransformGLSL` string in one place (`webglPipeline.js:57`), using a JS helper for Lanczos crop only.
 
 ---
 
@@ -181,7 +181,7 @@ Both map screen→texture with `cos/sin/unscale/unflip`. Extract `viewerMath.js:
 
 ### 5.1 `animation.rs:1` at crate root
 
-`AGENTS.md:65` domain lives in `archives/` + `formats.rs` + `ico.rs`. New `pub mod animation` should be `src-tauri/src/formats.rs: is_animated` (format registry) or `src-tauri/src/archives/animation.rs`. Prefer `formats.rs` — it's already the supported-format registry and has tests.
+`AGENTS.md:65` domain lives in `archives/` + `formats.rs` + `ico.rs`. New `pub mod animation` should be `src-tauri/src/formats.rs: is_animated` (format registry) or `src-tauri/src/archives/animation.rs`. Prefer `formats.rs` because it is already the supported-format registry and has tests.
 
 **Fix:** Move `is_animated`, `check_gif/webp/apng` into `formats.rs`, delete `animation.rs`. Update `commands/animation.rs:5` → `use crate::formats::is_animated;`.
 
@@ -197,7 +197,7 @@ Both map screen→texture with `cos/sin/unscale/unflip`. Extract `viewerMath.js:
 
 ## 6. CSS
 
-`main.css:820` `:has([data-render-ready])` wide invalidation but `max` allowed; no JS inline `width/color/display` violation — `viewerRender.js:139` uses `style.setProperty('--crop-*')` correctly (allowed per `AGENTS.md:50`). Keep. Optionally scope to `#viewport[data-crt]` via JS `dataset` to avoid `:has`, marked `nit`.
+`main.css:820` `:has([data-render-ready])` wide invalidation but `max` allowed; no JS inline `width/color/display` violation, as `viewerRender.js:139` uses `style.setProperty('--crop-*')` correctly (allowed per `AGENTS.md:50`). Keep. Optionally scope to `#viewport[data-crt]` via JS `dataset` to avoid `:has`, marked `nit`.
 
 ---
 
@@ -205,11 +205,11 @@ Both map screen→texture with `cos/sin/unscale/unflip`. Extract `viewerMath.js:
 
 | Slice | Files | Risk | Do |
 |-------|-------|------|-----|
-| **1 — Hotfix** | `index.html`, `main.js`, `commands/animation.rs`, `animation.rs`/`formats.rs` | Low | Restore shellBackground (2a), header-only 8 KiB + move to `formats.rs`. Run `cargo check`, nav 100-image CBZ. |
-| **2 — Shared helper** | `shared/blobImage.js` (new), `scalingPipeline.js`, `webglPipeline.js` | Low | Dedupe blob cache, lazy `window.pica` (2a), per-pipeline canvases. Remove debug. |
-| **3 — Core non-blocking** | `core.js`, `viewerRender.js`, `viewerMath.js` | Medium | Optimistic `notify` + memo, `getEffectiveScaling`, `invertViewport`. |
-| **4 — Ownership** | `actions.js`, `core.js`, `main.js`, `viewerRender.js`, `index.html` | Medium | `Core.setFilter`, `let _lastAnimated`, `pipeline.type` read-only, remove viewer `<script>`. |
-| **5 — Cleanup & Docs** | `README.md`, `architecture-state.md`, `implemented.md` | Low | Document filter/bilinear fallback, `blobImage.js` map, Lanczos 80 ms + viewport tiling. |
+| **1: Hotfix** | `index.html`, `main.js`, `commands/animation.rs`, `animation.rs`/`formats.rs` | Low | Restore shellBackground (2a), header-only 8 KiB + move to `formats.rs`. Run `cargo check`, nav 100-image CBZ. |
+| **2: Shared helper** | `shared/blobImage.js` (new), `scalingPipeline.js`, `webglPipeline.js` | Low | Dedupe blob cache, lazy `window.pica` (2a), per-pipeline canvases. Remove debug. |
+| **3: Core non-blocking** | `core.js`, `viewerRender.js`, `viewerMath.js` | Medium | Optimistic `notify` + memo, `getEffectiveScaling`, `invertViewport`. |
+| **4: Ownership** | `actions.js`, `core.js`, `main.js`, `viewerRender.js`, `index.html` | Medium | `Core.setFilter`, `let _lastAnimated`, `pipeline.type` read-only, remove viewer `<script>`. |
+| **5: Cleanup & Docs** | `README.md`, `architecture-state.md`, `implemented.md` | Low | Document filter/bilinear fallback, `blobImage.js` map, Lanczos 80 ms + viewport tiling. |
 
 Each slice: `node --check src/js/**/*.js`, `cargo check`, `cargo test` (add 11 `is_animated` header vectors: gif anim/static, webp anim/static, apng anim/static, png static, jpg static, svg skip, truncated <8 B).
 
@@ -228,13 +228,13 @@ Each slice: `node --check src/js/**/*.js`, `cargo check`, `cargo test` (add 11 `
 
 * `cargo check` clean, `cargo test` 14/14 + new `format_tests::is_animated_header` (11 ok).
 * `node --check` on `core.js`, `viewerRender.js`, `scalingPipeline.js`, `webglPipeline.js`, `actions.js`, `main.js`.
-* Manual smoke: open `test-files/single-frame.gif` vs animated GIF, WEBP, APNG — Lanczos/CRT badges `.muted` when animated, Lanczos check flips to Bilinear visually, returns on static. Zoom 400% + rotate 90° tiling correct. Theme toggle repaints native shell. Rapid next/prev (hold) no lag.
+* Manual smoke: open `test-files/single-frame.gif` vs animated GIF, WEBP, APNG. Verify Lanczos/CRT badges `.muted` when animated, Lanczos check flips to Bilinear visually, returns on static. Zoom 400% + rotate 90° tiling correct. Theme toggle repaints native shell. Rapid next/prev (hold) no lag.
 * Update `README.md` Features (Scalings/Filters), `architecture-state.md` (add `shared/blobImage.js`, `formats.rs:is_animated`, remove `animation.rs`).
 
 ---
 
 ## 10. Deferred (YAGNI)
 
-* `pica-wrapper.js` ESM shim — only if pica rebuilt as ESM.
-* Full animated Lanczos/WebGL support — tracked in `additions.md` Post-Release Backlog "Animated Images Support for Lanczos & WebGL".
+* `pica-wrapper.js` ESM shim, only if pica is rebuilt as ESM.
+* Full animated Lanczos/WebGL support, tracked in `additions.md` Post-Release Backlog "Animated Images Support for Lanczos & WebGL".
 

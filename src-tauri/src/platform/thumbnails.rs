@@ -103,8 +103,8 @@ pub fn get_shell_thumbnail_png(path: &str, size: u32) -> Result<Option<Vec<u8>>,
             return Ok(None);
         }
 
-        // COM init — only call CoUninitialize if we were the thread that
-        // actually initialized (S_OK), not when piggy-backing (S_FALSE).
+        // COM initialization. Only call CoUninitialize if this thread
+        // initialized COM (S_OK), not when reusing an existing runtime (S_FALSE).
         let hr = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
         if hr.is_err() {
             return Err(format!("COM init failed: {:?}", hr));

@@ -1,4 +1,4 @@
-/* Auto-generated Anime4K WebGL2 passes — do not edit by hand */
+/* Auto-generated Anime4K WebGL2 passes. Do not edit by hand. */
 
 export const FAST_CHAIN = [
   {

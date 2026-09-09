@@ -358,7 +358,7 @@ export function createViewerPipelines(viewportState) {
           sw = Math.max(1, Math.round(natW * scale));
           sh = Math.max(1, Math.round(natH * scale));
         } else {
-          // No intrinsic dimensions — use the display element's layout aspect ratio
+          // No intrinsic dimensions. Use the display element's layout aspect ratio.
           const cw = _activeSource?.clientWidth || 150;
           const ch = _activeSource?.clientHeight || 150;
           const scale = Math.min(maxEdge / cw, maxEdge / ch, Math.max(vpW / cw, vpH / ch));

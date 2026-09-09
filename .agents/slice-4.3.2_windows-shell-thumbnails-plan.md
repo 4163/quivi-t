@@ -24,7 +24,7 @@ Key capabilities in this slice:
 > - **Format Scope**: Only universal formats (`jpg`, `jpeg`, `png`, `bmp`, `dib`, `gif`) query the shell. All other formats load directly via WebView2.
 > - **Threading**: Shell COM calls run strictly on background threads via `tauri::async_runtime::spawn_blocking`.
 > - **Size & Quality**: 96×96 requested from Windows Shell, providing 2x crispness on high-DPI displays.
-> - **Cargo.toml**: No changes needed — all required Windows crate features (`Win32_UI_Shell`, `Win32_System_Com`, `Win32_Graphics_Gdi`, `Win32_Foundation`) are already enabled.
+> - **Cargo.toml**: No changes needed. All required Windows crate features (`Win32_UI_Shell`, `Win32_System_Com`, `Win32_Graphics_Gdi`, `Win32_Foundation`) are already enabled.
 
 > [!CAUTION]
 > ## Execution Rules
@@ -71,7 +71,7 @@ Every item in this plan follows [.agents/AGENTS.md](file:///E:/Projects/QuiviT/.
     - Swap BGRA → RGBA in-place (matching `icons.rs` pattern).
     - Encode via `image::write_buffer_with_format` → PNG into `Vec<u8>`.
     - Clean up all GDI objects via RAII drop guards.
-  - Reuse RAII guard structs from `icons.rs` where possible. If `icons.rs` guards are file-private, duplicate the minimal set (`ScopedHgdiobj`, `ScopedMemDc`, `ScopedScreenDc`) — they are tiny 4-line structs.
+  - Reuse RAII guard structs from `icons.rs` where possible. If `icons.rs` guards are file-private, duplicate the minimal set (`ScopedHgdiobj`, `ScopedMemDc`, `ScopedScreenDc`), which are tiny 4-line structs.
 
 #### [MODIFY] [src-tauri/src/platform/mod.rs](file:///E:/Projects/QuiviT/src-tauri/src/platform/mod.rs)
 - [COMPLETED] Add `pub mod thumbnails;` export (after existing `pub mod icons;`).
@@ -90,7 +90,7 @@ Every item in this plan follows [.agents/AGENTS.md](file:///E:/Projects/QuiviT/.
     - `split_once("/thumb/")`, strip any trailing query (`?...`), decode base64 path via `crate::utils::base64_decode`.
   - Dispatch handler:
     - `tauri::async_runtime::spawn_blocking` → call `platform::thumbnails::get_shell_thumbnail_png(&path, 96)`.
-    - On `Ok(Some(bytes))`: respond with `png_response(bytes)` (reuses existing helper — already has `Content-Type`, `Cache-Control`, `Access-Control-Allow-Origin`).
+    - On `Ok(Some(bytes))`: respond with `png_response(bytes)` (reuses existing helper, which already has `Content-Type`, `Cache-Control`, `Access-Control-Allow-Origin`).
     - On `Ok(None)` or `Err(_)`: respond with HTTP 404.
 - [COMPLETED] Add `parse_thumb_url` to the test import list in [`protocol_tests.rs`](file:///E:/Projects/QuiviT/src-tauri/src/tests/protocol_tests.rs).
 
@@ -164,12 +164,12 @@ cargo test --manifest-path src-tauri/Cargo.toml protocol_tests
 2. In DevTools Network tab, confirm requests are sent to `quivit://thumb/...`.
 3. Confirm thumbnails load in milliseconds directly from Windows cache.
 4. Verify WebP, AVIF, and SVG files continue to load directly via WebView2.
-5. Delete Windows thumbnail cache (`cleanmgr` → Thumbnails), reopen folder — verify graceful 404 fallback to direct file preview.
+5. Delete Windows thumbnail cache (`cleanmgr` → Thumbnails), reopen folder, and verify graceful 404 fallback to direct file preview.
 6. Verify favorites panel thumbnails use the same routing and fallback.
 
 ---
 
 ## Deviations, Violations & Runtime Fixes
 
-- **[COMPLETED] Pre-existing: Animated SVG thumbnails intermittently freeze on refresh (`src/js/filepanel/filePanel.js`, disk, thumbnail only)** — Not introduced by this slice; not Lanczos/filters or archives. Root cause: `loading='lazy'` + `thumbnailCache` retain via `new Image()` poisoned SMIL timeline + `display:none` pool recycling leaving stale `loading`. Fix: scoped `loading='eager'` for disk SVG only in `updateEntry` (uncached + cached), `commitPendingThumbnails`, `buildFavoriteEntry`; visibility-before-src (`li.top/display` before `src`); `removeAttribute('loading')` on reclaim; `thumbnailCache` skip retain for SVG (`set(src,true)` not `new Image()`). Validated via 30× refresh/scroll/click + canvas pixel diff (`playing:true`, `loading:eager`, `display:''`, `offsetParent:true`, `retain-skip-svg`). Temporary debug instrumentation cleanly removed.
+- **[COMPLETED] Pre-existing: Animated SVG thumbnails intermittently freeze on refresh (`src/js/filepanel/filePanel.js`, disk, thumbnail only).** Not introduced by this slice; not Lanczos/filters or archives. Root cause: `loading='lazy'` + `thumbnailCache` retain via `new Image()` poisoned SMIL timeline + `display:none` pool recycling leaving stale `loading`. Fix: scoped `loading='eager'` for disk SVG only in `updateEntry` (uncached + cached), `commitPendingThumbnails`, `buildFavoriteEntry`; visibility-before-src (`li.top/display` before `src`); `removeAttribute('loading')` on reclaim; `thumbnailCache` skip retain for SVG (`set(src,true)` not `new Image()`). Validated via 30× refresh/scroll/click + canvas pixel diff (`playing:true`, `loading:eager`, `display:''`, `offsetParent:true`, `retain-skip-svg`). Temporary debug instrumentation cleanly removed.
 

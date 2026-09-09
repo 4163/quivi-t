@@ -294,7 +294,7 @@ export function initKeybindUi(containerId, config, showStatus) {
     _scrollHold = document.querySelector('#scroll-mode-toggle [data-mode="hold"]');
     _scrollToggle = document.querySelector('#scroll-mode-toggle [data-mode="toggle"]');
     if (!_scrollHold || !_scrollToggle) return;
-    // Directly mutates caller-owned config — matches existing keybinds pattern in this file.
+    // Directly mutates caller-owned config, matching the existing keybinds pattern in this file.
     _scrollHold.addEventListener('click', () => {
       config.frontend_data.scroll_zoom_modifier = 'hold';
       syncScrollModeToggle();

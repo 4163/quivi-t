@@ -138,7 +138,7 @@ if (_savedTab && document.getElementById(_savedTab)) switchTab(_savedTab);
 document.getElementById('btn-reset-keybinds').addEventListener('click', () => {
   config.frontend_data.keybinds = JSON.parse(JSON.stringify(DEFAULT_KEYBINDS));
   config.frontend_data.scroll_zoom_modifier = 'hold';
-  // Latch is runtime state (quivit_state.json) tied to the modifier — clear together so Toggle starts unlatched.
+  // Latch is runtime state (quivit_state.json) tied to the modifier. Clear both so toggle starts unlatched.
   config.frontend_data.scroll_zoom_latched = false;
   if (keybindUiInstance) {
     keybindUiInstance.renderKeybinds();

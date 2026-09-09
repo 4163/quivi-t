@@ -1079,7 +1079,7 @@ See `.agents/implementation-plan - additions.md` for the active backlog and sequ
 
 ### SVG Rendering & Bounds Fix for Percentage-Based SVGs (2026-08-23)
 - **Problem:** SVGs with `width="100%"` and `height="100%"` (no fixed intrinsic dimensions) collapsed to 0×0 `clientWidth` inside the shrink-wrapped `#viewer-img-wrapper` container. The viewer math received zero-size geometry and rendered the image invisibly. Post-refactor regression: the old code path that handled this was lost during the decoupling.
-- **Root cause:** Circular CSS dependency — the absolutely positioned wrapper tries to shrink-wrap to the image, but the SVG tries to size itself to 100% of its parent. Result: both collapse to zero.
+- **Root cause:** Circular CSS dependency. The absolutely positioned wrapper tries to shrink-wrap to the image, but the SVG tries to size itself to 100% of its parent. Result: both collapse to zero.
 - **Fix:** In `viewerRender.js`, both `_attachLoadHandler` and `_activatePoolNode` now detect the collapse by checking `clientWidth === 0` after activation. Only suspect SVGs (percentage-based, zero client size) are rescued: their intrinsic base resolution is set to 50% of the current viewport, preserving the aspect ratio from `naturalWidth`/`naturalHeight`. SVGs with fixed dimensions are left untouched. The statusbar reports `SVG × SVG` for dimensionless vectors.
 
 ### Metadata Window Credit SVGs (2026-08-23)
