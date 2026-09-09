@@ -16,16 +16,9 @@ pub(crate) fn validate_zip_header(archive_path: &str) -> Result<fs::File, String
         return Err("Invalid ZIP archive: file is smaller than minimum ZIP header (22 bytes)".to_string());
     }
 
-    let mut magic = [0u8; 4];
-    file.read_exact(&mut magic).map_err(|e| format!("Cannot read ZIP signature: {e}"))?;
-    let is_zip_magic = matches!(
-        magic,
-        [0x50, 0x4B, 0x03, 0x04] | [0x50, 0x4B, 0x05, 0x06] | [0x50, 0x4B, 0x07, 0x08]
-    );
-    if !is_zip_magic {
-        return Err("Invalid ZIP archive: missing PK signature header".to_string());
-    }
-
+    // Allow ZIPs with prepended data (SFX/offset archives): do not require PK at byte 0.
+    // EOCD presence is the reliable structural marker; magic at 0 is only a fallback
+    // diagnostic when EOCD is missing to preserve the "missing PK" error for non-ZIPs.
     const MAX_TAIL_SCAN: u64 = 128 * 1024;
     let tail_len = len.min(MAX_TAIL_SCAN) as usize;
     let seek_offset = len - tail_len as u64;
@@ -37,7 +30,20 @@ pub(crate) fn validate_zip_header(archive_path: &str) -> Result<fs::File, String
         .map_err(|e| format!("Cannot read archive tail: {e}"))?;
 
     let has_eocd = tail_buf.windows(4).any(|w| w == [0x50, 0x4B, 0x05, 0x06]);
-    if !has_eocd {
+    let has_zip64_eocd = tail_buf.windows(4).any(|w| w == [0x50, 0x4B, 0x06, 0x06] || w == [0x50, 0x4B, 0x06, 0x07]);
+    if !has_eocd && !has_zip64_eocd {
+        file.seek(SeekFrom::Start(0))
+            .map_err(|e| format!("Cannot reset archive cursor: {e}"))?;
+        let mut magic = [0u8; 4];
+        if file.read_exact(&mut magic).is_ok() {
+            let is_zip_magic = matches!(
+                magic,
+                [0x50, 0x4B, 0x03, 0x04] | [0x50, 0x4B, 0x05, 0x06] | [0x50, 0x4B, 0x07, 0x08]
+            );
+            if !is_zip_magic {
+                return Err("Invalid ZIP archive: missing PK signature header".to_string());
+            }
+        }
         return Err("Invalid ZIP archive: End of Central Directory (EOCD) signature not found in archive tail".to_string());
     }
 
