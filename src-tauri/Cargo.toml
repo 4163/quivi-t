@@ -4,6 +4,10 @@ version = "1.0.0"
 description = "A lightweight standalone port of Quivi, built with Tauri and Vanilla HTML/CSS/JS."
 authors = ["QuiviT Contributors"]
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/4163/quivi-t"
+homepage = "https://github.com/4163/quivi-t"
+readme = "../README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

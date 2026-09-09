@@ -19,6 +19,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "QuiviT Contributors",
+    "category": "Photography",
+    "shortDescription": "Lightweight comic and manga viewer for Windows",
+    "longDescription": "QuiviT is a lightweight standalone port of Quivi, built with Tauri. View images and archives (ZIP/CBZ, RAR/CBR, 7Z/CB7, TAR) with fast browsing, viewer controls, and custom CSS theming.",
     "resources": {
       "../matcha-latte.css": "matcha-latte.css",
       "../sage-mint.css": "sage-mint.css"
@@ -29,6 +33,9 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "digestAlgorithm": "sha256"
+    }
   }
 }
