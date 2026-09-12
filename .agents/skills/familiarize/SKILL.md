@@ -4,11 +4,6 @@ description: Use at the very start of a session to familiarize yourself with thi
 argument-hint: "<task to prepare for>"
 ---
 
-```text
-recomended models to use for the initial familiarization task for specific harnesses:
-DeepSeek V4 Flash - High / Gemini 3.7 Flash - High / GPT 5.6 Terra - High
-```
-
 # Familiarize
 
 ## 1. Learn the codebase
