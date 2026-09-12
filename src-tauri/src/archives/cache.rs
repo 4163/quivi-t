@@ -140,7 +140,10 @@ impl ArchiveCache {
             .zip_archive
             .as_mut()
             .and_then(|archive| {
-                crate::archives::zip::read_zip_entry_by_decoded_name(archive, entry_name, index_map, password).ok()
+                crate::archives::zip::read_zip_entry_by_decoded_name(
+                    archive, entry_name, index_map, password,
+                )
+                .ok()
             })
             .map(Vec::into)
     }
@@ -154,12 +157,12 @@ impl ArchiveCache {
         let single = self.archives.get_mut(archive_path)?;
         let index_map = single.zip_index_map.as_ref();
         let password = single.password.as_deref();
-        single
-            .zip_archive
-            .as_mut()
-            .and_then(|archive| {
-                crate::archives::zip::read_zip_entry_header(archive, entry_name, limit, index_map, password).ok()
-            })
+        single.zip_archive.as_mut().and_then(|archive| {
+            crate::archives::zip::read_zip_entry_header(
+                archive, entry_name, limit, index_map, password,
+            )
+            .ok()
+        })
     }
 
     pub(crate) fn temp_extraction_state(
@@ -225,14 +228,14 @@ impl ArchiveCache {
                 };
                 entry
             };
-            
+
             let removed = self
                 .archives
                 .get_mut(&old_archive)
                 .and_then(|s| s.zip_entries.remove(&old_entry))
                 .map(|d| d.len())
                 .unwrap_or(0);
-                
+
             let mut lru = self.lru.lock().unwrap();
             lru.global_zip_lru.pop_front();
             lru.current_zip_bytes = lru.current_zip_bytes.saturating_sub(removed);
@@ -283,7 +286,13 @@ impl ArchiveCache {
         if !self.archives.contains_key(archive_path) {
             return;
         }
-        if self.archives.get(archive_path).unwrap().zip_entries.contains_key(entry_name) {
+        if self
+            .archives
+            .get(archive_path)
+            .unwrap()
+            .zip_entries
+            .contains_key(entry_name)
+        {
             self.touch_zip_entry(archive_path, entry_name);
             return;
         }

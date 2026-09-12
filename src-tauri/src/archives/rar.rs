@@ -5,21 +5,29 @@ use crate::formats::{is_image_ext, is_metadata_ext};
 use crate::models::{ArchiveEncryptionStatus, FileEntry};
 
 use super::cache::{notify_extracted, write_temp_entry, ExtractNotify, FinishGuard};
+use super::sort_archive_entries;
 
 pub(crate) fn validate_rar_header(archive_path: &str) -> Result<(), String> {
     use std::io::Read;
 
     let mut file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
-    let len = file.metadata().map_err(|e| format!("Cannot read archive metadata: {e}"))?.len();
+    let len = file
+        .metadata()
+        .map_err(|e| format!("Cannot read archive metadata: {e}"))?
+        .len();
 
     if len < 14 {
-        return Err("Invalid RAR archive: file is smaller than minimum RAR header (14 bytes)".to_string());
+        return Err(
+            "Invalid RAR archive: file is smaller than minimum RAR header (14 bytes)".to_string(),
+        );
     }
 
     let mut magic = [0u8; 7];
-    file.read_exact(&mut magic).map_err(|e| format!("Cannot read RAR signature: {e}"))?;
+    file.read_exact(&mut magic)
+        .map_err(|e| format!("Cannot read RAR signature: {e}"))?;
 
-    if magic[0..6] != [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07] || (magic[6] != 0x00 && magic[6] != 0x01) {
+    if magic[0..6] != [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07] || (magic[6] != 0x00 && magic[6] != 0x01)
+    {
         return Err("Invalid RAR archive: missing RAR signature header".to_string());
     }
 
@@ -122,7 +130,7 @@ pub(crate) fn list_rar_entries(
             }
         }
     }
-    files.sort_by(|a, b| natord::compare(&a.name, &b.name));
+    sort_archive_entries(&mut files);
     Ok((files, encryption))
 }
 
@@ -146,38 +154,38 @@ pub(crate) fn extract_rar_to_temp(
         return;
     };
     let mut iter = archive;
-        loop {
-            if cancel_flag.load(std::sync::atomic::Ordering::Relaxed) {
-                break;
-            }
-            match iter.read_header() {
-                Ok(Some(header)) => {
-                    let entry = header.entry();
-                    let name = entry.filename.to_string_lossy().to_string();
-                    if !entry.is_directory() {
-                        let ext = name.rsplit('.').next().unwrap_or("");
-                        if is_image_ext(ext) || is_metadata_ext(ext) {
-                            if let Ok((data, next)) = header.read() {
-                                if write_temp_entry(&temp_dir, &name, |path| fs::write(path, &data))
-                                    .is_some()
-                                {
-                                    notify_extracted(&notify, &name);
-                                }
-                                iter = next;
-                                continue;
-                            } else {
-                                break;
+    loop {
+        if cancel_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            break;
+        }
+        match iter.read_header() {
+            Ok(Some(header)) => {
+                let entry = header.entry();
+                let name = entry.filename.to_string_lossy().to_string();
+                if !entry.is_directory() {
+                    let ext = name.rsplit('.').next().unwrap_or("");
+                    if is_image_ext(ext) || is_metadata_ext(ext) {
+                        if let Ok((data, next)) = header.read() {
+                            if write_temp_entry(&temp_dir, &name, |path| fs::write(path, &data))
+                                .is_some()
+                            {
+                                notify_extracted(&notify, &name);
                             }
+                            iter = next;
+                            continue;
+                        } else {
+                            break;
                         }
                     }
-                    if let Ok(next) = header.skip() {
-                        iter = next;
-                    } else {
-                        break;
-                    }
                 }
-                Ok(None) => break,
-                Err(_) => break,
+                if let Ok(next) = header.skip() {
+                    iter = next;
+                } else {
+                    break;
+                }
             }
+            Ok(None) => break,
+            Err(_) => break,
         }
+    }
 }

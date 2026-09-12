@@ -5,15 +5,21 @@ use crate::formats::{is_image_ext, is_metadata_ext};
 use crate::models::{ArchiveEncryptionStatus, FileEntry};
 
 use super::cache::ZipArchive;
+use super::sort_archive_entries;
 
 pub(crate) fn validate_zip_header(archive_path: &str) -> Result<fs::File, String> {
     use std::io::{Read, Seek, SeekFrom};
 
     let mut file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
-    let len = file.metadata().map_err(|e| format!("Cannot read archive metadata: {e}"))?.len();
+    let len = file
+        .metadata()
+        .map_err(|e| format!("Cannot read archive metadata: {e}"))?
+        .len();
 
     if len < 22 {
-        return Err("Invalid ZIP archive: file is smaller than minimum ZIP header (22 bytes)".to_string());
+        return Err(
+            "Invalid ZIP archive: file is smaller than minimum ZIP header (22 bytes)".to_string(),
+        );
     }
 
     // Allow ZIPs with prepended data (SFX/offset archives): do not require PK at byte 0.
@@ -30,7 +36,9 @@ pub(crate) fn validate_zip_header(archive_path: &str) -> Result<fs::File, String
         .map_err(|e| format!("Cannot read archive tail: {e}"))?;
 
     let has_eocd = tail_buf.windows(4).any(|w| w == [0x50, 0x4B, 0x05, 0x06]);
-    let has_zip64_eocd = tail_buf.windows(4).any(|w| w == [0x50, 0x4B, 0x06, 0x06] || w == [0x50, 0x4B, 0x06, 0x07]);
+    let has_zip64_eocd = tail_buf
+        .windows(4)
+        .any(|w| w == [0x50, 0x4B, 0x06, 0x06] || w == [0x50, 0x4B, 0x06, 0x07]);
     if !has_eocd && !has_zip64_eocd {
         file.seek(SeekFrom::Start(0))
             .map_err(|e| format!("Cannot reset archive cursor: {e}"))?;
@@ -47,7 +55,8 @@ pub(crate) fn validate_zip_header(archive_path: &str) -> Result<fs::File, String
         return Err("Invalid ZIP archive: End of Central Directory (EOCD) signature not found in archive tail".to_string());
     }
 
-    file.seek(SeekFrom::Start(0)).map_err(|e| format!("Cannot reset archive cursor: {e}"))?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|e| format!("Cannot reset archive cursor: {e}"))?;
     Ok(file)
 }
 
@@ -66,7 +75,15 @@ fn decode_zip_entry_name<R: std::io::Read + std::io::Seek>(
 pub(crate) fn list_zip_entries(
     archive_path: &str,
     password: Option<&str>,
-) -> Result<(Vec<FileEntry>, ZipArchive, HashMap<String, usize>, Option<ArchiveEncryptionStatus>), String> {
+) -> Result<
+    (
+        Vec<FileEntry>,
+        ZipArchive,
+        HashMap<String, usize>,
+        Option<ArchiveEncryptionStatus>,
+    ),
+    String,
+> {
     let mut archive = open_zip_archive(archive_path)?;
     let all_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
 
@@ -187,7 +204,7 @@ pub(crate) fn list_zip_entries(
         );
     }
 
-    files.sort_by(|a, b| natord::compare(&a.name, &b.name));
+    sort_archive_entries(&mut files);
     Ok((files, archive, index_map, encryption))
 }
 

@@ -1,6 +1,7 @@
 import { Core } from './core.js';
 import { DirectoryPrefs } from './directoryPrefs.js';
-import { naturalCompare, applySort } from './services/sorting.js';
+import { applySort } from './services/sorting.js';
+import { isMetadataEntryName } from './services/metadataFiles.js';
 import { createHistoryEntry, recordNavigation } from './navigationHistory.js';
 
 const { invoke } = window.__TAURI__.core;
@@ -312,16 +313,14 @@ export const FsUtils = {
     return next === -1 ? 0 : next;
   },
 
-  // Sort-independent page position of an image: among images only, in natural
-  // ascending filename order (matching the app's default Name sort), regardless
-  // of the active sort column/direction. Returns { current, total } (1-based)
-  // or null when the filename isn't an image / isn't in the list.
+  // Sort-independent page position of an image: among images only, in the app's
+  // default Name sort, regardless of the active sort column/direction. Returns
+  // { current, total } (1-based) or null when the filename isn't an image.
   naturalPagePosition(list, filename) {
     if (!Array.isArray(list) || !filename) return null;
     const images = list.filter(e => this.isImageEntry(e));
     if (!images.length) return null;
-    const sorted = [...images].sort((a, b) =>
-      naturalCompare(a.name.toLowerCase(), b.name.toLowerCase()));
+    const sorted = applySort([...images], 'name', false);
     const idx = sorted.findIndex(e => e.name === filename);
     if (idx === -1) return null;
     return { current: idx + 1, total: sorted.length };
@@ -505,8 +504,8 @@ export const FsUtils = {
         _archiveEncryptionCache.set(result.archive_path, null);
       }
 
-      const metaFiles = result.files.filter(f => /\.(xml|opf)$/i.test(f.name)).map(f => f.name);
-      const imgFiles = result.files.filter(f => !/\.(xml|opf)$/i.test(f.name));
+      const metaFiles = result.files.filter(f => isMetadataEntryName(f.name)).map(f => f.name);
+      const imgFiles = result.files.filter(f => !isMetadataEntryName(f.name));
 
       let files = this.buildArchiveList({ ...result, files: imgFiles });
       const prefs = DirectoryPrefs.getSortPrefs(result.archive_path);
@@ -547,7 +546,13 @@ export const FsUtils = {
 
       if (targetPath) {
         const cleanTarget = cleanEntryName(targetPath);
-        preferredIndex = files.findIndex(f => f.path === targetPath || f.name === targetPath || f.name === cleanTarget || f.path === cleanTarget);
+        const normTarget = cleanTarget.replace(/\\/g, '/').toLowerCase();
+        preferredIndex = files.findIndex(f => {
+          if (f.path === targetPath || f.name === targetPath || f.name === cleanTarget || f.path === cleanTarget) return true;
+          const normName = f.name?.replace(/\\/g, '/').toLowerCase();
+          const normPath = f.path?.replace(/\\/g, '/').toLowerCase();
+          return normName === normTarget || normPath === normTarget || normPath?.endsWith('/' + normTarget);
+        });
       }
 
       if (preferredIndex === -1 && options?.restoreLastImage && fd.remember_last_image && fd.last_active_image && fd.last_active_image.container === result.archive_path) {
@@ -695,6 +700,22 @@ export const FsUtils = {
     }
 
     const ext = _ext(name);
+
+    // If opening a non-archive file from a temporary directory, resolve if it was extracted by an archiver
+    if (!SUPPORTED_ARCHIVES.has(ext) && /([\\/]temp[\\/]|([\\/]AppData[\\/]Local[\\/]Temp[\\/]))/i.test(path)) {
+      try {
+        const origin = await invoke('resolve_archive_temp_origin', { path });
+        if (origin && origin.archive_path && origin.entry_name) {
+          return this.loadArchive(origin.archive_path, origin.entry_name, {
+            ...options,
+            preferInitial: true,
+            restoreLastImage: false,
+          });
+        }
+      } catch (err) {
+        console.warn('[Core] Failed to resolve archiver temp origin:', err);
+      }
+    }
 
     try {
       if (SUPPORTED_ARCHIVES.has(ext)) {

@@ -72,41 +72,41 @@ pub fn run() {
             Ok(())
         });
 
-    builder = builder
-        .invoke_handler(tauri::generate_handler![
-            read_directory,
-            list_archive,
-            drop_archive_cache,
-            prefetch_archive_entries,
-            load_config,
-            get_config_dir,
-            open_config_dir,
-            get_local_data_dir,
-            open_local_data_dir,
-            save_config,
-            open_options,
-            fit_options_window,
-            open_metadata_window,
-            fit_metadata_window,
-            get_drives,
-            watch_directory,
-            open_in_explorer,
-            get_path_kind,
-            read_text_file,
-            write_text_file,
-            get_default_dir,
-            get_ico_frames,
-            get_archive_ico_frames,
-            get_native_icon,
-            get_format_status,
-            register_associations,
-            unregister_associations,
-            get_initial_args,
-            show_window,
-            update_theme,
-            pick_folder,
-            check_is_animated
-        ]);
+    builder = builder.invoke_handler(tauri::generate_handler![
+        read_directory,
+        list_archive,
+        drop_archive_cache,
+        prefetch_archive_entries,
+        load_config,
+        get_config_dir,
+        open_config_dir,
+        get_local_data_dir,
+        open_local_data_dir,
+        save_config,
+        open_options,
+        fit_options_window,
+        open_metadata_window,
+        fit_metadata_window,
+        get_drives,
+        watch_directory,
+        open_in_explorer,
+        get_path_kind,
+        read_text_file,
+        write_text_file,
+        get_default_dir,
+        get_ico_frames,
+        get_archive_ico_frames,
+        get_native_icon,
+        get_format_status,
+        register_associations,
+        unregister_associations,
+        get_initial_args,
+        show_window,
+        update_theme,
+        pick_folder,
+        check_is_animated,
+        resolve_archive_temp_origin
+    ]);
 
     crate::protocol::register_quivit_protocol(builder)
         .on_window_event(|window, event| {
@@ -146,3 +146,7 @@ mod format_tests;
 #[cfg(test)]
 #[path = "tests/thumbnails_tests.rs"]
 mod thumbnails_tests;
+
+#[cfg(test)]
+#[path = "tests/temp_archive_tests.rs"]
+mod temp_archive_tests;

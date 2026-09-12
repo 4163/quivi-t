@@ -148,8 +148,6 @@ pub fn read_directory(
     read_directory_impl(&path, show_hidden.unwrap_or(false), target_name.as_deref())
 }
 
-
-
 #[tauri::command]
 pub fn get_drives() -> Vec<String> {
     let mut drives = Vec::new();

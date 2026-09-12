@@ -1,6 +1,6 @@
-use tauri::Manager;
-use tauri::window::Color;
 use crate::config::AppConfig;
+use tauri::window::Color;
+use tauri::Manager;
 
 // Window size constants
 // Initial/min sizes in logical pixels. Named for easy tweaking.
@@ -73,9 +73,11 @@ pub fn update_theme(app: tauri::AppHandle, theme: Option<String>) {
         _ => None,
     };
 
-    let dark = tauri_theme == Some(tauri::Theme::Dark) || 
-        (tauri_theme.is_none() && app.get_webview_window("main").and_then(|w| w.theme().ok()) == Some(tauri::Theme::Dark));
-        
+    let dark = tauri_theme == Some(tauri::Theme::Dark)
+        || (tauri_theme.is_none()
+            && app.get_webview_window("main").and_then(|w| w.theme().ok())
+                == Some(tauri::Theme::Dark));
+
     let color = if dark {
         Color(37, 37, 38, 255)
     } else {
@@ -93,8 +95,13 @@ pub fn update_theme(app: tauri::AppHandle, theme: Option<String>) {
 #[tauri::command]
 pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("options") {
-        if window.is_visible().map_err(|e| format!("Failed to check options window: {e}"))? {
-            window.set_focus().map_err(|e| format!("Failed to focus options window: {e}"))?;
+        if window
+            .is_visible()
+            .map_err(|e| format!("Failed to check options window: {e}"))?
+        {
+            window
+                .set_focus()
+                .map_err(|e| format!("Failed to focus options window: {e}"))?;
         }
         return Ok(());
     }
@@ -102,7 +109,7 @@ pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
     let builder = tauri::WebviewWindowBuilder::new(
         &app,
         "options",
-        tauri::WebviewUrl::App("options.html".into())
+        tauri::WebviewUrl::App("options.html".into()),
     )
     .title("Options")
     .inner_size(OPTIONS_INITIAL_W, OPTIONS_INITIAL_H)
@@ -124,8 +131,13 @@ pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("metadata") {
-        if window.is_visible().map_err(|e| format!("Failed to check metadata window: {e}"))? {
-            window.set_focus().map_err(|e| format!("Failed to focus metadata window: {e}"))?;
+        if window
+            .is_visible()
+            .map_err(|e| format!("Failed to check metadata window: {e}"))?
+        {
+            window
+                .set_focus()
+                .map_err(|e| format!("Failed to focus metadata window: {e}"))?;
         }
         return Ok(());
     }
@@ -133,7 +145,7 @@ pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
     let builder = tauri::WebviewWindowBuilder::new(
         &app,
         "metadata",
-        tauri::WebviewUrl::App("metadata.html".into())
+        tauri::WebviewUrl::App("metadata.html".into()),
     )
     .title("Archive Info")
     .inner_size(META_INITIAL_W, META_INITIAL_H)
@@ -158,30 +170,32 @@ pub fn center_window_over_main(
     target_width: f64,
     target_height: f64,
 ) -> Result<(), String> {
-    let main = app.get_webview_window("main")
+    let main = app
+        .get_webview_window("main")
         .ok_or_else(|| "main window not found".to_string())?;
-    
+
     let pos = main.outer_position().map_err(|e| e.to_string())?;
     let size = main.outer_size().map_err(|e| e.to_string())?;
     let scale = main.scale_factor().map_err(|e| e.to_string())?;
-    
+
     let x = pos.x + (size.width as i32 - (target_width * scale) as i32) / 2;
     let y = pos.y + (size.height as i32 - (target_height * scale) as i32) / 2;
-    
+
     window
         .set_size(tauri::LogicalSize::new(target_width, target_height))
         .map_err(|e| e.to_string())?;
-    
+
     window
         .set_position(tauri::PhysicalPosition::new(x, y))
         .map_err(|e| e.to_string())?;
-        
+
     Ok(())
 }
 
 #[tauri::command]
 pub async fn fit_options_window(app: tauri::AppHandle, width: f64) -> Result<(), String> {
-    let options = app.get_webview_window("options")
+    let options = app
+        .get_webview_window("options")
         .ok_or_else(|| "options window not found".to_string())?;
 
     center_window_over_main(&app, &options, width, OPTIONS_INITIAL_H)
@@ -189,7 +203,8 @@ pub async fn fit_options_window(app: tauri::AppHandle, width: f64) -> Result<(),
 
 #[tauri::command]
 pub async fn fit_metadata_window(app: tauri::AppHandle, height: f64) -> Result<(), String> {
-    let metadata = app.get_webview_window("metadata")
+    let metadata = app
+        .get_webview_window("metadata")
         .ok_or_else(|| "metadata window not found".to_string())?;
 
     center_window_over_main(&app, &metadata, META_INITIAL_W, height)

@@ -18,8 +18,7 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{
-    IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK,
-    SIIGBF_THUMBNAILONLY,
+    IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK, SIIGBF_THUMBNAILONLY,
 };
 
 #[cfg(windows)]
@@ -78,7 +77,6 @@ impl Drop for ComGuard {
         }
     }
 }
-
 
 /// Extracts a pre-rendered thumbnail from the Windows Shell thumbnail cache.
 /// Returns `Ok(None)` when the extension is unsupported, the file is missing,
@@ -189,7 +187,9 @@ pub fn get_shell_thumbnail_png(path: &str, size: u32) -> Result<Option<Vec<u8>>,
         let hbm_dib = match hbm_dib {
             Ok(h) if !h.is_invalid() => h,
             _ => {
-                unsafe { SelectObject(hdc_src.0, old_src); }
+                unsafe {
+                    SelectObject(hdc_src.0, old_src);
+                }
                 return Ok(None);
             }
         };
@@ -243,8 +243,7 @@ pub fn get_shell_thumbnail_png(path: &str, size: u32) -> Result<Option<Vec<u8>>,
             }
         }
 
-        let img =
-            RgbaImage::from_raw(width, height, pixels).ok_or("Failed to create RgbaImage")?;
+        let img = RgbaImage::from_raw(width, height, pixels).ok_or("Failed to create RgbaImage")?;
         let mut buf = Cursor::new(Vec::new());
         image::write_buffer_with_format(
             &mut buf,
@@ -295,7 +294,8 @@ fn png_has_alpha(hdr: &[u8]) -> bool {
     // Scan chunks for tRNS before IDAT
     let mut pos = 8; // after PNG signature
     while pos + 12 <= hdr.len() {
-        let chunk_len = u32::from_be_bytes([hdr[pos], hdr[pos + 1], hdr[pos + 2], hdr[pos + 3]]) as usize;
+        let chunk_len =
+            u32::from_be_bytes([hdr[pos], hdr[pos + 1], hdr[pos + 2], hdr[pos + 3]]) as usize;
         let chunk_type = &hdr[pos + 4..pos + 8];
         if chunk_type == b"tRNS" {
             return true;
@@ -338,7 +338,9 @@ fn gif_has_transparency(hdr: &[u8]) -> bool {
             while pos < hdr.len() {
                 let block_size = hdr[pos] as usize;
                 pos += 1;
-                if block_size == 0 { break; }
+                if block_size == 0 {
+                    break;
+                }
                 pos += block_size;
             }
         } else {
@@ -371,7 +373,8 @@ fn ico_has_alpha(hdr: &[u8]) -> bool {
         }
         // Also treat 0 bpp with PNG entry as alpha (PNG signature inside)
         // Fallback: if entry size suggests PNG, assume alpha
-        let bytes_in_res = u32::from_le_bytes([hdr[off+8], hdr[off+9], hdr[off+10], hdr[off+11]]) as usize;
+        let bytes_in_res =
+            u32::from_le_bytes([hdr[off + 8], hdr[off + 9], hdr[off + 10], hdr[off + 11]]) as usize;
         if bytes_in_res >= 8 && hdr.len() >= 22 {
             // Heuristic: PNG entries are stored as PNG, which typically has alpha
             // We cannot read entry data in header-only 1024, but 32bpp is reliable.

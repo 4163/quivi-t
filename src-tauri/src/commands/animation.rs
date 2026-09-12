@@ -21,6 +21,8 @@ pub fn check_is_animated(
         let mut f = fs::File::open(&path).map_err(|e| format!("Cannot open file: {}", e))?;
         let mut buffer = vec![0u8; 262_144]; // 256 KiB
         let bytes_read = f.read(&mut buffer).unwrap_or(0);
-        Ok(crate::formats::check_animation_status(&buffer[..bytes_read]))
+        Ok(crate::formats::check_animation_status(
+            &buffer[..bytes_read],
+        ))
     }
 }

@@ -6,6 +6,7 @@ use crate::models::FileEntry;
 
 use super::cache::{notify_extracted, write_temp_entry, ExtractNotify, FinishGuard};
 use super::decode_cjk_name;
+use super::sort_archive_entries;
 
 fn decode_tar_name<R: std::io::Read>(entry: &tar::Entry<'_, R>) -> String {
     decode_cjk_name(&entry.path_bytes()).replace('\\', "/")
@@ -14,23 +15,32 @@ fn decode_tar_name<R: std::io::Read>(entry: &tar::Entry<'_, R>) -> String {
 pub(crate) fn validate_tar_header(archive_path: &str) -> Result<fs::File, String> {
     use std::io::{Read, Seek, SeekFrom};
 
-    let mut file = fs::File::open(archive_path).map_err(|e| format!("Cannot open TAR archive: {e}"))?;
-    let len = file.metadata().map_err(|e| format!("Cannot read TAR metadata: {e}"))?.len();
+    let mut file =
+        fs::File::open(archive_path).map_err(|e| format!("Cannot open TAR archive: {e}"))?;
+    let len = file
+        .metadata()
+        .map_err(|e| format!("Cannot read TAR metadata: {e}"))?
+        .len();
 
     if len < 512 {
-        return Err("Invalid TAR archive: file is smaller than minimum TAR block (512 bytes)".to_string());
+        return Err(
+            "Invalid TAR archive: file is smaller than minimum TAR block (512 bytes)".to_string(),
+        );
     }
 
     let mut block = [0u8; 512];
-    file.read_exact(&mut block).map_err(|e| format!("Cannot read TAR header block: {e}"))?;
+    file.read_exact(&mut block)
+        .map_err(|e| format!("Cannot read TAR header block: {e}"))?;
 
     if block.iter().all(|&b| b == 0) {
-        file.seek(SeekFrom::Start(0)).map_err(|e| format!("Cannot reset TAR cursor: {e}"))?;
+        file.seek(SeekFrom::Start(0))
+            .map_err(|e| format!("Cannot reset TAR cursor: {e}"))?;
         return Ok(file);
     }
 
     if &block[257..262] == b"ustar" {
-        file.seek(SeekFrom::Start(0)).map_err(|e| format!("Cannot reset TAR cursor: {e}"))?;
+        file.seek(SeekFrom::Start(0))
+            .map_err(|e| format!("Cannot reset TAR cursor: {e}"))?;
         return Ok(file);
     }
 
@@ -52,7 +62,8 @@ pub(crate) fn validate_tar_header(archive_path: &str) -> Result<fs::File, String
         return Err("Invalid TAR archive: invalid header checksum".to_string());
     }
 
-    file.seek(SeekFrom::Start(0)).map_err(|e| format!("Cannot reset TAR cursor: {e}"))?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|e| format!("Cannot reset TAR cursor: {e}"))?;
     Ok(file)
 }
 
@@ -85,7 +96,7 @@ pub(crate) fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, Str
         ));
     }
 
-    files.sort_by(|a, b| natord::compare(&a.name, &b.name));
+    sort_archive_entries(&mut files);
     Ok(files)
 }
 

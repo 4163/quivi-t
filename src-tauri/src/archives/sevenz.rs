@@ -5,19 +5,26 @@ use crate::formats::{is_image_ext, is_metadata_ext};
 use crate::models::{ArchiveEncryptionStatus, FileEntry};
 
 use super::cache::{notify_extracted, write_temp_entry, ExtractNotify, FinishGuard};
+use super::sort_archive_entries;
 
 pub(crate) fn validate_7z_header(archive_path: &str) -> Result<(), String> {
     use std::io::Read;
 
     let mut file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
-    let len = file.metadata().map_err(|e| format!("Cannot read archive metadata: {e}"))?.len();
+    let len = file
+        .metadata()
+        .map_err(|e| format!("Cannot read archive metadata: {e}"))?
+        .len();
 
     if len < 32 {
-        return Err("Invalid 7Z archive: file is smaller than minimum 7Z header (32 bytes)".to_string());
+        return Err(
+            "Invalid 7Z archive: file is smaller than minimum 7Z header (32 bytes)".to_string(),
+        );
     }
 
     let mut header = [0u8; 32];
-    file.read_exact(&mut header).map_err(|e| format!("Cannot read 7Z signature: {e}"))?;
+    file.read_exact(&mut header)
+        .map_err(|e| format!("Cannot read 7Z signature: {e}"))?;
 
     if header[0..6] != [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C] {
         return Err("Invalid 7Z archive: missing 7Z signature header".to_string());
@@ -26,7 +33,10 @@ pub(crate) fn validate_7z_header(archive_path: &str) -> Result<(), String> {
     let next_header_offset = u64::from_le_bytes(header[12..20].try_into().unwrap());
     let next_header_size = u64::from_le_bytes(header[20..28].try_into().unwrap());
 
-    if let Some(end) = 32u64.checked_add(next_header_offset).and_then(|h| h.checked_add(next_header_size)) {
+    if let Some(end) = 32u64
+        .checked_add(next_header_offset)
+        .and_then(|h| h.checked_add(next_header_size))
+    {
         if end > len {
             return Err("Invalid 7Z archive: truncated archive header".to_string());
         }
@@ -95,7 +105,7 @@ pub(crate) fn list_7z_entries(
         ));
     }
 
-    files.sort_by(|a, b| natord::compare(&a.name, &b.name));
+    sort_archive_entries(&mut files);
 
     let encryption = if is_enc {
         if password.is_none() {

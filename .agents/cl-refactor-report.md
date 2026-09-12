@@ -26,7 +26,6 @@ These items belong to the consumer application. The CL does not know or care abo
 *   **Window Management:** Detaching image windows, emergency boss keys, and fullscreen focus loss. (Note: Detaching images relies on Tauri window management because DOM elements cannot escape WebView2 bounds).
 *   **Web Fetching & Remote Routing:** Determining where URLs come from.
 *   **Update Indicators:** GitHub release checking.
-*   **UI Sound Design:** Audio feedback for clicks and list navigation.
 
 ## 3. Backend & I/O Priorities (Rust / Tauri)
 
@@ -41,12 +40,13 @@ These items modify the Rust backend or the OS integration. They do not affect th
 *   **[COMPLETED] Thumbnail View & High-Res Icons (Slice 4.3 + Slice 4.4):** Fetching `SHGFI_LARGEICON` via the Rust backend to render higher-resolution Windows icons in the file list.
 *   **Extended Format Support (PSD, XCF, PDF):** Implementing Rust-side decoders to turn these formats into raw pixels or standard web formats before passing them to the CL.
 *   **[COMPLETED] Password-Protected Archives:** Passing credentials through the IPC layer to `zip`, `unrar`, and `sevenz-rust2`, with frontend status signaling and locked container handling.
-*   **Additional Metadata Formats:** Parsing `comicinfo.json` alongside the existing metadata parsers.
+*   **[COMPLETED] Additional Metadata Formats (Slice 5):** Parsing `comicinfo.json` and `meta.json` alongside the existing XML/OPF metadata parsers.
 *   **[OUT OF SCOPE] Native 7-Zip Sidecar:** Using `7zr.exe` for faster LZMA2 extraction.
 
 ### Priority 3: Shelved / Low Value
 *   **Windows Thumbnails (APNG/WebP/AVIF):** Explicitly marked out of scope.
 *   **Video Support:** Out of scope for the image viewer context.
+*   **[OUT OF SCOPE] UI Sound Design:** Audio feedback for clicks and list navigation. Explicitly marked out of scope.
 
 ## Next Steps
 

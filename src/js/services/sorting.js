@@ -10,6 +10,26 @@ export function naturalCompare(a, b) {
   return ax.length - bx.length;
 }
 
+function isNestedArchiveEntry(item) {
+  const name = item?.name;
+  if (typeof name !== 'string') return false;
+  const trimmed = name.replace(/^[\\/]+|[\\/]+$/g, '');
+  return trimmed.includes('/') || trimmed.includes('\\');
+}
+
+function hasArchiveEntryPath(item) {
+  return typeof item?.path === 'string' && item.path.includes('|');
+}
+
+function compareNames(a, b) {
+  const archiveOrder = hasArchiveEntryPath(a) || hasArchiveEntryPath(b);
+  if (archiveOrder) {
+    const nestedCmp = Number(isNestedArchiveEntry(a)) - Number(isNestedArchiveEntry(b));
+    if (nestedCmp !== 0) return nestedCmp;
+  }
+  return naturalCompare(a.name.toLowerCase(), b.name.toLowerCase());
+}
+
 export function applySort(list, col, desc) {
   if (!list || list.length <= 1) return list;
 
@@ -43,7 +63,7 @@ export function applySort(list, col, desc) {
     }
 
     if (col === 'name' || (col === 'ext' && a.ext.toLowerCase() === b.ext.toLowerCase()) || (col === 'date' && a.rawDate === b.rawDate)) {
-      const cmp = naturalCompare(valA, valB);
+      const cmp = col === 'name' ? compareNames(a, b) : naturalCompare(valA, valB);
       return desc ? -cmp : cmp;
     }
 

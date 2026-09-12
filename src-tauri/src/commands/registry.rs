@@ -5,7 +5,11 @@ use crate::models::FormatStatus;
 use winreg::{enums::*, RegKey};
 
 #[tauri::command(async)]
-pub fn get_native_icon(path: String, ext_key: String, size: Option<String>) -> Result<Option<String>, String> {
+pub fn get_native_icon(
+    path: String,
+    ext_key: String,
+    size: Option<String>,
+) -> Result<Option<String>, String> {
     crate::platform::icons::get_cached_native_icon(&path, &ext_key, size.as_deref())
 }
 
@@ -72,8 +76,14 @@ pub fn get_format_status() -> Vec<FormatStatus> {
 
 const FORMAT_ICONS: &[(&str, &[u8])] = &[
     ("7z.ico", include_bytes!("../../../icons/formats/7z.ico")),
-    ("apng.ico", include_bytes!("../../../icons/formats/apng.ico")),
-    ("avif.ico", include_bytes!("../../../icons/formats/avif.ico")),
+    (
+        "apng.ico",
+        include_bytes!("../../../icons/formats/apng.ico"),
+    ),
+    (
+        "avif.ico",
+        include_bytes!("../../../icons/formats/avif.ico"),
+    ),
     ("bmp.ico", include_bytes!("../../../icons/formats/bmp.ico")),
     ("cb7.ico", include_bytes!("../../../icons/formats/cb7.ico")),
     ("cbr.ico", include_bytes!("../../../icons/formats/cbr.ico")),
@@ -81,13 +91,19 @@ const FORMAT_ICONS: &[(&str, &[u8])] = &[
     ("cbz.ico", include_bytes!("../../../icons/formats/cbz.ico")),
     ("gif.ico", include_bytes!("../../../icons/formats/gif.ico")),
     ("ico.ico", include_bytes!("../../../icons/formats/ico.ico")),
-    ("jpeg.ico", include_bytes!("../../../icons/formats/jpeg.ico")),
+    (
+        "jpeg.ico",
+        include_bytes!("../../../icons/formats/jpeg.ico"),
+    ),
     ("jpg.ico", include_bytes!("../../../icons/formats/jpg.ico")),
     ("png.ico", include_bytes!("../../../icons/formats/png.ico")),
     ("rar.ico", include_bytes!("../../../icons/formats/rar.ico")),
     ("svg.ico", include_bytes!("../../../icons/formats/svg.ico")),
     ("tar.ico", include_bytes!("../../../icons/formats/tar.ico")),
-    ("webp.ico", include_bytes!("../../../icons/formats/webp.ico")),
+    (
+        "webp.ico",
+        include_bytes!("../../../icons/formats/webp.ico"),
+    ),
     ("zip.ico", include_bytes!("../../../icons/formats/zip.ico")),
 ];
 
@@ -117,9 +133,7 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             let lower_ext = ext.to_lowercase();
             let format_info = SUPPORTED_FORMATS.iter().find(|f| f.ext == lower_ext);
             let display_name = format_info.map(|f| f.name).unwrap_or("QuiviT File");
-            let icon_name = format_info
-                .map(|f| f.icon)
-                .unwrap_or("jpg.ico");
+            let icon_name = format_info.map(|f| f.icon).unwrap_or("jpg.ico");
 
             let progid = format!("QuiviT.{}", lower_ext);
 

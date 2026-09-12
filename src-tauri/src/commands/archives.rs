@@ -63,3 +63,11 @@ pub fn get_archive_ico_frames(
     let data = entry_data.wait_for_data(&entry_name)?;
     ico_frames_from_bytes(&data)
 }
+
+#[tauri::command(async)]
+pub fn resolve_archive_temp_origin(
+    path: String,
+    state: tauri::State<'_, RwLock<ArchiveCache>>,
+) -> Result<Option<crate::models::TempArchiveOrigin>, String> {
+    crate::platform::temp_archive::resolve_temp_origin(&path, &state)
+}

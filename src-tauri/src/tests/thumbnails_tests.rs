@@ -50,9 +50,17 @@ fn shell_thumbnail_jpg_is_opaque() {
         let img = image::load_from_memory(&bytes).unwrap().to_rgba8();
         let opaque = img.pixels().filter(|p| p[3] == 255).count();
         let total = (img.width() * img.height()) as usize;
-        eprintln!("jpg thumb opaque {}/{} ({:.1}%)", opaque, total, opaque as f32 / total as f32 * 100.0);
+        eprintln!(
+            "jpg thumb opaque {}/{} ({:.1}%)",
+            opaque,
+            total,
+            opaque as f32 / total as f32 * 100.0
+        );
         // jpg should be fully opaque
-        assert!(opaque > total * 95 / 100, "jpg thumb should be mostly opaque");
+        assert!(
+            opaque > total * 95 / 100,
+            "jpg thumb should be mostly opaque"
+        );
     }
 }
 
@@ -89,7 +97,10 @@ fn shell_thumbnail_accepts_static_gif() {
     let result = crate::platform::thumbnails::get_shell_thumbnail_png(path, 96);
     match result {
         Ok(Some(bytes)) => {
-            assert!(!bytes.is_empty(), "static GIF thumbnail should not be empty");
+            assert!(
+                !bytes.is_empty(),
+                "static GIF thumbnail should not be empty"
+            );
         }
         Ok(None) => {
             // Shell has no cached thumbnail for this file, acceptable
@@ -150,11 +161,16 @@ fn shell_thumbnail_transparent_png_not_black_matte() {
             // Shell returned a thumbnail for a transparent PNG, verify it has alpha
             let img = image::load_from_memory(&bytes).unwrap().to_rgba8();
             let has_transparent = img.pixels().any(|p| p[3] < 255);
-            assert!(has_transparent, "thumbnail of transparent PNG should have alpha pixels");
+            assert!(
+                has_transparent,
+                "thumbnail of transparent PNG should have alpha pixels"
+            );
         }
         Ok(None) => {
             // Shell had no cached thumbnail or matte was detected, both acceptable
-            eprintln!("transparent PNG returned Ok(None), shell cache may be empty or matte detected");
+            eprintln!(
+                "transparent PNG returned Ok(None), shell cache may be empty or matte detected"
+            );
         }
         Err(e) => panic!("get_shell_thumbnail_png failed: {}", e),
     }

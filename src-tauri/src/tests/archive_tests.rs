@@ -1,7 +1,7 @@
 use super::*;
+use crate::archives::cache::new_extract_notify;
 use crate::formats::*;
 use crate::models::ArchiveEncryptionStatus;
-use crate::archives::cache::new_extract_notify;
 
 use std::fs;
 use std::io::Read;
@@ -76,6 +76,44 @@ fn ensure_cbt() -> std::path::PathBuf {
     cbt
 }
 
+fn assert_archive_default_order(label: &str, names: &[String]) {
+    let has_root = names
+        .iter()
+        .any(|name| !name.contains('/') && !name.contains('\\'));
+    let has_nested = names
+        .iter()
+        .any(|name| name.contains('/') || name.contains('\\'));
+    assert!(has_root, "{label}: fixture should include root entries");
+    assert!(has_nested, "{label}: fixture should include nested entries");
+
+    let first_nested = names
+        .iter()
+        .position(|name| name.contains('/') || name.contains('\\'))
+        .expect("nested entry");
+    assert!(
+        names[first_nested..]
+            .iter()
+            .all(|name| name.contains('/') || name.contains('\\')),
+        "{label}: root entry appeared after nested entries: {names:?}"
+    );
+
+    let roots = names[..first_nested].to_vec();
+    let mut sorted_roots = roots.clone();
+    sorted_roots.sort_by(|a, b| natord::compare(a, b));
+    assert_eq!(
+        roots, sorted_roots,
+        "{label}: root entries are not natural-sorted"
+    );
+
+    let nested = names[first_nested..].to_vec();
+    let mut sorted_nested = nested.clone();
+    sorted_nested.sort_by(|a, b| natord::compare(a, b));
+    assert_eq!(
+        nested, sorted_nested,
+        "{label}: nested entries are not natural-sorted"
+    );
+}
+
 fn scratch_cbz_copies(label: &str, count: usize) -> (std::path::PathBuf, Vec<String>) {
     let src = test_file("cbz.cbz");
     let scratch = std::env::temp_dir().join(format!("QuiviT-test-working-set-{label}"));
@@ -92,6 +130,29 @@ fn scratch_cbz_copies(label: &str, count: usize) -> (std::path::PathBuf, Vec<Str
 }
 
 #[test]
+fn archive_default_order_places_root_files_before_nested_paths() {
+    let zip = test_file("zip.zip");
+    let (zip_files, _, _, _) = list_zip_entries(zip.to_str().unwrap(), None).expect("list zip");
+    let zip_names: Vec<String> = zip_files.iter().map(|f| f.name.clone()).collect();
+    assert_archive_default_order("zip", &zip_names);
+
+    let rar = test_file("rar.rar");
+    let (rar_files, _) = list_rar_entries(rar.to_str().unwrap(), None).expect("list rar");
+    let rar_names: Vec<String> = rar_files.iter().map(|f| f.name.clone()).collect();
+    assert_archive_default_order("rar", &rar_names);
+
+    let seven = test_file("7z.7z");
+    let (seven_files, _) = list_7z_entries(seven.to_str().unwrap(), None).expect("list 7z");
+    let seven_names: Vec<String> = seven_files.iter().map(|f| f.name.clone()).collect();
+    assert_archive_default_order("7z", &seven_names);
+
+    let tar = test_file("tar.tar");
+    let tar_files = list_tar_entries(tar.to_str().unwrap()).expect("list tar");
+    let tar_names: Vec<String> = tar_files.iter().map(|f| f.name.clone()).collect();
+    assert_archive_default_order("tar", &tar_names);
+}
+
+#[test]
 fn lists_solid_7z_with_nested_folders() {
     let path = test_file("7z.7z");
     let (files, _) = list_7z_entries(path.to_str().unwrap(), None).expect("list 7z");
@@ -103,11 +164,8 @@ fn lists_solid_7z_with_nested_folders() {
     // Composite archive|entry paths, nested folder preserved
     assert!(files.iter().any(|f| f.path.contains('|')));
     assert!(files.iter().any(|f| f.name.contains('/')));
-    // Sorted naturally
-    let names: Vec<&String> = files.iter().map(|f| &f.name).collect();
-    let mut sorted = names.clone();
-    sorted.sort_by(|a, b| natord::compare(a, b));
-    assert_eq!(names, sorted);
+    let names: Vec<String> = files.iter().map(|f| f.name.clone()).collect();
+    assert_archive_default_order("7z fixture", &names);
 }
 
 #[test]
@@ -501,7 +559,9 @@ fn archive_cache_drops_oldest_of_nine_and_reopens() {
     let (scratch, paths) = scratch_cbz_copies("zip-lru", 10);
     let mut cache = ArchiveCache::new(64);
 
-    let first = cache.prepare_archive(&paths[0], None).expect("prepare archive 1");
+    let first = cache
+        .prepare_archive(&paths[0], None)
+        .expect("prepare archive 1");
     assert!(!first.files.is_empty());
     let first_entry = first.files[0].name.clone();
     let first_bytes = cache
@@ -522,7 +582,9 @@ fn archive_cache_drops_oldest_of_nine_and_reopens() {
     assert!(!cache.contains_archive(&paths[0]));
     assert!(cache.contains_archive(&paths[8]));
 
-    cache.prepare_archive(&paths[9], None).expect("prepare 10th");
+    cache
+        .prepare_archive(&paths[9], None)
+        .expect("prepare 10th");
     assert_eq!(cache.open_archive_count(), 8);
     assert!(!cache.contains_archive(&paths[0]));
     assert!(!cache.contains_archive(&paths[1]));
@@ -606,7 +668,9 @@ fn archive_cache_evicts_extract_temp_on_drop() {
     assert!(!temp_dir.exists());
 
     let t = Instant::now();
-    let relisted = cache.prepare_archive(seven, None).expect("re-open dropped 7z");
+    let relisted = cache
+        .prepare_archive(seven, None)
+        .expect("re-open dropped 7z");
     let reopen_prepare_ms = t.elapsed().as_millis();
     assert_eq!(relisted.files.len(), listed.files.len());
     assert!(cache.contains_archive(seven));
@@ -635,7 +699,8 @@ fn encoding_test_file(name: &str) -> std::path::PathBuf {
 #[test]
 fn zip_decodes_shift_jis_entry_names() {
     let path = encoding_test_file("shift_jis_test.zip");
-    let (entries, _, _, _) = list_zip_entries(path.to_str().unwrap(), None).expect("list shift-jis zip");
+    let (entries, _, _, _) =
+        list_zip_entries(path.to_str().unwrap(), None).expect("list shift-jis zip");
     assert_eq!(entries.len(), 1);
     assert!(
         entries[0].name.contains("テスト"),
@@ -659,7 +724,8 @@ fn zip_decodes_gbk_entry_names() {
 #[test]
 fn zip_decodes_euckr_entry_names() {
     let path = encoding_test_file("euckr_test.zip");
-    let (entries, _, _, _) = list_zip_entries(path.to_str().unwrap(), None).expect("list euc-kr zip");
+    let (entries, _, _, _) =
+        list_zip_entries(path.to_str().unwrap(), None).expect("list euc-kr zip");
     assert_eq!(entries.len(), 1);
     assert!(
         entries[0].name.contains("테스트"),
@@ -769,10 +835,12 @@ fn zip_encrypted_with_correct_password_succeeds_and_reads_entry() {
     if !path.exists() {
         return;
     }
-    let (files, _archive, _map, encryption) =
-        list_zip_entries(path.to_str().unwrap(), Some("123"))
-            .expect("list encrypted zip with correct password");
-    assert_eq!(encryption, None, "Expected None encryption status on valid credentials");
+    let (files, _archive, _map, encryption) = list_zip_entries(path.to_str().unwrap(), Some("123"))
+        .expect("list encrypted zip with correct password");
+    assert_eq!(
+        encryption, None,
+        "Expected None encryption status on valid credentials"
+    );
     assert_eq!(files.len(), 2);
 
     let mut cache = ArchiveCache::new(64);
@@ -786,7 +854,10 @@ fn zip_encrypted_with_correct_password_succeeds_and_reads_entry() {
         .expect("read decrypted zip entry")
         .wait_for_data("01.png")
         .expect("wait for decrypted data");
-    assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"), "PNG header should match");
+    assert!(
+        bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+        "PNG header should match"
+    );
 }
 
 #[test]
@@ -813,7 +884,10 @@ fn zip_corrupt_local_header_fails_fast_on_corrupt_entry_and_reads_valid_entry() 
     assert!(valid_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
 
     let corrupt_res = cache.read_entry_bytes(path.to_str().unwrap(), "corrupt.png");
-    assert!(corrupt_res.is_err(), "Corrupt entry should fail immediately");
+    assert!(
+        corrupt_res.is_err(),
+        "Corrupt entry should fail immediately"
+    );
 }
 
 #[test]
@@ -838,9 +912,8 @@ fn sevenz_encrypted_with_wrong_password_detects_password_incorrect() {
     if !path.exists() {
         return;
     }
-    let (_files, encryption) =
-        list_7z_entries(path.to_str().unwrap(), Some("wrong_password"))
-            .expect("list encrypted 7z with wrong password");
+    let (_files, encryption) = list_7z_entries(path.to_str().unwrap(), Some("wrong_password"))
+        .expect("list encrypted 7z with wrong password");
     assert_eq!(
         encryption,
         Some(ArchiveEncryptionStatus::PasswordIncorrect),
@@ -854,9 +927,8 @@ fn sevenz_encrypted_with_correct_password_succeeds_and_extracts() {
     if !path.exists() {
         return;
     }
-    let (files, encryption) =
-        list_7z_entries(path.to_str().unwrap(), Some("123"))
-            .expect("list encrypted 7z with valid password");
+    let (files, encryption) = list_7z_entries(path.to_str().unwrap(), Some("123"))
+        .expect("list encrypted 7z with valid password");
     assert_eq!(encryption, None);
     assert_eq!(files.len(), 2);
 
@@ -904,9 +976,8 @@ fn rar_encrypted_with_wrong_password_detects_password_incorrect() {
     if !path.exists() {
         return;
     }
-    let (_files, encryption) =
-        list_rar_entries(path.to_str().unwrap(), Some("wrong_password"))
-            .expect("list encrypted rar with wrong password");
+    let (_files, encryption) = list_rar_entries(path.to_str().unwrap(), Some("wrong_password"))
+        .expect("list encrypted rar with wrong password");
     assert_eq!(
         encryption,
         Some(ArchiveEncryptionStatus::PasswordIncorrect),
@@ -920,9 +991,8 @@ fn rar_encrypted_with_correct_password_succeeds_and_extracts() {
     if !path.exists() {
         return;
     }
-    let (files, encryption) =
-        list_rar_entries(path.to_str().unwrap(), Some("123"))
-            .expect("list encrypted rar with valid password");
+    let (files, encryption) = list_rar_entries(path.to_str().unwrap(), Some("123"))
+        .expect("list encrypted rar with valid password");
     assert_eq!(encryption, None);
     assert_eq!(files.len(), 2);
 
@@ -1007,7 +1077,11 @@ fn invalid_archive_zip_corrupt_tail_missing_eocd_fails_fast() {
         err.contains("End of Central Directory (EOCD) signature not found in archive tail"),
         "error should indicate tail EOCD check failed: {err}"
     );
-    assert!(elapsed.as_millis() < 50, "rejection took too long: {:?}", elapsed);
+    assert!(
+        elapsed.as_millis() < 50,
+        "rejection took too long: {:?}",
+        elapsed
+    );
 
     let _ = fs::remove_dir_all(&scratch_dir);
 }
@@ -1038,7 +1112,10 @@ fn invalid_archive_rar_invalid_magic_and_truncated() {
     fs::write(&small_rar, b"Rar!").expect("write small");
     let res = list_rar_entries(small_rar.to_str().unwrap(), None);
     assert!(res.is_err());
-    assert!(res.err().unwrap().contains("smaller than minimum RAR header"));
+    assert!(res
+        .err()
+        .unwrap()
+        .contains("smaller than minimum RAR header"));
 
     let bad_magic = scratch_dir.join("bad_magic.rar");
     fs::write(&bad_magic, b"NOT_A_RAR_FILE_HEADER").expect("write bad magic");
@@ -1059,7 +1136,10 @@ fn invalid_archive_sevenz_invalid_magic_and_truncated() {
     fs::write(&small_7z, b"7z\xbc\xaf\x27\x1c").expect("write small");
     let res = list_7z_entries(small_7z.to_str().unwrap(), None);
     assert!(res.is_err());
-    assert!(res.err().unwrap().contains("smaller than minimum 7Z header"));
+    assert!(res
+        .err()
+        .unwrap()
+        .contains("smaller than minimum 7Z header"));
 
     let bad_magic = scratch_dir.join("bad_magic.7z");
     fs::write(&bad_magic, [0u8; 32]).expect("write zeros");
@@ -1090,7 +1170,10 @@ fn invalid_archive_tar_invalid_checksum_and_truncated() {
     fs::write(&small_tar, b"tar data").expect("write small");
     let res = list_tar_entries(small_tar.to_str().unwrap());
     assert!(res.is_err());
-    assert!(res.err().unwrap().contains("smaller than minimum TAR block"));
+    assert!(res
+        .err()
+        .unwrap()
+        .contains("smaller than minimum TAR block"));
 
     let garbage_tar = scratch_dir.join("garbage.tar");
     let garbage = vec![0x42u8; 512];

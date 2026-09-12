@@ -1,14 +1,14 @@
-use std::path::Path;
 use std::fs;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+use std::path::Path;
 
 /// Set or clear the Windows FILE_ATTRIBUTE_HIDDEN flag on a file.
 /// Returns Ok(()) on success or if not on Windows.
 #[cfg(windows)]
 pub fn set_hidden_attribute(path: &Path, hidden: bool) -> Result<(), String> {
-    use std::os::windows::ffi::OsStrExt;
     use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
 
     const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
 
@@ -20,9 +20,9 @@ pub fn set_hidden_attribute(path: &Path, hidden: bool) -> Result<(), String> {
 
     unsafe {
         // Read current attributes.
-        let attrs = windows::Win32::Storage::FileSystem::GetFileAttributesW(
-            windows::core::PCWSTR(wide_path.as_ptr())
-        );
+        let attrs = windows::Win32::Storage::FileSystem::GetFileAttributesW(windows::core::PCWSTR(
+            wide_path.as_ptr(),
+        ));
 
         if attrs == windows::Win32::Storage::FileSystem::INVALID_FILE_ATTRIBUTES {
             return Err(format!("Failed to get file attributes for {:?}", path));
@@ -38,7 +38,7 @@ pub fn set_hidden_attribute(path: &Path, hidden: bool) -> Result<(), String> {
         // Write updated attributes.
         let result = windows::Win32::Storage::FileSystem::SetFileAttributesW(
             windows::core::PCWSTR(wide_path.as_ptr()),
-            windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(new_attrs)
+            windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(new_attrs),
         );
 
         if result.is_err() {

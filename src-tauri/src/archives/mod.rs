@@ -5,12 +5,13 @@ mod sevenz;
 mod tar;
 mod zip;
 
+use std::cmp::Ordering;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::models::ArchiveReadResult;
+use crate::models::{ArchiveReadResult, FileEntry};
 
 pub(crate) use cache::archive_entry_temp_path;
 pub(crate) use cache::archive_temp_dir;
@@ -59,6 +60,21 @@ impl ArchiveKind {
     }
 }
 
+fn is_nested_archive_entry(name: &str) -> bool {
+    let trimmed = name.trim_matches(|c| c == '/' || c == '\\');
+    trimmed.contains('/') || trimmed.contains('\\')
+}
+
+pub(crate) fn compare_archive_entry_names(a: &str, b: &str) -> Ordering {
+    let a_nested = is_nested_archive_entry(a);
+    let b_nested = is_nested_archive_entry(b);
+    a_nested.cmp(&b_nested).then_with(|| natord::compare(a, b))
+}
+
+pub(crate) fn sort_archive_entries(files: &mut [FileEntry]) {
+    files.sort_by(|a, b| compare_archive_entry_names(&a.name, &b.name));
+}
+
 pub enum ArchiveEntryData {
     Ready(Arc<[u8]>),
     PendingExtraction {
@@ -86,7 +102,8 @@ impl ArchiveEntryData {
                         break;
                     }
                     let rem = timeout - elapsed;
-                    let (next_guard, timeout_res) = cvar.wait_timeout(guard, rem).map_err(|e| e.to_string())?;
+                    let (next_guard, timeout_res) =
+                        cvar.wait_timeout(guard, rem).map_err(|e| e.to_string())?;
                     guard = next_guard;
                     if timeout_res.timed_out() {
                         break;
@@ -94,10 +111,13 @@ impl ArchiveEntryData {
                 }
 
                 if guard.extracted.contains(entry_name) {
-                    fs::read(&file_path)
-                        .map_err(|e| format!("Cannot read extracted archive entry {entry_name}: {e}"))
+                    fs::read(&file_path).map_err(|e| {
+                        format!("Cannot read extracted archive entry {entry_name}: {e}")
+                    })
                 } else {
-                    Err(format!("Archive entry {entry_name} not available or extraction finished"))
+                    Err(format!(
+                        "Archive entry {entry_name} not available or extraction finished"
+                    ))
                 }
             }
         }
@@ -113,7 +133,8 @@ impl ArchiveCache {
         let kind = ArchiveKind::from_path(archive_path)?;
         let (files, encryption) = match kind {
             ArchiveKind::Zip => {
-                let (files, zip_archive, index_map, enc) = zip::list_zip_entries(archive_path, password)?;
+                let (files, zip_archive, index_map, enc) =
+                    zip::list_zip_entries(archive_path, password)?;
                 self.prepare_archive_state(
                     archive_path,
                     kind,
@@ -274,12 +295,19 @@ impl ArchiveCache {
         }
 
         let single = match kind {
-            ArchiveKind::Zip => {
-                cache::SingleArchiveCache::with_zip_archive(zip_archive, zip_index_map, password, encryption)
-            }
+            ArchiveKind::Zip => cache::SingleArchiveCache::with_zip_archive(
+                zip_archive,
+                zip_index_map,
+                password,
+                encryption,
+            ),
             ArchiveKind::Rar | ArchiveKind::SevenZ | ArchiveKind::Tar => {
                 let temp_dir = archive_temp_dir(archive_path);
-                let single = cache::SingleArchiveCache::with_temp_dir(temp_dir.clone(), password.clone(), encryption);
+                let single = cache::SingleArchiveCache::with_temp_dir(
+                    temp_dir.clone(),
+                    password.clone(),
+                    encryption,
+                );
                 if !single.is_password_required() {
                     fs::create_dir_all(&temp_dir).ok();
                     spawn_temp_extractor(
@@ -360,7 +388,9 @@ fn spawn_temp_extractor(
     password: Option<String>,
 ) {
     std::thread::spawn(move || match kind {
-        ArchiveKind::Rar => rar::extract_rar_to_temp(archive_path, temp_dir, notify, cancel_flag, password),
+        ArchiveKind::Rar => {
+            rar::extract_rar_to_temp(archive_path, temp_dir, notify, cancel_flag, password)
+        }
         ArchiveKind::SevenZ => {
             sevenz::extract_7z_to_temp(archive_path, temp_dir, notify, cancel_flag, password)
         }

@@ -218,12 +218,11 @@ export function createViewerPipelines(viewportState) {
     const scaling = getEffectiveScaling(live?.scalingMode, liveAnimated, isSvg);
     
     let activeFilter = _resolveActiveFilter(live);
-    let usesWebgl = activeFilter !== null;
+    const useWebGlForLanczos = scaling === 'lanczos' && liveAnimated && !isSvg && activeFilter === null;
+    const usesWebgl = activeFilter !== null || useWebGlForLanczos;
     const usesLanczos = scaling === 'lanczos' && !usesWebgl;
-    const useWebGlForLanczos = usesLanczos && liveAnimated && !isSvg;
     
     if (useWebGlForLanczos) {
-      usesWebgl = true;
       activeFilter = 'lanczos';
     }
 
@@ -400,9 +399,16 @@ export function createViewerPipelines(viewportState) {
 
     // --- Raster WebCodecs Pump (GIF/APNG/WebP/AVIF) ---
     if (typeof ImageDecoder === 'undefined') {
-      _lastIsAnimated = false;
-      _scheduleTransform();
-      _triggerRender();
+      if (live?.isAnimated) {
+        _teardownWebglCanvas();
+        if (filterCanvas) filterCanvas.removeAttribute('data-render-ready');
+        const vp = document.getElementById('viewport');
+        if (vp) vp.removeAttribute('data-filter');
+      } else {
+        _lastIsAnimated = false;
+        _scheduleTransform();
+        _triggerRender();
+      }
       return;
     }
 
@@ -420,9 +426,16 @@ export function createViewerPipelines(viewportState) {
       await decoder.completed;
     } catch (e) {
       console.warn('[pump] ImageDecoder failed:', e.message);
-      _lastIsAnimated = false;
-      _scheduleTransform();
-      _triggerRender();
+      if (live?.isAnimated) {
+        _teardownWebglCanvas();
+        if (filterCanvas) filterCanvas.removeAttribute('data-render-ready');
+        const vp = document.getElementById('viewport');
+        if (vp) vp.removeAttribute('data-filter');
+      } else {
+        _lastIsAnimated = false;
+        _scheduleTransform();
+        _triggerRender();
+      }
       return;
     }
     if (_livePumpSrc !== currentSrc) { decoder.close(); return; }
@@ -431,9 +444,16 @@ export function createViewerPipelines(viewportState) {
     const frameCount = track.frameCount;
     if (frameCount < 2) { 
       decoder.close();
-      _lastIsAnimated = false;
-      _scheduleTransform();
-      _triggerRender();
+      if (live?.isAnimated) {
+        _teardownWebglCanvas();
+        if (filterCanvas) filterCanvas.removeAttribute('data-render-ready');
+        const vp = document.getElementById('viewport');
+        if (vp) vp.removeAttribute('data-filter');
+      } else {
+        _lastIsAnimated = false;
+        _scheduleTransform();
+        _triggerRender();
+      }
       return; 
     }
 

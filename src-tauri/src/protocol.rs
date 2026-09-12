@@ -1,5 +1,3 @@
-
-
 use tauri::http::Response;
 use tauri::Manager;
 
@@ -61,7 +59,8 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             };
 
             tauri::async_runtime::spawn_blocking(move || {
-                let response = match crate::platform::thumbnails::get_shell_thumbnail_png(&path, 96) {
+                let response = match crate::platform::thumbnails::get_shell_thumbnail_png(&path, 96)
+                {
                     Ok(Some(bytes)) => png_response(bytes),
                     _ => Response::builder()
                         .status(404)
@@ -91,8 +90,7 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             &archive_path,
             &entry_name,
             range_header.as_deref(),
-        )
-        {
+        ) {
             responder.respond(response);
             return;
         }
@@ -152,8 +150,7 @@ fn parse_thumb_url(url: &str) -> Result<String, String> {
         return Err(format!("Invalid quivit thumbnail URL: {url}"));
     };
     let clean = path_encoded.split('?').next().unwrap_or(path_encoded);
-    crate::utils::base64_decode(clean)
-        .ok_or_else(|| "Invalid base64 thumbnail path".to_string())
+    crate::utils::base64_decode(clean).ok_or_else(|| "Invalid base64 thumbnail path".to_string())
 }
 
 fn parse_archive_url(url: &str) -> Result<(String, String), String> {
@@ -161,14 +158,18 @@ fn parse_archive_url(url: &str) -> Result<(String, String), String> {
         return Err(format!("Invalid quivit URL: {url}"));
     };
 
-    let Some((archive_path_encoded, entry_name_encoded)) = archive_entry_path.split_once('/') else {
+    let Some((archive_path_encoded, entry_name_encoded)) = archive_entry_path.split_once('/')
+    else {
         return Err("Missing archive path or entry name".to_string());
     };
 
     let archive_path = crate::utils::base64_decode(archive_path_encoded)
         .ok_or_else(|| "Invalid base64 archive path".to_string())?;
-    
-    let entry_clean = entry_name_encoded.split('?').next().unwrap_or(entry_name_encoded);
+
+    let entry_clean = entry_name_encoded
+        .split('?')
+        .next()
+        .unwrap_or(entry_name_encoded);
     let entry_name = crate::utils::url_decode(entry_clean);
     Ok((archive_path, entry_name))
 }
@@ -199,11 +200,7 @@ fn png_response(data: Vec<u8>) -> Response<Vec<u8>> {
         .unwrap()
 }
 
-fn entry_response(
-    entry_name: &str,
-    data: &[u8],
-    range_header: Option<&str>,
-) -> Response<Vec<u8>> {
+fn entry_response(entry_name: &str, data: &[u8], range_header: Option<&str>) -> Response<Vec<u8>> {
     let mime = guess_mime(entry_name);
     if let Some(range) = range_header.and_then(|range| parse_byte_range(range, data.len())) {
         let body = data[range.start..=range.end].to_vec();

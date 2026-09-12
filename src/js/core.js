@@ -228,7 +228,11 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   _state.src = newSrc;
 
   let animPromise = null;
-  if (FsUtils.isImageEntry(file) && _state.archiveEncryption !== 'password_required' && _state.archiveEncryption !== 'password_incorrect') {
+  const isImg = FsUtils.isImageEntry(file);
+  const ext = file ? (file.name || file.path || '').split('.').pop().toLowerCase() : '';
+  const canBeAnimated = isImg && (ext === 'gif' || ext === 'webp' || ext === 'apng' || ext === 'png' || ext === 'avif' || ext === 'svg');
+
+  if (canBeAnimated && _state.archiveEncryption !== 'password_required' && _state.archiveEncryption !== 'password_incorrect') {
     const pathArg = _state.mode === 'archive' ? file.name : file.path;
     const archiveArg = _state.mode === 'archive' ? _state.archivePath : null;
     const cacheKey = `${archiveArg || ''}::${pathArg}`;
@@ -238,7 +242,8 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
       _state.isAnimated = cached.is_animated;
       _state.loopCount = cached.loop_count;
     } else {
-      // Leave previous flags alone until checked, to prevent pipeline teardown flash
+      _state.isAnimated = ext === 'gif' || ext === 'apng';
+      _state.loopCount = 0;
       animPromise = Core.checkIsAnimated(pathArg, archiveArg);
     }
   } else {
@@ -251,9 +256,12 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   if (animPromise) {
     animPromise.then(animStatus => {
       if (_state.index === index && _state.src === newSrc) {
+        const changed = _state.isAnimated !== animStatus.is_animated || _state.loopCount !== animStatus.loop_count;
         _state.isAnimated = animStatus.is_animated;
         _state.loopCount = animStatus.loop_count;
-        _notify();
+        if (changed) {
+          _notify();
+        }
       }
     });
   }

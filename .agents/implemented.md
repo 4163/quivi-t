@@ -8,6 +8,19 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Additional Metadata Formats: ComicInfo JSON & Meta JSON (Slice 5 - 2026-09-11)
+- **Archive Entry Filtering Parity (`src/js/services/metadataFiles.js`, `src/js/fsUtils.js`):**
+  - The working tree centralizes metadata filename priority and exact basename matching in `metadataFiles.js`.
+  - `fsUtils.js` uses `isMetadataEntryName` to classify `comicinfo.json`, `meta.json`, and `comet.json` as metadata files, store them in `state.archiveMetadataFiles`, and keep them out of the active image list.
+- **Priority Matching & JSON Schema Parsing (`src/js/metadata.js`):**
+  - `metadata.js` reuses the shared filename order: `comicinfo.xml`, `comicinfo.json`, `meta.json`, `comet.xml`, `comet.json`, `metadata.opf`.
+  - `fetchMetadata` parses `.json` payloads with `JSON.parse` and routes them to `parseComicInfoJson` or `parseGalleryMetaJson`.
+  - The parsers normalize PascalCase and camelCase ComicInfo fields, gallery scraper `meta.json` titles/tags/dates, creator arrays, manga flags, and numeric values into the existing `ComicMeta` contract.
+- **Automated Test Coverage (`src/js/tests/metadata.test.mjs`):**
+  - Metadata unit coverage currently has 10 tests. The latest focused checks passed: `node --test src\js\tests\metadata.test.mjs` (10 passed) and `npm test` (68 passed).
+  - Runtime metadata testing showed no regressions or issues.
+
+
 ### Windows Shell Native Thumbnails (2026-09-07)
 - **Windows Shell Native Thumbnail Extraction:**
   - Implemented `src-tauri/src/platform/thumbnails.rs` using `IShellItemImageFactory` with `SIIGBF_BIGGERSIZEOK | SIIGBF_THUMBNAILONLY` to extract 96×96 pre-rendered thumbnails from Windows `thumbcache_*.db` in ~0.2ms.
@@ -448,7 +461,7 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ### Window Title & Statusbar Index
 - **Dynamic window title:** The OS title bar reflects the currently displayed image via `updateWindowTitle()` in `main.js`: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages (separator is `◦` U+25E6, per user preference). Non-image selections (`..`, folders, archives, drives) fall back to just `QuiviT`. `setTitle` only fires on actual change (`_lastTitle` guard); requires the `core:window:allow-set-title` capability.
-- **Image-only page count:** `FsUtils.naturalPagePosition(list, filename)` counts only image entries in natural ascending filename order (via `DirectoryPrefs.naturalCompare`), independent of the active sort column/direction. The `(current/total)` suffix appears only when `total > 1`.
+- **Image-only page count:** `FsUtils.naturalPagePosition(list, filename)` counts only image entries through the same default Name sort used by the file list. For archive entries, root files come before nested files, with natural sorting inside each group. The `(current/total)` suffix appears only when `total > 1`.
 - **Statusbar index fix:** `FsUtils.formatStatusIndex(state)` replaces the inline `index+1 / length` math in `main.js`/`viewer.js`: the `..` parent row is excluded from both numerator and denominator (it is always `list[0]` when present). Single-entry lists render nothing.
 - **Verification:** 20/20 Node harness checks pass for `formatStatusIndex`, `naturalPagePosition`, and `naturalCompare`; runtime-confirmed in-app (title format for archive/folder pages, page count independent of sort).
 

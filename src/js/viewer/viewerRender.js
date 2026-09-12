@@ -52,6 +52,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   let _loadingDots = 0;
   let _retiringNode = null;
   let _retireRaf = null;
+  let _lastRenderedIsAnimated = false;
 
   function _cancelRetiringNode() {
     if (_retireRaf) {
@@ -331,7 +332,9 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
     let activeEl = _activeNodes.get(state.src);
     const isReload = _forceReloadTarget;
-    const activeChanged = state.src !== _activeTargetSrc || isReload;
+    const isAnimStateChanged = !!state.isAnimated && !_lastRenderedIsAnimated && state.src === _activeTargetSrc;
+    const activeChanged = state.src !== _activeTargetSrc || isReload || isAnimStateChanged;
+    _lastRenderedIsAnimated = !!state.isAnimated;
     const hasPreviousBridge = !isReload && !!(img && img !== activeEl && _isVisibleImage(img));
 
     if (activeChanged) {
@@ -366,11 +369,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         _targetLoadTimer = null;
         
         if (activeEl) {
-          const isReEntry = state.isAnimated && activeEl.dataset.played === 'true';
           let newSrc = state.src;
           if (isReload) {
             newSrc = state.src.includes('?') ? `${state.src}&_t=${_reloadTimestamp}` : `${state.src}?_t=${_reloadTimestamp}`;
-          } else if (isReEntry) {
+          } else if (state.isAnimated) {
             newSrc = state.src.includes('?') ? `${state.src}&_reset=${Date.now()}` : `${state.src}?_reset=${Date.now()}`;
           } else {
             const cached = thumbnailCache.get(state.src);

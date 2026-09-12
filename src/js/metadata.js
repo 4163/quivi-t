@@ -2,37 +2,17 @@
  * metadata.js: QuiviT
  * Detects, fetches, and parses comic metadata files from open archives.
  *
- * Supported formats (priority order):
- *   1. ComicInfo.xml: industry standard (ComicRack schema)
- *   2. CoMet.xml: older alternative standard
- *   3. metadata.opf: Calibre/ePub-style OPF metadata
+ * Supported formats include ComicInfo XML/JSON, gallery meta.json,
+ * CoMet XML/JSON, and Calibre/ePub-style OPF metadata.
  *
  * All lookups are case-insensitive. The module is stateless; callers
  * cache the result if they need it.
  */
 
 import { FsUtils } from './fsUtils.js';
+import { findMetadataEntry } from './services/metadataFiles.js';
 
-// Known metadata filenames, in priority order (lowercase for matching).
-const METADATA_FILENAMES = ['comicinfo.xml', 'comet.xml', 'metadata.opf'];
-
-/**
- * Given the list of filenames inside an archive, returns the first metadata
- * filename found (using the original casing from the archive), or null.
- * @param {string[]} fileNames - Array of entry names from the archive.
- * @returns {string|null}
- */
-export function findMetadataEntry(fileNames) {
-  for (const target of METADATA_FILENAMES) {
-    const match = fileNames.find(n => {
-      // Strip directory prefix. Only match root-level or bare filenames.
-      const bare = n.replace(/\\/g, '/').split('/').pop();
-      return bare.toLowerCase() === target;
-    });
-    if (match) return match;
-  }
-  return null;
-}
+export { findMetadataEntry };
 
 /**
  * Fetches and parses metadata from the given archive.
@@ -45,20 +25,32 @@ export async function fetchMetadata(archivePath, fileNames) {
   if (!entry) return null;
 
   const src = FsUtils.buildArchiveSrc(archivePath, entry);
-  let xmlText;
+  let text;
   try {
     const resp = await fetch(src);
     if (!resp.ok) return null;
-    xmlText = await resp.text();
+    text = await resp.text();
   } catch {
     return null;
   }
 
+  const name = entry.replace(/\\/g, '/').split('/').pop().toLowerCase();
+  if (name.endsWith('.json')) {
+    try {
+      const data = JSON.parse(text);
+      if (name === 'meta.json' || (Array.isArray(data?.tags) && data.tags.some(t => t && typeof t === 'object' && t.type))) {
+        return parseGalleryMetaJson(data);
+      }
+      return parseComicInfoJson(data);
+    } catch {
+      return null;
+    }
+  }
+
   try {
-    const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+    const doc = new DOMParser().parseFromString(text, 'text/xml');
     if (doc.querySelector('parsererror')) return null;
 
-    const name = entry.replace(/\\/g, '/').split('/').pop().toLowerCase();
     if (name === 'metadata.opf') {
       return parseOpf(doc);
     } else {
@@ -71,6 +63,171 @@ export async function fetchMetadata(archivePath, fileNames) {
 }
 
 // Parsers
+
+/**
+ * Parses ComicInfo JSON formats (PascalCase and camelCase).
+ * @param {object} raw
+ * @returns {ComicMeta|null}
+ */
+export function parseComicInfoJson(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const data = raw.ComicInfo || raw;
+
+  const get = (...keys) => {
+    for (const key of keys) {
+      const v = data[key];
+      if (v !== undefined && v !== null) {
+        if (Array.isArray(v)) {
+          return v.map(x => String(x).trim()).filter(Boolean).join(', ');
+        }
+        const s = String(v).trim();
+        if (s) return s;
+      }
+    }
+    return '';
+  };
+
+  const getNum = (...keys) => {
+    for (const key of keys) {
+      const v = data[key];
+      if (v !== undefined && v !== null) {
+        const n = parseInt(v, 10);
+        if (!isNaN(n)) return n;
+      }
+    }
+    return null;
+  };
+
+  const getManga = () => {
+    const rawVal = data.Manga ?? data.manga;
+    if (rawVal === true) return 'Yes';
+    if (rawVal === false) return 'No';
+    if (typeof rawVal === 'string') {
+      const trimmed = rawVal.trim();
+      if (['Yes', 'No', 'YesAndRightToLeft'].includes(trimmed)) return trimmed;
+      if (/^yes$/i.test(trimmed)) return 'Yes';
+      if (/^no$/i.test(trimmed)) return 'No';
+      if (/^rtl|righttoleft$/i.test(trimmed)) return 'YesAndRightToLeft';
+    }
+    return '';
+  };
+
+  const title       = get('Title', 'title');
+  const series      = get('Series', 'series');
+  const number      = get('Number', 'number', 'issue', 'Issue');
+  const count       = get('Count', 'count', 'totalIssues');
+  const volume      = get('Volume', 'volume');
+  const summary     = get('Summary', 'summary', 'Description', 'description');
+  const notes       = get('Notes', 'notes');
+  const year        = getNum('Year', 'year');
+  const month       = getNum('Month', 'month');
+  const writer      = get('Writer', 'writer', 'writers', 'Writers');
+  const penciller   = get('Penciller', 'penciller', 'pencillers', 'Pencillers');
+  const inker       = get('Inker', 'inker', 'inkers', 'Inkers');
+  const colorist    = get('Colorist', 'colorist', 'colorists', 'Colorists');
+  const letterer    = get('Letterer', 'letterer', 'letterers', 'Letterers');
+  const coverArtist = get('CoverArtist', 'coverArtist', 'cover_artist');
+  const editor      = get('Editor', 'editor', 'editors', 'Editors');
+  const publisher   = get('Publisher', 'publisher');
+  const genre       = get('Genre', 'genre', 'genres', 'Genres');
+  const tags        = get('Tags', 'tags');
+  const pageCount   = getNum('PageCount', 'pageCount', 'pages', 'Pages');
+  const manga       = getManga();
+  const languageISO = get('LanguageISO', 'languageISO', 'languageIso', 'language', 'Language');
+  const rating      = get('CommunityRating', 'communityRating', 'Rating', 'rating');
+
+  return {
+    title, series, number, count, volume,
+    summary, notes,
+    year, month,
+    writer, penciller, inker, colorist, letterer, coverArtist, editor,
+    publisher, genre, tags,
+    pageCount, manga, languageISO, rating,
+  };
+}
+
+/**
+ * Parses scraper / gallery meta.json structures.
+ * @param {object} raw
+ * @returns {ComicMeta|null}
+ */
+export function parseGalleryMetaJson(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  let title = '';
+  if (typeof raw.title === 'string') {
+    title = raw.title.trim();
+  } else if (raw.title && typeof raw.title === 'object') {
+    title = raw.title.english || raw.title.pretty || raw.title.japanese || '';
+    title = String(title).trim();
+  }
+
+  const tagList = Array.isArray(raw.tags) ? raw.tags : [];
+  const getTagNames = (type) => tagList
+    .filter(t => t && typeof t === 'object' && t.type === type && t.name)
+    .map(t => String(t.name).trim())
+    .filter(Boolean);
+
+  const parodies = getTagNames('parody');
+  const series = parodies.join(', ') || (typeof raw.series === 'string' ? raw.series.trim() : '');
+
+  const artists = getTagNames('artist');
+  const writer = artists.join(', ') || (typeof raw.artist === 'string' ? raw.artist.trim() : '');
+  const penciller = writer;
+
+  const groups = getTagNames('group');
+  const publisher = groups.join(', ') || (typeof raw.group === 'string' ? raw.group.trim() : '');
+
+  const categories = getTagNames('category');
+  const genre = categories.join(', ') || (typeof raw.category === 'string' ? raw.category.trim() : '');
+
+  const normalTags = getTagNames('tag');
+  const characters = getTagNames('character');
+  const combinedTags = [...normalTags, ...characters];
+  const tags = combinedTags.join(', ');
+
+  const languages = getTagNames('language').filter(l => l.toLowerCase() !== 'translated');
+  const languageISO = languages[0] || (typeof raw.language === 'string' ? raw.language.trim() : '');
+
+  let year = null;
+  let month = null;
+  if (typeof raw.upload_date === 'number' && raw.upload_date > 0) {
+    const d = new Date(raw.upload_date * 1000);
+    if (!isNaN(d.getTime())) {
+      year = d.getUTCFullYear();
+      month = d.getUTCMonth() + 1;
+    }
+  }
+
+  const pageCount = (typeof raw.num_pages === 'number' && raw.num_pages > 0) ? raw.num_pages : null;
+  const notes = raw.scanlator ? `Scanlator: ${String(raw.scanlator).trim()}` : '';
+
+  return {
+    title,
+    series,
+    number: '',
+    count: '',
+    volume: '',
+    summary: typeof raw.description === 'string' ? raw.description.trim() : '',
+    notes,
+    year,
+    month,
+    writer,
+    penciller,
+    inker: '',
+    colorist: '',
+    letterer: '',
+    coverArtist: '',
+    editor: '',
+    publisher,
+    genre,
+    tags,
+    pageCount,
+    manga: 'Yes',
+    languageISO,
+    rating: '',
+  };
+}
 
 /** @param {Document} doc */
 function parseComicInfo(doc) {

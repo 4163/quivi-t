@@ -15,8 +15,7 @@ fn guess_mime_matches_known_image_extensions_case_insensitively() {
 fn parse_archive_url_decodes_path_and_entry_name() {
     let archive_path = "E:\\Comics\\Issue 01.cbz";
     let encoded_path = crate::utils::base64_encode(archive_path.as_bytes());
-    let url =
-        format!("http://quivit.localhost/archive/{encoded_path}/Folder%201%2Fpage%2001.JPG");
+    let url = format!("http://quivit.localhost/archive/{encoded_path}/Folder%201%2Fpage%2001.JPG");
 
     let (parsed_path, entry_name) = parse_archive_url(&url).expect("parse archive URL");
 

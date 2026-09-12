@@ -1,4 +1,4 @@
-use crate::formats::{is_archive_ext, is_image_ext, is_metadata_ext, check_animation_status};
+use crate::formats::{check_animation_status, is_archive_ext, is_image_ext, is_metadata_ext};
 
 #[test]
 fn test_is_image_ext() {
@@ -10,7 +10,7 @@ fn test_is_image_ext() {
     assert!(is_image_ext("gif"));
     assert!(is_image_ext("avif"));
     assert!(is_image_ext("webp"));
-    
+
     // Invalid cases
     assert!(!is_image_ext(""));
     assert!(!is_image_ext("zip"));
@@ -31,7 +31,7 @@ fn test_is_archive_ext() {
     assert!(is_archive_ext("cb7"));
     assert!(is_archive_ext("tar"));
     assert!(is_archive_ext("cbt"));
-    
+
     // Invalid cases
     assert!(!is_archive_ext(""));
     assert!(!is_archive_ext("jpg"));
@@ -46,7 +46,7 @@ fn test_is_metadata_ext() {
     assert!(is_metadata_ext("XML"));
     assert!(is_metadata_ext("opf"));
     assert!(is_metadata_ext("OpF"));
-    
+
     // Invalid cases
     assert!(!is_metadata_ext(""));
     assert!(!is_metadata_ext("jpg"));
@@ -61,7 +61,7 @@ fn test_is_animated_gif() {
     // \x21 = Extension, \xFF = Application Extension, \x0B = length 11, NETSCAPE2.0, \x03 = length 3 data block, \x01\x00\x00, \x00 = terminator
     buf.extend_from_slice(b"\x21\xFF\x0BNETSCAPE2.0\x03\x01\x00\x00\x00");
     assert!(check_animation_status(&buf).is_animated);
-    
+
     // Test case mapping for single-frame with NETSCAPE loop
     assert!(check_animation_status(&buf).is_animated);
 
@@ -83,7 +83,7 @@ fn test_is_animated_webp() {
     // Add 4 bytes for chunk size (VP8X chunk size is usually 10)
     buf.extend_from_slice(&[10, 0, 0, 0]);
     // Flags: bit 1 is ANIM (0b0000_0010)
-    buf.push(0b0000_0010); 
+    buf.push(0b0000_0010);
     assert!(check_animation_status(&buf).is_animated);
 
     let mut static_buf = b"RIFF....WEBPVP8X".to_vec();
@@ -102,11 +102,10 @@ fn test_is_animated_webp_loop_count() {
     buf.extend_from_slice(&[6, 0, 0, 0]);
     buf.extend_from_slice(&[0, 0, 0, 0]); // bg color
     buf.extend_from_slice(&[1, 0]); // loop_count = 1
-    
+
     let status = check_animation_status(&buf);
     assert!(status.is_animated);
     assert_eq!(status.loop_count, 2); // 1 + 1 normalization
-
 }
 
 #[test]
@@ -127,7 +126,7 @@ fn test_is_animated_apng_loop_count() {
     buf.extend_from_slice(&[0, 0, 0, 0]); // num_frames
     buf.extend_from_slice(&[0, 0, 0, 3]); // num_plays = 3
     buf.extend_from_slice(b"IDAT");
-    
+
     let status = check_animation_status(&buf);
     assert!(status.is_animated);
     assert_eq!(status.loop_count, 3);
@@ -197,7 +196,7 @@ fn test_is_animated_avif() {
     // Update moov size (8 + 8 + 8 + 8 = 32)
     moov[0..4].copy_from_slice(&32u32.to_be_bytes());
     avif_elst.extend_from_slice(&moov);
-    
+
     let status_elst = check_animation_status(&avif_elst);
     assert!(status_elst.is_animated);
     assert_eq!(status_elst.loop_count, 1);

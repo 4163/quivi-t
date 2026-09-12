@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::models::AnimationInfo;
-
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FormatCategory {
@@ -33,35 +32,129 @@ pub struct FileFormat {
 
 pub const SUPPORTED_FORMATS: &[FileFormat] = &[
     // Images
-    FileFormat { ext: "jpg",  name: "JPEG Image",     icon: "jpg.ico",  category: FormatCategory::Image },
-    FileFormat { ext: "jpeg", name: "JPEG Image",     icon: "jpeg.ico", category: FormatCategory::Image },
-    FileFormat { ext: "png",  name: "PNG Image",      icon: "png.ico",  category: FormatCategory::Image },
-    FileFormat { ext: "gif",  name: "GIF Image",      icon: "gif.ico",  category: FormatCategory::Image },
-    FileFormat { ext: "webp", name: "WebP Image",     icon: "webp.ico", category: FormatCategory::Image },
-    FileFormat { ext: "apng", name: "APNG Image",     icon: "apng.ico", category: FormatCategory::Image },
-    FileFormat { ext: "svg",  name: "SVG Image",      icon: "svg.ico",  category: FormatCategory::Image },
-    FileFormat { ext: "bmp",  name: "BMP Image",      icon: "bmp.ico",  category: FormatCategory::Image },
-    FileFormat { ext: "ico",  name: "Icon Image",     icon: "ico.ico",  category: FormatCategory::Image },
-    FileFormat { ext: "avif", name: "AVIF Image",     icon: "avif.ico", category: FormatCategory::Image },
+    FileFormat {
+        ext: "jpg",
+        name: "JPEG Image",
+        icon: "jpg.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "jpeg",
+        name: "JPEG Image",
+        icon: "jpeg.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "png",
+        name: "PNG Image",
+        icon: "png.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "gif",
+        name: "GIF Image",
+        icon: "gif.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "webp",
+        name: "WebP Image",
+        icon: "webp.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "apng",
+        name: "APNG Image",
+        icon: "apng.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "svg",
+        name: "SVG Image",
+        icon: "svg.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "bmp",
+        name: "BMP Image",
+        icon: "bmp.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "ico",
+        name: "Icon Image",
+        icon: "ico.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "avif",
+        name: "AVIF Image",
+        icon: "avif.ico",
+        category: FormatCategory::Image,
+    },
     // Archives
-    FileFormat { ext: "zip",  name: "ZIP Archive",    icon: "zip.ico",  category: FormatCategory::Archive },
-    FileFormat { ext: "cbz",  name: "Comic Book ZIP", icon: "cbz.ico",  category: FormatCategory::Archive },
-    FileFormat { ext: "rar",  name: "RAR Archive",    icon: "rar.ico",  category: FormatCategory::Archive },
-    FileFormat { ext: "cbr",  name: "Comic Book RAR", icon: "cbr.ico",  category: FormatCategory::Archive },
-    FileFormat { ext: "7z",   name: "7z Archive",     icon: "7z.ico",   category: FormatCategory::Archive },
-    FileFormat { ext: "cb7",  name: "Comic Book 7z",  icon: "cb7.ico",  category: FormatCategory::Archive },
-    FileFormat { ext: "cbt",  name: "Comic Book TAR", icon: "cbt.ico",  category: FormatCategory::Archive },
-    FileFormat { ext: "tar",  name: "TAR Archive",    icon: "tar.ico",  category: FormatCategory::Archive },
+    FileFormat {
+        ext: "zip",
+        name: "ZIP Archive",
+        icon: "zip.ico",
+        category: FormatCategory::Archive,
+    },
+    FileFormat {
+        ext: "cbz",
+        name: "Comic Book ZIP",
+        icon: "cbz.ico",
+        category: FormatCategory::Archive,
+    },
+    FileFormat {
+        ext: "rar",
+        name: "RAR Archive",
+        icon: "rar.ico",
+        category: FormatCategory::Archive,
+    },
+    FileFormat {
+        ext: "cbr",
+        name: "Comic Book RAR",
+        icon: "cbr.ico",
+        category: FormatCategory::Archive,
+    },
+    FileFormat {
+        ext: "7z",
+        name: "7z Archive",
+        icon: "7z.ico",
+        category: FormatCategory::Archive,
+    },
+    FileFormat {
+        ext: "cb7",
+        name: "Comic Book 7z",
+        icon: "cb7.ico",
+        category: FormatCategory::Archive,
+    },
+    FileFormat {
+        ext: "cbt",
+        name: "Comic Book TAR",
+        icon: "cbt.ico",
+        category: FormatCategory::Archive,
+    },
+    FileFormat {
+        ext: "tar",
+        name: "TAR Archive",
+        icon: "tar.ico",
+        category: FormatCategory::Archive,
+    },
 ];
 
 #[inline]
 pub fn is_image_ext(ext: &str) -> bool {
-    SUPPORTED_FORMATS.iter().any(|f| f.category == FormatCategory::Image && f.ext.eq_ignore_ascii_case(ext))
+    SUPPORTED_FORMATS
+        .iter()
+        .any(|f| f.category == FormatCategory::Image && f.ext.eq_ignore_ascii_case(ext))
 }
 
 #[inline]
 pub fn is_archive_ext(ext: &str) -> bool {
-    SUPPORTED_FORMATS.iter().any(|f| f.category == FormatCategory::Archive && f.ext.eq_ignore_ascii_case(ext))
+    SUPPORTED_FORMATS
+        .iter()
+        .any(|f| f.category == FormatCategory::Archive && f.ext.eq_ignore_ascii_case(ext))
 }
 
 #[inline]
@@ -71,7 +164,10 @@ pub fn is_metadata_ext(ext: &str) -> bool {
 
 pub fn check_animation_status(bytes: &[u8]) -> AnimationInfo {
     if bytes.len() < 8 {
-        return AnimationInfo { is_animated: false, loop_count: 0 };
+        return AnimationInfo {
+            is_animated: false,
+            loop_count: 0,
+        };
     }
 
     if bytes.starts_with(b"GIF8") {
@@ -83,15 +179,24 @@ pub fn check_animation_status(bytes: &[u8]) -> AnimationInfo {
     } else if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
         return check_avif(bytes);
     } else if bytes.windows(4).any(|w| w == b"<svg") {
-        return AnimationInfo { is_animated: check_svg(bytes), loop_count: 0 };
+        return AnimationInfo {
+            is_animated: check_svg(bytes),
+            loop_count: 0,
+        };
     }
 
-    AnimationInfo { is_animated: false, loop_count: 0 }
+    AnimationInfo {
+        is_animated: false,
+        loop_count: 0,
+    }
 }
 
 fn check_gif(bytes: &[u8]) -> AnimationInfo {
     if bytes.len() < 13 || !bytes.starts_with(b"GIF") {
-        return AnimationInfo { is_animated: false, loop_count: 0 };
+        return AnimationInfo {
+            is_animated: false,
+            loop_count: 0,
+        };
     }
 
     let mut pos = 13;
@@ -114,7 +219,9 @@ fn check_gif(bytes: &[u8]) -> AnimationInfo {
                 break;
             }
             pos += 1;
-            if pos + 9 > bytes.len() { break; }
+            if pos + 9 > bytes.len() {
+                break;
+            }
             let lct_flags = bytes[pos + 8];
             pos += 9;
             if (lct_flags & 0x80) != 0 {
@@ -126,7 +233,9 @@ fn check_gif(bytes: &[u8]) -> AnimationInfo {
                 while pos < bytes.len() {
                     let block_size = bytes[pos] as usize;
                     pos += 1;
-                    if block_size == 0 { break; }
+                    if block_size == 0 {
+                        break;
+                    }
                     pos += block_size;
                 }
             }
@@ -136,9 +245,13 @@ fn check_gif(bytes: &[u8]) -> AnimationInfo {
                 let ext_label = bytes[pos];
                 pos += 1;
                 if ext_label == 0xFF {
-                    if pos + 12 <= bytes.len() && &bytes[pos..pos+12] == b"\x0BNETSCAPE2.0" {
-                        if pos + 16 <= bytes.len() && bytes[pos + 12] == 0x03 && bytes[pos + 13] == 0x01 {
-                            parsed_loop_count = Some(u16::from_le_bytes([bytes[pos + 14], bytes[pos + 15]]));
+                    if pos + 12 <= bytes.len() && &bytes[pos..pos + 12] == b"\x0BNETSCAPE2.0" {
+                        if pos + 16 <= bytes.len()
+                            && bytes[pos + 12] == 0x03
+                            && bytes[pos + 13] == 0x01
+                        {
+                            parsed_loop_count =
+                                Some(u16::from_le_bytes([bytes[pos + 14], bytes[pos + 15]]));
                         } else {
                             parsed_loop_count = Some(0);
                         }
@@ -147,7 +260,9 @@ fn check_gif(bytes: &[u8]) -> AnimationInfo {
                 while pos < bytes.len() {
                     let block_size = bytes[pos] as usize;
                     pos += 1;
-                    if block_size == 0 { break; }
+                    if block_size == 0 {
+                        break;
+                    }
                     pos += block_size;
                 }
             }
@@ -159,19 +274,22 @@ fn check_gif(bytes: &[u8]) -> AnimationInfo {
     }
 
     let is_animated = frame_count > 1 || parsed_loop_count.is_some();
-    
+
     // Normalize GIF loop count to total_plays
     let loop_count = if is_animated {
         match parsed_loop_count {
-            None => 1, // No NETSCAPE block = play once
-            Some(0) => 0, // 0 = infinite
+            None => 1,                 // No NETSCAPE block = play once
+            Some(0) => 0,              // 0 = infinite
             Some(n) => (n as u32) + 1, // Native plays N + 1 times
         }
     } else {
         0
     };
 
-    AnimationInfo { is_animated, loop_count }
+    AnimationInfo {
+        is_animated,
+        loop_count,
+    }
 }
 
 fn check_webp(bytes: &[u8]) -> AnimationInfo {
@@ -182,16 +300,30 @@ fn check_webp(bytes: &[u8]) -> AnimationInfo {
             if is_animated {
                 if let Some(anim_pos) = bytes.windows(4).position(|w| w == b"ANIM") {
                     if anim_pos + 14 <= bytes.len() {
-                        let parsed_loop_count = u16::from_le_bytes([bytes[anim_pos + 12], bytes[anim_pos + 13]]);
-                        let loop_count = if parsed_loop_count == 0 { 0 } else { (parsed_loop_count as u32) + 1 };
-                        return AnimationInfo { is_animated, loop_count };
+                        let parsed_loop_count =
+                            u16::from_le_bytes([bytes[anim_pos + 12], bytes[anim_pos + 13]]);
+                        let loop_count = if parsed_loop_count == 0 {
+                            0
+                        } else {
+                            (parsed_loop_count as u32) + 1
+                        };
+                        return AnimationInfo {
+                            is_animated,
+                            loop_count,
+                        };
                     }
                 }
-                return AnimationInfo { is_animated, loop_count: 0 };
+                return AnimationInfo {
+                    is_animated,
+                    loop_count: 0,
+                };
             }
         }
     }
-    AnimationInfo { is_animated: false, loop_count: 0 }
+    AnimationInfo {
+        is_animated: false,
+        loop_count: 0,
+    }
 }
 
 fn check_apng(bytes: &[u8]) -> AnimationInfo {
@@ -206,15 +338,28 @@ fn check_apng(bytes: &[u8]) -> AnimationInfo {
                     loop_count = u32::from_be_bytes(num_plays);
                 }
             }
-            AnimationInfo { is_animated: true, loop_count }
+            AnimationInfo {
+                is_animated: true,
+                loop_count,
+            }
+        }
+        (Some(_), None) => AnimationInfo {
+            is_animated: true,
+            loop_count: 0,
         },
-        (Some(_), None) => AnimationInfo { is_animated: true, loop_count: 0 },
-        _ => AnimationInfo { is_animated: false, loop_count: 0 },
+        _ => AnimationInfo {
+            is_animated: false,
+            loop_count: 0,
+        },
     }
 }
 
 fn be_u32(bytes: &[u8], offset: usize) -> Option<u32> {
-    bytes.get(offset..offset + 4)?.try_into().ok().map(u32::from_be_bytes)
+    bytes
+        .get(offset..offset + 4)?
+        .try_into()
+        .ok()
+        .map(u32::from_be_bytes)
 }
 
 /// Next ISO BMFF box at `pos`: (total size, header length, type).
@@ -257,7 +402,7 @@ fn contains_elst(bytes: &[u8], start: usize, end: usize) -> bool {
             break;
         }
         let box_end = (pos + size).min(end);
-        
+
         if &typ == b"elst" {
             return true;
         } else if &typ == b"moov" || &typ == b"trak" || &typ == b"edts" {
@@ -265,7 +410,7 @@ fn contains_elst(bytes: &[u8], start: usize, end: usize) -> bool {
                 return true;
             }
         }
-        
+
         if pos + size > end {
             break;
         }
@@ -320,12 +465,17 @@ fn check_avif(bytes: &[u8]) -> AnimationInfo {
     let is_animated = avis || (avif_family && has_moov);
     let loop_count = if is_animated && has_elst { 1 } else { 0 };
 
-    AnimationInfo { is_animated, loop_count }
+    AnimationInfo {
+        is_animated,
+        loop_count,
+    }
 }
 
 fn check_svg(bytes: &[u8]) -> bool {
     // <animate matches <animate, <animateMotion, and <animateTransform
     bytes.windows(8).any(|w| w == b"<animate")
         || bytes.windows(5).any(|w| w == b"<set " || w == b"<set>")
-        || bytes.windows(6).any(|w| w == b"<set\t\n" || w == b"<set\r\n") // Just in case, though <set > is enough usually
+        || bytes
+            .windows(6)
+            .any(|w| w == b"<set\t\n" || w == b"<set\r\n") // Just in case, though <set > is enough usually
 }

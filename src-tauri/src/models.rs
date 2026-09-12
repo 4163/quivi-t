@@ -14,18 +14,55 @@ pub struct FileEntry {
 
 impl FileEntry {
     #[inline(always)]
-    pub fn new_file(name: String, path: String, ext: String, date: String, is_hidden: bool, size: u64) -> Self {
-        Self { name, path, ext, date, is_dir: false, is_hidden, size }
+    pub fn new_file(
+        name: String,
+        path: String,
+        ext: String,
+        date: String,
+        is_hidden: bool,
+        size: u64,
+    ) -> Self {
+        Self {
+            name,
+            path,
+            ext,
+            date,
+            is_dir: false,
+            is_hidden,
+            size,
+        }
     }
 
     #[inline(always)]
     pub fn new_directory(name: String, path: String, date: String, is_hidden: bool) -> Self {
-        Self { name, path, ext: String::new(), date, is_dir: true, is_hidden, size: 0 }
+        Self {
+            name,
+            path,
+            ext: String::new(),
+            date,
+            is_dir: true,
+            is_hidden,
+            size: 0,
+        }
     }
 
     #[inline(always)]
-    pub fn new_archive_entry(name: String, path: String, ext: String, date: String, size: u64) -> Self {
-        Self { name, path, ext, date, is_dir: false, is_hidden: false, size }
+    pub fn new_archive_entry(
+        name: String,
+        path: String,
+        ext: String,
+        date: String,
+        size: u64,
+    ) -> Self {
+        Self {
+            name,
+            path,
+            ext,
+            date,
+            is_dir: false,
+            is_hidden: false,
+            size,
+        }
     }
 }
 
@@ -67,4 +104,10 @@ pub struct FormatStatus {
 pub struct AnimationInfo {
     pub is_animated: bool,
     pub loop_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TempArchiveOrigin {
+    pub archive_path: String,
+    pub entry_name: String,
 }
