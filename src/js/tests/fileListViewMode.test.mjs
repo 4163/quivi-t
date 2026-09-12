@@ -15,8 +15,20 @@ globalThis.window = {
 
 const { Core } = await import('../core.js');
 const { DEFAULT_FILE_LIST_VIEW_MODE, mergeConfig } = await import('../keybinds.js');
-const { FsUtils } = await import('../fsUtils.js');
-const { THUMB_CACHE_CAPACITY, thumbnailCache, FAVORITES_CACHE_CAPACITY, favoritesThumbnailCache, getPlaceholderType } = await import('../filepanel/filePanel.js');
+const {
+  FsUtils,
+  ARCHIVE_THUMBNAIL_WINDOW_HALF,
+} = await import('../fsUtils.js');
+const {
+  THUMB_CACHE_CAPACITY,
+  thumbnailCache,
+  FAVORITES_CACHE_CAPACITY,
+  favoritesThumbnailCache,
+  ARCHIVE_BLOB_CACHE_CAPACITY,
+  ARCHIVE_BLOB_CACHE_ENTRY_MAX_BYTES,
+  ensureArchiveBlob,
+  getPlaceholderType,
+} = await import('../filepanel/filePanel.js');
 
 test('Core: default file list view mode is list', () => {
   assert.equal(DEFAULT_FILE_LIST_VIEW_MODE, 'list');
@@ -82,15 +94,15 @@ test('FsUtils: buildThumbnailSrc generates image previews and icon fallbacks', (
 
   // Archive entry image (stays on /archive/ route, not /thumb/)
   const archiveImgItem = { name: '01.png', path: 'inner/01.png', ext: 'png' };
-  const archiveImgSrc = FsUtils.buildThumbnailSrc(archiveImgItem, { mode: 'archive', archivePath: 'C:\\test.zip' });
+  const archiveImgSrc = FsUtils.buildThumbnailSrc(archiveImgItem, { mode: 'archive', archivePath: 'C:\\test.zip', list: [archiveImgItem], index: 0 }, 0);
   assert.equal(archiveImgSrc.includes('/archive/'), true);
   assert.equal(archiveImgSrc.includes('01.png'), true);
 
   // Favorite entry with composite archive path
   const favArchiveItem = { name: 'cover.jpg', path: 'C:\\manga.cbz|cover.jpg', ext: 'jpg' };
   const favArchiveSrc = FsUtils.buildThumbnailSrc(favArchiveItem, { mode: 'directory' });
-  assert.equal(favArchiveSrc.includes('/archive/'), true);
-  assert.equal(favArchiveSrc.includes('cover.jpg'), true);
+  assert.equal(favArchiveSrc.includes('/icon/'), true);
+  assert.equal(favArchiveSrc.includes('/archive/'), false);
 });
 
 test('Virtualization: static sizer calculation across massive directory lists', () => {
@@ -465,6 +477,53 @@ test('Canonical URLs: absolute path favorites do not route to archive protocol',
   assert.ok(src.includes('/thumb/'), 'shell-supported format should route to /thumb/');
 });
 
+test('Archive thumbnails: active and neighboring archive pages keep image URLs', () => {
+  const list = Array.from({ length: 5 }, (_, i) => ({
+    name: `page-${i}.jpg`,
+    path: `C:\\window.cbz|page-${i}.jpg`,
+    ext: 'jpg',
+    size: 64 * 1024 * 1024,
+  }));
+  const state = {
+    mode: 'archive',
+    archivePath: 'C:\\window.cbz',
+    list,
+    index: 2,
+  };
+
+  const previousSrc = FsUtils.buildThumbnailSrc(list[1], state, 1);
+  const activeSrc = FsUtils.buildThumbnailSrc(list[2], state, 2);
+  const nextSrc = FsUtils.buildThumbnailSrc(list[3], state, 3);
+
+  assert.equal(ARCHIVE_THUMBNAIL_WINDOW_HALF, 1);
+  assert.ok(previousSrc.includes('/archive/'), 'previous archive entry keeps its thumbnail image');
+  assert.ok(activeSrc.includes('/archive/'), 'active archive entry keeps its thumbnail image');
+  assert.ok(nextSrc.includes('/archive/'), 'next archive entry keeps its thumbnail image');
+});
+
+test('Archive thumbnails: non-neighbor archive pages use lightweight icons', () => {
+  const list = Array.from({ length: 5 }, (_, i) => ({
+    name: `page-${i}.jpg`,
+    path: `C:\\window.cbz|page-${i}.jpg`,
+    ext: 'jpg',
+    size: 512 * 1024,
+  }));
+  const state = {
+    mode: 'archive',
+    archivePath: 'C:\\window.cbz',
+    list,
+    index: 2,
+  };
+
+  const farBeforeSrc = FsUtils.buildThumbnailSrc(list[0], state, 0);
+  const farAfterSrc = FsUtils.buildThumbnailSrc(list[4], state, 4);
+
+  assert.ok(farBeforeSrc.includes('/icon/'), 'far previous entries use icons');
+  assert.ok(!farBeforeSrc.includes('/archive/'), 'far previous entries avoid full archive fetches');
+  assert.ok(farAfterSrc.includes('/icon/'), 'far next entries use icons');
+  assert.ok(!farAfterSrc.includes('/archive/'), 'far next entries avoid full archive fetches');
+});
+
 test('Helpers: _isAbsolutePath detects Windows absolute paths', () => {
   assert.equal(FsUtils._isAbsolutePath('C:\\foo\\bar.jpg'), true);
   assert.equal(FsUtils._isAbsolutePath('D:\\test'), true);
@@ -499,5 +558,91 @@ test('Cache isolation: favoritesThumbnailCache is independent from thumbnailCach
   assert.equal(favoritesThumbnailCache.has('fav-key'), true, 'favorites entry survives main cache overflow');
   assert.equal(favoritesThumbnailCache.get('fav-key'), 'fav-value');
   assert.equal(thumbnailCache.size, 250);
+});
+
+test('Thumbnail cache: revokes blob URLs on eviction, delete, and clear', () => {
+  const originalRevoke = URL.revokeObjectURL;
+  const revoked = [];
+  URL.revokeObjectURL = (url) => revoked.push(url);
+
+  try {
+    thumbnailCache.clear();
+    revoked.length = 0;
+
+    // 1. Delete revokes blob URL
+    thumbnailCache.set('item1', 'blob:http://quivit.localhost/1');
+    thumbnailCache.set('item2', true);
+    thumbnailCache.delete('item1');
+    assert.deepEqual(revoked, ['blob:http://quivit.localhost/1']);
+
+    // Non-blob delete does not call revoke
+    revoked.length = 0;
+    thumbnailCache.delete('item2');
+    assert.equal(revoked.length, 0);
+
+    // 2. Clear revokes all blob URLs
+    thumbnailCache.set('item-a', 'blob:http://quivit.localhost/a');
+    thumbnailCache.set('item-b', 'blob:http://quivit.localhost/b');
+    thumbnailCache.set('item-c', 'http://quivit.localhost/thumb/c');
+    thumbnailCache.clear();
+    assert.deepEqual(revoked, [
+      'blob:http://quivit.localhost/a',
+      'blob:http://quivit.localhost/b',
+    ]);
+
+    // 3. Eviction past THUMB_CACHE_CAPACITY revokes evicted blob URL
+    revoked.length = 0;
+    thumbnailCache.set('first-blob', 'blob:http://quivit.localhost/first');
+    for (let i = 0; i < THUMB_CACHE_CAPACITY; i++) {
+      thumbnailCache.set(`filler-${i}`, `val-${i}`);
+    }
+    assert.equal(thumbnailCache.has('first-blob'), false);
+    assert.deepEqual(revoked, ['blob:http://quivit.localhost/first']);
+  } finally {
+    URL.revokeObjectURL = originalRevoke;
+    thumbnailCache.clear();
+  }
+});
+
+test('Archive blob cache: refuses oversized blobs and trims cached archive blob count', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalCreate = URL.createObjectURL;
+  const originalRevoke = URL.revokeObjectURL;
+  const revoked = [];
+  let created = 0;
+
+  URL.createObjectURL = () => `blob:http://quivit.localhost/archive-${++created}`;
+  URL.revokeObjectURL = (url) => revoked.push(url);
+  globalThis.fetch = async (url) => {
+    const size = url.includes('oversized')
+      ? ARCHIVE_BLOB_CACHE_ENTRY_MAX_BYTES + 1
+      : 512 * 1024;
+    return { blob: async () => new Blob([new Uint8Array(size)]) };
+  };
+
+  try {
+    thumbnailCache.clear();
+    for (let i = 0; i < ARCHIVE_BLOB_CACHE_CAPACITY + 3; i++) {
+      const result = await ensureArchiveBlob(`http://quivit.localhost/archive/test/page-${i}.jpg`);
+      assert.ok(result?.startsWith('blob:'), 'cacheable archive pages return a blob URL');
+    }
+
+    let cachedBlobCount = 0;
+    for (const value of thumbnailCache.values()) {
+      if (typeof value === 'string' && value.startsWith('blob:')) cachedBlobCount++;
+    }
+    assert.equal(cachedBlobCount, ARCHIVE_BLOB_CACHE_CAPACITY);
+    assert.equal(revoked.length, 3);
+
+    const oversized = await ensureArchiveBlob('http://quivit.localhost/archive/test/oversized.jpg');
+    assert.equal(oversized, null);
+    assert.equal(created, ARCHIVE_BLOB_CACHE_CAPACITY + 3);
+    assert.equal(thumbnailCache.has('http://quivit.localhost/archive/test/oversized.jpg'), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    URL.createObjectURL = originalCreate;
+    URL.revokeObjectURL = originalRevoke;
+    thumbnailCache.clear();
+  }
 });
 

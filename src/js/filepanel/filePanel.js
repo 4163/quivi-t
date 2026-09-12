@@ -15,21 +15,68 @@ import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { BoundedMap } from '../services/cache.js';
 
-// Bounded in-memory thumbnail cache: 250 items covers ~14 full screens (1080p) or entire manga volumes under ~10 MB RAM
-export const THUMB_CACHE_CAPACITY = 250;
-export const thumbnailCache = new BoundedMap(THUMB_CACHE_CAPACITY);
+let _activeViewerKey = null;
+let _activeViewerBlob = null;
+let _archiveBlobBytes = 0;
+const _archiveBlobSizes = new Map();
 
-const _thumbOrigSet = thumbnailCache.set.bind(thumbnailCache);
-thumbnailCache.set = function (key, value) {
-  if (this.size >= this.maxSize && !this.has(key)) {
-    const oldestKey = this.keys().next().value;
-    const evicted = this.get(oldestKey);
-    if (typeof evicted === 'string' && evicted.startsWith('blob:')) URL.revokeObjectURL(evicted);
+export const ARCHIVE_BLOB_CACHE_CAPACITY = 8;
+export const ARCHIVE_BLOB_CACHE_MAX_BYTES = 24 * 1024 * 1024;
+export const ARCHIVE_BLOB_CACHE_ENTRY_MAX_BYTES = 4 * 1024 * 1024;
+
+function _forgetArchiveBlobSize(key) {
+  const size = _archiveBlobSizes.get(key);
+  if (!size) return;
+  _archiveBlobBytes = Math.max(0, _archiveBlobBytes - size);
+  _archiveBlobSizes.delete(key);
+}
+
+function _rememberArchiveBlobSize(key, size) {
+  _forgetArchiveBlobSize(key);
+  if (!size) return;
+  _archiveBlobSizes.set(key, size);
+  _archiveBlobBytes += size;
+}
+
+function _trimArchiveBlobCache() {
+  while (_archiveBlobSizes.size > ARCHIVE_BLOB_CACHE_CAPACITY || _archiveBlobBytes > ARCHIVE_BLOB_CACHE_MAX_BYTES) {
+    let evicted = false;
+    for (const key of thumbnailCache.keys()) {
+      if (_archiveBlobSizes.has(key)) {
+        thumbnailCache.delete(key);
+        evicted = true;
+        break;
+      }
+    }
+    if (!evicted) break;
   }
-  return _thumbOrigSet(key, value);
-};
+}
 
-// Archive blob deduplication: viewer, hover and thumbnails share the same quivit:// fetch.
+function _revokeBlobEntry(key, value) {
+  if (typeof value === 'string' && value.startsWith('blob:')) {
+    _forgetArchiveBlobSize(key);
+    const activeSrc = Core?.getState()?.src;
+    if (activeSrc && (key === activeSrc || value === activeSrc)) {
+      if (_activeViewerBlob && _activeViewerBlob !== value) {
+        URL.revokeObjectURL(_activeViewerBlob);
+      }
+      _activeViewerKey = key;
+      _activeViewerBlob = value;
+      return;
+    }
+    URL.revokeObjectURL(value);
+  }
+}
+
+// Bounded in-memory thumbnail cache: covers ~14 full screens (1080p) or typical volume chapters.
+// Revokes blob URLs on capacity eviction, key replacement, and clear to prevent blob storage leaks.
+export const THUMB_CACHE_CAPACITY = 250;
+export const thumbnailCache = new BoundedMap(THUMB_CACHE_CAPACITY, _revokeBlobEntry);
+
+let _archiveBlobGeneration = 0;
+let _archiveBlobAbortController = null;
+
+// Archive blob deduplication: viewer and nearby thumbnails share the same quivit:// fetch.
 // Only one fetch per src, prioritized for viewer. Archive only. Disk thumbs are shell 96px, different URL.
 const _archiveBlobPromises = new Map();
 export function ensureArchiveBlob(src) {
@@ -37,7 +84,24 @@ export function ensureArchiveBlob(src) {
   const cached = thumbnailCache.get(src);
   if (typeof cached === 'string' && cached.startsWith('blob:')) return Promise.resolve(cached);
   if (_archiveBlobPromises.has(src)) return _archiveBlobPromises.get(src);
-  const p = fetch(src).then(r => r.blob()).then(blob => {
+
+  const gen = _archiveBlobGeneration;
+  let signal;
+  if (typeof AbortController !== 'undefined') {
+    if (!_archiveBlobAbortController) _archiveBlobAbortController = new AbortController();
+    signal = _archiveBlobAbortController.signal;
+  }
+
+  let p;
+  p = fetch(src, signal ? { signal } : {}).then(r => r.blob()).then(blob => {
+    if (gen !== _archiveBlobGeneration) {
+      _archiveBlobPromises.delete(src);
+      return null;
+    }
+    if (blob.size > ARCHIVE_BLOB_CACHE_ENTRY_MAX_BYTES) {
+      _archiveBlobPromises.delete(src);
+      return null;
+    }
     const existing = thumbnailCache.get(src);
     if (typeof existing === 'string' && existing.startsWith('blob:')) {
       _archiveBlobPromises.delete(src);
@@ -49,10 +113,21 @@ export function ensureArchiveBlob(src) {
       return null;
     }
     const blobUrl = URL.createObjectURL(blob);
+    if (gen !== _archiveBlobGeneration) {
+      URL.revokeObjectURL(blobUrl);
+      _archiveBlobPromises.delete(src);
+      return null;
+    }
     thumbnailCache.set(src, blobUrl);
+    _rememberArchiveBlobSize(src, blob.size);
+    _trimArchiveBlobCache();
     _archiveBlobPromises.delete(src);
     return blobUrl;
-  }).catch(() => {
+  }).catch((err) => {
+    if (gen !== _archiveBlobGeneration || err?.name === 'AbortError') {
+      _archiveBlobPromises.delete(src);
+      return null;
+    }
     if (!thumbnailCache.has(src)) thumbnailCache.set(src, true);
     _archiveBlobPromises.delete(src);
     return null;
@@ -62,7 +137,7 @@ export function ensureArchiveBlob(src) {
 }
 
 export const FAVORITES_CACHE_CAPACITY = 250;
-export const favoritesThumbnailCache = new BoundedMap(FAVORITES_CACHE_CAPACITY);
+export const favoritesThumbnailCache = new BoundedMap(FAVORITES_CACHE_CAPACITY, _revokeBlobEntry);
 
 // Canonical large format/folder icons (~20 entries).
 // Separate from thumbnailCache so image scrolling can't evict them.
@@ -168,7 +243,6 @@ let refreshStartTime = 0;
 let thumbRefreshTimestamp = 0;
 let hoverPreloadImg = null;
 let hoverPreloadTimer = null;
-const MAX_HOVER_PRELOAD_BYTES = 15 * 1024 * 1024;
 
 let columnsInitialized = false;
 
@@ -500,13 +574,7 @@ function buildFavoriteEntry(fav) {
     if (src && !src.startsWith('data:image/svg+xml')) {
       thumbImg.classList.add('is-loaded');
       if (!favoritesThumbnailCache.has(src)) {
-        if (typeof Image !== 'undefined') {
-          const retain = new Image();
-          retain.src = src;
-          favoritesThumbnailCache.set(src, retain);
-        } else {
-          favoritesThumbnailCache.set(src, true);
-        }
+        favoritesThumbnailCache.set(src, true);
       }
     }
   };
@@ -806,7 +874,7 @@ function wireRowListeners(li) {
     const item = state.list?.[index];
 
     if (item && !item.is_dir && !item.is_parent && FsUtils.isImageEntry(item)) {
-      if (item.size && item.size > MAX_HOVER_PRELOAD_BYTES) return;
+      if (state.mode === 'archive' && !FsUtils.shouldUseArchiveImageThumbnail(item, state, index)) return;
       hoverPreloadTimer = setTimeout(() => {
         let src;
         if (state.mode === 'archive') {
@@ -816,7 +884,7 @@ function wireRowListeners(li) {
           src = FsUtils.isIco(item.path) ? null : FsUtils.buildFileSrcSync(item.path);
         }
         if (!src || Core.getState().index === index) return;
-        // Archive only: reuse 1:1 thumb blob, dedupe viewer/hover/thumb to one quivit:// fetch.
+        // Archive hover reuses a nearby thumbnail blob only when it already exists.
         const cached = thumbnailCache.get(src);
         if (typeof cached === 'string' && cached.startsWith('blob:')) {
           hoverPreloadImg = new Image();
@@ -826,16 +894,6 @@ function wireRowListeners(li) {
           return;
         }
         if (src.includes('/archive/')) {
-          ensureArchiveBlob(src).then(blobUrl => {
-            if (!blobUrl || Core.getState().index === index) return;
-            // Only use blob if hover still relevant (mouse still over same index)
-            const currentHoverIdx = li.dataset.index ? parseInt(li.dataset.index, 10) : -1;
-            if (currentHoverIdx !== index) return;
-            hoverPreloadImg = new Image();
-            hoverPreloadImg.decoding = 'async';
-            hoverPreloadImg.src = blobUrl;
-            if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
-          });
           return;
         }
         hoverPreloadImg = new Image();
@@ -905,10 +963,6 @@ function createPoolRow() {
         } else if (src.includes('/archive/')) {
           // Archive only: 1:1 thumb == viewer/hover URL. Dedupe via shared promise, viewer prioritized.
           ensureArchiveBlob(src);
-        } else if (typeof Image !== 'undefined') {
-          const retain = new Image();
-          retain.src = src;
-          thumbnailCache.set(src, retain);
         } else {
           thumbnailCache.set(src, true);
         }
@@ -1008,7 +1062,7 @@ function updateEntry(li, item, index) {
     if (slots.thumbImg) {
       const ext = FsUtils.getIconExtKey(item);
       const isImage = FsUtils.isImageEntry(item);
-      let targetSrc = FsUtils.buildThumbnailSrc(item, state);
+      let targetSrc = FsUtils.buildThumbnailSrc(item, state, index);
       if (thumbRefreshTimestamp && isImage && targetSrc) {
         targetSrc = targetSrc.includes('?') ? `${targetSrc}&_t=${thumbRefreshTimestamp}` : `${targetSrc}?_t=${thumbRefreshTimestamp}`;
       }
@@ -1312,6 +1366,12 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
     for (const [idx, li] of activeRows) {
       li.classList.toggle('selected', idx === selectedIndex);
     }
+    const state = Core.getState();
+    if (state.fileListViewMode === 'thumbnail' && state.mode === 'archive') {
+      for (const [idx, li] of activeRows) {
+        if (lastRenderedList[idx]) updateEntry(li, lastRenderedList[idx], idx);
+      }
+    }
   }
 
   if (wasFocused) {
@@ -1324,6 +1384,12 @@ function setRefreshingVisual(active) {
   clearTimeout(refreshPulseTimer);
 
   if (active) {
+    _archiveBlobGeneration++;
+    if (_archiveBlobAbortController) {
+      _archiveBlobAbortController.abort();
+      _archiveBlobAbortController = null;
+    }
+    _archiveBlobPromises.clear();
     thumbnailCache.clear();
     thumbRefreshTimestamp = Date.now();
     refreshStartTime = performance.now();
@@ -1335,6 +1401,12 @@ function setRefreshingVisual(active) {
     fileListUl?.classList.add('refreshing');
     favoritesListUl?.classList.add('refreshing');
     if (Core && Core.getState().fileListViewMode === 'thumbnail') {
+      const list = Core.getState().list;
+      if (list) {
+        for (const [i, li] of activeRows) {
+          if (list[i]) updateEntry(li, list[i], i);
+        }
+      }
       renderVisibleSlice();
     }
     return;
@@ -1352,6 +1424,21 @@ function setRefreshingVisual(active) {
 
 export function renderFilePanel(state) {
   if (!filePanel) return;
+
+  if (_activeViewerBlob && state.src !== _activeViewerKey && state.src !== _activeViewerBlob) {
+    let stillInCache = false;
+    for (const val of thumbnailCache.values()) {
+      if (val === _activeViewerBlob) {
+        stillInCache = true;
+        break;
+      }
+    }
+    if (!stillInCache) {
+      URL.revokeObjectURL(_activeViewerBlob);
+      _activeViewerBlob = null;
+      _activeViewerKey = null;
+    }
+  }
 
   filePanel.classList.toggle('hidden', !state.fileListVisible);
   if (!state.fileListVisible) return;

@@ -8,6 +8,67 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Lanczos Viewer Memory Guard (2026-09-13)
+- **Thumbnail-Off Probe Result:**
+  - Live probing showed a separate memory path after the thumbnail/blob mitigations: thumbnail view was off, `blob_storage` stayed small, HTTP cache stayed flat, and WebView2 renderer/GPU memory still climbed while Lanczos was active.
+  - The active cause is decoded current-page image pressure plus Lanczos intermediate/native/GPU allocations, not the old stale thumbnail blob-storage path.
+- **Archive Viewer Preload Policy (`src/js/viewer/viewerRender.js`):**
+  - Archive viewer rendering no longer preloads previous/next archive images.
+  - Viewer rendering no longer creates archive blob warmups for the active archive image; it only reuses an existing cached thumbnail blob when one is already available.
+- **Clean Image Cache Policy (`src/js/shared/blobImage.js`):**
+  - Reduced `TEXTURE_CACHE_CAPACITY` to 1.
+  - Removed object URL creation from the clean image cache.
+  - Added `getCleanImageCrop(src, sx, sy, sw, sh)` for caller-owned cropped `ImageBitmap` creation.
+- **Lanczos Crop Ownership (`src/js/services/scaling/lanczos.js`):**
+  - Lanczos now creates a clean bitmap for only the visible crop and feeds it directly into `pica.resize`.
+  - The per-render cropped bitmap is closed after resize completion.
+  - Render cancellation now uses a generation guard so older async crop/resize work cannot return after a newer render starts.
+  - Removed the unused fallback crop canvas and the test-only clean-cache reset export.
+- **Automated Test Coverage (`src/js/tests/blobImage.test.mjs`):**
+  - Added tests for clean image cache capacity, cache reuse, eviction close behavior, and crop-bitmap ownership.
+  - Verified `npm test` passes with 79 tests.
+  - Verified the local Playwright thumbnail-flow harness passes across Chromium, Firefox, and WebKit (9 tests).
+
+### Large Archive Thumbnail Memory Guard (2026-09-13)
+- **Archive Thumbnail Policy (`src/js/fsUtils.js`):**
+  - Added a moving archive thumbnail window: the active archive image and its immediate previous/next image entries can use full `/archive/` page image URLs.
+  - Archive thumbnail rows outside that three-item window use lightweight extension icons.
+  - Composite archive favorites fall back to icons when no active archive window exists.
+- **Archive Blob Cache Budget (`src/js/filepanel/filePanel.js`):**
+  - Added a small count and compressed-byte budget for archive blob reuse.
+  - `ensureArchiveBlob()` now refuses oversized blobs before creating object URLs.
+  - Cached archive blob URLs are trimmed through the existing revocation path, so old entries release blob storage.
+  - Hover preload now follows the archive thumbnail window and only reuses already-cached archive blobs. It no longer starts archive blob fetches on hover.
+- **Decoded Image Retainer Reduction (`src/js/filepanel/filePanel.js`, `src/js/viewer/viewerRender.js`):**
+  - Removed off-DOM `new Image()` retainers from `thumbnailCache` and `favoritesThumbnailCache`; loaded thumbnail entries now cache warm flags or explicit fallback/blob URLs.
+  - Reduced the viewer DOM image pool from the previous 10-node cache to `VIEWER_IMAGE_POOL_CAPACITY = 4`.
+  - Viewer state changes now recycle `_activeNodes` outside the active/neighbor/bridge set immediately.
+  - Transient viewer preload `Image()` objects clear handlers and `src` after load or error.
+- **Automated Test Coverage (`src/js/tests/fileListViewMode.test.mjs`):**
+  - Added tests for active/neighbor archive thumbnail URLs, non-neighbor icon fallback, and archive blob cache trimming.
+  - Verified `npm test` passes with 77 tests.
+  - Verified the local Playwright thumbnail-flow harness passes across Chromium, Firefox, and WebKit (9 tests).
+
+### Blob URL Revocation on Cache Eviction and Clear (2026-09-13)
+- **BoundedMap Eviction Callback (`src/js/services/cache.js`):**
+  - Added an optional `onEvict(key, value)` callback to `BoundedMap`.
+  - Routed `delete()` and `clear()` through `onEvict` so entries removed explicitly or wiped on directory refresh invoke the callback.
+  - Routed capacity eviction in `set()` through `delete()`, and fired `onEvict` when replacing the value of an existing key.
+- **Thumbnail Cache Blob Revocation (`src/js/filepanel/filePanel.js`):**
+  - Replaced the monkey-patched `thumbnailCache.set` method with a `_revokeBlobEntry` callback passed directly to `BoundedMap`.
+  - Wired the same callback to `favoritesThumbnailCache`.
+  - Added active viewer blob protection (`_activeViewerKey` and `_activeViewerBlob`): when `thumbnailCache` overflows or clears, the active viewer image's blob URL is retained across normal rerenders until navigation changes the logical source (`state.src !== _activeViewerKey && state.src !== _activeViewerBlob`).
+  - In `setRefreshingVisual(true)`, cleared `_archiveBlobPromises`, incremented `_archiveBlobGeneration`, and aborted `_archiveBlobAbortController` so stale in-flight fetches are dropped immediately rather than resolving into `thumbnailCache` after refresh.
+  - Re-evaluated visible entries in `activeRows` so visible rows do not hold onto revoked blob URLs.
+- **Detached ImageBitmap Fix (`src/js/shared/blobImage.js`, `src/js/services/scaling/lanczos.js`, `src/js/services/pipelines/glRuntime.js`):**
+  - In `blobImage.js`, returned `null` instead of the closed `cleanImg` when `_pendingSrc !== src`, preventing consumers from attempting to draw a detached `ImageBitmap`.
+  - Switched `_textureCache` in `blobImage.js` to use `BoundedMap(TEXTURE_CACHE_CAPACITY, (_key, entry) => _evictEntry(entry))` directly.
+  - Added null checks in `lanczos.js` and `glRuntime.js` before canvas drawing and texture upload.
+- **Automated Test Coverage (`src/js/tests/boundedMap.test.mjs`, `src/js/tests/fileListViewMode.test.mjs`):**
+  - Added unit tests in `boundedMap.test.mjs` covering `onEvict` on capacity eviction, explicit `delete()`, non-existent key deletion, `clear()`, and in-place key replacement.
+  - Added integration tests in `fileListViewMode.test.mjs` verifying that `thumbnailCache` revokes `blob:` URLs on `delete()`, `clear()`, and capacity eviction past `THUMB_CACHE_CAPACITY`, while ignoring non-blob entries.
+  - Verified Chromium browser behavior locally using the local-only `playwright/` harness (`playwright/tests/test-thumbnail-flow.spec.js`, gitignored by repository convention) to validate rapid Lanczos navigation cancellation, active viewer blob preservation across normal rerenders, and in-flight fetch cancellation on refresh.
+
 ### Additional Metadata Formats: ComicInfo JSON & Meta JSON (Slice 5 - 2026-09-11)
 - **Archive Entry Filtering Parity (`src/js/services/metadataFiles.js`, `src/js/fsUtils.js`):**
   - The working tree centralizes metadata filename priority and exact basename matching in `metadataFiles.js`.
@@ -205,7 +266,7 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
   - Registered `cmd-toggle-cursor-autohide` action in `actions.js`.
   - Renamed Options section to `Viewport Controls` and added numeric delay input in `options.html` and `options.js`. Added `flex-wrap: wrap` to `.pan-step-row` in `options.css`.
 - **File Panel Hover Preload Gating:**
-  - In `filePanel.js`, gated hover preloading to reject files larger than 15 MB (`MAX_HOVER_PRELOAD_BYTES = 15 * 1024 * 1024`), eliminating UI stutter on massive uncompressed scans (e.g. `BDレーベル.bmp`).
+  - In `filePanel.js`, gated hover preloading to reject files larger than 15 MB (`MAX_HOVER_PRELOAD_BYTES = 15 * 1024 * 1024`), eliminating UI stutter on massive uncompressed scans.
   - Increased hover debounce from 90ms to 150ms to ignore rapid casual sweeps.
 - **Preload Asymmetry & Memory Budget:**
   - Lowered frontend DOM preloads from 7 to 2 (1 ahead, 1 behind) in `viewerRender.js`, eliminating WebView2 texture memory bloat.

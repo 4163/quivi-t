@@ -1,30 +1,30 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
-import { thumbnailCache, ensureArchiveBlob } from '../filepanel/filePanel.js';
+import { thumbnailCache } from '../filepanel/filePanel.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 const PRELOAD_HALF = 1;
+const VIEWER_IMAGE_POOL_CAPACITY = 4;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
 const LOADING_LABEL = 'Loading...';
 
 export function createViewerRenderer(viewportState, onActiveImageChanged = () => {}) {
   const _activeNodes = new Map();
   const _freeNodes = [];
-  const POOL_SIZE = 10; 
 
   const imgWrapper = document.getElementById('viewer-img-wrapper');
   if (imgWrapper) {
     const existingNodes = Array.from(document.querySelectorAll('.viewer-img:not(.is-placeholder)'));
     // Reuse existing nodes, don't remove and recreate
     for (let i = 0; i < existingNodes.length; i++) {
-      if (i < POOL_SIZE) {
+      if (i < VIEWER_IMAGE_POOL_CAPACITY) {
         existingNodes[i].classList.remove('active');
         _freeNodes.push(existingNodes[i]);
       } else {
         existingNodes[i].remove();
       }
     }
-    for (let i = _freeNodes.length; i < POOL_SIZE; i++) {
+    for (let i = _freeNodes.length; i < VIEWER_IMAGE_POOL_CAPACITY; i++) {
       const el = document.createElement('img');
       el.className = 'viewer-img';
       el.draggable = false;
@@ -196,7 +196,13 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _activeNodes.delete(src);
       _freeNodes.push(el);
       FsUtils.revokeIfObjectURL(src);
-      while (_freeNodes.length > POOL_SIZE) _freeNodes.pop()?.remove();
+      while (_freeNodes.length > VIEWER_IMAGE_POOL_CAPACITY) _freeNodes.pop()?.remove();
+    }
+  }
+
+  function _trimActiveNodes(allowedSrcs) {
+    for (const src of Array.from(_activeNodes.keys())) {
+      if (!allowedSrcs.has(src)) _recyclePoolNode(src);
     }
   }
 
@@ -272,6 +278,9 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         preloader.onload = () => {
           const idx = _preloadImages.indexOf(preloader);
           if (idx !== -1) _preloadImages.splice(idx, 1);
+          preloader.onload = null;
+          preloader.onerror = null;
+          preloader.removeAttribute('src');
         };
         preloader.onerror = preloader.onload;
         preloader.src = actualSrc;
@@ -314,17 +323,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     const desiredSrcs = new Set([state.src]);
     if (_isVisibleImage(img) && img.dataset.poolSrc) desiredSrcs.add(img.dataset.poolSrc);
 
-    const neighborSrcs = FsUtils.neighborEntries(state, state.index, PRELOAD_HALF);
+    const neighborSrcs = state.mode === 'archive' ? [] : FsUtils.neighborEntries(state, state.index, PRELOAD_HALF);
     for (const nSrc of neighborSrcs) desiredSrcs.add(nSrc);
 
-    if (_activeNodes.size > POOL_SIZE) {
-      for (const src of _activeNodes.keys()) {
-        if (!desiredSrcs.has(src)) {
-          _recyclePoolNode(src);
-          if (_activeNodes.size <= POOL_SIZE) break;
-        }
-      }
-    }
+    _trimActiveNodes(desiredSrcs);
 
     for (const src of desiredSrcs) {
       _getPoolNode(src);
@@ -378,15 +380,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
             const cached = thumbnailCache.get(state.src);
             if (typeof cached === 'string' && cached.startsWith('blob:')) {
               newSrc = cached;
-            } else if (state.src.includes('/archive/')) {
-              // Archive only: viewer is high priority. Use shared blob promise for dedupe, but paint quivit:// immediately for fastest first paint.
-              // Thumbnail for same src shares the same blob promise arrière, one quivit:// fetch for blob, viewer paints via quivit:// now.
-              ensureArchiveBlob(state.src).then(blobUrl => {
-                if (blobUrl && activation === _activationGeneration && Core.getState().src === state.src) {
-                  // Future navigations will hit blob directly; no need to repaint now if already painting quivit://
-                  // Keep blob in cache for next/prev/hover reuse
-                }
-              });
             }
           }
           _loadPoolNode(activeEl, newSrc, state.src);

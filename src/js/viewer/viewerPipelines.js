@@ -164,9 +164,8 @@ export function createViewerPipelines(viewportState) {
           pipeline.filter = activeFilter;
         }
       } else if (usesLanczos) {
-        const fallback1 = typeof OffscreenCanvas !== 'undefined' ? null : document.createElement('canvas');
-        const fallback2 = typeof OffscreenCanvas !== 'undefined' ? null : document.createElement('canvas');
-        pipeline = createLanczosPipeline(fallback1, fallback2);
+        const fallbackDestCanvas = typeof OffscreenCanvas !== 'undefined' ? null : document.createElement('canvas');
+        pipeline = createLanczosPipeline(fallbackDestCanvas);
       }
     } else if (usesWebgl && (filterChanged || variantChanged || scalingChanged)) {
       _livePumpLastDrawnFrameIndex = -1;

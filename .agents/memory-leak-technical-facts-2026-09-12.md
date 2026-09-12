@@ -6,6 +6,63 @@ Purpose: preserve the raw technical findings from the memory leak investigation.
 
 Related summary report: `.agents/memory-leak-investigation-2026-09-12.md`
 
+## Current working-tree mitigations, 2026-09-13 continuation
+
+These facts describe the latest code state after the user confirmed `npm run tauri dev` still reached about 1.5 GB in the stress run.
+
+- `src/js/fsUtils.js` now exports `ARCHIVE_THUMBNAIL_WINDOW_HALF = 1`.
+- `FsUtils.shouldUseArchiveImageThumbnail(item, state, itemIndex)` returns `true` for archive image thumbnails only when `state.mode === 'archive'`, `state.list` exists, `state.index` is finite, and `Math.abs(itemIndex - state.index) <= 1`.
+- `FsUtils.buildThumbnailSrc(item, state, itemIndex)` returns a large native icon URL for archive image entries outside that active/neighbor window.
+- Composite archive favorites use icon thumbnails when no active archive window exists.
+- `filePanel.updateEntry(li, item, index)` passes the visible row index into `buildThumbnailSrc()`.
+- `filePanel.updateSelection()` re-renders visible archive thumbnail rows when selection changes without scrolling, so the three-item thumbnail window moves with the active entry.
+- `filePanel` no longer stores off-DOM `new Image()` values in `thumbnailCache` or `favoritesThumbnailCache`; thumbnail loads now store warm flags, explicit fallback URLs, or archive blob URLs.
+- Archive hover preloading no longer calls `ensureArchiveBlob()` on hover. It only creates a transient `Image()` if the archive blob was already cached by the active/neighbor thumbnail path.
+- `viewerRender.js` now uses `VIEWER_IMAGE_POOL_CAPACITY = 4` instead of the previous 10-node pool.
+- `viewerRender._trimActiveNodes(allowedSrcs)` recycles any pooled viewer image whose source is outside the current desired set on every state change.
+- Viewer desired sources remain: current `state.src`, immediate previous/next image entries from `FsUtils.neighborEntries(..., PRELOAD_HALF = 1)`, and the currently visible outgoing image while the bridge transition exists.
+- Viewer transient preload `Image()` objects remove handlers and clear `src` after load or error.
+- `ensureArchiveBlob()` still has the small compressed-byte and count budget from the prior mitigation. That guard protects `blob_storage`; it does not cap decoded WebView2 renderer/GPU memory by itself.
+
+## Agreed refactor target, 2026-09-13
+
+This is the accepted design for the next refactor. It is not a description of the current code. The investigation measurements and the working-tree mitigation facts above remain historical evidence until the implementation lands.
+
+### Archive lifetime and materialization
+
+- All archive formats use one active archive session. The current eight-session policy goes away.
+- ZIP and CBZ stop retaining extracted entry bytes in the 128 MiB Rust LRU. The archive index remains available for the active session, and no Rust-memory entry-byte cache survives a completed response.
+- The active session owns one temporary materialization directory. ZIP, CBZ, RAR, 7Z, and TAR use that directory for requested entries and prefetch output.
+- Opening an archive does not decode every page into pixels or extract every entry. The reader serves the selected entry first, then materializes only the next directional entry.
+- Switching archives or closing the active archive cancels work, drops the session, and removes its temporary directory. Startup cleanup removes stale QuiviT archive directories left by interrupted runs.
+- Temp-origin probing must validate a candidate before it prepares or materializes an archive. It must not create extraction work for every candidate it inspects.
+- Header-only animation checks for materialized non-ZIP files must read only the requested header bytes, not the whole entry.
+
+### Directional archive prefetch
+
+- Archive navigation has one speculative work item, not a symmetric window.
+- Moving toward later entries queues `+1`. Moving toward earlier entries queues `-1`.
+- The selected entry always wins over the speculative item. A direction change or an item leaving the relevant viewport cancels queued speculative work.
+- The directional entry writes to the active materialization directory. Without that destination, prefetch would only decompress data and discard it.
+
+### Protocol and archive thumbnails
+
+- Full archive-page protocol responses use `Cache-Control: no-store`. WebView must not become a second, unbounded archive byte cache after the Rust byte LRU is removed.
+- Small native icons and true thumbnail responses retain their existing cache policy.
+- The normal file list stays virtualized and keeps its lightweight warm-marker and icon behavior. This remains the large-folder path.
+- Archive thumbnail rows are eligible for decoding only while they are visible. A single decode queue prioritizes the selected row, then the nearest visible rows in the active scroll direction.
+- The queue starts one decode at a time. Rows that leave the viewport before their turn lose their queued work. Recycled rows release their source and any temporary URL.
+- Archive thumbnails do not retain a full-page blob cache after their row leaves the viewport. The queue is a display-lifetime policy, not an offscreen image cache.
+- Hover preview is removed. It must not start or retain speculative image decode work.
+
+### Viewer, filters, and animation
+
+- The viewer pool has two DOM image nodes: the outgoing image and the incoming image during a bridge transition. It does not retain adjacent sources in that pool.
+- The one-entry clean `ImageBitmap` cache, WebGL resource lifetime, and crop-first Lanczos path remain unchanged.
+- Animation rendering keeps its existing visual resolution. On exit it stops the frame loop, closes the active frame and decoder, clears the staging canvas, revokes the temporary URL, and releases the related GL source. This changes cleanup only, not image quality.
+- Animation-result metadata remains small, but its memo is bounded or cleared on archive and folder changes.
+- Native icon and shell thumbnail behavior remains unchanged.
+
 ## Reproduction context
 
 The app was already running from normal user activity.
@@ -143,6 +200,8 @@ Interpretation recorded during investigation:
 
 ## Frontend subagent facts
 
+These are pre-mitigation static findings from the first investigation pass. They describe the code as it existed when the leak was first traced.
+
 Agent:
 
 ```text
@@ -178,7 +237,7 @@ Reported high-confidence facts:
 - `src/js/filepanel/filePanel.js:958-969` `initDomPool()` removes active/free rows on view-mode changes without first clearing thumbnail image `src`s.
 - `src/js/filepanel/filePanel.js:65` creates `favoritesThumbnailCache`, also count-bound.
 - `src/js/filepanel/filePanel.js:498-508` favorites thumbnail load can retain `new Image()` values in `favoritesThumbnailCache`.
-- `src/js/shared/blobImage.js:6-7` creates a separate `TEXTURE_CACHE_CAPACITY = 6` `BoundedMap`.
+- Before the 2026-09-13 Lanczos mitigation, `src/js/shared/blobImage.js:6-7` created a separate `TEXTURE_CACHE_CAPACITY = 6` `BoundedMap`.
 - `src/js/shared/blobImage.js:12-14` evicts `blobUrl` and `cleanImg.close()` correctly when `_textureCache.set()` evicts.
 - `src/js/shared/blobImage.js:27-48` `getCleanImage()` fetches source bytes, creates an object URL, creates an `ImageBitmap`, and caches `{ blobUrl, cleanImg }`.
 - `src/js/shared/blobImage.js` has no exported debug/trim/clear method.
@@ -265,6 +324,8 @@ src-tauri/src/models.rs
 
 Confirmed code facts:
 
+These facts are pre-mitigation unless explicitly marked as a 2026-09-13 implementation fact.
+
 - `src/js/services/cache.js` `BoundedMap` only evicts by entry count.
 - `filePanel.js` wraps `thumbnailCache.set()` to revoke blob URL values on eviction.
 - `thumbnailCache.clear()` is called in `setRefreshingVisual(true)` and does not revoke blob URLs.
@@ -278,15 +339,15 @@ Confirmed code facts:
 - `viewerRender.js` keeps a DOM image pool with `POOL_SIZE = 10`.
 - `viewerRender.js` recycles `_activeNodes` only when `_activeNodes.size > POOL_SIZE`.
 - Main pass refinement: because recycling happens before adding desired sources, `_activeNodes` can exceed the cap until the next state change, but this looks bounded rather than runaway.
-- `blobImage.js` keeps a `TEXTURE_CACHE_CAPACITY = 6` `BoundedMap`.
+- Before the 2026-09-13 Lanczos mitigation, `blobImage.js` kept a `TEXTURE_CACHE_CAPACITY = 6` `BoundedMap`.
 - `blobImage.js` revokes blob URLs and closes `ImageBitmap`s when evicting entries.
 - `blobImage.js` has no exported clear/trim method.
 - `protocol.rs` sets `Cache-Control: public, max-age=86400` on PNG icon/thumbnail responses and archive entry responses.
 - Main pass refinement: after the WebView2 profile breakdown, normal HTTP cache was only about 9 MB, so protocol cache headers were not the main observed disk owner.
 
-## Object URL ownership model observed in code
+## Object URL ownership model observed in pre-mitigation code
 
-Current owner map from source inspection:
+Owner map from the first source inspection:
 
 ```text
 filePanel.thumbnailCache
@@ -447,7 +508,7 @@ lanczos.render()
 Cache facts:
 
 ```text
-blobImage.TEXTURE_CACHE_CAPACITY = 6
+blobImage.TEXTURE_CACHE_CAPACITY = 6 at the time of the first investigation
 _textureCache values include an object URL and an ImageBitmap
 eviction closes ImageBitmap and revokes object URL
 cache is count-bound, not byte-bound
@@ -623,12 +684,34 @@ Facts that agree across sources:
 - Rust protocol cloning can amplify transient memory pressure during blob creation.
 - Non-ZIP temp extraction creates real disk retention and cleanup work.
 
+Facts from the 2026-09-13 thumbnail-off follow-up probe:
+
+- Thumbnail view was off and Lanczos scaling was active.
+- `Default\blob_storage` was small at about 11.45 MB across 3 files.
+- Normal HTTP `Cache` stayed flat at about 9.40 MB.
+- The large live owners were still WebView2 renderer and GPU private memory.
+- The Rust host stayed near the previous baseline and was not the owner of the 1 GB-class memory in that run.
+- This separates the later 1 GB-class memory pressure from the earlier blob-storage leak.
+- The active lead for that run is decoded current-page image memory plus Lanczos intermediate/native/GPU allocations.
+
 Facts that changed priority after live probing:
 
 - Protocol `Cache-Control` looked suspicious from static code, but normal HTTP cache was only about 9 MB in the observed profile.
 - Blob/object URL storage became the concrete lead after measuring `Default\blob_storage` at about 607 MB.
 - Viewer DOM pool looked suspicious from static code, but main-agent review suggests bounded retention rather than unbounded leak.
 - Rust archive cache was expected at 128 MB, and the live Rust host stayed around 135 MB private, so it was not the main sustained 1 GB owner in this run.
+- After the thumbnail-off follow-up probe, Lanczos moved from a secondary/static suspect to an active mitigation target because blob storage was no longer large.
+
+Implementation facts from the 2026-09-13 mitigation pass:
+
+- `viewerRender.js` no longer preloads archive neighbors. The previous/next preload path still applies outside archive mode.
+- `viewerRender.js` no longer calls `ensureArchiveBlob()` for the active viewer archive image. It only reuses an existing cached thumbnail blob if one is already present.
+- `blobImage.js` exports `TEXTURE_CACHE_CAPACITY = 1`.
+- `blobImage.js` no longer creates object URLs for the clean image cache.
+- `blobImage.js` exposes `getCleanImageCrop(src, sx, sy, sw, sh)`, which returns a caller-owned cropped `ImageBitmap`.
+- `lanczos.js` uses `getCleanImageCrop()` for the visible crop and closes that cropped bitmap after the resize path completes.
+- `lanczos.js` tracks render generation so an older async crop/resize cannot return after a newer render starts.
+- `blobImage.test.mjs` covers the reduced clean image cache capacity, eviction close behavior, cache reuse, and crop-bitmap ownership.
 
 ## Open factual questions
 
@@ -637,6 +720,7 @@ Facts that changed priority after live probing:
 - Does WebView2 release `blob_storage` files promptly after `URL.revokeObjectURL`, or only after GC/navigation/process exit?
 - How much memory drops after clearing thumbnail cache, blanking visible thumbnail images, and forcing GC?
 - How much memory is retained by `ImageBitmap`s when filters or Lanczos are active?
+- After the cropped Lanczos mitigation, how much renderer/GPU memory remains attributable to the current visible page itself?
 - Do stale `%TEMP%\QuiviT` directories survive a clean app shutdown?
 - Does temp-origin resolution create extraction dirs for wrong candidates in ordinary external-open flows?
 - Are full archive thumbnails acceptable at all, or does the app need a real resized thumbnail protocol to meet the release memory budget?

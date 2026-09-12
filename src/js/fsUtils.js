@@ -13,6 +13,7 @@ export const SUPPORTED_IMAGES = new Set([
 export const SUPPORTED_ARCHIVES = new Set(['zip', 'cbz', 'rar', 'cbr', '7z', 'cb7', 'cbt', 'tar']);
 
 export const SHELL_THUMBNAIL_EXTS = new Set(['jpg', 'jpeg', 'png', 'bmp', 'dib', 'gif', 'ico']);
+export const ARCHIVE_THUMBNAIL_WINDOW_HALF = 1;
 
 function _ext(name) {
   return name.split('.').pop().toLowerCase();
@@ -178,16 +179,33 @@ export const FsUtils = {
     return (item.ext || _ext(item.name || item.path || '')).toLowerCase();
   },
 
-  buildThumbnailSrc(item, state) {
+  shouldUseArchiveImageThumbnail(item, state, itemIndex = undefined) {
+    if (!item || !this.isImageEntry(item)) return false;
+    const isCompositeArchiveEntry = !!(item.path && item.path.includes('|'));
+    const isArchiveListEntry = state?.mode === 'archive' && (isCompositeArchiveEntry || !this._isAbsolutePath(item.path));
+    if (!isCompositeArchiveEntry && !isArchiveListEntry) return true;
+
+    if (!isArchiveListEntry || !Array.isArray(state.list) || !Number.isFinite(state.index)) return false;
+    const index = Number.isFinite(itemIndex) ? itemIndex : state.list.indexOf(item);
+    return index >= 0 && Math.abs(index - state.index) <= ARCHIVE_THUMBNAIL_WINDOW_HALF;
+  },
+
+  buildThumbnailSrc(item, state, itemIndex = undefined) {
     if (!item) return '';
     if (this.isImageEntry(item)) {
       if (item.path && item.path.includes('|')) {
         const sep = item.path.indexOf('|');
         const archivePath = item.path.slice(0, sep);
         const entryName = item.path.slice(sep + 1);
+        if (!this.shouldUseArchiveImageThumbnail(item, state, itemIndex)) {
+          return this.buildNativeIconSrc('', this.getIconExtKey(item), 'large');
+        }
         // Archive ico: serve full file via quivit://archive/ (shell cannot read inside archive)
         return this.buildArchiveSrc(archivePath, entryName);
       } else if (state?.mode === 'archive' && !this._isAbsolutePath(item.path)) {
+        if (!this.shouldUseArchiveImageThumbnail(item, state, itemIndex)) {
+          return this.buildNativeIconSrc('', this.getIconExtKey(item), 'large');
+        }
         // Archive ico: full file, disk ico falls through to shell path below
         return this.buildArchiveSrc(state.archivePath, item.name);
       } else if (item.path) {

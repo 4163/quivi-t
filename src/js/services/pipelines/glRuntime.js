@@ -181,7 +181,7 @@ export function createGlRuntime(canvas) {
       try {
         cleanImg = await getCleanImage(imgElement.src);
       } catch { return null; }
-      if (!_active || token !== _cancelToken) return null;
+      if (!_active || token !== _cancelToken || !cleanImg) return null;
       
       // Support both HTMLImageElement (naturalWidth) and ImageBitmap (width)
       const cleanW = cleanImg.naturalWidth || cleanImg.width;

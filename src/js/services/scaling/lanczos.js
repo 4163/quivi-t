@@ -1,4 +1,4 @@
-import { getCleanImage } from '../../shared/blobImage.js';
+import { getCleanImageCrop } from '../../shared/blobImage.js';
 import { invertViewport } from '../viewerMath.js';
 
 let _resampler = null;
@@ -12,13 +12,14 @@ const PICA_OPTIONS = {
   unsharpThreshold: 2
 };
 
-export function createLanczosPipeline(fallbackDestCanvas, fallbackSrcCanvas) {
+export function createLanczosPipeline(fallbackDestCanvas) {
   const _destCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : fallbackDestCanvas;
-  const _srcCanvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : fallbackSrcCanvas;
   let _activePromise = null;
+  let _generation = 0;
 
   function cancel() {
     _activePromise = null;
+    _generation += 1;
   }
 
   function dispose() {
@@ -30,6 +31,7 @@ export function createLanczosPipeline(fallbackDestCanvas, fallbackSrcCanvas) {
     render: async (sourceImg, geom) => {
       const { scale, tx, ty, rotation, flipX, flipY, viewport } = geom;
       cancel();
+      const generation = _generation;
 
       const nw = sourceImg.naturalWidth;
       const nh = sourceImg.naturalHeight;
@@ -72,7 +74,7 @@ export function createLanczosPipeline(fallbackDestCanvas, fallbackSrcCanvas) {
       // The destination canvas size based on the crop size and current scale
       const destW = Math.round(cropW * scale);
       const destH = Math.round(cropH * scale);
-      
+
       if (destW <= 0 || destH <= 0) return null;
 
       _destCanvas.width = destW;
@@ -80,29 +82,27 @@ export function createLanczosPipeline(fallbackDestCanvas, fallbackSrcCanvas) {
 
       let cleanImg;
       try {
-        cleanImg = await getCleanImage(sourceImg.src);
+        cleanImg = await getCleanImageCrop(sourceImg.src, minX, minY, cropW, cropH);
       } catch {
         return null;
       }
-
-      // Draw the crop from the clean image to a temporary source canvas
-      // Pica works best when resizing a full canvas to a full canvas
-      _srcCanvas.width = cropW;
-      _srcCanvas.height = cropH;
-      const sctx = _srcCanvas.getContext('2d');
-      sctx.drawImage(cleanImg, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+      if (!cleanImg) return null;
+      if (generation !== _generation) {
+        if (cleanImg.close) cleanImg.close();
+        return null;
+      }
 
       const resampler = getResampler();
-      const renderPromise = resampler.resize(_srcCanvas, _destCanvas, PICA_OPTIONS);
+      const renderPromise = resampler.resize(cleanImg, _destCanvas, PICA_OPTIONS);
       _activePromise = renderPromise;
 
       try {
         const resultCanvas = await renderPromise;
-        if (_activePromise !== renderPromise) return null;
-        
-        return { 
-          canvas: resultCanvas, 
-          width: destW, 
+        if (_activePromise !== renderPromise || generation !== _generation) return null;
+
+        return {
+          canvas: resultCanvas,
+          width: destW,
           height: destH,
           cssLeft: minX,
           cssTop: minY,
@@ -111,6 +111,8 @@ export function createLanczosPipeline(fallbackDestCanvas, fallbackSrcCanvas) {
         };
       } catch {
         return null;
+      } finally {
+        if (cleanImg.close) cleanImg.close();
       }
     },
     cancel,

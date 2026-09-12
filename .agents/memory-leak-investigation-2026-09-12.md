@@ -2,9 +2,9 @@
 
 Date: 2026-09-12
 
-Status: pending fixes and battle-test verification.
+Status: investigation completed (2026-09-13). The next archive/resource refactor is agreed but not implemented.
 
-Latest synthesis: the primary leak candidate is frontend-created Blob/object URL retention from full archive images. WebView2 `Default\blob_storage` held about 607 MB in one directory with 94 files, while the normal HTTP `Cache` directory was only about 9 MB. That makes `ensureArchiveBlob()` and missing blob revocation the first fix target.
+Latest synthesis: the first leak cause was frontend-created Blob/object URL retention from full archive images. WebView2 `Default\blob_storage` held about 607 MB in one directory with 94 files, while the normal HTTP `Cache` directory was only about 9 MB. Suspect 1 resolves stale blob retention by revoking blob URLs on eviction, deletion, and refresh clears, protecting the active viewer blob, and cancelling in-flight requests. A later limit test showed the next problem: even with blob storage controlled, WebView2 renderer/GPU memory can stay high from decoded full-page images. Suspects 2 and 3 mitigate thumbnail/viewer image retention. A later dev-run probe with thumbnail view off showed `blob_storage` stayed small, while renderer/GPU memory still climbed with Lanczos active; Suspect 4 is now mitigated in code by eliminating archive neighbor preloads, avoiding viewer-side archive blob warmup, shrinking the clean image cache, and cropping before Lanczos resize.
 
 ## Context
 
@@ -14,6 +14,21 @@ This report consolidates the main-agent live probes plus the two read-only subag
 
 - Frontend investigation: `01a0946f-9a89-7d70-8a94-217572410fed`
 - Backend investigation: `01a0946f-b042-77e2-ba9a-43694a3ff60e`
+
+## Agreed refactor target
+
+This section records the accepted follow-up design. It does not alter the historical evidence below. The detailed contract lives in `.agents/memory-leak-technical-facts-2026-09-12.md` under "Agreed refactor target, 2026-09-13".
+
+- Keep one active archive session across ZIP, CBZ, RAR, 7Z, and TAR. Remove the eight-session archive retention policy and the 128 MiB ZIP/CBZ entry-byte LRU.
+- Materialize the selected archive entry and one directionally adjacent entry into the active session's temporary directory. Do not decode every page when an archive opens.
+- Replace symmetric archive prefetch with one direction-aware item: `+1` while moving forward and `-1` while moving backward. Cancel stale queued work.
+- Mark full archive-page responses `no-store`; retain the existing long-lived policy only for small icons and true thumbnails.
+- Decode archive thumbnail rows only while visible, through a one-at-a-time queue. Do not retain full-page blobs after a row leaves the viewport. Remove hover preview.
+- Reduce the viewer bridge to two DOM image nodes. Preserve the current one-entry filter source cache and crop-first Lanczos behavior.
+- Keep animated-file quality unchanged. Make exit cleanup explicit for its frame loop, decoder, staging canvas, object URL, and GL source.
+- Bound or clear animation-result metadata on archive and folder changes. Keep shell thumbnails and native icons unchanged.
+
+The refactor does not update `.agents/architecture-state.md`. That document will be updated separately after implementation.
 
 ## Live evidence
 
@@ -32,18 +47,38 @@ Observed process memory while the already-running app was idle:
 
 Interpretation: the sustained 1 GB-class memory pressure is almost certainly dominated by frontend/WebView decoded images, GPU textures, and blob URLs. Rust still has real pressure points, especially temp extraction and protocol cloning, but it was not the largest live owner in this run. The disk evidence points much more strongly at Blob storage than ordinary protocol HTTP caching.
 
+Follow-up dev-run evidence after the blob and thumbnail mitigations:
+
+- Thumbnail view was off (`file_list_view_mode = list`) and Lanczos scaling was active.
+- Rust host stayed around the same size as previous probes, roughly 135 MB private.
+- WebView2 `Default\blob_storage` stayed small: 3 files, about 11.45 MB. Normal HTTP `Cache` stayed flat at about 9.40 MB.
+- The large owners were WebView2 renderer and GPU private memory, with renderer samples reaching roughly 700 MB to 1 GB private and GPU samples reaching roughly 660 MB to 870 MB private.
+
+Interpretation: the later 1 GB-class run was not the old thumbnail blob-storage issue. It points at decoded current-page image memory and the Lanczos processing path.
+
 ## Consolidated suspects
 
 ### 1. Archive thumbnail/viewer blob cache stores full archive pages
 
-Status: pending fix.
+Status: resolved (2026-09-13).
 
 Files:
 
+- `src/js/services/cache.js`
 - `src/js/filepanel/filePanel.js`
-- `src/js/viewer/viewerRender.js`
-- `src/js/fsUtils.js`
+- `src/js/shared/blobImage.js`
+- `src/js/services/scaling/lanczos.js`
+- `src/js/services/pipelines/glRuntime.js`
 - `src-tauri/src/protocol.rs`
+
+Resolution:
+
+- `BoundedMap` now takes an `onEvict(key, value)` callback called on `delete()`, `clear()`, capacity overflow, and key replacement.
+- `thumbnailCache` and `favoritesThumbnailCache` pass `_revokeBlobEntry` to revoke `blob:` URLs via `URL.revokeObjectURL()`.
+- Active viewer blob protection tracks `_activeViewerKey` and `_activeViewerBlob`, retaining the current image blob across rerenders and evictions until navigation changes `state.src`.
+- Generation counters and `AbortController` in `ensureArchiveBlob()` cancel in-flight fetches and ignore stale responses on refresh.
+- `blobImage.js` returns `null` on cancelled fetch, and null guards in `lanczos.js` and `glRuntime.js` prevent detached image draw calls.
+- Verified with unit tests (`boundedMap.test.mjs`, `fileListViewMode.test.mjs`) and Playwright tests (`playwright/tests/test-thumbnail-flow.spec.js`).
 
 Mechanism:
 
@@ -81,18 +116,27 @@ Likely fix direction:
 
 ### 2. Thumbnail cache retains full-resolution images
 
-Status: pending fix.
+Status: mitigated in code, pending battle-test verification.
 
 Files:
 
 - `src/js/filepanel/filePanel.js`
 - `src/js/fsUtils.js`
 
+Resolution:
+
+- Archive thumbnail view now loads full `/archive/` image URLs only for the active entry and its immediate previous/next image entries.
+- Archive thumbnail rows outside that moving three-item window use lightweight extension icons.
+- `ensureArchiveBlob()` refuses oversized blob entries and trims cached archive blobs by both count and compressed-byte budget.
+- Hover preload follows the same archive thumbnail window and no longer starts archive blob fetches on hover. It only reuses an already-cached nearby blob.
+- Thumbnail caches no longer store off-DOM `new Image()` retainers for ordinary image thumbnails or favorites.
+- The viewer still loads full archive images through the normal reader path. This fix targets the side-panel thumbnail cache, not image fidelity in the reader.
+
 Mechanism:
 
 - `thumbnailCache` is bounded by item count (`250`), not by bytes.
 - Disk WebP, AVIF, APNG, SVG, and archive thumbnail paths can use original image URLs instead of a resized thumbnail route.
-- `filePanel.js` can store retained `new Image()` objects in `thumbnailCache` for loaded thumbnails.
+- Before the 2026-09-13 mitigation, `filePanel.js` could store retained `new Image()` objects in `thumbnailCache` for loaded thumbnails.
 - A 250-item cache is small for icon URLs but huge for decoded full-resolution pages.
 - One nuance from the main pass: `thumbImg.onload` is overwritten in the non-image branch and not restored for later image reuse. That bug may make the decoded-image retainer inconsistent rather than universal, but when it does run, it retains exactly the wrong thing.
 
@@ -100,13 +144,13 @@ Why this matches the report:
 
 - User action included enabling/disabling thumbnail view.
 - Live memory sits in WebView2 renderer/GPU processes.
-- The code retains decoded browser image objects beyond visible rows.
+- The earlier code could retain decoded browser image objects beyond visible rows.
 
 Runtime confirmation:
 
-- Heap snapshot should show many `HTMLImageElement` objects retained by `thumbnailCache`.
-- Cache keys should include `asset://` or `/archive/` full image URLs, not only `/thumb/`.
-- Clearing `thumbnailCache`, blanking visible thumbnail `src`s, and forcing GC should reduce renderer/GPU memory if this is active.
+- Heap snapshot should no longer show many `HTMLImageElement` objects retained by `thumbnailCache`.
+- In archive thumbnail view, `/archive/` thumbnail URLs should appear only for the active item and its two neighbors. Other archive image rows should use icon URLs.
+- Moving through an archive should not steadily increase decoded thumbnail count beyond the active/neighbor window.
 
 Likely fix direction:
 
@@ -117,7 +161,7 @@ Likely fix direction:
 
 ### 3. Viewer image pool can retain too many decoded images
 
-Status: secondary, bounded-retention proof needed.
+Status: mitigated in code, pending battle-test verification.
 
 File:
 
@@ -126,15 +170,15 @@ File:
 Mechanism:
 
 - `_activeNodes` maps image source to pooled `<img>` nodes.
-- Recycle logic runs before adding newly desired nodes and only when `_activeNodes.size > POOL_SIZE`.
-- The map can briefly exceed the pool limit after adding current/neighbor entries, then gets trimmed on the next state change.
-- This is probably not unbounded, but 10 to 13 decoded full-resolution pages plus WebView backing stores can still be too much.
+- Earlier recycle logic ran before adding newly desired nodes and only when `_activeNodes.size > POOL_SIZE`.
+- The DOM image pool is now capped by `VIEWER_IMAGE_POOL_CAPACITY = 4`: active image, previous/next preloaded images, and one short-lived bridge image.
+- `_activeNodes` now recycles anything outside the desired set on every state change instead of waiting for the old count cap to overflow.
 
 Runtime confirmation:
 
 - DevTools heap should show `.viewer-img` elements retained by `_activeNodes`.
-- Source keys should include images that are no longer current, bridged, or neighbors.
-- Memory should stop climbing if stale active nodes are recycled to the desired set on each navigation.
+- Source keys should be limited to the current image, immediate neighbors, and at most the transition bridge.
+- Memory should stop climbing from stale viewer nodes if this path was active.
 
 Likely fix direction:
 
@@ -144,7 +188,7 @@ Likely fix direction:
 
 ### 4. WebGL/Lanczos clean image cache is count-bound, not byte-bound
 
-Status: pending proof.
+Status: mitigated in code, pending battle-test verification.
 
 Files:
 
@@ -155,22 +199,34 @@ Files:
 
 Mechanism:
 
-- `blobImage.js` keeps up to six `ImageBitmap`s plus blob URLs.
-- Eviction closes `ImageBitmap`s and revokes blob URLs, which is good.
-- Six large decoded pages can still cost hundreds of MB.
-- Pipeline clearing does not clear this module cache.
+- Before mitigation, `blobImage.js` kept up to six full-page `ImageBitmap`s plus blob URLs.
+- Eviction closed `ImageBitmap`s and revoked blob URLs, which was correct but still count-bound rather than byte-bound.
+- Six very large decoded pages could cost hundreds of MB even with perfect eviction.
+- `lanczos.js` drew from a full clean source bitmap into an intermediate crop canvas before resizing, so each render could temporarily hold a full clean image, crop canvas, destination canvas, native image decode, and browser/GPU resources.
+- Archive viewer rendering also preloaded previous/next archive images and tried to create archive blob warmups even when thumbnail view was off.
+
+Resolution:
+
+- Archive viewer rendering no longer neighbor-preloads archive images. Disk/folder viewer preloading still uses the existing previous/next behavior.
+- Viewer rendering no longer creates archive blob warmups for the active image; it only reuses an already-cached thumbnail blob if one exists.
+- `TEXTURE_CACHE_CAPACITY` is now 1.
+- The clean image cache no longer creates Blob/object URLs.
+- `getCleanImageCrop(src, sx, sy, sw, sh)` fetches the source and creates a caller-owned cropped `ImageBitmap` directly.
+- Lanczos resize now uses the visible crop bitmap directly and closes it after each resize completes.
+- Lanczos render cancellation now uses a generation guard so an older async crop cannot overwrite or return after a newer render starts.
 
 Runtime confirmation:
 
-- Memory growth should be much worse when filters or Lanczos are active.
-- Heap/native memory should show `ImageBitmap` retention.
-- A temporary debug clear of the texture cache should drop memory if this is a major owner.
+- With thumbnail view off and Lanczos active, memory should no longer grow with every page touched.
+- WebView2 `Default\blob_storage` should stay small during this run.
+- Renderer/GPU memory may still spike on extremely large pages, but should settle after navigation and idle instead of tracking cumulative page count.
+- Switching from Lanczos to Bilinear/Pixelated should lower peak renderer/GPU memory for the same page if the remaining pressure is the Lanczos processing path.
 
 Likely fix direction:
 
-- Make the texture cache byte-aware.
-- Expose a narrow clear/trim method and call it on source churn, mode changes, or memory-pressure-safe points.
-- Consider capacity 1-2 for very large images.
+- If the current mitigation is insufficient, make the Lanczos path tile-based or bypass Lanczos for images whose decoded crop exceeds a memory threshold.
+- Add explicit runtime memory instrumentation around the Lanczos render lifecycle.
+- Treat remaining high memory with `blob_storage` flat as current-frame decode/GPU pressure, not stale blob retention.
 
 ### 5. Protocol responses clone full ZIP entries
 
@@ -279,9 +335,9 @@ Likely fix direction:
 - Read only the requested header bytes from extracted temp files.
 - Avoid whole-file `fs::read` for header paths.
 
-### 9. Favorites thumbnail cache has the same decoded-image pattern
+### 9. Favorites thumbnail cache had the same decoded-image pattern
 
-Status: pending lower-priority fix.
+Status: mitigated in code, pending battle-test verification.
 
 File:
 
@@ -289,7 +345,7 @@ File:
 
 Mechanism:
 
-- `favoritesThumbnailCache` can retain `new Image()` objects.
+- Before the 2026-09-13 mitigation, `favoritesThumbnailCache` could retain `new Image()` objects.
 - `renderFavorites()` rebuilds DOM with `innerHTML = ''`, while the cache keeps decoded image retainers.
 - Usually smaller than the main thumbnail cache unless many favorites are large images or archive entries.
 
@@ -300,7 +356,7 @@ Runtime confirmation:
 
 Likely fix direction:
 
-- Apply the same thumbnail cache policy as the main file list.
+- Apply the same lightweight cache policy as the main file list.
 - Avoid decoded-image retainers.
 
 ### 10. Small unbounded metadata caches
@@ -325,7 +381,7 @@ Likely fix direction:
 
 - Add simple size bounds if touching nearby code.
 
-## Fix priority
+## Baseline fix priority
 
 1. Fix `ensureArchiveBlob()` ownership and revocation. This is the strongest match to live evidence.
 2. Stop retaining decoded `Image` objects in thumbnail caches.
@@ -346,8 +402,44 @@ After fixes land, test with normal use rather than a tiny synthetic run:
 - Leave the app idle for 10-30 minutes after browsing.
 - Confirm WebView2 renderer/GPU/browser private memory settles instead of climbing.
 - Confirm `%TEMP%\QuiviT` does not grow without cleanup across app restarts.
-- Confirm thumbnail view still feels instant when scrolling back through recently visible rows.
 
-## Pending verification result
+For the agreed refactor, also confirm:
 
-Unverified. This report records likely causes and live evidence before fixes. Update this section after the next memory-leak slice and after battle testing.
+- Only one archive session and one materialization directory exist while browsing across archive formats.
+- ZIP/CBZ entry bytes do not remain in a Rust byte LRU after a protocol response completes.
+- Navigation produces only the selected entry plus one directionally adjacent materialization request.
+- Archive thumbnail scrolling starts one decode at a time and cancels rows that leave the viewport before decoding.
+- Archive-page responses do not accumulate in the WebView HTTP cache, while icons and true thumbnails still load from their intended cache path.
+- Rapid reader navigation preserves the two-node transition without blank frames or a visible bridge glitch.
+- Leaving an animated SVG, GIF, WebP, or similar file releases its active staging and decoding resources without changing its displayed quality.
+
+## Verification results
+
+### Suspect 1 (2026-09-13)
+- Status: resolved and verified.
+- Unit tests: 74/74 passing (`npm test`), including `BoundedMap` onEvict callback and `thumbnailCache` blob revocation lifecycle tests.
+- Static checks: `cargo check --tests` clean (0 warnings, 0 errors).
+- Local browser tests: 6/6 passing in Chromium (`playwright/tests/test-thumbnail-flow.spec.js`), confirming rapid navigation cancellation in Lanczos, active viewer blob preservation through normal rerenders, and in-flight fetch cancellation on refresh.
+- Runtime probe: fresh launch baseline recorded clean `Default\blob_storage` (0 files, 0 MB). In-flight cancellation and generation tracking successfully prevent stale blob URLs from refilling the cache on visual refresh.
+
+### Suspect 2 (2026-09-13)
+- Status: mitigated in code, not yet runtime-verified.
+- Code checks: `node --check` clean for `src/js/fsUtils.js`, `src/js/filepanel/filePanel.js`, `src/js/viewer/viewerRender.js`, and `src/js/tests/fileListViewMode.test.mjs`.
+- Unit tests: 77/77 passing (`npm test`), including active/neighbor archive thumbnail URLs, non-neighbor icon fallback, and archive blob cache budget tests.
+- Local browser tests: 9/9 passing in Chromium, Firefox, and WebKit (`playwright/tests/test-thumbnail-flow.spec.js`).
+- Runtime note: a limit test with very large archives previously settled near 1 GB because 67 full-page archive images still fit inside the old 250-item thumbnail cache. The latest mitigation keeps archive thumbnail image URLs to the active image plus its two neighbors and removes hover-created archive blob fetches.
+
+### Suspect 3 (2026-09-13)
+- Status: mitigated in code, not yet runtime-verified.
+- Code checks: `node --check` clean for `src/js/viewer/viewerRender.js`.
+- Unit/browser coverage: covered indirectly by the full JS test run and local Playwright thumbnail-flow harness.
+- Runtime note: viewer DOM image retention is now limited to the current source, immediate neighbors, and at most one bridge image. A manual stress run still needs to confirm whether WebView2 renderer/GPU memory now settles.
+
+### Suspect 4 (2026-09-13)
+- Status: mitigated in code, not yet runtime-verified.
+- Probe result: with thumbnail view off, `blob_storage` stayed near 11.45 MB and HTTP `Cache` stayed near 9.40 MB, while WebView2 renderer/GPU memory remained the main high-water owner under Lanczos.
+- Code checks: `node --check` clean for `src/js/shared/blobImage.js`, `src/js/services/scaling/lanczos.js`, `src/js/viewer/viewerRender.js`, and `src/js/tests/blobImage.test.mjs`.
+- Unit tests: 79/79 passing (`npm test`), including clean image cache capacity/eviction and crop-bitmap behavior.
+- Local browser tests: 9/9 passing in Chromium, Firefox, and WebKit (`playwright/tests/test-thumbnail-flow.spec.js`).
+- Runtime note: the code now avoids archive viewer neighbor preloads, avoids viewer-created archive blob warmups, keeps only one cached clean full image, and closes per-render cropped bitmaps after Lanczos resize.
+- Cancellation note: the Lanczos path also guards async crop/resize completion by generation so stale renders do not win after rapid navigation.
