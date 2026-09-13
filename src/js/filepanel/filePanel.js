@@ -241,8 +241,6 @@ const MIN_REFRESH_DURATION_MS = 200;
 let refreshPulseTimer = null;
 let refreshStartTime = 0;
 let thumbRefreshTimestamp = 0;
-let hoverPreloadImg = null;
-let hoverPreloadTimer = null;
 
 let columnsInitialized = false;
 
@@ -859,58 +857,6 @@ function wireRowListeners(li) {
       lastClickIndex = index;
     }
   });
-
-  li.addEventListener('mouseenter', () => {
-    clearTimeout(hoverPreloadTimer);
-    if (hoverPreloadImg) {
-      hoverPreloadImg.removeAttribute('src');
-      hoverPreloadImg = null;
-    }
-
-    const idxStr = li.dataset.index;
-    if (!idxStr) return;
-    const index = parseInt(idxStr, 10);
-    const state = Core.getState();
-    const item = state.list?.[index];
-
-    if (item && !item.is_dir && !item.is_parent && FsUtils.isImageEntry(item)) {
-      if (state.mode === 'archive' && !FsUtils.shouldUseArchiveImageThumbnail(item, state, index)) return;
-      hoverPreloadTimer = setTimeout(() => {
-        let src;
-        if (state.mode === 'archive') {
-          // Archive ico now full file (quivit://archive/...), allow hover preload (shell cannot thumb inside archive)
-          src = FsUtils.buildArchiveSrc(state.archivePath, item.name);
-        } else {
-          src = FsUtils.isIco(item.path) ? null : FsUtils.buildFileSrcSync(item.path);
-        }
-        if (!src || Core.getState().index === index) return;
-        // Archive hover reuses a nearby thumbnail blob only when it already exists.
-        const cached = thumbnailCache.get(src);
-        if (typeof cached === 'string' && cached.startsWith('blob:')) {
-          hoverPreloadImg = new Image();
-          hoverPreloadImg.decoding = 'async';
-          hoverPreloadImg.src = cached;
-          if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
-          return;
-        }
-        if (src.includes('/archive/')) {
-          return;
-        }
-        hoverPreloadImg = new Image();
-        hoverPreloadImg.decoding = 'async';
-        hoverPreloadImg.src = src;
-        if (hoverPreloadImg.decode) hoverPreloadImg.decode().catch(() => {});
-      }, 150);
-    }
-  });
-
-  li.addEventListener('mouseleave', () => {
-    clearTimeout(hoverPreloadTimer);
-    if (hoverPreloadImg) {
-      hoverPreloadImg.removeAttribute('src');
-      hoverPreloadImg = null;
-    }
-  });
 }
 
 function createPoolRow() {
@@ -961,7 +907,7 @@ function createPoolRow() {
         if (isSvgSrc(src)) {
           thumbnailCache.set(src, true);
         } else if (src.includes('/archive/')) {
-          // Archive only: 1:1 thumb == viewer/hover URL. Dedupe via shared promise, viewer prioritized.
+          // Archive only: 1:1 thumb == viewer URL. Dedupe via shared promise, viewer prioritized.
           ensureArchiveBlob(src);
         } else {
           thumbnailCache.set(src, true);
@@ -1138,7 +1084,7 @@ function updateEntry(li, item, index) {
             if (isSvgSrc(targetSrc) && item.path) {
               markIfAnimatedSvg(targetSrc, item.path);
             }
-            // Archive only: also warm blob cache for viewer/hover reuse (deduplicated, low overhead)
+            // Archive only: also warm blob cache for viewer reuse (deduplicated, low overhead)
             if (targetSrc.includes('/archive/')) ensureArchiveBlob(targetSrc);
           } else {
             slots.thumbImg.classList.remove('is-loaded');

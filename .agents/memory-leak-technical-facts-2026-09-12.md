@@ -53,7 +53,7 @@ This is the accepted design for the next refactor. It is not a description of th
 - Archive thumbnail rows are eligible for decoding only while they are visible. A single decode queue prioritizes the selected row, then the nearest visible rows in the active scroll direction.
 - The queue starts one decode at a time. Rows that leave the viewport before their turn lose their queued work. Recycled rows release their source and any temporary URL.
 - Archive thumbnails do not retain a full-page blob cache after their row leaves the viewport. The queue is a display-lifetime policy, not an offscreen image cache.
-- Hover preview is removed. It must not start or retain speculative image decode work.
+- Hover preview is removed (completed 2026-09-13). It must not start or retain speculative image decode work.
 
 ### Viewer, filters, and animation
 

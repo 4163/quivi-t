@@ -8,6 +8,15 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Hover Preview Elimination (2026-09-13)
+- **Archive Resource Refactor (First Slice):**
+  - Removed the hover preload mechanism from `src/js/filepanel/filePanel.js`.
+  - Deleted `hoverPreloadImg` and `hoverPreloadTimer` module state variables.
+  - Dropped `mouseenter` and `mouseleave` event listeners that triggered speculative async image fetches on file row hover.
+  - Removed obsolete hover references from inline code documentation.
+  - This is a pure deletion of speculative decode work that removes unintended background memory pressure without breaking active viewing or existing cache warmup paths.
+  - Verified via `npm test` and `node --check`.
+
 ### Lanczos Viewer Memory Guard (2026-09-13)
 - **Thumbnail-Off Probe Result:**
   - Live probing showed a separate memory path after the thumbnail/blob mitigations: thumbnail view was off, `blob_storage` stayed small, HTTP cache stayed flat, and WebView2 renderer/GPU memory still climbed while Lanczos was active.

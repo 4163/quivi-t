@@ -23,7 +23,7 @@ This section records the accepted follow-up design. It does not alter the histor
 - Materialize the selected archive entry and one directionally adjacent entry into the active session's temporary directory. Do not decode every page when an archive opens.
 - Replace symmetric archive prefetch with one direction-aware item: `+1` while moving forward and `-1` while moving backward. Cancel stale queued work.
 - Mark full archive-page responses `no-store`; retain the existing long-lived policy only for small icons and true thumbnails.
-- Decode archive thumbnail rows only while visible, through a one-at-a-time queue. Do not retain full-page blobs after a row leaves the viewport. Remove hover preview.
+- Decode archive thumbnail rows only while visible, through a one-at-a-time queue. Do not retain full-page blobs after a row leaves the viewport. Remove hover preview (completed 2026-09-13).
 - Reduce the viewer bridge to two DOM image nodes. Preserve the current one-entry filter source cache and crop-first Lanczos behavior.
 - Keep animated-file quality unchanged. Make exit cleanup explicit for its frame loop, decoder, staging canvas, object URL, and GL source.
 - Bound or clear animation-result metadata on archive and folder changes. Keep shell thumbnails and native icons unchanged.
