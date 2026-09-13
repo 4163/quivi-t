@@ -4,7 +4,7 @@ import { thumbnailCache } from '../filepanel/filePanel.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 const PRELOAD_HALF = 1;
-const VIEWER_IMAGE_POOL_CAPACITY = 4;
+const VIEWER_IMAGE_POOL_CAPACITY = 2;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
 const LOADING_LABEL = 'Loading...';
 
@@ -324,7 +324,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     if (_isVisibleImage(img) && img.dataset.poolSrc) desiredSrcs.add(img.dataset.poolSrc);
 
     const neighborSrcs = state.mode === 'archive' ? [] : FsUtils.neighborEntries(state, state.index, PRELOAD_HALF);
-    for (const nSrc of neighborSrcs) desiredSrcs.add(nSrc);
+    // for (const nSrc of neighborSrcs) desiredSrcs.add(nSrc); // Removed to avoid retaining adjacent sources in DOM pool
 
     _trimActiveNodes(desiredSrcs);
 

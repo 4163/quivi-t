@@ -8,6 +8,14 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Viewer Two-Node DOM Pool Reduction (2026-09-13)
+- **Archive Resource Refactor (Third Slice):**
+  - Reduced `VIEWER_IMAGE_POOL_CAPACITY` from 4 to 2 in `src/js/viewer/viewerRender.js`.
+  - Stopped adding `neighborSrcs` to the `desiredSrcs` DOM pool set, ensuring adjacent sources are not retained as active `<img>` nodes.
+  - The DOM pool now cleanly contains only the incoming active image and the outgoing bridge image during transitions.
+  - Directory neighbor preloading (which uses transient off-DOM `Image()` instances) was preserved to keep the browser HTTP cache warm.
+  - Verified via `npm test` and static checks.
+
 ### Protocol no-store Cache-Control (2026-09-13)
 - **Archive Resource Refactor (Second Slice):**
   - Changed `entry_response()` in `src-tauri/src/protocol.rs` to emit `Cache-Control: no-store` instead of `public, max-age=86400` on both 200 full-body and 206 byte-range paths.

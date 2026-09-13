@@ -57,7 +57,7 @@ This is the accepted design for the next refactor. It is not a description of th
 
 ### Viewer, filters, and animation
 
-- The viewer pool has two DOM image nodes: the outgoing image and the incoming image during a bridge transition. It does not retain adjacent sources in that pool.
+- The viewer pool has two DOM image nodes: the outgoing image and the incoming image during a bridge transition. It does not retain adjacent sources in that pool (completed 2026-09-13).
 - The one-entry clean `ImageBitmap` cache, WebGL resource lifetime, and crop-first Lanczos path remain unchanged.
 - Animation rendering keeps its existing visual resolution. On exit it stops the frame loop, closes the active frame and decoder, clears the staging canvas, revokes the temporary URL, and releases the related GL source. This changes cleanup only, not image quality.
 - Animation-result metadata remains small, but its memo is bounded or cleared on archive and folder changes.
