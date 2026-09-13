@@ -214,10 +214,10 @@ let scrollDebounceTimer = null;
 const THUMB_SCROLL_DEBOUNCE_MS = 100;
 const TRANSPARENT_PIXEL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+';
 
-// Archive viewport-bound thumbnail queue
-const ARCHIVE_VIEWPORT_MARGIN = 1;
-let archiveViewportStart = 0;
-let archiveViewportEnd = 0;
+// Viewport-bound thumbnail queue for heavy decodes (archive + 1:1 file assets)
+const VIEWPORT_MARGIN = 1;
+let imageViewportStart = 0;
+let imageViewportEnd = 0;
 let lastScrollTop = 0;
 let scrollDirection = 1;
 const PLACEHOLDER_HTML = '<svg class="placeholder-icon icon-image" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><svg class="placeholder-icon icon-folder" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg><svg class="placeholder-icon icon-archive" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></svg><svg class="placeholder-icon icon-file" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
@@ -1017,8 +1017,8 @@ function updateEntry(li, item, index) {
       const ext = FsUtils.getIconExtKey(item);
       const isImage = FsUtils.isImageEntry(item);
       let targetSrc = FsUtils.buildThumbnailSrc(item, state);
-      const isArchiveThumb = isImage && targetSrc.includes('/archive/');
-      const outsideArchiveViewport = isArchiveThumb && (index < archiveViewportStart || index >= archiveViewportEnd);
+      const isConstrained = isImage && FsUtils.isConstrainedThumbnailSrc(targetSrc);
+      const outsideViewport = isConstrained && (index < imageViewportStart || index >= imageViewportEnd);
       if (thumbRefreshTimestamp && isImage && targetSrc) {
         targetSrc = targetSrc.includes('?') ? `${targetSrc}&_t=${thumbRefreshTimestamp}` : `${targetSrc}?_t=${thumbRefreshTimestamp}`;
       }
@@ -1074,8 +1074,8 @@ function updateEntry(li, item, index) {
           slots.thumbImg.src = finalSrc;
         }
         slots.thumbImg.classList.add('is-loaded');
-      } else if (outsideArchiveViewport && index !== Core.getState().index) {
-        // Archive thumbnail outside visible viewport + safety margin: defer for commit
+      } else if (outsideViewport && index !== Core.getState().index) {
+        // Heavy thumbnail outside visible viewport + safety margin: defer for commit
         slots.thumbImg.dataset.pendingSrc = targetSrc;
         if (slots.thumbImg.getAttribute('src') !== TRANSPARENT_PIXEL) {
           slots.thumbImg.classList.remove('is-loaded');
@@ -1186,14 +1186,14 @@ function renderVisibleSlice() {
   const startIndex = Math.max(0, rawStart - OVERSCAN);
   const endIndex = Math.min(total, rawStart + visibleCount + OVERSCAN);
 
-  // Archive viewport bounds: visible rows + 1-item safety margin for smooth scroll
-  const isArchiveMode = state.mode === 'archive' && state.fileListViewMode === 'thumbnail';
-  if (isArchiveMode) {
-    archiveViewportStart = Math.max(0, rawStart - ARCHIVE_VIEWPORT_MARGIN);
-    archiveViewportEnd = Math.min(total, rawStart + visibleCount + ARCHIVE_VIEWPORT_MARGIN);
+  // Heavy-thumbnail viewport bounds: visible rows + 1-item safety margin for smooth scroll
+  const isThumbnailView = state.fileListViewMode === 'thumbnail';
+  if (isThumbnailView) {
+    imageViewportStart = Math.max(0, rawStart - VIEWPORT_MARGIN);
+    imageViewportEnd = Math.min(total, rawStart + visibleCount + VIEWPORT_MARGIN);
   } else {
-    archiveViewportStart = startIndex;
-    archiveViewportEnd = endIndex;
+    imageViewportStart = startIndex;
+    imageViewportEnd = endIndex;
   }
 
   // Phase 1: Reclaim offscreen rows into freePool (VS Code RowCache pattern)
@@ -1215,14 +1215,14 @@ function renderVisibleSlice() {
     }
   }
 
-  // Phase 1b: Clear archive thumbnails on rows still in the DOM pool but outside viewport margin
-  if (isArchiveMode) {
+  // Phase 1b: Clear heavy thumbnails on rows still in the DOM pool but outside viewport margin
+  if (isThumbnailView) {
     for (const [idx, li] of activeRows) {
-      if (idx < archiveViewportStart || idx >= archiveViewportEnd) {
+      if (idx < imageViewportStart || idx >= imageViewportEnd) {
         const img = li._slots?.thumbImg;
         if (img) {
           const src = img.getAttribute('src') || '';
-          if (src && src !== TRANSPARENT_PIXEL && src.includes('/archive/')) {
+          if (src && src !== TRANSPARENT_PIXEL && FsUtils.isConstrainedThumbnailSrc(src)) {
             img.dataset.pendingSrc = src;
             img.classList.remove('is-loaded');
             img.src = TRANSPARENT_PIXEL;
@@ -1252,15 +1252,16 @@ function onScrollSettle() {
 
 function commitPendingThumbnails() {
   const activeIdx = Core.getState().index;
-  const isArchiveMode = Core.getState().mode === 'archive';
+  const isThumbnailView = Core.getState().fileListViewMode === 'thumbnail';
 
-  // Filter to rows within archive viewport, sort by: active first, then scroll direction
+  // Filter to rows within viewport (constrained URLs only), sort by: active first, then scroll direction
   const ordered = Array.from(activeRows.values()).filter(li => {
     const img = li._slots?.thumbImg;
     if (!img || !img.dataset.pendingSrc) return false;
-    if (!isArchiveMode) return true;
+    if (!isThumbnailView) return true;
+    if (!FsUtils.isConstrainedThumbnailSrc(img.dataset.pendingSrc)) return true;
     const idx = parseInt(li.dataset.index, 10);
-    return idx >= archiveViewportStart && idx < archiveViewportEnd;
+    return idx >= imageViewportStart && idx < imageViewportEnd;
   }).sort((a, b) => {
     const ai = parseInt(a.dataset.index, 10);
     const bi = parseInt(b.dataset.index, 10);

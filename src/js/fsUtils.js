@@ -178,11 +178,12 @@ export const FsUtils = {
     return (item.ext || _ext(item.name || item.path || '')).toLowerCase();
   },
 
-  shouldUseArchiveImageThumbnail(item, state) {
-    if (!item || !this.isImageEntry(item)) return false;
-    const isCompositeArchiveEntry = !!(item.path && item.path.includes('|'));
-    const isArchiveListEntry = state?.mode === 'archive' && (isCompositeArchiveEntry || !this._isAbsolutePath(item.path));
-    return !isCompositeArchiveEntry && !isArchiveListEntry ? true : isArchiveListEntry;
+  // Heavy thumbnail URLs that need viewport-bound queuing: archive protocol
+  // and raw 1:1 file assets. Shell /thumb/ (96px) and /icon/ are lightweight.
+  isConstrainedThumbnailSrc(src) {
+    if (!src) return false;
+    if (src.includes('/archive/')) return true;
+    return src.includes('asset.localhost') || src.includes('asset://');
   },
 
   buildThumbnailSrc(item, state) {

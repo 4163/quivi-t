@@ -20,6 +20,7 @@ Implementation tracker for archive lifecycle management, memory safety, and file
 | **10** | **Frontend Viewport Archive Thumbnail Queue** | Directional `+1`/`-1` queue, off-viewport clear | `filePanel.js`, `fsUtils.js` | `[DONE]` |
 | **11** | **Temp-Origin Resolver Probing** | Slice 5 `d131378` candidate ranking preserved | `temp_archive.rs` | `[OUT OF SCOPE]` |
 | **12** | **Protocol Zero-Copy Streaming** | Negligible gain (<1ms copy vs 50ms decode; IPC copies anyway) | `protocol.rs` | `[CLOSED / NOT NEEDED]` |
+| **13** | **Non-Archive 1:1 Thumbnail Viewport Queue** | Directional `+1`/`-1` queue for 1:1 non-shell images (WebP, AVIF, SVG, fallbacks) | `filePanel.js`, `fsUtils.js` | `[DONE]` |
 
 ---
 
@@ -79,20 +80,29 @@ These changes are landed in commits `f551d84` through `f1335c3`, plus viewer sta
 - Added `drop_all_archives_cache` IPC command in `commands/archives.rs`.
 - Added test `temp_lock_lifecycle_cleans_on_exit` in `archive_tests.rs` verifying lock exclusivity and exit deletion.
 
+### [x] Frontend Viewport-Bound Archive Thumbnail Queue (Task 2, Suspect 2)
+- **Files:** `src/js/filepanel/filePanel.js`, `src/js/fsUtils.js`, `src/js/tests/fileListViewMode.test.mjs`
+- Removed static 3-item window (`ARCHIVE_THUMBNAIL_WINDOW_HALF = 1`); `buildThumbnailSrc` returns canonical archive URLs for all archive image entries.
+- Confined archive thumbnail loading to visible rows plus 1-item safety margin (`ARCHIVE_VIEWPORT_MARGIN = 1`) in `filePanel.js`.
+- Implemented directional one-by-one queue in `commitPendingThumbnails` loading in scroll direction (`+1`/`-1`), prioritizing active index first.
+- Added Phase 1b off-viewport cleanup resetting out-of-bounds archive row `img.src` to `TRANSPARENT_PIXEL` to abort in-flight fetches while preserving `pendingSrc`.
+- Preserved `pendingSrc` across scroll settle and hooked `commitPendingThumbnails` to window resize events to eliminate gaps on window maximize or title-bar double-clicks.
+- Removed redundant active-row re-evaluations from `updateSelection`.
+
 ---
 
-## 2. Completed
+## 2. All Tasks Complete
 
-### [x] Task 2: Frontend Viewport-Bound Archive Thumbnail Queue (Suspect 2)
-- **Target files:**
-  - `src/js/filepanel/filePanel.js`
-  - `src/js/fsUtils.js`
-- **Work items:**
-  - [x] **Replace Static 3-Item Window:** Removed `ARCHIVE_THUMBNAIL_WINDOW_HALF = 1`. `buildThumbnailSrc` now returns archive URLs for all archive image entries. Viewport gating moved to `filePanel.js`.
-  - [x] **Viewport-Bound Queue:** `ARCHIVE_VIEWPORT_MARGIN = 1` confines archive thumbnail loading to visible rows ± 1-item safety margin. DOM pool still uses `OVERSCAN = 10` for layout.
-  - [x] **Directional One-by-One Loading (`+1` / `-1`):** `commitPendingThumbnails` filters to viewport bounds and sorts by scroll direction (`scrollDirection`), active index first.
-  - [x] **Off-Viewport Immediate Cleanup:** Phase 1b in `renderVisibleSlice` clears archive thumbnail `src` to `TRANSPARENT_PIXEL` on rows outside viewport margin. Browser auto-aborts in-flight `quivit://` fetches.
-  - [x] **Fast-Scroll Cancellation:** Resetting `img.src` during scroll aborts the browser's in-flight request. `updateEntry` gates archive thumbnails outside viewport bounds to placeholder.
+All implementation items are landed, out of scope, or closed. No pending work remains.
+
+### [x] Non-Archive 1:1 Thumbnail Viewport Queue (Task 3, Item 13)
+- **Files:** `src/js/filepanel/filePanel.js`, `src/js/fsUtils.js`
+- Added `FsUtils.isConstrainedThumbnailSrc(src)` to classify heavy-decode URLs (archive protocol and raw 1:1 file assets) versus lightweight shell thumbnails (`/thumb/`) and icons (`/icon/`).
+- Broadened viewport-bound queue from archive-only to all constrained thumbnails: renamed `ARCHIVE_VIEWPORT_MARGIN` → `VIEWPORT_MARGIN`, `archiveViewportStart/End` → `imageViewportStart/End`.
+- `updateEntry` now defers any constrained thumbnail outside the viewport margin, not just archive URLs.
+- Phase 1b cleanup resets any out-of-bounds constrained `src` to `TRANSPARENT_PIXEL`, preserving `pendingSrc` for re-entry.
+- `commitPendingThumbnails` gates on thumbnail view mode (not archive mode), applying viewport bounds only to constrained URLs while allowing shell thumbnails through unconditionally.
+- Removed dead `shouldUseArchiveImageThumbnail` helper.
 
 ---
 
@@ -114,10 +124,10 @@ These changes are landed in commits `f551d84` through `f1335c3`, plus viewer sta
 
 ## 4. Verification & Battle-Test Checklist
 
-Once Task 1 and Task 2 land, run the full verification plan:
+All tasks landed. Run the verification plan:
 
 ### Automated Tests
-- [x] `npm test`: Verify all JS unit tests pass (79/79 passed).
+- [x] `npm test`: Verify all JS unit tests pass (78/78 passed).
 - [x] `cargo check --tests`: Clean build with zero warnings or errors.
 - [x] `cargo test archive_tests`: All archive cache, streaming header, and extraction tests pass.
 
@@ -129,4 +139,5 @@ Once Task 1 and Task 2 land, run the full verification plan:
 - [x] **Archive Thumbnail Viewport Streaming:** In thumbnail view, scroll through an archive file list; verify visible rows load sequentially (`+1` / `-1`), off-screen thumbnails are cleared (with 1-item safety buffer), and memory remains strictly capped.
 - [x] **Viewer Stability:** Rapidly flip through images with arrow keys and WebGL filters (Anime4K/Lanczos) enabled; verify zero canvas flicker, no black/white flashes, and smooth bridge transitions.
 - [x] **Idle Memory Settling:** Leave the app idle for 10–15 minutes after heavy browsing; verify WebView2 renderer/GPU memory settles stably rather than climbing.
+- [x] **Non-Archive 1:1 Thumbnail Viewport Streaming:** In thumbnail view, scroll through a folder containing WebP/AVIF/SVG files; verify visible rows load sequentially (`+1` / `-1`), off-screen thumbnails are cleared to transparent, and shell thumbnails (JPG/PNG) load concurrently without delay.
 

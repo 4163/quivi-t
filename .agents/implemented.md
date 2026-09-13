@@ -8,6 +8,17 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Non-Archive 1:1 Thumbnail Viewport Queue (2026-09-14)
+- **Archive Resource Refactor (Seventh Slice / Task 3, Item 13):**
+  - Generalized the file panel viewport queue to cover non-archive disk images decoded at 1:1 via Tauri asset URLs (WebP, AVIF, SVG, APNG, and shell thumbnail fallbacks).
+  - Added `FsUtils.isConstrainedThumbnailSrc(src)` in `src/js/fsUtils.js` to identify heavy-decode URLs (`/archive/` protocol and `asset.localhost`/`asset://` full-resolution file URLs) versus lightweight shell thumbnails (`/thumb/`, 96px) and icons (`/icon/`).
+  - Removed unused `shouldUseArchiveImageThumbnail` helper.
+  - Generalized viewport boundary tracking in `src/js/filepanel/filePanel.js`: renamed `ARCHIVE_VIEWPORT_MARGIN` to `VIEWPORT_MARGIN` (1-item safety buffer), and `archiveViewportStart/End` to `imageViewportStart/End`.
+  - Updated `updateEntry` to defer any uncached constrained thumbnail outside the visible viewport margin into `dataset.pendingSrc`, setting `img.src` to `TRANSPARENT_PIXEL` to prevent eager whole-directory fetches on folder entry.
+  - Broadened Phase 1b cleanup in `renderVisibleSlice` to reset any out-of-viewport constrained image to `TRANSPARENT_PIXEL` while retaining `dataset.pendingSrc` for re-entry.
+  - Updated `commitPendingThumbnails` to gate on `isThumbnailView` instead of archive mode, enforcing viewport constraints strictly on heavy URLs while allowing shell thumbnails (`/thumb/`) to resolve concurrently without delay.
+  - Verified via `npm test` (78/78 passed), `cargo check --tests`, and runtime manual testing in WebP/AVIF/SVG directories with sequential directional loading, placeholder cleanup outside viewport bounds, and stable memory.
+
 ### Frontend Viewport-Bound Archive Thumbnail Queue (2026-09-14)
 - **Archive Resource Refactor (Sixth Slice):**
   - Removed `ARCHIVE_THUMBNAIL_WINDOW_HALF` and the static three-item window from `src/js/fsUtils.js`. `buildThumbnailSrc` now returns archive URLs for archive image entries, delegating viewport gating to `src/js/filepanel/filePanel.js`.
