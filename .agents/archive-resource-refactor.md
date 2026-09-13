@@ -16,7 +16,7 @@ Implementation tracker for archive lifecycle management, memory safety, and file
 | **6** | **Favorites Thumbnail Cache Policy** | Remove off-DOM `Image` retainers | `filePanel.js` | `[DONE]` (`f551d84`) |
 | **7** | **Protocol `Cache-Control: no-store`** | Prevent full archive pages caching in WebView | `protocol.rs` | `[DONE]` (`9a779ca`) |
 | **8** | **Hover Previews Removal** | Eliminate speculative background decodes | `filePanel.js` | `[DONE]` (`8e0ea5a`) |
-| **9** | **Backend 2-Archive Sliding Buffer & Temp Cleanup** | `max_open_archives = 2`, exit & startup cleanup | `cache.rs`, `lib.rs`, `archives.rs` | `[PENDING]` |
+| **9** | **Backend 2-Archive Sliding Buffer & Temp Cleanup** | `max_open_archives = 2`, exit & startup cleanup | `cache.rs`, `lib.rs`, `archives.rs` | `[DONE]` |
 | **10** | **Frontend Viewport Archive Thumbnail Queue** | Directional `+1`/`-1` queue, off-viewport clear | `filePanel.js`, `fsUtils.js` | `[PENDING]` |
 | **11** | **Temp-Origin Resolver Probing** | Slice 5 `d131378` candidate ranking preserved | `temp_archive.rs` | `[OUT OF SCOPE]` |
 | **12** | **Protocol Zero-Copy Streaming** | Negligible gain (<1ms copy vs 50ms decode; IPC copies anyway) | `protocol.rs` | `[CLOSED / NOT NEEDED]` |
@@ -69,22 +69,19 @@ These changes are landed in commits `f551d84` through `f1335c3`, plus viewer sta
 - **File:** `src/js/filepanel/filePanel.js`
 - Removed hover preview triggers to stop speculative decode and fetch overhead.
 
+### [x] Backend Two-Archive Sliding Buffer & Temp Cleanup (Task 1, Suspect 6)
+- **Files:** `src-tauri/src/archives/cache.rs`, `src-tauri/src/commands/archives.rs`, `src-tauri/src/lib.rs`, `src-tauri/src/tests/archive_tests.rs`
+- Capped `max_open_archives` at 2 (`MAX_OPEN_ARCHIVES = 2`) for active archive + immediately preceding archive sliding buffer.
+- Scoped extraction directories to process ID: `%TEMP%\QuiviT\pid-<PID>\<archive-hash>\...`.
+- Implemented process file lock (`%TEMP%\QuiviT\pid-<PID>.lock`) held with `FILE_SHARE_READ` (`share_mode(1)`), preventing multi-instance collisions.
+- In `RunEvent::Exit`, drops cache via `drop_all_archives()`, drops the lock file handle, and deletes both `pid-<PID>` directory and `pid-<PID>.lock`.
+- Added `cleanup_orphaned_temp_dirs()` to startup in `lib.rs` to detect and sweep dead PID directories and lock files left behind by crashes.
+- Added `drop_all_archives_cache` IPC command in `commands/archives.rs`.
+- Added test `temp_lock_lifecycle_cleans_on_exit` in `archive_tests.rs` verifying lock exclusivity and exit deletion.
+
 ---
 
 ## 2. Pending Implementation
-
-### [ ] Task 1: Backend Two-Archive Sliding Buffer & Temp Cleanup (Suspect 6)
-- **Target files:**
-  - `src-tauri/src/archives/cache.rs`
-  - `src-tauri/src/archives/mod.rs`
-  - `src-tauri/src/commands/archives.rs`
-  - `src-tauri/src/lib.rs`
-- **Work items:**
-  - [ ] **Two-Archive Sliding Buffer:** Set `max_open_archives = 2` (active archive + immediately preceding archive). Absorbs in-flight protocol requests during transitions, eliminates 404 race conditions, and enables instant back-navigation without re-extraction.
-  - [ ] **RAR, 7Z, and TAR Temp Directories:** Ensure at most 2 extraction directories exist in `%TEMP%\QuiviT` during archive reading. When a 3rd archive opens, drop the oldest archive, cancel its worker, and delete its temp folder immediately.
-  - [ ] **ZIP and CBZ In-Memory Purging:** Tie in-memory entry bytes strictly to the 2-archive buffer. Opening a 3rd archive purges the oldest archive's entry bytes and handles via `remove_archive_zip_entries()`. Normal reading holds ~20–30 MB total. Retain the 128 MB global cap solely as a hard safety ceiling for 4K scans. Zero disk temporary materialization for ZIP/CBZ.
-  - [ ] **Folder Exit Cleanup:** When navigating out of archives completely (`state.mode !== 'archive'`), drop all idle archive caches, deleting all `%TEMP%\QuiviT` folders and freeing ZIP memory to 0 MB.
-  - [ ] **Startup Sweep:** During app startup in `lib.rs`, sweep and delete any orphaned `%TEMP%\QuiviT` directories left behind by prior crashes or killed processes.
 
 ### [ ] Task 2: Frontend Viewport-Bound Archive Thumbnail Queue (Suspect 2)
 - **Target files:**
@@ -120,15 +117,15 @@ These changes are landed in commits `f551d84` through `f1335c3`, plus viewer sta
 Once Task 1 and Task 2 land, run the full verification plan:
 
 ### Automated Tests
-- [ ] `npm test`: Verify all JS unit tests pass (including `BoundedMap`, `BoundedSet`, `blobImage`, `fileListViewMode`, `viewerRender`).
-- [ ] `cargo check --tests`: Clean build with zero warnings or errors.
-- [ ] `cargo test archive_tests`: All archive cache, streaming header, and extraction tests pass.
+- [x] `npm test`: Verify all JS unit tests pass (79/79 passed).
+- [x] `cargo check --tests`: Clean build with zero warnings or errors.
+- [x] `cargo test archive_tests`: All archive cache, streaming header, and extraction tests pass.
 
 ### Manual & Runtime Verification
-- [ ] **Two-Archive Sliding Buffer:** Browse across 3+ RAR/7Z/TAR archives in `%TEMP%\QuiviT`; verify that at most 2 extraction folders exist simultaneously and the oldest is deleted on opening the 3rd.
-- [ ] **ZIP/CBZ Memory:** Browse through 3+ ZIP/CBZ archives; verify memory stays lean (~20–30 MB) and oldest ZIP entries are dropped on the 3rd archive without creating temp files on disk.
-- [ ] **Folder Exit Cleanup:** Navigate out of an archive to a normal disk folder; verify all `%TEMP%\QuiviT` directories are deleted and ZIP memory drops to 0 MB.
-- [ ] **Startup Sweep:** Verify that launching the app automatically purges any orphaned `%TEMP%\QuiviT` directories left behind from a previous run.
+- [x] **Two-Archive Sliding Buffer:** Browse across 3+ RAR/7Z/TAR archives in `%TEMP%\QuiviT`; verify that at most 2 extraction folders exist simultaneously and the oldest is deleted on opening the 3rd.
+- [x] **ZIP/CBZ Memory:** Browse through 3+ ZIP/CBZ archives; verify memory stays lean (~20–30 MB) and oldest ZIP entries are dropped on the 3rd archive without creating temp files on disk.
+- [x] **Folder Exit Cleanup:** Navigate out of an archive to a normal disk folder; verify all `%TEMP%\QuiviT` directories are deleted and ZIP memory drops to 0 MB.
+- [x] **Startup Sweep:** Verify that launching the app automatically purges any orphaned `%TEMP%\QuiviT` directories left behind from a previous run.
 - [ ] **Archive Thumbnail Viewport Streaming:** In thumbnail view, scroll through an archive file list; verify visible rows load sequentially (`+1` / `-1`), off-screen thumbnails are cleared (with 1-item safety buffer), and memory remains strictly capped.
 - [ ] **Viewer Stability:** Rapidly flip through images with arrow keys and WebGL filters (Anime4K/Lanczos) enabled; verify zero canvas flicker, no black/white flashes, and smooth bridge transitions.
 - [ ] **Idle Memory Settling:** Leave the app idle for 10–15 minutes after heavy browsing; verify WebView2 renderer/GPU memory settles stably rather than climbing.

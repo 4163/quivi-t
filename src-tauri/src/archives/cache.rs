@@ -3,6 +3,8 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 
+const MAX_OPEN_ARCHIVES: usize = 2;
+
 #[derive(Default)]
 pub struct ExtractState {
     pub extracted: HashSet<String>,
@@ -114,7 +116,7 @@ impl ArchiveCache {
                 current_zip_bytes: 0,
             }),
             global_zip_capacity_bytes: capacity_mb.saturating_mul(1024 * 1024),
-            max_open_archives: 8,
+            max_open_archives: MAX_OPEN_ARCHIVES,
         }
     }
 
@@ -255,6 +257,16 @@ impl ArchiveCache {
         lru.archive_lru.retain(|p| p != archive_path);
     }
 
+    pub(crate) fn drop_all_archives(&mut self) {
+        let paths: Vec<String> = self.archives.keys().cloned().collect();
+        for path in paths {
+            self.remove_archive_zip_entries(&path);
+        }
+        self.archives.clear();
+        let mut lru = self.lru.lock().unwrap();
+        lru.archive_lru.clear();
+    }
+
     pub(crate) fn is_archive_password_required(&self, archive_path: &str) -> bool {
         self.archives
             .get(archive_path)
@@ -344,9 +356,17 @@ impl ArchiveCache {
     }
 }
 
+fn quivit_temp_root() -> PathBuf {
+    std::env::temp_dir().join("QuiviT")
+}
+
+fn pid_temp_dir() -> PathBuf {
+    quivit_temp_root().join(format!("pid-{}", std::process::id()))
+}
+
 pub(crate) fn archive_temp_dir(archive_path: &str) -> PathBuf {
     let hash = format!("{:x}", md5::compute(archive_path));
-    std::env::temp_dir().join("QuiviT").join(hash)
+    pid_temp_dir().join(hash)
 }
 
 pub(crate) fn archive_entry_temp_path(temp_dir: &Path, entry_name: &str) -> Option<PathBuf> {
@@ -415,8 +435,107 @@ pub(crate) fn notify_finished(notify: &ExtractNotify) {
 
 pub(crate) struct FinishGuard<'a>(pub &'a ExtractNotify);
 
-impl<'a> Drop for FinishGuard<'a> {
+impl Drop for FinishGuard<'_> {
     fn drop(&mut self) {
         notify_finished(self.0);
     }
+}
+
+// -- PID-scoped temp directory lifecycle --
+//
+// Each running QuiviT instance writes extraction temps into
+//   %TEMP%\QuiviT\pid-<PID>\<archive-hash>\...
+// and holds an exclusive lock on
+//   %TEMP%\QuiviT\pid-<PID>.lock
+// while alive.  On startup we probe every sibling .lock file; if we can
+// acquire it, the owner is dead and we delete its folder and lock file.
+
+/// Held for the process lifetime so other instances can probe liveness.
+static APP_TEMP_LOCK: Mutex<Option<fs::File>> = Mutex::new(None);
+
+/// Create and exclusively hold `%TEMP%\QuiviT\pid-<PID>.lock`.
+/// Call once during `setup()`.
+pub(crate) fn acquire_temp_lock() {
+    let root = quivit_temp_root();
+    let _ = fs::create_dir_all(&root);
+    let lock_path = root.join(format!("pid-{}.lock", std::process::id()));
+
+    use std::io::Write;
+    use std::os::windows::fs::OpenOptionsExt;
+    // FILE_SHARE_READ (1): deny write-sharing so other instances'
+    // open-for-write probe gets a sharing violation while we're alive.
+    match fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .share_mode(1)
+        .open(&lock_path)
+    {
+        Ok(mut file) => {
+            let _ = write!(file, "{}", std::process::id());
+            if let Ok(mut guard) = APP_TEMP_LOCK.lock() {
+                *guard = Some(file);
+            }
+        }
+        Err(e) => {
+            eprintln!("[TempLock] failed to create lock file: {e}");
+        }
+    }
+}
+
+/// Delete temp dirs whose owning process is no longer alive.
+/// A dir is orphaned when we can open its .lock file for writing (the
+/// owner releases the handle on exit or crash).
+pub(crate) fn cleanup_orphaned_temp_dirs() {
+    let root = quivit_temp_root();
+    let Ok(entries) = fs::read_dir(&root) else {
+        return;
+    };
+    let own_pid = format!("pid-{}", std::process::id());
+
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name_str) = name.to_str() else {
+            continue;
+        };
+
+        // Only look at lock files that belong to other PIDs.
+        let Some(stem) = name_str.strip_suffix(".lock") else {
+            continue;
+        };
+        if stem == own_pid {
+            continue;
+        }
+
+        // Try to open for writing; success means the owner is gone.
+        let lock_path = entry.path();
+        match fs::OpenOptions::new().write(true).open(&lock_path) {
+            Ok(_handle) => {
+                drop(_handle);
+                let _ = fs::remove_file(&lock_path);
+                let dir = root.join(stem);
+                if dir.is_dir() {
+                    let _ = fs::remove_dir_all(&dir);
+                }
+            }
+            Err(_) => {
+                // Lock held by a live process — skip.
+            }
+        }
+    }
+}
+
+/// Remove the current instance's temp directory and lock file.
+/// Call during `RunEvent::Exit`.
+pub(crate) fn cleanup_current_temp_dir() {
+    let dir = pid_temp_dir();
+    if dir.exists() {
+        let _ = fs::remove_dir_all(&dir);
+    }
+    // Drop the held file handle so Windows releases the lock before removal.
+    if let Ok(mut guard) = APP_TEMP_LOCK.lock() {
+        drop(guard.take());
+    }
+    let lock_path = quivit_temp_root().join(format!("pid-{}.lock", std::process::id()));
+    let _ = fs::remove_file(&lock_path);
 }

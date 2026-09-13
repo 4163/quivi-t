@@ -32,6 +32,15 @@ pub fn drop_archive_cache(
 }
 
 #[tauri::command(async)]
+pub fn drop_all_archives_cache(
+    state: tauri::State<'_, RwLock<ArchiveCache>>,
+) -> Result<(), String> {
+    let mut cache = state.write().map_err(|e| e.to_string())?;
+    cache.drop_all_archives();
+    Ok(())
+}
+
+#[tauri::command(async)]
 pub fn prefetch_archive_entries(
     archive_path: String,
     entries: Vec<String>,

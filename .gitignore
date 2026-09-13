@@ -30,6 +30,7 @@ dist-ssr
 # Note: session-index.md and other .agents/ files are strictly local and intentionally ignored
 .agents/session-index.md
 .agents/user-notes
+.agents/scratch
 
 # Runtime/portable user config; may contain personal paths
 quivit_config.json
@@ -47,5 +48,3 @@ test-files/animated/
 playwright/
 test-results/
 playwright-report/
-
-scratch/

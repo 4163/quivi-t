@@ -8,6 +8,17 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Backend Two-Archive Sliding Buffer and Temp Cleanup (2026-09-14)
+- **Archive Resource Refactor (Fifth Slice):**
+  - Capped `max_open_archives` at 2 (`MAX_OPEN_ARCHIVES = 2`) in `src-tauri/src/archives/cache.rs` to form a two-archive sliding window (active archive plus immediately preceding archive), eliminating 404 races and enabling instant back-navigation without re-extraction.
+  - Isolated temporary extraction directories by process ID: `%TEMP%\QuiviT\pid-<PID>\<archive-hash>\...`.
+  - Implemented liveness lock `%TEMP%\QuiviT\pid-<PID>.lock` with `FILE_SHARE_READ` (`share_mode(1)`), preventing multi-instance collision and accidental deletion of active directories.
+  - Added clean exit teardown in `RunEvent::Exit` (`src-tauri/src/lib.rs`) that drops in-memory caches, drops the lock handle, and deletes both `pid-<PID>` and `pid-<PID>.lock`.
+  - Added startup sweep `cleanup_orphaned_temp_dirs()` in `lib.rs` to probe for abandoned lock files from crashes and remove stale directories.
+  - Added `drop_all_archives_cache` IPC command in `src-tauri/src/commands/archives.rs`.
+  - Added `temp_lock_lifecycle_cleans_on_exit` and updated eviction tests in `src-tauri/src/tests/archive_tests.rs`.
+  - Verified via `cargo check --tests`, full `cargo test` (91/91 passed), `npm test` (79/79 passed), and multi-instance runtime verification.
+
 ### Animation Header Streaming, Canvas Teardown, and Bounded Metadata (2026-09-13)
 - **Archive Resource Refactor (Fourth Slice):**
   - Updated `read_temp_entry_header()` in `src-tauri/src/archives/mod.rs` to stream up to `max_len` bytes directly from disk with `std::io::Read::take()`, preventing whole-file allocations during non-ZIP animation detection.

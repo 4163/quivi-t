@@ -550,14 +550,15 @@ fn archive_cache_bounds_open_archive_state() {
     assert_eq!(cache.current_zip_bytes(), 0);
 }
 
-// Default working-set size is 8. A 9th open must drop the oldest; ZIP
-// listing and first-image read must still complete on demand.
+// Eviction with explicit working-set size of 3. A 4th open must drop
+// the oldest; ZIP listing and first-image read must still complete on demand.
 #[test]
 fn archive_cache_drops_oldest_of_nine_and_reopens() {
     use std::time::Instant;
 
-    let (scratch, paths) = scratch_cbz_copies("zip-lru", 10);
+    let (scratch, paths) = scratch_cbz_copies("zip-lru", 6);
     let mut cache = ArchiveCache::new(64);
+    cache.set_max_open_archives(3);
 
     let first = cache
         .prepare_archive(&paths[0], None)
@@ -571,21 +572,21 @@ fn archive_cache_drops_oldest_of_nine_and_reopens() {
         .expect("wait for archive 1 first image");
     assert!(!first_bytes.is_empty());
 
-    for path in &paths[1..8] {
+    for path in &paths[1..3] {
         cache.prepare_archive(path, None).expect("prepare archive");
     }
-    assert_eq!(cache.open_archive_count(), 8);
+    assert_eq!(cache.open_archive_count(), 3);
     assert!(cache.contains_archive(&paths[0]));
 
-    cache.prepare_archive(&paths[8], None).expect("prepare 9th");
-    assert_eq!(cache.open_archive_count(), 8);
+    cache.prepare_archive(&paths[3], None).expect("prepare 4th");
+    assert_eq!(cache.open_archive_count(), 3);
     assert!(!cache.contains_archive(&paths[0]));
-    assert!(cache.contains_archive(&paths[8]));
+    assert!(cache.contains_archive(&paths[3]));
 
     cache
-        .prepare_archive(&paths[9], None)
-        .expect("prepare 10th");
-    assert_eq!(cache.open_archive_count(), 8);
+        .prepare_archive(&paths[4], None)
+        .expect("prepare 5th");
+    assert_eq!(cache.open_archive_count(), 3);
     assert!(!cache.contains_archive(&paths[0]));
     assert!(!cache.contains_archive(&paths[1]));
 
@@ -596,7 +597,7 @@ fn archive_cache_drops_oldest_of_nine_and_reopens() {
     let reopen_prepare_ms = t.elapsed().as_millis();
     assert_eq!(reopened.files.len(), first.files.len());
     assert!(cache.contains_archive(&paths[0]));
-    assert_eq!(cache.open_archive_count(), 8);
+    assert_eq!(cache.open_archive_count(), 3);
     assert!(!cache.contains_archive(&paths[2]));
 
     let t = Instant::now();
@@ -631,8 +632,9 @@ fn archive_cache_evicts_extract_temp_on_drop() {
     let temp_dir = archive_temp_dir(seven);
     let _ = fs::remove_dir_all(&temp_dir);
 
-    let (scratch, zips) = scratch_cbz_copies("sevenz-evict", 8);
+    let (scratch, zips) = scratch_cbz_copies("sevenz-evict", 4);
     let mut cache = ArchiveCache::new(64);
+    cache.set_max_open_archives(3);
 
     let listed = cache.prepare_archive(seven, None).expect("prepare 7z");
     assert!(listed.files.len() >= 12);
@@ -657,13 +659,15 @@ fn archive_cache_evicts_extract_temp_on_drop() {
     }
     std::thread::sleep(Duration::from_millis(200));
 
-    for path in &zips[..7] {
+    // Fill to limit (7z + 2 zips = 3)
+    for path in &zips[..2] {
         cache.prepare_archive(path, None).expect("prepare zip copy");
         assert!(cache.contains_archive(seven));
     }
-    cache.prepare_archive(&zips[7], None).expect("prepare 9th");
+    // 4th archive triggers eviction of the oldest (7z)
+    cache.prepare_archive(&zips[2], None).expect("prepare 4th");
 
-    assert_eq!(cache.open_archive_count(), 8);
+    assert_eq!(cache.open_archive_count(), 3);
     assert!(!cache.contains_archive(seven));
     assert!(!temp_dir.exists());
 
@@ -688,6 +692,29 @@ fn archive_cache_evicts_extract_temp_on_drop() {
 
     let _ = fs::remove_dir_all(&temp_dir);
     let _ = fs::remove_dir_all(&scratch);
+}
+
+#[test]
+fn temp_lock_lifecycle_cleans_on_exit() {
+    use crate::archives::cache::{acquire_temp_lock, cleanup_current_temp_dir};
+    acquire_temp_lock();
+
+    let pid = std::process::id();
+    let lock_path = std::env::temp_dir().join("QuiviT").join(format!("pid-{pid}.lock"));
+    let pid_dir = std::env::temp_dir().join("QuiviT").join(format!("pid-{pid}"));
+
+    assert!(lock_path.exists());
+    // While held with FILE_SHARE_READ, opening for write must fail (sharing violation)
+    assert!(fs::OpenOptions::new().write(true).open(&lock_path).is_err());
+
+    // Create a dummy file in the pid dir
+    let _ = fs::create_dir_all(&pid_dir);
+    fs::write(pid_dir.join("test.txt"), "hello").unwrap();
+
+    // Cleanup drops the lock handle and removes both directory and lock file
+    cleanup_current_temp_dir();
+    assert!(!lock_path.exists(), "lock file must be deleted on exit cleanup");
+    assert!(!pid_dir.exists(), "pid temp dir must be deleted on exit cleanup");
 }
 
 // CJK encoding regression tests

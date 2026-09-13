@@ -68,6 +68,8 @@ pub fn run() {
             windows::apply_shell_background(&main_window, &config);
             platform::icons::warmup();
             crate::commands::watchers::spawn_config_file_watcher(app.handle().clone());
+            crate::archives::cache::acquire_temp_lock();
+            crate::archives::cache::cleanup_orphaned_temp_dirs();
 
             Ok(())
         });
@@ -76,6 +78,7 @@ pub fn run() {
         read_directory,
         list_archive,
         drop_archive_cache,
+        drop_all_archives_cache,
         prefetch_archive_entries,
         load_config,
         get_config_dir,
@@ -128,9 +131,15 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, event| {
+        .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
                 crate::config::apply_pending_config_to_disk();
+                if let Some(cache) = app_handle.try_state::<std::sync::RwLock<ArchiveCache>>() {
+                    if let Ok(mut guard) = cache.write() {
+                        guard.drop_all_archives();
+                    }
+                }
+                crate::archives::cache::cleanup_current_temp_dir();
             }
         });
 }
