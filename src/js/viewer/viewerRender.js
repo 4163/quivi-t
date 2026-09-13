@@ -4,7 +4,7 @@ import { thumbnailCache } from '../filepanel/filePanel.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 const PRELOAD_HALF = 1;
-const VIEWER_IMAGE_POOL_CAPACITY = 2;
+const VIEWER_IMAGE_POOL_CAPACITY = 4;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
 const LOADING_LABEL = 'Loading...';
 
@@ -53,6 +53,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   let _retiringNode = null;
   let _retireRaf = null;
   let _lastRenderedIsAnimated = false;
+  let _lastRenderedArchivePath = null;
 
   function _cancelRetiringNode() {
     if (_retireRaf) {
@@ -312,6 +313,16 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   }
 
   Core.onStateChange((state) => {
+    const isArchive = state.mode === 'archive';
+    const currentArchivePath = isArchive ? state.archivePath : null;
+    const archiveChanged = isArchive && currentArchivePath !== _lastRenderedArchivePath;
+    const exitedArchive = !isArchive && _lastRenderedArchivePath !== null;
+
+    if (archiveChanged || exitedArchive) {
+      clearDisplayedImage();
+    }
+    _lastRenderedArchivePath = currentArchivePath;
+
     const generation = ++_poolGeneration;
     _clearScheduledPreloads();
 
@@ -323,8 +334,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     const desiredSrcs = new Set([state.src]);
     if (_isVisibleImage(img) && img.dataset.poolSrc) desiredSrcs.add(img.dataset.poolSrc);
 
-    const neighborSrcs = state.mode === 'archive' ? [] : FsUtils.neighborEntries(state, state.index, PRELOAD_HALF);
-    // for (const nSrc of neighborSrcs) desiredSrcs.add(nSrc); // Removed to avoid retaining adjacent sources in DOM pool
+    const neighborSrcs = FsUtils.neighborEntries(state, state.index, PRELOAD_HALF);
+    for (const nSrc of neighborSrcs) desiredSrcs.add(nSrc);
 
     _trimActiveNodes(desiredSrcs);
 
@@ -334,8 +345,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
     let activeEl = _activeNodes.get(state.src);
     const isReload = _forceReloadTarget;
-    const isAnimStateChanged = !!state.isAnimated && !_lastRenderedIsAnimated && state.src === _activeTargetSrc;
-    const activeChanged = state.src !== _activeTargetSrc || isReload || isAnimStateChanged;
+    const activeChanged = state.src !== _activeTargetSrc || isReload;
     _lastRenderedIsAnimated = !!state.isAnimated;
     const hasPreviousBridge = !isReload && !!(img && img !== activeEl && _isVisibleImage(img));
 

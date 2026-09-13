@@ -598,14 +598,8 @@ export const FsUtils = {
         : '';
       if (!_isCurrentGeneration(options.generation)) return;
 
-      let isAnimated = false;
-      let loopCount = 0;
-      if (this.isImageEntry(selectedEntry)) {
-        const animStatus = await Core.checkIsAnimated(selectedEntry.name, result.archive_path);
-        isAnimated = animStatus.is_animated;
-        loopCount = animStatus.loop_count;
-        if (!_isCurrentGeneration(options.generation)) return;
-      }
+      const ext = selectedEntry?.ext?.toLowerCase() || '';
+      const initialAnimated = ext === 'gif' || ext === 'apng';
 
       Core.setState({
         mode: 'archive',
@@ -617,13 +611,32 @@ export const FsUtils = {
         directory: '',
         filename: selectedEntry?.name || '',
         src: selectedSrc,
-        isAnimated,
-        loopCount,
+        isAnimated: initialAnimated,
+        loopCount: 0,
         isSiblingNavigation: !!options.isSiblingNavigation,
       });
       recordNavigation(options.previousEntry, Core.getState(), options);
       if (!_isCurrentGeneration(options.generation)) return;
       this.persistLastOpened(result.archive_path);
+
+      if (this.isImageEntry(selectedEntry)) {
+        const gen = options.generation;
+        Core.checkIsAnimated(selectedEntry.name, result.archive_path).then(animStatus => {
+          if (!_isCurrentGeneration(gen)) return;
+          const curState = Core.getState();
+          if (curState.mode === 'archive' && curState.archivePath === result.archive_path && curState.index === index) {
+            const changed = curState.isAnimated !== animStatus.is_animated || curState.loopCount !== animStatus.loop_count;
+            if (changed) {
+              Core.setState({
+                isAnimated: animStatus.is_animated,
+                loopCount: animStatus.loop_count,
+              });
+            }
+          }
+        }).catch(err => {
+          console.warn('[Core] Failed to check archive entry animation status:', err);
+        });
+      }
 
       // Initial archive load starts the nearby-entry prefetch.
       this.prefetchAhead(result.archive_path, index, 1);
