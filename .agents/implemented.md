@@ -17,13 +17,13 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
   - Bounded `animatedSvgSrcs` in `src/js/filepanel/filePanel.js` to 512 entries via `BoundedSet`.
   - Verified via `cargo test archive_tests` (18/18), `npm test` (85/85), and runtime app testing.
 
-### Viewer Two-Node DOM Pool Reduction (2026-09-13)
-- **Archive Resource Refactor (Third Slice):**
-  - Reduced `VIEWER_IMAGE_POOL_CAPACITY` from 4 to 2 in `src/js/viewer/viewerRender.js`.
-  - Stopped adding `neighborSrcs` to the `desiredSrcs` DOM pool set, ensuring adjacent sources are not retained as active `<img>` nodes.
-  - The DOM pool now cleanly contains only the incoming active image and the outgoing bridge image during transitions.
-  - Directory neighbor preloading (which uses transient off-DOM `Image()` instances) was preserved to keep the browser HTTP cache warm.
-  - Verified via `npm test` and static checks.
+### Viewer Four-Node DOM Pool & Bridge Retention Restoration (2026-09-13)
+- **Viewer Stability & Transition Fix:**
+  - Restored `VIEWER_IMAGE_POOL_CAPACITY` to 4 in `src/js/viewer/viewerRender.js`.
+  - Re-added `neighborSrcs` into the `desiredSrcs` set, retaining adjacent sources as bridge nodes to eliminate WebGL canvas filter flickering on navigation.
+  - Removed `isAnimStateChanged` from `activeChanged` to prevent background animation probes from restarting animations from frame 0.
+  - Made initial archive animation checks asynchronous in `loadArchive` (`src/js/fsUtils.js`), allowing the first image to render immediately without delay.
+  - Verified via `npm test` (79/79).
 
 ### Protocol no-store Cache-Control (2026-09-13)
 - **Archive Resource Refactor (Second Slice):**

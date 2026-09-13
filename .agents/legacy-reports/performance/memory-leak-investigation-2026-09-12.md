@@ -2,7 +2,10 @@
 
 Date: 2026-09-12
 
-Status: investigation completed (2026-09-13). Follow-up refactoring is underway with several slices resolved and runtime-verified.
+Status: investigation completed and finalized (2026-09-13). Follow-up implementation is tracked in [archive-resource-refactor.md](../../archive-resource-refactor.md).
+
+> [!NOTE]
+> This investigation is finalized. Active implementation and pending tasks are tracked in [archive-resource-refactor.md](../../archive-resource-refactor.md).
 
 Latest synthesis: the first leak cause was frontend-created Blob/object URL retention from full archive images. WebView2 `Default\blob_storage` held about 607 MB in one directory with 94 files, while the normal HTTP `Cache` directory was only about 9 MB. Suspect 1 resolves stale blob retention by revoking blob URLs on eviction, deletion, and refresh clears, protecting the active viewer blob, and cancelling in-flight requests. A later limit test showed the next problem: even with blob storage controlled, WebView2 renderer/GPU memory can stay high from decoded full-page images. Suspects 2 and 3 mitigate thumbnail/viewer image retention. A later dev-run probe with thumbnail view off showed `blob_storage` stayed small, while renderer/GPU memory still climbed with Lanczos active; Suspect 4 is now mitigated in code by eliminating archive neighbor preloads, avoiding viewer-side archive blob warmup, shrinking the clean image cache, and cropping before Lanczos resize. Suspects 8 and 10 are resolved: header sniffing uses streaming reads, metadata caches are bounded, and staging canvas allocations are released on exit.
 
@@ -17,18 +20,31 @@ This report consolidates the main-agent live probes plus the two read-only subag
 
 ## Agreed refactor target
 
-This section records the accepted follow-up design. It does not alter the historical evidence below. The detailed contract lives in `.agents/memory-leak-technical-facts-2026-09-12.md` under "Agreed refactor target, 2026-09-13".
-
-- Keep one active archive session across ZIP, CBZ, RAR, 7Z, and TAR. Remove the eight-session archive retention policy and the 128 MiB ZIP/CBZ entry-byte LRU.
-- Materialize the selected archive entry and one directionally adjacent entry into the active session's temporary directory. Do not decode every page when an archive opens.
-- Replace symmetric archive prefetch with one direction-aware item: `+1` while moving forward and `-1` while moving backward. Cancel stale queued work.
-- Mark full archive-page responses `no-store`; retain the existing long-lived policy only for small icons and true thumbnails (completed 2026-09-13).
-- Decode archive thumbnail rows only while visible, through a one-at-a-time queue. Do not retain full-page blobs after a row leaves the viewport. Remove hover preview (completed 2026-09-13).
-- Reduce the viewer bridge to two DOM image nodes. Preserve the current one-entry filter source cache and crop-first Lanczos behavior (completed 2026-09-13).
-- Keep animated-file quality unchanged. Make exit cleanup explicit for its frame loop, decoder, staging canvas, object URL, and GL source (staging canvas zeroing completed 2026-09-13).
-- Bound or clear animation-result metadata on archive and folder changes. Keep shell thumbnails and native icons unchanged (completed 2026-09-13).
-
-The refactor does not update `.agents/architecture-state.md`. That document will be updated separately after implementation.
+- **Two-Archive Sliding Buffer Lifecycle (`max_open_archives = 2`):**
+  - While reading archives: Maintain a lean 2-archive sliding buffer (current archive + immediately preceding archive). This guarantees zero 404 race conditions for in-flight requests, preserves outgoing bridge frames, and enables instant back-navigation without re-extraction. Opening a third archive immediately purges the oldest archive.
+  - **RAR, 7Z, and TAR:** Strictly at most 2 temporary extraction directories exist in `%TEMP%\QuiviT` during archive reading (down from 8). When the oldest archive is evicted, its worker cancels and its temp folder is deleted immediately.
+  - **ZIP and CBZ:** In-memory entry bytes are strictly tied to the 2-archive buffer (`max_open_archives = 2`). When navigating to a third archive, all in-memory entry bytes and handles of the oldest archive are purged immediately via `remove_archive_zip_entries()`. The cache only holds pages from the active + previous ZIP (e.g. ~20–30 MB total during normal reading) rather than hovering at 128 MB. The 128 MB cap is solely a hard ceiling safety net for huge/4K scans. Zero disk temporary materialization is used for ZIP/CBZ.
+  - **Exit Cleanup:** When navigating out of archives completely (mode changes to `'directory'` or `'empty'`), drop all idle archive caches, deleting all `%TEMP%\QuiviT` extraction directories and freeing all ZIP memory to 0 MB.
+  - **Startup Sweep:** Purge any orphaned `%TEMP%\QuiviT` directories left behind from force-closes or system crashes during app initialization.
+- **Archive Navigation & In-Flight Safety:**
+  - The 2-archive buffer naturally absorbs in-flight protocol requests during transition handoffs, eliminating 404 errors.
+- **Frontend Viewer Bridge:**
+  - Retain the 4-node DOM image pool (`VIEWER_IMAGE_POOL_CAPACITY = 4`) and neighbor bridge retention in `desiredSrcs`. This preserves smooth transitions and prevents WebGL filter canvas flickering.
+- **Non-blocking Archive Initialization:**
+  - Archive entry animation status checks (`check_is_animated`) run asynchronously without blocking the initial `src` assignment and display of the first image.
+- **Archive Thumbnail Viewport Pipeline (Target Agreed):**
+  - Archive thumbnail loading is strictly bound to the visible viewport (plus a 1-item safety buffer above and below the viewport edge).
+  - Visible rows load sequentially one-by-one in the active scroll direction (`+1` if scrolling down, `-1` if scrolling up), prioritizing the selected item.
+  - Rows that leave the viewport (beyond the 1-item buffer) clear and release their thumbnail image immediately, bounding memory strictly to the viewport display.
+  - Fast scrolling cancels in-flight/queued decodes for rows that leave the viewport before loading.
+  - Replaces the blunt 3-item static active-only window with dynamic viewport-bound loading, giving real thumbnails as the user browses while keeping decoded image memory strictly capped to the viewport size.
+- **WebView2 Blob Storage & Metadata Bounding (Resolved):**
+  - Revoke object URLs on cache eviction and clear in `BoundedMap` (Suspect 1, resolved).
+  - Stream animation header reads via `take()` to avoid reading full files (Suspect 8, resolved).
+  - Bounded metadata sets and maps (512 entries for `_animMemo` and `animatedSvgSrcs`).
+  - Zero staging canvas dimensions on animation exit.
+  - Mark full archive-page responses `no-store`; retain the existing long-lived policy only for small icons and true thumbnails.
+  - Remove hover preview from file panel rows (completed 2026-09-13).
 
 ## Live evidence
 
@@ -116,48 +132,29 @@ Likely fix direction:
 
 ### 2. Thumbnail cache retains full-resolution images
 
-Status: mitigated in code, pending battle-test verification.
+Status: target agreed (viewport-bound directional queue with off-screen clear; temporary 3-item window currently active).
 
 Files:
 
 - `src/js/filepanel/filePanel.js`
 - `src/js/fsUtils.js`
 
-Resolution:
+Current working-tree mitigation:
 
-- Archive thumbnail view now loads full `/archive/` image URLs only for the active entry and its immediate previous/next image entries.
+- Archive thumbnail view temporarily loads full `/archive/` image URLs only for the active entry and its immediate previous/next image entries (`ARCHIVE_THUMBNAIL_WINDOW_HALF = 1`).
 - Archive thumbnail rows outside that moving three-item window use lightweight extension icons.
 - `ensureArchiveBlob()` refuses oversized blob entries and trims cached archive blobs by both count and compressed-byte budget.
 - Hover preload follows the same archive thumbnail window and no longer starts archive blob fetches on hover. It only reuses an already-cached nearby blob.
 - Thumbnail caches no longer store off-DOM `new Image()` retainers for ordinary image thumbnails or favorites.
-- The viewer still loads full archive images through the normal reader path. This fix targets the side-panel thumbnail cache, not image fidelity in the reader.
+- The viewer still loads full archive images through the normal reader path.
 
-Mechanism:
+Agreed target implementation:
 
-- `thumbnailCache` is bounded by item count (`250`), not by bytes.
-- Disk WebP, AVIF, APNG, SVG, and archive thumbnail paths can use original image URLs instead of a resized thumbnail route.
-- Before the 2026-09-13 mitigation, `filePanel.js` could store retained `new Image()` objects in `thumbnailCache` for loaded thumbnails.
-- A 250-item cache is small for icon URLs but huge for decoded full-resolution pages.
-- One nuance from the main pass: `thumbImg.onload` is overwritten in the non-image branch and not restored for later image reuse. That bug may make the decoded-image retainer inconsistent rather than universal, but when it does run, it retains exactly the wrong thing.
-
-Why this matches the report:
-
-- User action included enabling/disabling thumbnail view.
-- Live memory sits in WebView2 renderer/GPU processes.
-- The earlier code could retain decoded browser image objects beyond visible rows.
-
-Runtime confirmation:
-
-- Heap snapshot should no longer show many `HTMLImageElement` objects retained by `thumbnailCache`.
-- In archive thumbnail view, `/archive/` thumbnail URLs should appear only for the active item and its two neighbors. Other archive image rows should use icon URLs.
-- Moving through an archive should not steadily increase decoded thumbnail count beyond the active/neighbor window.
-
-Likely fix direction:
-
-- Stop storing `new Image()` objects in thumbnail caches.
-- Cache only lightweight warm flags or explicit thumbnail-sized blob URLs.
-- Add a byte-aware or mode-aware thumbnail cache policy.
-- Prefer a real resized thumbnail route for archive/disk thumbnails instead of original image URLs.
+- Replace the rigid 3-item static window with a **viewport-bound directional decode queue**:
+  - Only rows currently inside the visible viewport (plus a 1-item margin above and below) are eligible for thumbnail loading.
+  - Rows load sequentially one-by-one in the direction of scrolling (`+1` or `-1`), with the selected row prioritized first.
+  - Rows that leave the viewport (beyond the 1-item margin) clear and release their thumbnail image immediately, bounding memory strictly to the screen height.
+  - Fast-scrolling past rows cancels queued/in-flight decodes for rows that leave the viewport before loading.
 
 ### 3. Viewer image pool can retain too many decoded images
 
@@ -259,7 +256,7 @@ Likely fix direction:
 
 ### 6. Non-ZIP temp extraction keeps extracted archive trees
 
-Status: pending cleanup policy.
+Status: target agreed (2-archive sliding buffer + folder exit cleanup + startup sweep).
 
 Files:
 
@@ -271,44 +268,30 @@ Mechanism:
 
 - RAR/7Z/TAR extraction uses `%TEMP%\QuiviT\<md5>`.
 - Temp dirs are cleaned when `SingleArchiveCache` drops.
-- The cache keeps up to 8 open archives.
-- Stale dirs were observed across older runs, so app startup or shutdown cleanup is incomplete for abandoned temp dirs.
+- The previous cache kept up to 8 open archives.
+- Opening 8 large RARs could leave 8 uncompressed trees in `%TEMP%` until the 9th evicted the oldest.
+- Interrupted runs can leave temp dirs behind permanently.
 
-Runtime confirmation:
+Agreed fix direction:
 
-- Watch `%TEMP%\QuiviT` while opening RAR/7Z/TAR archives and then navigating away.
-- If dirs remain until app exit or cache eviction, this is expected but still may be too permissive.
-- If dirs remain after clean app shutdown, this is a real disk-temp leak.
-
-Likely fix direction:
-
-- Clean stale `%TEMP%\QuiviT` directories on startup.
-- Drop non-current temp archive state more aggressively if memory/disk pressure matters more than instant back-navigation.
+- Cap open archives to `max_open_archives = 2` (active + previous archive). This cuts disk accumulation by 75% while maintaining the buffer needed to prevent in-flight 404s and enable instant back-navigation.
+- When navigating away from archives to a normal folder or empty state, drop all idle archive caches so 0 temp directories remain.
+- Clean stale `%TEMP%\QuiviT` directories on app startup.
 - Keep extraction cancellation reliable when archive cache entries are dropped.
 
 ### 7. Temp-origin resolver can prepare too many candidate archives
 
-Status: pending proof.
+Status: closed / out of scope (no code changes needed).
 
 File:
 
 - `src-tauri/src/platform/temp_archive.rs`
 
-Mechanism:
+Rationale:
 
-- Temp-origin resolution can scan candidates from registry/history/open windows/folders.
-- It may call `cache.prepare_archive()` for several candidates before it knows which one matches.
-- For non-ZIP candidates, that can start extraction work and create temp dirs for wrong candidates.
-
-Runtime confirmation:
-
-- Log candidate count, `prepare_archive` path, extraction starts, and temp-dir creation when opening temp-extracted files from archive tools.
-- A burst of unrelated temp dirs confirms it.
-
-Likely fix direction:
-
-- Add a cheaper candidate validation path before `prepare_archive()`.
-- Avoid starting extraction during origin probing unless the candidate is highly likely.
+- Slice 5 (`d131378`) established strict candidate ranking where candidates with live archiver window context (known subfolder or explicit root) are sorted to index 0 (`deduped.sort_by_key(...)`). Candidate 0 matches on the first attempt during normal archiver launches, avoiding scans across lower-ranked candidates.
+- The 2-archive buffer policy (`max_open_archives = 2`) naturally evicts and deletes any transient candidate state if an unexpected mismatch occurs.
+- Modifying `temp_archive.rs` risks regressing the delicate window-detection and subfolder-matching balance established across the 7 supported archivers (Explorer, 7-Zip, NanaZip, WinRAR, Bandizip, WinZip, PeaZip) and verified by `temp_archive_tests.rs`.
 
 ### 8. Non-ZIP animation header checks can read full extracted files
 
@@ -410,12 +393,11 @@ After fixes land, test with normal use rather than a tiny synthetic run:
 
 For the agreed refactor, also confirm:
 
-- Only one archive session and one materialization directory exist while browsing across archive formats.
-- ZIP/CBZ entry bytes do not remain in a Rust byte LRU after a protocol response completes.
-- Navigation produces only the selected entry plus one directionally adjacent materialization request.
-- Archive thumbnail scrolling starts one decode at a time and cancels rows that leave the viewport before decoding.
-- Archive-page responses do not accumulate in the WebView HTTP cache, while icons and true thumbnails still load from their intended cache path.
-- Rapid reader navigation preserves the two-node transition without blank frames or a visible bridge glitch.
+- At most two archive sessions exist while browsing across archives (active + previous).
+- Navigating out of archives to a folder drops archive caches and clears `%TEMP%\QuiviT`.
+- ZIP/CBZ in-memory entry bytes are strictly tied to the two-archive sliding buffer (`max_open_archives = 2`), evicting the oldest archive on the third archive, bounded by the shared 128 MB hard ceiling without disk temporary files.
+- Rapid reader navigation preserves the four-node bridge transition without blank frames or filter canvas flicker.
+- Archive thumbnail scrolling loads visible rows sequentially one-by-one (+1/-1 in scroll direction) and clears thumbnails as rows leave the viewport (with 1-item safety buffer).
 - Leaving an animated SVG, GIF, WebP, or similar file releases its active staging and decoding resources without changing its displayed quality.
 
 ## Verification results

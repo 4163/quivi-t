@@ -4,7 +4,10 @@ Date: 2026-09-12
 
 Purpose: preserve the raw technical findings from the memory leak investigation. This is an agent-facing facts ledger, not a user-facing report and not a priority list.
 
-Related summary report: `.agents/memory-leak-investigation-2026-09-12.md`
+Related summary report: `memory-leak-investigation-2026-09-12.md`
+
+> [!NOTE]
+> This facts ledger is finalized and archived for reference. Active implementation and pending tasks are tracked in [archive-resource-refactor.md](../../archive-resource-refactor.md).
 
 ## Current working-tree mitigations, 2026-09-13 continuation
 
@@ -31,40 +34,34 @@ These facts describe the latest code state after the user confirmed `npm run tau
 
 ## Agreed refactor target, 2026-09-13
 
-This is the accepted design for the next refactor. It is not a description of the current code. The investigation measurements and the working-tree mitigation facts above remain historical evidence until the implementation lands.
+This records the accepted architecture for the archive lifecycle and viewer stability:
 
-### Archive lifetime and materialization
+### Archive lifetime and storage model
 
-- All archive formats use one active archive session. The current eight-session policy goes away.
-- ZIP and CBZ stop retaining extracted entry bytes in the 128 MiB Rust LRU. The archive index remains available for the active session, and no Rust-memory entry-byte cache survives a completed response.
-- The active session owns one temporary materialization directory. ZIP, CBZ, RAR, 7Z, and TAR use that directory for requested entries and prefetch output.
-- Opening an archive does not decode every page into pixels or extract every entry. The reader serves the selected entry first, then materializes only the next directional entry.
-- Switching archives or closing the active archive cancels work, drops the session, and removes its temporary directory. Startup cleanup removes stale QuiviT archive directories left by interrupted runs.
-- Temp-origin probing must validate a candidate before it prepares or materializes an archive. It must not create extraction work for every candidate it inspects.
-- Header-only animation checks for materialized non-ZIP files must read only the requested header bytes, not the whole entry (completed 2026-09-13).
-
-### Directional archive prefetch
-
-- Archive navigation has one speculative work item, not a symmetric window.
-- Moving toward later entries queues `+1`. Moving toward earlier entries queues `-1`.
-- The selected entry always wins over the speculative item. A direction change or an item leaving the relevant viewport cancels queued speculative work.
-- The directional entry writes to the active materialization directory. Without that destination, prefetch would only decompress data and discard it.
+- All archive formats maintain a lean two-archive sliding buffer (`max_open_archives = 2`: active + previous archive). This absorbs in-flight protocol requests across navigation, prevents 404 race conditions, and enables instant back-navigation without re-extraction.
+- **RAR, 7Z, and TAR:** Strictly at most 2 temporary extraction directories exist in `%TEMP%\QuiviT` during archive browsing. Opening a 3rd archive immediately drops the oldest archive, cancels its worker, and deletes its temp directory.
+- **ZIP and CBZ:** In-memory entry bytes are strictly tied to the 2-archive buffer (`max_open_archives = 2`). When navigating to a 3rd archive, all in-memory entry bytes and handles of the oldest archive are purged immediately via `remove_archive_zip_entries()`. The cache only holds pages from the active + previous ZIP (e.g. ~20–30 MB total during normal reading) rather than hovering at 128 MB. The 128 MB cap is solely a hard ceiling safety net for huge/4K scans. Zero disk temporary materialization is used for ZIP/CBZ.
+- **Folder Exit Cleanup:** When navigating out of archives completely (mode changes to `'directory'` or `'empty'`), drop all idle archive caches, deleting all `%TEMP%\QuiviT` extraction directories and freeing all ZIP memory to 0 MB.
+- **Startup Cleanup:** Startup sweep purges any orphaned `%TEMP%\QuiviT` temporary directories left by prior interrupted or killed runs.
+- Header-only animation checks stream only requested bytes (up to 256 KiB) via `take()`, preventing whole-file allocations (completed 2026-09-13).
 
 ### Protocol and archive thumbnails
 
-- Full archive-page protocol responses use `Cache-Control: no-store` (completed 2026-09-13). WebView must not become a second, unbounded archive byte cache after the Rust byte LRU is removed.
+- Full archive-page protocol responses use `Cache-Control: no-store` (completed 2026-09-13). WebView must not become an unbounded HTTP cache for decompressed archive pages.
 - Small native icons and true thumbnail responses retain their existing cache policy.
-- The normal file list stays virtualized and keeps its lightweight warm-marker and icon behavior. This remains the large-folder path.
-- Archive thumbnail rows are eligible for decoding only while they are visible. A single decode queue prioritizes the selected row, then the nearest visible rows in the active scroll direction.
-- The queue starts one decode at a time. Rows that leave the viewport before their turn lose their queued work. Recycled rows release their source and any temporary URL.
-- Archive thumbnails do not retain a full-page blob cache after their row leaves the viewport. The queue is a display-lifetime policy, not an offscreen image cache.
+- **Archive Thumbnail Viewport Pipeline (Target Agreed):**
+  - Archive thumbnail loading is strictly bound to the visible viewport (plus a 1-item safety buffer above and below the viewport edge).
+  - Visible rows load sequentially one-by-one in the active scroll direction (`+1` if scrolling down, `-1` if scrolling up), prioritizing the selected item.
+  - Rows that leave the viewport (beyond the 1-item buffer) clear and release their thumbnail image immediately, bounding memory strictly to the viewport display.
+  - Fast scrolling cancels in-flight/queued decodes for rows that leave the viewport before loading.
+  - Replaces the blunt 3-item static active-only window with dynamic viewport-bound loading, giving real thumbnails as the user browses while keeping decoded image memory strictly capped to the viewport size.
 - Hover preview is removed (completed 2026-09-13). It must not start or retain speculative image decode work.
 
 ### Viewer, filters, and animation
 
-- The viewer pool has two DOM image nodes: the outgoing image and the incoming image during a bridge transition. It does not retain adjacent sources in that pool (completed 2026-09-13).
-- The one-entry clean `ImageBitmap` cache, WebGL resource lifetime, and crop-first Lanczos path remain unchanged.
-- Animation rendering keeps its existing visual resolution. On exit it stops the frame loop, closes the active frame and decoder, clears the staging canvas (dimensions reset to 0 completed 2026-09-13), revokes the temporary URL, and releases the related GL source. This changes cleanup only, not image quality.
+- The viewer pool maintains 4 DOM image nodes (`VIEWER_IMAGE_POOL_CAPACITY = 4`) and retains immediate neighbor entries in `desiredSrcs`. This preserves the bridge transition during navigation and eliminates WebGL filter canvas flickering.
+- Initial archive load sets image `src` immediately and checks animation status asynchronously in the background, preventing archive open latency.
+- Animation rendering keeps its existing visual resolution. On exit it stops the frame loop, closes the active frame and decoder, clears the staging canvas (dimensions reset to 0 completed 2026-09-13), revokes the temporary URL, and releases the related GL source.
 - Animation-result metadata remains small, but its memo is bounded or cleared on archive and folder changes (completed 2026-09-13 with 512-entry bounds).
 - Native icon and shell thumbnail behavior remains unchanged.
 
