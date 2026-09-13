@@ -2,9 +2,9 @@
 
 Date: 2026-09-12
 
-Status: investigation completed (2026-09-13). The next archive/resource refactor is agreed but not implemented.
+Status: investigation completed (2026-09-13). Follow-up refactoring is underway with several slices resolved and runtime-verified.
 
-Latest synthesis: the first leak cause was frontend-created Blob/object URL retention from full archive images. WebView2 `Default\blob_storage` held about 607 MB in one directory with 94 files, while the normal HTTP `Cache` directory was only about 9 MB. Suspect 1 resolves stale blob retention by revoking blob URLs on eviction, deletion, and refresh clears, protecting the active viewer blob, and cancelling in-flight requests. A later limit test showed the next problem: even with blob storage controlled, WebView2 renderer/GPU memory can stay high from decoded full-page images. Suspects 2 and 3 mitigate thumbnail/viewer image retention. A later dev-run probe with thumbnail view off showed `blob_storage` stayed small, while renderer/GPU memory still climbed with Lanczos active; Suspect 4 is now mitigated in code by eliminating archive neighbor preloads, avoiding viewer-side archive blob warmup, shrinking the clean image cache, and cropping before Lanczos resize.
+Latest synthesis: the first leak cause was frontend-created Blob/object URL retention from full archive images. WebView2 `Default\blob_storage` held about 607 MB in one directory with 94 files, while the normal HTTP `Cache` directory was only about 9 MB. Suspect 1 resolves stale blob retention by revoking blob URLs on eviction, deletion, and refresh clears, protecting the active viewer blob, and cancelling in-flight requests. A later limit test showed the next problem: even with blob storage controlled, WebView2 renderer/GPU memory can stay high from decoded full-page images. Suspects 2 and 3 mitigate thumbnail/viewer image retention. A later dev-run probe with thumbnail view off showed `blob_storage` stayed small, while renderer/GPU memory still climbed with Lanczos active; Suspect 4 is now mitigated in code by eliminating archive neighbor preloads, avoiding viewer-side archive blob warmup, shrinking the clean image cache, and cropping before Lanczos resize. Suspects 8 and 10 are resolved: header sniffing uses streaming reads, metadata caches are bounded, and staging canvas allocations are released on exit.
 
 ## Context
 
@@ -25,8 +25,8 @@ This section records the accepted follow-up design. It does not alter the histor
 - Mark full archive-page responses `no-store`; retain the existing long-lived policy only for small icons and true thumbnails (completed 2026-09-13).
 - Decode archive thumbnail rows only while visible, through a one-at-a-time queue. Do not retain full-page blobs after a row leaves the viewport. Remove hover preview (completed 2026-09-13).
 - Reduce the viewer bridge to two DOM image nodes. Preserve the current one-entry filter source cache and crop-first Lanczos behavior (completed 2026-09-13).
-- Keep animated-file quality unchanged. Make exit cleanup explicit for its frame loop, decoder, staging canvas, object URL, and GL source.
-- Bound or clear animation-result metadata on archive and folder changes. Keep shell thumbnails and native icons unchanged.
+- Keep animated-file quality unchanged. Make exit cleanup explicit for its frame loop, decoder, staging canvas, object URL, and GL source (staging canvas zeroing completed 2026-09-13).
+- Bound or clear animation-result metadata on archive and folder changes. Keep shell thumbnails and native icons unchanged (completed 2026-09-13).
 
 The refactor does not update `.agents/architecture-state.md`. That document will be updated separately after implementation.
 
@@ -312,28 +312,29 @@ Likely fix direction:
 
 ### 8. Non-ZIP animation header checks can read full extracted files
 
-Status: pending optimization.
+Status: resolved (2026-09-13).
 
 Files:
 
 - `src-tauri/src/archives/mod.rs`
 - `src-tauri/src/commands/animation.rs`
 
+Resolution:
+
+- `read_temp_entry_header()` opens the materialized file and reads up to `max_len` bytes with `std::io::Read::take()`.
+- Header sniffing avoids reading whole multi-megabyte non-ZIP files into memory.
+- Preserves the wait loop for in-flight extraction without holding full-entry byte buffers.
+
 Mechanism:
 
 - `check_is_animated` asks for a bounded header.
-- For RAR/7Z/TAR, header reads can wait for and read a whole extracted entry, then slice.
-- This is transient memory pressure, not the main sustained WebView leak.
+- Before the fix, non-ZIP paths waited for and read a whole extracted entry before slicing.
+- This was transient memory pressure rather than the main sustained WebView leak.
 
 Runtime confirmation:
 
-- Trace `check_is_animated` on large non-ZIP images.
-- Rust RSS should spike by full image size instead of the requested header size.
-
-Likely fix direction:
-
-- Read only the requested header bytes from extracted temp files.
-- Avoid whole-file `fs::read` for header paths.
+- Streamed header reads succeed on non-ZIP animations without whole-file allocations.
+- Verified in `cargo test archive_tests` and runtime app checks.
 
 ### 9. Favorites thumbnail cache had the same decoded-image pattern
 
@@ -361,25 +362,29 @@ Likely fix direction:
 
 ### 10. Small unbounded metadata caches
 
-Status: low priority.
+Status: resolved (2026-09-13).
 
 Files:
 
 - `src/js/core.js`
 - `src/js/filepanel/filePanel.js`
+- `src/js/services/cache.js`
+
+Resolution:
+
+- Added `BoundedSet` to `src/js/services/cache.js`.
+- Bounded `_animMemo` in `src/js/core.js` to 512 entries with `BoundedMap`.
+- Bounded `animatedSvgSrcs` in `src/js/filepanel/filePanel.js` to 512 entries with `BoundedSet`.
 
 Mechanism:
 
-- `_animMemo` and `animatedSvgSrcs` grow across unique source checks.
-- Entries are small strings/results, so this is unlikely to explain 1 GB.
+- `_animMemo` and `animatedSvgSrcs` grew across unique source checks.
+- Entries are small strings and booleans, so they were unlikely to explain 1 GB alone, but capping them prevents slow growth during long sessions.
 
 Runtime confirmation:
 
-- Heap dominated by strings/maps rather than images/blobs would raise priority, but that is not expected.
-
-Likely fix direction:
-
-- Add simple size bounds if touching nearby code.
+- Unit tests verify capacity limits and FIFO eviction for both structures.
+- Verified in runtime app checks.
 
 ## Baseline fix priority
 
@@ -443,3 +448,17 @@ For the agreed refactor, also confirm:
 - Local browser tests: 9/9 passing in Chromium, Firefox, and WebKit (`playwright/tests/test-thumbnail-flow.spec.js`).
 - Runtime note: the code now avoids archive viewer neighbor preloads, avoids viewer-created archive blob warmups, keeps only one cached clean full image, and closes per-render cropped bitmaps after Lanczos resize.
 - Cancellation note: the Lanczos path also guards async crop/resize completion by generation so stale renders do not win after rapid navigation.
+
+### Suspect 8 (2026-09-13)
+- Status: resolved and runtime-verified.
+- Code checks: `cargo check --tests` clean.
+- Unit tests: `cargo test archive_tests` passing (18/18).
+- Implementation: `read_temp_entry_header` streams `max_len` bytes via `std::io::Read::take()`.
+- Runtime note: verified in running app with `npm run tauri dev`.
+
+### Suspect 10 and animation cleanup (2026-09-13)
+- Status: resolved and runtime-verified.
+- Code checks: `node --check` clean for `src/js/services/cache.js`, `src/js/core.js`, `src/js/filepanel/filePanel.js`, and `src/js/viewer/viewerPipelines.js`.
+- Unit tests: 85/85 passing (`npm test`), including `BoundedSet` capacity and eviction tests.
+- Implementation: `_animMemo` and `animatedSvgSrcs` capped at 512 items; `_stopLivePump` resets `_liveStagingCanvas` dimensions to 0 on exit.
+- Runtime note: verified in running app with `npm run tauri dev`.

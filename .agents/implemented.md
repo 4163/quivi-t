@@ -8,6 +8,15 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Animation Header Streaming, Canvas Teardown, and Bounded Metadata (2026-09-13)
+- **Archive Resource Refactor (Fourth Slice):**
+  - Updated `read_temp_entry_header()` in `src-tauri/src/archives/mod.rs` to stream up to `max_len` bytes directly from disk with `std::io::Read::take()`, preventing whole-file allocations during non-ZIP animation detection.
+  - Added canvas dimension teardown (`width = 0`, `height = 0`) to `_stopLivePump()` in `src/js/viewer/viewerPipelines.js` to prompt GPU backing surface reclamation when leaving animated images.
+  - Exported `BoundedSet` from `src/js/services/cache.js` with FIFO eviction on overflow.
+  - Bounded `_animMemo` in `src/js/core.js` to 512 entries via `BoundedMap`.
+  - Bounded `animatedSvgSrcs` in `src/js/filepanel/filePanel.js` to 512 entries via `BoundedSet`.
+  - Verified via `cargo test archive_tests` (18/18), `npm test` (85/85), and runtime app testing.
+
 ### Viewer Two-Node DOM Pool Reduction (2026-09-13)
 - **Archive Resource Refactor (Third Slice):**
   - Reduced `VIEWER_IMAGE_POOL_CAPACITY` from 4 to 2 in `src/js/viewer/viewerRender.js`.

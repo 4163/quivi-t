@@ -34,3 +34,18 @@ export class BoundedMap extends Map {
     super.clear();
   }
 }
+
+export class BoundedSet extends Set {
+  constructor(maxSize = 50) {
+    super();
+    this.maxSize = maxSize;
+  }
+
+  add(value) {
+    if (!this.has(value) && this.size >= this.maxSize) {
+      const oldestValue = this.keys().next().value;
+      this.delete(oldestValue);
+    }
+    return super.add(value);
+  }
+}

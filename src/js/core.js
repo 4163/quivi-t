@@ -38,12 +38,14 @@
 
 import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_DIRECTION, DEFAULT_SPREAD_MODE, DEFAULT_FILE_LIST_VIEW_MODE, mergeConfig } from './keybinds.js';
 import { FsUtils } from './fsUtils.js';
+import { BoundedMap } from './services/cache.js';
 
 const invoke = window.__TAURI__?.core?.invoke;
 
 // Internal state.
 
-const _animMemo = new Map();
+const ANIM_MEMO_CAPACITY = 512;
+const _animMemo = new BoundedMap(ANIM_MEMO_CAPACITY);
 
 const _state = {
   /** @type {'empty'|'image'|'archive'} */

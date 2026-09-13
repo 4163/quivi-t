@@ -23,6 +23,11 @@ These facts describe the latest code state after the user confirmed `npm run tau
 - Viewer desired sources remain: current `state.src`, immediate previous/next image entries from `FsUtils.neighborEntries(..., PRELOAD_HALF = 1)`, and the currently visible outgoing image while the bridge transition exists.
 - Viewer transient preload `Image()` objects remove handlers and clear `src` after load or error.
 - `ensureArchiveBlob()` still has the small compressed-byte and count budget from the prior mitigation. That guard protects `blob_storage`; it does not cap decoded WebView2 renderer/GPU memory by itself.
+- `src/js/services/cache.js` exports `BoundedSet(maxSize = 250)` with FIFO eviction on overflow.
+- `src/js/core.js` bounds `_animMemo` to 512 entries with `BoundedMap`.
+- `src/js/filepanel/filePanel.js` bounds `animatedSvgSrcs` to 512 entries with `BoundedSet`.
+- `src/js/viewer/viewerPipelines.js` `_stopLivePump()` resets `_liveStagingCanvas.width = 0` and `_liveStagingCanvas.height = 0` to release backing surface memory on animation teardown.
+- `src-tauri/src/archives/mod.rs` `read_temp_entry_header()` opens the file and reads up to `max_len` bytes via `reader.take(max_len as u64).read_to_end(&mut buf)`, eliminating whole-file allocations for non-ZIP header checks.
 
 ## Agreed refactor target, 2026-09-13
 
@@ -36,7 +41,7 @@ This is the accepted design for the next refactor. It is not a description of th
 - Opening an archive does not decode every page into pixels or extract every entry. The reader serves the selected entry first, then materializes only the next directional entry.
 - Switching archives or closing the active archive cancels work, drops the session, and removes its temporary directory. Startup cleanup removes stale QuiviT archive directories left by interrupted runs.
 - Temp-origin probing must validate a candidate before it prepares or materializes an archive. It must not create extraction work for every candidate it inspects.
-- Header-only animation checks for materialized non-ZIP files must read only the requested header bytes, not the whole entry.
+- Header-only animation checks for materialized non-ZIP files must read only the requested header bytes, not the whole entry (completed 2026-09-13).
 
 ### Directional archive prefetch
 
@@ -59,8 +64,8 @@ This is the accepted design for the next refactor. It is not a description of th
 
 - The viewer pool has two DOM image nodes: the outgoing image and the incoming image during a bridge transition. It does not retain adjacent sources in that pool (completed 2026-09-13).
 - The one-entry clean `ImageBitmap` cache, WebGL resource lifetime, and crop-first Lanczos path remain unchanged.
-- Animation rendering keeps its existing visual resolution. On exit it stops the frame loop, closes the active frame and decoder, clears the staging canvas, revokes the temporary URL, and releases the related GL source. This changes cleanup only, not image quality.
-- Animation-result metadata remains small, but its memo is bounded or cleared on archive and folder changes.
+- Animation rendering keeps its existing visual resolution. On exit it stops the frame loop, closes the active frame and decoder, clears the staging canvas (dimensions reset to 0 completed 2026-09-13), revokes the temporary URL, and releases the related GL source. This changes cleanup only, not image quality.
+- Animation-result metadata remains small, but its memo is bounded or cleared on archive and folder changes (completed 2026-09-13 with 512-entry bounds).
 - Native icon and shell thumbnail behavior remains unchanged.
 
 ## Reproduction context
@@ -243,7 +248,7 @@ Reported high-confidence facts:
 - `src/js/shared/blobImage.js` has no exported debug/trim/clear method.
 - `src/js/viewer/viewerPipelines.js:320` creates a blob URL for SVG live pump.
 - `src/js/viewer/viewerPipelines.js:280`, `441`, `446`, `513`, `520`, and `551` contain cleanup paths for live pump images, decoders, and frames.
-- `core.js` `_animMemo` and `filePanel.js:77` `animatedSvgSrcs` are unbounded, but entries are expected to be small.
+- `core.js` `_animMemo` and `filePanel.js:77` `animatedSvgSrcs` were unbounded; on 2026-09-13 they were bounded to 512 entries via `BoundedMap` and `BoundedSet`.
 
 Suggested frontend confirmations:
 
@@ -288,7 +293,7 @@ Reported backend facts:
 - `src-tauri/src/archives/cache.rs:84-90` removes temp dirs in `Drop for SingleArchiveCache`.
 - Ordinary archive navigation may keep non-current temp extraction state until cache eviction or explicit drop.
 - `src-tauri/src/platform/temp_archive.rs:1318` calls `cache.prepare_archive(&cand_str, None)` while resolving temp origins.
-- `src-tauri/src/archives/mod.rs:263-276` non-ZIP `read_temp_entry_header()` calls `read_temp_entry_bytes()` and then `data.wait_for_data(entry_name)?`, so it can read the full extracted file before slicing.
+- Prior to 2026-09-13, `src-tauri/src/archives/mod.rs:263-276` non-ZIP `read_temp_entry_header()` called `read_temp_entry_bytes()` and then `data.wait_for_data(entry_name)?`, reading the full extracted file before slicing. On 2026-09-13 this was replaced with streamed reads via `std::io::Read::take()`.
 - `src-tauri/src/commands/animation.rs` uses archive header reads for `check_is_animated`.
 - Native icon cache is static and probably too small to explain 1 GB.
 - Config/state and watcher paths appeared bounded.
@@ -712,6 +717,10 @@ Implementation facts from the 2026-09-13 mitigation pass:
 - `lanczos.js` uses `getCleanImageCrop()` for the visible crop and closes that cropped bitmap after the resize path completes.
 - `lanczos.js` tracks render generation so an older async crop/resize cannot return after a newer render starts.
 - `blobImage.test.mjs` covers the reduced clean image cache capacity, eviction close behavior, cache reuse, and crop-bitmap ownership.
+- `read_temp_entry_header()` in `archives/mod.rs` uses `std::io::Read::take()` on `fs::File` to read only requested header slices (typically 256 KiB), removing multi-megabyte allocations on non-ZIP animation detection.
+- `_stopLivePump()` zeroes canvas dimensions (`width = 0`, `height = 0`) to trigger GPU backing surface reclamation on animation exit.
+- `src/js/services/cache.js` exports `BoundedSet` implementing FIFO eviction when reaching `maxSize`.
+- `_animMemo` in `core.js` and `animatedSvgSrcs` in `filePanel.js` are capped at 512 entries.
 
 ## Open factual questions
 

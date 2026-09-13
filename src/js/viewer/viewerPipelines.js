@@ -285,6 +285,11 @@ export function createViewerPipelines(viewportState) {
       _livePumpBlobUrl = null;
     }
     _livePumpSrc = null;
+
+    // Zero dimensions to release the off-DOM staging pixel buffer.
+    // Not a visual mutation; canvas is recreated on the next pump tick.
+    _liveStagingCanvas.width = 0;
+    _liveStagingCanvas.height = 0;
   }
 
   async function _syncLivePump() {

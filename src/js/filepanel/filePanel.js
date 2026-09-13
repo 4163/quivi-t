@@ -13,7 +13,7 @@ import {
 } from './favoritesStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
-import { BoundedMap } from '../services/cache.js';
+import { BoundedMap, BoundedSet } from '../services/cache.js';
 
 let _activeViewerKey = null;
 let _activeViewerBlob = null;
@@ -149,7 +149,8 @@ function isSvgSrc(src) {
   catch { return src.split('?')[0].split('#')[0].toLowerCase().endsWith('.svg'); }
 }
 
-const animatedSvgSrcs = new Set();
+const ANIMATED_SVG_CACHE_CAPACITY = 512;
+const animatedSvgSrcs = new BoundedSet(ANIMATED_SVG_CACHE_CAPACITY);
 
 async function markIfAnimatedSvg(targetSrc, filePath) {
   if (animatedSvgSrcs.has(targetSrc)) return;

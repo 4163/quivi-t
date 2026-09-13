@@ -271,9 +271,47 @@ impl ArchiveCache {
         }
 
         let data = self.read_temp_entry_bytes(archive_path, entry_name)?;
-        let bytes = data.wait_for_data(entry_name)?;
-        let end = bytes.len().min(limit);
-        Ok(bytes[..end].to_vec())
+        match data {
+            ArchiveEntryData::Ready(arc) => {
+                let end = arc.len().min(limit);
+                Ok(arc[..end].to_vec())
+            }
+            ArchiveEntryData::PendingExtraction { file_path, notify } => {
+                // Note: Wait logic duplicates ArchiveEntryData::wait_for_data.
+                // Left inline to avoid premature abstraction for a two-caller pattern.
+                let (lock, cvar) = &*notify;
+                let mut guard = match lock.lock() {
+                    Ok(g) => g,
+                    Err(p) => p.into_inner(),
+                };
+                let timeout = std::time::Duration::from_secs(30);
+                let start = std::time::Instant::now();
+                while !guard.extracted.contains(entry_name) && !guard.finished {
+                    let elapsed = start.elapsed();
+                    if elapsed >= timeout { break; }
+                    let (next, timed_out) = cvar.wait_timeout(guard, timeout - elapsed)
+                        .map_err(|e| e.to_string())?;
+                    guard = next;
+                    if timed_out.timed_out() { break; }
+                }
+                if !guard.extracted.contains(entry_name) {
+                    return Err(format!(
+                        "Archive entry {entry_name} not available or extraction finished"
+                    ));
+                }
+                drop(guard);
+
+                use std::io::Read;
+                let mut f = std::fs::File::open(&file_path)
+                    .map_err(|e| format!("Cannot open extracted entry {entry_name}: {e}"))?;
+                let mut buf = vec![0u8; limit];
+                let n = f.read(&mut buf).map_err(|e| {
+                    format!("Cannot read extracted entry header {entry_name}: {e}")
+                })?;
+                buf.truncate(n);
+                Ok(buf)
+            }
+        }
     }
 
     fn prepare_archive_state(
