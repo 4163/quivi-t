@@ -8,6 +8,14 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Protocol no-store Cache-Control (2026-09-13)
+- **Archive Resource Refactor (Second Slice):**
+  - Changed `entry_response()` in `src-tauri/src/protocol.rs` to emit `Cache-Control: no-store` instead of `public, max-age=86400` on both 200 full-body and 206 byte-range paths.
+  - This prevents WebView2 from acting as an unbounded HTTP/memory cache for decompressed archive pages.
+  - The `png_response()` function (icons, shell thumbnails) correctly retains its `public, max-age=86400` policy.
+  - Updated existing byte-range assertions in `protocol_tests.rs` and added `entry_response_uses_no_store_cache_control` to verify header output.
+  - Verified via `cargo test protocol` and `cargo check --tests`.
+
 ### Hover Preview Elimination (2026-09-13)
 - **Archive Resource Refactor (First Slice):**
   - Removed the hover preload mechanism from `src/js/filepanel/filePanel.js`.

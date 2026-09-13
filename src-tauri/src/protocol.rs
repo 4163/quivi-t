@@ -210,7 +210,7 @@ fn entry_response(entry_name: &str, data: &[u8], range_header: Option<&str>) -> 
             .header("Accept-Ranges", "bytes")
             .header("Content-Range", range.content_range(data.len()))
             .header("Content-Length", body.len().to_string())
-            .header("Cache-Control", "public, max-age=86400")
+            .header("Cache-Control", "no-store")
             .header("Access-Control-Allow-Origin", "*")
             .body(body)
             .unwrap();
@@ -221,7 +221,7 @@ fn entry_response(entry_name: &str, data: &[u8], range_header: Option<&str>) -> 
         .header("Content-Type", mime)
         .header("Accept-Ranges", "bytes")
         .header("Content-Length", data.len().to_string())
-        .header("Cache-Control", "public, max-age=86400")
+        .header("Cache-Control", "no-store")
         .header("Access-Control-Allow-Origin", "*")
         .body(data.to_vec())
         .unwrap()

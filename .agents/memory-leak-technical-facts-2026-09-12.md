@@ -47,7 +47,7 @@ This is the accepted design for the next refactor. It is not a description of th
 
 ### Protocol and archive thumbnails
 
-- Full archive-page protocol responses use `Cache-Control: no-store`. WebView must not become a second, unbounded archive byte cache after the Rust byte LRU is removed.
+- Full archive-page protocol responses use `Cache-Control: no-store` (completed 2026-09-13). WebView must not become a second, unbounded archive byte cache after the Rust byte LRU is removed.
 - Small native icons and true thumbnail responses retain their existing cache policy.
 - The normal file list stays virtualized and keeps its lightweight warm-marker and icon behavior. This remains the large-folder path.
 - Archive thumbnail rows are eligible for decoding only while they are visible. A single decode queue prioritizes the selected row, then the nearest visible rows in the active scroll direction.

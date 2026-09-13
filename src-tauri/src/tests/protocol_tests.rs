@@ -120,6 +120,7 @@ fn entry_response_serves_valid_byte_ranges() {
     assert_eq!(response.headers()["Accept-Ranges"], "bytes");
     assert_eq!(response.headers()["Content-Range"], "bytes 1-3/5");
     assert_eq!(response.headers()["Content-Length"], "3");
+    assert_eq!(response.headers()["Cache-Control"], "no-store");
     assert_eq!(response.body(), &vec![1, 2, 3]);
 }
 
@@ -130,5 +131,13 @@ fn entry_response_ignores_invalid_byte_ranges() {
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers()["Accept-Ranges"], "bytes");
     assert_eq!(response.headers()["Content-Length"], "5");
+    assert_eq!(response.headers()["Cache-Control"], "no-store");
     assert_eq!(response.body(), &vec![0, 1, 2, 3, 4]);
+}
+
+#[test]
+fn entry_response_uses_no_store_cache_control() {
+    let response = entry_response("page.jpg", &[0, 1, 2], None);
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()["Cache-Control"], "no-store");
 }
