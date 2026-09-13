@@ -8,6 +8,18 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Frontend Viewport-Bound Archive Thumbnail Queue (2026-09-14)
+- **Archive Resource Refactor (Sixth Slice):**
+  - Removed `ARCHIVE_THUMBNAIL_WINDOW_HALF` and the static three-item window from `src/js/fsUtils.js`. `buildThumbnailSrc` now returns archive URLs for archive image entries, delegating viewport gating to `src/js/filepanel/filePanel.js`.
+  - Confined archive thumbnail loading to visible rows plus a 1-item safety margin (`ARCHIVE_VIEWPORT_MARGIN = 1`) in `src/js/filepanel/filePanel.js` while keeping `OVERSCAN = 10` for DOM virtualization layout.
+  - Directional one-by-one loading in `commitPendingThumbnails`: filtered pending rows to the archive viewport bounds and sorted them in scroll direction (ascending when scrolling down, descending when scrolling up), prioritizing the active viewer index.
+  - Added off-viewport cleanup in Phase 1b of `renderVisibleSlice` to reset off-screen archive row `img.src` to `TRANSPARENT_PIXEL`, aborting in-flight fetches and capping memory.
+  - Preserved `pendingSrc` across off-viewport gating and Phase 1b cleanup so rows scrolled out and back into view remain queued for `commitPendingThumbnails` when scrolling settles.
+  - Hooked `commitPendingThumbnails` to window resize events so sudden viewport expansions (such as window maximize or title-bar double-clicks) immediately load newly visible rows.
+  - Removed redundant active-row re-evaluation in `updateSelection`.
+  - Updated `src/js/tests/fileListViewMode.test.mjs` to test canonical archive URLs across items without distance bounds.
+  - Verified via `npm test` (78/78 passed), `cargo check --tests`, and runtime manual testing confirming sequential directional loading, resize commits, and stable memory without leaks.
+
 ### Backend Two-Archive Sliding Buffer and Temp Cleanup (2026-09-14)
 - **Archive Resource Refactor (Fifth Slice):**
   - Capped `max_open_archives` at 2 (`MAX_OPEN_ARCHIVES = 2`) in `src-tauri/src/archives/cache.rs` to form a two-archive sliding window (active archive plus immediately preceding archive), eliminating 404 races and enabling instant back-navigation without re-extraction.

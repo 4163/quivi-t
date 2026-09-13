@@ -213,6 +213,13 @@ let isScrolling = false;
 let scrollDebounceTimer = null;
 const THUMB_SCROLL_DEBOUNCE_MS = 100;
 const TRANSPARENT_PIXEL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+';
+
+// Archive viewport-bound thumbnail queue
+const ARCHIVE_VIEWPORT_MARGIN = 1;
+let archiveViewportStart = 0;
+let archiveViewportEnd = 0;
+let lastScrollTop = 0;
+let scrollDirection = 1;
 const PLACEHOLDER_HTML = '<svg class="placeholder-icon icon-image" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><svg class="placeholder-icon icon-folder" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg><svg class="placeholder-icon icon-archive" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></svg><svg class="placeholder-icon icon-file" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
 
 export function getPlaceholderType(item) {
@@ -1009,7 +1016,9 @@ function updateEntry(li, item, index) {
     if (slots.thumbImg) {
       const ext = FsUtils.getIconExtKey(item);
       const isImage = FsUtils.isImageEntry(item);
-      let targetSrc = FsUtils.buildThumbnailSrc(item, state, index);
+      let targetSrc = FsUtils.buildThumbnailSrc(item, state);
+      const isArchiveThumb = isImage && targetSrc.includes('/archive/');
+      const outsideArchiveViewport = isArchiveThumb && (index < archiveViewportStart || index >= archiveViewportEnd);
       if (thumbRefreshTimestamp && isImage && targetSrc) {
         targetSrc = targetSrc.includes('?') ? `${targetSrc}&_t=${thumbRefreshTimestamp}` : `${targetSrc}?_t=${thumbRefreshTimestamp}`;
       }
@@ -1065,6 +1074,13 @@ function updateEntry(li, item, index) {
           slots.thumbImg.src = finalSrc;
         }
         slots.thumbImg.classList.add('is-loaded');
+      } else if (outsideArchiveViewport && index !== Core.getState().index) {
+        // Archive thumbnail outside visible viewport + safety margin: defer for commit
+        slots.thumbImg.dataset.pendingSrc = targetSrc;
+        if (slots.thumbImg.getAttribute('src') !== TRANSPARENT_PIXEL) {
+          slots.thumbImg.classList.remove('is-loaded');
+          slots.thumbImg.src = TRANSPARENT_PIXEL;
+        }
       } else if (isScrolling && index !== Core.getState().index) {
         // Uncached image thumbnail during rapid scrolling: defer decode to protect scroll performance
         // Exception: viewer active item must not wait for scroll settle. Prioritize viewer
@@ -1170,6 +1186,16 @@ function renderVisibleSlice() {
   const startIndex = Math.max(0, rawStart - OVERSCAN);
   const endIndex = Math.min(total, rawStart + visibleCount + OVERSCAN);
 
+  // Archive viewport bounds: visible rows + 1-item safety margin for smooth scroll
+  const isArchiveMode = state.mode === 'archive' && state.fileListViewMode === 'thumbnail';
+  if (isArchiveMode) {
+    archiveViewportStart = Math.max(0, rawStart - ARCHIVE_VIEWPORT_MARGIN);
+    archiveViewportEnd = Math.min(total, rawStart + visibleCount + ARCHIVE_VIEWPORT_MARGIN);
+  } else {
+    archiveViewportStart = startIndex;
+    archiveViewportEnd = endIndex;
+  }
+
   // Phase 1: Reclaim offscreen rows into freePool (VS Code RowCache pattern)
   for (const [idx, li] of activeRows) {
     if (idx < startIndex || idx >= endIndex) {
@@ -1186,6 +1212,23 @@ function renderVisibleSlice() {
         img.src = TRANSPARENT_PIXEL;
       }
       freePool.push(li);
+    }
+  }
+
+  // Phase 1b: Clear archive thumbnails on rows still in the DOM pool but outside viewport margin
+  if (isArchiveMode) {
+    for (const [idx, li] of activeRows) {
+      if (idx < archiveViewportStart || idx >= archiveViewportEnd) {
+        const img = li._slots?.thumbImg;
+        if (img) {
+          const src = img.getAttribute('src') || '';
+          if (src && src !== TRANSPARENT_PIXEL && src.includes('/archive/')) {
+            img.dataset.pendingSrc = src;
+            img.classList.remove('is-loaded');
+            img.src = TRANSPARENT_PIXEL;
+          }
+        }
+      }
     }
   }
 
@@ -1208,15 +1251,25 @@ function onScrollSettle() {
 }
 
 function commitPendingThumbnails() {
-  // Prioritize viewer active item first so viewer does not wait for all thumbnails
   const activeIdx = Core.getState().index;
-  const ordered = Array.from(activeRows.values()).sort((a, b) => {
+  const isArchiveMode = Core.getState().mode === 'archive';
+
+  // Filter to rows within archive viewport, sort by: active first, then scroll direction
+  const ordered = Array.from(activeRows.values()).filter(li => {
+    const img = li._slots?.thumbImg;
+    if (!img || !img.dataset.pendingSrc) return false;
+    if (!isArchiveMode) return true;
+    const idx = parseInt(li.dataset.index, 10);
+    return idx >= archiveViewportStart && idx < archiveViewportEnd;
+  }).sort((a, b) => {
     const ai = parseInt(a.dataset.index, 10);
     const bi = parseInt(b.dataset.index, 10);
     if (ai === activeIdx) return -1;
     if (bi === activeIdx) return 1;
-    return 0;
+    // Load in scroll direction: down (+1) loads ascending, up (-1) loads descending
+    return scrollDirection >= 0 ? ai - bi : bi - ai;
   });
+
   for (let orderIdx = 0; orderIdx < ordered.length; orderIdx++) {
     const li = ordered[orderIdx];
     const img = li._slots?.thumbImg;
@@ -1312,12 +1365,6 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
     // Surgical update: directly update .selected on active elements without re-rendering
     for (const [idx, li] of activeRows) {
       li.classList.toggle('selected', idx === selectedIndex);
-    }
-    const state = Core.getState();
-    if (state.fileListViewMode === 'thumbnail' && state.mode === 'archive') {
-      for (const [idx, li] of activeRows) {
-        if (lastRenderedList[idx]) updateEntry(li, lastRenderedList[idx], idx);
-      }
     }
   }
 
@@ -1519,6 +1566,9 @@ export function initFilePanel(deps) {
   ensureSpacer();
 
   fileListUl.addEventListener('scroll', () => {
+    const st = fileListUl.scrollTop;
+    scrollDirection = st >= lastScrollTop ? 1 : -1;
+    lastScrollTop = st;
     const state = Core.getState();
     if (state.fileListViewMode === 'thumbnail') {
       isScrolling = true;
@@ -1536,6 +1586,7 @@ export function initFilePanel(deps) {
 
   window.addEventListener('resize', () => {
     renderVisibleSlice();
+    commitPendingThumbnails();
   }, { passive: true });
 
   Core.onStateChange(() => renderFilePanel(Core.getState()));

@@ -17,7 +17,6 @@ const { Core } = await import('../core.js');
 const { DEFAULT_FILE_LIST_VIEW_MODE, mergeConfig } = await import('../keybinds.js');
 const {
   FsUtils,
-  ARCHIVE_THUMBNAIL_WINDOW_HALF,
 } = await import('../fsUtils.js');
 const {
   THUMB_CACHE_CAPACITY,
@@ -101,8 +100,8 @@ test('FsUtils: buildThumbnailSrc generates image previews and icon fallbacks', (
   // Favorite entry with composite archive path
   const favArchiveItem = { name: 'cover.jpg', path: 'C:\\manga.cbz|cover.jpg', ext: 'jpg' };
   const favArchiveSrc = FsUtils.buildThumbnailSrc(favArchiveItem, { mode: 'directory' });
-  assert.equal(favArchiveSrc.includes('/icon/'), true);
-  assert.equal(favArchiveSrc.includes('/archive/'), false);
+  assert.equal(favArchiveSrc.includes('/archive/'), true);
+  assert.equal(favArchiveSrc.includes('cover.jpg'), true);
 });
 
 test('Virtualization: static sizer calculation across massive directory lists', () => {
@@ -477,8 +476,8 @@ test('Canonical URLs: absolute path favorites do not route to archive protocol',
   assert.ok(src.includes('/thumb/'), 'shell-supported format should route to /thumb/');
 });
 
-test('Archive thumbnails: active and neighboring archive pages keep image URLs', () => {
-  const list = Array.from({ length: 5 }, (_, i) => ({
+test('Archive thumbnails: all archive entries get archive URLs (viewport gating in filePanel)', () => {
+  const list = Array.from({ length: 10 }, (_, i) => ({
     name: `page-${i}.jpg`,
     path: `C:\\window.cbz|page-${i}.jpg`,
     ext: 'jpg',
@@ -491,37 +490,10 @@ test('Archive thumbnails: active and neighboring archive pages keep image URLs',
     index: 2,
   };
 
-  const previousSrc = FsUtils.buildThumbnailSrc(list[1], state, 1);
-  const activeSrc = FsUtils.buildThumbnailSrc(list[2], state, 2);
-  const nextSrc = FsUtils.buildThumbnailSrc(list[3], state, 3);
-
-  assert.equal(ARCHIVE_THUMBNAIL_WINDOW_HALF, 1);
-  assert.ok(previousSrc.includes('/archive/'), 'previous archive entry keeps its thumbnail image');
-  assert.ok(activeSrc.includes('/archive/'), 'active archive entry keeps its thumbnail image');
-  assert.ok(nextSrc.includes('/archive/'), 'next archive entry keeps its thumbnail image');
-});
-
-test('Archive thumbnails: non-neighbor archive pages use lightweight icons', () => {
-  const list = Array.from({ length: 5 }, (_, i) => ({
-    name: `page-${i}.jpg`,
-    path: `C:\\window.cbz|page-${i}.jpg`,
-    ext: 'jpg',
-    size: 512 * 1024,
-  }));
-  const state = {
-    mode: 'archive',
-    archivePath: 'C:\\window.cbz',
-    list,
-    index: 2,
-  };
-
-  const farBeforeSrc = FsUtils.buildThumbnailSrc(list[0], state, 0);
-  const farAfterSrc = FsUtils.buildThumbnailSrc(list[4], state, 4);
-
-  assert.ok(farBeforeSrc.includes('/icon/'), 'far previous entries use icons');
-  assert.ok(!farBeforeSrc.includes('/archive/'), 'far previous entries avoid full archive fetches');
-  assert.ok(farAfterSrc.includes('/icon/'), 'far next entries use icons');
-  assert.ok(!farAfterSrc.includes('/archive/'), 'far next entries avoid full archive fetches');
+  for (let i = 0; i < list.length; i++) {
+    const src = FsUtils.buildThumbnailSrc(list[i], state);
+    assert.ok(src.includes('/archive/'), `entry ${i} should get archive URL regardless of distance from active index`);
+  }
 });
 
 test('Helpers: _isAbsolutePath detects Windows absolute paths', () => {

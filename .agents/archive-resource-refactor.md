@@ -17,7 +17,7 @@ Implementation tracker for archive lifecycle management, memory safety, and file
 | **7** | **Protocol `Cache-Control: no-store`** | Prevent full archive pages caching in WebView | `protocol.rs` | `[DONE]` (`9a779ca`) |
 | **8** | **Hover Previews Removal** | Eliminate speculative background decodes | `filePanel.js` | `[DONE]` (`8e0ea5a`) |
 | **9** | **Backend 2-Archive Sliding Buffer & Temp Cleanup** | `max_open_archives = 2`, exit & startup cleanup | `cache.rs`, `lib.rs`, `archives.rs` | `[DONE]` |
-| **10** | **Frontend Viewport Archive Thumbnail Queue** | Directional `+1`/`-1` queue, off-viewport clear | `filePanel.js`, `fsUtils.js` | `[PENDING]` |
+| **10** | **Frontend Viewport Archive Thumbnail Queue** | Directional `+1`/`-1` queue, off-viewport clear | `filePanel.js`, `fsUtils.js` | `[DONE]` |
 | **11** | **Temp-Origin Resolver Probing** | Slice 5 `d131378` candidate ranking preserved | `temp_archive.rs` | `[OUT OF SCOPE]` |
 | **12** | **Protocol Zero-Copy Streaming** | Negligible gain (<1ms copy vs 50ms decode; IPC copies anyway) | `protocol.rs` | `[CLOSED / NOT NEEDED]` |
 
@@ -81,18 +81,18 @@ These changes are landed in commits `f551d84` through `f1335c3`, plus viewer sta
 
 ---
 
-## 2. Pending Implementation
+## 2. Completed
 
-### [ ] Task 2: Frontend Viewport-Bound Archive Thumbnail Queue (Suspect 2)
+### [x] Task 2: Frontend Viewport-Bound Archive Thumbnail Queue (Suspect 2)
 - **Target files:**
   - `src/js/filepanel/filePanel.js`
   - `src/js/fsUtils.js`
 - **Work items:**
-  - [ ] **Replace Static 3-Item Window:** Replace the temporary `ARCHIVE_THUMBNAIL_WINDOW_HALF = 1` limitation that turned distant rows into generic file icons.
-  - [ ] **Viewport-Bound Queue:** Confine archive thumbnail loading strictly to rows currently inside the visible file panel viewport, plus a **1-item safety margin** above and below the viewport edge for smooth scrolling.
-  - [ ] **Directional One-by-One Loading (`+1` / `-1`):** Load visible rows sequentially one-by-one in the active scroll direction, prioritizing the currently selected row first.
-  - [ ] **Off-Viewport Immediate Cleanup:** Clear and release thumbnail images as rows scroll out of the viewport (beyond the 1-item safety buffer), keeping decoded image memory strictly capped to the viewport display.
-  - [ ] **Fast-Scroll Cancellation:** Cancel queued or in-flight decodes for rows that leave the viewport before loading completes.
+  - [x] **Replace Static 3-Item Window:** Removed `ARCHIVE_THUMBNAIL_WINDOW_HALF = 1`. `buildThumbnailSrc` now returns archive URLs for all archive image entries. Viewport gating moved to `filePanel.js`.
+  - [x] **Viewport-Bound Queue:** `ARCHIVE_VIEWPORT_MARGIN = 1` confines archive thumbnail loading to visible rows ± 1-item safety margin. DOM pool still uses `OVERSCAN = 10` for layout.
+  - [x] **Directional One-by-One Loading (`+1` / `-1`):** `commitPendingThumbnails` filters to viewport bounds and sorts by scroll direction (`scrollDirection`), active index first.
+  - [x] **Off-Viewport Immediate Cleanup:** Phase 1b in `renderVisibleSlice` clears archive thumbnail `src` to `TRANSPARENT_PIXEL` on rows outside viewport margin. Browser auto-aborts in-flight `quivit://` fetches.
+  - [x] **Fast-Scroll Cancellation:** Resetting `img.src` during scroll aborts the browser's in-flight request. `updateEntry` gates archive thumbnails outside viewport bounds to placeholder.
 
 ---
 
@@ -126,7 +126,7 @@ Once Task 1 and Task 2 land, run the full verification plan:
 - [x] **ZIP/CBZ Memory:** Browse through 3+ ZIP/CBZ archives; verify memory stays lean (~20–30 MB) and oldest ZIP entries are dropped on the 3rd archive without creating temp files on disk.
 - [x] **Folder Exit Cleanup:** Navigate out of an archive to a normal disk folder; verify all `%TEMP%\QuiviT` directories are deleted and ZIP memory drops to 0 MB.
 - [x] **Startup Sweep:** Verify that launching the app automatically purges any orphaned `%TEMP%\QuiviT` directories left behind from a previous run.
-- [ ] **Archive Thumbnail Viewport Streaming:** In thumbnail view, scroll through an archive file list; verify visible rows load sequentially (`+1` / `-1`), off-screen thumbnails are cleared (with 1-item safety buffer), and memory remains strictly capped.
-- [ ] **Viewer Stability:** Rapidly flip through images with arrow keys and WebGL filters (Anime4K/Lanczos) enabled; verify zero canvas flicker, no black/white flashes, and smooth bridge transitions.
-- [ ] **Idle Memory Settling:** Leave the app idle for 10–15 minutes after heavy browsing; verify WebView2 renderer/GPU memory settles stably rather than climbing.
+- [x] **Archive Thumbnail Viewport Streaming:** In thumbnail view, scroll through an archive file list; verify visible rows load sequentially (`+1` / `-1`), off-screen thumbnails are cleared (with 1-item safety buffer), and memory remains strictly capped.
+- [x] **Viewer Stability:** Rapidly flip through images with arrow keys and WebGL filters (Anime4K/Lanczos) enabled; verify zero canvas flicker, no black/white flashes, and smooth bridge transitions.
+- [x] **Idle Memory Settling:** Leave the app idle for 10–15 minutes after heavy browsing; verify WebView2 renderer/GPU memory settles stably rather than climbing.
 
