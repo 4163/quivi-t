@@ -18,19 +18,20 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 ## Features
 
 - **Formats**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
-- **Archives**: Read compressed files directly as folders, including image navigation and archive metadata.
+- **Archives**: Read compressed files directly as folders, including password-protected archives and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
-- **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Ctrl`+wheel.
+- **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Mod`+wheel. Cursor auto-hides after inactivity over the viewport.
+- **Manga Spread Mode**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
 - **Scaling**: Choose from Pixelated, Bilinear, and Lanczos scaling.
 - **Filters**: WebGL filters for Anime4K (Mode A Fast/HQ), CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or Scanlines.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
 - **Persistent State**: Persists favorites, single-instance handoff, optional auto-open behavior, and the last opened image.
-- **Windows Integration**: Use native file/folder icons and register file associations per-user for Windows Default Apps.
+- **Windows Integration**: Drag and drop supported files to open them. Register file associations per-user for Windows Default Apps. Native window dragging supports PowerToys FancyZones snapping.
 - **Configuration**: Choose roaming user config or portable config stored next to the executable.
 - **Custom Theming**: Inject and live-reload custom CSS rules, with native light/dark mode support.
 - **ICO Spritesheets**: Render multi-frame `.ico` files as generated spritesheets.
-- **Archive Resilience**: Skip corrupted or unsupported entries without freezing. Legacy CJK filename encodings (like Shift-JIS) are automatically decoded for ZIP and TAR archives.
-- **Performance**: Fast O(1) virtualized rendering handles folders and archives with thousands of items instantly. Native shell icons are cached to eliminate UI pop-in.
+- **File Panel**: Switchable list and thumbnail view modes with virtualized card grid layout.
+- **Performance**: Fast O(1) virtualized rendering handles folders and archives with thousands of items instantly. Caching native shell icons and thumbnails eliminates UI pop-in.
 
 ## Shortcuts & Controls
 
@@ -65,18 +66,18 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Pan up / down (Scroll) | `ScrollUp` / `ScrollDown` |
 | Pan left / right (Scroll) | `Shift+ScrollUp` / `Shift+ScrollDown` |
 | **Rotation** | |
-| Rotate counter-clockwise / clockwise | `G` / `H` |
+| Rotate counterclockwise / clockwise | `G` / `H` |
 | Flip horizontal / vertical | `V` / `B` |
 | **Window & UI** | |
 | Options | `5` |
 | Toggle file list | `1` |
 | Toggle menu bar | `2` |
 | Toggle status bar | `3` |
-| Full screen | `4` / `Alt+Enter` |
-| Exit full screen (Hold) | `Escape` |
-| **Files & Folders** | |
+| Fullscreen | `4` / `Alt+Enter` |
+| Exit fullscreen (Hold) | `Escape` |
+| **File Operations** | |
 | Open directory... | `Ctrl+O` |
-| Open file/archive... | `Ctrl+Shift+O` |
+| Open File / Archive... | `Ctrl+Shift+O` |
 | Refresh | `6` / `Ctrl+R` |
 
 ## Custom CSS
@@ -142,10 +143,12 @@ The following system defaults are used:
 
 - **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
 - **Scaling Mode:** `bilinear`
+- **Spread View:** Defaults to `off`. When enabled, reading direction defaults to `rtl`.
 - **Filters:** Defaults to none active, only one filter can be active at a time. SVGs are rasterized at a capped resolution (2048px static, 512px animated); Anime4K and Lanczos fall back to Bilinear for SVGs.
 - **Filter: Anime4K** Defaults to `fast` (upstream Mode A Fast). Configurable in **Options → General → Filters**.
-- **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in **Options → General → Panning**.
+- **Idle Cursor Auto-Hide:** Defaults to 2 seconds of inactivity over the viewport before hiding the pointer (0 to disable). Configurable in **Options → General → Viewport**.
 - **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge shows whether scroll zoom is latched or which bound modifier keys are currently held.
+- **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in **Options → General → Panning**.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
 - **Secondary Windows:** Options and Archive Info windows size to their content and open centered over the main window.
 - **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
@@ -153,6 +156,7 @@ The following system defaults are used:
 - **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor, or the Drives view at the root.
 - **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting on or off requires an app restart to take effect.
 - **Default Sort:** `name` ascending. Per-directory preferences are cached for up to 100 directories, with the oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort` (`col`: `name`, `ext`, or `date`; `desc`: `false` = ascending, `true` = descending). Directories without a saved preference in `quivit_directory_sort.json` fall back to it.
+- **Thumbnail Loading:** In thumbnail view, shell thumbnails (JPG, PNG, BMP, GIF) load concurrently from the OS cache at 96x96. Archive images and non-shell file thumbnails (WebP, AVIF, SVG, fallback images) have no pre-scaled cache and decode full-size 1:1 images, so they load one at a time in scroll direction order with only visible rows plus one buffer row active. This carries a higher per-image performance cost than shell thumbnails, especially for large or animated images.
 - **Image Swap Buffer:** The DOM viewer keeps a decoded previous image visible while the next target image loads, then waits for a short 45ms settled-navigation window before committing the swap. This is an intentional WebView2/HTML `<img>` tradeoff: it slightly delays final activation during rapid navigation, but prevents visible blank-frame flicker that can occur when very large images are decoded, uploaded, or repainted by the browser.
 
 ### Configuration & Persistence
@@ -163,7 +167,7 @@ QuiviT manages data across three distinct tiers depending on lifecycle and scope
 `C:\Users\<user>\AppData\Roaming\com.x4163.quivit`
 
 Data is split across five files:
-- `quivit_config.json`: User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, default sort, options)
+- `quivit_config.json`: User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, default sort, hide_cursor_delay_sec, file_list_view_mode, spread_enabled, spread_direction, spread_mode, options)
 - `quivit_state.json`: Runtime state (`last_opened_path`, `last_active_image`, `scroll_zoom_latched`)
 - `quivit_directory_sort.json`: Per-directory sort column/direction
 - `quivit_favorites.json`: Favorited folders/files and collapsed state
@@ -175,8 +179,10 @@ Data is split across five files:
 
 **In-memory state**: session-only; reset on app exit:
 - `navigationHistory`: Container-level Back/Forward history trail (capped at 100 entries)
-- `ArchiveCache`: Recent archive working set. ZIP/CBZ entries use a byte-budgeted in-memory image cache (default 512 MB) and background prefetch queue; RAR/CBR, 7Z/CB7, and TAR/CBT archives keep temporary extraction state for up to 8 recently opened archives.
-- `#viewer-img-wrapper` image bridge: Two reusable DOM images for the current target and decoded previous image; nearby pages warm through off-DOM preloaders after navigation settles behind the 45ms image swap buffer
+- `ArchiveCache`: Two-archive sliding buffer retaining the active archive and the immediately preceding archive. ZIP/CBZ entries use a byte-budgeted in-memory image cache (default 512 MB) and background prefetch queue; RAR/CBR, 7Z/CB7, and TAR/CBT archives keep temporary extraction state.
+- `#viewer-img-wrapper` image bridge: Four reusable DOM images (current target, decoded previous image, and adjacent preloads); nearby pages warm through off-DOM preloaders after navigation settles behind the 45ms image swap buffer
+- `thumbnailCache`: 250-item bounded cache for rendered file panel thumbnails (`filePanel.js`)
+- `fsUtils.js` archive caches: unlocked password cache (50 items) and encryption status cache (100 items)
 - `previewTheme` / `previewCss`: Options window live theme and custom CSS previews (persisting across config reloads until Apply or Close)
 
 **Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth. In portable mode, the top-level `hidden` flag controls the Windows hidden attribute on that local `quivit_config.json`: `true` hides it, and `false` leaves it visible. The attribute is synced on every app launch and on each config save; edits made to the JSON while QuiviT is running are overwritten by the in-memory state on the next save.
@@ -186,12 +192,12 @@ Data is split across five files:
 The frontend is split into a state machine, pure services, and single-owner UI modules that talk through `Core.onStateChange` instead of writing each other's DOM:
 
 - `core.js`: App state and configuration. No DOM.
-- `services/`: Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), key combos, keybind rules, sorting, viewer math. Filter logic lives in `filters/`, scaling in `scaling/`, and the WebGL runtime/catalog in `pipelines/`.
+- `services/`: Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), `cache.js` (`BoundedMap`, `BoundedSet`), `metadataFiles.js`, key combos, keybind rules, sorting, viewer math. Filter logic lives in `filters/`, scaling in `scaling/`, and the WebGL runtime/catalog in `pipelines/`.
 - `shared/`: Cross-window theme/CSS apply, pre-paint injector, config preview / emergency reset, window fit.
 - `viewer/`: Facade plus render pool, overlay canvas owner (`viewerPipelines.js`), and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
-- `filepanel/`: File list (virtualized), columns, breadcrumb, resize. Favorites persistence is `favoritesStore.js`.
-- `menubar/`: Chrome visibility and the sole `#statusbar` writer. `menubar.js` owns dropdown interaction.
-- `main/`: Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge.
+- `filepanel/`: File list (virtualized) with list and thumbnail view modes. Columns, breadcrumb, resize. Favorites persistence is `favoritesStore.js`.
+- `menubar/`: Chrome visibility and the sole `#statusbar` writer with dual spread indicator routing. `menubar.js` owns dropdown interaction.
+- `main/`: Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge, password overlay.
 - `options/`: Options window, keybind capture UI, file-association UI.
 - `fsUtils.js`: Filesystem and archive navigation (no DOM).
 - `shortcuts.js` / `keybinds.js`: Input dispatch and config merge. Action ids come from `ACTION_REGISTRY`.
@@ -202,11 +208,11 @@ The Rust backend is split into domain-specific modules:
 
 - `lib.rs` & `main.rs`: Bootstrap, config watcher, and main-window build.
 - `config.rs`: `AppConfig`, persistence, portable mode, and pending promotion.
-- `commands/`: Tauri command surface (directory, archives, watcher, associations, shell).
+- `commands/`: Tauri command surface (directory, archives, animation, watcher, associations, shell).
 - `archives/` & `formats.rs`: Archive readers, `ArchiveCache`, and format registry.
-- `platform/` & `windows.rs`: OS-level integrations, dialogs, and window lifecycle.
-- `tests/`: In-tree testing for archives, config, formats, and protocol.
-- `protocol.rs`: `quivit://` and `asset://` handler logic.
+- `platform/` & `windows.rs`: OS-level integrations, native shell thumbnails (`IShellItemImageFactory`), external archiver temp origin resolution, dialogs, and window lifecycle.
+- `tests/`: In-tree testing for archives, config, formats, protocol, temp archive origin, and thumbnails.
+- `protocol.rs`: `quivit://` handler (archive entries, shell thumbnails, shell icons). `asset://` for direct file access.
 - `ico.rs`: ICO spritesheets.
 - `models.rs`: IPC structs and data models.
 - `utils.rs`: Base64 and encoding helpers.
@@ -260,18 +266,18 @@ node --check src/js/options/options.js
 | **Lanczos Scaling** | `pica` | Off-thread still-image Lanczos resize |
 | **WebGL Filters** | WebGL2 | Anime4K, CRT, Phosphor, Scanlines, and per-frame Lanczos on animated images |
 | **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG/AVIF playback under filters and Lanczos |
-| **Archives (ZIP/CBZ)** | `zip` | Fast on-demand extraction |
-| **Archives (RAR/CBR)** | `unrar` | Legacy archive support |
-| **Archives (7Z/CB7)** | `sevenz-rust2` | Solid LZMA archive support |
+| **Archives (ZIP/CBZ)** | `zip` | Fast on-demand extraction and password decryption |
+| **Archives (RAR/CBR)** | `unrar` | Legacy archive support and password decryption |
+| **Archives (7Z/CB7)** | `sevenz-rust2` | Solid LZMA archive support and password decryption |
 | **Archives (TAR/CBT)** | `tar` | Uncompressed archive reading |
-| **Character Encoding** | `encoding_rs` | Shift-JIS/CP932 decoding for legacy ZIP filenames |
+| **Character Encoding** | `chardetng` / `encoding_rs` | Statistical detection and decoding for legacy CJK encodings (Shift-JIS, GBK, EUC-KR, Big5) in ZIP and TAR archives |
 | **Sorting** | `natord` | Natural alphanumeric sorting |
 | **Config** | `serde` / `serde_json` | Configuration serialization |
 | **File Watching** | `notify` | Directory watcher for auto-refresh |
 | **ICO Extraction** | `image` | Multi-frame ICO spritesheet generation |
 | **Hashing** | `md5` | Deterministic temp directory naming |
 | **Data URIs** | `base64` | Base64 encoding for generated image payloads |
-| **Windows APIs** | `windows` / `winreg` | Native icons, file attributes, shell notifications, and per-user file associations |
+| **Windows APIs** | `windows` / `winreg` | Native icons, shell thumbnails (`IShellItemImageFactory`), UI Automation and window enumeration (temp archive origin resolution), file attributes, shell notifications, and per-user file associations |
 | **Tauri Plugins** | `opener`, `dialog`, `single-instance` | System integration (explorer, pickers, handoff) |
 | **Frontend Tauri API** | `@tauri-apps/api` / `@tauri-apps/plugin-dialog` | Browser-side IPC, asset URLs, and native file dialogs |
 
@@ -295,7 +301,7 @@ QuiviT/
 │     ├─ keybinds.js             # Config merge + pan/zoom defaults
 │     ├─ keyboardNav.js          # List / tab keyboard navigation
 │     ├─ menubar.js              # Menu bar dropdown interaction
-│     ├─ metadata.js             # ComicInfo / CoMet / OPF parsing
+│     ├─ metadata.js             # ComicInfo (XML/JSON), CoMet, OPF, and gallery meta.json parsing
 │     ├─ metadata-window.js      # Metadata window controller
 │     ├─ navigationHistory.js    # Session-only Back/Forward
 │     ├─ shellBackground.js      # Mirrors --surface into the native window
@@ -308,7 +314,8 @@ QuiviT/
 │     │  ├─ fullscreen.js        # Fullscreen UX
 │     │  ├─ dropzone.js          # Drag-and-drop
 │     │  ├─ lifecycle.js         # Title, flush-on-close, single-instance
-│     │  └─ metadataBadge.js     # Archive-info badge
+│     │  ├─ metadataBadge.js     # Archive-info badge
+│     │  └─ passwordOverlay.js   # Archive password prompt
 │     ├─ menubar/
 │     │  ├─ chrome.js            # Menu / status visibility
 │     │  └─ statusbar.js         # Sole #statusbar writer
@@ -318,12 +325,14 @@ QuiviT/
 │     │  └─ associationsUi.js    # File-type association UI
 │     ├─ services/
 │     │  ├─ actions.js           # ACTION_REGISTRY + dispatch
+│     │  ├─ cache.js             # BoundedMap / BoundedSet
 │     │  ├─ filterModules.js     # Filter module resolution
 │     │  ├─ keyCombo.js          # Combo normalize / format
 │     │  ├─ keybindDomain.js     # Locked binds, conflicts, categories
+│     │  ├─ metadataFiles.js     # Metadata file priority + basename matching
 │     │  ├─ registry.js          # Filter and scaling definitions
 │     │  ├─ sorting.js           # naturalCompare / applySort
-│     │  ├─ viewerMath.js        # Zoom / pan / fit math
+│     │  ├─ viewerMath.js        # Zoom / pan / fit / spread math
 │     │  ├─ filters/
 │     │  │  ├─ anime4k.js        # Anime4K filter definition
 │     │  │  ├─ crt.js            # Retro CRT filter definition
@@ -356,8 +365,8 @@ QuiviT/
 │  ├─ src/
 │  │  ├─ archives/               # Archive readers, caching, and extraction
 │  │  ├─ commands/               # Tauri command surface and watchers
-│  │  ├─ platform/               # OS-level integrations, dialogs, and shell icons
-│  │  ├─ tests/                  # In-tree tests (archives, formats, protocol, config)
+│  │  ├─ platform/               # Shell thumbnails, external archiver temp origin, icons, dialogs
+│  │  ├─ tests/                  # In-tree tests (archives, formats, protocol, config, temp archive, thumbnails)
 │  │  ├─ config.rs               # Configuration state, persistence, and portable mode
 │  │  ├─ formats.rs              # Supported format registry
 │  │  ├─ ico.rs                  # ICO frame extraction and spritesheet

@@ -30,19 +30,19 @@ Any safety fact you can't get to step 4, say so out loud. Don't write it up as s
 
 These are the repo's common blast-radius zones. Not every change touches all of them. Scope your analysis to what the diff actually reaches.
 
-- **IPC commands** (`src-tauri/src/commands/`): changed return types, renamed commands, or shifted payloads break the JS caller.
+- **IPC commands** (`src-tauri/src/commands/`): changed return types, renamed commands, or shifted payloads break the JS caller. Key contracts: `list_archive` accepts `password: Option<String>`, `resolve_archive_temp_origin` returns `TempArchiveOrigin`, `drop_all_archives_cache` clears the sliding buffer. `FileEntry.size: u64` and `ArchiveEncryptionStatus` are consumed by the frontend state machine and file panel.
 - **Config schema** (`src-tauri/src/config.rs`): changed keys, types, or defaults break existing user config files and portable-mode paths.
 - **Archive & format readers** (`src-tauri/src/archives/`, `src-tauri/src/formats.rs`): changed entry shapes, sort orders, or cache keys break virtual directory traversal and viewer navigation.
-- **Protocol URLs** (`src-tauri/src/protocol.rs` handling `asset://`, `quivit://`): changed routes or response headers break image loading and cross-window preview.
-- **Platform & Windowing** (`src-tauri/src/platform/`, `src-tauri/src/windows.rs`): changed native integrations, file associations, or window spawning logic break OS-level behaviors.
+- **Protocol URLs** (`src-tauri/src/protocol.rs` handling `asset://`, `quivit://`): changed routes or response headers break image loading and cross-window preview. Active routes: `quivit://thumb/<base64_path>` (shell thumbnails), `quivit://icon/...&size=large` (32x32 shell icons), `quivit://archive/<base64_path>/<entry>` (`Cache-Control: no-store`).
+- **Platform & Windowing** (`src-tauri/src/platform/`, `src-tauri/src/windows.rs`): changed native integrations, file associations, or window spawning logic break OS-level behaviors. Includes `platform/thumbnails.rs` (shell thumbnail extraction) and `platform/temp_archive.rs` (external archiver temp origin resolution).
 - **Cross-window state** (`localStorage`, theme, preview payload): changed shapes or keys break secondary windows that read what the primary writes.
-- **CSS tokens** (`global.css` `:root`): changed or removed custom properties break downstream page sheets and theme application.
-- **Action registry** (JS service modules): changed action ids, labels, or handler signatures break menus, shortcuts, and context menus.
-- **State machine** (JS core): changed state shapes or callback contracts break every UI subscriber.
+- **CSS tokens** (`global.css` `:root`): changed or removed custom properties break downstream page sheets and theme application. Includes `--fs-169` (font-size based max-width for submenu items).
+- **Action registry** (JS service modules): changed action ids, labels, or handler signatures break menus, shortcuts, and context menus. Categories include "Spread View" (`cmd-spread-off`, `cmd-spread-direction-rtl`, `cmd-spread-direction-ltr`) and "File Operations" (`cmd-toggle-file-list-view-mode`, `cmd-open-file`, `cmd-open-dir`, `cmd-refresh`). Other registered actions: `cmd-toggle-cursor-autohide`, `cmd-filter-off`.
+- **State machine** (JS core): changed state shapes or callback contracts break every UI subscriber. Properties include `spreadEnabled`, `spreadDirection`, `spreadStep`, `fileListViewMode`, and `archiveEncryption`.
 
 ### Surface to targeted test matrix
 
-Match touched files to their targeted test command to prove safety in 1 to 2 seconds instead of running the full 58-test suite:
+Match touched files to their targeted test command to prove safety in 1 to 2 seconds instead of running the full test suite:
 
 | Touched surface | Targeted test command | Typical runtime |
 |---|---|---|
@@ -55,6 +55,13 @@ Match touched files to their targeted test command to prove safety in 1 to 2 sec
 | `src-tauri/src/archives/tar.rs` | `cargo test --manifest-path src-tauri/Cargo.toml tar_` | ~2.0s |
 | `src-tauri/src/archives/cache.rs` | `cargo test --manifest-path src-tauri/Cargo.toml archive_cache_` | ~1.5s |
 | Invalid archive validation (all formats) | `cargo test --manifest-path src-tauri/Cargo.toml invalid_archive_` | ~1.2s |
+| `src-tauri/src/platform/thumbnails.rs` | `cargo test --manifest-path src-tauri/Cargo.toml thumbnails_` | ~1.2s |
+| `src-tauri/src/platform/temp_archive.rs` | `cargo test --manifest-path src-tauri/Cargo.toml temp_archive_` | ~1.2s |
+| `src-tauri/src/platform/attributes.rs` | `cargo test --manifest-path src-tauri/Cargo.toml test_is_hidden_path` | ~1.0s |
+| `src/js/services/viewerMath.js` | `node --test src/js/tests/viewerMath.test.mjs` | ~0.3s |
+| `src/js/core.js` (spread navigation) | `node --test src/js/tests/coreSpread.test.mjs` | ~0.3s |
+| `src/js/services/cache.js` | `node --test src/js/tests/boundedMap.test.mjs` | ~0.3s |
+| `src/js/services/metadataFiles.js`, `src/js/metadata.js` | `node --test src/js/tests/metadata.test.mjs` | ~0.3s |
 | Fast compile & borrow check (iteration) | `cargo check --tests --manifest-path src-tauri/Cargo.toml` | ~3.0s |
 | Any modified JS module | `node --check <file>` | ~0.1s |
 

@@ -35,29 +35,32 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - User-chosen prefs → `quivit_config.json`. Last-known runtime → `quivit_state.json`. Restart-gated settings are staged as `pending_<key>` and promoted at startup.
 - `default_sort` is config-file-only; the UI writes only per-directory sort prefs. Archive cache budget is config-file-only, no UI.
 - Filter preference is stored as `active_filter` (id) and `filter_options` (bag), replacing individual booleans.
+- Additional `frontend_data` preferences: `hide_cursor_delay_sec`, `file_list_view_mode`, `spread_enabled`, `spread_direction`, `spread_mode` (derived from enabled + direction).
+- Bounded in-memory session caches: `fsUtils.js` archive password (50) and encryption status (100); `filePanel.js` thumbnail (250); `core.js` animation memo (512). All use `BoundedMap` from `services/cache.js`.
 - Theme/CSS live previews are ephemeral until Options Apply. They must not persist to `localStorage` while previewing.
 
 **CSS:**
 - `global.css`: tokens, resets, shared rules. Loaded by every HTML page.
 - `main.css` / `options.css` / `metadata.css`: that window's layout only. Consume tokens; do not redeclare them.
+- Menubar flyout submenu positioning uses CSS custom properties (`--submenu-top`, `--submenu-left`, `--submenu-max-height`) on host elements, not inline style assignments.
 
 **JavaScript:**
-- `core.js`: state machine. No DOM. UI modules subscribe via `onStateChange`.
-- `services/`: pure domain: `actions.js` (single `cmd-*` registry + dispatch), `keyCombo.js`, `keybindDomain.js`, `sorting.js`, `viewerMath.js`. Filter/scaler methods live in `filters/` and `scaling/lanczos.js`; WebGL is orchestrated by `pipelines/glRuntime.js`. No `document` querying.
+- `core.js`: state machine. No DOM. UI modules subscribe via `onStateChange`. Tracks `spreadEnabled`, `spreadDirection`, `spreadStep`, `fileListViewMode`, and `archiveEncryption` in addition to mode/index/list/config.
+- `services/`: pure domain: `actions.js` (single `cmd-*` registry + dispatch), `cache.js` (`BoundedMap`, `BoundedSet`), `keyCombo.js`, `keybindDomain.js`, `metadataFiles.js` (metadata file priority and basename matching), `registry.js` (filter/scaler catalog), `filterModules.js` (filter module loader), `sorting.js`, `viewerMath.js` (spread ratio detection, half-width scaling, viewport resize pan retention). Filter/scaler methods live in `filters/` and `scaling/lanczos.js`; WebGL is orchestrated by `pipelines/glRuntime.js`. No `document` querying.
 - `shared/`: cross-window: `theme.js` / `themePrePaint.js`, `configPreview.js`, `windowFit.js`, `blobImage.js`.
 - `keybinds.js`: `mergeConfig` + pan/zoom defaults. `DEFAULT_KEYBINDS` is derived from `ACTION_REGISTRY`.
 - `shortcuts.js`: keyboard / mouse / wheel dispatch. Does not write the statusbar.
 - `viewer/`: `viewer.js` facade; `viewerRender.js` owns the image pool; `viewerPipelines.js` owns the overlay canvases; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
-- `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. `favoritesStore.js` is persistence only (no DOM).
+- `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. List and thumbnail view modes with card grid virtualization. Exports `focusFileList()` and `isFileListFocused()`. `favoritesStore.js` is persistence only (no DOM).
 - `fsUtils.js`: filesystem / archive navigation. No DOM.
 - `directoryPrefs.js`: per-directory sort prefs. Sort math is in `services/sorting.js`.
 - `navigationHistory.js`: session-only container Back/Forward.
 - `metadata.js`: comic/archive metadata parsing. `metadata-window.js`: that window's controller.
-- `menubar.js`: dropdown interaction. `menubar/chrome.js`: menu/status visibility. `menubar/statusbar.js`: sole `#statusbar` writer.
+- `menubar.js`: dropdown interaction. `menubar/chrome.js`: menu/status visibility. `menubar/statusbar.js`: sole `#statusbar` writer. Dual spread indicator routing (`.status-spread` in statusbar, `#spread-indicator` viewport overlay).
 - `keyboardNav.js`: generic list/tab navigation.
 - `shellBackground.js`: mirrors `--surface` onto the native window.
 - `main/main.js`: thin bootstrap + init + slim state fan-out. Does not render the file panel or write the statusbar.
-- `main/fullscreen.js`, `dropzone.js`, `lifecycle.js`, `metadataBadge.js`: those surfaces only.
+- `main/fullscreen.js`, `dropzone.js`, `lifecycle.js`, `metadataBadge.js`, `passwordOverlay.js`: those surfaces only.
 - `options/options.js`: Options orchestration. `keybindUi.js`: capture UI. `associationsUi.js`: file-type associations.
 
 **Windows:**
@@ -67,12 +70,12 @@ If the tree looks the same and ownership did not change, leave this file alone.
 
 **Rust:**
 - `lib.rs` & `main.rs`: bootstrap, config watcher, and main-window build.
-- `tests/`: in-tree testing for archives, config, formats, and protocol.
+- `tests/`: in-tree testing for archives, config, formats, protocol, temp archive origin, and thumbnails.
 - `config.rs`: `AppConfig` / persistence / portable / pending promotion.
-- `commands/`: Tauri command surface (directory, archives, animation, watcher, associations, shell).
-- `archives/` & `formats.rs`: archive readers + `ArchiveCache` and format / animation registry.
-- `protocol.rs`: `quivit://` and `asset://` handler logic.
-- `platform/` & `windows.rs`: OS-level integrations (including shell icons and hidden-path logic), window lifecycle (including size constants).
+- `commands/`: Tauri command surface (directory, archives, animation, watcher, associations, shell). `list_archive` accepts `password: Option<String>`. `drop_all_archives_cache` and `resolve_archive_temp_origin` are archive lifecycle commands.
+- `archives/` & `formats.rs`: archive readers + `ArchiveCache` (two-archive sliding buffer, `MAX_OPEN_ARCHIVES = 2`) and format / animation registry.
+- `protocol.rs`: `quivit://` handler. Routes: `/archive/` (entry data, `no-store`), `/thumb/` (96×96 shell thumbnails), `/icon/` (shell icons, `?size=large` for 32×32). `asset://` for direct file access.
+- `platform/`: `icons.rs` (shell icons), `thumbnails.rs` (96×96 `IShellItemImageFactory`), `temp_archive.rs` (external archiver temp origin resolution), `attributes.rs` (dotfile visibility), `dialog.rs` (native folder picker with Library virtual folder resolution). `windows.rs`: window lifecycle and size constants.
 - `ico.rs`: ICO spritesheets.
-- `models.rs`: IPC structs (cross-module contracts).
+- `models.rs`: IPC structs. `FileEntry.size: u64`, `ArchiveEncryptionStatus`, `ArchiveReadResult.encryption`, `TempArchiveOrigin`.
 - `utils.rs`: Base64 and URL encoding helpers.
