@@ -8,6 +8,13 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Single-Instance Options Save Status Message (2026-09-14)
+- **Options UI:**
+  - Tracked `initialSingleInstance` in `src/js/options/options.js` during configuration initialization.
+  - Updated the Options Save handler to check if "Allow only one QuiviT instance" has been modified from its initial state (`opt-single-instance.checked !== initialSingleInstance`).
+  - Displays `"Options applied successfully. Restart required."` in `#options-status` when the option was modified, while keeping `"Options applied successfully."` for unchanged saves and preserving existing failure messages.
+  - Verified with `node --check src/js/options/options.js` and `npm test` (78/78 passed).
+
 ### Non-Archive 1:1 Thumbnail Viewport Queue (2026-09-14)
 - **Archive Resource Refactor (Seventh Slice / Task 3, Item 13):**
   - Generalized the file panel viewport queue to cover non-archive disk images decoded at 1:1 via Tauri asset URLs (WebP, AVIF, SVG, APNG, and shell thumbnail fallbacks).

@@ -20,6 +20,7 @@ const configDirLabel = document.getElementById('config-dir-label');
 const localDataDirLabel = document.getElementById('local-data-dir-label');
 let keybindUiInstance = null;
 let forceClose = false;
+let initialSingleInstance = true;
 
 // Emergency CSS reset (Ctrl+Shift+Alt+C).
 window.addEventListener('keydown', (e) => {
@@ -76,7 +77,8 @@ async function init() {
     document.getElementById('opt-remember-last-image').checked = config.frontend_data.remember_last_image === true;
     document.getElementById('opt-open-first-image').checked = config.frontend_data.open_first_image === true;
     const singleInstanceValue = config.frontend_data.pending_single_instance ?? config.frontend_data.single_instance;
-    document.getElementById('opt-single-instance').checked = singleInstanceValue !== false;
+    initialSingleInstance = singleInstanceValue !== false;
+    document.getElementById('opt-single-instance').checked = initialSingleInstance;
     document.getElementById('opt-show-hidden').checked = config.frontend_data.show_hidden === true;
     document.getElementById('opt-hide-chrome-fullscreen').checked = config.frontend_data.hide_chrome_on_fullscreen !== false;
     document.getElementById('opt-hide-cursor-delay').value = typeof config.frontend_data.hide_cursor_delay_sec === 'number' ? config.frontend_data.hide_cursor_delay_sec : 2;
@@ -335,6 +337,7 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   }
   await applyAssociations(showStatus);
   
+  const isSingleInstanceModified = document.getElementById('opt-single-instance').checked !== initialSingleInstance;
   const formConfig = buildConfigFromForm(config);
   try { localStorage.setItem('quivit-custom-css', formConfig.frontend_data.custom_css); } catch(e) {}
   
@@ -350,6 +353,8 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
     const currentStatus = statusEl ? statusEl.textContent : '';
     if (currentStatus.toLowerCase().includes('failed') || currentStatus.toLowerCase().includes('error')) {
       showStatus('Options applied, but some operations failed. Check the logs above.');
+    } else if (isSingleInstanceModified) {
+      showStatus('Options applied successfully. Restart required.');
     } else {
       showStatus('Options applied successfully.');
     }
