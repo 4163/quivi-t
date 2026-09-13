@@ -47,3 +47,5 @@ test-files/animated/
 playwright/
 test-results/
 playwright-report/
+
+scratch/
