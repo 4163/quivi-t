@@ -122,12 +122,9 @@
 - Do not start this without first securing at least one non-Windows test device or CI runner: verification is impossible otherwise.
 
 ### Instrumentation System: Test Harness
-- Main job after the HTML/CSS/JS and Rust refactors: rewrite and decouple functions that have no honest test seam, then write a proper test harness covering a decent portion of QuiviT's functions.
-- For each behavior worth keeping, write a targeted cargo test (or extend an existing one) that exercises the real code path and fails loud if the behavior is wrong.
-- Focus on: functions, commands, and public APIs; config schema (defaults, key renames, type shifts); archive entry parsing, sort order, and cache-key logic; state machine transitions and callback contracts.
-- Do not write tests for pure presentation (CSS, layout, visual rendering). Those stay on the manual verify checklist.
-- Place new tests alongside existing test infrastructure (`src-tauri/src/tests/`, in-tree `#[path]` tests). If a seam has no home yet, discuss placement before inventing a new tree. Throwaway scripts are fine for fixture generation, environment probes, or one-off coverage sweeps. They are not the harness.
-- Run `cargo test` in `src-tauri`. Fix the implementation or the test. Do not proceed with failing tests.
-- **Skill allocation.** The harness work belongs on the next branch inside `diagnose`. One explicit skill. Same lock style as `update-architecture-state`.
-- **Scope boundary.** `blast-radius` stays "prove this change did not break a consumer." It does not build the harness.
-- **Deferred, after the harness exists.** Do not start Python instrumentation in the same slice as the rewrite. Once the cargo tests cover a decent portion of the app, add JS and Rust timing and call-count logs (processing time in ms, hot spots / call counts). Python then drives the benches and collects the output. `diagnose` still owns that later slice. Trigger on "it's slow," "it's flaky," or "measure X."
+- The test harness uses a 3-tier structure covering backend domain logic, frontend unit state, and live application end-to-end workflows.
+- **Rust unit tests (`src-tauri/src/tests/`, in-tree `#[path]` tests):** Cover pure backend logic without spinning up webviews. Focus on archive entry parsing, sort order, cache budgets, format headers, protocol URL routing, config schema defaults and migrations, and temp archive path resolution.
+- **JavaScript unit tests (`tests/`, Mocha runner via `npm test`):** Cover pure frontend domain state, action registry bindings, state machine transitions, math helpers, and viewport matrix transforms with zero DOM dependencies.
+- **WebdriverIO end-to-end tests (`e2e/specs/`, via `npm run test:e2e`):** Cover live UI rendering, IPC roundtrips, cross-window state, shortcuts, dialogs, and user interactions against the running Tauri debug build using `tauri-driver` and `msedgedriver`.
+- Python instrumentation and benching scripts are removed from scope. WebdriverIO and Mocha handle timing, regression assertions, and automated test execution directly.
+- **Verification rule:** Keep unit tests fast and deterministic. Avoid disk-churning fixtures or long timeouts in unit test files; offload multi-process integration assertions to WebdriverIO specs.

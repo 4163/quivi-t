@@ -333,11 +333,6 @@ impl ArchiveCache {
     }
 
     #[cfg(test)]
-    pub(crate) fn open_archive_count(&self) -> usize {
-        self.archives.len()
-    }
-
-    #[cfg(test)]
     pub(crate) fn set_max_open_archives(&mut self, max_open_archives: usize) {
         self.max_open_archives = max_open_archives;
     }

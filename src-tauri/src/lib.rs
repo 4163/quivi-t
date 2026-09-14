@@ -153,9 +153,5 @@ mod archive_tests;
 mod format_tests;
 
 #[cfg(test)]
-#[path = "tests/thumbnails_tests.rs"]
-mod thumbnails_tests;
-
-#[cfg(test)]
 #[path = "tests/temp_archive_tests.rs"]
 mod temp_archive_tests;

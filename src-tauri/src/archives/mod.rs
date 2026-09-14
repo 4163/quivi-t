@@ -17,21 +17,11 @@ pub(crate) use cache::archive_entry_temp_path;
 pub(crate) use cache::archive_temp_dir;
 pub use cache::ArchiveCache;
 #[cfg(test)]
-pub(crate) use rar::extract_rar_to_temp;
-#[cfg(test)]
 pub(crate) use rar::list_rar_entries;
-#[cfg(test)]
-pub(crate) use sevenz::extract_7z_to_temp;
 #[cfg(test)]
 pub(crate) use sevenz::list_7z_entries;
 #[cfg(test)]
-pub(crate) use tar::extract_tar_entry;
-#[cfg(test)]
-pub(crate) use tar::extract_tar_to_temp;
-#[cfg(test)]
 pub(crate) use tar::list_tar_entries;
-#[cfg(test)]
-pub(crate) use zip::extract_zip_entry;
 #[cfg(test)]
 pub(crate) use zip::list_zip_entries;
 

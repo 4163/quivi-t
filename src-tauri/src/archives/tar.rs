@@ -100,27 +100,6 @@ pub(crate) fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, Str
     Ok(files)
 }
 
-#[cfg(test)]
-pub(crate) fn extract_tar_entry(archive_path: &str, entry_name: &str) -> Result<Vec<u8>, String> {
-    let file = validate_tar_header(archive_path)?;
-    let mut archive = tar::Archive::new(file);
-    let entries = archive
-        .entries()
-        .map_err(|e| format!("Cannot read TAR entries: {e}"))?;
-
-    for entry in entries {
-        let mut entry = entry.map_err(|e| format!("Error reading TAR entry: {e}"))?;
-        let name = decode_tar_name(&entry);
-        if name == entry_name {
-            let mut buf = Vec::with_capacity(entry.size() as usize);
-            std::io::Read::read_to_end(&mut entry, &mut buf)
-                .map_err(|e| format!("Error reading TAR entry {entry_name}: {e}"))?;
-            return Ok(buf);
-        }
-    }
-
-    Err(format!("Cannot find TAR entry {}", entry_name))
-}
 
 pub(crate) fn extract_tar_to_temp(
     archive_path: String,
