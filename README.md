@@ -366,7 +366,7 @@ QuiviT/
 │  │  ├─ archives/               # Archive readers, caching, and extraction
 │  │  ├─ commands/               # Tauri command surface and watchers
 │  │  ├─ platform/               # Shell thumbnails, external archiver temp origin, icons, dialogs
-│  │  ├─ tests/                  # In-tree tests (archives, formats, protocol, config, temp archive, thumbnails)
+│  │  ├─ tests/                  # In-tree tests
 │  │  ├─ config.rs               # Configuration state, persistence, and portable mode
 │  │  ├─ formats.rs              # Supported format registry
 │  │  ├─ ico.rs                  # ICO frame extraction and spritesheet
