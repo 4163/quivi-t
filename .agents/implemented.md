@@ -8,6 +8,25 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Flat Mocha Unit Test Harness in mocha/ (2026-09-14)
+- **Root Unit Test Suite Architecture:**
+  - Initialized a flat `mocha/` test suite at the repository root mirroring `src-tauri/src/tests/` for pure frontend domain invariants.
+  - Kept unit tests outside `src/` to prevent embedding test files and mocks into Tauri's production release executable via `frontendDist: "../src"`.
+  - Added `"test:unit": "mocha 'mocha/*.test.js'"` script to `package.json` and added `mocha` directly to `devDependencies`.
+- **Test Suites Implemented:**
+  - `mocha/viewerMath.test.js` (10 tests): Viewport matrix transformations, 1.2 aspect ratio spread detection, RTL/LTR spread step translation offsets, fit modes, pan/zoom coordinate retention across window resizes, and viewport coordinate inversion.
+  - `mocha/core.test.js` (9 tests): Pure state machine transitions, subscriber notification lifecycle (`onStateChange`), dimension derivation, spread step navigation, list/thumbnail view mode toggling, and archive encryption state tracking.
+  - `mocha/actions.test.js` (6 tests): Command registry integrity (`ACTION_REGISTRY`), required category existence, `DEFAULT_KEYBINDS` validation, combo normalization (`keyCombo.js`), and context dispatch execution.
+  - `mocha/metadata.test.js` (9 tests): Metadata filename priority (`ComicInfo.xml` > `comicinfo.json` > `meta.json`), case-insensitivity, ComicInfo JSON parsing (PascalCase and camelCase), and GalleryMeta JSON extraction.
+  - `mocha/cache.test.js` (7 tests): BoundedMap capacity limits, oldest key LRU eviction, onEvict callbacks on capacity / delete / clear, and in-place updates.
+  - `mocha/sorting.test.js` (1 test): Natural archive entry sorting ensuring root files precede nested files.
+- **Verification & Cleanup:**
+  - `npm test`: 42/42 tests passed in 51ms via Mocha.
+  - Removed obsolete `src/js/tests/` directory to eliminate DOM/Tauri mocks and keep `frontendDist: "../src"` free of test files in release builds.
+  - `cargo check --tests`: Passed with zero warnings in 1.48s.
+  - `cargo test`: 63/63 backend unit tests passed in 0.22s.
+  - `node --check`: Syntax passed across all six test files in `mocha/`.
+
 ### Three-Tier Test Harness and End-to-End Suite (2026-09-14)
 - **Harness Architecture and Test Separation:**
   - Structured testing into three distinct layers matching execution speed and runtime requirements.

@@ -58,10 +58,12 @@ Match touched files to their targeted test command to prove safety in 1 to 2 sec
 | `src-tauri/src/platform/thumbnails.rs` | `npx wdio run wdio.conf.js --spec e2e/specs/02-navigation.e2e.js` | ~8.0s |
 | `src-tauri/src/platform/temp_archive.rs` | `cargo test --manifest-path src-tauri/Cargo.toml temp_archive_` | ~1.2s |
 | `src-tauri/src/platform/attributes.rs` | `cargo test --manifest-path src-tauri/Cargo.toml test_is_hidden_path` | ~1.0s |
-| `src/js/services/viewerMath.js` | `node --test src/js/tests/viewerMath.test.mjs` | ~0.3s |
-| `src/js/core.js` (spread navigation) | `node --test src/js/tests/coreSpread.test.mjs` | ~0.3s |
-| `src/js/services/cache.js` | `node --test src/js/tests/boundedMap.test.mjs` | ~0.3s |
-| `src/js/services/metadataFiles.js`, `src/js/metadata.js` | `node --test src/js/tests/metadata.test.mjs` | ~0.3s |
+| `src/js/services/viewerMath.js` | `npx mocha mocha/viewerMath.test.js` | ~0.05s |
+| `src/js/core.js` | `npx mocha mocha/core.test.js` | ~0.05s |
+| `src/js/services/actions.js`, `keyCombo.js` | `npx mocha mocha/actions.test.js` | ~0.05s |
+| `src/js/services/metadataFiles.js`, `src/js/metadata.js` | `npx mocha mocha/metadata.test.js` | ~0.05s |
+| `src/js/services/cache.js` | `npx mocha mocha/cache.test.js` | ~0.05s |
+| `src/js/services/sorting.js` | `npx mocha mocha/sorting.test.js` | ~0.05s |
 | Fast compile & borrow check (iteration) | `cargo check --tests --manifest-path src-tauri/Cargo.toml` | ~3.0s |
 | Any modified JS module | `node --check <file>` | ~0.1s |
 
