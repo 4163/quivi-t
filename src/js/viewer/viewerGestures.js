@@ -61,7 +61,7 @@ export function createViewerGestures(viewportState) {
 
     if (_lastMouseX !== 0 || _lastMouseY !== 0) {
       const target = document.elementFromPoint(_lastMouseX, _lastMouseY);
-      if (!target || target.closest('#drop-overlay') || target.closest('#password-overlay') || target.closest('#file-panel, #menubar, #statusbar')) {
+      if (!target || target.closest('#drop-overlay') || target.closest('#password-overlay') || target.closest('#file-panel, #menubar, #statusbar, #quivit-recorder-badge, [data-ui]')) {
         return false;
       }
       return !!target.closest('#viewport');

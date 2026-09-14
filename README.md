@@ -299,6 +299,7 @@ AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/sk
 | **Desktop Webview** | WebView2 | Native Windows web rendering |
 | **Unit Testing** | `mocha` | Fast standalone frontend unit testing |
 | **E2E Testing** | WebdriverIO (`@wdio/tauri-service`) | End-to-end desktop testing via `tauri-driver` and `msedgedriver` |
+| **Replay Diagnostics** | WebdriverIO / In-Browser Probes | Deterministic scenario replay, frame blackout detection, and pipeline telemetry |
 | **Lanczos Scaling** | `pica` | Off-thread still-image Lanczos resize |
 | **WebGL Filters** | WebGL2 | Anime4K, CRT, Phosphor, Scanlines, and per-frame Lanczos on animated images |
 | **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG/AVIF playback under filters and Lanczos |
@@ -321,114 +322,121 @@ AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/sk
 
 ```text
 QuiviT/
-├─ e2e/                          # WebdriverIO end-to-end test suite
-│  ├─ helpers/                   # Test fixtures and keyboard/shortcut helpers
-│  ├─ pageobjects/               # Page objects for viewer, file panel, options, etc.
-│  └─ specs/                     # E2E test specifications (01-startup to 07-os-integration)
-├─ mocha/                        # Standalone Mocha frontend unit tests (outside src/)
-│  ├─ actions.test.js            # Action registry integrity and key combo dispatch
-│  ├─ cache.test.js              # BoundedMap LRU cache eviction and callbacks
-│  ├─ core.test.js               # State machine transitions and subscriptions
-│  ├─ metadata.test.js           # ComicInfo and GalleryMeta JSON parsing
-│  ├─ sorting.test.js            # Archive natural sort order
-│  └─ viewerMath.test.js         # Viewport scaling, transforms, and spread geometry
+├─ e2e/                           # WebdriverIO test suite & replay diagnostics
+│  ├─ helpers/                    # Test fixtures, recorder shim, and diagnostics router
+│  ├─ pageobjects/                # Page objects for viewer, file panel, options, etc.
+│  ├─ replay-diagnostics/         # In-browser diagnostic engine, CLI, runner, and probes
+│  │  ├─ base.js                  # In-browser diagnostic engine template
+│  │  ├─ cli.js                   # Diagnostic CLI runner (npm run diagnose)
+│  │  ├─ runner.e2e.js            # Replay scenario execution spec
+│  │  ├─ probes/                  # Modular telemetry probes (Core, Viewer, IPC)
+│  │  └─ reports/                 # Output diagnostic timeline and anomaly reports
+│  ├─ scenarios/                  # Recorded action scenarios (*.json)
+│  └─ specs/                      # E2E test specs (01-startup to 07-os-integration, record, replay)
+├─ mocha/                         # Standalone Mocha frontend unit tests (outside src/)
+│  ├─ actions.test.js             # Action registry integrity and key combo dispatch
+│  ├─ cache.test.js               # BoundedMap LRU cache eviction and callbacks
+│  ├─ core.test.js                # State machine transitions and subscriptions
+│  ├─ diagnosticsContract.test.js # Action registry, scenario, and probe DOM contract checks
+│  ├─ metadata.test.js            # ComicInfo and GalleryMeta JSON parsing
+│  ├─ sorting.test.js             # Archive natural sort order
+│  └─ viewerMath.test.js          # Viewport scaling, transforms, and spread geometry
 ├─ src/
-│  ├─ index.html                 # Main viewer window
-│  ├─ options.html               # Options window
-│  ├─ metadata.html              # Archive metadata window
+│  ├─ index.html                  # Main viewer window
+│  ├─ options.html                # Options window
+│  ├─ metadata.html               # Archive metadata window
 │  ├─ css/
-│  │  ├─ global.css              # Tokens, resets, rules shared by every page
-│  │  ├─ main.css                # Viewer / file-panel layout
-│  │  ├─ options.css             # Options window layout
-│  │  └─ metadata.css            # Metadata window layout
+│  │  ├─ global.css               # Tokens, resets, rules shared by every page
+│  │  ├─ main.css                 # Viewer / file-panel layout
+│  │  ├─ options.css              # Options window layout
+│  │  └─ metadata.css             # Metadata window layout
 │  └─ js/
-│     ├─ core.js                 # State machine (no DOM)
-│     ├─ directoryPrefs.js       # Per-directory sort prefs
-│     ├─ fsUtils.js              # Filesystem / archive navigation
-│     ├─ keybinds.js             # Config merge + pan/zoom defaults
-│     ├─ keyboardNav.js          # List / tab keyboard navigation
-│     ├─ menubar.js              # Menu bar dropdown interaction
-│     ├─ metadata.js             # ComicInfo (XML/JSON), CoMet, OPF, and gallery meta.json parsing
-│     ├─ metadata-window.js      # Metadata window controller
-│     ├─ navigationHistory.js    # Session-only Back/Forward
-│     ├─ shellBackground.js      # Mirrors --surface into the native window
-│     ├─ shortcuts.js            # Keyboard / mouse / wheel dispatch
+│     ├─ core.js                  # State machine (no DOM)
+│     ├─ directoryPrefs.js        # Per-directory sort prefs
+│     ├─ fsUtils.js               # Filesystem / archive navigation
+│     ├─ keybinds.js              # Config merge + pan/zoom defaults
+│     ├─ keyboardNav.js           # List / tab keyboard navigation
+│     ├─ menubar.js               # Menu bar dropdown interaction
+│     ├─ metadata.js              # ComicInfo (XML/JSON), CoMet, OPF, and gallery meta.json parsing
+│     ├─ metadata-window.js       # Metadata window controller
+│     ├─ navigationHistory.js     # Session-only Back/Forward
+│     ├─ shellBackground.js       # Mirrors --surface into the native window
+│     ├─ shortcuts.js             # Keyboard / mouse / wheel dispatch
 │     ├─ filepanel/
-│     │  ├─ filePanel.js         # File list, columns, breadcrumb, resize
-│     │  └─ favoritesStore.js    # Favorites persistence (no DOM)
+│     │  ├─ filePanel.js          # File list, columns, breadcrumb, resize
+│     │  └─ favoritesStore.js     # Favorites persistence (no DOM)
 │     ├─ main/
-│     │  ├─ main.js              # Bootstrap + slim state fan-out
-│     │  ├─ fullscreen.js        # Fullscreen UX
-│     │  ├─ dropzone.js          # Drag-and-drop
-│     │  ├─ lifecycle.js         # Title, flush-on-close, single-instance
-│     │  ├─ metadataBadge.js     # Archive-info badge
-│     │  └─ passwordOverlay.js   # Archive password prompt
+│     │  ├─ main.js               # Bootstrap + slim state fan-out
+│     │  ├─ fullscreen.js         # Fullscreen UX
+│     │  ├─ dropzone.js           # Drag-and-drop
+│     │  ├─ lifecycle.js          # Title, flush-on-close, single-instance
+│     │  ├─ metadataBadge.js      # Archive-info badge
+│     │  └─ passwordOverlay.js    # Archive password prompt
 │     ├─ menubar/
-│     │  ├─ chrome.js            # Menu / status visibility
-│     │  └─ statusbar.js         # Sole #statusbar writer
+│     │  ├─ chrome.js             # Menu / status visibility
+│     │  └─ statusbar.js          # Sole #statusbar writer
 │     ├─ options/
-│     │  ├─ options.js           # Options window orchestration
-│     │  ├─ keybindUi.js         # Keybind capture / conflicts
-│     │  └─ associationsUi.js    # File-type association UI
+│     │  ├─ options.js            # Options window orchestration
+│     │  ├─ keybindUi.js          # Keybind capture / conflicts
+│     │  └─ associationsUi.js     # File-type association UI
 │     ├─ services/
-│     │  ├─ actions.js           # ACTION_REGISTRY + dispatch
-│     │  ├─ cache.js             # BoundedMap / BoundedSet
-│     │  ├─ filterModules.js     # Filter module resolution
-│     │  ├─ keyCombo.js          # Combo normalize / format
-│     │  ├─ keybindDomain.js     # Locked binds, conflicts, categories
-│     │  ├─ metadataFiles.js     # Metadata file priority + basename matching
-│     │  ├─ registry.js          # Filter and scaling definitions
-│     │  ├─ sorting.js           # naturalCompare / applySort
-│     │  ├─ viewerMath.js        # Zoom / pan / fit / spread math
+│     │  ├─ actions.js            # ACTION_REGISTRY + dispatch
+│     │  ├─ cache.js              # BoundedMap / BoundedSet
+│     │  ├─ filterModules.js      # Filter module resolution
+│     │  ├─ keyCombo.js           # Locked binds, conflicts, categories
+│     │  ├─ metadataFiles.js      # Metadata file priority + basename matching
+│     │  ├─ registry.js           # Filter and scaling definitions
+│     │  ├─ sorting.js            # naturalCompare / applySort
+│     │  ├─ viewerMath.js         # Zoom / pan / fit / spread math
 │     │  ├─ filters/
-│     │  │  ├─ anime4k.js        # Anime4K filter definition
-│     │  │  ├─ crt.js            # Retro CRT filter definition
-│     │  │  ├─ phosphor.js       # Phosphor dot-matrix filter definition
-│     │  │  ├─ scanlines.js      # Simple scanlines filter definition
-│     │  │  └─ anime4k/          # Anime4K WebGL shader chains
+│     │  │  ├─ anime4k.js         # Anime4K filter definition
+│     │  │  ├─ crt.js             # Retro CRT filter definition
+│     │  │  ├─ phosphor.js        # Phosphor dot-matrix filter definition
+│     │  │  ├─ scanlines.js       # Simple scanlines filter definition
+│     │  │  └─ anime4k/           # Anime4K WebGL shader chains
 │     │  ├─ pipelines/
-│     │  │  ├─ glCommon.js       # WebGL utility and shader compilation functions
-│     │  │  └─ glRuntime.js      # Filter pipeline orchestrator and quad renderer
+│     │  │  ├─ glCommon.js        # WebGL utility and shader compilation functions
+│     │  │  └─ glRuntime.js       # Filter pipeline orchestrator and quad renderer
 │     │  └─ scaling/
-│     │     ├─ lanczos.js        # Off-thread Pica/Canvas2D Lanczos scaling
-│     │     └─ lanczosWebGL.js   # Real-time WebGL Lanczos for animated images
+│     │     ├─ lanczos.js         # Off-thread Pica/Canvas2D Lanczos scaling
+│     │     └─ lanczosWebGL.js    # Real-time WebGL Lanczos for animated images
 │     ├─ shared/
-│     │  ├─ theme.js             # applyTheme / applyCustomCss
-│     │  ├─ themePrePaint.js     # Synchronous pre-paint injector
-│     │  ├─ blobImage.js         # Shared ImageBitmap cache for origins
-│     │  ├─ configPreview.js     # Live preview + emergency CSS reset
-│     │  └─ windowFit.js         # Options / metadata content fit
+│     │  ├─ theme.js              # applyTheme / applyCustomCss
+│     │  ├─ themePrePaint.js      # Synchronous pre-paint injector
+│     │  ├─ blobImage.js          # Shared ImageBitmap cache for origins
+│     │  ├─ configPreview.js      # Live preview + emergency CSS reset
+│     │  └─ windowFit.js          # Options / metadata content fit
 │     ├─ vendors/
-│     │  └─ pica.js              # High quality image resizing
+│     │  └─ pica.js               # High quality image resizing
 │     └─ viewer/
-│        ├─ viewer.js            # Facade
-│        ├─ viewerRender.js      # Image pool + transforms
-│        ├─ viewerPipelines.js   # Overlay canvas and WebGL owner
-│        └─ viewerGestures.js    # Pan input
+│        ├─ viewer.js             # Facade
+│        ├─ viewerRender.js       # Image pool + transforms
+│        ├─ viewerPipelines.js    # Overlay canvas and WebGL owner
+│        └─ viewerGestures.js     # Pan input
 ├─ src-tauri/
 │  ├─ capabilities/
-│  │  └─ default.json            # Tauri permissions for main/options/metadata windows
-│  ├─ icons/                     # Application icons
+│  │  └─ default.json             # Tauri permissions for main/options/metadata windows
+│  ├─ icons/                      # Application icons
 │  ├─ src/
-│  │  ├─ archives/               # Archive readers, caching, and extraction
-│  │  ├─ commands/               # Tauri command surface and watchers
-│  │  ├─ platform/               # Shell thumbnails, external archiver temp origin, icons, dialogs
-│  │  ├─ tests/                  # In-tree tests
-│  │  ├─ config.rs               # Configuration state, persistence, and portable mode
-│  │  ├─ formats.rs              # Supported format registry
-│  │  ├─ ico.rs                  # ICO frame extraction and spritesheet
-│  │  ├─ lib.rs                  # Bootstrap, config watcher, and main-window build
-│  │  ├─ main.rs                 # Native executable entry point
-│  │  ├─ models.rs               # IPC structs and data models
-│  │  ├─ protocol.rs             # quivit:// and asset:// handler logic
-│  │  ├─ utils.rs                # Base64 and encoding helpers
-│  │  └─ windows.rs              # Window lifecycle and size constants
+│  │  ├─ archives/                # Archive readers, caching, and extraction
+│  │  ├─ commands/                # Tauri command surface and watchers
+│  │  ├─ platform/                # Shell thumbnails, external archiver temp origin, icons, dialogs
+│  │  ├─ tests/                   # In-tree tests
+│  │  ├─ config.rs                # Configuration state, persistence, and portable mode
+│  │  ├─ formats.rs               # Supported format registry
+│  │  ├─ ico.rs                   # ICO frame extraction and spritesheet
+│  │  ├─ lib.rs                   # Bootstrap, config watcher, and main-window build
+│  │  ├─ main.rs                  # Native executable entry point
+│  │  ├─ models.rs                # IPC structs and data models
+│  │  ├─ protocol.rs              # quivit:// and asset:// handler logic
+│  │  ├─ utils.rs                 # Base64 and encoding helpers
+│  │  └─ windows.rs               # Window lifecycle and size constants
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json
-├─ matcha-latte.css              # Example theme (bundled with the release)
-├─ sage-mint.css                 # Example theme (bundled with the release)
+├─ matcha-latte.css               # Example theme (bundled with the release)
+├─ sage-mint.css                  # Example theme (bundled with the release)
 ├─ package.json
-└─ README.md                     # Project overview & architecture documentation
+└─ README.md                      # Project overview & architecture documentation
 ```
 
 ## Attributions

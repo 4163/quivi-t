@@ -81,8 +81,18 @@ describe('Replay Diagnostics Runner', function () {
       initialPath = path.resolve(projectRoot, initialPath);
     }
 
+    // Ensure viewport and application DOM are ready
+    await viewerPage.viewport.waitForDisplayed({ timeout: 15000 });
+
     // Load initial file into viewport
-    await browser.execute((filePath) => {
+    await browser.execute(async (filePath) => {
+      try {
+        const { FsUtils } = await import('/js/fsUtils.js');
+        if (FsUtils && typeof FsUtils.loadFile === 'function') {
+          await FsUtils.loadFile(filePath, { preferInitial: true, restoreLastImage: false });
+          return;
+        }
+      } catch {}
       if (window.__TAURI__?.event?.emit) {
         window.__TAURI__.event.emit('single-instance-open', filePath);
       }

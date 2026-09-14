@@ -39,25 +39,52 @@ describe('Command Action Recorder', function () {
       initialPath = path.resolve(projectRoot, initialPath);
     }
 
+    // Ensure viewport and application DOM are ready
+    await viewerPage.viewport.waitForDisplayed({ timeout: 15000 });
+
     // Load initial file or directory into viewport
-    await browser.execute((filePath) => {
+    await browser.execute(async (filePath) => {
+      try {
+        const { FsUtils } = await import('/js/fsUtils.js');
+        if (FsUtils && typeof FsUtils.loadFile === 'function') {
+          await FsUtils.loadFile(filePath, { preferInitial: true, restoreLastImage: false });
+          return;
+        }
+      } catch {}
       if (window.__TAURI__?.event?.emit) {
         window.__TAURI__.event.emit('single-instance-open', filePath);
       }
     }, initialPath);
 
-    await browser.waitUntil(
-      async () => !(await viewerPage.isDropOverlayVisible()),
-      { timeout: 10000, timeoutMsg: 'Initial image failed to load into viewport' }
-    );
+    try {
+      await browser.waitUntil(
+        async () => {
+          const dropVisible = await viewerPage.isDropOverlayVisible();
+          if (!dropVisible) return true;
+          // Retry loading if initial event was fired before listener attached
+          await browser.execute(async (filePath) => {
+            try {
+              const { FsUtils } = await import('/js/fsUtils.js');
+              if (FsUtils?.loadFile) {
+                FsUtils.loadFile(filePath, { preferInitial: true, restoreLastImage: false });
+              }
+            } catch {}
+          }, initialPath);
+          return false;
+        },
+        { timeout: 10000, interval: 600 }
+      );
+    } catch {
+      console.warn(`[WARN] Drop overlay did not dismiss for "${initialPath}". Continuing to recorder initialization.`);
+    }
 
     // Inject detached recorder shim into webview
     await browser.execute(initRecorderShim);
 
     console.log(`\n======================================================`);
     console.log(`[RECORDING ACTIVE] Scenario: "${scenarioName}"`);
-    console.log(`Use the floating badge controls: [Start/Pause], [Reset], [Stop].`);
-    console.log(`Press 'Escape' or simply close the window when done to finalize.`);
+    console.log(`Use the floating badge controls: [Start/Pause] (or F9), [Reset], [Stop].`);
+    console.log(`Click [Stop] or simply close the window when done to finalize.`);
     console.log(`======================================================\n`);
 
     // Poll latest trace continuously into Node memory and detect window exit immediately

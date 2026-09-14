@@ -200,6 +200,16 @@ async function main() {
   if (pause) env.STEP_PAUSE_MS = pause;
   if (verbose) env.VERBOSE = '1';
 
+  if (fs.existsSync(investigationPath)) {
+    console.log('\n************************************************************');
+    console.log('[NOTICE] ACTIVE INVESTIGATION OVERRIDE:');
+    console.log('Engine: e2e/replay-diagnostics/investigation.js');
+    console.log('(base.js is shadowed. Use --clean when finished)');
+    console.log('************************************************************\n');
+  } else {
+    console.log('[DIAGNOSTICS] Engine: base.js (baseline)');
+  }
+
   console.log(`[DIAGNOSTICS] Launching replay for scenario "${scenario}"...`);
   if (pause) console.log(`[DIAGNOSTICS] Step pause: ${pause}ms`);
   if (verbose) console.log(`[DIAGNOSTICS] Verbose mode enabled`);

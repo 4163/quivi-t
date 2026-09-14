@@ -10,6 +10,7 @@ if (fs.existsSync(investigationFile)) {
   console.log('[DIAGNOSTICS] Active probe engine: investigation.js (iterative investigation copy)');
   diagnosticsModule = await import('../replay-diagnostics/investigation.js');
 } else {
+  console.log('[DIAGNOSTICS] Active probe engine: base.js (baseline)');
   diagnosticsModule = await import('../replay-diagnostics/base.js');
 }
 

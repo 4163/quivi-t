@@ -8,6 +8,23 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Diagnostics Anti-Staleness Guardrails and Contract Verification (2026-09-15)
+- **Static Contract Unit Testing:**
+  - Added `mocha/diagnosticsContract.test.js` running under `npm test` (< 20ms). Validates that all action IDs in `e2e/scenarios/*.json` match entries in `ACTION_REGISTRY`, all DOM IDs and classes queried by `viewerPipelineProbe.js` exist in markup and viewer render modules, and base/recorder exports remain intact.
+  - Exported `ACTION_MAP` from `src/js/services/actions.js` for O(1) action lookups.
+- **Test Harness Isolation & Gitignore Documentation:**
+  - Configured `wdio.conf.js` to exclude interactive tools (`record.e2e.js`, `replay.e2e.js`) from default `npm run test:e2e` runs, preventing 30-minute hangs while preserving explicit invocation via `npm run record`.
+  - Documented in `.gitignore` that `e2e/replay-diagnostics/investigation.js` is intentionally tracked to support multi-session investigations across commits.
+- **Engine Observability & Agent Skills Integration:**
+  - Updated `e2e/replay-diagnostics/cli.js` and `e2e/helpers/replay-diagnostics.js` to print clear status banners when `investigation.js` is actively overriding `base.js`.
+  - Updated `blast-radius/SKILL.md` to add the `Viewer DOM & rendering pool` surface and mapped viewer/pipeline changes to `npm run diagnose -- sample-navigation` (~2.5s).
+  - Updated `verify-implementation/SKILL.md` and `validate-changes/SKILL.md` to check probe DOM contracts, scenario action validity, and active investigation status.
+- **Verification:**
+  - Verified syntax via `node --check` across all touched JS files.
+  - Verified unit test suite via `npm test` (47/47 passing in 56ms).
+  - Verified backend compilation via `cargo check --tests` (0 warnings).
+  - Confirmed CLI scenario listing, report inspection, and clean operations run cleanly.
+
 ### Replay Diagnostics Harness and Agent Debugging Skill (2026-09-15)
 - **Harness Architecture and CLI Runner:**
   - Built a dedicated replay diagnostic harness in `e2e/replay-diagnostics/` to capture in-browser pipeline identity, telemetry events, and frame rendering anomalies.
@@ -15,7 +32,7 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
   - Added formatted report summaries displaying total steps, blackout frames, anomalies, and jank frame counts with non-zero exit codes on detected failures.
   - Configured `e2e/helpers/replay-diagnostics.js` to automatically load `e2e/replay-diagnostics/investigation.js` when present for the copy-and-iterate diagnostic loop, falling back to `base.js`.
 - **Command Action Recorder Enhancements:**
-  - Updated `e2e/helpers/recorder-shim.js` with an intuitive floating dark-themed badge featuring explicit `[Start/Pause]`, `[Reset]`, and `[Stop]` buttons, live action count, and draggable header handle.
+  - Updated `e2e/helpers/recorder-shim.js` with an intuitive floating dark-themed badge featuring explicit `[Start/Pause]`, `[Stop]`, and `[Reset]` buttons, live action count, and draggable header handle.
   - Added hotkeys (`F9` to toggle Start/Pause, `Escape` to stop).
   - Updated `e2e/specs/record.e2e.js` to continuously poll and buffer the action trace in Node memory every 200ms and monitor window handles, auto-finalizing and saving the scenario immediately when the executable or window exits without hanging or timeout delays.
 - **In-Browser Diagnostic Engine & Modular Probes:**

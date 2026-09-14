@@ -7,7 +7,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export const config = {
   runner: 'local',
-  specs: ['./e2e/specs/**/*.e2e.js'],
+  specs: ['./e2e/specs/0*.e2e.js'],
   maxInstances: 1,
   capabilities: [
     {

@@ -56,6 +56,7 @@ export function initRecorderShim(options = {}) {
   // Floating UI badge
   const badge = document.createElement('div');
   badge.id = 'quivit-recorder-badge';
+  badge.setAttribute('data-ui', 'true');
   badge.innerHTML = `
     <div id="quivit-recorder-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:grab;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.08);">
       <div style="display:flex;align-items:center;gap:6px;">
@@ -68,14 +69,14 @@ export function initRecorderShim(options = {}) {
     <div id="quivit-recorder-info" style="font-size:11px;color:#999;margin-top:6px;min-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;">Click Start or press F9 to begin</div>
     <div style="display:flex;gap:6px;margin-top:8px;">
       <button id="quivit-recorder-toggle-btn" style="flex:1.4;padding:6px 8px;background:#16a34a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:4px;transition:background 0.15s ease;">
-        <span id="quivit-recorder-toggle-icon">▶</span>
-        <span id="quivit-recorder-toggle-label">Start</span>
-      </button>
-      <button id="quivit-recorder-reset-btn" style="flex:1;padding:6px 8px;background:#27272a;color:#e4e4e7;border:1px solid rgba(255,255,255,0.12);border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;transition:background 0.15s ease;">
-        ↺ Reset
+        <span id="quivit-recorder-toggle-icon" style="pointer-events:none;">▶</span>
+        <span id="quivit-recorder-toggle-label" style="pointer-events:none;">Start</span>
       </button>
       <button id="quivit-recorder-stop-btn" style="flex:1.1;padding:6px 8px;background:#dc2626;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:11px;font-weight:700;transition:background 0.15s ease;">
         ⏹ Stop
+      </button>
+      <button id="quivit-recorder-reset-btn" style="flex:1;padding:6px 8px;background:#27272a;color:#e4e4e7;border:1px solid rgba(255,255,255,0.12);border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;transition:background 0.15s ease;">
+        ↺ Reset
       </button>
     </div>
   `;
@@ -99,6 +100,19 @@ export function initRecorderShim(options = {}) {
   `;
   document.body.appendChild(badge);
 
+  let lastWidgetInteractionTime = 0;
+  function markWidgetInteraction() {
+    lastWidgetInteractionTime = performance.now();
+  }
+
+  // Prevent widget clicks and wheel events from triggering outside handlers
+  ['click', 'dblclick', 'contextmenu', 'wheel'].forEach((evtType) => {
+    badge.addEventListener(evtType, (e) => {
+      markWidgetInteraction();
+      e.stopPropagation();
+    });
+  });
+
   // Dragging support so user can move badge away from viewport elements
   let isDragging = false;
   let dragOffsetX = 0;
@@ -107,29 +121,41 @@ export function initRecorderShim(options = {}) {
 
   if (header) {
     header.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
       isDragging = true;
+      markWidgetInteraction();
       header.style.cursor = 'grabbing';
-      dragOffsetX = e.clientX - badge.offsetLeft;
-      dragOffsetY = e.clientY - badge.offsetTop;
+      const rect = badge.getBoundingClientRect();
+      dragOffsetX = e.clientX - rect.left;
+      dragOffsetY = e.clientY - rect.top;
+      badge.style.left = `${rect.left}px`;
+      badge.style.top = `${rect.top}px`;
       badge.style.right = 'auto';
+      badge.style.bottom = 'auto';
       e.preventDefault();
+      e.stopPropagation();
     });
   }
 
   window.addEventListener('mousemove', (e) => {
     if (!isDragging) return;
+    markWidgetInteraction();
     const x = Math.max(8, Math.min(window.innerWidth - badge.offsetWidth - 8, e.clientX - dragOffsetX));
     const y = Math.max(8, Math.min(window.innerHeight - badge.offsetHeight - 8, e.clientY - dragOffsetY));
     badge.style.left = `${x}px`;
     badge.style.top = `${y}px`;
   });
 
-  window.addEventListener('mouseup', () => {
+  function stopDrag() {
     if (isDragging) {
       isDragging = false;
+      markWidgetInteraction();
       if (header) header.style.cursor = 'grab';
     }
-  });
+  }
+
+  window.addEventListener('mouseup', stopDrag, { capture: true });
+  window.addEventListener('blur', stopDrag);
 
   function updateBadge(lastActionLabel) {
     const dot = document.getElementById('quivit-recorder-dot');
@@ -243,12 +269,13 @@ export function initRecorderShim(options = {}) {
   }
 
   function resetRecording() {
-    if (isDone) return;
+    isDone = false;
+    isRecording = false;
     actions.length = 0;
-    initialSnapshot = isRecording ? getContextSnapshot() : null;
+    initialSnapshot = null;
     updateBadge();
     const infoEl = document.getElementById('quivit-recorder-info');
-    if (infoEl) infoEl.textContent = 'Reset (0 actions).';
+    if (infoEl) infoEl.textContent = 'Reset (0 actions). Click Start to record.';
   }
 
   function finish() {
@@ -261,7 +288,9 @@ export function initRecorderShim(options = {}) {
   const toggleBtn = document.getElementById('quivit-recorder-toggle-btn');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', (e) => {
+      markWidgetInteraction();
       e.stopPropagation();
+      e.preventDefault();
       toggleRecording();
     });
   }
@@ -269,7 +298,9 @@ export function initRecorderShim(options = {}) {
   const resetBtn = document.getElementById('quivit-recorder-reset-btn');
   if (resetBtn) {
     resetBtn.addEventListener('click', (e) => {
+      markWidgetInteraction();
       e.stopPropagation();
+      e.preventDefault();
       resetRecording();
     });
   }
@@ -277,17 +308,15 @@ export function initRecorderShim(options = {}) {
   const stopBtn = document.getElementById('quivit-recorder-stop-btn');
   if (stopBtn) {
     stopBtn.addEventListener('click', (e) => {
+      markWidgetInteraction();
       e.stopPropagation();
+      e.preventDefault();
       finish();
     });
   }
 
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      e.preventDefault();
-      finish();
-    } else if (e.key === 'F9' || (e.altKey && e.key.toLowerCase() === 'r')) {
+    if (e.key === 'F9' || (e.altKey && e.key.toLowerCase() === 'r')) {
       e.stopPropagation();
       e.preventDefault();
       toggleRecording();
@@ -296,6 +325,7 @@ export function initRecorderShim(options = {}) {
 
   async function recordStep(actionId, trigger = 'command', extra = {}) {
     if (isDone || !isRecording) return;
+    if (isDragging) return;
     await Promise.resolve();
     const context = getContextSnapshot();
     actions.push({
@@ -319,6 +349,9 @@ export function initRecorderShim(options = {}) {
         if (!action || typeof action.run !== 'function') continue;
         const originalRun = action.run;
         action.run = function(ctx, payload) {
+          if (isDragging) {
+            return originalRun.call(this, ctx, payload);
+          }
           recordStep(action.id, 'command');
           return originalRun.call(this, ctx, payload);
         };
@@ -328,6 +361,7 @@ export function initRecorderShim(options = {}) {
     // Fallback: listen to clicks on menu items
     document.addEventListener('click', (e) => {
       if (isDone || !isRecording) return;
+      if (e.target.closest('#quivit-recorder-badge, [data-ui]')) return;
       const cmdEl = e.target.closest('[id^="cmd-"]');
       if (cmdEl && cmdEl.id) {
         recordStep(cmdEl.id, 'menu-click');

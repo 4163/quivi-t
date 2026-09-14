@@ -122,7 +122,7 @@ function _updateScrollIndicator(config) {
 // The wheel should never hijack scrolling over UI chrome or the file list.
 function isWheelOverUI(e) {
   const el = e.target;
-  return !!(el.closest?.('#file-panel, #menubar, .menu-dropdown, #statusbar'));
+  return !!(el.closest?.('#file-panel, #menubar, .menu-dropdown, #statusbar, #quivit-recorder-badge, [data-ui]'));
 }
 
 const KEYBOARD_PAN_VECTORS = {
@@ -352,7 +352,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
     // Mouse/double-click gestures are viewport actions, never over the file
     // panel, menubar/dropdowns, or status bar (which handle their own clicks).
-    const isUI = e.target.closest('#file-panel, #menubar, .menu-dropdown, #statusbar');
+    const isUI = e.target.closest('#file-panel, #menubar, .menu-dropdown, #statusbar, #quivit-recorder-badge, [data-ui]');
     if (isUI) return;
 
     activeButtons.add(e.button);

@@ -37,9 +37,10 @@ These are the repo's common blast-radius zones. Not every change touches all of 
 - **Platform & Windowing** (`src-tauri/src/platform/`, `src-tauri/src/windows.rs`): changed native integrations, file associations, or window spawning logic break OS-level behaviors. Includes `platform/thumbnails.rs` (shell thumbnail extraction) and `platform/temp_archive.rs` (external archiver temp origin resolution).
 - **Cross-window state** (`localStorage`, theme, preview payload): changed shapes or keys break secondary windows that read what the primary writes.
 - **CSS tokens** (`global.css` `:root`): changed or removed custom properties break downstream page sheets and theme application. Includes `--fs-169` (font-size based max-width for submenu items).
-- **Action registry** (JS service modules): changed action ids, labels, or handler signatures break menus, shortcuts, and context menus. Categories include "Spread View" (`cmd-spread-off`, `cmd-spread-direction-rtl`, `cmd-spread-direction-ltr`) and "File Operations" (`cmd-toggle-file-list-view-mode`, `cmd-open-file`, `cmd-open-dir`, `cmd-refresh`). Other registered actions: `cmd-toggle-cursor-autohide`, `cmd-filter-off`.
+- **Action registry** (JS service modules): changed action ids, labels, or handler signatures break menus, shortcuts, context menus, and serialized replay scenarios in `e2e/scenarios/`. Categories include "Spread View" (`cmd-spread-off`, `cmd-spread-direction-rtl`, `cmd-spread-direction-ltr`) and "File Operations" (`cmd-toggle-file-list-view-mode`, `cmd-open-file`, `cmd-open-dir`, `cmd-refresh`). Other registered actions: `cmd-toggle-cursor-autohide`, `cmd-filter-off`.
+- **Viewer DOM & rendering pool** (`src/js/viewer/viewerRender.js`, `viewerPipelines.js`, `src/js/pipelines/`): changed element IDs, active or bridge image pool classes, or canvas render-ready attributes break viewport display and telemetry probes in `e2e/replay-diagnostics/probes/viewerPipelineProbe.js`.
 - **State machine** (JS core): changed state shapes or callback contracts break every UI subscriber. Properties include `spreadEnabled`, `spreadDirection`, `spreadStep`, `fileListViewMode`, and `archiveEncryption`.
-- **Test harnesses** (`src-tauri/src/tests/`, `mocha/`, `e2e/`): test suites act as living contracts. Changes to IPC commands, config schemas, action IDs, or viewer math must keep both sub-50ms unit tests (`npm test`) and E2E specs (`npm run test:e2e`) green.
+- **Test harnesses & diagnostics** (`src-tauri/src/tests/`, `mocha/`, `e2e/`): test suites, action recorder shims, and replay diagnostic probes act as living contracts. Changes to IPC commands, config schemas, action IDs, viewer math, or rendering pipelines must keep frontend unit tests (`npm test`), E2E specs (`npm run test:e2e`), action recording (`npm run record`), and replay diagnostics (`npm run diagnose`) functional and green.
 
 ### Surface to targeted test matrix
 
@@ -65,9 +66,14 @@ Match touched files to their targeted test command to prove safety in 1 to 2 sec
 | `src/js/services/metadataFiles.js`, `src/js/metadata.js` | `npx mocha mocha/metadata.test.js` | ~0.05s |
 | `src/js/services/cache.js` | `npx mocha mocha/cache.test.js` | ~0.05s |
 | `src/js/services/sorting.js` | `npx mocha mocha/sorting.test.js` | ~0.05s |
+| Diagnostics contracts & scenario schema | `npx mocha mocha/diagnosticsContract.test.js` | ~0.05s |
+| Viewer rendering & image pool (`src/js/viewer/`) | `npm run diagnose -- sample-navigation` | ~2.5s |
+| WebGL filters & shaders (`src/js/pipelines/`) | `npm run diagnose -- filter-navigation` | ~2.5s |
 | Options window & live theme save | `npx wdio run wdio.conf.js --spec e2e/specs/06-configuration.e2e.js` | ~5.0s |
 | File panel view modes & favorites persistence | `npx wdio run wdio.conf.js --spec e2e/specs/05-persistence.e2e.js` | ~10.0s |
 | Archive extraction & password flow | `npx wdio run wdio.conf.js --spec e2e/specs/04-archives.e2e.js` | ~9.0s |
+| Replay diagnostics engine & probes | `npm run diagnose -- sample-navigation` | ~2.5s |
+| Action recorder shim | `node --check e2e/helpers/recorder-shim.js` | ~0.1s |
 | Fast compile & borrow check (iteration) | `cargo check --tests --manifest-path src-tauri/Cargo.toml` | ~3.0s |
 | Any modified JS module | `node --check <file>` | ~0.1s |
 

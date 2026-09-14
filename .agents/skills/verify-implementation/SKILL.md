@@ -22,8 +22,10 @@ Run on every touched file:
 
 - `node --check <file>` for each modified JS module.
 - `cargo check --tests --manifest-path src-tauri/Cargo.toml` if Rust files were touched.
-- Run the targeted test suite mapped from `.agents/skills/blast-radius/SKILL.md` (e.g. `cargo test format_tests`). Do not run the full test suite during slice iteration.
+- `npm test` to verify pure frontend unit tests and scenario/probe contract integrity.
+- Run the targeted test suite mapped from `.agents/skills/blast-radius/SKILL.md` (e.g. `npm run diagnose -- sample-navigation` if viewer rendering, pipelines, or actions were touched). Do not run the full test suite during slice iteration.
 - Run the full suite (`cargo test --manifest-path src-tauri/Cargo.toml`) only when finishing a slice that touches core cross-cutting contracts (`lib.rs`, `models.rs`) or during final slice signoff.
+- If `e2e/replay-diagnostics/investigation.js` is present, confirm whether it is an intentional multi-session investigation file or needs to be cleaned up.
 
 Stop and report failures. Do not proceed until they pass.
 

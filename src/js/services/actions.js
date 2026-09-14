@@ -351,7 +351,7 @@ for (const action of ACTION_REGISTRY) {
     categoryMap[action.category].actions.push({ id: action.id, label: action.label, description: action.description });
   }
 }
-const ACTION_MAP = new Map(ACTION_REGISTRY.map(a => [a.id, a]));
+export const ACTION_MAP = new Map(ACTION_REGISTRY.map(a => [a.id, a]));
 
 /**
  * Dispatches an action by ID, looking it up in the registry.
