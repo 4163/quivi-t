@@ -8,6 +8,26 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Three-Tier Test Harness and End-to-End Suite (2026-09-14)
+- **Harness Architecture and Test Separation:**
+  - Structured testing into three distinct layers matching execution speed and runtime requirements.
+  - Cargo unit tests (`src-tauri/src/tests/`): 63 pure in-memory tests running in 0.20s without webview launch, browser context, or disk extraction.
+  - Frontend unit tests (`tests/`, Mocha): 78 tests running in 2.37s covering matrix transforms, spread calculations, state machine transitions, and action registries.
+  - WebdriverIO E2E tests (`e2e/`): 26 tests across seven specs running live against the Tauri debug binary via `tauri-driver` and `msedgedriver`.
+- **E2E Test Specs & Page Objects:**
+  - `01-startup.e2e.js`: Verifies application chrome, title, menu bar, and initial drop overlay dismissal upon file load.
+  - `02-navigation.e2e.js`: Verifies directory navigation, sorting by name/size/date/type, item selection, and parent ascension.
+  - `03-viewer.e2e.js`: Verifies viewport transformations, fit mode switches (1:1, Width, Height, Best), zoom in/out readouts, keyboard panning, and spread mode activation.
+  - `04-archives.e2e.js`: Verifies loading CBZ, CBR, CB7, and CBT archives, CJK character entry decoding (Shift-JIS, GBK, EUC-KR), and password prompt modal unlock.
+  - `05-persistence.e2e.js`: Verifies view mode toggling between list and thumbnail view with file watcher debounce settling, favorites store addition, and removal.
+  - `06-configuration.e2e.js`: Verifies Options window opening, tab navigation across all five tabs, live theme swapping (dark/light), configuration saving, and clean window destruction.
+  - `07-os-integration.e2e.js`: Verifies supported format queries, launch argument handling, Pictures folder fallback, and Windows Explorer temporary extraction origin resolution.
+- **Resilience and Portability Safeguards:**
+  - Configured portable mode initialization in `wdio.conf.js` (`onPrepare`) writing to `src-tauri/target/debug/quivit_config.json`, preventing mutation of user `%APPDATA%`.
+  - Added window readiness checks and event retry fallbacks in test hooks to prevent race conditions during webview bootstrap.
+  - Updated `closeOptionsWindow()` in `src/js/options/options.js` and `options.page.js` to prefer immediate window destruction via `currentWindow.destroy()`, eliminating orphaned secondary window handles.
+  - Verified with `node --check` across all touched files, `cargo check --tests`, 63/63 Cargo tests passing in 0.20s, 78/78 Mocha tests passing in 2.37s, and 7/7 E2E specs (26/26 tests) passing in 1m 38s.
+
 ### Single-Instance Options Save Status Message (2026-09-14)
 - **Options UI:**
   - Tracked `initialSingleInstance` in `src/js/options/options.js` during configuration initialization.

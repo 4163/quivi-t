@@ -214,7 +214,8 @@ makeListNavigable(document.querySelectorAll('[data-anime4k-variant]'), { horizon
 async function closeOptionsWindow() {
   forceClose = true;
   const currentWindow = tauri.window?.getCurrentWindow?.();
-  if (currentWindow) await currentWindow.close();
+  if (currentWindow?.destroy) await currentWindow.destroy().catch(() => currentWindow.close());
+  else if (currentWindow?.close) await currentWindow.close();
   else window.close();
 }
 

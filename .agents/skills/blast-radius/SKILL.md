@@ -55,7 +55,7 @@ Match touched files to their targeted test command to prove safety in 1 to 2 sec
 | `src-tauri/src/archives/tar.rs` | `cargo test --manifest-path src-tauri/Cargo.toml tar_` | ~2.0s |
 | `src-tauri/src/archives/cache.rs` | `cargo test --manifest-path src-tauri/Cargo.toml archive_cache_` | ~1.5s |
 | Invalid archive validation (all formats) | `cargo test --manifest-path src-tauri/Cargo.toml invalid_archive_` | ~1.2s |
-| `src-tauri/src/platform/thumbnails.rs` | `cargo test --manifest-path src-tauri/Cargo.toml thumbnails_` | ~1.2s |
+| `src-tauri/src/platform/thumbnails.rs` | `npx wdio run wdio.conf.js --spec e2e/specs/02-navigation.e2e.js` | ~8.0s |
 | `src-tauri/src/platform/temp_archive.rs` | `cargo test --manifest-path src-tauri/Cargo.toml temp_archive_` | ~1.2s |
 | `src-tauri/src/platform/attributes.rs` | `cargo test --manifest-path src-tauri/Cargo.toml test_is_hidden_path` | ~1.0s |
 | `src/js/services/viewerMath.js` | `node --test src/js/tests/viewerMath.test.mjs` | ~0.3s |
