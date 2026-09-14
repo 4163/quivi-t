@@ -8,7 +8,7 @@ import urllib.request
 # Configuration for AI Committer
 AI_CLI = "opencode"
 AI_CMD = "run --auto"
-AI_MODEL = "opencode/muse-spark-1.2-contributor-free"
+AI_MODEL = "opencode/muse-spark-1.3-contributor-free"
 AI_VARIANT = "xhigh"
 INSTRUCTIONS_PATH = ".agents/skills/commit-pipeline/SKILL.md"
 

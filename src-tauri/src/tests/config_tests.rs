@@ -69,6 +69,64 @@ fn test_apply_pending_config_noop_without_pending() {
 }
 
 #[test]
+fn test_should_cleanup_old_location_only_on_migration() {
+    // Normal saves in either mode must leave the other location alone.
+    // E2E and diagnose runs save portable configs routinely; every-save
+    // deletion wiped real roaming user data.
+    assert!(!should_cleanup_old_location(false, false));
+    assert!(!should_cleanup_old_location(true, true));
+    // Real mode switches still migrate stale files away.
+    assert!(should_cleanup_old_location(false, true));
+    assert!(should_cleanup_old_location(true, false));
+}
+
+#[test]
+fn test_is_portable_dir_marker_and_content() {
+    let base = std::env::temp_dir().join(format!("quivit_cfg_test_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+
+    // Empty dir: roaming.
+    let empty = base.join("empty");
+    std::fs::create_dir_all(&empty).unwrap();
+    assert!(!is_portable_dir(&empty));
+
+    // `.portable` marker always wins, even with no config file.
+    let marked = base.join("marked");
+    std::fs::create_dir_all(&marked).unwrap();
+    std::fs::write(marked.join(".portable"), "").unwrap();
+    assert!(is_portable_dir(&marked));
+
+    // Exe-dir config opting into portable mode stays portable.
+    let opted_in = base.join("opted_in");
+    std::fs::create_dir_all(&opted_in).unwrap();
+    std::fs::write(
+        opted_in.join("quivit_config.json"),
+        r#"{"portable_mode": true, "frontend_data": {}}"#,
+    )
+    .unwrap();
+    assert!(is_portable_dir(&opted_in));
+
+    // Stray file with portable_mode false must not hijack roaming.
+    let stray = base.join("stray");
+    std::fs::create_dir_all(&stray).unwrap();
+    std::fs::write(
+        stray.join("quivit_config.json"),
+        r#"{"portable_mode": false, "frontend_data": {}}"#,
+    )
+    .unwrap();
+    assert!(!is_portable_dir(&stray));
+
+    // Corrupt exe-dir file: stay portable rather than silently switching
+    // locations and letting the next save rewrite the other side.
+    let corrupt = base.join("corrupt");
+    std::fs::create_dir_all(&corrupt).unwrap();
+    std::fs::write(corrupt.join("quivit_config.json"), "{not json").unwrap();
+    assert!(is_portable_dir(&corrupt));
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
 fn test_apply_pending_config_non_bool_dropped() {
     // Non-boolean pending is invalid: dropped without promoting.
     let mut config: AppConfig = serde_json::from_str(

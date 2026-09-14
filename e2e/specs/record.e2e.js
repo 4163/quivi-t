@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import menubarPage from '../pageobjects/menubar.page.js';
 import viewerPage from '../pageobjects/viewer.page.js';
-import { fixtures } from '../helpers/fixtures.js';
 import { initRecorderShim } from '../helpers/recorder-shim.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,59 +26,57 @@ function getCliArg(flag, defaultVal = null) {
 describe('Command Action Recorder', function () {
   this.timeout(1800000); // 30 minutes for user interaction
 
-  it('records user command actions and outputs a scenario trace', async function () {
+    it('records user command actions and outputs a scenario trace', async function () {
     this.timeout(1800000);
+    const t0 = Date.now();
+    const stamp = (label) => console.log(`[RECORD-TIMING] ${label} at +${((Date.now() - t0) / 1000).toFixed(1)}s`);
     await menubarPage.ensureMainWindow();
+    stamp('main window handle acquired');
 
     const scenarioName = process.env.SCENARIO || getCliArg('scenario') || getCliArg('name') || 'last-recording';
-    const rawInitialPath = process.env.INITIAL_PATH || getCliArg('initial-path') || getCliArg('path') || fixtures.testPng;
+    // No default: without an explicit path, startup (continue-from-last-opened)
+    // decides what opens. A hardcoded fixture here would bulldoze it.
+    const rawInitialPath = process.env.INITIAL_PATH || getCliArg('initial-path') || getCliArg('path') || null;
     let initialPath = rawInitialPath;
-    if (!path.isAbsolute(initialPath)) {
+    if (initialPath && !path.isAbsolute(initialPath)) {
       const projectRoot = path.resolve(__dirname, '../..');
       initialPath = path.resolve(projectRoot, initialPath);
     }
 
     // Ensure viewport and application DOM are ready
     await viewerPage.viewport.waitForDisplayed({ timeout: 15000 });
+    stamp('viewport displayed');
 
-    // Load initial file or directory into viewport
-    await browser.execute(async (filePath) => {
-      try {
-        const { FsUtils } = await import('/js/fsUtils.js');
-        if (FsUtils && typeof FsUtils.loadFile === 'function') {
-          await FsUtils.loadFile(filePath, { preferInitial: true, restoreLastImage: false });
-          return;
+    if (initialPath) {
+      // Explicit starting point: load it into the viewport.
+      await browser.execute(async (filePath) => {
+        try {
+          const { FsUtils } = await import('/js/fsUtils.js');
+          if (FsUtils && typeof FsUtils.loadFile === 'function') {
+            await FsUtils.loadFile(filePath, { preferInitial: true, restoreLastImage: false });
+            return;
+          }
+        } catch {}
+        if (window.__TAURI__?.event?.emit) {
+          window.__TAURI__.event.emit('single-instance-open', filePath);
         }
-      } catch {}
-      if (window.__TAURI__?.event?.emit) {
-        window.__TAURI__.event.emit('single-instance-open', filePath);
-      }
-    }, initialPath);
+      }, initialPath);
+    }
 
     try {
       await browser.waitUntil(
-        async () => {
-          const dropVisible = await viewerPage.isDropOverlayVisible();
-          if (!dropVisible) return true;
-          // Retry loading if initial event was fired before listener attached
-          await browser.execute(async (filePath) => {
-            try {
-              const { FsUtils } = await import('/js/fsUtils.js');
-              if (FsUtils?.loadFile) {
-                FsUtils.loadFile(filePath, { preferInitial: true, restoreLastImage: false });
-              }
-            } catch {}
-          }, initialPath);
-          return false;
-        },
+        async () => !(await viewerPage.isDropOverlayVisible()),
         { timeout: 10000, interval: 600 }
       );
+      stamp('drop overlay dismissed');
     } catch {
-      console.warn(`[WARN] Drop overlay did not dismiss for "${initialPath}". Continuing to recorder initialization.`);
+      console.warn(`[WARN] Drop overlay still visible${initialPath ? ` for "${initialPath}"` : ''}. Continuing to recorder initialization.`);
+      stamp('drop overlay wait timed out');
     }
 
     // Inject detached recorder shim into webview
     await browser.execute(initRecorderShim);
+    stamp('recorder badge injected');
 
     console.log(`\n======================================================`);
     console.log(`[RECORDING ACTIVE] Scenario: "${scenarioName}"`);
@@ -165,7 +162,7 @@ describe('Command Action Recorder', function () {
       const scenarioPayload = {
         name: scenarioName,
         recordedAt: new Date().toISOString(),
-        initialPath: latestTrace.initialState?.container || initialPath,
+        initialPath: latestTrace.initialState?.container || initialPath || null,
         initialState: latestTrace.initialState,
         actions: latestTrace.actions,
       };

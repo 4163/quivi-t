@@ -445,6 +445,11 @@ button:disabled {
   pointer-events: none;
 }
 
+.options-section label:has(input[type="checkbox"]:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* Associations UI. */
 .assoc-actions {
   margin-bottom: 10px;

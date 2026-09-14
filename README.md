@@ -287,6 +287,8 @@ npm run diagnose -- --inspect
 ```
 The runner replays recorded actions step by step with in-browser telemetry probes, detecting blank blackout frames, image pool retirement races, WebGL readiness, and IPC latency. Detailed JSON reports are saved to `e2e/replay-diagnostics/reports/`.
 
+Record and diagnose share one persistent profile in `e2e/.profile/`, so prefs set before recording (scaling, filters, spread, keybinds) are still active at replay. "Continue from last opened" carries over between runs; "remember last image" is always forced off so replay starts at the recorded index, and portable mode is always forced on so suite runs never touch roaming data. The main `test:e2e` suite still starts factory fresh. Reset the profile with `E2E_FRESH=1 npm run record` or `npm run record -- --fresh`.
+
 AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/skills/replay-debugging/SKILL.md) to run an automated investigation loop on recorded traces: generating a temporary `investigation.js` workspace copy, injecting granular microtask and frame assertions, isolating the root cause, delivering a structured diagnosis report, and applying a surgical fix.
 
 ## Stack

@@ -40,9 +40,39 @@ pub fn get_exe_dir() -> PathBuf {
         .to_path_buf()
 }
 
+pub fn is_portable_dir(exe_dir: &Path) -> bool {
+    // The `.portable` marker always wins. It is what the E2E harness and
+    // intentional portable installs create.
+    if exe_dir.join(".portable").exists() {
+        return true;
+    }
+    // Legacy fallback: an exe-dir config implies portable, but only when it
+    // actually opts in. A stray file with `portable_mode: false` must not
+    // hijack a roaming install into reading an empty local file.
+    let cfg = exe_dir.join("quivit_config.json");
+    if !cfg.exists() {
+        return false;
+    }
+    match fs::read_to_string(&cfg) {
+        Ok(content) => match serde_json::from_str::<AppConfig>(&content) {
+            Ok(c) => c.portable_mode,
+            // Corrupt exe-dir file: stay portable so we keep reading the
+            // local file instead of silently switching locations.
+            Err(_) => true,
+        },
+        Err(_) => false,
+    }
+}
+
 pub fn is_portable() -> bool {
-    let exe_dir = get_exe_dir();
-    exe_dir.join(".portable").exists() || exe_dir.join("quivit_config.json").exists()
+    is_portable_dir(&get_exe_dir())
+}
+
+/// Old-location cleanup runs only on a real mode switch, never on a normal
+/// save. Every-save deletion wiped roaming user data whenever the app ran
+/// portable with a factory-empty config (E2E runs share the debug exe dir).
+pub fn should_cleanup_old_location(was_portable: bool, will_be_portable: bool) -> bool {
+    was_portable != will_be_portable
 }
 
 pub fn roaming_dir_path(app_handle: &tauri::AppHandle) -> PathBuf {
@@ -71,7 +101,7 @@ pub fn remove_roaming_files(dir: &Path) {
 
 pub fn get_config_path() -> PathBuf {
     let exe_dir = get_exe_dir();
-    let is_port = exe_dir.join(".portable").exists() || exe_dir.join("quivit_config.json").exists();
+    let is_port = is_portable_dir(&exe_dir);
 
     if is_port {
         exe_dir.join("quivit_config.json")
@@ -242,8 +272,11 @@ pub fn open_local_data_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Result<(), String> {
     let exe_dir = get_exe_dir();
+    let will_be_portable = config.portable_mode;
+    let was_portable = is_portable_dir(&exe_dir);
+    let migrating = should_cleanup_old_location(was_portable, will_be_portable);
 
-    if config.portable_mode {
+    if will_be_portable {
         let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
         let config_path = exe_dir.join("quivit_config.json");
         atomic_write(&config_path, data).map_err(|e| e.to_string())?;
@@ -251,9 +284,13 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
         // Only the portable config file gets the hidden attribute.
         crate::platform::attributes::set_hidden_attribute(&config_path, config.hidden)?;
 
-        remove_roaming_files(&roaming_dir_path(&app_handle));
+        // Migration only: a normal portable save must never touch roaming
+        // user data. E2E and diagnose runs save portable configs routinely.
+        if migrating {
+            remove_roaming_files(&roaming_dir_path(&app_handle));
 
-        let _ = fs::remove_file(roaming_dir(&app_handle).join("custom_css.css"));
+            let _ = fs::remove_file(roaming_dir(&app_handle).join("custom_css.css"));
+        }
     } else {
         // Roaming: write the split files first, then remove portable leftovers so
         // a failed write never loses the config.
@@ -293,7 +330,11 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
 
         atomic_write(&dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())?;
 
-        let _ = fs::remove_file(exe_dir.join("quivit_config.json"));
+        // Migration only: leaving a stray exe-dir config behind would trap
+        // the next launch back into portable mode via is_portable_dir.
+        if migrating {
+            let _ = fs::remove_file(exe_dir.join("quivit_config.json"));
+        }
     }
     Ok(())
 }

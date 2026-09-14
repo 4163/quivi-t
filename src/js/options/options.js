@@ -38,6 +38,16 @@ function showStatus(message) {
   if (statusEl) statusEl.textContent = message || '';
 }
 
+// E2E suite lock. The harness stamps frontend_data.e2e_suite on its isolation
+// config; these toggles would desync record and replay, so they stay fixed
+// while the flag is present. Real user configs never carry it.
+function lockSuiteToggle(id, reason) {
+  const input = document.getElementById(id);
+  if (!input) return;
+  input.disabled = true;
+  input.title = reason;
+}
+
 async function refreshLiveConfigState() {
   if (!invoke) return;
   const latest = mergeConfig(await invoke('load_config'));
@@ -85,6 +95,12 @@ async function init() {
     document.getElementById('opt-keyboard-pan-step').value = config.frontend_data.keyboard_pan_step || 72;
     document.getElementById('opt-wheel-pan-step').value = config.frontend_data.wheel_pan_step || 120;
     document.getElementById('opt-start-dir').value = config.frontend_data.start_dir || '';
+
+    if (config.frontend_data.e2e_suite === true) {
+      lockSuiteToggle('opt-portable-mode', 'Managed by the test suite profile');
+      lockSuiteToggle('opt-remember-last-image', 'Locked off so replay starts at the recorded index');
+      lockSuiteToggle('opt-single-instance', 'Locked on so files hand off to the running session');
+    }
 
     // Theme and custom CSS.
     const theme = config.frontend_data.theme || 'system';
