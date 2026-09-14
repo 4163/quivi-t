@@ -46,3 +46,7 @@ test-files/animated/
 
 # WebdriverIO test logs
 test-logs/
+
+# E2E recorded scenarios (runtime traces, overwritten on each record)
+e2e/scenarios/*.json
+!e2e/scenarios/sample-navigation.json

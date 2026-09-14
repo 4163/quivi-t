@@ -262,6 +262,20 @@ node --check src/js/main/main.js                 # Syntax check JS files
 # etc.
 ```
 
+### Action recorder and replay diagnostics
+
+Record a scenario:
+```bash
+SCENARIO=flicker-bmp npm run test:record
+```
+Interact with the window to reproduce the flickering issue, then press `Escape` or click `Finish Recording`. The trace is saved to `e2e/scenarios/flicker-bmp.json`.
+
+Replay and diagnose:
+```bash
+SCENARIO=flicker-bmp npm run test:replay
+```
+The runner replays the exact commands step by step, evaluating viewport invariants and printing any flickering/blank frames or unmounting races.
+
 ## Stack
 
 | Component | Technology | Purpose |

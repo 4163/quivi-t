@@ -1,0 +1,20 @@
+{
+  "name": "sample-navigation",
+  "recordedAt": "2026-09-14T15:25:00.000Z",
+  "initialPath": "test-files/export_1785518878919.png",
+  "initialState": {
+    "filename": "export_1785518878919.png",
+    "fitText": "Fit: Window",
+    "zoomText": "100%",
+    "filter": "Off",
+    "scaling": "Bilinear",
+    "spread": "Off"
+  },
+  "actions": [
+    "cmd-next",
+    "cmd-next",
+    "cmd-fit-width",
+    "cmd-prev",
+    "cmd-fit-best"
+  ]
+}
