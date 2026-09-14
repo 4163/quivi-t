@@ -50,3 +50,6 @@ test-logs/
 # E2E recorded scenarios (runtime traces, overwritten on each record)
 e2e/scenarios/*.json
 !e2e/scenarios/sample-navigation.json
+
+# Replay diagnostic reports (generated on each diagnose, contain local absolute paths)
+e2e/replay-diagnostics/reports/
