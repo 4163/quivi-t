@@ -264,17 +264,30 @@ node --check src/js/main/main.js                 # Syntax check JS files
 
 ### Action recorder and replay diagnostics
 
-Record a scenario:
+Record a reproduction scenario:
 ```bash
-SCENARIO=flicker-bmp npm run test:record
+# Record with default name last-recording.json
+npm run record
+
+# Record with custom scenario name and starting path
+npm run record -- --scenario flicker-bmp --path test-files/webp
 ```
-Interact with the window to reproduce the flickering issue, then press `Escape` or click `Finish Recording`. The trace is saved to `e2e/scenarios/flicker-bmp.json`.
+QuiviT launches with a floating recording badge. Click **Start** to begin capturing actions, reproduce the issue, then click **Stop**, press `Escape`, or close the app to finalize. The trace is saved to `e2e/scenarios/<scenario>.json`.
 
 Replay and diagnose:
 ```bash
-SCENARIO=flicker-bmp npm run test:replay
+# Run diagnostics on the default scenario
+npm run diagnose
+
+# Run diagnostics on a specific scenario with optional pause delay
+npm run diagnose -- flicker-bmp --pause 300
+
+# Inspect the latest generated report without launching the window
+npm run diagnose -- --inspect
 ```
-The runner replays the exact commands step by step, evaluating viewport invariants and printing any flickering/blank frames or unmounting races.
+The runner replays recorded actions step by step with in-browser telemetry probes, detecting blank blackout frames, image pool retirement races, WebGL readiness, and IPC latency. Detailed JSON reports are saved to `e2e/replay-diagnostics/reports/`.
+
+AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/skills/replay-debugging/SKILL.md) to run an automated investigation loop on recorded traces: generating a temporary `investigation.js` workspace copy, injecting granular microtask and frame assertions, isolating the root cause, delivering a structured diagnosis report, and applying a surgical fix.
 
 ## Stack
 

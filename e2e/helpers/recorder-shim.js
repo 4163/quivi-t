@@ -9,6 +9,7 @@ export function initRecorderShim(options = {}) {
 
   const actions = [];
   let isDone = false;
+  let isRecording = false;
   let CoreInstance = null;
   let initialSnapshot = null;
 
@@ -56,17 +57,26 @@ export function initRecorderShim(options = {}) {
   const badge = document.createElement('div');
   badge.id = 'quivit-recorder-badge';
   badge.innerHTML = `
-    <div style="display:flex;align-items:center;gap:8px;">
-      <span id="quivit-recorder-dot" style="width:10px;height:10px;border-radius:50%;background:#ff4d4f;display:inline-block;box-shadow:0 0 6px #ff4d4f;"></span>
-      <span style="font-weight:600;font-size:12px;color:#fff;">RECORDING HARNESS</span>
-      <span id="quivit-recorder-count" style="font-size:12px;color:#bbb;background:rgba(255,255,255,0.12);padding:2px 6px;border-radius:4px;">0 actions</span>
+    <div id="quivit-recorder-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:grab;padding-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="color:rgba(255,255,255,0.35);font-size:12px;user-select:none;">⠿</span>
+        <span id="quivit-recorder-dot" style="width:8px;height:8px;border-radius:50%;background:#888;display:inline-block;transition:all 0.2s ease;"></span>
+        <span id="quivit-recorder-status" style="font-weight:700;font-size:11px;letter-spacing:0.5px;color:#fff;">READY</span>
+      </div>
+      <span id="quivit-recorder-count" style="font-size:11px;font-weight:600;color:#bbb;background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;">0 actions</span>
     </div>
-      <div style="font-size:11px;color:#888;margin-top:4px;">Press Esc or click Finish to complete</div>
-    </div>
-    <div id="quivit-recorder-info" style="font-size:11px;color:#aaa;margin-top:4px;">Ready to record actions...</div>
+    <div id="quivit-recorder-info" style="font-size:11px;color:#999;margin-top:6px;min-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;">Click Start or press F9 to begin</div>
     <div style="display:flex;gap:6px;margin-top:8px;">
-      <button id="quivit-recorder-reset-btn" style="flex:1;padding:6px 0;background:#3a3a3c;color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">Reset</button>
-      <button id="quivit-recorder-done-btn" style="flex:2;padding:6px 0;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">Finish Recording</button>
+      <button id="quivit-recorder-toggle-btn" style="flex:1.4;padding:6px 8px;background:#16a34a;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:4px;transition:background 0.15s ease;">
+        <span id="quivit-recorder-toggle-icon">▶</span>
+        <span id="quivit-recorder-toggle-label">Start</span>
+      </button>
+      <button id="quivit-recorder-reset-btn" style="flex:1;padding:6px 8px;background:#27272a;color:#e4e4e7;border:1px solid rgba(255,255,255,0.12);border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;transition:background 0.15s ease;">
+        ↺ Reset
+      </button>
+      <button id="quivit-recorder-stop-btn" style="flex:1.1;padding:6px 8px;background:#dc2626;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:11px;font-weight:700;transition:background 0.15s ease;">
+        ⏹ Stop
+      </button>
     </div>
   `;
   badge.style.cssText = `
@@ -74,43 +84,186 @@ export function initRecorderShim(options = {}) {
     top: 14px;
     right: 14px;
     z-index: 2147483647;
-    background: rgba(20, 20, 24, 0.94);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 8px;
-    padding: 10px 14px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: rgba(18, 18, 22, 0.94);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 9px;
+    padding: 10px 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.65);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     user-select: none;
     pointer-events: auto;
+    width: 250px;
+    box-sizing: border-box;
   `;
   document.body.appendChild(badge);
 
+  // Dragging support so user can move badge away from viewport elements
+  let isDragging = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+  const header = document.getElementById('quivit-recorder-header');
+
+  if (header) {
+    header.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      header.style.cursor = 'grabbing';
+      dragOffsetX = e.clientX - badge.offsetLeft;
+      dragOffsetY = e.clientY - badge.offsetTop;
+      badge.style.right = 'auto';
+      e.preventDefault();
+    });
+  }
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const x = Math.max(8, Math.min(window.innerWidth - badge.offsetWidth - 8, e.clientX - dragOffsetX));
+    const y = Math.max(8, Math.min(window.innerHeight - badge.offsetHeight - 8, e.clientY - dragOffsetY));
+    badge.style.left = `${x}px`;
+    badge.style.top = `${y}px`;
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      if (header) header.style.cursor = 'grab';
+    }
+  });
+
   function updateBadge(lastActionLabel) {
-    const countEl = document.getElementById('quivit-recorder-count');
-    if (countEl) countEl.textContent = `${actions.length} action${actions.length === 1 ? '' : 's'}`;
-    const infoEl = document.getElementById('quivit-recorder-info');
-    if (infoEl) {
-      infoEl.textContent = lastActionLabel ? `Last: ${lastActionLabel}` : 'Ready to record actions...';
+    const dot = document.getElementById('quivit-recorder-dot');
+    const status = document.getElementById('quivit-recorder-status');
+    const count = document.getElementById('quivit-recorder-count');
+    const info = document.getElementById('quivit-recorder-info');
+    const toggleBtn = document.getElementById('quivit-recorder-toggle-btn');
+    const toggleIcon = document.getElementById('quivit-recorder-toggle-icon');
+    const toggleLabel = document.getElementById('quivit-recorder-toggle-label');
+
+    if (count) {
+      count.textContent = `${actions.length} action${actions.length === 1 ? '' : 's'}`;
+    }
+
+    if (isDone) {
+      if (dot) {
+        dot.style.background = '#22c55e';
+        dot.style.boxShadow = '0 0 8px #22c55e';
+      }
+      if (status) {
+        status.textContent = 'SAVED';
+        status.style.color = '#22c55e';
+      }
+      if (info) {
+        info.textContent = `Captured ${actions.length} action(s). Writing scenario...`;
+        info.style.color = '#a1a1aa';
+      }
+      return;
+    }
+
+    if (isRecording) {
+      if (dot) {
+        dot.style.background = '#ef4444';
+        dot.style.boxShadow = '0 0 8px #ef4444';
+      }
+      if (status) {
+        status.textContent = 'RECORDING';
+        status.style.color = '#ef4444';
+      }
+      if (toggleBtn) {
+        toggleBtn.style.background = '#d97706';
+      }
+      if (toggleIcon) toggleIcon.textContent = '⏸';
+      if (toggleLabel) toggleLabel.textContent = 'Pause';
+      if (info) {
+        info.textContent = lastActionLabel ? `Last: ${lastActionLabel}` : 'Recording active...';
+        info.style.color = '#e4e4e7';
+      }
+    } else {
+      if (actions.length > 0) {
+        if (dot) {
+          dot.style.background = '#eab308';
+          dot.style.boxShadow = '0 0 6px #eab308';
+        }
+        if (status) {
+          status.textContent = 'PAUSED';
+          status.style.color = '#eab308';
+        }
+        if (toggleBtn) {
+          toggleBtn.style.background = '#16a34a';
+        }
+        if (toggleIcon) toggleIcon.textContent = '▶';
+        if (toggleLabel) toggleLabel.textContent = 'Resume';
+        if (info) {
+          info.textContent = 'Paused (actions ignored)';
+          info.style.color = '#a1a1aa';
+        }
+      } else {
+        if (dot) {
+          dot.style.background = '#71717a';
+          dot.style.boxShadow = 'none';
+        }
+        if (status) {
+          status.textContent = 'READY';
+          status.style.color = '#d4d4d8';
+        }
+        if (toggleBtn) {
+          toggleBtn.style.background = '#16a34a';
+        }
+        if (toggleIcon) toggleIcon.textContent = '▶';
+        if (toggleLabel) toggleLabel.textContent = 'Start';
+        if (info) {
+          info.textContent = 'Click Start or press F9 to begin';
+          info.style.color = '#a1a1aa';
+        }
+      }
+    }
+  }
+
+  function startRecording() {
+    if (isDone || isRecording) return;
+    if (!initialSnapshot || actions.length === 0) {
+      initialSnapshot = getContextSnapshot();
+    }
+    isRecording = true;
+    updateBadge();
+  }
+
+  function pauseRecording() {
+    if (isDone || !isRecording) return;
+    isRecording = false;
+    updateBadge();
+  }
+
+  function toggleRecording() {
+    if (isRecording) {
+      pauseRecording();
+    } else {
+      startRecording();
     }
   }
 
   function resetRecording() {
     if (isDone) return;
     actions.length = 0;
-    initialSnapshot = getContextSnapshot();
+    initialSnapshot = isRecording ? getContextSnapshot() : null;
     updateBadge();
     const infoEl = document.getElementById('quivit-recorder-info');
-    if (infoEl) infoEl.textContent = 'Recording reset (0 actions).';
+    if (infoEl) infoEl.textContent = 'Reset (0 actions).';
   }
 
   function finish() {
     if (isDone) return;
     isDone = true;
-    badge.style.background = 'rgba(20, 44, 24, 0.95)';
-    badge.innerHTML = `
-      <div style="font-weight:600;font-size:12px;color:#52c41a;">RECORDING COMPLETE</div>
-      <div style="font-size:11px;color:#bbb;margin-top:4px;">Captured ${actions.length} action${actions.length === 1 ? '' : 's'}. Writing scenario...</div>
-    `;
+    isRecording = false;
+    updateBadge();
+  }
+
+  const toggleBtn = document.getElementById('quivit-recorder-toggle-btn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleRecording();
+    });
   }
 
   const resetBtn = document.getElementById('quivit-recorder-reset-btn');
@@ -121,9 +274,9 @@ export function initRecorderShim(options = {}) {
     });
   }
 
-  const doneBtn = document.getElementById('quivit-recorder-done-btn');
-  if (doneBtn) {
-    doneBtn.addEventListener('click', (e) => {
+  const stopBtn = document.getElementById('quivit-recorder-stop-btn');
+  if (stopBtn) {
+    stopBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       finish();
     });
@@ -134,11 +287,15 @@ export function initRecorderShim(options = {}) {
       e.stopPropagation();
       e.preventDefault();
       finish();
+    } else if (e.key === 'F9' || (e.altKey && e.key.toLowerCase() === 'r')) {
+      e.stopPropagation();
+      e.preventDefault();
+      toggleRecording();
     }
   }, true);
 
   async function recordStep(actionId, trigger = 'command', extra = {}) {
-    if (isDone) return;
+    if (isDone || !isRecording) return;
     await Promise.resolve();
     const context = getContextSnapshot();
     actions.push({
@@ -170,7 +327,7 @@ export function initRecorderShim(options = {}) {
   }).catch(() => {
     // Fallback: listen to clicks on menu items
     document.addEventListener('click', (e) => {
-      if (isDone) return;
+      if (isDone || !isRecording) return;
       const cmdEl = e.target.closest('[id^="cmd-"]');
       if (cmdEl && cmdEl.id) {
         recordStep(cmdEl.id, 'menu-click');
@@ -182,7 +339,7 @@ export function initRecorderShim(options = {}) {
   const fileList = document.getElementById('file-list');
   if (fileList) {
     fileList.addEventListener('click', (e) => {
-      if (isDone) return;
+      if (isDone || !isRecording) return;
       const row = e.target.closest('li[role="option"]');
       if (row && row.dataset.index !== undefined) {
         const index = parseInt(row.dataset.index, 10);
@@ -200,7 +357,7 @@ export function initRecorderShim(options = {}) {
   const viewModeBtn = document.getElementById('btn-toggle-view-mode');
   if (viewModeBtn) {
     viewModeBtn.addEventListener('click', () => {
-      if (!isDone) recordStep('cmd-toggle-filelist-view-mode', 'click');
+      if (!isDone && isRecording) recordStep('cmd-toggle-filelist-view-mode', 'click');
     }, true);
   }
 
@@ -208,7 +365,7 @@ export function initRecorderShim(options = {}) {
   const favList = document.getElementById('favorites-list');
   if (favList) {
     favList.addEventListener('click', (e) => {
-      if (isDone) return;
+      if (isDone || !isRecording) return;
       const li = e.target.closest('li');
       if (li && li.dataset.path) {
         recordStep('open-favorite', 'click', { path: li.dataset.path });
@@ -218,7 +375,12 @@ export function initRecorderShim(options = {}) {
 
   window.__QUIVIT_RECORDER__ = {
     get isDone() { return isDone; },
+    get isRecording() { return isRecording; },
     get actions() { return [...actions]; },
+    start: startRecording,
+    pause: pauseRecording,
+    toggle: toggleRecording,
+    reset: resetRecording,
     finish,
     getTrace() {
       return {

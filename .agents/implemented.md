@@ -8,6 +8,28 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Replay Diagnostics Harness and Agent Debugging Skill (2026-09-15)
+- **Harness Architecture and CLI Runner:**
+  - Built a dedicated replay diagnostic harness in `e2e/replay-diagnostics/` to capture in-browser pipeline identity, telemetry events, and frame rendering anomalies.
+  - Implemented `e2e/replay-diagnostics/cli.js` supporting `--scenario`, `--pause`, `--verbose`, `--investigate`, `--clean`, `--inspect`, and `--list`. Added `npm run record`, `npm run replay`, and `npm run diagnose` scripts to `package.json`.
+  - Added formatted report summaries displaying total steps, blackout frames, anomalies, and jank frame counts with non-zero exit codes on detected failures.
+  - Configured `e2e/helpers/replay-diagnostics.js` to automatically load `e2e/replay-diagnostics/investigation.js` when present for the copy-and-iterate diagnostic loop, falling back to `base.js`.
+- **Command Action Recorder Enhancements:**
+  - Updated `e2e/helpers/recorder-shim.js` with an intuitive floating dark-themed badge featuring explicit `[Start/Pause]`, `[Reset]`, and `[Stop]` buttons, live action count, and draggable header handle.
+  - Added hotkeys (`F9` to toggle Start/Pause, `Escape` to stop).
+  - Updated `e2e/specs/record.e2e.js` to continuously poll and buffer the action trace in Node memory every 200ms and monitor window handles, auto-finalizing and saving the scenario immediately when the executable or window exits without hanging or timeout delays.
+- **In-Browser Diagnostic Engine & Modular Probes:**
+  - Built `e2e/replay-diagnostics/base.js` bundling Core state machine diffs, image pool lifecycle, WebGL canvas readiness, `MutationObserver` role transitions, `img.decode` / `createImageBitmap` timings, IPC invocation durations, and custom protocol status codes across the WebDriver serialization boundary.
+  - Created modular probe sources under `e2e/replay-diagnostics/probes/` (`corePipelineProbe.js`, `viewerPipelineProbe.js`, `ipcProtocolProbe.js`).
+- **Debugging Skill & Documentation:**
+  - Authored `.agents/skills/replay-debugging/SKILL.md` adapted from poteto, pstack, and Matt Pocock patterns, formalizing the hypothesis-driven copy-and-iterate investigation loop, probe narrowing, structured diagnosis reporting checkpoint, and surgical remediation.
+  - Updated `README.md` Action recorder and replay diagnostics section with new CLI commands, floating badge workflows, and skill integration.
+- **Verification:**
+  - Replayed `last-recording.json` (9 actions, 4.1s), `sample-navigation.json` (5 actions, 2.3s), and `filter-navigation.json` (5 actions with WebGL CRT shader, 2.0s) cleanly with 0 blackout frames, 0 anomalies, and 0 jank.
+  - Verified syntax via `node --check` across all touched JS files.
+  - Verified backend compilation via `cargo check --tests` (0 warnings).
+  - Verified frontend unit tests via `npm test` (42/42 passing in 46ms).
+
 ### Flat Mocha Unit Test Harness in mocha/ (2026-09-14)
 - **Root Unit Test Suite Architecture:**
   - Initialized a flat `mocha/` test suite at the repository root mirroring `src-tauri/src/tests/` for pure frontend domain invariants.
