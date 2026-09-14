@@ -70,7 +70,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 
 **Rust:**
 - `lib.rs` & `main.rs`: bootstrap, config watcher, and main-window build.
-- `tests/`: in-tree testing for archives, config, formats, protocol, temp archive origin, and thumbnails.
+- `tests/`: in-tree testing for archives, config, formats, protocol, and temp archive origin.
 - `config.rs`: `AppConfig` / persistence / portable / pending promotion.
 - `commands/`: Tauri command surface (directory, archives, animation, watcher, associations, shell). `list_archive` accepts `password: Option<String>`. `drop_all_archives_cache` and `resolve_archive_temp_origin` are archive lifecycle commands.
 - `archives/` & `formats.rs`: archive readers + `ArchiveCache` (two-archive sliding buffer, `MAX_OPEN_ARCHIVES = 2`) and format / animation registry.
@@ -79,3 +79,9 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `ico.rs`: ICO spritesheets.
 - `models.rs`: IPC structs. `FileEntry.size: u64`, `ArchiveEncryptionStatus`, `ArchiveReadResult.encryption`, `TempArchiveOrigin`.
 - `utils.rs`: Base64 and URL encoding helpers.
+
+**Testing:**
+- Three-tier testing architecture matching execution speed and runtime dependencies.
+- `mocha/`: standalone pure frontend unit tests (`actions`, `cache`, `core`, `metadata`, `sorting`, `viewerMath`) outside `src/` to prevent bundling into `frontendDist: "../src"`. Runs via `npm test` in < 100ms.
+- `e2e/`: WebdriverIO end-to-end suite (`specs/`, `pageobjects/`, `helpers/`) running against the live debug binary via `tauri-driver` and `msedgedriver` under portable mode isolation. Runs via `npm run test:e2e`.
+- `src-tauri/src/tests/`: in-tree Rust backend unit tests for archives, config parsing, format sniffing, protocol URLs, and temp archive origin matching. Runs via `cargo test` in < 1s.

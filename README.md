@@ -211,11 +211,16 @@ The Rust backend is split into domain-specific modules:
 - `commands/`: Tauri command surface (directory, archives, animation, watcher, associations, shell).
 - `archives/` & `formats.rs`: Archive readers, `ArchiveCache`, and format registry.
 - `platform/` & `windows.rs`: OS-level integrations, native shell thumbnails (`IShellItemImageFactory`), external archiver temp origin resolution, dialogs, and window lifecycle.
-- `tests/`: In-tree testing for archives, config, formats, protocol, temp archive origin, and thumbnails.
+- `tests/`: In-tree testing for archives, config, formats, protocol, and temp archive origin.
 - `protocol.rs`: `quivit://` handler (archive entries, shell thumbnails, shell icons). `asset://` for direct file access.
 - `ico.rs`: ICO spritesheets.
 - `models.rs`: IPC structs and data models.
 - `utils.rs`: Base64 and encoding helpers.
+
+Testing spans three focused layers:
+- `src-tauri/src/tests/`: In-tree Rust unit tests for archive engines, config parsing, protocol URLs, and temp archive extraction matching (`cargo test`).
+- `mocha/`: Flat pure frontend unit tests for viewer math, state transitions, action registry, metadata parsing, sorting, and bounded cache (`npm test`).
+- `e2e/`: WebdriverIO end-to-end test suite (`e2e/specs/`) verifying startup chrome, navigation, viewer transforms, archive formats, and OS integrations against the live debug binary under portable mode isolation (`npm run test:e2e`).
 
 > **Design Principle:** New DOM belongs in the module that already owns that surface. New domain logic belongs in `core.js` or `services/`. Do not grow `main.js` back into a god file.
 
@@ -247,11 +252,13 @@ npm install
 npm run tauri dev
 ```
 
-Run backend and frontend syntax checks:
+Run backend and frontend tests and syntax checks:
 ```bash
-cd src-tauri && cargo check
-node --check src/js/main/main.js
-node --check src/js/options/options.js
+npm test                                         # Run fast Mocha frontend unit tests (< 100ms)
+npm run test:e2e                                 # Run WebdriverIO E2E test suite
+cargo test --manifest-path src-tauri/Cargo.toml  # Run Rust backend unit tests
+cd src-tauri && cargo check                      # Validate backend compilation
+node --check src/js/main/main.js                 # Syntax check JS files
 # etc.
 ```
 
@@ -263,6 +270,8 @@ node --check src/js/options/options.js
 | **Backend** | Rust | Core logic and filesystem operations |
 | **Frontend** | Vanilla HTML/CSS/JS | ES modules-based user interface |
 | **Desktop Webview** | WebView2 | Native Windows web rendering |
+| **Unit Testing** | `mocha` | Fast standalone frontend unit testing |
+| **E2E Testing** | WebdriverIO (`@wdio/tauri-service`) | End-to-end desktop testing via `tauri-driver` and `msedgedriver` |
 | **Lanczos Scaling** | `pica` | Off-thread still-image Lanczos resize |
 | **WebGL Filters** | WebGL2 | Anime4K, CRT, Phosphor, Scanlines, and per-frame Lanczos on animated images |
 | **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG/AVIF playback under filters and Lanczos |
@@ -285,6 +294,17 @@ node --check src/js/options/options.js
 
 ```text
 QuiviT/
+├─ e2e/                          # WebdriverIO end-to-end test suite
+│  ├─ helpers/                   # Test fixtures and keyboard/shortcut helpers
+│  ├─ pageobjects/               # Page objects for viewer, file panel, options, etc.
+│  └─ specs/                     # E2E test specifications (01-startup to 07-os-integration)
+├─ mocha/                        # Standalone Mocha frontend unit tests (outside src/)
+│  ├─ actions.test.js            # Action registry integrity and key combo dispatch
+│  ├─ cache.test.js              # BoundedMap LRU cache eviction and callbacks
+│  ├─ core.test.js               # State machine transitions and subscriptions
+│  ├─ metadata.test.js           # ComicInfo and GalleryMeta JSON parsing
+│  ├─ sorting.test.js            # Archive natural sort order
+│  └─ viewerMath.test.js         # Viewport scaling, transforms, and spread geometry
 ├─ src/
 │  ├─ index.html                 # Main viewer window
 │  ├─ options.html               # Options window

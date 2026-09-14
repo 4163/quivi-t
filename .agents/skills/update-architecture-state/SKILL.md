@@ -14,7 +14,7 @@ Read and follow `.agents/skills/unslop/SKILL.md` for all written output.
 
 - `.agents/architecture-state.md`
 - `.agents/AGENTS.md` section: `## Architecture Rules` (and its subsections: see specs below)
-- `README.md` sections: `## Documentation` (and its subsections: see specs below), `## Project Structure`.
+- `README.md` sections: `## Documentation` (and its subsections: see specs below), `## Stack`, `## Project Structure`.
 - `.agents/skills/blast-radius/SKILL.md` sections `## QuiviT surfaces to check` and `### Surface to targeted test matrix`. Treat them as architecture state, not a standalone checklist. Keep zone lists, file paths, failure modes, and targeted test commands aligned with the current code and with `architecture-state.md`.
 - Git: working tree, recent commits, current branch, or a user-specified range.
 
@@ -29,6 +29,7 @@ Each subsection under `## Documentation` has a fixed purpose. Update content wit
 | **Architecture** | Module boundaries, data/control flow, ownership rules. Reflect the current structure, not the history of refactors. |
 | **File Associations (Windows)** | Registry paths, per-user registration mechanics, supported extensions. |
 | **Command-Line Interface** | Accepted flags, arguments, and their behavior. |
+| **Stack** | Core components, technologies/libraries, and their architectural purpose. Update when libraries, frameworks, or tools are added, replaced, or removed. |
 | **Project Structure** | ASCII tree matching the current filesystem. Add/remove/move entries when files change. |
 
 ### AGENTS.md Architecture Rules subsection specs
@@ -65,7 +66,7 @@ When a zone's path, shape, or consumer changes, rewrite the stale bullet in the 
 
 1. **Analyze:** Map the changes from the refactor or feature implementation to the existing architectural documentation.
 2. **Surgical Updates:** Edit only the specific lines, lists, or paragraphs that govern the module or logic that changed. Do not rewrite entire sections.
-3. **Verify Project Structure:** If files or directories were added, moved, or deleted, update the ASCII tree under `## Project Structure` in the `README.md` to match the current filesystem.
+3. **Verify Project Structure & Stack:** If files, directories, dependencies, or tools were added, moved, or deleted, update the ASCII tree under `## Project Structure` and the components table under `## Stack` in the `README.md` to match the current codebase.
 4. **Architecture Rules:** If ownership or layering moved, update the matching subsection in `.agents/AGENTS.md` so the rule still describes the current contract. Prefer replacing a stale line over adding a clarifying paragraph.
 5. **Blast-radius surfaces:** If a blast-radius zone changed (new command, config key, archive path, protocol route, window helper, storage key, CSS token, action id, or state shape), update both `## QuiviT surfaces to check` and `### Surface to targeted test matrix` in `.agents/skills/blast-radius/SKILL.md` to match. Apply the same surgical rule as above. If the diff touched a live contract, also run `blast-radius` steps 2-4 to trace consumers and climb the confidence ladder with targeted tests before documenting the new shape as settled.
 6. **Maintain Principles:** New descriptions in `architecture-state.md`, README, and `blast-radius` still have to match those rules after the edit.

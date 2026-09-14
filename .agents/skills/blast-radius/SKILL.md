@@ -39,6 +39,7 @@ These are the repo's common blast-radius zones. Not every change touches all of 
 - **CSS tokens** (`global.css` `:root`): changed or removed custom properties break downstream page sheets and theme application. Includes `--fs-169` (font-size based max-width for submenu items).
 - **Action registry** (JS service modules): changed action ids, labels, or handler signatures break menus, shortcuts, and context menus. Categories include "Spread View" (`cmd-spread-off`, `cmd-spread-direction-rtl`, `cmd-spread-direction-ltr`) and "File Operations" (`cmd-toggle-file-list-view-mode`, `cmd-open-file`, `cmd-open-dir`, `cmd-refresh`). Other registered actions: `cmd-toggle-cursor-autohide`, `cmd-filter-off`.
 - **State machine** (JS core): changed state shapes or callback contracts break every UI subscriber. Properties include `spreadEnabled`, `spreadDirection`, `spreadStep`, `fileListViewMode`, and `archiveEncryption`.
+- **Test harnesses** (`src-tauri/src/tests/`, `mocha/`, `e2e/`): test suites act as living contracts. Changes to IPC commands, config schemas, action IDs, or viewer math must keep both sub-50ms unit tests (`npm test`) and E2E specs (`npm run test:e2e`) green.
 
 ### Surface to targeted test matrix
 
@@ -64,6 +65,9 @@ Match touched files to their targeted test command to prove safety in 1 to 2 sec
 | `src/js/services/metadataFiles.js`, `src/js/metadata.js` | `npx mocha mocha/metadata.test.js` | ~0.05s |
 | `src/js/services/cache.js` | `npx mocha mocha/cache.test.js` | ~0.05s |
 | `src/js/services/sorting.js` | `npx mocha mocha/sorting.test.js` | ~0.05s |
+| Options window & live theme save | `npx wdio run wdio.conf.js --spec e2e/specs/06-configuration.e2e.js` | ~5.0s |
+| File panel view modes & favorites persistence | `npx wdio run wdio.conf.js --spec e2e/specs/05-persistence.e2e.js` | ~10.0s |
+| Archive extraction & password flow | `npx wdio run wdio.conf.js --spec e2e/specs/04-archives.e2e.js` | ~9.0s |
 | Fast compile & borrow check (iteration) | `cargo check --tests --manifest-path src-tauri/Cargo.toml` | ~3.0s |
 | Any modified JS module | `node --check <file>` | ~0.1s |
 

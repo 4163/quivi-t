@@ -23,7 +23,7 @@ These rules apply to the AI coding assistant.
 - **Work in logical slices.** Prioritize small, precise code changes rather than big blocks to prevent tooling and scope failures, especially during large refactors. Be surgical!
 - **YAGNI.** Do not add abstractions, features, or complexity without a clear need.
 - **Blast radius.** When modifying core cross-cutting surfaces (IPC, configs, cross-window state, protocol URLs, or archives), stop and prove you haven't broken downstream consumers. Do not rely on speculation or writeups. Use the `.agents/skills/blast-radius/SKILL.md` workflow to execute actual checks and confirm safety.
-- **Targeted testing via blast radius.** Do not run the full `cargo test` suite on minor or localized changes. Full suite runs incur high linker and archive extraction overhead (30+ seconds). Derive targeted test commands directly from the diff's blast radius (e.g., `cargo test format_tests` or `cargo test <filter>`). Use `cargo check --tests` during iteration to validate types and test signatures in 2 to 4 seconds. Reserve full suite runs for final slice verification.
+- **Targeted testing via blast radius.** Do not run the full `cargo test` suite on minor or localized changes. Full suite runs incur high linker and archive extraction overhead (30+ seconds). Derive targeted test commands directly from the diff's blast radius (e.g., `npm test` for pure frontend math/state, `cargo test format_tests` or `cargo test <filter>` for backend). Use `cargo check --tests` during iteration to validate types and test signatures in 2 to 4 seconds. Reserve full suite runs for final slice verification.
 
 ## Architecture Rules
 
@@ -60,7 +60,7 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 - Domain logic lives in pure service modules (no `document`). Action ids, labels, defaults, and handlers have one registry; other files derive from it. Filter and scaler methods live under `services/filters` and `services/scaling`; the GL runtime does not know their names; overlay canvases have one UI owner.
 - Each UI feature owns its DOM and self-subscribes. Bootstrap stays thin: init + a slim state fan-out. It does not render another module's surface.
 - Shared cross-window helpers (theme, preview, window fit) stay out of the state machine and out of feature UI files.
-- New frontend work extends this layering. Do not dump new DOM into bootstrap or new domain logic into a UI file.
+- New frontend work extends this layering. Do not dump new DOM into bootstrap or new domain logic into a UI file. Frontend unit tests live in `mocha/` outside `src/` to prevent embedding tests and mocks into the release bundle via `frontendDist: "../src"`.
 
 ### Rust Module Ownership
 - The crate root is bootstrap: plugin wiring, command registration, main-window construction, config-watcher start. It does not grow archive, protocol, command, or test bodies.
