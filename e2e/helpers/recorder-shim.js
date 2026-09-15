@@ -34,6 +34,8 @@ export function initRecorderShim(options = {}) {
     const spread = (state?.spreadEnabled && state?.spreadDirection) ? state.spreadDirection : 'Off';
     const viewMode = state?.fileListViewMode || 'list';
 
+    const transparentBg = !!state?.config?.frontend_data?.transparent_bg;
+
     return {
       container,
       isArchive,
@@ -49,6 +51,8 @@ export function initRecorderShim(options = {}) {
         fitMode,
         spread,
         viewMode,
+        transparentBg,
+        opaqueCanvas: !transparentBg,
       },
     };
   }

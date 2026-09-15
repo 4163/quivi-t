@@ -98,31 +98,165 @@ describe('Replay Diagnostics Runner', function () {
       }
     }, initialPath);
 
-    await browser.waitUntil(
-      async () => !(await viewerPage.isDropOverlayVisible()),
-      { timeout: 10000, timeoutMsg: 'Initial image failed to load into viewport' }
-    );
-
-    // Ensure initial index matches the recorded state
+    // Ensure initial index/file matches the recorded state before waiting for the image to load
     if (scenario.initialState?.index !== undefined) {
-      await browser.execute(async (targetIdx) => {
+      await browser.executeAsync(async (targetIdx, done) => {
         const { Core } = await import('/js/core.js');
-        if (Core.getState().index !== targetIdx) {
-          await Core.selectIndex(targetIdx);
-        }
+        let attempts = 0;
+        const check = () => {
+          if (Core.getState().list?.length > 0) {
+            if (Core.getState().index !== targetIdx) {
+              Core.selectIndex(targetIdx).finally(done);
+            } else {
+              done();
+            }
+          } else if (attempts++ < 50) {
+            setTimeout(check, 100);
+          } else {
+            done();
+          }
+        };
+        check();
       }, scenario.initialState.index);
+    } else if (scenario.initialState?.filename) {
+      await browser.executeAsync(async (targetFilename, done) => {
+        const { Core } = await import('/js/core.js');
+        let attempts = 0;
+        const check = () => {
+          const state = Core.getState();
+          if (Array.isArray(state.list) && state.list.length > 0) {
+            if (state.filename !== targetFilename) {
+              const target = targetFilename.toLowerCase();
+              const foundIdx = state.list.findIndex((item) => {
+                const name = typeof item === 'string' ? item : (item.name || item.filename || item.path || '');
+                const base = name.split(/[/\\]/).pop().toLowerCase();
+                return base === target;
+              });
+              if (foundIdx !== -1 && foundIdx !== state.index) {
+                Core.selectIndex(foundIdx).finally(done);
+                return;
+              }
+            }
+            done();
+          } else if (attempts++ < 50) {
+            setTimeout(check, 100);
+          } else {
+            done();
+          }
+        };
+        check();
+      }, scenario.initialState.filename);
     }
 
+    await browser.waitUntil(
+      async () => {
+        const isOverlayHidden = !(await viewerPage.isDropOverlayVisible());
+        if (isOverlayHidden) return true;
+        // If the overlay is visible, it might be because we loaded a directory and no image is selected yet.
+        // In that case, we can proceed if the list is populated.
+        const listLength = await browser.executeAsync(async (done) => {
+          try {
+            const { Core } = await import('/js/core.js');
+            done(Core.getState()?.list?.length || 0);
+          } catch {
+            done(0);
+          }
+        });
+        return listLength > 0;
+      },
+      { timeout: 10000, timeoutMsg: 'Initial image or list failed to load' }
+    );
+
     // Restore initial pipeline settings if recorded
-    if (scenario.initialState?.pipeline) {
-      await browser.execute((p) => {
-        if (p.filter) {
-          document.getElementById(`cmd-filter-${p.filter}`)?.click();
+    if (scenario.initialState?.pipeline || scenario.initialState?.transparentBg !== undefined || scenario.initialState?.opaqueCanvas !== undefined) {
+      await browser.execute(async (pipeline, rawInitState) => {
+        const { Core } = await import('/js/core.js');
+        const p = pipeline || {};
+
+        // 1. Filter restoration
+        if (p.filter !== undefined && p.filter !== null) {
+          const raw = String(p.filter).trim().toLowerCase();
+          let targetFilter = null;
+          if (raw === 'crt' || raw === 'retro crt') targetFilter = 'crt';
+          else if (raw === 'anime4k') targetFilter = 'anime4k';
+          else if (raw === 'scanlines') targetFilter = 'scanlines';
+          else if (raw === 'phosphor') targetFilter = 'phosphor';
+          else if (raw === 'off' || raw === 'none' || raw === 'false') targetFilter = null;
+          else targetFilter = p.filter;
+
+          const currentFilter = Core.getState().config?.frontend_data?.active_filter || null;
+          if (currentFilter !== targetFilter) {
+            Core.setActiveFilter(targetFilter);
+          }
         }
+
+        // 2. Scaling restoration
+        if (p.scaling) {
+          const raw = String(p.scaling).trim().toLowerCase();
+          let targetScaling = 'bilinear';
+          if (raw === 'pixelated' || raw === 'none') targetScaling = 'none';
+          else if (raw === 'lanczos') targetScaling = 'lanczos';
+          else if (raw === 'bilinear') targetScaling = 'bilinear';
+          else targetScaling = p.scaling;
+
+          if (Core.getState().scalingMode !== targetScaling) {
+            Core.setScalingMode(targetScaling, { persist: false });
+          }
+        }
+
+        // 3. Fit mode restoration
         if (p.fitMode) {
-          document.getElementById(`cmd-fit-${p.fitMode}`)?.click();
+          const raw = String(p.fitMode).trim().toLowerCase();
+          let targetFit = 'window';
+          if (raw === 'window' || raw === 'fit window' || raw === 'fit-window' || raw === 'best') targetFit = 'window';
+          else if (raw === 'window-if-larger' || raw === 'fit window if larger' || raw === 'fit-window-if-larger') targetFit = 'window-if-larger';
+          else if (raw === 'height-if-larger' || raw === 'fit height if larger' || raw === 'fit-height-if-larger') targetFit = 'height-if-larger';
+          else if (raw === 'width-if-larger' || raw === 'fit width if larger' || raw === 'fit-width-if-larger') targetFit = 'width-if-larger';
+          else if (raw === 'height' || raw === 'fit height' || raw === 'fit-height') targetFit = 'height';
+          else if (raw === 'width' || raw === 'fit width' || raw === 'fit-width') targetFit = 'width';
+          else if (raw === 'none' || raw === 'fit none' || raw === 'fit-none' || raw === '1:1') targetFit = 'none';
+          else targetFit = p.fitMode;
+
+          if (Core.getState().fitMode !== targetFit) {
+            Core.setFitMode(targetFit, { persist: false });
+          }
         }
-      }, scenario.initialState.pipeline);
+
+        // 4. Spread restoration
+        if (p.spread) {
+          const raw = String(p.spread).trim().toLowerCase();
+          if (raw === 'off') {
+            Core.setSpreadEnabled(false, { persist: false });
+          } else if (raw === 'rtl' || raw === 'ltr') {
+            Core.setSpreadEnabled(true, { persist: false });
+            Core.setSpreadDirection(raw, { persist: false });
+          }
+        }
+
+        // 5. File list view mode restoration
+        if (p.viewMode) {
+          const raw = String(p.viewMode).trim().toLowerCase();
+          if (raw === 'thumbnail' || raw === 'list') {
+            Core.setFileListViewMode(raw);
+          }
+        }
+
+        // 6. Opaque canvas / transparent background sync
+        const hasTransparentBg = p.transparentBg !== undefined || rawInitState?.transparentBg !== undefined;
+        const hasOpaqueCanvas = p.opaqueCanvas !== undefined || rawInitState?.opaqueCanvas !== undefined;
+        if (hasTransparentBg || hasOpaqueCanvas) {
+          const wantTransparent = hasTransparentBg
+            ? !!(p.transparentBg ?? rawInitState?.transparentBg)
+            : !(p.opaqueCanvas ?? rawInitState?.opaqueCanvas);
+          const currentTransparent = !!Core.getState().config?.frontend_data?.transparent_bg;
+          if (currentTransparent !== wantTransparent) {
+            Core.toggleTransparentBg();
+          }
+        }
+      }, scenario.initialState.pipeline, scenario.initialState);
+
+      // Brief pause to allow pipeline changes to render
+      await browser.pause(100);
     }
 
     // Inject diagnostic engine and active probes
@@ -170,14 +304,44 @@ describe('Replay Diagnostics Runner', function () {
         }, stepItem.path);
       } else {
         await browser.execute(async (id, item) => {
-          const el = document.getElementById(id);
+          const ACTION_ALIASES = {
+            'cmd-filter-crt': 'cmd-toggle-crt-filter',
+            'cmd-filter-anime4k': 'cmd-toggle-anime4k-filter',
+            'cmd-filter-scanlines': 'cmd-toggle-scanlines-filter',
+            'cmd-filter-phosphor': 'cmd-toggle-phosphor-filter',
+            'cmd-fit-window': 'cmd-fit-best',
+            'cmd-scale-pixelated': 'cmd-scale-none',
+          };
+          const effectiveId = ACTION_ALIASES[id] || id;
+          const el = document.getElementById(effectiveId);
           if (el) {
             el.click();
             return;
           }
-          const { dispatch } = await import('/js/services/actions.js');
+          const [
+            { dispatch },
+            { Core },
+            { FsUtils },
+            { Viewer },
+            { NavigationHistory },
+            { Chrome }
+          ] = await Promise.all([
+            import('/js/services/actions.js'),
+            import('/js/core.js'),
+            import('/js/fsUtils.js'),
+            import('/js/viewer/viewer.js'),
+            import('/js/navigationHistory.js'),
+            import('/js/menubar/chrome.js')
+          ]);
+          const actionCtx = {
+            Core,
+            FsUtils,
+            Viewer,
+            NavigationHistory,
+            Chrome,
+          };
           if (typeof dispatch === 'function') {
-            await dispatch(id, item?.payload, item?.context);
+            await dispatch(effectiveId, item?.payload, actionCtx);
           }
         }, actionId, typeof stepItem === 'object' ? stepItem : null);
       }

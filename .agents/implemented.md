@@ -8,6 +8,15 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Diagnostics Runner Reliability (2026-09-15)
+- **Runner reliability (`runner.e2e.js`):**
+  - Replaced synchronous `setTimeout` polling with `browser.executeAsync` when waiting for `Core.getState().list` to populate during `selectIndex` phase, ensuring the directory is fully loaded in Rust backend before attempting to select the initial index.
+  - Fixed `listLength` wait condition bug in `waitUntil` block by injecting dynamic `await import('/js/core.js')` instead of relying on the non-existent global `window.Core`.
+  - Restores pipeline state through `Core` setters instead of DOM clicks, with action-id aliases for legacy command IDs.
+  - The `grill-desync` and `last-recording` scenarios now pass cleanly.
+- **Recorder (`recorder-shim.js`):**
+  - Recorder captures `transparentBg` / `opaqueCanvas` in state snapshots.
+
 ### Diagnostics Anti-Staleness Guardrails and Contract Verification (2026-09-15)
 - **Static Contract Unit Testing:**
   - Added `mocha/diagnosticsContract.test.js` running under `npm test` (< 20ms). Validates that all action IDs in `e2e/scenarios/*.json` match entries in `ACTION_REGISTRY`, all DOM IDs and classes queried by `viewerPipelineProbe.js` exist in markup and viewer render modules, and base/recorder exports remain intact.
