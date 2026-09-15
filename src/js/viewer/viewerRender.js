@@ -369,7 +369,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         }
         if (activeEl) {
           img = activeEl;
-          img.classList.add('active');
         }
       }
 
