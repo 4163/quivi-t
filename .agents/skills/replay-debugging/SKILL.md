@@ -14,8 +14,9 @@ Isolate frontend rendering glitches, blank frame blackouts, state desynchronizat
 2. Probe before concluding. Run the replay diagnostics harness to capture real frame and event timelines.
 3. Start clean and iterate. Always start each new investigation with a fresh copy of `base.js`. Clear any leftover `investigation.js` from previous runs so old probes do not contaminate the new diagnosis.
 4. Flag non-specified issues. While isolating the reported problem, check the report for unexpected anomalies, unhandled rejections, and jank frames.
-5. Strictly diagnostics first. Never modify production frontend or backend files (`src/` or `src-tauri/`) during a replay debugging session. Do not draft code patches or speculative solutions. Focus strictly on isolating and documenting the race condition, lifecycle flaw, or timing mismatch. Modifying the runner, `base.js`, or other files within the record and replay debugging system is allowed when a new useful baseline, general improvement, or tooling fix presents itself.
-6. Deliver telemetry and stop. Report the isolated root cause with frame-accurate timeline evidence. Stop and await user review. The user will review the findings, lead discussion, and approve planning before any implementation begins.
+5. Strictly diagnostics first. Never modify production frontend or backend files (`src/` or `src-tauri/`) during a replay debugging session. Do not draft code patches or speculative solutions. Focus strictly on isolating and documenting the race condition, lifecycle flaw, or timing mismatch.
+6. Leave tooling alone unless adding a new baseline, general improvements, or tooling fixes. Keep the runner, `base.js`, and other files in the record and replay setup unchanged.
+7. Deliver telemetry and stop. Report the isolated root cause with frame-accurate timeline evidence. Stop and await user review. The user will review the findings, lead discussion, and approve planning before any implementation begins.
 
 ## Investigation lifecycle
 

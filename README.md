@@ -289,7 +289,7 @@ The runner replays recorded actions step by step with in-browser telemetry probe
 
 Record and diagnose share one persistent profile in `e2e/.profile/`, so prefs set before recording (scaling, filters, spread, keybinds) are still active at replay. "Continue from last opened" carries over between runs; "remember last image" is always forced off so replay starts at the recorded index, and portable mode is always forced on so suite runs never touch roaming data. The main `test:e2e` suite still starts factory fresh. Reset the profile with `E2E_FRESH=1 npm run record` or `npm run record -- --fresh`.
 
-AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/skills/replay-debugging/SKILL.md) to run an automated investigation loop on recorded traces: generating a temporary `investigation.js` workspace copy, injecting granular microtask and frame assertions, isolating the root cause, delivering a structured diagnosis report, and applying a surgical fix.
+AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/skills/replay-debugging/SKILL.md) to run an automated investigation loop on recorded traces: generating a temporary `investigation.js` workspace copy, injecting granular microtask and frame assertions, isolating the root cause, delivering a structured diagnosis report.
 
 ## Stack
 
@@ -299,26 +299,26 @@ AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/sk
 | **Backend** | Rust | Core logic and filesystem operations |
 | **Frontend** | Vanilla HTML/CSS/JS | ES modules-based user interface |
 | **Desktop Webview** | WebView2 | Native Windows web rendering |
+| **Frontend Tauri API** | `@tauri-apps/api` / `@tauri-apps/plugin-dialog` | Browser-side IPC, asset URLs, and native file dialogs |
+| **Tauri Plugins** | `opener`, `dialog`, `single-instance` | System integration (explorer, pickers, handoff) |
 | **Unit Testing** | `mocha` | Fast standalone frontend unit testing |
 | **E2E Testing** | WebdriverIO (`@wdio/tauri-service`) | End-to-end desktop testing via `tauri-driver` and `msedgedriver` |
 | **Replay Diagnostics** | WebdriverIO / In-Browser Probes | Deterministic scenario replay, frame blackout detection, and pipeline telemetry |
+| **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG/AVIF playback under filters and Lanczos |
 | **Lanczos Scaling** | `pica` | Off-thread still-image Lanczos resize |
 | **WebGL Filters** | WebGL2 | Anime4K, CRT, Phosphor, Scanlines, and per-frame Lanczos on animated images |
-| **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG/AVIF playback under filters and Lanczos |
 | **Archives (ZIP/CBZ)** | `zip` | Fast on-demand extraction and password decryption |
 | **Archives (RAR/CBR)** | `unrar` | Legacy archive support and password decryption |
 | **Archives (7Z/CB7)** | `sevenz-rust2` | Solid LZMA archive support and password decryption |
 | **Archives (TAR/CBT)** | `tar` | Uncompressed archive reading |
 | **Character Encoding** | `chardetng` / `encoding_rs` | Statistical detection and decoding for legacy CJK encodings (Shift-JIS, GBK, EUC-KR, Big5) in ZIP and TAR archives |
-| **Sorting** | `natord` | Natural alphanumeric sorting |
-| **Config** | `serde` / `serde_json` | Configuration serialization |
-| **File Watching** | `notify` | Directory watcher for auto-refresh |
 | **ICO Extraction** | `image` | Multi-frame ICO spritesheet generation |
+| **Windows APIs** | `windows` / `winreg` | Native icons, shell thumbnails (`IShellItemImageFactory`), UI Automation and window enumeration (temp archive origin resolution), file attributes, shell notifications, and per-user file associations |
+| **Sorting** | `natord` | Natural alphanumeric sorting |
+| **File Watching** | `notify` | Directory watcher for auto-refresh |
+| **Config** | `serde` / `serde_json` | Configuration serialization |
 | **Hashing** | `md5` | Deterministic temp directory naming |
 | **Data URIs** | `base64` | Base64 encoding for generated image payloads |
-| **Windows APIs** | `windows` / `winreg` | Native icons, shell thumbnails (`IShellItemImageFactory`), UI Automation and window enumeration (temp archive origin resolution), file attributes, shell notifications, and per-user file associations |
-| **Tauri Plugins** | `opener`, `dialog`, `single-instance` | System integration (explorer, pickers, handoff) |
-| **Frontend Tauri API** | `@tauri-apps/api` / `@tauri-apps/plugin-dialog` | Browser-side IPC, asset URLs, and native file dialogs |
 
 ## Project Structure
 
@@ -347,6 +347,7 @@ QuiviT/
 │  ├─ index.html                  # Main viewer window
 │  ├─ options.html                # Options window
 │  ├─ metadata.html               # Archive metadata window
+│  ├─ assets/                     # Format icons and language flags
 │  ├─ css/
 │  │  ├─ global.css               # Tokens, resets, rules shared by every page
 │  │  ├─ main.css                 # Viewer / file-panel layout
@@ -386,22 +387,14 @@ QuiviT/
 │     │  ├─ cache.js              # BoundedMap / BoundedSet
 │     │  ├─ filterModules.js      # Filter module resolution
 │     │  ├─ keyCombo.js           # Locked binds, conflicts, categories
+│     │  ├─ keybindDomain.js      # Keybind safety, conflicts, validation
 │     │  ├─ metadataFiles.js      # Metadata file priority + basename matching
 │     │  ├─ registry.js           # Filter and scaling definitions
 │     │  ├─ sorting.js            # naturalCompare / applySort
 │     │  ├─ viewerMath.js         # Zoom / pan / fit / spread math
-│     │  ├─ filters/
-│     │  │  ├─ anime4k.js         # Anime4K filter definition
-│     │  │  ├─ crt.js             # Retro CRT filter definition
-│     │  │  ├─ phosphor.js        # Phosphor dot-matrix filter definition
-│     │  │  ├─ scanlines.js       # Simple scanlines filter definition
-│     │  │  └─ anime4k/           # Anime4K WebGL shader chains
-│     │  ├─ pipelines/
-│     │  │  ├─ glCommon.js        # WebGL utility and shader compilation functions
-│     │  │  └─ glRuntime.js       # Filter pipeline orchestrator and quad renderer
-│     │  └─ scaling/
-│     │     ├─ lanczos.js         # Off-thread Pica/Canvas2D Lanczos scaling
-│     │     └─ lanczosWebGL.js    # Real-time WebGL Lanczos for animated images
+│     │  ├─ filters/              # Filter definitions and shader chains
+│     │  ├─ pipelines/            # WebGL filter runtime
+│     │  └─ scaling/              # Lanczos scaling
 │     ├─ shared/
 │     │  ├─ theme.js              # applyTheme / applyCustomCss
 │     │  ├─ themePrePaint.js      # Synchronous pre-paint injector

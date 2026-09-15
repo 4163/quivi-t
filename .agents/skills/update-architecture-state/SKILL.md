@@ -29,8 +29,8 @@ Each subsection under `## Documentation` has a fixed purpose. Update content wit
 | **Architecture** | Module boundaries, data/control flow, ownership rules. Reflect the current structure, not the history of refactors. |
 | **File Associations (Windows)** | Registry paths, per-user registration mechanics, supported extensions. |
 | **Command-Line Interface** | Accepted flags, arguments, and their behavior. |
-| **Stack** | Core components, technologies/libraries, and their architectural purpose. Update when libraries, frameworks, or tools are added, replaced, or removed. |
-| **Project Structure** | ASCII tree matching the current filesystem. Add/remove/move entries when files change. |
+| **Stack** | Core components, technologies/libraries, and their architectural purpose. Update when libraries, frameworks, or tools are added, replaced, or removed. Group by layer: framework, testing, media pipeline, archives, platform, utilities. |
+| **Project Structure** | ASCII tree matching the current filesystem. Backend and frontend must use the same expansion depth. Collapse subdirectories to folder lines when the file list doesn't add architectural clarity. |
 
 ### AGENTS.md Architecture Rules subsection specs
 
