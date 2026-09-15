@@ -244,7 +244,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
       _state.isAnimated = cached.is_animated;
       _state.loopCount = cached.loop_count;
     } else {
-      _state.isAnimated = ext === 'gif' || ext === 'apng';
+      _state.isAnimated = ext === 'gif' || ext === 'apng' || ext === 'webp';
       _state.loopCount = 0;
       animPromise = Core.checkIsAnimated(pathArg, archiveArg);
     }

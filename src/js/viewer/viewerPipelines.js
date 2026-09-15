@@ -403,16 +403,9 @@ export function createViewerPipelines(viewportState) {
 
     // --- Raster WebCodecs Pump (GIF/APNG/WebP/AVIF) ---
     if (typeof ImageDecoder === 'undefined') {
-      if (live?.isAnimated) {
-        _teardownWebglCanvas();
-        if (filterCanvas) filterCanvas.removeAttribute('data-render-ready');
-        const vp = document.getElementById('viewport');
-        if (vp) vp.removeAttribute('data-filter');
-      } else {
-        _lastIsAnimated = false;
-        _scheduleTransform();
-        _triggerRender();
-      }
+      _lastIsAnimated = false;
+      _scheduleTransform();
+      _triggerRender();
       return;
     }
 
@@ -430,16 +423,9 @@ export function createViewerPipelines(viewportState) {
       await decoder.completed;
     } catch (e) {
       console.warn('[pump] ImageDecoder failed:', e.message);
-      if (live?.isAnimated) {
-        _teardownWebglCanvas();
-        if (filterCanvas) filterCanvas.removeAttribute('data-render-ready');
-        const vp = document.getElementById('viewport');
-        if (vp) vp.removeAttribute('data-filter');
-      } else {
-        _lastIsAnimated = false;
-        _scheduleTransform();
-        _triggerRender();
-      }
+      _lastIsAnimated = false;
+      _scheduleTransform();
+      _triggerRender();
       return;
     }
     if (_livePumpSrc !== currentSrc) { decoder.close(); return; }
@@ -448,16 +434,9 @@ export function createViewerPipelines(viewportState) {
     const frameCount = track.frameCount;
     if (frameCount < 2) { 
       decoder.close();
-      if (live?.isAnimated) {
-        _teardownWebglCanvas();
-        if (filterCanvas) filterCanvas.removeAttribute('data-render-ready');
-        const vp = document.getElementById('viewport');
-        if (vp) vp.removeAttribute('data-filter');
-      } else {
-        _lastIsAnimated = false;
-        _scheduleTransform();
-        _triggerRender();
-      }
+      _lastIsAnimated = false;
+      _scheduleTransform();
+      _triggerRender();
       return; 
     }
 
