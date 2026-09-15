@@ -234,6 +234,11 @@
           <img class="viewer-img" decoding="async" alt="" draggable="false">
           <canvas id="viewer-lanczos-canvas"></canvas>
         </div>
+
+        <!-- Bridge layer. Retiring image parks here for two frames so it keeps
+             the pre-navigation transform instead of inheriting the incoming
+             image wrapper scale. -->
+        <div id="viewer-bridge-layer"></div>
         
         <img id="viewer-svg-pump" class="svg-pump-live hidden">
         <canvas id="viewer-filter-canvas"></canvas>

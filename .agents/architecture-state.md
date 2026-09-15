@@ -50,7 +50,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `shared/`: cross-window: `theme.js` / `themePrePaint.js`, `configPreview.js`, `windowFit.js`, `blobImage.js`.
 - `keybinds.js`: `mergeConfig` + pan/zoom defaults. `DEFAULT_KEYBINDS` is derived from `ACTION_REGISTRY`.
 - `shortcuts.js`: keyboard / mouse / wheel dispatch. Does not write the statusbar.
-- `viewer/`: `viewer.js` facade; `viewerRender.js` owns the image pool; `viewerPipelines.js` owns the overlay canvases; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
+- `viewer/`: `viewer.js` facade; `viewerRender.js` owns the image pool and parks the retiring bridge image in the `#viewer-bridge-layer` sibling with its pre-navigation transform frozen in `--bridge-*` props; `viewerPipelines.js` owns the overlay canvases; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
 - `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. List and thumbnail view modes with card grid virtualization. Exports `focusFileList()` and `isFileListFocused()`. `favoritesStore.js` is persistence only (no DOM).
 - `fsUtils.js`: filesystem / archive navigation. No DOM.
 - `directoryPrefs.js`: per-directory sort prefs. Sort math is in `services/sorting.js`.

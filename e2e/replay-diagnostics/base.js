@@ -336,7 +336,7 @@ export function initReplayDiagnostics() {
   function _isViewerContentVisible() {
     const imgWrapper = document.getElementById('viewer-img-wrapper');
     const activeImg = imgWrapper?.querySelector('.viewer-img.active');
-    const bridgeImg = imgWrapper?.querySelector('.viewer-img.bridge');
+    const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge') ?? imgWrapper?.querySelector('.viewer-img.bridge');
     const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
     const filterCanvas = document.getElementById('viewer-filter-canvas');
 
@@ -467,7 +467,7 @@ export function initReplayDiagnostics() {
 
       const imgWrapper = document.getElementById('viewer-img-wrapper');
       const activeImg = imgWrapper?.querySelector('.viewer-img.active');
-      const bridgeImg = imgWrapper?.querySelector('.viewer-img.bridge');
+      const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge') ?? imgWrapper?.querySelector('.viewer-img.bridge');
       const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
       const filterCanvas = document.getElementById('viewer-filter-canvas');
 

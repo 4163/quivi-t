@@ -1232,9 +1232,19 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  transform: translate(calc(-50% + var(--bridge-tx, 0px)), calc(-50% + var(--bridge-ty, 0px))) rotate(var(--bridge-rot, 0deg)) scale(var(--bridge-sx, 1), var(--bridge-sy, 1));
   pointer-events: none;
   z-index: 0;
+}
+
+/* Bridge layer. Untransformed sibling of the wrapper. The retiring image
+   parks here with its pre-navigation transform frozen via --bridge-*
+   so it never inherits the incoming wrapper scale. */
+#viewer-bridge-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .viewer-img[data-scaling="none"] {
@@ -1296,7 +1306,9 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 }
 
 #viewport[data-filter] #viewer-img-wrapper .viewer-img,
-#viewer-img-wrapper:has(#viewer-lanczos-canvas[data-render-ready="true"]) .viewer-img {
+#viewer-img-wrapper:has(#viewer-lanczos-canvas[data-render-ready="true"]) .viewer-img,
+#viewport[data-filter] #viewer-bridge-layer .viewer-img,
+#viewport:has(#viewer-lanczos-canvas[data-render-ready="true"]) #viewer-bridge-layer .viewer-img {
   opacity: 0 !important;
 }
 

@@ -13,12 +13,14 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   const _freeNodes = [];
 
   const imgWrapper = document.getElementById('viewer-img-wrapper');
+  const bridgeLayer = document.getElementById('viewer-bridge-layer');
   if (imgWrapper) {
     const existingNodes = Array.from(document.querySelectorAll('.viewer-img:not(.is-placeholder)'));
     // Reuse existing nodes, don't remove and recreate
     for (let i = 0; i < existingNodes.length; i++) {
       if (i < VIEWER_IMAGE_POOL_CAPACITY) {
-        existingNodes[i].classList.remove('active');
+        existingNodes[i].classList.remove('active', 'bridge');
+        if (existingNodes[i].parentElement !== imgWrapper) imgWrapper.appendChild(existingNodes[i]);
         _freeNodes.push(existingNodes[i]);
       } else {
         existingNodes[i].remove();
@@ -55,13 +57,25 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   let _lastRenderedIsAnimated = false;
   let _lastRenderedArchivePath = null;
 
+  function _releaseBridgeNode(node) {
+    node.classList.remove('bridge');
+    node.style.removeProperty('--bridge-tx');
+    node.style.removeProperty('--bridge-ty');
+    node.style.removeProperty('--bridge-rot');
+    node.style.removeProperty('--bridge-sx');
+    node.style.removeProperty('--bridge-sy');
+    if (imgWrapper && node.parentElement !== imgWrapper && !node.classList.contains('is-placeholder')) {
+      imgWrapper.appendChild(node);
+    }
+  }
+
   function _cancelRetiringNode() {
     if (_retireRaf) {
       cancelAnimationFrame(_retireRaf);
       _retireRaf = null;
     }
     if (_retiringNode) {
-      _retiringNode.classList.remove('bridge');
+      _releaseBridgeNode(_retiringNode);
       _retiringNode = null;
     }
   }
@@ -189,7 +203,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       el.removeAttribute('data-pool-src');
       el.removeAttribute('data-played');
       el.removeAttribute('data-scaling');
-      el.classList.remove('active', 'bridge');
+      el.classList.remove('active');
+      _releaseBridgeNode(el);
       if (el === img) {
         img = null;
         onActiveImageChanged(null);
@@ -220,15 +235,24 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
   function _activatePoolNode(el, filename, state) {
     if (img && img !== el) {
+      const frozen = viewportState.getGeometry ? viewportState.getGeometry() : null;
       _cancelRetiringNode();
       const outgoing = img;
       outgoing.classList.remove('active');
+      if (frozen && bridgeLayer) {
+        outgoing.style.setProperty('--bridge-tx', `${frozen.tx}px`);
+        outgoing.style.setProperty('--bridge-ty', `${frozen.ty}px`);
+        outgoing.style.setProperty('--bridge-rot', `${frozen.rotation}deg`);
+        outgoing.style.setProperty('--bridge-sx', `${frozen.flipX * frozen.scale}`);
+        outgoing.style.setProperty('--bridge-sy', `${frozen.flipY * frozen.scale}`);
+        bridgeLayer.appendChild(outgoing);
+      }
       outgoing.classList.add('bridge');
       _retiringNode = outgoing;
       _retireRaf = requestAnimationFrame(() => {
         _retireRaf = requestAnimationFrame(() => {
           if (_retiringNode === outgoing) {
-            outgoing.classList.remove('bridge');
+            _releaseBridgeNode(outgoing);
             _retiringNode = null;
           }
           _retireRaf = null;
@@ -237,8 +261,16 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     }
 
     img = el;
+    if (imgWrapper && img.parentElement !== imgWrapper && !img.classList.contains('is-placeholder')) {
+      imgWrapper.appendChild(img);
+    }
     img.dataset.played = 'true';
     img.classList.remove('bridge');
+    img.style.removeProperty('--bridge-tx');
+    img.style.removeProperty('--bridge-ty');
+    img.style.removeProperty('--bridge-rot');
+    img.style.removeProperty('--bridge-sx');
+    img.style.removeProperty('--bridge-sy');
     img.classList.add('active');
     img.alt = filename || '';
     img.title = filename || '';
