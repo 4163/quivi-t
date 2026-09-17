@@ -73,10 +73,10 @@ Two categories: app code that ships in the executable, and extractor files that 
 
 **Ships with the app** (inside `src/` and `src-tauri/`, bundled via `frontendDist: "../src"` and Cargo):
 
-- `src/js/urlLoader.js` — orchestrator: Ctrl+U flow, manifest fetching, extractor loading via blob URL import, download queue, library directory coordination
-- `src-tauri/src/commands/network.rs` — `fetch_text` and `download_to_file` Tauri commands, compiled into the Rust binary
-- `src/js/services/actions.js` — `cmd-use-url` action registry entry
-- `src/index.html` — File menu item
+- `src/js/urlLoader.js`. Orchestrator: Ctrl+U flow, manifest fetching, extractor loading via blob URL import, download queue, library directory coordination.
+- `src-tauri/src/commands/network.rs`. `fetch_text` and `download_to_file` Tauri commands, compiled into the Rust binary.
+- `src/js/services/actions.js`. `cmd-use-url` action registry entry.
+- `src/index.html`. File menu item.
 - File panel library section rendering (in `filePanel.js` or a new sibling module)
 
 **Does not ship** (repo root, fetched at runtime from GitHub raw URL):

@@ -514,7 +514,7 @@ pub(crate) fn cleanup_orphaned_temp_dirs() {
                 }
             }
             Err(_) => {
-                // Lock held by a live process — skip.
+                // Lock held by a live process, skip.
             }
         }
     }
