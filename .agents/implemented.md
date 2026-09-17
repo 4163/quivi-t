@@ -8,6 +8,22 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Password Overlay Deselection Fix (2026-09-18)
+- **State cleanup on deselect (`src/js/core.js`):**
+  - Updated `_selectEntry(-1)` to clear `archivePath` and `archiveEncryption` when in directory mode (`mode !== 'archive'`), and reset lingering image state.
+- **Overlay dismissal and backdrop handling (`src/js/main/passwordOverlay.js`):**
+  - Added backdrop `pointerdown` listener to deselect the active entry and dismiss the overlay when clicking empty space outside the prompt.
+  - Updated overlay `Escape` key handler to deselect the entry and return focus to the file list in directory mode.
+  - Guarded `onStateChange` listener so the overlay only shows when an archive is active or the current container is an archive.
+- **Password status label format (`src/js/core.js`, `src/js/fsUtils.js`):**
+  - Updated lock status labels from `'Password required: <name>'` to `'<name>: password required'` (and `'<name>: password incorrect'`).
+  - Formatted active file entries inside a locked archive container to display `${file.name}: password required` in the statusbar while awaiting password input.
+- **Verification:**
+  - Added unit tests in `mocha/core.test.js` verifying `selectIndex(-1)` clears encryption state in directory mode, preserves it in archive mode, and formats locked archive entries as `<name>: password required`.
+  - Verified with `node --check` across modified files.
+  - Verified with `npm test` (57/57 passing).
+  - Verified with `cargo check --tests` (clean).
+
 ### Use URL Initial Setup (2026-09-17)
 - **Rust network proxy (`commands/network.rs`):**
   - Added `ureq = "2.10"` to `Cargo.toml` with default rustls for synchronous HTTP requests.

@@ -203,5 +203,70 @@ describe('Core state machine', () => {
       Core.setState({ archiveEncryption: null });
       assert.equal(Core.getState().archiveEncryption, null);
     });
+
+    it('clears archiveEncryption and archivePath on selectIndex(-1) in directory mode', () => {
+      Core.setState({
+        mode: 'image',
+        directory: '/images',
+        archivePath: '/images/secret.zip',
+        archiveEncryption: 'password_required',
+        index: 0,
+        filename: 'secret.zip: password required',
+        list: [{ name: 'secret.zip', path: '/images/secret.zip' }]
+      });
+
+      Core.selectIndex(-1);
+
+      const state = Core.getState();
+      assert.equal(state.index, -1);
+      assert.equal(state.archivePath, '');
+      assert.equal(state.archiveEncryption, null);
+      assert.equal(state.filename, '');
+    });
+
+    it('preserves archivePath and archiveEncryption on selectIndex(-1) in archive mode', () => {
+      Core.setState({
+        mode: 'archive',
+        directory: '',
+        archivePath: '/images/secret.zip',
+        archiveEncryption: 'password_required',
+        index: 0,
+        filename: 'secret.zip: password required',
+        list: [{ name: 'secret.zip', path: '/images/secret.zip' }]
+      });
+
+      Core.selectIndex(-1);
+
+      const state = Core.getState();
+      assert.equal(state.index, -1);
+      assert.equal(state.archivePath, '/images/secret.zip');
+      assert.equal(state.archiveEncryption, 'password_required');
+    });
+
+    it('formats active file filename as <name>: password required when inside locked archive', () => {
+      const dummyList = [
+        { name: '..', is_parent: true },
+        { name: 'vlcsnap-2026-07-03-12h02m23s726.png', path: 'vlcsnap-2026-07-03-12h02m23s726.png' }
+      ];
+      Core.setState({
+        mode: 'archive',
+        directory: '',
+        archivePath: '/images/locked.rar',
+        archiveEncryption: 'password_required',
+        index: 0,
+        list: dummyList
+      });
+
+      Core.selectIndex(1);
+
+      const state = Core.getState();
+      assert.equal(state.index, 1);
+      assert.equal(state.filename, 'vlcsnap-2026-07-03-12h02m23s726.png: password required');
+
+      // Parent row keeps simple '..'
+      Core.selectIndex(0);
+      assert.equal(Core.getState().index, 0);
+      assert.equal(Core.getState().filename, '..');
+    });
   });
 });

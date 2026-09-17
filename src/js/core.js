@@ -167,7 +167,18 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   if (index === -1) {
     _state.index = -1;
     _state.filename = '';
+    FsUtils.revokeIfObjectURL(_state.src);
     _state.src = '';
+    _state.isSpread = false;
+    _state.naturalWidth = 0;
+    _state.naturalHeight = 0;
+    _state.isSiblingNavigation = false;
+    _state.isAnimated = false;
+    _state.loopCount = 0;
+    if (_state.mode !== 'archive') {
+      _state.archivePath = '';
+      _state.archiveEncryption = null;
+    }
     _notify();
     return;
   }
@@ -214,7 +225,8 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
       if (enc === 'password_required' || enc === 'password_incorrect') {
         _state.archivePath = file.path;
         _state.archiveEncryption = enc;
-        _state.filename = `Password required: ${file.name}`;
+        const lockSuffix = enc === 'password_incorrect' ? 'password incorrect' : 'password required';
+        _state.filename = `${file.name}: ${lockSuffix}`;
         newSrc = '';
       } else {
         _state.archivePath = '';
@@ -223,6 +235,11 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     } else {
       _state.archivePath = '';
       _state.archiveEncryption = null;
+    }
+  } else {
+    if ((_state.archiveEncryption === 'password_required' || _state.archiveEncryption === 'password_incorrect') && !file.is_parent) {
+      const lockSuffix = _state.archiveEncryption === 'password_incorrect' ? 'password incorrect' : 'password required';
+      _state.filename = `${file.name}: ${lockSuffix}`;
     }
   }
 
