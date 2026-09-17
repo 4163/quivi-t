@@ -7,7 +7,7 @@ describe('UrlLoader and cmd-use-url', () => {
     it('registers cmd-use-url in ACTION_REGISTRY', () => {
       const action = ACTION_REGISTRY.find(a => a.id === 'cmd-use-url');
       assert.ok(action, 'cmd-use-url should be registered');
-      assert.equal(action.label, 'Use URL...');
+      assert.equal(action.label, 'Open URL...');
       assert.equal(action.category, 'File Operations');
       assert.deepEqual(action.defaultBinds, 'Ctrl+u');
     });

@@ -24,7 +24,7 @@
         <ul class="menu-dropdown" role="menu">
           <li role="menuitem" id="cmd-open-dir" tabindex="0">Open directory...<span class="shortcut">Ctrl+O</span></li>
           <li role="menuitem" id="cmd-open-file" tabindex="0">Open file / archive...<span class="shortcut"></span></li>
-          <li role="menuitem" id="cmd-use-url" tabindex="0">Use URL...<span class="shortcut">Ctrl+U</span></li>
+          <li role="menuitem" id="cmd-use-url" tabindex="0" title="Load images / galleries from supported sites">Open URL...<span class="shortcut">Ctrl+U</span></li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-options" tabindex="0">Options...<span class="shortcut">5</span></li>
           <li class="separator"></li>
@@ -198,7 +198,7 @@
 
         <!-- Drop overlay, shown when no image is loaded -->
         <div id="drop-overlay" class="active">
-          <div class="drop-hint">
+          <div class="drop-hint overlay-prompt">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="17 8 12 3 7 8"/>
@@ -211,34 +211,34 @@
 
         <!-- Password overlay for encrypted archives -->
         <div id="password-overlay">
-          <form class="password-prompt" autocomplete="off">
+          <form class="password-prompt overlay-prompt" autocomplete="off">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
               <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
             <p>This archive is password-protected</p>
-            <div class="password-field">
-              <input type="password" id="password-input" placeholder="Enter password" spellcheck="false">
+            <div class="password-field overlay-field">
+              <input type="password" id="password-input" placeholder="Enter password" spellcheck="false" size="1">
               <button type="submit">Unlock</button>
             </div>
-            <span class="password-error"></span>
+            <span class="password-error overlay-error"></span>
           </form>
         </div>
 
         <!-- URL overlay for remote galleries -->
         <div id="url-overlay">
-          <form class="url-prompt" autocomplete="off">
+          <form class="url-prompt overlay-prompt" autocomplete="off">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="10"/>
               <line x1="2" y1="12" x2="22" y2="12"/>
               <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
             </svg>
             <p>Enter URL</p>
-            <div class="url-field">
-              <input type="text" id="url-input" placeholder="mangadex.org/title/*/bakemonogatari" spellcheck="false">
+            <div class="url-field overlay-field" data-placeholder="mangadex.org/title/*/bakemonogatari">
+              <input type="text" id="url-input" placeholder="mangadex.org/title/*/bakemonogatari" spellcheck="false" size="1">
               <button type="submit">Open</button>
             </div>
-            <span class="url-error"></span>
+            <span class="url-error overlay-error"></span>
           </form>
         </div>
 

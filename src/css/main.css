@@ -1,12 +1,4 @@
-/* ============================================================
-   main.css: QuiviT (main window)
-   Component styles for the main viewer window.
-   Shared foundation (tokens, resets, base styles) lives in
-   global.css, loaded before this file.
-   ============================================================ */
-
-/* App layout. */
-/* menubar | workspace | statusbar */
+/* Main-window styles. Shared tokens and base rules are in global.css. */
 body {
   display: flex;
   flex-direction: column;
@@ -22,7 +14,7 @@ body.resizing-col { cursor: col-resize !important; }
   min-width: 0 !important;
 }
 
-/* Menu bar. */
+/* Menu bar */
 #menubar {
   display: flex;
   align-items: stretch;
@@ -92,7 +84,7 @@ body.resizing-col { cursor: col-resize !important; }
   outline: none;
 }
 
-/* Dropdown */
+/* Dropdown menu */
 .menu-dropdown {
   display: none;
   position: absolute;
@@ -103,7 +95,7 @@ body.resizing-col { cursor: col-resize !important; }
   max-height: calc(100vh - var(--fs-28) - 8px);
   overflow-y: auto;
   overflow-x: hidden;
-  direction: rtl; /* Scrollbar on the left side */
+  direction: rtl; /* Left scrollbar */
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
   background: var(--menu-bg);
@@ -115,7 +107,7 @@ body.resizing-col { cursor: col-resize !important; }
 }
 
 .menu-dropdown > * {
-  direction: ltr; /* Items and layout stay left-to-right */
+  direction: ltr; /* Restore content direction */
 }
 
 .menu-item.open > .menu-dropdown {
@@ -139,7 +131,7 @@ body.resizing-col { cursor: col-resize !important; }
   padding-left: var(--fs-24);
 }
 
-/* Submenu Flyout */
+/* Submenus */
 .menu-dropdown li.has-submenu {
   position: relative;
 }
@@ -216,7 +208,7 @@ body.resizing-col { cursor: col-resize !important; }
   color: #fff;
 }
 
-/* While mouse is moving diagonally towards an open submenu, suppress hover on sibling items */
+/* Keep sibling hover clear while moving to a submenu. */
 .menu-dropdown.submenu-aiming > li[role="menuitem"]:not(.open):hover {
   background: transparent;
   color: var(--text);
@@ -279,15 +271,15 @@ body.resizing-col { cursor: col-resize !important; }
   flex-shrink: 0;
 }
 
-/* Workspace. */
+/* Workspace */
 #workspace {
   display: flex;
   flex: 1;
-  min-height: 0; /* allow flex children to scroll */
+  min-height: 0; /* Allow inner scrollers to shrink */
   overflow: hidden;
 }
 
-/* File panel. */
+/* File panel */
 #file-panel {
   display: flex;
   flex-direction: column;
@@ -317,6 +309,7 @@ body.resizing-col { cursor: col-resize !important; }
 
 #file-panel-header-top #file-panel-breadcrumb {
   flex: 1;
+  min-width: 0;
 }
 
 #btn-favorite-current {
@@ -333,7 +326,7 @@ body.resizing-col { cursor: col-resize !important; }
   cursor: not-allowed;
 }
 
-/* Favorites panel. */
+/* Favorites */
 #file-panel-favorites {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -380,7 +373,7 @@ body.resizing-col { cursor: col-resize !important; }
   overflow-y: auto;
 }
 
-/* Favorites focus ring belongs on the container, not each item. */
+/* The list owns the focus ring. */
 #favorites-list:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 1px var(--accent);
@@ -433,11 +426,9 @@ li:hover > .fav-remove,
   flex: 1;
   min-height: 24px;
   padding: 4px 8px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-muted);
   font-size: var(--fs-11);
   line-height: 1.35;
@@ -628,7 +619,7 @@ li:hover > .fav-remove,
 }
 
 #favorites-list li {
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(calc(8px + var(--fs-14)), 1fr) auto auto;
 }
 
 #favorites-list li .item-date {
@@ -717,7 +708,7 @@ li:hover > .fav-remove,
   color: var(--selected-text);
 }
 
-/* Items are not individually focusable. The list handles keyboard. */
+/* The list owns keyboard focus. */
 #file-list li,
 #favorites-list li { outline: none; }
 
@@ -734,7 +725,13 @@ li:hover > .fav-remove,
 #file-list .item-ext, #favorites-list .item-ext  { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); padding-left: 8px; }
 #file-list .item-date, #favorites-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-10); color: var(--text-dim); padding-left: 8px; }
 
-/* Thumbnail view mode */
+/* Thumbnail view */
+#file-panel.view-mode-thumbnail {
+  --thumbnail-size: calc(var(--fs-36) + var(--fs-8));
+  --thumbnail-row-height: calc(var(--thumbnail-size) + 8px);
+  --thumbnail-icon-size: calc(var(--fs-24) + var(--fs-8));
+}
+
 #file-list li .item-thumbnail-wrapper,
 #file-list li .item-thumbnail-info,
 #favorites-list li .item-thumbnail-wrapper,
@@ -746,7 +743,7 @@ li:hover > .fav-remove,
 #file-panel.view-mode-thumbnail #favorites-list li {
   display: flex;
   align-items: center;
-  height: 52px;
+  height: var(--thumbnail-row-height);
   padding: 4px 8px;
   gap: 8px;
   box-sizing: border-box;
@@ -767,9 +764,9 @@ li:hover > .fav-remove,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
+  width: var(--thumbnail-size);
+  height: var(--thumbnail-size);
+  flex: 0 0 var(--thumbnail-size);
   overflow: hidden;
 }
 
@@ -782,8 +779,8 @@ li:hover > .fav-remove,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: var(--fs-24);
+  height: var(--fs-24);
   color: var(--text-dim);
   opacity: 0.35;
   pointer-events: none;
@@ -792,9 +789,9 @@ li:hover > .fav-remove,
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder .placeholder-icon,
 #file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder .placeholder-icon {
   display: none;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
+  width: var(--fs-24);
+  height: var(--fs-24);
+  flex: 0 0 var(--fs-24);
 }
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder:not([data-type]) .icon-image,
@@ -817,16 +814,22 @@ li:hover > .fav-remove,
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-wrapper img,
 #file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-wrapper img {
-  max-width: 44px;
-  max-height: 44px;
+  max-width: var(--thumbnail-size);
+  max-height: var(--thumbnail-size);
   object-fit: contain;
+}
+
+#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-img.is-loaded[src*="/icon/"],
+#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-img.is-loaded[src*="/icon/"] {
+  width: var(--fs-40);
+  height: var(--fs-40);
 }
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-wrapper svg,
 #file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-wrapper svg {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
+  width: var(--thumbnail-icon-size);
+  height: var(--thumbnail-icon-size);
+  flex: 0 0 var(--thumbnail-icon-size);
 }
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-info,
@@ -884,7 +887,7 @@ li:hover > .fav-remove,
   opacity: 0.5;
 }
 
-/* Viewport. */
+/* Viewport */
 #viewport {
   flex: 1;
   position: relative;
@@ -903,7 +906,7 @@ li:hover > .fav-remove,
     calc(var(--checker-size) / -2) 0;
 }
 
-/* Solid bg while no image loaded (no pointless checkerboard) */
+/* Empty viewport */
 #viewport.empty {
   background: var(--bg);
 }
@@ -913,7 +916,7 @@ li:hover > .fav-remove,
   cursor: none !important;
 }
 
-/* Fullscreen exit button. */
+/* Fullscreen exit */
 #fullscreen-exit-hint {
   position: fixed;
   top: 18px;
@@ -1011,55 +1014,182 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   outline: none;
 }
 
+/* Viewport overlays */
+
 #drop-overlay, #password-overlay, #url-overlay {
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  padding: 16px;
   background: var(--bg);
   z-index: 5;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s;
   container-type: inline-size;
-  container-name: box;
+  container-name: overlay;
 }
 
-@container box (max-width: 323px) {
-  .password-prompt,
-  .url-prompt {
-    width: calc(100% - 52px);
-  }
-}
-
-@container box (max-width: 260px) {
-  .drop-hint p,
-  .drop-hint span,
-  .password-prompt p,
-  .url-prompt p {
-    display: none;
-  }
-  .drop-hint {
-    width: calc(100% - 52px);
-  }
-  .password-prompt,
-  .url-prompt {
-    padding: 40px 0 !important;
-  }
-  .password-field,
-  .url-field {
-   width: calc(100% - 26px);
-  }
-  .password-field > *,
-  .url-field > * {
-    width: 100%;
-  }
-}
-
-#drop-overlay.active {
+#drop-overlay.active,
+#password-overlay.active,
+#url-overlay.active {
   opacity: 1;
   pointer-events: all;
+}
+
+/* Overlay prompt */
+
+.overlay-prompt {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 40px 52px;
+  max-width: 448px;
+  width: 100%;
+  min-width: 0;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.overlay-prompt svg {
+  width: min(var(--fs-40), 100%);
+  min-width: 0;
+  height: auto;
+  opacity: 0.55;
+}
+
+.overlay-prompt > p {
+  font-size: var(--fs-15);
+  font-weight: 500;
+  text-align: center;
+}
+
+/* Overlay fields */
+
+.overlay-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "field action";
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.overlay-field input {
+  grid-area: field;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 10px;
+  font-size: var(--fs-13);
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--field-bg);
+  color: var(--text);
+  outline: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overlay-field input:focus {
+  border-color: var(--accent);
+}
+
+.overlay-field input::placeholder {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* WebView2 does not ellipsize focused native placeholders. */
+.url-field {
+  position: relative;
+}
+
+.url-field:has(#url-input:placeholder-shown)::after {
+  content: attr(data-placeholder);
+  grid-area: field;
+  align-self: center;
+  min-width: 0;
+  margin-inline: 11px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--fs-13);
+  font-family: inherit;
+  line-height: normal;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.url-field:has(#url-input:placeholder-shown) #url-input::placeholder {
+  color: transparent;
+}
+
+.overlay-field button {
+  grid-area: action;
+  min-width: 0;
+  padding: 5px 16px;
+  font-size: var(--fs-13);
+  font-family: inherit;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overlay-field button:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* Overlay errors */
+
+.overlay-error {
+  font-size: var(--fs-12);
+  min-height: 1em;
+  color: var(--danger);
+  letter-spacing: 0.02em;
+}
+
+/* Narrow overlays */
+
+@container overlay (max-width: 320px) {
+  .overlay-prompt {
+    padding-inline: 26px;
+  }
+  .overlay-prompt > p { display: none; }
+  .drop-hint > span { display: none; }
+  .overlay-field {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "field"
+      "action";
+  }
+
+}
+
+/* Drop overlay */
+
+.drop-hint {
+  cursor: pointer;
+}
+
+.drop-hint > span {
+  font-size: var(--fs-12);
+  opacity: 0.5;
+  letter-spacing: 0.04em;
+  text-align: center;
 }
 
 #drop-overlay.drag-over {
@@ -1076,195 +1206,19 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   color: #d83b01;
 }
 
-.drop-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 40px 52px;
-  border: 1.5px dashed var(--border);
-  margin: 0 25px;
-  border-radius: 10px;
-  color: var(--text-muted);
-  transition: border-color 0.15s, color 0.15s;
-  cursor: pointer;
-}
+/* Password and URL errors */
 
-.drop-hint svg { width: var(--fs-40); height: var(--fs-40); opacity: 0.55; }
-.drop-hint p   { font-size: 0.95rem; font-weight: 500; text-align: center; }
-.drop-hint span{ font-size: 0.75rem; opacity: 0.5; letter-spacing: 0.04em; text-align: center; }
-
-#password-overlay.active {
-  opacity: 1;
-  pointer-events: all;
-}
-
-.password-prompt {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 40px 52px;
-  border: 1.5px dashed var(--border);
-  margin: 0 25px;
-  border-radius: 10px;
-  color: var(--text-muted);
-  transition: border-color 0.15s, color 0.15s;
-}
-
-.password-prompt svg { width: var(--fs-40); height: var(--fs-40); opacity: 0.55; }
-.password-prompt p   { font-size: 0.95rem; font-weight: 500; text-align: center; }
-
-.password-field {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.password-field input {
-  max-width: var(--fs-169);
-  min-width: 0;
-  padding: 5px 10px;
-  font-size: var(--fs-13);
-  font-family: inherit;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--field-bg);
-  color: var(--text);
-  outline: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.password-field input:focus {
-  border-color: var(--accent);
-}
-
-.password-field button {
-  max-width: var(--fs-169);
-  flex-grow: 1;
-  min-width: 0;
-  padding: 5px 16px;
-  font-size: var(--fs-13);
-  font-family: inherit;
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.password-field button:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-}
-
-.password-error {
-  font-size: 0.75rem;
-  min-height: 1em;
-  color: var(--danger);
-  letter-spacing: 0.02em;
-}
-
-#password-overlay.error .password-prompt {
+:is(#password-overlay, #url-overlay).error > .overlay-prompt {
   border-color: var(--danger);
 }
 
-#password-overlay.error .password-field input {
+:is(#password-overlay, #url-overlay).error .overlay-field input {
   border-color: var(--danger);
 }
 
-#url-overlay.active {
-  opacity: 1;
-  pointer-events: all;
-}
 
-.url-prompt {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 40px 52px;
-  border: 1.5px dashed var(--border);
-  margin: 0 25px;
-  border-radius: 10px;
-  color: var(--text-muted);
-  transition: border-color 0.15s, color 0.15s;
-}
 
-.url-prompt svg { width: var(--fs-40); height: var(--fs-40); opacity: 0.55; }
-.url-prompt p   { font-size: 0.95rem; font-weight: 500; text-align: center; }
-
-.url-field {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.url-field input {
-  width: 260px;
-  max-width: 100%;
-  min-width: 0;
-  padding: 5px 10px;
-  font-size: var(--fs-13);
-  font-family: inherit;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--field-bg);
-  color: var(--text);
-  outline: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.url-field input:focus {
-  border-color: var(--accent);
-}
-
-.url-field button {
-  padding: 5px 16px;
-  font-size: var(--fs-13);
-  font-family: inherit;
-  border: 1px solid var(--accent);
-  border-radius: 4px;
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.url-field button:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-}
-
-.url-error {
-  font-size: 0.75rem;
-  min-height: 1em;
-  color: var(--danger);
-  letter-spacing: 0.02em;
-}
-
-#url-overlay.error .url-prompt {
-  border-color: var(--danger);
-}
-
-#url-overlay.error .url-field input {
-  border-color: var(--danger);
-}
-
-/* Spread mode overlay (visible when statusbar is hidden). */
+/* Spread indicator when the status bar is hidden. */
 #spread-indicator:empty {
   display: none;
 }
@@ -1286,9 +1240,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   user-select: none;
 }
 
-/* Viewer image wrapper. */
-/* The wrapper is the positioned/transformed element. The image and
-   the Lanczos canvas live inside; the WebGL filter canvas is a sibling. */
+/* Transformed image wrapper. The WebGL canvas is a sibling. */
 #viewer-img-wrapper {
   position: absolute;
   top: 50%;
@@ -1298,10 +1250,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   pointer-events: none;
 }
 
-/* Viewer image. */
-/* position: relative puts it in the same stacking layer as #img-grill
-   (position: absolute), so DOM order determines paint order and the
-   image (second in DOM) naturally renders on top of the grill. */
+/* DOM order paints the viewer image above #img-grill. */
 .viewer-img {
   display: none;
   max-width: none;
@@ -1327,9 +1276,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   z-index: 0;
 }
 
-/* Bridge layer. Untransformed sibling of the wrapper. The retiring image
-   parks here with its pre-navigation transform frozen via --bridge-*
-   so it never inherits the incoming wrapper scale. */
+/* Retiring images keep their transform in this unscaled sibling layer. */
 #viewer-bridge-layer {
   position: absolute;
   inset: 0;
@@ -1345,7 +1292,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   image-rendering: auto;
 }
 
-/* ── SVG Live Pump Fallback ── */
+/* SVG fallback */
 .svg-pump-live {
   position: absolute;
   top: 0;
@@ -1364,7 +1311,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   opacity: 0.001;
 }
 
-/* ── Lanczos Overlay Canvas (inside img-wrapper) ── */
+/* Lanczos canvas */
 #viewer-lanczos-canvas {
   position: absolute;
   top: var(--crop-top, 0px);
@@ -1378,7 +1325,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   opacity: 1;
 }
 
-/* ── WebGL Overlay Canvas ── */
+/* WebGL canvas */
 #viewer-filter-canvas {
   position: absolute;
   top: 0;
@@ -1401,22 +1348,21 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   opacity: 0 !important;
 }
 
-/* SVGs with percentage-based dimensions collapse in the shrink-wrap wrapper.
-   JS sets --svg-base-w/--svg-base-h to give them a concrete canvas size. */
+/* Percentage-sized SVGs need concrete dimensions in the shrink-wrap wrapper. */
 .viewer-img[data-svg-bounds] {
   width: var(--svg-base-w);
   height: var(--svg-base-h);
 }
 
-/* Opaque image grill. */
+/* Image grill */
 #img-grill {
   display: none;
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* Solid base hides the viewport checkerboard; stripes are drawn over it */
+  /* The solid base hides the checkerboard. */
   background-color: var(--grill-bg);
-  /* Absolute pixel stops mixed with percentages guarantee perfect thickness */
+  /* Mixed pixel and percentage stops keep stripe widths steady. */
   background-image: linear-gradient(-45deg,
     transparent 0,
     transparent calc(25% - var(--grill-thickness-pct) / 2),
@@ -1436,15 +1382,13 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   display: block;
 }
 
-/* Border around the grill */
-/* No z-index: like #img-grill it shares the wrapper's stacking layer, so DOM
-   order decides paint order. The image (last in DOM) renders on top of it. */
+/* Grill border. DOM order keeps the image on top. */
 #img-grill-border {
   display: none;
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* Use box-shadow because outline width doesn't support subpixels reliably across browsers */
+  /* box-shadow supports subpixel widths reliably. */
   box-shadow: inset 0 0 0 calc(var(--grill-thickness-px) * 1px / var(--zoom-scale, 1)) var(--grill-border);
 }
 
@@ -1452,7 +1396,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   display: block;
 }
 
-/* Status bar. */
+/* Status bar */
 #statusbar {
   display: flex;
   align-items: center;
@@ -1503,7 +1447,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 .status-fit::before     { content: '·'; margin-right: 12px; color: var(--border); }
 .status-version::before { content: '·'; margin-right: 12px; color: var(--border); }
 
-/* Sticky zoom-mode indicator (Options > Keys > Scroll Wheel > Toggle Ctrl) */
+/* Scroll-zoom indicator */
 .status-scroll-zoom {
   display: none;
   overflow: hidden;
@@ -1515,5 +1459,3 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 #statusbar.action-latched .status-scroll-zoom {
   display: inline-block;
 }
-
-/* Utilities. */

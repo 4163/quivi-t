@@ -37,7 +37,7 @@ export async function downloadFile(url, destPath) {
 
 export async function loadUrl(urlString) {
   if (!isValidUrl(urlString)) {
-    throw new Error('Please enter a valid HTTP or HTTPS URL');
+    throw new Error('Please enter a valid URL');
   }
 
   // Placeholder for extractor matching and download queue execution.
