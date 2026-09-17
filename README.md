@@ -127,7 +127,7 @@ html {
 
 **Developer Tools:** Inspect Element is intentionally left enabled to help users create and debug custom CSS.
 
-**Example themes:** Try the included `matcha-latte.css` and `sage-mint.css` example themes: import them from **Options → Customization** to restyle the app.
+**Example themes:** Try the included `matcha-latte.css` and `sage-mint.css` themes under [`themes/`](themes/). Import them from **Options → Customization** to restyle the app.
 
 > If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` in any QuiviT window. This emergency reset instantly removes the custom CSS and reloads the interface safely.
 
@@ -428,8 +428,7 @@ QuiviT/
 │  │  └─ windows.rs               # Window lifecycle and size constants
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json
-├─ matcha-latte.css               # Example theme (bundled with the release)
-├─ sage-mint.css                  # Example theme (bundled with the release)
+├─ themes/                        # Example themes (bundled with the release)
 ├─ package.json
 └─ README.md                      # Project overview & architecture documentation
 ```

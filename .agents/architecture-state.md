@@ -42,6 +42,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 **CSS:**
 - `global.css`: tokens, resets, shared rules. Loaded by every HTML page.
 - `main.css` / `options.css` / `metadata.css`: that window's layout only. Consume tokens; do not redeclare them.
+- `themes/`: bundled example themes (`matcha-latte.css`, `sage-mint.css`).
 - Menubar flyout submenu positioning uses CSS custom properties (`--submenu-top`, `--submenu-left`, `--submenu-max-height`) on host elements, not inline style assignments.
 
 **JavaScript:**

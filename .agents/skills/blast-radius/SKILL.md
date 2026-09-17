@@ -72,6 +72,7 @@ Match touched files to their targeted test command to prove safety in 1 to 2 sec
 | Options window & live theme save | `npx wdio run wdio.conf.js --spec e2e/specs/06-configuration.e2e.js` | ~5.0s |
 | File panel view modes & favorites persistence | `npx wdio run wdio.conf.js --spec e2e/specs/05-persistence.e2e.js` | ~10.0s |
 | Archive extraction & password flow | `npx wdio run wdio.conf.js --spec e2e/specs/04-archives.e2e.js` | ~9.0s |
+| OS integration & temp extraction | `npx wdio run wdio.conf.js --spec e2e/specs/07-os-integration.e2e.js` | ~6.0s |
 | Replay diagnostics engine & probes | `npm run diagnose -- sample-navigation` | ~2.5s |
 | Action recorder shim | `node --check e2e/helpers/recorder-shim.js` | ~0.1s |
 | Fast compile & borrow check (iteration) | `cargo check --tests --manifest-path src-tauri/Cargo.toml` | ~3.0s |

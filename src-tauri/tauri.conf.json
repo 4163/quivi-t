@@ -24,8 +24,8 @@
     "shortDescription": "Lightweight comic and manga viewer for Windows",
     "longDescription": "QuiviT is a lightweight standalone port of Quivi, built with Tauri. View images and archives (ZIP/CBZ, RAR/CBR, 7Z/CB7, TAR) with fast browsing, viewer controls, and custom CSS theming.",
     "resources": {
-      "../matcha-latte.css": "matcha-latte.css",
-      "../sage-mint.css": "sage-mint.css"
+      "../themes/matcha-latte.css": "themes/matcha-latte.css",
+      "../themes/sage-mint.css": "themes/sage-mint.css"
     },
     "icon": [
       "icons/32x32.png",
