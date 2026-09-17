@@ -318,9 +318,15 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     if (isModifierKey(e.key)) _updateScrollIndicator(Core.getState().config);
   });
 
+  function clearHeldKeys() {
+    activeKeys.clear();
+    activeButtons.clear();
+    _updateScrollIndicator(Core.getState().config);
+  }
+
   window.addEventListener('keyup', (e) => {
     if (isInteractiveKeyTarget(e)) {
-      activeKeys.clear();
+      clearHeldKeys();
       return;
     }
     const config = Core.getState().config;
@@ -340,10 +346,22 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     if (isModifierKey(e.key)) _updateScrollIndicator(config);
   });
 
+  window.addEventListener('focusin', (e) => {
+    if (isInteractiveKeyTarget(e)) {
+      clearHeldKeys();
+    }
+  });
+
+  window.addEventListener('paste', () => {
+    clearHeldKeys();
+  });
+
+  window.addEventListener('quivit-reset-held-keys', () => {
+    clearHeldKeys();
+  });
+
   window.addEventListener('blur', () => {
-    activeKeys.clear();
-    activeButtons.clear();
-    _updateScrollIndicator(Core.getState().config);
+    clearHeldKeys();
   });
 
   window.addEventListener('mousedown', (e) => {

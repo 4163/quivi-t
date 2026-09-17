@@ -23,6 +23,10 @@ function _show() {
   _overlay.classList.remove('error');
   _overlay.classList.add('active');
 
+  if (typeof window !== 'undefined' && window.dispatchEvent) {
+    window.dispatchEvent(new CustomEvent('quivit-reset-held-keys'));
+  }
+
   if (_Core) {
     const state = _Core.getState();
     _lastObservedSrc = state.src;
@@ -89,8 +93,8 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
     }
   });
 
-  _input.addEventListener('keyup', (e) => {
-    e.stopPropagation();
+  _input.addEventListener('paste', () => {
+    window.dispatchEvent?.(new CustomEvent('quivit-reset-held-keys'));
   });
 
   // Clicking overlay backdrop outside prompt dismisses the overlay.

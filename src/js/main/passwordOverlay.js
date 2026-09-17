@@ -23,6 +23,10 @@ function _show(archivePath, encryption, shouldFocus = true) {
   _overlay.classList.remove('error');
   _overlay.classList.add('active');
 
+  if (typeof window !== 'undefined' && window.dispatchEvent) {
+    window.dispatchEvent(new CustomEvent('quivit-reset-held-keys'));
+  }
+
   if (encryption === 'password_incorrect') {
     _errorEl.textContent = 'Incorrect password';
     _overlay.classList.add('error');
@@ -70,8 +74,8 @@ export function initPasswordOverlay({ overlay, Core, FsUtils, focusFileList, isF
     }
   });
 
-  _input.addEventListener('keyup', (e) => {
-    e.stopPropagation();
+  _input.addEventListener('paste', () => {
+    window.dispatchEvent?.(new CustomEvent('quivit-reset-held-keys'));
   });
 
   // Block mousedown so viewport pan doesn't start through the overlay.

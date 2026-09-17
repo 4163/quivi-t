@@ -8,6 +8,28 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Remote Extractor Registry & Dynamic Module Loader (2026-09-18)
+- **Manifest registry and reference extractor (`extractors/`):**
+  - Created `extractors/manifest.json` version 1 registering Imgur album and gallery URL patterns and source script reference.
+  - Implemented `extractors/imgur.js` satisfying `{ match, extract }` contract, extracting album payloads from embedded JSON scripts with fallbacks to `og:image` and HTML title.
+  - Standardized `ExtractionResult` structure containing `provider`, `title`, `images` array with direct URLs/filenames, and `nextPageUrl`.
+- **Orchestrator implementation (`src/js/urlLoader.js`):**
+  - Implemented remote manifest fetching from GitHub raw URL with memory caching.
+  - Added URL pattern matching with regular expression safety guards against malformed patterns.
+  - Built dynamic module loader using `Blob` URLs and `import()`, backed by `BoundedMap` (capacity 20) with automatic `URL.revokeObjectURL` on eviction.
+  - Added extraction result validation enforcing required `provider` and `images` array fields.
+  - Added pagination loop supporting `nextPageUrl` with safety cap `MAX_PAGINATION_PAGES = 50`.
+- **Held key status indicator reset on input overlays (`src/js/shortcuts.js`, `src/js/main/urlOverlay.js`, `src/js/main/passwordOverlay.js`):**
+  - Added `clearHeldKeys` routine resetting `activeKeys`, `activeButtons`, and updating the statusbar scroll indicator.
+  - Wired `focusin`, `paste`, and `quivit-reset-held-keys` event listeners in `shortcuts.js` to ensure held indicators clear when focusing or pasting into input fields.
+  - Removed `e.stopPropagation()` from input `keyup` listeners in both overlays so key releases reach window event listeners.
+- **Verification:**
+  - Added unit test suite in `mocha/urlLoader.test.js` covering pattern matching, result validation, and pagination constant integrity.
+  - Verified with `node --check` across all touched JavaScript modules.
+  - Verified with `npm test` (68 passing).
+  - Verified with `cargo check --tests` (clean).
+  - Confirmed interactive runtime behavior in running dev instance.
+
 ### Password Overlay Deselection Fix (2026-09-18)
 - **State cleanup on deselect (`src/js/core.js`):**
   - Updated `_selectEntry(-1)` to clear `archivePath` and `archiveEncryption` when in directory mode (`mode !== 'archive'`), and reset lingering image state.

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "extractors": [
+    {
+      "id": "imgur",
+      "name": "Imgur",
+      "patterns": ["^https?://(www\\.)?imgur\\.com/(a|gallery)/"],
+      "source": "imgur.js"
+    }
+  ]
+}
