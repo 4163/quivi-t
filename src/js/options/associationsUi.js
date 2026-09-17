@@ -89,8 +89,6 @@ export async function initAssociationsUi(containerId, statusCallback) {
   const deselectAll = document.getElementById('btn-assoc-deselect-all');
   if (deselectAll) deselectAll.onclick = () => document.querySelectorAll('.assoc-checkbox').forEach(cb => cb.checked = false);
 
-
-
   const settingsBtn = document.getElementById('btn-assoc-settings');
   if (settingsBtn) {
     settingsBtn.onclick = async () => {
@@ -107,79 +105,16 @@ export async function initAssociationsUi(containerId, statusCallback) {
     };
   }
 
-  // Fixed pinning via JS is intentional: native position: sticky only sticks within its parent containing block and collides with elements underneath rather than letting content scroll under it.
-  const wrapper = document.getElementById('assoc-mascots-wrapper');
   const mascotsBar = document.getElementById('assoc-mascots');
-  const tabContent = document.getElementById('tab-associations');
-  if (!wrapper || !mascotsBar || !tabContent) return;
-
   const mascotBoxes = new Map();
-  mascotsBar.querySelectorAll('.assoc-mascot-box').forEach(box => {
-    const group = box.dataset.group;
-    const icon = box.querySelector('.assoc-format-icon');
-    if (group && icon) {
-      mascotBoxes.set(group, { box, icon });
-    }
-  });
-
-  const unpinMascots = () => {
-    mascotsBar.classList.remove('is-fixed');
-    wrapper.classList.remove('is-fixed');
-    mascotsBar.style.removeProperty('--mascot-fixed-top');
-    mascotsBar.style.removeProperty('--mascot-fixed-left');
-    mascotsBar.style.removeProperty('--mascot-fixed-width');
-    wrapper.style.removeProperty('--mascot-wrapper-height');
-  };
-
-  const updateStickyState = () => {
-    if (!tabContent.classList.contains('active')) {
-      unpinMascots();
-      return;
-    }
-
-    const tabRect = tabContent.getBoundingClientRect();
-    const wrapperRect = wrapper.getBoundingClientRect();
-    const targetTop = tabRect.top;
-
-    if (wrapperRect.top <= targetTop) {
-      const height = mascotsBar.offsetHeight;
-      wrapper.style.setProperty('--mascot-wrapper-height', `${height}px`);
-      mascotsBar.style.setProperty('--mascot-fixed-top', `${targetTop}px`);
-      mascotsBar.style.setProperty('--mascot-fixed-left', `${wrapperRect.left}px`);
-      mascotsBar.style.setProperty('--mascot-fixed-width', `${wrapperRect.width}px`);
-      wrapper.classList.add('is-fixed');
-      mascotsBar.classList.add('is-fixed');
-    } else {
-      unpinMascots();
-    }
-  };
-
-  let ticking = false;
-  const onScroll = () => {
-    if (!ticking) {
-      requestAnimationFrame(() => {
-        updateStickyState();
-        ticking = false;
-      });
-      ticking = true;
-    }
-  };
-
-  tabContent.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('resize', onScroll, { passive: true });
-
-  const tabObserver = new MutationObserver(() => {
-    if (tabContent.classList.contains('active')) {
-      updateStickyState();
-    } else {
-      unpinMascots();
-    }
-  });
-  tabObserver.observe(tabContent, { attributes: true, attributeFilter: ['class'] });
-
-  if (tabContent.classList.contains('active')) {
-    updateStickyState();
+  if (mascotsBar) {
+    mascotsBar.querySelectorAll('.assoc-mascot-box').forEach(box => {
+      const group = box.dataset.group;
+      const icon = box.querySelector('.assoc-format-icon');
+      if (group && icon) {
+        mascotBoxes.set(group, { box, icon });
+      }
+    });
   }
 
   let currentExt = null;

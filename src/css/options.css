@@ -15,7 +15,9 @@ body > * {
   display: flex;
   gap: 2px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 20px;
+  position: relative;
+  z-index: 30;
+  box-shadow: 0 8px 0 var(--surface);
 }
 
 .tab-btn {
@@ -55,9 +57,14 @@ body > * {
 .tab-content.active {
   display: flex;
   flex: 1;
+
   overflow-y: auto;
   overflow-x: visible;
   min-height: 0;
+}
+
+.options-section:first-of-type {
+  margin-top: 20px;
 }
 
 .options-section:last-of-type {
@@ -483,8 +490,12 @@ button:disabled {
 
 /* Mascot format preview bar */
 
-.assoc-mascots-wrapper.is-fixed {
-  min-height: var(--mascot-wrapper-height, 106px);
+.assoc-mascots-wrapper {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--surface);
+  padding: 8px 0 8px;
 }
 
 .assoc-mascots {
@@ -493,21 +504,9 @@ button:disabled {
   align-items: center;
   gap: 8px;
   padding: 4px 0;
-  pointer-events: none;
 }
 
-.assoc-mascots.is-fixed {
-  position: fixed;
-  top: var(--mascot-fixed-top, 0px);
-  left: var(--mascot-fixed-left, 0px);
-  width: var(--mascot-fixed-width, auto);
-  box-sizing: border-box;
-  z-index: 50;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: 8px 0 20px;
-}
-
+/* Fixed pixels keep preview mascots stable under font-size overrides. */
 .assoc-mascot-box {
   position: relative;
   display: flex;
