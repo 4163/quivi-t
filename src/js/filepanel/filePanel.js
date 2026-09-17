@@ -1656,6 +1656,7 @@ export function initFilePanel(deps) {
     measureRowHeight();
     if (oldHeight !== ROW_HEIGHT) {
       initDomPool();
+      lastRenderedList = null;
     }
     if (Core) renderFilePanel(Core.getState());
   });
@@ -1666,6 +1667,7 @@ export function initFilePanel(deps) {
     measureRowHeight();
     if (oldHeight !== ROW_HEIGHT) {
       initDomPool();
+      lastRenderedList = null;
     }
     recalculateMinColWidths();
     normalizeColumnWidths('name');
