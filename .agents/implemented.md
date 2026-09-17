@@ -8,6 +8,27 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Use URL Initial Setup (2026-09-17)
+- **Rust network proxy (`commands/network.rs`):**
+  - Added `ureq = "2.10"` to `Cargo.toml` with default rustls for synchronous HTTP requests.
+  - Implemented `fetch_text(url)` to retrieve remote HTML and text.
+  - Implemented `download_to_file(url, dest_path)` for streaming remote files directly to disk with directory creation and atomic file replacement.
+  - Registered commands in `commands/mod.rs` and `lib.rs` invoke handler.
+- **Action and menu integration:**
+  - Added `cmd-use-url` to `src/js/services/actions.js` with shortcut `Ctrl+U`, label `Use URL...`, and category `File Operations`.
+  - Added `Use URL...` item to File dropdown menu in `src/index.html`.
+- **UI modal overlay and orchestrator:**
+  - Added `#url-overlay` to `src/index.html` inside `#viewport` matching the layout and styling of `#password-overlay` and `#drop-overlay`.
+  - Extended `#url-overlay`, `.url-prompt`, `.url-field`, and `.url-error` styles in `src/css/main.css`.
+  - Implemented `src/js/main/urlOverlay.js` to manage focus, keyboard trapping, submit actions, Esc dismissal, and automatic transition-out when interacting with the file list or backdrop.
+  - Created `src/js/urlLoader.js` service orchestrator providing `isValidUrl`, `openPrompt`, and proxy helper functions.
+  - Wired `urlOverlay` and `UrlLoader` into `src/js/main/main.js` and `actionCtx`.
+- **Verification:**
+  - Added `mocha/urlLoader.test.js` covering action registration, dispatch, URL validation, and service lifecycle.
+  - Verified with `node --check` across modified JavaScript files.
+  - Verified with `npm test` (54 passing).
+  - Verified with `cargo check --tests` and `cargo test` (65 passing).
+
 ### Diagnostics Runner Reliability (2026-09-15)
 - **Runner reliability (`runner.e2e.js`):**
   - Replaced synchronous `setTimeout` polling with `browser.executeAsync` when waiting for `Core.getState().list` to populate during `selectIndex` phase, ensuring the directory is fully loaded in Rust backend before attempting to select the initial index.

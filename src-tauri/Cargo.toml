@@ -41,4 +41,4 @@ windows = { version = "0.62.2", features = ["Win32_UI_Shell", "Win32_UI_Shell_Co
 winreg = "0.53.0"
 encoding_rs = "0.8"
 chardetng = "1.0.0"
-
+ureq = "2.10"

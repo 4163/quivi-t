@@ -1011,7 +1011,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   outline: none;
 }
 
-#drop-overlay, #password-overlay {
+#drop-overlay, #password-overlay, #url-overlay {
   position: absolute;
   inset: 0;
   display: flex;
@@ -1027,7 +1027,8 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 }
 
 @container box (max-width: 323px) {
-  .password-prompt {
+  .password-prompt,
+  .url-prompt {
     width: calc(100% - 52px);
   }
 }
@@ -1035,19 +1036,23 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 @container box (max-width: 260px) {
   .drop-hint p,
   .drop-hint span,
-  .password-prompt p {
+  .password-prompt p,
+  .url-prompt p {
     display: none;
   }
   .drop-hint {
     width: calc(100% - 52px);
   }
-  .password-prompt {
+  .password-prompt,
+  .url-prompt {
     padding: 40px 0 !important;
   }
-  .password-field {
+  .password-field,
+  .url-field {
    width: calc(100% - 26px);
   }
-  .password-field > * {
+  .password-field > *,
+  .url-field > * {
     width: 100%;
   }
 }
@@ -1172,6 +1177,90 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 }
 
 #password-overlay.error .password-field input {
+  border-color: var(--danger);
+}
+
+#url-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.url-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 52px;
+  border: 1.5px dashed var(--border);
+  margin: 0 25px;
+  border-radius: 10px;
+  color: var(--text-muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.url-prompt svg { width: var(--fs-40); height: var(--fs-40); opacity: 0.55; }
+.url-prompt p   { font-size: 0.95rem; font-weight: 500; text-align: center; }
+
+.url-field {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.url-field input {
+  width: 260px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 5px 10px;
+  font-size: var(--fs-13);
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--field-bg);
+  color: var(--text);
+  outline: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.url-field input:focus {
+  border-color: var(--accent);
+}
+
+.url-field button {
+  padding: 5px 16px;
+  font-size: var(--fs-13);
+  font-family: inherit;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.url-field button:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.url-error {
+  font-size: 0.75rem;
+  min-height: 1em;
+  color: var(--danger);
+  letter-spacing: 0.02em;
+}
+
+#url-overlay.error .url-prompt {
+  border-color: var(--danger);
+}
+
+#url-overlay.error .url-field input {
   border-color: var(--danger);
 }
 

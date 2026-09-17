@@ -1,0 +1,175 @@
+/**
+ * main/urlOverlay.js: modal prompt for entering gallery URLs.
+ *
+ * Owns #url-overlay. Handles focus management, input validation,
+ * submission, Esc dismissal, and transitions out when the user
+ * interacts with the file list or backdrop.
+ */
+
+let _overlay = null;
+let _input = null;
+let _errorEl = null;
+let _focusFileList = null;
+let _onSubmit = null;
+let _filePanel = null;
+let _Core = null;
+let _lastObservedSrc = null;
+let _lastObservedDirectory = null;
+
+function _show() {
+  if (!_overlay) return;
+  _input.value = '';
+  _errorEl.textContent = '';
+  _overlay.classList.remove('error');
+  _overlay.classList.add('active');
+
+  if (_Core) {
+    const state = _Core.getState();
+    _lastObservedSrc = state.src;
+    _lastObservedDirectory = state.directory || state.archivePath || '';
+  }
+
+  requestAnimationFrame(() => _input.focus());
+}
+
+function _hide(opts = {}) {
+  if (!_overlay || !_overlay.classList.contains('active')) return;
+  _overlay.classList.remove('active', 'error');
+  _input.blur();
+
+  if (opts.restoreFocus !== false && _focusFileList) {
+    _focusFileList();
+  }
+}
+
+function _setError(message) {
+  if (!_overlay || !_errorEl) return;
+  _errorEl.textContent = message || '';
+  _overlay.classList.toggle('error', Boolean(message));
+}
+
+async function _handleSubmit() {
+  const url = _input.value.trim();
+  if (!url) {
+    _setError('Please enter a URL');
+    return;
+  }
+
+  _setError('');
+
+  if (_onSubmit) {
+    try {
+      await _onSubmit(url);
+      _hide({ restoreFocus: true });
+    } catch (err) {
+      _setError(err.message || 'Failed to open URL');
+    }
+  } else {
+    _hide({ restoreFocus: true });
+  }
+}
+
+export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubmit }) {
+  _overlay = overlay;
+  _filePanel = filePanel || null;
+  _Core = Core || null;
+  _focusFileList = focusFileList || (() => {});
+  _onSubmit = onSubmit || null;
+  _input = overlay.querySelector('#url-input');
+  _errorEl = overlay.querySelector('.url-error');
+
+  overlay.querySelector('form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    _handleSubmit();
+  });
+
+  _input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') {
+      e.stopPropagation();
+    }
+  });
+
+  _input.addEventListener('keyup', (e) => {
+    e.stopPropagation();
+  });
+
+  // Clicking overlay backdrop outside prompt dismisses the overlay.
+  overlay.addEventListener('pointerdown', (e) => {
+    if (e.target === overlay) {
+      _hide({ restoreFocus: false }, 'backdrop_pointerdown');
+    }
+  });
+
+  // Block mousedown so viewport pan does not start through the overlay.
+  overlay.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+  });
+
+  overlay.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      _hide({ restoreFocus: true }, 'escape_key');
+    }
+  });
+
+  const EXCLUDED_INTERACTION_SELECTOR = [
+    '#panel-resize-handle',
+    '.col-resizer',
+    '.file-panel-actions',
+    '#file-panel-favorites-header',
+    '.file-panel-favorites-header',
+    '#file-panel-header-top',
+    '.file-panel-header-top',
+    '#file-panel-header',
+    '.file-panel-header',
+    '.header-cell',
+    '.fav-remove'
+  ].join(', ');
+
+  function _isExcludedInteraction(e) {
+    if (document.body?.classList?.contains('resizing-panel') || document.body?.classList?.contains('resizing-col')) {
+      return true;
+    }
+    return Boolean(e?.target?.closest?.(EXCLUDED_INTERACTION_SELECTOR));
+  }
+
+  // Transition out when interacting with the file list.
+  if (_filePanel) {
+    _filePanel.addEventListener('pointerdown', (e) => {
+      if (_isExcludedInteraction(e)) return;
+      const isFileListTarget = e.target?.closest?.('#file-list, #favorites-list li');
+      if (isFileListTarget && _overlay?.classList.contains('active')) {
+        _hide({ restoreFocus: false }, 'filepanel_pointerdown');
+      }
+    }, { capture: true });
+
+    _filePanel.addEventListener('wheel', (e) => {
+      if (_isExcludedInteraction(e)) return;
+      const isFileListTarget = e.target?.closest?.('#file-list, #favorites-list');
+      if (isFileListTarget && _overlay?.classList.contains('active')) {
+        _hide({ restoreFocus: false }, 'filepanel_wheel');
+      }
+    }, { passive: true });
+  }
+
+  // Dismiss if user navigates images or directories while overlay is open.
+  if (_Core) {
+    _Core.onStateChange((state) => {
+      if (!_overlay?.classList.contains('active')) return;
+      const currentDir = state.directory || state.archivePath || '';
+      if (state.src !== _lastObservedSrc || currentDir !== _lastObservedDirectory) {
+        const oldSrc = _lastObservedSrc;
+        const oldDir = _lastObservedDirectory;
+        _lastObservedSrc = state.src;
+        _lastObservedDirectory = currentDir;
+        _hide({ restoreFocus: false, oldSrc, newSrc: state.src, oldDir, newDir: currentDir }, 'core_state_change');
+      }
+    });
+  }
+
+  return {
+    show: _show,
+    hide: _hide,
+    setError: _setError
+  };
+}

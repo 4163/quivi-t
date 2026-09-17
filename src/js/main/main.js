@@ -23,7 +23,8 @@ import { initLifecycle } from './lifecycle.js';
 import { initMetadataBadge, openMetadataWindow } from './metadataBadge.js';
 import { initDropZone } from './dropzone.js';
 import { initPasswordOverlay } from './passwordOverlay.js';
-
+import { initUrlOverlay } from './urlOverlay.js';
+import { UrlLoader } from '../urlLoader.js';
 
 // Reset the options tab on startup so each session starts on General.
 localStorage.removeItem('options-active-tab');
@@ -41,6 +42,7 @@ window.addEventListener('keydown', (e) => {
 
 const dropOverlay = document.getElementById('drop-overlay');
 const passwordOverlay = document.getElementById('password-overlay');
+const urlOverlayEl = document.getElementById('url-overlay');
 const viewport = document.getElementById('viewport');
 const statusbar = document.getElementById('statusbar');
 const filePanel = document.getElementById('file-panel');
@@ -87,6 +89,7 @@ const actionCtx = {
   get navigateHighlightedFavorite() { return navigateHighlightedFavorite; },
   get openMetadataWindow() { return openMetadataWindow; },
   get toggleFullscreen() { return toggleFullscreen; },
+  get UrlLoader() { return UrlLoader; },
   isFavoritesFocused: () => !!document.activeElement?.closest('#favorites-list'),
   get keyboardPanStep() { return keyboardPanStep; },
   get wheelPanStep() { return wheelPanStep; }
@@ -178,6 +181,14 @@ initMenuBar();
 bindMenuCommands();
 initDropZone({ dropOverlay, FsUtils });
 initPasswordOverlay({ overlay: passwordOverlay, Core, FsUtils, focusFileList, isFileListFocused });
+const urlOverlay = initUrlOverlay({
+  overlay: urlOverlayEl,
+  filePanel,
+  Core,
+  focusFileList,
+  onSubmit: (url) => UrlLoader.loadUrl(url)
+});
+UrlLoader.init({ Core, FsUtils, urlOverlay });
 initMetadataBadge({ Core, FsUtils, badgeEl: metadataBadgeEl });
 initLifecycle({ Core, FsUtils });
 

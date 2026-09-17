@@ -24,6 +24,7 @@
         <ul class="menu-dropdown" role="menu">
           <li role="menuitem" id="cmd-open-dir" tabindex="0">Open directory...<span class="shortcut">Ctrl+O</span></li>
           <li role="menuitem" id="cmd-open-file" tabindex="0">Open file / archive...<span class="shortcut"></span></li>
+          <li role="menuitem" id="cmd-use-url" tabindex="0">Use URL...<span class="shortcut">Ctrl+U</span></li>
           <li class="separator"></li>
           <li role="menuitem" id="cmd-options" tabindex="0">Options...<span class="shortcut">5</span></li>
           <li class="separator"></li>
@@ -221,6 +222,23 @@
               <button type="submit">Unlock</button>
             </div>
             <span class="password-error"></span>
+          </form>
+        </div>
+
+        <!-- URL overlay for remote galleries -->
+        <div id="url-overlay">
+          <form class="url-prompt" autocomplete="off">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="2" y1="12" x2="22" y2="12"/>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            <p>Enter URL</p>
+            <div class="url-field">
+              <input type="text" id="url-input" placeholder="mangadex.org/title/*/bakemonogatari" spellcheck="false">
+              <button type="submit">Open</button>
+            </div>
+            <span class="url-error"></span>
           </form>
         </div>
 

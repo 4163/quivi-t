@@ -112,7 +112,9 @@ pub fn run() {
         update_theme,
         pick_folder,
         check_is_animated,
-        resolve_archive_temp_origin
+        resolve_archive_temp_origin,
+        fetch_text,
+        download_to_file
     ]);
 
     crate::protocol::register_quivit_protocol(builder)
