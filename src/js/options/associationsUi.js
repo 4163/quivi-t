@@ -3,6 +3,18 @@ const invoke = tauri.core?.invoke?.bind(tauri.core);
 
 const initialState = {};
 
+const RECOMMENDED_EXTENSIONS = new Set([
+  'gif', 'webp', 'apng', 'svg', 'bmp', 'ico', 'avif', 'cbz', 'cbr', 'cb7', 'cbt'
+]);
+
+// Mascot group mapping: extension → mascot data-group
+const EXT_TO_GROUP = new Map([
+  ['jpg', 'mascot'], ['jpeg', 'mascot'], ['png', 'mascot'], ['bmp', 'mascot'], ['ico', 'mascot'],
+  ['gif', 'moe1'], ['webp', 'moe1'], ['apng', 'moe1'], ['svg', 'moe1'], ['avif', 'moe1'],
+  ['cbz', 'moe3'], ['cbr', 'moe3'], ['cb7', 'moe3'], ['cbt', 'moe3'],
+  ['zip', 'stoic'], ['rar', 'stoic'], ['7z', 'stoic'], ['tar', 'stoic']
+]);
+
 export async function applyAssociations(statusCallback) {
   if (!invoke) return;
   const toRegister = [];
@@ -62,6 +74,15 @@ export async function initAssociationsUi(containerId, statusCallback) {
     container.classList.add('is-error');
   }
 
+  const recommended = document.getElementById('btn-assoc-recommended');
+  if (recommended) {
+    recommended.onclick = () => {
+      document.querySelectorAll('.assoc-checkbox').forEach(cb => {
+        cb.checked = RECOMMENDED_EXTENSIONS.has(cb.dataset.ext?.toLowerCase());
+      });
+    };
+  }
+
   const selectAll = document.getElementById('btn-assoc-select-all');
   if (selectAll) selectAll.onclick = () => document.querySelectorAll('.assoc-checkbox').forEach(cb => cb.checked = true);
 
@@ -85,4 +106,122 @@ export async function initAssociationsUi(containerId, statusCallback) {
       }
     };
   }
+
+  // Fixed pinning via JS is intentional: native position: sticky only sticks within its parent containing block and collides with elements underneath rather than letting content scroll under it.
+  const wrapper = document.getElementById('assoc-mascots-wrapper');
+  const mascotsBar = document.getElementById('assoc-mascots');
+  const tabContent = document.getElementById('tab-associations');
+  if (!wrapper || !mascotsBar || !tabContent) return;
+
+  const mascotBoxes = new Map();
+  mascotsBar.querySelectorAll('.assoc-mascot-box').forEach(box => {
+    const group = box.dataset.group;
+    const icon = box.querySelector('.assoc-format-icon');
+    if (group && icon) {
+      mascotBoxes.set(group, { box, icon });
+    }
+  });
+
+  const unpinMascots = () => {
+    mascotsBar.classList.remove('is-fixed');
+    wrapper.classList.remove('is-fixed');
+    mascotsBar.style.removeProperty('--mascot-fixed-top');
+    mascotsBar.style.removeProperty('--mascot-fixed-left');
+    mascotsBar.style.removeProperty('--mascot-fixed-width');
+    wrapper.style.removeProperty('--mascot-wrapper-height');
+  };
+
+  const updateStickyState = () => {
+    if (!tabContent.classList.contains('active')) {
+      unpinMascots();
+      return;
+    }
+
+    const tabRect = tabContent.getBoundingClientRect();
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const targetTop = tabRect.top;
+
+    if (wrapperRect.top <= targetTop) {
+      const height = mascotsBar.offsetHeight;
+      wrapper.style.setProperty('--mascot-wrapper-height', `${height}px`);
+      mascotsBar.style.setProperty('--mascot-fixed-top', `${targetTop}px`);
+      mascotsBar.style.setProperty('--mascot-fixed-left', `${wrapperRect.left}px`);
+      mascotsBar.style.setProperty('--mascot-fixed-width', `${wrapperRect.width}px`);
+      wrapper.classList.add('is-fixed');
+      mascotsBar.classList.add('is-fixed');
+    } else {
+      unpinMascots();
+    }
+  };
+
+  let ticking = false;
+  const onScroll = () => {
+    if (!ticking) {
+      requestAnimationFrame(() => {
+        updateStickyState();
+        ticking = false;
+      });
+      ticking = true;
+    }
+  };
+
+  tabContent.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll, { passive: true });
+
+  const tabObserver = new MutationObserver(() => {
+    if (tabContent.classList.contains('active')) {
+      updateStickyState();
+    } else {
+      unpinMascots();
+    }
+  });
+  tabObserver.observe(tabContent, { attributes: true, attributeFilter: ['class'] });
+
+  if (tabContent.classList.contains('active')) {
+    updateStickyState();
+  }
+
+  let currentExt = null;
+
+  const setHoveredFormat = (ext) => {
+    if (currentExt === ext) return;
+    currentExt = ext;
+    const targetGroup = EXT_TO_GROUP.get(ext);
+
+    mascotBoxes.forEach(({ box, icon }, group) => {
+      if (group === targetGroup) {
+        icon.src = `/assets/icons/${ext}.png`;
+        box.classList.add('is-active');
+      } else {
+        box.classList.remove('is-active');
+      }
+    });
+  };
+
+  const clearHoveredFormat = () => {
+    if (currentExt === null) return;
+    currentExt = null;
+    mascotBoxes.forEach(({ box }) => box.classList.remove('is-active'));
+  };
+
+  container.addEventListener('pointerover', (e) => {
+    const label = e.target.closest('.assoc-label');
+    if (!label) return;
+    const ext = label.querySelector('.assoc-checkbox')?.dataset.ext?.toLowerCase();
+    if (ext && EXT_TO_GROUP.has(ext)) {
+      setHoveredFormat(ext);
+    }
+  });
+
+  container.addEventListener('pointerout', (e) => {
+    const label = e.target.closest('.assoc-label');
+    if (!label) return;
+    const nextLabel = e.relatedTarget ? e.relatedTarget.closest('.assoc-label') : null;
+    if (!nextLabel) {
+      clearHoveredFormat();
+    }
+  });
+
+  container.addEventListener('pointerleave', clearHoveredFormat);
 }

@@ -480,3 +480,75 @@ button:disabled {
 .assoc-text {
   font-size: 0.9em;
 }
+
+/* Mascot format preview bar */
+
+.assoc-mascots-wrapper.is-fixed {
+  min-height: var(--mascot-wrapper-height, 106px);
+}
+
+.assoc-mascots {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  pointer-events: none;
+}
+
+.assoc-mascots.is-fixed {
+  position: fixed;
+  top: var(--mascot-fixed-top, 0px);
+  left: var(--mascot-fixed-left, 0px);
+  width: var(--mascot-fixed-width, auto);
+  box-sizing: border-box;
+  z-index: 50;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 0 20px;
+}
+
+.assoc-mascot-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  background: var(--surface-alt);
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.assoc-mascot-box.is-active {
+  transform: scale(1.05);
+  border-color: var(--accent);
+}
+
+.assoc-mascot-svg {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  pointer-events: none;
+  opacity: 0.3;
+}
+
+.assoc-format-icon {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.assoc-mascot-box.is-active .assoc-format-icon {
+  opacity: 1;
+  transform: scale(1);
+}
+

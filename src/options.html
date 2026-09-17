@@ -369,11 +369,32 @@
         <h3>Associated File Types</h3>
         <p class="hint">Checking these boxes registers QuiviT as an available handler. You may still need to choose it in the file's `<i>Open with</i>` dialog or set it as the default app in Windows Settings.</p>
         <div class="flex-row assoc-actions">
+          <button id="btn-assoc-recommended" class="secondary">Recommended</button>
           <button id="btn-assoc-select-all" class="secondary">Select All</button>
           <button id="btn-assoc-deselect-all" class="secondary">Deselect All</button>
         </div>
-
+        <h4>Icon Preview</h4>
         <div class="associations-list" id="associations-container">
+          <div class="assoc-mascots-wrapper" id="assoc-mascots-wrapper">
+            <div class="assoc-mascots" id="assoc-mascots">
+              <div class="assoc-mascot-box" data-group="mascot">
+                <img src="/assets/icons/_mascot-formats.svg" class="assoc-mascot-svg" alt="Standard formats">
+                <img class="assoc-format-icon" alt="">
+              </div>
+              <div class="assoc-mascot-box" data-group="moe1">
+                <img src="/assets/icons/_moe-1-formats.svg" class="assoc-mascot-svg" alt="Extended formats">
+                <img class="assoc-format-icon" alt="">
+              </div>
+              <div class="assoc-mascot-box" data-group="moe3">
+                <img src="/assets/icons/_moe-3-formats.svg" class="assoc-mascot-svg" alt="Comic archives">
+                <img class="assoc-format-icon" alt="">
+              </div>
+              <div class="assoc-mascot-box" data-group="stoic">
+                <img src="/assets/icons/_stoic-formats.svg" class="assoc-mascot-svg" alt="Plain archives">
+                <img class="assoc-format-icon" alt="">
+              </div>
+            </div>
+          </div>
           <h4 class="assoc-header">Image</h4>
           <div class="assoc-grid">
             <label class="checkbox-label assoc-label">
@@ -460,14 +481,14 @@
               <span class="assoc-text">.cb7 (Comic Book 7z)</span>
             </label>
             <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="cbt" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/cbt.png" alt="cbt" class="assoc-icon">
-              <span class="assoc-text">.cbt (Comic Book TAR)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
               <input type="checkbox" class="assoc-checkbox" data-ext="tar" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
               <img src="/assets/icons/tar.png" alt="tar" class="assoc-icon">
               <span class="assoc-text">.tar (TAR Archive)</span>
+            </label>
+            <label class="checkbox-label assoc-label">
+              <input type="checkbox" class="assoc-checkbox" data-ext="cbt" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+              <img src="/assets/icons/cbt.png" alt="cbt" class="assoc-icon">
+              <span class="assoc-text">.cbt (Comic Book TAR)</span>
             </label>
           </div>
         </div>

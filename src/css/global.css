@@ -104,6 +104,13 @@
     --grill-lines:  rgba(60, 200, 170, 0.6);
     --grill-border: rgba(60, 200, 170, 0.6);
   }
+  .assoc-mascot-svg,
+  .assoc-mascot-box.is-active .assoc-format-icon {
+    filter: drop-shadow(2px 0 0 var(--accent))
+            drop-shadow(-2px 0 0 var(--accent))
+            drop-shadow(0 2px 0 var(--accent))
+            drop-shadow(0 -2px 0 var(--accent));
+  }
 }
 
 /* Explicit dark theme override (ignores system preference) */
@@ -130,6 +137,13 @@
   --grill-bg:     rgba(20, 60, 50, 0.75);
   --grill-lines:  rgba(60, 200, 170, 0.6);
   --grill-border: rgba(60, 200, 170, 0.6);
+}
+:root[data-theme="dark"] .assoc-mascot-svg,
+:root[data-theme="dark"] .assoc-mascot-box.is-active .assoc-format-icon {
+  filter: drop-shadow(2px 0 0 var(--accent))
+          drop-shadow(-2px 0 0 var(--accent))
+          drop-shadow(0 2px 0 var(--accent))
+          drop-shadow(0 -2px 0 var(--accent));
 }
 
 /* Reset */
