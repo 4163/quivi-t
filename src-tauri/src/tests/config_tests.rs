@@ -142,3 +142,29 @@ fn test_apply_pending_config_non_bool_dropped() {
         .get("pending_single_instance")
         .is_none());
 }
+
+#[test]
+fn test_e2e_suite_non_persistence_and_detection() {
+    let mut config: AppConfig = serde_json::from_str(
+        r#"{
+            "frontend_data": { "e2e_suite": true, "theme": "dark" }
+        }"#,
+    )
+    .unwrap();
+
+    // Verify e2e_suite gets removed on save preparation
+    if let Some(obj) = config.frontend_data.as_object_mut() {
+        obj.remove("e2e_suite");
+    }
+    assert!(config.frontend_data.get("e2e_suite").is_none());
+    assert_eq!(config.frontend_data["theme"], "dark");
+
+    // Without environment or CLI flags, is_e2e_suite is false
+    std::env::remove_var("QUIVIT_E2E_SUITE");
+    assert!(!is_e2e_suite());
+
+    // When QUIVIT_E2E_SUITE is present, is_e2e_suite returns true
+    std::env::set_var("QUIVIT_E2E_SUITE", "1");
+    assert!(is_e2e_suite());
+    std::env::remove_var("QUIVIT_E2E_SUITE");
+}

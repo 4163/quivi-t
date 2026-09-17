@@ -342,6 +342,7 @@ function buildConfigFromForm(baseConfig) {
   if (!newConfig.frontend_data.continue_last) {
     delete newConfig.frontend_data.last_opened_path;
   }
+  delete newConfig.frontend_data.e2e_suite;
   return newConfig;
 }
 

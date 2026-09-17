@@ -5,6 +5,29 @@ import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
+process.env.QUIVIT_E2E_SUITE = '1';
+
+let devStateRestored = false;
+function restoreAndCleanDevState(targetDir, backupDir, isolatedFiles) {
+  if (devStateRestored) return;
+  devStateRestored = true;
+  for (const file of isolatedFiles) {
+    const p = path.join(targetDir, file);
+    if (fs.existsSync(p)) {
+      try { fs.unlinkSync(p); } catch {}
+    }
+  }
+  if (fs.existsSync(backupDir)) {
+    for (const file of isolatedFiles) {
+      const src = path.join(backupDir, file);
+      if (fs.existsSync(src)) {
+        try { fs.copyFileSync(src, path.join(targetDir, file)); } catch {}
+      }
+    }
+    try { fs.rmSync(backupDir, { recursive: true, force: true }); } catch {}
+  }
+}
+
 export const config = {
   runner: 'local',
   specs: ['./e2e/specs/0*.e2e.js'],
@@ -15,6 +38,7 @@ export const config = {
       browserName: 'tauri',
       'tauri:options': {
         application: './src-tauri/target/debug/tauri-app.exe',
+        args: ['--e2e-suite'],
       },
     },
   ],
@@ -77,13 +101,35 @@ export const config = {
       console.warn('[E2E] Leftover backup found, keeping it (previous run may not have restored).');
     } else {
       fs.mkdirSync(backupDir, { recursive: true });
-      for (const file of isolatedFiles) {
-        const src = path.join(targetDir, file);
-        if (fs.existsSync(src)) {
-          try { fs.copyFileSync(src, path.join(backupDir, file)); } catch {}
+      let isLeftoverIsolation = false;
+      try {
+        const targetCfg = JSON.parse(fs.readFileSync(path.join(targetDir, 'quivit_config.json'), 'utf8'));
+        if (targetCfg?.frontend_data?.e2e_suite === true) {
+          isLeftoverIsolation = true;
+        }
+      } catch {}
+      if (!isLeftoverIsolation) {
+        for (const file of isolatedFiles) {
+          const src = path.join(targetDir, file);
+          if (fs.existsSync(src)) {
+            try { fs.copyFileSync(src, path.join(backupDir, file)); } catch {}
+          }
         }
       }
     }
+
+    // Register process exit listeners so interrupted runs clean up isolation and restore dev state
+    process.once('SIGINT', () => {
+      restoreAndCleanDevState(targetDir, backupDir, isolatedFiles);
+      process.exit(130);
+    });
+    process.once('SIGTERM', () => {
+      restoreAndCleanDevState(targetDir, backupDir, isolatedFiles);
+      process.exit(143);
+    });
+    process.once('exit', () => {
+      restoreAndCleanDevState(targetDir, backupDir, isolatedFiles);
+    });
 
     // Terminate leftover processes so the executable is not locked during test run or build
     if (process.platform === 'win32') {
@@ -157,17 +203,6 @@ export const config = {
       );
     }
 
-    // Stamp the suite lock flag on the isolation config so the Options page
-    // fixes harness-critical toggles for this run only. Stripped from the
-    // profile on completion, so real user configs never carry it.
-    try {
-      const isoCfgPath = path.join(targetDir, 'quivit_config.json');
-      const isoCfg = JSON.parse(fs.readFileSync(isoCfgPath, 'utf8'));
-      isoCfg.frontend_data = isoCfg.frontend_data && typeof isoCfg.frontend_data === 'object' ? isoCfg.frontend_data : {};
-      isoCfg.frontend_data.e2e_suite = true;
-      fs.writeFileSync(isoCfgPath, JSON.stringify(isoCfg, null, 2));
-    } catch {}
-
     console.log('Building Tauri debug binary for E2E testing...');
     const res = spawnSync('cargo', ['build', '--manifest-path', 'src-tauri/Cargo.toml'], {
       cwd: __dirname,
@@ -227,21 +262,7 @@ export const config = {
     // Remove isolation files, then restore the dev exe-dir state that
     // onPrepare backed up. Without restore, a portable dev config stays
     // wiped and the next `tauri dev` starts from factory defaults.
-    for (const file of isolatedFiles) {
-      const p = path.join(targetDir, file);
-      if (fs.existsSync(p)) {
-        try { fs.unlinkSync(p); } catch {}
-      }
-    }
-    if (fs.existsSync(backupDir)) {
-      for (const file of isolatedFiles) {
-        const src = path.join(backupDir, file);
-        if (fs.existsSync(src)) {
-          try { fs.copyFileSync(src, path.join(targetDir, file)); } catch {}
-        }
-      }
-      try { fs.rmSync(backupDir, { recursive: true, force: true }); } catch {}
-    }
+    restoreAndCleanDevState(targetDir, backupDir, isolatedFiles);
 
     if (process.platform === 'win32') {
       spawnSync(

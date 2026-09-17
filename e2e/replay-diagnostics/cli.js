@@ -195,6 +195,7 @@ async function main() {
 
   const env = {
     ...process.env,
+    QUIVIT_E2E_SUITE: '1',
     SCENARIO: scenario,
   };
   if (pause) env.STEP_PAUSE_MS = pause;

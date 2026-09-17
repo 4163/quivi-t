@@ -20,12 +20,16 @@ use windows::*;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let config = crate::config::load_config_early();
-    // Single instance defaults to true unless config opts out.
-    let single_instance = config
-        .frontend_data
-        .get("single_instance")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(true);
+    // Single instance defaults to true unless config opts out. Forced true under E2E suite.
+    let single_instance = if crate::config::is_e2e_suite() {
+        true
+    } else {
+        config
+            .frontend_data
+            .get("single_instance")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true)
+    };
     let cache_mb = config.archive_cache_mb.unwrap_or(128);
 
     let mut builder = tauri::Builder::default();
@@ -35,9 +39,9 @@ pub fn run() {
             if let Some(main_window) = app.get_webview_window("main") {
                 let _ = main_window.show();
                 let _ = main_window.set_focus();
-                if argv.len() > 1 {
-                    let path = argv[1].clone();
-                    let _ = main_window.emit("single-instance-open", path);
+                let path_arg = argv.iter().skip(1).find(|arg| !arg.starts_with("--"));
+                if let Some(path) = path_arg {
+                    let _ = main_window.emit("single-instance-open", path.clone());
                 }
             }
         }));

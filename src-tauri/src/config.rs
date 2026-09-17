@@ -206,30 +206,42 @@ pub fn merge_file_into(path: &Path, frontend_data: &mut JsonValue) {
     }
 }
 
+pub fn is_e2e_suite() -> bool {
+    std::env::var("QUIVIT_E2E_SUITE").is_ok() || std::env::args().any(|a| a == "--e2e-suite")
+}
+
 #[tauri::command]
 pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
-    if is_portable() {
-        return read_json_file(&get_exe_dir().join("quivit_config.json")).unwrap_or_default();
-    }
+    let mut config = if is_portable() {
+        read_json_file(&get_exe_dir().join("quivit_config.json")).unwrap_or_default()
+    } else {
+        let dir = roaming_dir(&app_handle);
+        let mut cfg: AppConfig = read_json_file(&dir.join("quivit_config.json")).unwrap_or_default();
+        // New layout: state, directory-sort, and favorites live in their own files.
+        // Legacy layout (everything in quivit_config.json) loads unchanged.
+        merge_file_into(&dir.join("quivit_state.json"), &mut cfg.frontend_data);
+        merge_file_into(
+            &dir.join("quivit_directory_sort.json"),
+            &mut cfg.frontend_data,
+        );
+        merge_file_into(
+            &dir.join("quivit_favorites.json"),
+            &mut cfg.frontend_data,
+        );
 
-    let dir = roaming_dir(&app_handle);
-    let mut config: AppConfig = read_json_file(&dir.join("quivit_config.json")).unwrap_or_default();
-    // New layout: state, directory-sort, and favorites live in their own files.
-    // Legacy layout (everything in quivit_config.json) loads unchanged.
-    merge_file_into(&dir.join("quivit_state.json"), &mut config.frontend_data);
-    merge_file_into(
-        &dir.join("quivit_directory_sort.json"),
-        &mut config.frontend_data,
-    );
-    merge_file_into(
-        &dir.join("quivit_favorites.json"),
-        &mut config.frontend_data,
-    );
+        // Roaming mode stores custom CSS in its own file.
+        let css_path = dir.join("custom_css.css");
+        if let Ok(custom_css) = fs::read_to_string(&css_path) {
+            cfg.frontend_data["custom_css"] = serde_json::json!(custom_css);
+        }
 
-    // Roaming mode stores custom CSS in its own file.
-    let css_path = dir.join("custom_css.css");
-    if let Ok(custom_css) = fs::read_to_string(&css_path) {
-        config.frontend_data["custom_css"] = serde_json::json!(custom_css);
+        cfg
+    };
+
+    if is_e2e_suite() {
+        config.frontend_data["e2e_suite"] = serde_json::json!(true);
+    } else if let Some(obj) = config.frontend_data.as_object_mut() {
+        obj.remove("e2e_suite");
     }
 
     config
@@ -271,6 +283,9 @@ pub fn open_local_data_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Result<(), String> {
+    if let Some(obj) = config.frontend_data.as_object_mut() {
+        obj.remove("e2e_suite");
+    }
     let exe_dir = get_exe_dir();
     let will_be_portable = config.portable_mode;
     let was_portable = is_portable_dir(&exe_dir);
