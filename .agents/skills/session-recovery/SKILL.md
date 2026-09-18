@@ -17,6 +17,16 @@ Before reading old session data, check whether it is still relevant:
 
 All sessions for this project may be indexed at `.agents/session-index.md`. The index is a candidate list, not a source of truth. Its entries can be stale, and actual session data if old enough may not exist anymore.
 
+## Continuation discipline
+
+When recovering a handoff entry that lists "exact next actions", the receiving agent must follow this order:
+
+1. Run the familiarize skill at the tier the handoff specifies (default: low).
+2. Select the next candidate items from the roadmap or task list referenced in the handoff.
+3. Report the selected items to the user and wait for approval before starting thorough planning, deep research, or implementation.
+
+Do not jump into context gathering, implementation planning, or code changes before the user confirms the selected items.
+
 ## Adding session entries
 
 When adding sessions from other tools, insert new entries at the top of `.agents/session-index.md`, directly beneath the `# Session Index` heading, so the list remains newest first.
