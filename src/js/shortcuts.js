@@ -119,10 +119,12 @@ function _updateScrollIndicator(config) {
   Statusbar.setScrollIndicatorState(text, held, latched);
 }
 
-// The wheel should never hijack scrolling over UI chrome or the file list.
+// The wheel should never hijack scrolling over UI chrome, overlays, or the file list.
 function isWheelOverUI(e) {
+  if (document.getElementById('url-overlay')?.classList.contains('active')) return true;
+  if (document.getElementById('password-overlay')?.classList.contains('active')) return true;
   const el = e.target;
-  return !!(el.closest?.('#file-panel, #menubar, .menu-dropdown, #statusbar, #quivit-recorder-badge, [data-ui]'));
+  return !!(el.closest?.('#file-panel, #menubar, .menu-dropdown, #statusbar, #quivit-recorder-badge, #url-overlay, #password-overlay, [data-ui]'));
 }
 
 const KEYBOARD_PAN_VECTORS = {

@@ -179,5 +179,43 @@ pub fn read_text_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 pub fn write_text_file(path: String, content: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub fn create_placeholder_files(dir: String, filenames: Vec<String>) -> Result<(), String> {
+    let dir_path = Path::new(&dir);
+    if !dir_path.exists() {
+        fs::create_dir_all(dir_path).map_err(|e| e.to_string())?;
+    }
+    for filename in filenames {
+        let file_path = dir_path.join(filename);
+        if !file_path.exists() {
+            let _ = fs::File::create(&file_path);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_placeholder_files() {
+        let temp_dir = std::env::temp_dir().join(format!("quivit_test_placeholders_{}", std::process::id()));
+        let filenames = vec!["001.png".to_string(), "002.png".to_string()];
+        let res = create_placeholder_files(temp_dir.to_string_lossy().into_owned(), filenames);
+        assert!(res.is_ok());
+
+        assert!(temp_dir.join("001.png").is_file());
+        assert!(temp_dir.join("002.png").is_file());
+        assert_eq!(temp_dir.join("001.png").metadata().unwrap().len(), 0);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
 }

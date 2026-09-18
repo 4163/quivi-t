@@ -23,7 +23,7 @@ function updateWindowTitle(state, FsUtils) {
   }
 }
 
-export function initLifecycle({ Core, FsUtils }) {
+export function initLifecycle({ Core, FsUtils, UrlLoader }) {
   Core.onStateChange((state) => {
     updateWindowTitle(state, FsUtils);
   });
@@ -33,6 +33,10 @@ export function initLifecycle({ Core, FsUtils }) {
 
     let watchTimer = null;
     listen('directory-changed', () => {
+      const state = Core.getState();
+      if (UrlLoader?.isGalleryDownloading?.(state.directory)) {
+        return;
+      }
       clearTimeout(watchTimer);
       watchTimer = setTimeout(() => {
         FsUtils.refresh();

@@ -31,8 +31,17 @@ pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String
 
     // Watch for changes inside the directory.
     let app_clone = app.clone();
-    let mut watcher = notify::recommended_watcher(move |_res: notify::Result<Event>| {
-        let _ = app_clone.emit("directory-changed", ());
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
+        if let Ok(event) = res {
+            match event.kind {
+                notify::EventKind::Create(_)
+                | notify::EventKind::Remove(_)
+                | notify::EventKind::Modify(notify::event::ModifyKind::Name(_)) => {
+                    let _ = app_clone.emit("directory-changed", ());
+                }
+                _ => {}
+            }
+        }
     })
     .map_err(|e| format!("Failed to create watcher: {}", e))?;
 

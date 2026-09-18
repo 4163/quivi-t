@@ -47,6 +47,8 @@ const invoke = window.__TAURI__?.core?.invoke;
 const ANIM_MEMO_CAPACITY = 512;
 const _animMemo = new BoundedMap(ANIM_MEMO_CAPACITY);
 
+let _placeholderCheck = null;
+
 const _state = {
   /** @type {'empty'|'image'|'archive'} */
   mode: 'empty',
@@ -216,6 +218,12 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   } else {
     newSrc = await FsUtils.buildFileSrc(file.path);
     if (_state.index !== index) return;
+
+    // Image bridging: if the target file is a 0-byte placeholder awaiting
+    // download, keep the previous viewer image until the download completes.
+    if (_placeholderCheck && _placeholderCheck(file.path)) {
+      newSrc = _state.src;
+    }
   }
 
   if (_state.mode !== 'archive') {
@@ -328,6 +336,10 @@ export const Core = {
   setState(partial) {
     Object.assign(_state, partial);
     _notify();
+  },
+
+  setPlaceholderCheck(fn) {
+    _placeholderCheck = typeof fn === 'function' ? fn : null;
   },
 
   setFileListVisible(visible, options = {}) {

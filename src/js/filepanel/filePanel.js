@@ -2,7 +2,7 @@
  * filePanel.js: file list rendering, sorting, and column resizing.
  */
 import { DirectoryPrefs } from '../directoryPrefs.js';
-import { makeContainerNavigable } from '../keyboardNav.js';
+import { makeListNavigable, makeContainerNavigable } from '../keyboardNav.js';
 import {
   getFavorites,
   getFavoritesCollapsed,
@@ -14,6 +14,7 @@ import {
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
+import { setVisibleRange as setDownloadVisibleRange } from '../urlLoader.js';
 
 let _activeViewerKey = null;
 let _activeViewerBlob = null;
@@ -201,6 +202,30 @@ let currentPath = '';
 
 // Virtualization (VS Code RowCache pattern)
 let activeRows = new Map();
+// When a download completes, remove the pending-download dim from the matching row.
+window.addEventListener('quivit-download-complete', (e) => {
+  const destPath = e.detail?.destPath;
+  if (!destPath) return;
+  const destName = destPath.split('\\').pop();
+  const state = Core.getState();
+  for (const [idx, li] of activeRows) {
+    if (li.dataset.index !== undefined) {
+      const item = state.list?.[idx];
+      if (item && item.name === destName) {
+        li.classList.remove('is-pending-download');
+        item.size = e.detail?.size || 1;
+        if (state.fileListViewMode === 'thumbnail' && li._slots?.thumbImg) {
+          const targetSrc = FsUtils.buildThumbnailSrc(item, state);
+          if (targetSrc && li._slots.thumbImg.getAttribute('src') !== targetSrc) {
+            li._slots.thumbImg.src = targetSrc;
+            li._slots.thumbImg.classList.add('is-loaded');
+          }
+        }
+        break;
+      }
+    }
+  }
+});
 let freePool = [];
 let scrollSpacer = null;
 let ROW_HEIGHT = 0;
@@ -983,8 +1008,9 @@ function updateEntry(li, item, index) {
   li.style.top = `${index * ROW_HEIGHT}px`;
   li.style.display = '';
   li.dataset.index = index;
-  li.title = item.name && item.name !== '..' ? item.name : '';
+  li.title = item.name && item.name !== '..' ? (item.displayName || item.name) : '';
   li.classList.toggle('is-hidden-entry', !!item.is_hidden);
+  li.classList.toggle('is-pending-download', item.size === 0 && !item.is_dir && !item.is_parent);
 
   const state = Core.getState();
   const isThumbnail = state.fileListViewMode === 'thumbnail';
@@ -992,7 +1018,7 @@ function updateEntry(li, item, index) {
   if (!slots) return;
 
   if (isThumbnail) {
-    if (slots.thumbTitle) slots.thumbTitle.textContent = item.name || '';
+    if (slots.thumbTitle) slots.thumbTitle.textContent = item.displayName || item.name || '';
     if (slots.thumbMeta) {
       if (item.is_parent) {
         slots.thumbMeta.textContent = 'Parent folder';
@@ -1136,7 +1162,7 @@ function updateEntry(li, item, index) {
     }
   } else {
     updateRowIcon(slots, item);
-    if (slots.label) slots.label.textContent = item.name || '';
+    if (slots.label) slots.label.textContent = item.displayName || item.name || '';
     if (slots.ext) slots.ext.textContent = item.is_dir ? 'DIR' : (item.ext || '');
     if (slots.date) slots.date.textContent = item.date || '';
   }
@@ -1195,6 +1221,9 @@ function renderVisibleSlice() {
     imageViewportStart = startIndex;
     imageViewportEnd = endIndex;
   }
+
+  // Pipe viewport bounds to the URL download queue so only visible items download
+  setDownloadVisibleRange(imageViewportStart, imageViewportEnd);
 
   // Phase 1: Reclaim offscreen rows into freePool (VS Code RowCache pattern)
   for (const [idx, li] of activeRows) {
@@ -1486,10 +1515,14 @@ export function renderFilePanel(state) {
     const entry = state.list?.[state.index];
     if (entry && !entry.is_parent) {
       updateFavoriteBtn(entry.path);
-      if (favoritesBtnEl) favoritesBtnEl.disabled = false;
+      if (favoritesBtnEl) {
+        favoritesBtnEl.disabled = false;
+        favoritesBtnEl.tabIndex = 0;
+      }
     } else {
       if (favoritesBtnEl) {
         favoritesBtnEl.disabled = true;
+        favoritesBtnEl.tabIndex = -1;
         const svg = favoritesBtnEl.querySelector('svg');
         if (svg) svg.setAttribute('fill', 'none');
         favoritesBtnEl.classList.remove('active');
@@ -1607,7 +1640,13 @@ export function initFilePanel(deps) {
 
   if (favoritesBtnEl) {
     favoritesBtnEl.disabled = true;
+    favoritesBtnEl.tabIndex = -1;
     favoritesBtnEl.addEventListener('click', toggleFavoriteCurrent);
+  }
+
+  const actionButtons = filePanel.querySelectorAll('.file-panel-actions .icon-btn');
+  if (actionButtons.length) {
+    makeListNavigable(actionButtons, { horizontal: true, vertical: false, loop: true });
   }
 
   btnToggleViewMode = document.getElementById('btn-toggle-view-mode');

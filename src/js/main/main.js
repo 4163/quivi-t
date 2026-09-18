@@ -186,11 +186,14 @@ const urlOverlay = initUrlOverlay({
   filePanel,
   Core,
   focusFileList,
-  onSubmit: (url) => UrlLoader.loadUrl(url)
+  onSubmit: async (url) => {
+    const { galleryPath } = await UrlLoader.loadUrl(url);
+    await FsUtils.loadFile(galleryPath);
+  }
 });
 UrlLoader.init({ Core, FsUtils, urlOverlay });
 initMetadataBadge({ Core, FsUtils, badgeEl: metadataBadgeEl });
-initLifecycle({ Core, FsUtils });
+initLifecycle({ Core, FsUtils, UrlLoader });
 
 let previewTheme = null;
 let previewCss = null;

@@ -9,7 +9,8 @@ pub mod protocol;
 pub mod utils;
 pub mod windows;
 
-use std::sync::{Mutex, RwLock};
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex, RwLock};
 use tauri::{Emitter, Manager};
 
 use archives::*;
@@ -50,6 +51,7 @@ pub fn run() {
     builder = builder
         .manage(RwLock::new(ArchiveCache::new(cache_mb)))
         .manage(Mutex::new(WatcherState::new()))
+        .manage(network::DownloadCancelFlag(Arc::new(AtomicBool::new(false))))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
@@ -114,7 +116,11 @@ pub fn run() {
         check_is_animated,
         resolve_archive_temp_origin,
         fetch_text,
-        download_to_file
+        fetch_extractor_text,
+        download_to_file,
+        get_library_dir,
+        create_placeholder_files,
+        cancel_download
     ]);
 
     crate::protocol::register_quivit_protocol(builder)

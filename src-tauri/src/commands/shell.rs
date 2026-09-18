@@ -65,3 +65,14 @@ pub fn pick_folder(window: tauri::Window) -> Result<Option<String>, String> {
     let hwnd = window.hwnd().map(|h| h.0 as isize).ok();
     crate::platform::dialog::pick_folder(hwnd)
 }
+
+#[tauri::command]
+pub fn get_library_dir() -> Result<String, String> {
+    let local = std::env::var("LOCALAPPDATA")
+        .map_err(|_| "LOCALAPPDATA not set".to_string())?;
+    let dir = std::path::Path::new(&local).join("QuiviT").join("library");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create library directory: {e}"))?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+

@@ -358,6 +358,31 @@ export const FsUtils = {
     if (!_isCurrentGeneration(options.generation)) return;
 
     let files = this.buildDirectoryList(result);
+
+    if (result.directory) {
+      try {
+        const sidecarPath = `${result.directory}\\gallery.json`;
+        const content = await invoke('read_text_file', { path: sidecarPath });
+        const data = JSON.parse(content);
+        if (data && Array.isArray(data.images)) {
+          const nameMap = new Map();
+          for (const img of data.images) {
+            if (img.filename) {
+              nameMap.set(img.filename, img.displayName || img.filename);
+            }
+          }
+          for (const file of files) {
+            if (nameMap.has(file.name)) {
+              file.displayName = nameMap.get(file.name);
+            }
+          }
+        }
+      } catch (err) {
+        // Not a gallery directory or gallery.json missing, ignore
+      }
+      files = files.filter(f => f.name.toLowerCase() !== 'gallery.json');
+    }
+
     const prefs = DirectoryPrefs.getSortPrefs(result.directory);
     files = applySort(files, prefs.col, prefs.desc);
 

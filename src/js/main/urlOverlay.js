@@ -18,6 +18,10 @@ let _lastObservedDirectory = null;
 
 function _show() {
   if (!_overlay) return;
+  _input.disabled = false;
+  const submitBtn = _overlay.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = false;
+  _overlay.classList.remove('loading');
   _input.value = '';
   _errorEl.textContent = '';
   _overlay.classList.remove('error');
@@ -38,7 +42,10 @@ function _show() {
 
 function _hide(opts = {}) {
   if (!_overlay || !_overlay.classList.contains('active')) return;
-  _overlay.classList.remove('active', 'error');
+  _input.disabled = false;
+  const submitBtn = _overlay.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.disabled = false;
+  _overlay.classList.remove('active', 'error', 'loading');
   _input.blur();
 
   if (opts.restoreFocus !== false && _focusFileList) {
@@ -61,15 +68,20 @@ async function _handleSubmit() {
 
   _setError('');
 
-  if (_onSubmit) {
-    try {
-      await _onSubmit(url);
-      _hide({ restoreFocus: true });
-    } catch (err) {
-      _setError(err.message || 'Failed to open URL');
-    }
-  } else {
+  const submitBtn = _overlay.querySelector('button[type="submit"]');
+  _input.disabled = true;
+  if (submitBtn) submitBtn.disabled = true;
+  _overlay.classList.add('loading');
+
+  try {
+    if (_onSubmit) await _onSubmit(url);
     _hide({ restoreFocus: true });
+  } catch (err) {
+    _setError(err.message || 'Failed to open URL');
+  } finally {
+    _input.disabled = false;
+    if (submitBtn) submitBtn.disabled = false;
+    _overlay.classList.remove('loading');
   }
 }
 
@@ -104,8 +116,12 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
     }
   });
 
-  // Block mousedown so viewport pan does not start through the overlay.
+  // Block mousedown and wheel so viewport pan and shortcuts do not trigger through the overlay.
   overlay.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+  });
+
+  overlay.addEventListener('wheel', (e) => {
     e.stopPropagation();
   });
 
@@ -137,7 +153,7 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
     return Boolean(e?.target?.closest?.(EXCLUDED_INTERACTION_SELECTOR));
   }
 
-  // Transition out when interacting with the file list.
+  // Transition out when clicking an entry in the file list.
   if (_filePanel) {
     _filePanel.addEventListener('pointerdown', (e) => {
       if (_isExcludedInteraction(e)) return;
@@ -146,14 +162,6 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
         _hide({ restoreFocus: false }, 'filepanel_pointerdown');
       }
     }, { capture: true });
-
-    _filePanel.addEventListener('wheel', (e) => {
-      if (_isExcludedInteraction(e)) return;
-      const isFileListTarget = e.target?.closest?.('#file-list, #favorites-list');
-      if (isFileListTarget && _overlay?.classList.contains('active')) {
-        _hide({ restoreFocus: false }, 'filepanel_wheel');
-      }
-    }, { passive: true });
   }
 
   // Dismiss if user navigates images or directories while overlay is open.

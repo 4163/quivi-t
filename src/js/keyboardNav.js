@@ -3,6 +3,47 @@
  * Keyboard navigation helpers for element lists.
  */
 
+function isItemNavigable(el) {
+  if (!el) return false;
+  if (el.disabled) return false;
+  if (el.getAttribute('aria-disabled') === 'true') return false;
+  if (el.getAttribute('tabindex') === '-1') return false;
+  return true;
+}
+
+function findNextNavigableIndex(arr, currentIndex, dir, loop) {
+  const total = arr.length;
+  if (!total) return null;
+  let candidate = currentIndex + dir;
+  let count = 0;
+  while (count < total) {
+    if (loop) {
+      candidate = (candidate + total) % total;
+    } else if (candidate < 0 || candidate >= total) {
+      return null;
+    }
+    if (isItemNavigable(arr[candidate])) {
+      return candidate;
+    }
+    candidate += dir;
+    count++;
+  }
+  return null;
+}
+
+function findInitialNavigableIndex(items, dir) {
+  const total = items.length;
+  if (!total) return null;
+  const start = dir > 0 ? 0 : total - 1;
+  let curr = start;
+  for (let i = 0; i < total; i++) {
+    if (isItemNavigable(items[curr])) return curr;
+    curr += dir;
+    if (curr < 0 || curr >= total) break;
+  }
+  return null;
+}
+
 export function makeListNavigable(elements, options = {}) {
   const { 
     horizontal = true,
@@ -10,29 +51,26 @@ export function makeListNavigable(elements, options = {}) {
     loop = true,
   } = options;
 
-  Array.from(elements).forEach((el, index, arr) => {
+  const arr = Array.from(elements);
+  arr.forEach((el, index) => {
     el.addEventListener('keydown', (e) => {
-      let nextIndex = null;
+      let dir = null;
 
       if (horizontal && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
         e.preventDefault();
         e.stopPropagation();
-        const dir = e.key === 'ArrowRight' ? 1 : -1;
-        nextIndex = index + dir;
+        dir = e.key === 'ArrowRight' ? 1 : -1;
       } else if (vertical && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
         e.preventDefault();
         e.stopPropagation();
-        const dir = e.key === 'ArrowDown' ? 1 : -1;
-        nextIndex = index + dir;
+        dir = e.key === 'ArrowDown' ? 1 : -1;
       }
 
-      if (nextIndex !== null) {
-        if (loop) {
-          nextIndex = (nextIndex + arr.length) % arr.length;
-        } else {
-          nextIndex = Math.max(0, Math.min(nextIndex, arr.length - 1));
+      if (dir !== null) {
+        const nextIndex = findNextNavigableIndex(arr, index, dir, loop);
+        if (nextIndex !== null && arr[nextIndex]) {
+          arr[nextIndex].focus();
         }
-        arr[nextIndex].focus();
       }
     });
   });
@@ -65,32 +103,36 @@ export function makeContainerNavigable(containerEl, itemSelector, options = {}) 
         if (vertical) {
           e.preventDefault();
           e.stopPropagation();
-          if (currentIndex === -1) nextIndex = 0;
-          else nextIndex = loop ? (currentIndex + 1) % items.length : Math.min(currentIndex + 1, items.length - 1);
+          nextIndex = currentIndex === -1
+            ? findInitialNavigableIndex(items, 1)
+            : findNextNavigableIndex(items, currentIndex, 1, loop);
         }
         break;
       case 'ArrowUp':
         if (vertical) {
           e.preventDefault();
           e.stopPropagation();
-          if (currentIndex === -1) nextIndex = items.length - 1;
-          else nextIndex = loop ? (currentIndex - 1 + items.length) % items.length : Math.max(currentIndex - 1, 0);
+          nextIndex = currentIndex === -1
+            ? findInitialNavigableIndex(items, -1)
+            : findNextNavigableIndex(items, currentIndex, -1, loop);
         }
         break;
       case 'ArrowRight':
         if (horizontal) {
           e.preventDefault();
           e.stopPropagation();
-          if (currentIndex === -1) nextIndex = 0;
-          else nextIndex = loop ? (currentIndex + 1) % items.length : Math.min(currentIndex + 1, items.length - 1);
+          nextIndex = currentIndex === -1
+            ? findInitialNavigableIndex(items, 1)
+            : findNextNavigableIndex(items, currentIndex, 1, loop);
         }
         break;
       case 'ArrowLeft':
         if (horizontal) {
           e.preventDefault();
           e.stopPropagation();
-          if (currentIndex === -1) nextIndex = items.length - 1;
-          else nextIndex = loop ? (currentIndex - 1 + items.length) % items.length : Math.max(currentIndex - 1, 0);
+          nextIndex = currentIndex === -1
+            ? findInitialNavigableIndex(items, -1)
+            : findNextNavigableIndex(items, currentIndex, -1, loop);
         }
         break;
       case 'Enter':
@@ -127,7 +169,7 @@ export function makeContainerNavigable(containerEl, itemSelector, options = {}) 
 export function handleTabJump(e) {
   if (!['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && (e.key === 'Home' || e.key === 'End')) {
     const tabbables = Array.from(document.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
-      .filter(el => el.offsetWidth > 0 && el.offsetHeight > 0 && window.getComputedStyle(el).visibility !== 'hidden');
+      .filter(el => isItemNavigable(el) && el.offsetWidth > 0 && el.offsetHeight > 0 && window.getComputedStyle(el).visibility !== 'hidden');
     if (tabbables.length > 0) {
       if (e.key === 'Home') {
         e.preventDefault();

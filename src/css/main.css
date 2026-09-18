@@ -721,6 +721,7 @@ li:hover > .fav-remove,
 #file-list .is-hidden-entry .item-name > img,
 #favorites-list .is-hidden-entry .item-name > img,
 #file-list .is-hidden-entry .item-icon-svg { opacity: 0.65; }
+#file-list .is-pending-download { opacity: 0.65; }
 #file-list .item-label, #favorites-list .item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #file-list .item-ext, #favorites-list .item-ext  { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); padding-left: 8px; }
 #file-list .item-date, #favorites-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-10); color: var(--text-dim); padding-left: 8px; }
@@ -1214,6 +1215,13 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 
 :is(#password-overlay, #url-overlay).error .overlay-field input {
   border-color: var(--danger);
+}
+
+:is(#password-overlay, #url-overlay).loading .overlay-field input,
+:is(#password-overlay, #url-overlay).loading .overlay-field button {
+  opacity: 0.5;
+  cursor: wait;
+  pointer-events: none;
 }
 
 
