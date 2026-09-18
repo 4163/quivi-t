@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {
+  DownloadQueue,
+  PREFETCH_START_THRESHOLD_PERCENT,
   normalizeUrl,
   isValidUrl,
   findMatchingGalleryImage,
@@ -7,7 +9,106 @@ import {
 } from '../src/js/urlLoader.js';
 import * as ImgurExtractor from '../extractors/imgur.js';
 
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function flushQueue() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe('UrlLoader and Imgur extractor direct URL handling', () => {
+  describe('staggered gallery downloads', () => {
+    it('waits for the active file, then starts the next prefetch at 50%', async () => {
+      const downloads = [];
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 }
+      ], {
+        visibleStart: 0,
+        visibleEnd: 3,
+        downloadFile: (_url, destPath, options) => {
+          const deferred = createDeferred();
+          downloads.push({ destPath, options, deferred });
+          return deferred.promise;
+        }
+      });
+
+      queue.prioritize('C:\\gallery\\001.jpg');
+      await flushQueue();
+      assert.deepEqual(downloads.map((download) => download.destPath), ['C:\\gallery\\001.jpg']);
+      assert.equal(downloads[0].options.thresholdPercent, null);
+
+      downloads[0].deferred.resolve();
+      await flushQueue();
+      assert.deepEqual(downloads.map((download) => download.destPath), [
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\002.jpg'
+      ]);
+      assert.equal(downloads[1].options.thresholdPercent, PREFETCH_START_THRESHOLD_PERCENT);
+
+      queue.handleDownloadThreshold({
+        requestId: downloads[1].options.requestId,
+        queueGeneration: downloads[1].options.queueGeneration
+      });
+      await flushQueue();
+      assert.deepEqual(downloads.map((download) => download.destPath), [
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\002.jpg',
+        'C:\\gallery\\003.jpg'
+      ]);
+
+      queue.cancel();
+    });
+
+    it('discards stale completion after a jump cancels the active request', async () => {
+      const downloads = [];
+      let cancelCount = 0;
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 }
+      ], {
+        visibleStart: 0,
+        visibleEnd: 3,
+        cancelDownload: async () => { cancelCount++; },
+        downloadFile: (_url, destPath, options) => {
+          const deferred = createDeferred();
+          downloads.push({ destPath, options, deferred });
+          return deferred.promise;
+        }
+      });
+
+      queue.prioritize('C:\\gallery\\001.jpg');
+      await flushQueue();
+      queue.prioritize('C:\\gallery\\003.jpg');
+      await flushQueue();
+
+      assert.equal(cancelCount, 1);
+      assert.deepEqual(downloads.map((download) => download.destPath), [
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\003.jpg'
+      ]);
+      assert.equal(queue.getStatus('C:\\gallery\\001.jpg'), 'pending');
+
+      downloads[0].deferred.resolve();
+      await flushQueue();
+      assert.equal(queue.getStatus('C:\\gallery\\001.jpg'), 'pending');
+      assert.equal(queue.getStatus('C:\\gallery\\003.jpg'), 'downloading');
+
+      queue.cancel();
+    });
+  });
+
   describe('normalizeUrl and isValidUrl', () => {
     it('upgrades http to https', () => {
       assert.equal(normalizeUrl('http://i.imgur.com/04XS16K.png'), 'https://i.imgur.com/04XS16K.png');

@@ -1,15 +1,23 @@
+use serde::Serialize;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tauri::Emitter;
 
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 QuiviT/1.0";
-const MANIFEST_BASE_URL: &str =
-    "https://raw.githubusercontent.com/4163/quivi-t/main/extractors/";
+const MANIFEST_BASE_URL: &str = "https://raw.githubusercontent.com/4163/quivi-t/main/extractors/";
 const DOWNLOAD_CHUNK_SIZE: usize = 32 * 1024;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DownloadThresholdEvent<'a> {
+    request_id: &'a str,
+    queue_generation: u64,
+}
 
 pub struct DownloadCancelFlag(pub Arc<AtomicU64>);
 
@@ -28,7 +36,8 @@ fn get_agent() -> &'static ureq::Agent {
 #[tauri::command(async)]
 pub fn fetch_text(url: String) -> Result<String, String> {
     let agent = get_agent();
-    let response = agent.get(&url)
+    let response = agent
+        .get(&url)
         .call()
         .map_err(|e| format!("Network request failed: {e}"))?;
 
@@ -65,7 +74,8 @@ pub fn fetch_extractor_text(relative_path: String) -> Result<String, String> {
     // Remote fallback: production or file not found locally.
     let url = format!("{MANIFEST_BASE_URL}{relative_path}");
     let agent = get_agent();
-    let response = agent.get(&url)
+    let response = agent
+        .get(&url)
         .call()
         .map_err(|e| format!("Network request failed: {e}"))?;
     response
@@ -78,6 +88,9 @@ pub fn download_to_file(
     app: tauri::AppHandle,
     url: String,
     dest_path: String,
+    request_id: Option<String>,
+    queue_generation: Option<u64>,
+    threshold_percent: Option<u8>,
 ) -> Result<(), String> {
     use tauri::Manager;
 
@@ -90,15 +103,13 @@ pub fn download_to_file(
             .map_err(|e| format!("Failed to create destination directory: {e}"))?;
     }
 
-    let cancel = app
-        .state::<DownloadCancelFlag>()
-        .0
-        .clone();
+    let cancel = app.state::<DownloadCancelFlag>().0.clone();
 
     let my_gen = cancel.load(Ordering::SeqCst);
 
     let agent = get_agent();
-    let response = agent.get(&url)
+    let response = agent
+        .get(&url)
         .call()
         .map_err(|e| format!("Download request failed: {e}"))?;
 
@@ -120,9 +131,20 @@ pub fn download_to_file(
     );
     let temp_dest = std::env::temp_dir().join(temp_name);
 
+    let content_length = response
+        .header("content-length")
+        .and_then(|value| value.parse::<u64>().ok());
+    let threshold_bytes = match (content_length, threshold_percent) {
+        (Some(length), Some(percent)) if (1..100).contains(&percent) => {
+            Some(length.saturating_mul(u64::from(percent)).saturating_add(99) / 100)
+        }
+        _ => None,
+    };
+    let mut threshold_emitted = threshold_bytes.is_none();
+    let mut bytes_written = 0_u64;
     let mut reader = response.into_reader();
-    let mut file = File::create(&temp_dest)
-        .map_err(|e| format!("Failed to create temp file: {e}"))?;
+    let mut file =
+        File::create(&temp_dest).map_err(|e| format!("Failed to create temp file: {e}"))?;
 
     let mut buf = vec![0u8; DOWNLOAD_CHUNK_SIZE];
     loop {
@@ -152,17 +174,36 @@ pub fn download_to_file(
             let _ = fs::remove_file(&temp_dest);
             format!("Failed to write download content: {e}")
         })?;
+        bytes_written = bytes_written.saturating_add(n as u64);
+
+        if !threshold_emitted && threshold_bytes.is_some_and(|threshold| bytes_written >= threshold)
+        {
+            threshold_emitted = true;
+            if let (Some(request_id), Some(queue_generation)) = (&request_id, queue_generation) {
+                let _ = app.emit(
+                    "quivit-download-threshold",
+                    DownloadThresholdEvent {
+                        request_id,
+                        queue_generation,
+                    },
+                );
+            }
+        }
     }
 
     drop(file);
 
+    if cancel.load(Ordering::SeqCst) != my_gen {
+        let _ = fs::remove_file(&temp_dest);
+        return Err("Download cancelled".to_string());
+    }
+
     // Atomically move or copy finished file into final destination.
     if fs::rename(&temp_dest, dest).is_err() {
-        fs::copy(&temp_dest, dest)
-            .map_err(|e| {
-                let _ = fs::remove_file(&temp_dest);
-                format!("Failed to finalize downloaded file: {e}")
-            })?;
+        fs::copy(&temp_dest, dest).map_err(|e| {
+            let _ = fs::remove_file(&temp_dest);
+            format!("Failed to finalize downloaded file: {e}")
+        })?;
         let _ = fs::remove_file(&temp_dest);
     }
 
@@ -187,5 +228,11 @@ mod tests {
         assert!(res.is_ok(), "Failed to fetch manifest: {:?}", res.err());
         let content = res.unwrap();
         assert!(content.contains("\"extractors\""));
+    }
+
+    #[test]
+    fn download_threshold_rounds_up_to_the_first_written_byte() {
+        let threshold = 101_u64.saturating_mul(50).saturating_add(99) / 100;
+        assert_eq!(threshold, 51);
     }
 }

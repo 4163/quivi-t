@@ -8,8 +8,8 @@
  * Download lifecycle:
  * - Queue items track a galleryIndex so the viewport filter can decide
  *   which downloads are visible + buffer.
- * - On navigation jump, cancel_download aborts the in-flight HTTP
- *   stream (chunked reads with AtomicBool on the Rust side).
+ * - On navigation jump, cancel_download aborts every in-flight HTTP
+ *   stream and starts the new active image in a fresh generation.
  * - On directory exit, the queue is cancelled and the active download
  *   is aborted.
  * - Image bridging: isPlaceholderFile() lets Core hold the previous
@@ -21,8 +21,7 @@ import { BoundedMap } from './services/cache.js';
 const EXTRACTOR_MODULE_CACHE_CAPACITY = 20;
 export const MAX_PAGINATION_PAGES = 50;
 const DOWNLOAD_QUEUE_RETRY_LIMIT = 1;
-const DOWNLOAD_QUEUE_IDLE_POLL_MS = 200;
-export const DOWNLOAD_CONCURRENCY = 1;
+export const PREFETCH_START_THRESHOLD_PERCENT = 50;
 const RESERVED_DEVICE_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
 
 let _urlOverlay = null;
@@ -34,6 +33,8 @@ let _activeQueue = null;
 let _activeGalleryPath = null;
 let _activeGalleryItems = null;
 let _coreStateUnsubscribe = null;
+let _downloadThresholdUnlisten = null;
+let _nextDownloadQueueId = 0;
 
 // Blob URLs tracked separately for revocation on cache eviction.
 const _blobUrls = new Map();
@@ -111,11 +112,15 @@ export async function fetchExtractorText(relativePath) {
   return await window.__TAURI__.core.invoke('fetch_extractor_text', { relativePath });
 }
 
-export async function downloadFile(url, destPath) {
+export async function downloadFile(url, destPath, options = {}) {
   if (!window.__TAURI__) {
     throw new Error('Backend network proxy unavailable in browser environment');
   }
-  return await window.__TAURI__.core.invoke('download_to_file', { url, destPath });
+  const args = { url, destPath };
+  if (options.requestId) args.requestId = options.requestId;
+  if (Number.isInteger(options.queueGeneration)) args.queueGeneration = options.queueGeneration;
+  if (Number.isInteger(options.thresholdPercent)) args.thresholdPercent = options.thresholdPercent;
+  return await window.__TAURI__.core.invoke('download_to_file', args);
 }
 
 export async function cancelDownload() {
@@ -140,7 +145,7 @@ function _pathsEqual(a, b) {
   return a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase();
 }
 
-// -- Sequential Download Queue --
+// -- Staggered Download Queue --
 
 export class DownloadQueue {
   constructor(items = [], options = {}) {
@@ -157,14 +162,19 @@ export class DownloadQueue {
       };
     });
     this._onItemStatusChanged = options.onItemStatusChanged || null;
-    this._getActivePath = typeof options.getActivePath === 'function' ? options.getActivePath : null;
+    this._downloadFile = options.downloadFile || downloadFile;
+    this._cancelDownload = options.cancelDownload || cancelDownload;
+    this._prefetchStartThresholdPercent = options.prefetchStartThresholdPercent ?? PREFETCH_START_THRESHOLD_PERCENT;
     this._cancelled = false;
-    this._running = false;
     this._activeDestPath = null;
     this._visibleStart = options.visibleStart ?? 0;
     this._visibleEnd = options.visibleEnd ?? 0;
-    this._inFlightItems = new Set();
-    this._activeWorkers = 0;
+    this._inFlightItems = new Map();
+    this._generation = 0;
+    this._requestSequence = 0;
+    this._queueId = ++_nextDownloadQueueId;
+    this._prefetchUnlocked = false;
+    this._awaitingActiveStart = false;
   }
 
   get isActive() {
@@ -172,7 +182,7 @@ export class DownloadQueue {
   }
 
   get isRunning() {
-    return this._running && !this._cancelled;
+    return this._inFlightItems.size > 0 && !this._cancelled;
   }
 
   _findItem(targetPathOrName) {
@@ -192,235 +202,229 @@ export class DownloadQueue {
   getStatus(destPath) {
     const item = this._findItem(destPath);
     if (!item) return null;
-    if (this._inFlightItems.has(item)) return 'downloading';
-    return item.status;
+    return this._inFlightItems.has(item) ? 'downloading' : item.status;
   }
 
   setVisibleRange(start, end) {
     this._visibleStart = start;
     this._visibleEnd = end;
-    if (!this._cancelled) {
-      this._spawnWorkers();
-    }
+    this._admitPendingPrefetch();
   }
 
   prioritize(destPath) {
     const target = this._findItem(destPath);
     if (!target) return;
-    this._activeDestPath = target.destPath;
 
     if (target.status === 'error') {
       target.status = 'pending';
       target.retryCount = 0;
     }
 
-    const gi = target.galleryIndex;
-
-    // Reorder all pending items: target first, then forward ascending (gi+1..N),
-    // then wrap back descending (gi-1..0). Non-pending items keep their position.
-    const pending = this._items.filter((i) => i.status === 'pending');
-    const nonPending = this._items.filter((i) => i.status !== 'pending');
-
-    const forward = [];
-    const backward = [];
-    for (const item of pending) {
-      if (item === target) continue;
-      if (item.galleryIndex >= gi) {
-        forward.push(item);
-      } else {
-        backward.push(item);
+    if (_pathsEqual(target.destPath, this._activeDestPath)) {
+      if (target.status === 'completed') {
+        this._prefetchUnlocked = true;
+        this._admitPendingPrefetch();
+      } else if (target.status === 'pending' && !this._awaitingActiveStart && !this._inFlightItems.has(target)) {
+        this._startAttempt(target, 'active', this._generation);
       }
+      return;
     }
 
-    forward.sort((a, b) => a.galleryIndex - b.galleryIndex);
-    backward.sort((a, b) => b.galleryIndex - a.galleryIndex);
-
-    const reordered = [];
-    if (target.status === 'pending') reordered.push(target);
-    reordered.push(...forward, ...backward);
-
-    // Rebuild: non-pending items stay at the front, reordered pending after
-    this._items = [...nonPending, ...reordered];
-
-    // If target is pending and not already downloading, cancel in-flight downloads to yield worker slot
-    if (target.status === 'pending' && !this._inFlightItems.has(target) && this._inFlightItems.size > 0) {
-      cancelDownload().catch(() => {});
-    }
-
-    // Wake up workers if target is pending
-    if (target.status === 'pending' && !this._cancelled) {
-      this._spawnWorkers();
-    }
+    this._startActiveCutover(target);
   }
 
   cancel() {
+    if (this._cancelled) return;
     this._cancelled = true;
-    cancelDownload().catch(() => {});
-    for (const item of this._inFlightItems) {
+    this._generation++;
+    this._awaitingActiveStart = false;
+    for (const item of this._inFlightItems.keys()) {
       this._updateStatus(item, 'pending');
     }
     this._inFlightItems.clear();
+    this._cancelDownload().catch(() => {});
   }
 
   _isInViewport(item) {
-    const gi = item.galleryIndex;
-    return gi >= this._visibleStart && gi < this._visibleEnd;
+    return item.galleryIndex >= this._visibleStart && item.galleryIndex < this._visibleEnd;
   }
 
-  _getNextItem() {
-    if (this._getActivePath) {
-      try {
-        const activePath = this._getActivePath();
-        if (activePath) {
-          const target = this._findItem(activePath);
-          if (target) {
-            this._activeDestPath = target.destPath;
-          }
-        }
-      } catch {}
-    }
-
-    const pending = this._items.filter((i) => i.status === 'pending' && !this._inFlightItems.has(i));
+  _getNextPrefetchItem() {
+    const pending = this._items.filter((item) => item.status === 'pending' && !this._inFlightItems.has(item));
     if (pending.length === 0) return null;
 
-    // 1. Top priority: Active viewer target (exempt from viewport gating)
-    let pivotGi = 0;
-    if (this._activeDestPath) {
-      const target = this._findItem(this._activeDestPath);
-      if (target) {
-        if (target.status === 'pending' && !this._inFlightItems.has(target)) {
-          return target;
-        }
-        pivotGi = target.galleryIndex;
-      }
-    } else if (isFinite(this._visibleStart)) {
-      pivotGi = Math.max(0, this._visibleStart);
-    }
+    let pivotGi = Math.max(0, this._visibleStart);
+    const activeItem = this._findItem(this._activeDestPath);
+    if (activeItem) pivotGi = activeItem.galleryIndex;
 
-    // 2. Candidate items: ONLY items in the visible file panel window (+ buffer)
-    const visiblePending = pending.filter((i) => this._isInViewport(i));
-    if (visiblePending.length === 0) {
-      return null;
-    }
+    const visiblePending = pending.filter((item) => this._isInViewport(item));
+    if (visiblePending.length === 0) return null;
 
-    // 3. Within visible window: forward first from pivotGi, then wrap backward
-    const forwardVisible = visiblePending.filter((i) => i.galleryIndex >= pivotGi);
-    const backwardVisible = visiblePending.filter((i) => i.galleryIndex < pivotGi);
+    const forward = visiblePending
+      .filter((item) => item.galleryIndex >= pivotGi)
+      .sort((a, b) => a.galleryIndex - b.galleryIndex);
+    if (forward.length > 0) return forward[0];
 
-    if (forwardVisible.length > 0) {
-      forwardVisible.sort((a, b) => a.galleryIndex - b.galleryIndex);
-      return forwardVisible[0];
-    }
-
-    if (backwardVisible.length > 0) {
-      backwardVisible.sort((a, b) => b.galleryIndex - a.galleryIndex);
-      return backwardVisible[0];
-    }
-
-    return null;
+    const backward = visiblePending
+      .filter((item) => item.galleryIndex < pivotGi)
+      .sort((a, b) => b.galleryIndex - a.galleryIndex);
+    return backward[0] || null;
   }
 
   async start() {
-    if (this._cancelled) return;
-    this._spawnWorkers();
-  }
-
-  _spawnWorkers() {
-    if (this._cancelled) return;
-    while (this._activeWorkers < DOWNLOAD_CONCURRENCY) {
-      const next = this._getNextItem();
-      if (!next) break;
-      this._inFlightItems.add(next);
-      this._activeWorkers++;
-      this._runWorker(next).catch((err) => {
-        console.warn('[DownloadQueue] Worker error:', err);
-      });
+    if (this._cancelled || !this._activeDestPath) return;
+    const target = this._findItem(this._activeDestPath);
+    if (target?.status === 'completed') {
+      this._prefetchUnlocked = true;
+      this._admitPendingPrefetch();
     }
-    this._running = this._activeWorkers > 0;
   }
 
-  async _runWorker(initialItem) {
-    let item = initialItem;
-    try {
-      while (!this._cancelled && item) {
-        this._updateStatus(item, 'downloading');
+  handleDownloadThreshold(payload) {
+    if (this._cancelled || !payload?.requestId) return;
+    const attempt = Array.from(this._inFlightItems.values())
+      .find((candidate) => candidate.requestId === payload.requestId);
+    if (!attempt || attempt.generation !== this._generation || attempt.kind !== 'prefetch') return;
+    if (Number.isInteger(payload.queueGeneration) && payload.queueGeneration !== attempt.generation) return;
 
-        let success = false;
-        while (!success && item.retryCount <= DOWNLOAD_QUEUE_RETRY_LIMIT && !this._cancelled) {
-          try {
-            await downloadFile(item.url, item.destPath);
-            success = true;
-          } catch (err) {
-            const msg = String(err?.message || err || '');
-            if (msg.includes('cancelled') || msg.includes('canceled')) {
-              item.retryCount = 0;
-              break;
-            }
-            item.retryCount++;
-            if (item.retryCount > DOWNLOAD_QUEUE_RETRY_LIMIT) {
-              console.warn(`[DownloadQueue] Failed to download ${item.url}:`, err);
-            }
-          }
-        }
+    attempt.thresholdReached = true;
+    this._admitPendingPrefetch();
+  }
 
-        this._inFlightItems.delete(item);
+  _startActiveCutover(target) {
+    const mustCancel = this._inFlightItems.size > 0;
+    const generation = ++this._generation;
+    this._activeDestPath = target.destPath;
+    this._prefetchUnlocked = target.status === 'completed';
+    this._awaitingActiveStart = target.status !== 'completed';
 
-        if (this._cancelled && !success) {
-          this._updateStatus(item, 'pending');
+    for (const item of this._inFlightItems.keys()) {
+      this._updateStatus(item, 'pending');
+    }
+    this._inFlightItems.clear();
+
+    const begin = mustCancel ? this._cancelDownload().catch(() => {}) : Promise.resolve();
+    begin.then(() => {
+      if (this._cancelled || generation !== this._generation) return;
+      this._awaitingActiveStart = false;
+      if (target.status === 'completed') {
+        this._admitPendingPrefetch();
+      } else {
+        this._startAttempt(target, 'active', generation);
+      }
+    });
+  }
+
+  _admitPendingPrefetch() {
+    if (this._cancelled || !this._prefetchUnlocked) return;
+
+    for (const attempt of this._inFlightItems.values()) {
+      if (!attempt.thresholdReached || attempt.admittedSuccessor) continue;
+      const next = this._getNextPrefetchItem();
+      if (!next) return;
+      attempt.admittedSuccessor = true;
+      this._startAttempt(next, 'prefetch', this._generation);
+    }
+
+    if (!this._hasPrefetchAttempt()) {
+      const next = this._getNextPrefetchItem();
+      if (next) this._startAttempt(next, 'prefetch', this._generation);
+    }
+  }
+
+  _hasPrefetchAttempt() {
+    for (const attempt of this._inFlightItems.values()) {
+      if (attempt.kind === 'prefetch') return true;
+    }
+    return false;
+  }
+
+  _startAttempt(item, kind, generation) {
+    if (this._cancelled || generation !== this._generation || this._inFlightItems.has(item)) return;
+    const attempt = {
+      item,
+      kind,
+      generation,
+      requestId: `${this._queueId}:${generation}:${++this._requestSequence}`,
+      thresholdReached: false,
+      admittedSuccessor: false
+    };
+    this._inFlightItems.set(item, attempt);
+    this._updateStatus(item, 'downloading');
+    this._runAttempt(attempt).catch((err) => {
+      console.warn('[DownloadQueue] Worker error:', err);
+    });
+  }
+
+  _isCurrentAttempt(attempt) {
+    return !this._cancelled && attempt.generation === this._generation && this._inFlightItems.get(attempt.item) === attempt;
+  }
+
+  async _runAttempt(attempt) {
+    const { item } = attempt;
+    let success = false;
+
+    while (!success && item.retryCount <= DOWNLOAD_QUEUE_RETRY_LIMIT && this._isCurrentAttempt(attempt)) {
+      try {
+        await this._downloadFile(item.url, item.destPath, {
+          requestId: attempt.requestId,
+          queueGeneration: attempt.generation,
+          thresholdPercent: attempt.kind === 'prefetch' ? this._prefetchStartThresholdPercent : null
+        });
+        success = true;
+      } catch (err) {
+        const msg = String(err?.message || err || '');
+        if (msg.includes('cancelled') || msg.includes('canceled')) {
+          item.retryCount = 0;
           break;
         }
-
-        if (success) {
-          this._updateStatus(item, 'completed');
-        } else if (item.retryCount > DOWNLOAD_QUEUE_RETRY_LIMIT) {
-          this._updateStatus(item, 'error');
-        } else {
-          this._updateStatus(item, 'pending');
+        item.retryCount++;
+        if (item.retryCount > DOWNLOAD_QUEUE_RETRY_LIMIT) {
+          console.warn(`[DownloadQueue] Failed to download ${item.url}:`, err);
         }
-
-        item = null;
-        if (!this._cancelled) {
-          const next = this._getNextItem();
-          if (next) {
-            this._inFlightItems.add(next);
-            item = next;
-          }
-        }
-      }
-    } finally {
-      if (item) {
-        this._inFlightItems.delete(item);
-        if (item.status === 'downloading') {
-          this._updateStatus(item, 'pending');
-        }
-      }
-      this._activeWorkers--;
-      this._running = this._activeWorkers > 0;
-
-      if (this._activeWorkers === 0) {
-        const allDone = this._items.every((i) => i.status === 'completed' || i.status === 'error');
-        if (!this._cancelled && allDone && _FsUtils && _Core && _activeGalleryPath) {
-          try {
-            const state = _Core.getState();
-            if (state.directory && _pathsEqual(state.directory, _activeGalleryPath)) {
-              _FsUtils.refresh();
-            }
-          } catch {}
-        }
-      } else {
-        this._spawnWorkers();
       }
     }
+
+    if (!this._isCurrentAttempt(attempt)) return;
+    this._inFlightItems.delete(item);
+
+    if (success) {
+      this._updateStatus(item, 'completed');
+      if (attempt.kind === 'active') {
+        this._prefetchUnlocked = true;
+      } else {
+        attempt.thresholdReached = true;
+      }
+      this._admitPendingPrefetch();
+      this._refreshWhenComplete();
+      return;
+    }
+
+    if (item.retryCount > DOWNLOAD_QUEUE_RETRY_LIMIT) {
+      this._updateStatus(item, 'error');
+    } else {
+      this._updateStatus(item, 'pending');
+    }
+  }
+
+  _refreshWhenComplete() {
+    const allDone = this._items.every((item) => item.status === 'completed' || item.status === 'error');
+    if (!allDone || this._inFlightItems.size > 0 || this._cancelled || !_FsUtils || !_Core || !_activeGalleryPath) return;
+    try {
+      const state = _Core.getState();
+      if (state.directory && _pathsEqual(state.directory, _activeGalleryPath)) {
+        _FsUtils.refresh();
+      }
+    } catch {}
   }
 
   _updateStatus(item, status) {
     item.status = status;
-    if (this._onItemStatusChanged) {
-      try {
-        this._onItemStatusChanged(item.destPath, status, item);
-      } catch (e) {
-        console.error('[DownloadQueue] onItemStatusChanged error:', e);
-      }
+    if (!this._onItemStatusChanged) return;
+    try {
+      this._onItemStatusChanged(item.destPath, status, item);
+    } catch (err) {
+      console.error('[DownloadQueue] onItemStatusChanged error:', err);
     }
   }
 }
@@ -514,7 +518,7 @@ export function extractGallery(extractor, html, url, context = {}) {
 // -- Gallery Matching & Standalone Raw Cleanup --
 
 export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
-  if (!window.__TAURI__) return null;
+  if (typeof window === 'undefined' || !window.__TAURI__) return null;
   try {
     const dirResult = await window.__TAURI__.core.invoke('read_directory', {
       path: providerPath,
@@ -569,7 +573,7 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
 }
 
 export async function cleanupMatchingRawFiles(providerPath, images) {
-  if (!window.__TAURI__ || !Array.isArray(images) || images.length === 0) return;
+  if (typeof window === 'undefined' || !window.__TAURI__ || !Array.isArray(images) || images.length === 0) return;
   try {
     const dirResult = await window.__TAURI__.core.invoke('read_directory', {
       path: providerPath,
@@ -781,12 +785,6 @@ function _startGalleryQueue(galleryPath, items) {
   _activeQueue = new DownloadQueue(items, {
     visibleStart: initialVisibleStart,
     visibleEnd: initialVisibleEnd,
-    getActivePath: () => {
-      const s = _Core?.getState?.();
-      if (!s?.list || s.index < 0 || s.index >= s.list.length) return null;
-      const entry = s.list[s.index];
-      return entry?.path || (entry?.name ? `${galleryPath}\\${entry.name}` : null);
-    },
     onItemStatusChanged: (destPath, status) => {
       window.dispatchEvent(new CustomEvent('quivit-download-status', {
         detail: { destPath, status }
@@ -935,6 +933,14 @@ export const UrlLoader = {
     _urlOverlay = urlOverlay;
     _getFileListViewportRange = typeof getFileListViewportRange === 'function' ? getFileListViewportRange : null;
 
+    if (!_downloadThresholdUnlisten && window.__TAURI__?.event?.listen) {
+      window.__TAURI__.event.listen('quivit-download-threshold', (event) => {
+        _activeQueue?.handleDownloadThreshold(event.payload);
+      }).then((unlisten) => {
+        _downloadThresholdUnlisten = unlisten;
+      }).catch(() => {});
+    }
+
     // Register the placeholder check hook so core.js can bridge images
     // without importing urlLoader.js directly.
     if (_Core && typeof _Core.setPlaceholderCheck === 'function') {
@@ -1001,7 +1007,6 @@ export const UrlLoader = {
   extractGallery,
   findMatchingGalleryImage,
   cleanupMatchingRawFiles,
-  DOWNLOAD_CONCURRENCY,
+  PREFETCH_START_THRESHOLD_PERCENT,
   DownloadQueue
 };
-
