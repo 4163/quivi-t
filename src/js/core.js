@@ -342,6 +342,14 @@ export const Core = {
     _placeholderCheck = typeof fn === 'function' ? fn : null;
   },
 
+  isDownloading(path) {
+    return _placeholderCheck ? _placeholderCheck(path) : false;
+  },
+
+  isPlaceholder(path) {
+    return _placeholderCheck ? _placeholderCheck(path) : false;
+  },
+
   setFileListVisible(visible, options = {}) {
     _state.fileListVisible = !!visible;
     if (options.notify !== false) _notify();

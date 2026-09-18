@@ -111,3 +111,21 @@ pub struct TempArchiveOrigin {
     pub archive_path: String,
     pub entry_name: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LibraryGalleryEntry {
+    pub name: String,
+    pub path: String,
+    pub title: Option<String>,
+    pub date: String,
+    pub created_millis: u64,
+    pub is_dir: bool,
+    pub image_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LibraryProviderEntry {
+    pub name: String,
+    pub path: String,
+    pub galleries: Vec<LibraryGalleryEntry>,
+}

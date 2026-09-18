@@ -8,6 +8,50 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Downloading statusbar reflection and library UX refinements (2026-09-18)
+- **Statusbar downloading indicator (`src/js/menubar/statusbar.js`, `src/js/core.js`, `src/js/urlLoader.js`):**
+  - Added `Core.isDownloading` and `Core.isPlaceholder` querying the active download queue.
+  - Added real-time `quivit-download-status` events on queue start, teardown, and per-item worker status transitions.
+  - In `Statusbar.update`, when the active entry is downloading in an active queue, `.status-filename` displays `Downloading...` (with title `<filename> (Downloading...)`), and sets `dims` and `zoom` to `N/A`.
+  - Guarded `Statusbar.setImage` against overwriting while the active entry is downloading.
+  - Added listeners in `Statusbar` for `quivit-download-complete` and `quivit-download-status` to re-sync `Statusbar.update` dynamically as downloads start and finish.
+- **Provider hierarchy and defensive delete refinements (`src/index.html`, `src/css/main.css`, `src/js/filepanel/filePanel.js`):**
+  - Flattened provider headers and lists directly into `#file-panel-library` at the same DOM depth as favorites.
+  - Replaced SVG delete box with `.lib-remove-box` CSS element (10px x 10px, 1px border, 2px radius). Disarms strictly on outside clicks (`pointerdown`) or Escape key, removing auto-timers and hover disarm.
+  - Fixed active gallery folder highlighting when browsing provider root directories.
+  - Fixed thumbnail placeholder visibility so placeholders cleanly hide once thumbnails load across all lists.
+- **Backend raw file deletion (`src-tauri/src/commands/directory.rs`):**
+  - Updated `remove_directory` to support deleting raw standalone files via `fs::remove_file` when the target is a file inside the library root, fixing deletion of raw library items.
+- **Sequential download queue (`src/js/urlLoader.js`):**
+  - Set `DOWNLOAD_CONCURRENCY` to 1 for sequential downloads.
+- **Verification:**
+  - `node --check` clean across all modified JavaScript files.
+  - `npm test` passing (58/58).
+  - `cargo check --tests` and `cargo test` passing (70/70).
+
+
+### File panel library section and gallery management (2026-09-18)
+- **Rust library scanning and folder deletion (`src-tauri/src/models.rs`, `src-tauri/src/commands/directory.rs`, `src-tauri/src/lib.rs`):**
+  - Added `LibraryProviderEntry` and `LibraryGalleryEntry` models.
+  - Implemented `read_library_tree` to enumerate provider directories, gallery folders, and raw files with creation timestamps and sidecar titles.
+  - Implemented `remove_directory` with strict canonical path guard checking that targets reside inside the library root.
+  - Registered commands in the Tauri invoke handler and added safety unit test.
+- **Frontend library store (`src/js/filepanel/libraryStore.js`):**
+  - Pure service module managing IPC calls for library scanning and directory removal.
+  - Manages localStorage persistence for provider group collapsed states (`quivit_library_providers_collapsed`).
+- **File panel UI and navigation parity (`src/index.html`, `src/css/main.css`, `src/js/filepanel/filePanel.js`):**
+  - Added static `#file-panel-library` markup below Favorites with zero-space empty state (`#file-panel-library.is-empty { display: none; }`).
+  - Implemented direct provider dropdowns (e.g. `IMGUR ▼`) directly under Favorites without an outer "Library" header.
+  - Rendered native Windows shell icons (`getIconHtml(item)`) for galleries and downloaded raw files.
+  - Navigation matches favorites: single click highlights, double click opens directory, single click opens raw files, Enter/Space opens focused item.
+  - Added defensive two-step delete button defaulting to an empty box matching the original X svg size (`<rect x="6" y="6" width="12" height="12"/>`). First click arms the button into the close X in danger red with confirmation tooltip; second click executes permanent deletion on disk. Auto-disarms on mouseleave, focusout, or Escape.
+  - Wired `cmd-next` and `cmd-prev` action routing via `isLibraryFocused` and `navigateHighlightedLibrary`.
+  - Dispatches `quivit-library-updated` event on gallery downloads in `src/js/urlLoader.js` to refresh the tree automatically.
+- **Verification:**
+  - Verified with `node --check` across modified JavaScript files.
+  - Verified with `npm test` (58/58 passing).
+  - Verified with `cargo check --tests` and `cargo test test_remove_directory` (1/1 passing).
+
 ### Imgur Direct URL & Raw Lifecycle Handling (2026-09-18)
 - **Rust file deletion command (`src-tauri/src/commands/directory.rs`, `src-tauri/src/lib.rs`):**
   - Added `remove_file(path: String) -> Result<(), String>` command to delete files from disk.

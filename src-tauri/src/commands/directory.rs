@@ -210,6 +210,163 @@ pub fn remove_file(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command(async)]
+pub fn read_library_tree() -> Result<Vec<LibraryProviderEntry>, String> {
+    let lib_dir_str = crate::commands::shell::get_library_dir()?;
+    let lib_dir = Path::new(&lib_dir_str);
+    if !lib_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let provider_entries = fs::read_dir(lib_dir).map_err(|e| e.to_string())?;
+    let mut providers = Vec::new();
+
+    for entry in provider_entries.flatten() {
+        let file_type = match entry.file_type() {
+            Ok(ft) => ft,
+            Err(_) => continue,
+        };
+        if !file_type.is_dir() {
+            continue;
+        }
+
+        let provider_path = entry.path();
+        let provider_name = provider_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string();
+
+        if provider_name.is_empty() {
+            continue;
+        }
+
+        let mut galleries = Vec::new();
+        if let Ok(gallery_entries) = fs::read_dir(&provider_path) {
+            for g_entry in gallery_entries.flatten() {
+                let g_type = match g_entry.file_type() {
+                    Ok(ft) => ft,
+                    Err(_) => continue,
+                };
+                let g_path = g_entry.path();
+                let g_name = g_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                if g_name.is_empty() {
+                    continue;
+                }
+
+                let is_dir = g_type.is_dir();
+                let is_file = g_type.is_file();
+
+                if !is_dir && !is_file {
+                    continue;
+                }
+
+                if is_file {
+                    if let Some(ext) = g_path.extension().and_then(|e| e.to_str()) {
+                        if !is_image_ext(ext) {
+                            continue;
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+
+                let metadata = g_entry.metadata().ok();
+                let created_millis = metadata
+                    .as_ref()
+                    .and_then(|m| m.created().or_else(|_| m.modified()).ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+
+                let date_str = if created_millis > 0 {
+                    created_millis.to_string()
+                } else {
+                    String::new()
+                };
+
+                let mut title = None;
+                let mut image_count = 0;
+
+                if is_dir {
+                    let sidecar_path = g_path.join("gallery.json");
+                    if sidecar_path.is_file() {
+                        if let Ok(sidecar_text) = fs::read_to_string(&sidecar_path) {
+                            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&sidecar_text) {
+                                if let Some(t) = v.get("title").and_then(|t| t.as_str()) {
+                                    if !t.is_empty() {
+                                        title = Some(t.to_string());
+                                    }
+                                }
+                                if let Some(imgs) = v.get("images").and_then(|i| i.as_array()) {
+                                    image_count = imgs.len();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                galleries.push(LibraryGalleryEntry {
+                    name: g_name,
+                    path: g_path.to_string_lossy().into_owned(),
+                    title,
+                    date: date_str,
+                    created_millis,
+                    is_dir,
+                    image_count,
+                });
+            }
+        }
+
+        galleries.sort_by(|a, b| {
+            a.created_millis
+                .cmp(&b.created_millis)
+                .then_with(|| natord::compare(&a.name, &b.name))
+        });
+
+        providers.push(LibraryProviderEntry {
+            name: provider_name,
+            path: provider_path.to_string_lossy().into_owned(),
+            galleries,
+        });
+    }
+
+    providers.sort_by(|a, b| natord::compare(&a.name, &b.name));
+    Ok(providers)
+}
+
+#[tauri::command(async)]
+pub fn remove_directory(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    if !p.exists() {
+        return Ok(());
+    }
+
+    let lib_dir_str = crate::commands::shell::get_library_dir()?;
+    let lib_dir = Path::new(&lib_dir_str);
+
+    let canonical_lib = fs::canonicalize(lib_dir)
+        .map_err(|e| format!("Failed to canonicalize library root: {e}"))?;
+    let canonical_target = fs::canonicalize(p)
+        .map_err(|e| format!("Failed to canonicalize target path: {e}"))?;
+
+    if !canonical_target.starts_with(&canonical_lib) || canonical_target == canonical_lib {
+        return Err("Cannot remove path outside of library root".into());
+    }
+
+    if canonical_target.is_dir() {
+        fs::remove_dir_all(&canonical_target).map_err(|e| e.to_string())?;
+    } else {
+        fs::remove_file(&canonical_target).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,5 +399,17 @@ mod tests {
         let res2 = remove_file(temp_file.to_string_lossy().into_owned());
         assert!(res2.is_ok());
     }
+
+    #[test]
+    fn test_remove_directory_safety() {
+        let non_existent = std::env::temp_dir().join(format!("quivit_non_existent_{}", std::process::id()));
+        let res = remove_directory(non_existent.to_string_lossy().into_owned());
+        assert!(res.is_ok());
+
+        let outside_dir = std::env::temp_dir();
+        let res_outside = remove_directory(outside_dir.to_string_lossy().into_owned());
+        assert!(res_outside.is_err());
+    }
 }
+
 

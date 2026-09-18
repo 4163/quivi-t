@@ -22,7 +22,7 @@ const EXTRACTOR_MODULE_CACHE_CAPACITY = 20;
 export const MAX_PAGINATION_PAGES = 50;
 const DOWNLOAD_QUEUE_RETRY_LIMIT = 1;
 const DOWNLOAD_QUEUE_IDLE_POLL_MS = 200;
-export const DOWNLOAD_CONCURRENCY = 2;
+export const DOWNLOAD_CONCURRENCY = 1;
 const RESERVED_DEVICE_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
 
 let _urlOverlay = null;
@@ -652,6 +652,7 @@ export async function loadUrl(urlString) {
     const destPath = `${providerPath}\\${rawFilename}`;
     if (window.__TAURI__) {
       await downloadFile(downloadUrl, destPath);
+      window.dispatchEvent(new CustomEvent('quivit-library-updated'));
     }
 
     return {
@@ -749,6 +750,8 @@ export async function loadUrl(urlString) {
     _activeGalleryItems = downloadItems;
   }
 
+  window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+
   return { galleryPath, result, targetName: result.images[0]?.filename || null };
 }
 
@@ -785,6 +788,10 @@ function _startGalleryQueue(galleryPath, items) {
       return entry?.path || (entry?.name ? `${galleryPath}\\${entry.name}` : null);
     },
     onItemStatusChanged: (destPath, status) => {
+      window.dispatchEvent(new CustomEvent('quivit-download-status', {
+        detail: { destPath, status }
+      }));
+
       if (status === 'completed' && _Core && _FsUtils) {
         try {
           const state = _Core.getState();
@@ -804,6 +811,10 @@ function _startGalleryQueue(galleryPath, items) {
       }
     }
   });
+
+  window.dispatchEvent(new CustomEvent('quivit-download-status', {
+    detail: { galleryPath, status: 'queue_started' }
+  }));
 
   const state = _Core?.getState?.();
   if (state?.directory && _pathsEqual(state.directory, galleryPath) && state.list?.[state.index]) {
@@ -874,6 +885,11 @@ export async function resumeGalleryDownloads(galleryPath, list) {
 export function isPlaceholderFile(filePath) {
   if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath) return false;
   if (!filePath) return false;
+  const cleanPath = String(filePath).replace(/\\/g, '/').toLowerCase();
+  const cleanGallery = _activeGalleryPath.replace(/\\/g, '/').toLowerCase();
+  if (cleanPath.includes('/') && !cleanPath.startsWith(cleanGallery) && !cleanGallery.startsWith(cleanPath)) {
+    return false;
+  }
   const status = _activeQueue.getStatus(filePath);
   return status === 'pending' || status === 'downloading';
 }
@@ -905,6 +921,9 @@ function _teardownActiveQueue() {
   }
   _activeGalleryPath = null;
   _activeGalleryItems = null;
+  window.dispatchEvent(new CustomEvent('quivit-download-status', {
+    detail: { status: 'cancelled' }
+  }));
 }
 
 let _getFileListViewportRange = null;

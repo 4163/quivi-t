@@ -121,6 +121,8 @@ pub fn run() {
         get_library_dir,
         create_placeholder_files,
         remove_file,
+        remove_directory,
+        read_library_tree,
         cancel_download
     ]);
 

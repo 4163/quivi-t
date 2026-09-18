@@ -9,12 +9,14 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-next', label: 'Next Item', defaultBinds: ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'], category: 'Navigation',
     run: (ctx) => {
       if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(1);
+      else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(1);
       else ctx.Core.navigate(1);
     }
   },
   { id: 'cmd-prev', label: 'Previous Item', defaultBinds: ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'], category: 'Navigation',
     run: (ctx) => {
       if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(-1);
+      else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(-1);
       else ctx.Core.navigate(-1);
     }
   },

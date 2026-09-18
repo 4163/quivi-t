@@ -143,7 +143,10 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
     '#file-panel-header',
     '.file-panel-header',
     '.header-cell',
-    '.fav-remove'
+    '.fav-remove',
+    '#file-panel-library-header',
+    '.library-provider-header',
+    '.lib-remove'
   ].join(', ');
 
   function _isExcludedInteraction(e) {
@@ -157,7 +160,7 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
   if (_filePanel) {
     _filePanel.addEventListener('pointerdown', (e) => {
       if (_isExcludedInteraction(e)) return;
-      const isFileListTarget = e.target?.closest?.('#file-list, #favorites-list li');
+      const isFileListTarget = e.target?.closest?.('#file-list, #favorites-list li, .library-provider-list li');
       if (isFileListTarget && _overlay?.classList.contains('active')) {
         _hide({ restoreFocus: false }, 'filepanel_pointerdown');
       }

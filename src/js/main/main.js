@@ -6,7 +6,7 @@ import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { Viewer } from '../viewer/viewer.js';
 import * as NavigationHistory from '../navigationHistory.js';
-import { initFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite, focusFileList, isFileListFocused, getFileListViewportRange } from '../filepanel/filePanel.js';
+import { initFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite, getHighlightedLibrary, navigateHighlightedLibrary, focusFileList, isFileListFocused, getFileListViewportRange } from '../filepanel/filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from '../shortcuts.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from '../keybinds.js';
@@ -87,10 +87,13 @@ const actionCtx = {
   get toggleFavoriteCurrent() { return toggleFavoriteCurrent; },
   get getHighlightedFavorite() { return getHighlightedFavorite; },
   get navigateHighlightedFavorite() { return navigateHighlightedFavorite; },
+  get getHighlightedLibrary() { return getHighlightedLibrary; },
+  get navigateHighlightedLibrary() { return navigateHighlightedLibrary; },
   get openMetadataWindow() { return openMetadataWindow; },
   get toggleFullscreen() { return toggleFullscreen; },
   get UrlLoader() { return UrlLoader; },
   isFavoritesFocused: () => !!document.activeElement?.closest('#favorites-list'),
+  isLibraryFocused: () => !!document.activeElement?.closest('#file-panel-library, .library-provider-list'),
   get keyboardPanStep() { return keyboardPanStep; },
   get wheelPanStep() { return wheelPanStep; }
 };
