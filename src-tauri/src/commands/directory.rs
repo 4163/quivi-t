@@ -201,6 +201,15 @@ pub fn create_placeholder_files(dir: String, filenames: Vec<String>) -> Result<(
     Ok(())
 }
 
+#[tauri::command]
+pub fn remove_file(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    if p.exists() {
+        fs::remove_file(p).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,4 +227,20 @@ mod tests {
 
         let _ = fs::remove_dir_all(temp_dir);
     }
+
+    #[test]
+    fn test_remove_file() {
+        let temp_file = std::env::temp_dir().join(format!("quivit_test_remove_{}", std::process::id()));
+        fs::write(&temp_file, "hello").unwrap();
+        assert!(temp_file.is_file());
+
+        let res = remove_file(temp_file.to_string_lossy().into_owned());
+        assert!(res.is_ok());
+        assert!(!temp_file.exists());
+
+        // Deleting non-existent file should succeed as a no-op
+        let res2 = remove_file(temp_file.to_string_lossy().into_owned());
+        assert!(res2.is_ok());
+    }
 }
+

@@ -6,7 +6,7 @@ import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { Viewer } from '../viewer/viewer.js';
 import * as NavigationHistory from '../navigationHistory.js';
-import { initFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite, focusFileList, isFileListFocused } from '../filepanel/filePanel.js';
+import { initFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite, focusFileList, isFileListFocused, getFileListViewportRange } from '../filepanel/filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from '../shortcuts.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from '../keybinds.js';
@@ -187,11 +187,11 @@ const urlOverlay = initUrlOverlay({
   Core,
   focusFileList,
   onSubmit: async (url) => {
-    const { galleryPath } = await UrlLoader.loadUrl(url);
-    await FsUtils.loadFile(galleryPath);
+    const { galleryPath, targetName } = await UrlLoader.loadUrl(url);
+    await FsUtils.loadFile(galleryPath, { targetName });
   }
 });
-UrlLoader.init({ Core, FsUtils, urlOverlay });
+UrlLoader.init({ Core, FsUtils, urlOverlay, getFileListViewportRange });
 initMetadataBadge({ Core, FsUtils, badgeEl: metadataBadgeEl });
 initLifecycle({ Core, FsUtils, UrlLoader });
 

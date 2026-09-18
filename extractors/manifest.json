@@ -4,7 +4,10 @@
     {
       "id": "imgur",
       "name": "Imgur",
-      "patterns": ["^https?://(www\\.)?imgur\\.com/(a|gallery)/"],
+      "patterns": [
+        "^https?://(www\\.)?imgur\\.com/(a|gallery)/",
+        "^https?://(www\\.|i\\.)?imgur\\.com/([a-zA-Z0-9]+)(\\.[a-zA-Z0-9]+)?$"
+      ],
       "source": "imgur.js"
     }
   ]

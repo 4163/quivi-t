@@ -5,7 +5,9 @@
  * in the HTML source. Returns image URLs, filenames, and display names.
  */
 
-const IMGUR_URL_RE = /^https?:\/\/(www\.)?imgur\.com\/(a|gallery)\/(?:[\w-]+-)?([a-zA-Z0-9]+)/;
+const IMGUR_ALBUM_RE = /^https?:\/\/(?:www\.)?imgur\.com\/(?:a|gallery)\/(?:[\w-]+-)?([a-zA-Z0-9]+)/i;
+const IMGUR_DIRECT_RE = /^https?:\/\/(?:www\.|i\.)?imgur\.com\/([a-zA-Z0-9]+)\.([a-zA-Z0-9]+)$/i;
+const IMGUR_SINGLE_RE = /^https?:\/\/(?:www\.)?imgur\.com\/([a-zA-Z0-9]+)$/i;
 
 // Imgur embeds album data as a JSON object inside a <script> tag.
 // The shape and variable name change over time; these patterns
@@ -39,13 +41,47 @@ function formatFilename(index, total, ext, description) {
   return clean ? `${padded}_${clean}${ext}` : `${padded}${ext}`;
 }
 
+export function parseDirectUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const m = url.match(IMGUR_DIRECT_RE);
+  if (!m) return null;
+  const hash = m[1];
+  const ext = `.${m[2].toLowerCase()}`;
+  return {
+    provider: 'Imgur',
+    hash,
+    ext,
+    filename: `${hash}${ext}`,
+    url: `https://i.imgur.com/${hash}${ext}`
+  };
+}
+
+export function isDirectUrl(url) {
+  return IMGUR_DIRECT_RE.test(url);
+}
+
 export function match(url) {
-  return IMGUR_URL_RE.test(url);
+  return IMGUR_ALBUM_RE.test(url) || IMGUR_DIRECT_RE.test(url) || IMGUR_SINGLE_RE.test(url);
 }
 
 export async function extract(html, url, context = {}) {
-  const urlMatch = url.match(IMGUR_URL_RE);
-  const albumId = urlMatch ? urlMatch[3] : 'unknown';
+  const direct = parseDirectUrl(url);
+  if (direct) {
+    return {
+      provider: 'Imgur',
+      title: `Imgur ${direct.hash}`,
+      images: [{
+        url: direct.url,
+        filename: direct.filename,
+        displayName: direct.hash
+      }],
+      nextPageUrl: null
+    };
+  }
+
+  const albumMatch = url.match(IMGUR_ALBUM_RE);
+  const singleMatch = !albumMatch ? url.match(IMGUR_SINGLE_RE) : null;
+  const albumId = albumMatch ? albumMatch[1] : (singleMatch ? singleMatch[1] : 'unknown');
 
   // Accumulate raw entries first; format filenames after total count is known.
   const rawEntries = [];

@@ -22,6 +22,7 @@ const EXTRACTOR_MODULE_CACHE_CAPACITY = 20;
 export const MAX_PAGINATION_PAGES = 50;
 const DOWNLOAD_QUEUE_RETRY_LIMIT = 1;
 const DOWNLOAD_QUEUE_IDLE_POLL_MS = 200;
+export const DOWNLOAD_CONCURRENCY = 2;
 const RESERVED_DEVICE_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
 
 let _urlOverlay = null;
@@ -67,14 +68,27 @@ export function sanitizePathSegment(name) {
   return sanitized;
 }
 
-// -- URL validation --
+// -- URL validation and normalization --
+
+export function normalizeUrl(urlString) {
+  if (typeof urlString !== 'string') return '';
+  let trimmed = urlString.trim();
+  if (!trimmed) return '';
+
+  if (/^http:\/\//i.test(trimmed)) {
+    trimmed = trimmed.replace(/^http:\/\//i, 'https://');
+  } else if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed)) {
+    trimmed = `https://${trimmed}`;
+  }
+
+  return trimmed;
+}
 
 export function isValidUrl(urlString) {
-  if (typeof urlString !== 'string') return false;
-  const trimmed = urlString.trim();
-  if (!trimmed) return false;
+  const normalized = normalizeUrl(urlString);
+  if (!normalized) return false;
   try {
-    const parsed = new URL(trimmed);
+    const parsed = new URL(normalized);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch {
     return false;
@@ -130,51 +144,87 @@ function _pathsEqual(a, b) {
 
 export class DownloadQueue {
   constructor(items = [], options = {}) {
-    this._items = items.map((item, i) => ({
-      url: item.url,
-      destPath: item.destPath,
-      galleryIndex: item.galleryIndex ?? i,
-      status: 'pending',
-      retryCount: 0
-    }));
+    this._items = items.map((item, i) => {
+      const destPath = item.destPath || '';
+      const filename = item.filename || (destPath ? destPath.replace(/\\/g, '/').split('/').pop() : '');
+      return {
+        url: item.url,
+        destPath,
+        filename,
+        galleryIndex: item.galleryIndex ?? i,
+        status: item.status || 'pending',
+        retryCount: 0
+      };
+    });
     this._onItemStatusChanged = options.onItemStatusChanged || null;
+    this._getActivePath = typeof options.getActivePath === 'function' ? options.getActivePath : null;
     this._cancelled = false;
     this._running = false;
     this._activeDestPath = null;
-    this._visibleStart = 0;
-    this._visibleEnd = Infinity;
+    this._visibleStart = options.visibleStart ?? 0;
+    this._visibleEnd = options.visibleEnd ?? 0;
+    this._inFlightItems = new Set();
+    this._activeWorkers = 0;
   }
 
   get isActive() {
+    return !this._cancelled;
+  }
+
+  get isRunning() {
     return this._running && !this._cancelled;
   }
 
+  _findItem(targetPathOrName) {
+    if (!targetPathOrName) return null;
+    const cleanTarget = String(targetPathOrName).replace(/\\/g, '/').toLowerCase();
+    const targetName = cleanTarget.split('/').pop();
+    return this._items.find((item) => {
+      if (!item.destPath) return false;
+      const cleanItem = item.destPath.replace(/\\/g, '/').toLowerCase();
+      if (cleanItem === cleanTarget) return true;
+      if (item.filename && item.filename.toLowerCase() === targetName) return true;
+      if (cleanTarget.endsWith('/' + item.filename.toLowerCase()) || cleanItem.endsWith('/' + targetName)) return true;
+      return false;
+    }) || null;
+  }
+
   getStatus(destPath) {
-    const item = this._items.find((i) => i.destPath === destPath);
-    return item ? item.status : null;
+    const item = this._findItem(destPath);
+    if (!item) return null;
+    if (this._inFlightItems.has(item)) return 'downloading';
+    return item.status;
   }
 
   setVisibleRange(start, end) {
     this._visibleStart = start;
     this._visibleEnd = end;
+    if (!this._cancelled) {
+      this._spawnWorkers();
+    }
   }
 
   prioritize(destPath) {
-    this._activeDestPath = destPath;
-    const target = this._items.find((i) => i.destPath === destPath);
+    const target = this._findItem(destPath);
     if (!target) return;
+    this._activeDestPath = target.destPath;
+
+    if (target.status === 'error') {
+      target.status = 'pending';
+      target.retryCount = 0;
+    }
 
     const gi = target.galleryIndex;
 
-    // Reorder all pending items: target first, then forward (gi+1, gi+2...),
-    // then backward (gi-1, gi-2...). Non-pending items keep their position.
+    // Reorder all pending items: target first, then forward ascending (gi+1..N),
+    // then wrap back descending (gi-1..0). Non-pending items keep their position.
     const pending = this._items.filter((i) => i.status === 'pending');
     const nonPending = this._items.filter((i) => i.status !== 'pending');
 
     const forward = [];
     const backward = [];
     for (const item of pending) {
-      if (item.destPath === destPath) continue;
+      if (item === target) continue;
       if (item.galleryIndex >= gi) {
         forward.push(item);
       } else {
@@ -183,7 +233,7 @@ export class DownloadQueue {
     }
 
     forward.sort((a, b) => a.galleryIndex - b.galleryIndex);
-    backward.sort((a, b) => a.galleryIndex - b.galleryIndex);
+    backward.sort((a, b) => b.galleryIndex - a.galleryIndex);
 
     const reordered = [];
     if (target.status === 'pending') reordered.push(target);
@@ -192,104 +242,173 @@ export class DownloadQueue {
     // Rebuild: non-pending items stay at the front, reordered pending after
     this._items = [...nonPending, ...reordered];
 
-    // Abort the in-flight download if it's no longer the prioritized item
-    if (this._currentItem && this._currentItem.destPath !== destPath && this._currentItem.status === 'downloading') {
+    // If target is pending and not already downloading, cancel in-flight downloads to yield worker slot
+    if (target.status === 'pending' && !this._inFlightItems.has(target) && this._inFlightItems.size > 0) {
       cancelDownload().catch(() => {});
+    }
+
+    // Wake up workers if target is pending
+    if (target.status === 'pending' && !this._cancelled) {
+      this._spawnWorkers();
     }
   }
 
   cancel() {
     this._cancelled = true;
     cancelDownload().catch(() => {});
+    for (const item of this._inFlightItems) {
+      this._updateStatus(item, 'pending');
+    }
+    this._inFlightItems.clear();
   }
 
   _isInViewport(item) {
     const gi = item.galleryIndex;
-    return gi >= this._visibleStart - 1 && gi < this._visibleEnd + 1;
+    return gi >= this._visibleStart && gi < this._visibleEnd;
   }
 
   _getNextItem() {
-    const pending = this._items.filter((i) => i.status === 'pending');
+    if (this._getActivePath) {
+      try {
+        const activePath = this._getActivePath();
+        if (activePath) {
+          const target = this._findItem(activePath);
+          if (target) {
+            this._activeDestPath = target.destPath;
+          }
+        }
+      } catch {}
+    }
+
+    const pending = this._items.filter((i) => i.status === 'pending' && !this._inFlightItems.has(i));
     if (pending.length === 0) return null;
 
-    // 1. Tier 1: Active viewer target (exempt from viewport gating)
+    // 1. Top priority: Active viewer target (exempt from viewport gating)
+    let pivotGi = 0;
     if (this._activeDestPath) {
-      const active = pending.find((i) => i.destPath === this._activeDestPath);
-      if (active) return active;
+      const target = this._findItem(this._activeDestPath);
+      if (target) {
+        if (target.status === 'pending' && !this._inFlightItems.has(target)) {
+          return target;
+        }
+        pivotGi = target.galleryIndex;
+      }
+    } else if (isFinite(this._visibleStart)) {
+      pivotGi = Math.max(0, this._visibleStart);
     }
 
-    // 2. Tier 2: Pending items within visible file panel slice (+ buffer)
+    // 2. Candidate items: ONLY items in the visible file panel window (+ buffer)
     const visiblePending = pending.filter((i) => this._isInViewport(i));
-    if (visiblePending.length > 0) {
-      return visiblePending[0];
+    if (visiblePending.length === 0) {
+      return null;
     }
 
-    // 3. Tier 3: Gallery backlog outside viewport.
-    // Continuously fetch remaining items while in gallery without stalling.
-    return pending[0];
+    // 3. Within visible window: forward first from pivotGi, then wrap backward
+    const forwardVisible = visiblePending.filter((i) => i.galleryIndex >= pivotGi);
+    const backwardVisible = visiblePending.filter((i) => i.galleryIndex < pivotGi);
+
+    if (forwardVisible.length > 0) {
+      forwardVisible.sort((a, b) => a.galleryIndex - b.galleryIndex);
+      return forwardVisible[0];
+    }
+
+    if (backwardVisible.length > 0) {
+      backwardVisible.sort((a, b) => b.galleryIndex - a.galleryIndex);
+      return backwardVisible[0];
+    }
+
+    return null;
   }
 
   async start() {
-    if (this._running) return;
-    this._running = true;
+    if (this._cancelled) return;
+    this._spawnWorkers();
+  }
 
+  _spawnWorkers() {
+    if (this._cancelled) return;
+    while (this._activeWorkers < DOWNLOAD_CONCURRENCY) {
+      const next = this._getNextItem();
+      if (!next) break;
+      this._inFlightItems.add(next);
+      this._activeWorkers++;
+      this._runWorker(next).catch((err) => {
+        console.warn('[DownloadQueue] Worker error:', err);
+      });
+    }
+    this._running = this._activeWorkers > 0;
+  }
+
+  async _runWorker(initialItem) {
+    let item = initialItem;
     try {
-      while (!this._cancelled) {
-        const nextItem = this._getNextItem();
-        if (!nextItem) {
-          break;
-        }
-
-        this._currentItem = nextItem;
-        this._updateStatus(nextItem, 'downloading');
+      while (!this._cancelled && item) {
+        this._updateStatus(item, 'downloading');
 
         let success = false;
-        while (!success && nextItem.retryCount <= DOWNLOAD_QUEUE_RETRY_LIMIT && !this._cancelled) {
+        while (!success && item.retryCount <= DOWNLOAD_QUEUE_RETRY_LIMIT && !this._cancelled) {
           try {
-            await downloadFile(nextItem.url, nextItem.destPath);
+            await downloadFile(item.url, item.destPath);
             success = true;
           } catch (err) {
             const msg = String(err?.message || err || '');
             if (msg.includes('cancelled') || msg.includes('canceled')) {
-              // Abort requested (e.g. jumped to another image) — reset to pending
-              nextItem.retryCount = 0;
+              item.retryCount = 0;
               break;
             }
-            nextItem.retryCount++;
-            if (nextItem.retryCount > DOWNLOAD_QUEUE_RETRY_LIMIT) {
-              console.warn(`[DownloadQueue] Failed to download ${nextItem.url}:`, err);
+            item.retryCount++;
+            if (item.retryCount > DOWNLOAD_QUEUE_RETRY_LIMIT) {
+              console.warn(`[DownloadQueue] Failed to download ${item.url}:`, err);
             }
           }
         }
 
+        this._inFlightItems.delete(item);
+
         if (this._cancelled && !success) {
-          this._updateStatus(nextItem, 'pending');
+          this._updateStatus(item, 'pending');
           break;
         }
 
         if (success) {
-          this._updateStatus(nextItem, 'completed');
-        } else if (nextItem.retryCount > DOWNLOAD_QUEUE_RETRY_LIMIT) {
-          this._updateStatus(nextItem, 'error');
+          this._updateStatus(item, 'completed');
+        } else if (item.retryCount > DOWNLOAD_QUEUE_RETRY_LIMIT) {
+          this._updateStatus(item, 'error');
         } else {
-          // Cancelled mid-download — reset to pending
-          this._updateStatus(nextItem, 'pending');
+          this._updateStatus(item, 'pending');
         }
 
-        this._currentItem = null;
-        await Promise.resolve();
+        item = null;
+        if (!this._cancelled) {
+          const next = this._getNextItem();
+          if (next) {
+            this._inFlightItems.add(next);
+            item = next;
+          }
+        }
       }
     } finally {
-      const wasActive = this._running;
-      this._running = false;
-      this._currentItem = null;
-      if (wasActive && !this._cancelled && _FsUtils && _Core && _activeGalleryPath) {
-        try {
-          const state = _Core.getState();
-          if (state.directory && _pathsEqual(state.directory, _activeGalleryPath)) {
-            _FsUtils.refresh();
-          }
-        } catch {}
+      if (item) {
+        this._inFlightItems.delete(item);
+        if (item.status === 'downloading') {
+          this._updateStatus(item, 'pending');
+        }
+      }
+      this._activeWorkers--;
+      this._running = this._activeWorkers > 0;
+
+      if (this._activeWorkers === 0) {
+        const allDone = this._items.every((i) => i.status === 'completed' || i.status === 'error');
+        if (!this._cancelled && allDone && _FsUtils && _Core && _activeGalleryPath) {
+          try {
+            const state = _Core.getState();
+            if (state.directory && _pathsEqual(state.directory, _activeGalleryPath)) {
+              _FsUtils.refresh();
+            }
+          } catch {}
+        }
+      } else {
+        this._spawnWorkers();
       }
     }
   }
@@ -392,14 +511,113 @@ export function extractGallery(extractor, html, url, context = {}) {
   return _validateResult(result);
 }
 
+// -- Gallery Matching & Standalone Raw Cleanup --
+
+export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
+  if (!window.__TAURI__) return null;
+  try {
+    const dirResult = await window.__TAURI__.core.invoke('read_directory', {
+      path: providerPath,
+      showHidden: false
+    });
+    if (!dirResult?.files) return null;
+
+    const normalizedDirectUrl = normalizeUrl(directUrl);
+    const targetHash = hash ? hash.toLowerCase() : null;
+
+    for (const entry of dirResult.files) {
+      if (!entry.is_dir) continue;
+      const sidecarPath = `${entry.path}\\gallery.json`;
+      try {
+        const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+        const sidecar = JSON.parse(sidecarText);
+        if (!Array.isArray(sidecar.images)) continue;
+
+        for (const img of sidecar.images) {
+          const imgSource = normalizeUrl(img.sourceUrl || '');
+          const imgFilename = img.filename || '';
+
+          let isMatch = false;
+          if (imgSource && normalizedDirectUrl && imgSource.toLowerCase() === normalizedDirectUrl.toLowerCase()) {
+            isMatch = true;
+          } else if (targetHash) {
+            const sourceHashMatch = imgSource.match(/(?:i\.)?imgur\.com\/(?:a\/|gallery\/)?([a-zA-Z0-9]+)(?:\.[a-zA-Z0-9]+)?/i);
+            const sourceHash = sourceHashMatch ? sourceHashMatch[1].toLowerCase() : null;
+            if (sourceHash && sourceHash === targetHash) {
+              isMatch = true;
+            } else if (imgFilename.toLowerCase().includes(targetHash)) {
+              isMatch = true;
+            }
+          }
+
+          if (isMatch) {
+            return {
+              galleryPath: entry.path,
+              targetName: img.filename,
+              image: img
+            };
+          }
+        }
+      } catch {
+        // Not a gallery directory or invalid JSON; continue scanning.
+      }
+    }
+  } catch {
+    // Provider directory may not exist yet or failed to read.
+  }
+  return null;
+}
+
+export async function cleanupMatchingRawFiles(providerPath, images) {
+  if (!window.__TAURI__ || !Array.isArray(images) || images.length === 0) return;
+  try {
+    const dirResult = await window.__TAURI__.core.invoke('read_directory', {
+      path: providerPath,
+      showHidden: false
+    });
+    if (!dirResult?.files) return;
+
+    const matchHashes = new Set();
+    const matchFilenames = new Set();
+
+    for (const img of images) {
+      if (img.filename) matchFilenames.add(img.filename.toLowerCase());
+      const src = img.sourceUrl || img.url || '';
+      if (src) {
+        const hashMatch = src.match(/(?:i\.)?imgur\.com\/(?:a\/|gallery\/)?([a-zA-Z0-9]+)(?:\.[a-zA-Z0-9]+)?/i);
+        if (hashMatch) {
+          matchHashes.add(hashMatch[1].toLowerCase());
+        }
+      }
+    }
+
+    for (const entry of dirResult.files) {
+      if (entry.is_dir) continue;
+      const lowerName = entry.name.toLowerCase();
+      const dotIndex = lowerName.lastIndexOf('.');
+      const fileBase = dotIndex > 0 ? lowerName.slice(0, dotIndex) : lowerName;
+
+      if (matchHashes.has(fileBase) || matchFilenames.has(lowerName)) {
+        try {
+          await window.__TAURI__.core.invoke('remove_file', { path: entry.path });
+        } catch {
+          // Ignore individual file deletion errors.
+        }
+      }
+    }
+  } catch {
+    // Provider directory does not exist or read failed.
+  }
+}
+
 // -- Main orchestrator --
 
 export async function loadUrl(urlString) {
-  if (!isValidUrl(urlString)) {
+  const url = normalizeUrl(urlString);
+  if (!isValidUrl(url)) {
     throw new Error('Please enter a valid URL');
   }
 
-  const url = urlString.trim();
   const manifest = await fetchManifest();
   const entry = findExtractor(url, manifest);
   if (!entry) {
@@ -407,6 +625,42 @@ export async function loadUrl(urlString) {
   }
 
   const mod = await loadExtractorModule(entry);
+  const providerName = entry.name || 'Unknown';
+  const providerDir = sanitizePathSegment(providerName);
+  const libraryDir = await getLibraryDir();
+  const providerPath = `${libraryDir}\\${providerDir}`;
+
+  // Direct image handling (e.g. https://i.imgur.com/04XS16K.png)
+  const isDirect = typeof mod.isDirectUrl === 'function' && mod.isDirectUrl(url);
+  if (isDirect) {
+    const directInfo = typeof mod.parseDirectUrl === 'function' ? mod.parseDirectUrl(url) : null;
+    const hash = directInfo?.hash || null;
+    const rawFilename = directInfo?.filename || (url.split('/').pop() || 'image.png');
+    const downloadUrl = directInfo?.url || url;
+
+    // 1. If direct URL has a matching gallery, jump directly to that file
+    const match = await findMatchingGalleryImage(providerPath, url, hash);
+    if (match) {
+      return {
+        galleryPath: match.galleryPath,
+        targetName: match.targetName,
+        isDirectMatch: true
+      };
+    }
+
+    // 2. Otherwise, dump it raw under the provider root (e.g. Imgur/04XS16K.png)
+    const destPath = `${providerPath}\\${rawFilename}`;
+    if (window.__TAURI__) {
+      await downloadFile(downloadUrl, destPath);
+    }
+
+    return {
+      galleryPath: providerPath,
+      targetName: rawFilename,
+      isRaw: true
+    };
+  }
+
   const html = await fetchRemoteText(url);
   const result = await extractGallery(mod, html, url, { fetchText: fetchRemoteText });
 
@@ -439,8 +693,6 @@ export async function loadUrl(urlString) {
     }
   });
 
-  const libraryDir = await getLibraryDir();
-  const providerDir = sanitizePathSegment(result.provider);
   const titleDir = sanitizePathSegment(result.title || 'Untitled Gallery');
   const galleryPath = `${libraryDir}\\${providerDir}\\${titleDir}`;
 
@@ -485,16 +737,19 @@ export async function loadUrl(urlString) {
     });
   }
 
+  // Prune any standalone raw files under the provider root that are part of this gallery
+  await cleanupMatchingRawFiles(providerPath, result.images);
+
   // Background queue for remaining images (index 0 already downloaded eagerly)
   if (downloadItems.length > 1) {
-    const remainingItems = downloadItems.slice(1);
-    _startGalleryQueue(galleryPath, remainingItems);
+    downloadItems[0].status = 'completed';
+    _startGalleryQueue(galleryPath, downloadItems);
   } else {
     _activeGalleryPath = galleryPath;
     _activeGalleryItems = downloadItems;
   }
 
-  return { galleryPath, result };
+  return { galleryPath, result, targetName: result.images[0]?.filename || null };
 }
 
 // -- Gallery queue management and auto-resumption --
@@ -508,7 +763,27 @@ function _startGalleryQueue(galleryPath, items) {
   _activeGalleryPath = galleryPath;
   _activeGalleryItems = items;
 
+  let initialVisibleStart = 0;
+  let initialVisibleEnd = 0;
+  if (_getFileListViewportRange) {
+    try {
+      const range = _getFileListViewportRange();
+      if (range && typeof range.start === 'number' && typeof range.end === 'number' && range.end > 0) {
+        initialVisibleStart = range.start;
+        initialVisibleEnd = range.end;
+      }
+    } catch {}
+  }
+
   _activeQueue = new DownloadQueue(items, {
+    visibleStart: initialVisibleStart,
+    visibleEnd: initialVisibleEnd,
+    getActivePath: () => {
+      const s = _Core?.getState?.();
+      if (!s?.list || s.index < 0 || s.index >= s.list.length) return null;
+      const entry = s.list[s.index];
+      return entry?.path || (entry?.name ? `${galleryPath}\\${entry.name}` : null);
+    },
     onItemStatusChanged: (destPath, status) => {
       if (status === 'completed' && _Core && _FsUtils) {
         try {
@@ -516,7 +791,7 @@ function _startGalleryQueue(galleryPath, items) {
           if (state.directory && _pathsEqual(state.directory, galleryPath)) {
             // Notify file panel to update row opacity for the completed download
             window.dispatchEvent(new CustomEvent('quivit-download-complete', {
-              detail: { destPath }
+              detail: { destPath, size: 1 }
             }));
 
             const currentEntry = state.list?.[state.index];
@@ -569,24 +844,25 @@ export async function resumeGalleryDownloads(galleryPath, list) {
       }
     }
 
-    const pendingItems = [];
+    const allItems = [];
     data.images.forEach((img, index) => {
       const destPath = `${galleryPath}\\${img.filename}`;
       const size = sizeMap.get(img.filename.toLowerCase());
-      if (size === undefined || size === 0) {
-        pendingItems.push({
-          url: img.sourceUrl || img.url,
-          destPath,
-          galleryIndex: index
-        });
-      }
+      const isDownloaded = size !== undefined && size > 0;
+      allItems.push({
+        url: img.sourceUrl || img.url,
+        destPath,
+        galleryIndex: index,
+        status: isDownloaded ? 'completed' : 'pending'
+      });
     });
 
-    if (pendingItems.length === 0) {
+    const hasPending = allItems.some((i) => i.status === 'pending');
+    if (!hasPending) {
       return false;
     }
 
-    _startGalleryQueue(galleryPath, pendingItems);
+    _startGalleryQueue(galleryPath, allItems);
     return true;
   } catch {
     return false;
@@ -603,7 +879,7 @@ export function isPlaceholderFile(filePath) {
 }
 
 export function setVisibleRange(start, end) {
-  if (_activeQueue && _activeQueue.isActive) {
+  if (_activeQueue) {
     _activeQueue.setVisibleRange(start, end);
   }
 }
@@ -631,11 +907,14 @@ function _teardownActiveQueue() {
   _activeGalleryItems = null;
 }
 
+let _getFileListViewportRange = null;
+
 export const UrlLoader = {
-  init({ Core, FsUtils, urlOverlay }) {
+  init({ Core, FsUtils, urlOverlay, getFileListViewportRange }) {
     _Core = Core;
     _FsUtils = FsUtils;
     _urlOverlay = urlOverlay;
+    _getFileListViewportRange = typeof getFileListViewportRange === 'function' ? getFileListViewportRange : null;
 
     // Register the placeholder check hook so core.js can bridge images
     // without importing urlLoader.js directly.
@@ -663,14 +942,14 @@ export const UrlLoader = {
           return;
         }
 
-        // Same directory: resume if queue was not running but pending items exist
-        if ((!_activeQueue || !_activeQueue.isActive) && dir) {
-          resumeGalleryDownloads(dir, state.list).catch(() => {});
+        // Same directory: resume if queue is missing or not active for this gallery
+        if (!_activeQueue || !_activeQueue.isActive || !_pathsEqual(dir, _activeGalleryPath)) {
+          if (dir) {
+            resumeGalleryDownloads(dir, state.list).catch(() => {});
+          }
           return;
         }
 
-        if (!_activeQueue || !_activeQueue.isActive) return;
-        if (!_pathsEqual(dir, _activeGalleryPath)) return;
         if (!state.list || state.index < 0 || state.index >= state.list.length) return;
 
         const currentEntry = state.list[state.index];
@@ -686,6 +965,7 @@ export const UrlLoader = {
   openPrompt,
   loadUrl,
   resumeGalleryDownloads,
+  normalizeUrl,
   isValidUrl,
   isGalleryDownloading,
   isPlaceholderFile,
@@ -700,5 +980,9 @@ export const UrlLoader = {
   findExtractor,
   loadExtractorModule,
   extractGallery,
+  findMatchingGalleryImage,
+  cleanupMatchingRawFiles,
+  DOWNLOAD_CONCURRENCY,
   DownloadQueue
 };
+

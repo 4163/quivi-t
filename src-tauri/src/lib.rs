@@ -9,7 +9,7 @@ pub mod protocol;
 pub mod utils;
 pub mod windows;
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, RwLock};
 use tauri::{Emitter, Manager};
 
@@ -51,7 +51,7 @@ pub fn run() {
     builder = builder
         .manage(RwLock::new(ArchiveCache::new(cache_mb)))
         .manage(Mutex::new(WatcherState::new()))
-        .manage(network::DownloadCancelFlag(Arc::new(AtomicBool::new(false))))
+        .manage(network::DownloadCancelFlag(Arc::new(AtomicU64::new(0))))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
@@ -120,6 +120,7 @@ pub fn run() {
         download_to_file,
         get_library_dir,
         create_placeholder_files,
+        remove_file,
         cancel_download
     ]);
 

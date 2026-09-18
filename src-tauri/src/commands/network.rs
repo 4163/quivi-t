@@ -1,7 +1,7 @@
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -9,9 +9,11 @@ const NETWORK_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 QuiviT/1.0";
 const MANIFEST_BASE_URL: &str =
     "https://raw.githubusercontent.com/4163/quivi-t/main/extractors/";
-const DOWNLOAD_CHUNK_SIZE: usize = 64 * 1024;
+const DOWNLOAD_CHUNK_SIZE: usize = 32 * 1024;
 
-pub struct DownloadCancelFlag(pub Arc<AtomicBool>);
+pub struct DownloadCancelFlag(pub Arc<AtomicU64>);
+
+static DL_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn get_agent() -> &'static ureq::Agent {
     static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
@@ -93,25 +95,30 @@ pub fn download_to_file(
         .0
         .clone();
 
-    // Clear any stale cancel from a previous call.
-    cancel.store(false, Ordering::SeqCst);
-
-    // Stream download into a temporary file in OS temp directory so that
-    // chunk writes do not trigger filesystem watcher events in the gallery folder.
-    let temp_name = format!(
-        "quivit_dl_{}_{}.tmp",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0)
-    );
-    let temp_dest = std::env::temp_dir().join(temp_name);
+    let my_gen = cancel.load(Ordering::SeqCst);
 
     let agent = get_agent();
     let response = agent.get(&url)
         .call()
         .map_err(|e| format!("Download request failed: {e}"))?;
+
+    // Fast-fail: abort before creating temp file if cancelled while waiting for response headers
+    if cancel.load(Ordering::SeqCst) != my_gen {
+        return Err("Download cancelled".to_string());
+    }
+
+    // Stream download into a temporary file in OS temp directory so that
+    // chunk writes do not trigger filesystem watcher events in the gallery folder.
+    let temp_name = format!(
+        "quivit_dl_{}_{}_{}.tmp",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0),
+        DL_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+    );
+    let temp_dest = std::env::temp_dir().join(temp_name);
 
     let mut reader = response.into_reader();
     let mut file = File::create(&temp_dest)
@@ -119,7 +126,7 @@ pub fn download_to_file(
 
     let mut buf = vec![0u8; DOWNLOAD_CHUNK_SIZE];
     loop {
-        if cancel.load(Ordering::SeqCst) {
+        if cancel.load(Ordering::SeqCst) != my_gen {
             drop(file);
             let _ = fs::remove_file(&temp_dest);
             return Err("Download cancelled".to_string());
@@ -132,6 +139,13 @@ pub fn download_to_file(
 
         if n == 0 {
             break;
+        }
+
+        // Fast-fail: abort immediately if cancel arrived while blocked in socket read
+        if cancel.load(Ordering::SeqCst) != my_gen {
+            drop(file);
+            let _ = fs::remove_file(&temp_dest);
+            return Err("Download cancelled".to_string());
         }
 
         file.write_all(&buf[..n]).map_err(|e| {
@@ -160,7 +174,7 @@ pub fn cancel_download(app: tauri::AppHandle) {
     use tauri::Manager;
     app.state::<DownloadCancelFlag>()
         .0
-        .store(true, Ordering::SeqCst);
+        .fetch_add(1, Ordering::SeqCst);
 }
 
 #[cfg(test)]

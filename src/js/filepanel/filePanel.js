@@ -206,12 +206,12 @@ let activeRows = new Map();
 window.addEventListener('quivit-download-complete', (e) => {
   const destPath = e.detail?.destPath;
   if (!destPath) return;
-  const destName = destPath.split('\\').pop();
+  const destName = destPath.replace(/\\/g, '/').split('/').pop().toLowerCase();
   const state = Core.getState();
   for (const [idx, li] of activeRows) {
     if (li.dataset.index !== undefined) {
       const item = state.list?.[idx];
-      if (item && item.name === destName) {
+      if (item && item.name && item.name.toLowerCase() === destName) {
         li.classList.remove('is-pending-download');
         item.size = e.detail?.size || 1;
         if (state.fileListViewMode === 'thumbnail' && li._slots?.thumbImg) {
@@ -1222,8 +1222,10 @@ function renderVisibleSlice() {
     imageViewportEnd = endIndex;
   }
 
-  // Pipe viewport bounds to the URL download queue so only visible items download
-  setDownloadVisibleRange(imageViewportStart, imageViewportEnd);
+  // Pipe viewport bounds to the URL download queue: visible rows + 1 buffer row on each side
+  const downloadStart = Math.max(0, rawStart - VIEWPORT_MARGIN);
+  const downloadEnd = Math.min(total, rawStart + visibleCount + VIEWPORT_MARGIN);
+  setDownloadVisibleRange(downloadStart, downloadEnd);
 
   // Phase 1: Reclaim offscreen rows into freePool (VS Code RowCache pattern)
   for (const [idx, li] of activeRows) {
@@ -1923,4 +1925,19 @@ export function focusFileList() {
 
 export function isFileListFocused() {
   return !!(fileListUl && document.activeElement && fileListUl.contains(document.activeElement));
+}
+
+export function getFileListViewportRange() {
+  if (!fileListUl) return { start: 0, end: 0 };
+  if (!ROW_HEIGHT) measureRowHeight();
+  const total = Core.getState().list?.length || 0;
+  const scrollTop = fileListUl.scrollTop;
+  const clientH = fileListUl.clientHeight || 600;
+  const rowH = ROW_HEIGHT || 22;
+  const rawStart = Math.floor(scrollTop / rowH);
+  const visibleCount = Math.ceil(clientH / rowH);
+  return {
+    start: Math.max(0, rawStart - VIEWPORT_MARGIN),
+    end: Math.min(total, rawStart + visibleCount + VIEWPORT_MARGIN)
+  };
 }

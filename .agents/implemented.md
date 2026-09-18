@@ -8,6 +8,25 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Imgur Direct URL & Raw Lifecycle Handling (2026-09-18)
+- **Rust file deletion command (`src-tauri/src/commands/directory.rs`, `src-tauri/src/lib.rs`):**
+  - Added `remove_file(path: String) -> Result<(), String>` command to delete files from disk.
+  - Registered `remove_file` in the Tauri command handler list.
+  - Added backend unit test verifying file deletion and safe no-op on missing paths.
+- **Extractor definitions (`extractors/manifest.json`, `extractors/imgur.js`):**
+  - Updated manifest pattern to match direct images on `i.imgur.com` and single image paths.
+  - Added `isDirectUrl(url)` and `parseDirectUrl(url)` to identify direct image URLs and extract image hashes, extensions, filenames, and canonical URLs without fetching HTML.
+- **URL loader orchestration (`src/js/urlLoader.js`, `src/js/main/main.js`):**
+  - Added `findMatchingGalleryImage(providerPath, directUrl, hash)` to search existing gallery sidecars under the provider root. If a matching gallery exists, QuiviT jumps directly to that file in the viewer.
+  - Added raw download fallback. If no gallery matches, QuiviT downloads the raw image directly under `library/<provider>/<hash>.<ext>` and opens it immediately.
+  - Added `cleanupMatchingRawFiles(providerPath, images)`. When a full gallery finishes, QuiviT deletes any loose raw files whose hashes or filenames match images in the new gallery.
+  - Updated `urlOverlay` submission in `main.js` to pass `targetName` to `FsUtils.loadFile(galleryPath, { targetName })`.
+- **Verification:**
+  - Added unit test suite in `mocha/urlLoader.test.js` covering direct URL parsing, sidecar matching, and loose raw file cleanup.
+  - Verified with `node --check` across modified JavaScript files.
+  - Verified with `npm test` (58/58 passing).
+  - Verified with `cargo check --tests` and `cargo test test_remove_file` (1/1 passing).
+
 ### Remote Extractor Registry & Dynamic Module Loader (2026-09-18)
 - **Manifest registry and reference extractor (`extractors/`):**
   - Created `extractors/manifest.json` version 1 registering Imgur album and gallery URL patterns and source script reference.
