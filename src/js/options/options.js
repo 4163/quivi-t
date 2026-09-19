@@ -21,6 +21,9 @@ const localDataDirLabel = document.getElementById('local-data-dir-label');
 let keybindUiInstance = null;
 let forceClose = false;
 let initialSingleInstance = true;
+let initialLibraryDir = '';
+let initialLibraryPath = '';
+let defaultLibraryDir = '';
 
 // Emergency CSS reset (Ctrl+Shift+Alt+C).
 window.addEventListener('keydown', (e) => {
@@ -36,6 +39,56 @@ window.addEventListener('keydown', (e) => {
 
 function showStatus(message) {
   if (statusEl) statusEl.textContent = message || '';
+}
+
+function saveErrorMessage(error) {
+  const detail = String(error || '').toLowerCase();
+  if (detail.includes('already in progress') || detail.includes('relocation is in progress')) {
+    return 'The Library is already being moved. Try again in a moment.';
+  }
+  if (detail.includes('absolute path')) {
+    return 'Enter a full folder path.';
+  }
+  if (detail.includes('empty folder') || detail.includes('destination changed')) {
+    return 'Choose an empty folder for the Library.';
+  }
+  if (detail.includes('not writable')) {
+    return 'QuiviT cannot write to that folder.';
+  }
+  if (detail.includes('symlink') || detail.includes('reparse point')) {
+    return 'Choose a regular folder, not a shortcut or linked folder.';
+  }
+  if (detail.includes('cannot contain') || detail.includes('different folder')) {
+    return 'Choose a different folder for the Library.';
+  }
+  if (detail.includes('storage mode change')) {
+    return 'Save the configuration setting first, then move the Library.';
+  }
+  if (detail.includes('settings saves cannot change')) {
+    return 'The Library location changed. Reopen Options and try again.';
+  }
+  if (detail.includes('library data was copied')) {
+    return 'The Library was not moved. Your files are still in the original folder.';
+  }
+  if (detail.includes('current library location is not safe')) {
+    return 'The current Library folder cannot be moved.';
+  }
+  return 'Could not save settings. Try again.';
+}
+
+function relocationWarningMessage(relocation) {
+  if (relocation?.cleanupWarning) {
+    return 'Library moved, but the old folder is still there. You can remove it after closing QuiviT.';
+  }
+  if (relocation?.watcherWarning) {
+    return 'Library moved. Restart QuiviT to refresh the Library list.';
+  }
+  return '';
+}
+
+function pathsMatch(left, right) {
+  return String(left || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
+    === String(right || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
 }
 
 // E2E suite lock. The harness stamps frontend_data.e2e_suite on its isolation
@@ -94,7 +147,15 @@ async function init() {
     document.getElementById('opt-hide-cursor-delay').value = typeof config.frontend_data.hide_cursor_delay_sec === 'number' ? config.frontend_data.hide_cursor_delay_sec : 2;
     document.getElementById('opt-keyboard-pan-step').value = config.frontend_data.keyboard_pan_step || 72;
     document.getElementById('opt-wheel-pan-step').value = config.frontend_data.wheel_pan_step || 120;
-    document.getElementById('opt-start-dir').value = config.frontend_data.start_dir || '';
+    const startDirInput = document.getElementById('opt-start-dir');
+    startDirInput.value = config.frontend_data.start_dir || '';
+    startDirInput.placeholder = await invoke('get_default_dir');
+    defaultLibraryDir = await invoke('get_default_library_dir');
+    initialLibraryDir = await invoke('get_library_dir');
+    initialLibraryPath = pathsMatch(initialLibraryDir, defaultLibraryDir) ? '' : initialLibraryDir;
+    const libraryInput = document.getElementById('opt-library-path');
+    libraryInput.value = initialLibraryPath;
+    libraryInput.placeholder = defaultLibraryDir;
 
     if (config.frontend_data.e2e_suite === true) {
       lockSuiteToggle('opt-portable-mode', 'Managed by the test suite profile');
@@ -127,7 +188,7 @@ async function init() {
     initAssociationsUi('associations-container', showStatus);
   } catch (err) {
     console.error('Failed to load config:', err);
-    showStatus(`Failed to load config: ${err}`);
+    showStatus('Could not load settings. Close and reopen Options.');
     if (!keybindUiInstance) {
       keybindUiInstance = initKeybindUi('keybinds-container', config, showStatus);
     }
@@ -162,18 +223,29 @@ document.getElementById('btn-reset-keybinds').addEventListener('click', () => {
     keybindUiInstance.renderKeybinds();
     keybindUiInstance.syncScrollModeToggle?.();
   }
-  showStatus('Keybindings reset to defaults.');
+  showStatus('Shortcuts reset.');
 });
 
 // Start directory picker.
 document.getElementById('btn-browse-start').addEventListener('click', async () => {
   if (!invoke) {
-    showStatus('Directory picker is unavailable in this window.');
+    showStatus('Folder picker is not available.');
     return;
   }
   const path = await invoke('pick_folder');
   if (path) {
     document.getElementById('opt-start-dir').value = path;
+  }
+});
+
+document.getElementById('btn-browse-library').addEventListener('click', async () => {
+  if (!invoke) {
+    showStatus('Folder picker is not available.');
+    return;
+  }
+  const path = await invoke('pick_folder');
+  if (path) {
+    document.getElementById('opt-library-path').value = path;
   }
 });
 
@@ -183,7 +255,7 @@ document.getElementById('btn-open-config-dir').addEventListener('click', async (
     await invoke('open_config_dir');
   } catch (err) {
     console.error('Failed to open config directory:', err);
-    showStatus(`Failed to open config directory: ${err}`);
+    showStatus('Could not open the settings folder.');
   }
 });
 
@@ -193,7 +265,7 @@ document.getElementById('btn-open-local-data-dir').addEventListener('click', asy
     await invoke('open_local_data_dir');
   } catch (err) {
     console.error('Failed to open local data directory:', err);
-    showStatus(`Failed to open local data directory: ${err}`);
+    showStatus('Could not open the app data folder.');
   }
 });
 
@@ -269,10 +341,10 @@ document.getElementById('btn-import-css').addEventListener('click', async () => 
     try {
       const content = await invoke('read_text_file', { path });
       document.getElementById('opt-custom-css').value = content;
-      showStatus('CSS imported successfully.');
+      showStatus('CSS imported.');
     } catch (err) {
       console.error('Failed to import CSS:', err);
-      showStatus('Failed to import CSS.');
+      showStatus('Could not import CSS.');
     }
   }
 });
@@ -287,10 +359,10 @@ document.getElementById('btn-export-css').addEventListener('click', async () => 
   if (path) {
     try {
       await invoke('write_text_file', { path, content: css });
-      showStatus('CSS exported successfully.');
+      showStatus('CSS exported.');
     } catch (err) {
       console.error('Failed to export CSS:', err);
-      showStatus('Failed to export CSS.');
+      showStatus('Could not export CSS.');
     }
   }
 });
@@ -300,7 +372,7 @@ async function localPreviewCss() {
   try { localStorage.setItem('quivit-custom-css', css); } catch(e) {}
   applyCustomCss(css);
   previewCss(css);
-  showStatus('CSS previewed locally. Click Apply to save.');
+  showStatus('Previewing CSS. Apply to save.');
 }
 
 document.getElementById('btn-save-apply-css').addEventListener('click', localPreviewCss);
@@ -327,6 +399,12 @@ function buildConfigFromForm(baseConfig) {
   newConfig.frontend_data.keyboard_pan_step = parseInt(document.getElementById('opt-keyboard-pan-step').value, 10);
   newConfig.frontend_data.wheel_pan_step = parseInt(document.getElementById('opt-wheel-pan-step').value, 10);
   newConfig.frontend_data.start_dir = document.getElementById('opt-start-dir').value;
+  const libraryPath = document.getElementById('opt-library-path').value.trim();
+  if (libraryPath && !pathsMatch(libraryPath, defaultLibraryDir)) {
+    newConfig.frontend_data.library_path = libraryPath;
+  } else {
+    delete newConfig.frontend_data.library_path;
+  }
   // Wheel Behaviour (Keys tab) is owned by keybindUi.js and mutated directly on `config`.
   // Preserve the current value through the shallow copy so Save persists the toggle.
   newConfig.frontend_data.scroll_zoom_modifier = baseConfig.frontend_data.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold';
@@ -353,10 +431,14 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
     showStatus(keybindSafety.message);
     return;
   }
-  await applyAssociations(showStatus);
+  showStatus('');
+  const associationsApplied = await applyAssociations(showStatus);
   
   const isSingleInstanceModified = document.getElementById('opt-single-instance').checked !== initialSingleInstance;
   const formConfig = buildConfigFromForm(config);
+  const requestedLibraryPath = document.getElementById('opt-library-path').value.trim();
+  const selectedLibraryPath = requestedLibraryPath || defaultLibraryDir;
+  const libraryPathChanged = !pathsMatch(selectedLibraryPath, initialLibraryDir);
   try { localStorage.setItem('quivit-custom-css', formConfig.frontend_data.custom_css); } catch(e) {}
   
   const merged = mergeConfig(formConfig);
@@ -364,21 +446,36 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
-    await invoke('save_config', { config });
+    let relocation = null;
+    if (libraryPathChanged) {
+      relocation = await invoke('move_library', {
+        config,
+        destination: requestedLibraryPath
+      });
+      initialLibraryDir = relocation.libraryPath;
+      initialLibraryPath = pathsMatch(relocation.libraryPath, defaultLibraryDir)
+        ? ''
+        : relocation.libraryPath;
+      document.getElementById('opt-library-path').value = initialLibraryPath;
+    } else {
+      await invoke('save_config', { config });
+    }
     setPreviewing(false);
     await emit?.('config-updated');
     
-    const currentStatus = statusEl ? statusEl.textContent : '';
-    if (currentStatus.toLowerCase().includes('failed') || currentStatus.toLowerCase().includes('error')) {
-      showStatus('Options applied, but some operations failed. Check the logs above.');
+    const relocationWarning = relocationWarningMessage(relocation);
+    if (relocationWarning) {
+      showStatus(relocationWarning);
+    } else if (!associationsApplied) {
+      showStatus('Settings saved, but file types could not be updated.');
     } else if (isSingleInstanceModified) {
-      showStatus('Options applied successfully. Restart required.');
+      showStatus('Settings saved. Restart QuiviT to apply this change.');
     } else {
-      showStatus('Options applied successfully.');
+      showStatus('Settings saved.');
     }
   } catch (err) {
     console.error('Failed to save config:', err);
-    showStatus(`Failed to save config: ${err}`);
+    showStatus(saveErrorMessage(err));
   }
 });
 

@@ -20,17 +20,18 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Formats**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
 - **Archives**: Read compressed files directly as folders, including password-protected archives and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
+- **Web Import**: Save and read manga/galleries directly from supported sites for offline reading.
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Mod`+wheel. Cursor auto-hides after inactivity over the viewport.
 - **Manga Spread Mode**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
 - **Scaling**: Choose from Pixelated, Bilinear, and Lanczos scaling.
 - **Filters**: WebGL filters for Anime4K (Mode A Fast/HQ), CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or Scanlines.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
-- **Persistent State**: Persists favorites, single-instance handoff, optional auto-open behavior, and the last opened image.
+- **Persistent State**: Persists favorites, URL Library content and location, single-instance handoff, optional auto-open behavior, and the last opened image.
 - **Windows Integration**: Drag and drop supported files to open them. Register file associations per-user for Windows Default Apps. Native window dragging supports PowerToys FancyZones snapping.
-- **Configuration**: Choose roaming user config or portable config stored next to the executable.
+- **Configuration**: Choose roaming user config or portable config stored next to the executable, and move the shared URL Library to an existing empty folder.
 - **Custom Theming**: Inject and live-reload custom CSS rules, with native light/dark mode support.
 - **ICO Spritesheets**: Render multi-frame `.ico` files as generated spritesheets.
-- **File Panel**: Switchable list and thumbnail view modes with virtualized card grid layout.
+- **File Panel**: Switchable list and thumbnail view modes with virtualized card grid layout, Favorites, and provider-organized URL Library galleries.
 - **Performance**: Fast O(1) virtualized rendering handles folders and archives with thousands of items instantly. Caching native shell icons and thumbnails eliminates UI pop-in.
 
 ## Shortcuts & Controls
@@ -76,8 +77,9 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Fullscreen | `4` / `Alt+Enter` |
 | Exit fullscreen (Hold) | `Escape` |
 | **File Operations** | |
-| Open directory... | `Ctrl+O` |
-| Open File / Archive... | `Ctrl+Shift+O` |
+| Open directory | `Ctrl+O` |
+| Open File / Archive | `Ctrl+Shift+O` |
+| Open URL | `Ctrl+I` |
 | Refresh | `6` / `Ctrl+R` |
 
 ## Custom CSS
@@ -153,6 +155,7 @@ The following system defaults are used:
 - **Secondary Windows:** Options and Archive Info windows size to their content and open centered over the main window.
 - **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
 - **History Trail:** Menu bar **Folder → Back / Forward** (`Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only: opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
+- **Library Deletion:** Deleting folders or images from the Library in the file panel sends them to the Windows Recycle Bin rather than permanently deleting them, and cancels any active background downloads for that folder.
 - **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor, or the Drives view at the root.
 - **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting on or off requires an app restart to take effect.
 - **Default Sort:** `name` ascending. Per-directory preferences are cached for up to 100 directories, with the oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort` (`col`: `name`, `ext`, or `date`; `desc`: `false` = ascending, `true` = descending). Directories without a saved preference in `quivit_directory_sort.json` fall back to it.
@@ -167,15 +170,18 @@ QuiviT manages data across three distinct tiers depending on lifecycle and scope
 `C:\Users\<user>\AppData\Roaming\com.x4163.quivit`
 
 Data is split across five files:
-- `quivit_config.json`: User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, default sort, hide_cursor_delay_sec, file_list_view_mode, spread_enabled, spread_direction, spread_mode, options)
+- `quivit_config.json`: User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, default sort, hide_cursor_delay_sec, file_list_view_mode, spread_enabled, spread_direction, spread_mode, Library location, options)
 - `quivit_state.json`: Runtime state (`last_opened_path`, `last_active_image`, `scroll_zoom_latched`)
 - `quivit_directory_sort.json`: Per-directory sort column/direction
 - `quivit_favorites.json`: Favorited folders/files and collapsed state
 - `custom_css.css`: Custom CSS source text
 
-**WebView2 localStorage**: never the source of truth; used only as a fast cache layer:
+**WebView2 localStorage**: not the source of app configuration or Library content. It holds presentation state, cross-window payloads, and caches:
 - `quivit-theme` / `quivit-custom-css`: Pre-paint mirrors so the theme and custom CSS apply before first render (prevents flicker)
 - `options-active-tab`: Session-only; cleared on each app start
+- `quivit-metadata-current`: Short-lived metadata-window payload
+- `quivit_library_providers_collapsed`: Provider-collapse presentation state for the Library sidebar
+- `icon:*`: Cached native file-icon data
 
 **In-memory state**: session-only; reset on app exit:
 - `navigationHistory`: Container-level Back/Forward history trail (capped at 100 entries)
@@ -183,9 +189,12 @@ Data is split across five files:
 - `#viewer-img-wrapper` image bridge: Four reusable DOM images (current target, decoded previous image, and adjacent preloads); nearby pages warm through off-DOM preloaders after navigation settles behind the 45ms image swap buffer
 - `thumbnailCache`: 250-item bounded cache for rendered file panel thumbnails (`filePanel.js`)
 - `fsUtils.js` archive caches: unlocked password cache (50 items) and encryption status cache (100 items)
+- `urlLoader.js`: Active gallery queue plus manifest and extractor module caches
 - `previewTheme` / `previewCss`: Options window live theme and custom CSS previews (persisting across config reloads until Apply or Close)
 
-**Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four split files above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth. In portable mode, the top-level `hidden` flag controls the Windows hidden attribute on that local `quivit_config.json`: `true` hides it, and `false` leaves it visible. The attribute is synced on every app launch and on each config save; edits made to the JSON while QuiviT is running are overwritten by the in-memory state on the next save.
+**Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four JSON files plus custom CSS above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth. In portable mode, the top-level `hidden` flag controls the Windows hidden attribute on that local `quivit_config.json`: `true` hides it, and `false` leaves it visible. The attribute is synced on every app launch and on each config save; edits made to the JSON while QuiviT is running are overwritten by the in-memory state on the next save.
+
+`frontend_data.library_path` is an optional absolute path for the shared URL Library. Without it, QuiviT uses `%LOCALAPPDATA%\\QuiviT\\library`. Changing the location copies the existing Library into an empty, writable folder, switches the shared configuration, and rebinds each running process to the new root.
 
 ### Architecture
 
@@ -195,11 +204,12 @@ The frontend is split into a state machine, pure services, and single-owner UI m
 - `services/`: Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), `cache.js` (`BoundedMap`, `BoundedSet`), `metadataFiles.js`, key combos, keybind rules, sorting, viewer math. Filter logic lives in `filters/`, scaling in `scaling/`, and the WebGL runtime/catalog in `pipelines/`.
 - `shared/`: Cross-window theme/CSS apply, pre-paint injector, config preview / emergency reset, window fit.
 - `viewer/`: Facade plus render pool, overlay canvas owner (`viewerPipelines.js`), and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
-- `filepanel/`: File list (virtualized) with list and thumbnail view modes. Columns, breadcrumb, resize. Favorites persistence is `favoritesStore.js`.
+- `filepanel/`: File list (virtualized) with list and thumbnail view modes. Columns, breadcrumb, resize, Favorites persistence, and the recursive Library tree. `libraryStore.js` is the Library data layer.
 - `menubar/`: Chrome visibility and the sole `#statusbar` writer with dual spread indicator routing. `menubar.js` owns dropdown interaction.
-- `main/`: Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge, password overlay.
+- `main/`: Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge, password overlay, and the URL overlay.
 - `options/`: Options window, keybind capture UI, file-association UI.
 - `fsUtils.js`: Filesystem and archive navigation (no DOM).
+- `urlLoader.js`: Non-DOM URL import coordinator for remote extractors and progressive gallery downloads.
 - `shortcuts.js` / `keybinds.js`: Input dispatch and config merge. Action ids come from `ACTION_REGISTRY`.
 
 CSS follows the same split: `global.css` holds tokens and shared rules; `main.css`, `options.css`, and `metadata.css` are page-only.
@@ -208,7 +218,7 @@ The Rust backend is split into domain-specific modules:
 
 - `lib.rs` & `main.rs`: Bootstrap, config watcher, and main-window build.
 - `config.rs`: `AppConfig`, persistence, portable mode, and pending promotion.
-- `commands/`: Tauri command surface (directory, archives, animation, watcher, associations, shell).
+- `commands/`: Tauri command surface for directory, archive, animation, Library, network, watcher, association, and shell operations.
 - `archives/` & `formats.rs`: Archive readers, `ArchiveCache`, and format registry.
 - `platform/` & `windows.rs`: OS-level integrations, native shell thumbnails (`IShellItemImageFactory`), external archiver temp origin resolution, dialogs, and window lifecycle.
 - `tests/`: In-tree testing for archives, config, formats, protocol, and temp archive origin.
@@ -223,6 +233,12 @@ Testing spans three focused layers:
 - `e2e/`: WebdriverIO end-to-end test suite (`e2e/specs/`) verifying startup chrome, navigation, viewer transforms, archive formats, and OS integrations against the live debug binary under portable mode isolation (`npm run test:e2e`).
 
 > **Design Principle:** New DOM belongs in the module that already owns that surface. New domain logic belongs in `core.js` or `services/`. Do not grow `main.js` back into a god file.
+
+### Web Import
+
+ **File → Open URL...** imports galleries and images from supported websites directly into the local Library.
+
+QuiviT checks the dedicated `extractors` branch for website support at runtime, caching modules under `%LOCALAPPDATA%\QuiviT\extractor-cache` for offline use. See the [`extractors`](https://github.com/4163/quivi-t/tree/extractors) branch for supported sites and extractor documentation.
 
 ### File Associations (Windows)
 
@@ -316,6 +332,7 @@ AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/sk
 | **Windows APIs** | `windows` / `winreg` | Native icons, shell thumbnails (`IShellItemImageFactory`), UI Automation and window enumeration (temp archive origin resolution), file attributes, shell notifications, and per-user file associations |
 | **Sorting** | `natord` | Natural alphanumeric sorting |
 | **File Watching** | `notify` | Directory watcher for auto-refresh |
+| **Network** | `ureq` | Blocking HTTP client for remote extractors and streamed image downloads |
 | **Config** | `serde` / `serde_json` | Configuration serialization |
 | **Hashing** | `md5` | Deterministic temp directory naming |
 | **Data URIs** | `base64` | Base64 encoding for generated image payloads |
@@ -334,7 +351,7 @@ QuiviT/
 │  │  ├─ probes/                  # Modular telemetry probes (Core, Viewer, IPC)
 │  │  └─ reports/                 # Output diagnostic timeline and anomaly reports
 │  ├─ scenarios/                  # Recorded action scenarios (*.json)
-│  └─ specs/                      # E2E test specs (01-startup to 07-os-integration, record, replay)
+│  └─ specs/                      # E2E test specs, including URL loading, record, and replay
 ├─ mocha/                         # Standalone Mocha frontend unit tests (outside src/)
 │  ├─ actions.test.js             # Action registry integrity and key combo dispatch
 │  ├─ cache.test.js               # BoundedMap LRU cache eviction and callbacks
@@ -342,7 +359,12 @@ QuiviT/
 │  ├─ diagnosticsContract.test.js # Action registry, scenario, and probe DOM contract checks
 │  ├─ metadata.test.js            # ComicInfo and GalleryMeta JSON parsing
 │  ├─ sorting.test.js             # Archive natural sort order
+│  ├─ urlLoader.test.js           # URL registry, extractor, and download queue rules
 │  └─ viewerMath.test.js          # Viewport scaling, transforms, and spread geometry
+├─ extractors/ (orphan branch)    # Remote registry for runtime site extractors
+│  ├─ README.md                   # Authoring contract and contribution guidelines
+│  ├─ manifest.json               # Versioned registry for remote extractors
+│  └─ imgur.js                    # Imgur extractor
 ├─ src/
 │  ├─ index.html                  # Main viewer window
 │  ├─ options.html                # Options window
@@ -365,16 +387,19 @@ QuiviT/
 │     ├─ navigationHistory.js     # Session-only Back/Forward
 │     ├─ shellBackground.js       # Mirrors --surface into the native window
 │     ├─ shortcuts.js             # Keyboard / mouse / wheel dispatch
+│     ├─ urlLoader.js             # Remote extractor and gallery download coordinator
 │     ├─ filepanel/
 │     │  ├─ filePanel.js          # File list, columns, breadcrumb, resize
-│     │  └─ favoritesStore.js     # Favorites persistence (no DOM)
+│     │  ├─ favoritesStore.js     # Favorites persistence (no DOM)
+│     │  └─ libraryStore.js       # Library tree data and collapsed-state persistence
 │     ├─ main/
 │     │  ├─ main.js               # Bootstrap + slim state fan-out
 │     │  ├─ fullscreen.js         # Fullscreen UX
 │     │  ├─ dropzone.js           # Drag-and-drop
 │     │  ├─ lifecycle.js          # Title, flush-on-close, single-instance
 │     │  ├─ metadataBadge.js      # Archive-info badge
-│     │  └─ passwordOverlay.js    # Archive password prompt
+│     │  ├─ passwordOverlay.js    # Archive password prompt
+│     │  └─ urlOverlay.js         # URL import prompt
 │     ├─ menubar/
 │     │  ├─ chrome.js             # Menu / status visibility
 │     │  └─ statusbar.js          # Sole #statusbar writer
@@ -414,7 +439,7 @@ QuiviT/
 │  ├─ icons/                      # Application icons
 │  ├─ src/
 │  │  ├─ archives/                # Archive readers, caching, and extraction
-│  │  ├─ commands/                # Tauri command surface and watchers
+│  │  ├─ commands/                # Tauri IPC: directory, archives, Library, network, shell, watchers
 │  │  ├─ platform/                # Shell thumbnails, external archiver temp origin, icons, dialogs
 │  │  ├─ tests/                   # In-tree tests
 │  │  ├─ config.rs                # Configuration state, persistence, and portable mode

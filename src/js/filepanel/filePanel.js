@@ -2,18 +2,36 @@
  * filePanel.js: file list rendering, sorting, and column resizing.
  */
 import { DirectoryPrefs } from '../directoryPrefs.js';
-import { makeContainerNavigable } from '../keyboardNav.js';
+import { makeListNavigable, makeContainerNavigable } from '../keyboardNav.js';
 import {
   getFavorites,
   getFavoritesCollapsed,
   saveFavoritesCollapsed,
   isFavorite,
   toggleFavorite,
-  saveFavorites
+  saveFavorites,
+  reconcileFavorites
 } from './favoritesStore.js';
+import {
+  fetchLibraryTree,
+  hasLibraryEntries,
+  deleteLibraryEntry,
+  getProviderCollapsed,
+  saveProviderCollapsed
+} from './libraryStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
+import {
+  setVisibleRange as setDownloadVisibleRange,
+  cancelGalleryDownloads,
+  getGalleryDownloadStatus,
+  retryGalleryDownload,
+  reloadLibraryDir,
+  getCachedLibraryDir,
+  remapLibraryPath,
+  isLibraryLocationError
+} from '../urlLoader.js';
 
 let _activeViewerKey = null;
 let _activeViewerBlob = null;
@@ -139,6 +157,11 @@ export function ensureArchiveBlob(src) {
 export const FAVORITES_CACHE_CAPACITY = 250;
 export const favoritesThumbnailCache = new BoundedMap(FAVORITES_CACHE_CAPACITY, _revokeBlobEntry);
 
+export function clearLibraryPathCaches() {
+  thumbnailCache.clear();
+  favoritesThumbnailCache.clear();
+}
+
 // Canonical large format/folder icons (~20 entries).
 // Separate from thumbnailCache so image scrolling can't evict them.
 const staticIconCache = new Map();
@@ -201,6 +224,42 @@ let currentPath = '';
 
 // Virtualization (VS Code RowCache pattern)
 let activeRows = new Map();
+function updateDownloadRow(destPath, status, size = 0) {
+  if (!destPath) return;
+  const state = Core.getState();
+  for (const [idx, li] of activeRows) {
+    if (li.dataset.index === undefined) continue;
+    const item = state.list?.[idx];
+    if (!item || !_pathsEqual(item.path, destPath)) continue;
+
+    if (status === 'completed') {
+      item.size = size || 1;
+    }
+    updateEntry(li, item, idx);
+
+    if (status === 'completed' && state.fileListViewMode === 'thumbnail' && li._slots?.thumbImg) {
+      const targetSrc = FsUtils.buildThumbnailSrc(item, state);
+      if (targetSrc && li._slots.thumbImg.getAttribute('src') !== targetSrc) {
+        li._slots.thumbImg.src = targetSrc;
+        li._slots.thumbImg.classList.add('is-loaded');
+      }
+    }
+    break;
+  }
+}
+
+// Completed downloads gain their real size so future renders no longer treat
+// them as placeholders. Queue status events repaint the visible row in place.
+window.addEventListener('quivit-download-complete', (e) => {
+  updateDownloadRow(e.detail?.destPath, 'completed', e.detail?.size);
+});
+
+window.addEventListener('quivit-download-status', (e) => {
+  const { destPath, status } = e.detail || {};
+  if (destPath && status) {
+    updateDownloadRow(destPath, status);
+  }
+});
 let freePool = [];
 let scrollSpacer = null;
 let ROW_HEIGHT = 0;
@@ -245,6 +304,48 @@ let favoritesHeaderEl = null;
 let favLastClickPath = '';
 let favLastClickTime = 0;
 let highlightedFavoritePath = '';
+
+// Library
+let libraryPanelEl = null;
+let libLastClickPath = '';
+let libLastClickTime = 0;
+let highlightedLibraryPath = '';
+
+let activeArmedRemoveBtn = null;
+let activeArmedDisarmFn = null;
+let activeArmedLibPath = '';
+
+function disarmActiveRemoveBtn() {
+  activeArmedLibPath = '';
+  if (activeArmedDisarmFn) {
+    const fn = activeArmedDisarmFn;
+    activeArmedRemoveBtn = null;
+    activeArmedDisarmFn = null;
+    fn();
+  }
+}
+
+// Global listener for interactions heard elsewhere: only disarm if interaction is elsewhere
+window.addEventListener('pointerdown', (e) => {
+  if (activeArmedRemoveBtn && !activeArmedRemoveBtn.contains(e.target)) {
+    disarmActiveRemoveBtn();
+  }
+}, true);
+
+window.addEventListener('keydown', (e) => {
+  if (activeArmedRemoveBtn) {
+    if (e.key === 'Escape') {
+      disarmActiveRemoveBtn();
+      e.preventDefault();
+      e.stopPropagation();
+    } else if (e.key !== 'Enter' && e.key !== ' ') {
+      disarmActiveRemoveBtn();
+    }
+  }
+}, true);
+
+export const LIBRARY_CACHE_CAPACITY = 250;
+export const libraryThumbnailCache = new BoundedMap(LIBRARY_CACHE_CAPACITY, _revokeBlobEntry);
 const MIN_REFRESH_DURATION_MS = 200;
 let refreshPulseTimer = null;
 let refreshStartTime = 0;
@@ -475,10 +576,21 @@ function getIconHtml(item, size = 'small') {
   return `<img data-ext="${CSS.escape(ext)}" data-icon-key="${CSS.escape(cacheKey)}" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
 }
 
+function _pathsEqual(a, b) {
+  if (!a || !b) return false;
+  return a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase();
+}
+
+const EMPTY_BOX_HTML = '<span class="lib-remove-box"></span>';
+const CLOSE_X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+
 function openFavorite(fav) {
   focusMainListOnNextRender = true;
   if (FsUtils) {
-    FsUtils.loadFile(fav.path).catch(console.error);
+    FsUtils.loadFile(fav.path).catch(err => {
+      console.error(err);
+      refreshFavoritesAfterFilesystemChange();
+    });
   }
 }
 
@@ -662,6 +774,9 @@ function buildFavoriteEntry(fav) {
 function renderFavorites() {
   if (!favoritesListUl) return;
   const favs = getFavorites();
+  if (!favs.some(favorite => favorite.path === highlightedFavoritePath)) {
+    highlightedFavoritePath = '';
+  }
   
   if (favoritesHeaderEl) {
     favoritesHeaderEl.classList.toggle('hidden', favs.length === 0);
@@ -682,6 +797,27 @@ function renderFavorites() {
     if (icon) icon.textContent = favoritesExpanded ? '▲' : '▼';
   }
   if (Core) updateFavoritesSelection(Core.getState());
+}
+
+let favoritesRefreshTimer = null;
+
+function refreshFavoritesAfterFilesystemChange() {
+  clearTimeout(favoritesRefreshTimer);
+  favoritesRefreshTimer = setTimeout(async () => {
+    const movingLibrary = await window.__TAURI__?.core
+      ?.invoke('library_move_in_progress')
+      .catch(() => false);
+    if (movingLibrary) return;
+
+    reconcileFavorites().then(changed => {
+      if (!changed) return;
+      renderFavorites();
+      const state = Core.getState();
+      updateFavoriteBtn(state.list?.[state.index]?.path || '');
+    }).catch(err => {
+      console.error('[FilePanel] Failed to reconcile Favorites after a filesystem change:', err);
+    });
+  }, 250);
 }
 
 function toggleFavoritesExpanded() {
@@ -736,6 +872,405 @@ export function navigateHighlightedFavorite(delta) {
   const items = Array.from(favoritesListUl.children);
   if (!items.length) return;
   const currentIndex = items.findIndex(li => li.dataset.path === highlightedFavoritePath);
+  let nextIndex;
+  if (currentIndex === -1) {
+    nextIndex = delta > 0 ? 0 : items.length - 1;
+  } else {
+    nextIndex = (currentIndex + delta + items.length) % items.length;
+  }
+  items[nextIndex].focus();
+}
+
+// -- Library Panel --
+
+function openLibraryEntry(item) {
+  focusMainListOnNextRender = true;
+  if (FsUtils && item?.path) {
+    FsUtils.loadFile(item.path).catch(console.error);
+  }
+}
+
+function formatLibraryDate(dateStr) {
+  if (!dateStr) return '';
+  const millis = parseInt(dateStr, 10);
+  if (!millis || isNaN(millis)) return dateStr;
+  const d = new Date(millis);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function buildLibraryEntry(item, depth = 0) {
+  const li = document.createElement('li');
+  li.title = item.title ? `${item.title}\n${item.path}` : item.path;
+  li.dataset.path = item.path;
+  li.style.setProperty('--library-indent', `${depth * 12}px`);
+  li.setAttribute('role', 'option');
+  li.setAttribute('tabindex', '0');
+
+  // List mode elements
+  const itemName = document.createElement('span');
+  itemName.className = 'item-name';
+  itemName.innerHTML = getIconHtml(item);
+
+  const itemLabel = document.createElement('span');
+  itemLabel.className = 'item-label';
+  itemLabel.textContent = item.title || item.name;
+  itemName.appendChild(itemLabel);
+
+  const itemExt = document.createElement('span');
+  itemExt.className = 'item-ext';
+  itemExt.textContent = item.is_dir ? 'DIR' : (item.name.includes('.') ? item.name.split('.').pop().toUpperCase() : '');
+
+  const itemDate = document.createElement('span');
+  itemDate.className = 'item-date';
+  itemDate.textContent = formatLibraryDate(item.date);
+
+  // Thumbnail mode elements
+  const thumbWrapper = document.createElement('div');
+  thumbWrapper.className = 'item-thumbnail-wrapper';
+  const thumbImg = document.createElement('img');
+  thumbImg.className = 'item-thumbnail-img';
+  thumbImg.draggable = false;
+  thumbImg.onload = () => {
+    if (thumbImg.getAttribute('src') && !thumbImg.getAttribute('src').startsWith('data:image/svg+xml')) {
+      thumbImg.classList.add('is-loaded');
+    }
+  };
+  thumbWrapper.appendChild(thumbImg);
+
+  const thumbPlaceholder = document.createElement('span');
+  thumbPlaceholder.className = 'item-thumbnail-placeholder';
+  thumbPlaceholder.setAttribute('aria-hidden', 'true');
+  thumbPlaceholder.dataset.type = getPlaceholderType(item);
+  thumbPlaceholder.innerHTML = PLACEHOLDER_HTML;
+  thumbWrapper.appendChild(thumbPlaceholder);
+
+  const thumbInfo = document.createElement('div');
+  thumbInfo.className = 'item-thumbnail-info';
+  const thumbTitle = document.createElement('span');
+  thumbTitle.className = 'item-thumbnail-title';
+  thumbTitle.textContent = item.title || item.name;
+  const thumbMeta = document.createElement('span');
+  thumbMeta.className = 'item-thumbnail-meta';
+
+  if (item.is_dir) {
+    thumbMeta.textContent = item.image_count > 0 ? `${item.image_count} images` : 'Folder';
+  } else {
+    thumbMeta.textContent = 'Image';
+  }
+  thumbInfo.appendChild(thumbTitle);
+  thumbInfo.appendChild(thumbMeta);
+
+  const ext = FsUtils.getIconExtKey(item);
+  const targetSrc = FsUtils.buildThumbnailSrc(item, null);
+  thumbImg.onerror = () => {
+    thumbImg.onerror = null;
+    const currentSrc = thumbImg.getAttribute('src') || '';
+    if (currentSrc.includes('/thumb/')) {
+      thumbImg.onerror = () => {
+        thumbImg.onerror = null;
+        const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
+        const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
+        libraryThumbnailCache.set(targetSrc, fallbackSrc);
+        thumbImg.src = fallbackSrc;
+      };
+      const directSrc = FsUtils.buildFileSrcSync(item.path);
+      libraryThumbnailCache.set(targetSrc, directSrc);
+      thumbImg.src = directSrc;
+    } else {
+      const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
+      const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
+      libraryThumbnailCache.set(targetSrc, fallbackSrc);
+      thumbImg.src = fallbackSrc;
+    }
+  };
+  thumbImg.onload = () => {
+    const src = thumbImg.getAttribute('src');
+    if (src && !src.startsWith('data:image/svg+xml')) {
+      thumbImg.classList.add('is-loaded');
+      if (!libraryThumbnailCache.has(src)) {
+        libraryThumbnailCache.set(src, true);
+      }
+    }
+  };
+
+  const cachedThumb = libraryThumbnailCache.get(targetSrc);
+  if (cachedThumb !== undefined) {
+    if (animatedSvgSrcs.has(targetSrc)) thumbImg.loading = 'eager';
+    thumbImg.src = typeof cachedThumb === 'string' ? cachedThumb : targetSrc;
+    thumbImg.classList.add('is-loaded');
+  } else {
+    thumbImg.loading = 'lazy';
+    thumbImg.src = targetSrc;
+  }
+  if (isSvgSrc(targetSrc) && item.path) {
+    markIfAnimatedSvg(targetSrc, item.path);
+  }
+
+  const canDelete = item.is_gallery || !item.is_dir;
+
+  // Defensive deletion button (moves to Recycle Bin)
+  const removeBtn = document.createElement('button');
+  removeBtn.className = 'lib-remove';
+  removeBtn.tabIndex = -1;
+  removeBtn.hidden = !canDelete;
+  removeBtn.title = 'Move to Recycle Bin';
+  removeBtn.setAttribute('aria-label', 'Move to Recycle Bin');
+  removeBtn.innerHTML = EMPTY_BOX_HTML;
+
+  const disarm = () => {
+    removeBtn.classList.remove('is-confirming');
+    removeBtn.title = 'Move to Recycle Bin';
+    removeBtn.setAttribute('aria-label', 'Move to Recycle Bin');
+    removeBtn.innerHTML = EMPTY_BOX_HTML;
+    if (_pathsEqual(activeArmedLibPath, item.path)) {
+      activeArmedLibPath = '';
+    }
+    if (activeArmedRemoveBtn === removeBtn) {
+      activeArmedRemoveBtn = null;
+      activeArmedDisarmFn = null;
+    }
+  };
+
+  const arm = () => {
+    if (activeArmedRemoveBtn && activeArmedRemoveBtn !== removeBtn) {
+      disarmActiveRemoveBtn();
+    }
+    removeBtn.classList.add('is-confirming');
+    removeBtn.title = 'Delete local';
+    removeBtn.setAttribute('aria-label', 'Delete local');
+    removeBtn.innerHTML = CLOSE_X_SVG;
+    activeArmedLibPath = item.path || '';
+    activeArmedRemoveBtn = removeBtn;
+    activeArmedDisarmFn = disarm;
+  };
+
+  if (canDelete && item.path && _pathsEqual(item.path, activeArmedLibPath)) {
+    arm();
+  }
+
+  if (canDelete) {
+    removeBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!removeBtn.classList.contains('is-confirming')) {
+        arm();
+        return;
+      }
+
+      disarm();
+      try {
+        if (typeof cancelGalleryDownloads === 'function') {
+          cancelGalleryDownloads(item.path);
+        }
+
+        const state = Core?.getState?.();
+        const curDir = (state?.directory || '').replace(/\\/g, '/').toLowerCase();
+        const targetDir = (item.path || '').replace(/\\/g, '/').toLowerCase();
+        const isInside = curDir === targetDir || (targetDir && curDir.startsWith(targetDir + '/'));
+
+        if (isInside && FsUtils?.openParent) {
+          await FsUtils.openParent();
+        }
+
+        if (targetDir) {
+          for (const key of Array.from(thumbnailCache.keys())) {
+            const k = String(key).replace(/\\/g, '/').toLowerCase();
+            if (k.includes(targetDir)) {
+              thumbnailCache.delete(key);
+            }
+          }
+        }
+
+        await deleteLibraryEntry(item.path).catch(async (err) => {
+          if (!isLibraryLocationError(err)) throw err;
+          // The entry was rendered from a stale Library root (the location
+          // moved in another window). Remap it onto the live root and retry.
+          const staleRoot = typeof getCachedLibraryDir === 'function' ? getCachedLibraryDir() : '';
+          const liveRoot = typeof reloadLibraryDir === 'function' ? await reloadLibraryDir() : '';
+          const remapped = remapLibraryPath(item.path, staleRoot, liveRoot);
+          if (remapped === item.path) throw err;
+          await deleteLibraryEntry(remapped);
+        });
+        await renderLibrary();
+
+        const parentOfTarget = targetDir.includes('/') ? targetDir.substring(0, targetDir.lastIndexOf('/')) : '';
+        if (FsUtils?.refresh && (isInside || curDir === targetDir || curDir === parentOfTarget)) {
+          await FsUtils.refresh();
+        }
+      } catch (err) {
+        console.error('[FilePanel] Delete failed:', err);
+      }
+    });
+  }
+
+  li.appendChild(itemName);
+  li.appendChild(itemExt);
+  li.appendChild(itemDate);
+  li.appendChild(thumbWrapper);
+  li.appendChild(thumbInfo);
+  li.appendChild(removeBtn);
+
+  li.addEventListener('focus', () => {
+    highlightLibraryByPath(item.path);
+    if (libraryPanelEl) {
+      for (const row of libraryPanelEl.querySelectorAll('.library-provider-list li')) {
+        const btn = row.querySelector('.lib-remove');
+        if (btn) btn.tabIndex = -1;
+      }
+    }
+    removeBtn.tabIndex = canDelete ? 0 : -1;
+  });
+
+  removeBtn.addEventListener('focus', () => {
+    if (libraryPanelEl) {
+      for (const row of libraryPanelEl.querySelectorAll('.library-provider-list li')) {
+        const btn = row.querySelector('.lib-remove');
+        if (btn) btn.tabIndex = -1;
+      }
+    }
+    removeBtn.tabIndex = 0;
+  });
+
+  li.addEventListener('click', () => {
+    highlightLibraryByPath(item.path);
+    if (item.is_dir) {
+      const now = Date.now();
+      if (libLastClickPath === item.path && (now - libLastClickTime < 400)) {
+        libLastClickPath = '';
+        libLastClickTime = 0;
+        openLibraryEntry(item);
+      } else {
+        libLastClickPath = item.path;
+        libLastClickTime = now;
+      }
+    } else {
+      openLibraryEntry(item);
+    }
+  });
+
+  return li;
+}
+
+export async function renderLibrary() {
+  if (!libraryPanelEl) return;
+  const tree = await fetchLibraryTree();
+  const hasAny = hasLibraryEntries(tree);
+
+  libraryPanelEl.classList.toggle('is-empty', !hasAny);
+  libraryPanelEl.innerHTML = '';
+  if (!hasAny) {
+    disarmActiveRemoveBtn();
+    return;
+  }
+
+  let allCollapsed = true;
+
+  for (const provider of tree) {
+    if (!provider.nodes || provider.nodes.length === 0) continue;
+
+    const isProvCollapsed = getProviderCollapsed(provider.name);
+    if (!isProvCollapsed) allCollapsed = false;
+
+    const provHeader = document.createElement('div');
+    provHeader.className = 'library-provider-header';
+    provHeader.tabIndex = 0;
+    provHeader.setAttribute('role', 'button');
+    provHeader.setAttribute('aria-expanded', isProvCollapsed ? 'false' : 'true');
+    provHeader.setAttribute('aria-controls', `library-list-${provider.name}`);
+    provHeader.dataset.provider = provider.name;
+    provHeader.innerHTML = `<span>${provider.name}</span><span class="toggle-icon">${isProvCollapsed ? '▼' : '▲'}</span>`;
+
+    const listUl = document.createElement('ul');
+    listUl.id = `library-list-${provider.name}`;
+    listUl.className = 'library-provider-list';
+    if (isProvCollapsed) listUl.classList.add('collapsed');
+    listUl.setAttribute('role', 'listbox');
+    listUl.setAttribute('aria-label', `${provider.name} library`);
+
+    const toggleProv = () => {
+      const nowCollapsed = !listUl.classList.contains('collapsed');
+      listUl.classList.toggle('collapsed', nowCollapsed);
+      saveProviderCollapsed(provider.name, nowCollapsed);
+      provHeader.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
+      const icon = provHeader.querySelector('.toggle-icon');
+      if (icon) icon.textContent = nowCollapsed ? '▼' : '▲';
+
+      const anyOpen = Array.from(libraryPanelEl.querySelectorAll('.library-provider-list')).some(ul => !ul.classList.contains('collapsed'));
+      libraryPanelEl.classList.toggle('all-collapsed', !anyOpen);
+    };
+
+    provHeader.addEventListener('click', toggleProv);
+    provHeader.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleProv();
+      }
+    });
+
+    const appendNodes = (nodes, depth) => {
+      for (const node of nodes) {
+        if (!node.is_dir && depth > 0) continue;
+        listUl.appendChild(buildLibraryEntry(node, depth));
+        if (node.children?.length) appendNodes(node.children, depth + 1);
+      }
+    };
+    appendNodes(provider.nodes, 0);
+
+    libraryPanelEl.appendChild(provHeader);
+    libraryPanelEl.appendChild(listUl);
+  }
+
+  libraryPanelEl.classList.toggle('all-collapsed', allCollapsed);
+
+  if (activeArmedLibPath && (!activeArmedRemoveBtn || !libraryPanelEl.contains(activeArmedRemoveBtn))) {
+    activeArmedLibPath = '';
+    activeArmedRemoveBtn = null;
+    activeArmedDisarmFn = null;
+  }
+
+  if (Core) updateLibrarySelection(Core.getState());
+}
+
+function updateLibrarySelection(state) {
+  if (!libraryPanelEl) return;
+  const items = Array.from(libraryPanelEl.querySelectorAll('.library-provider-list li'));
+  if (!items.length) return;
+
+  const containerPath = state.mode === 'archive' ? state.archivePath : state.directory;
+  const isContainerInLibrary = containerPath && items.some(li => _pathsEqual(li.dataset.path, containerPath));
+
+  let activePath = '';
+  if (isContainerInLibrary) {
+    activePath = containerPath;
+  } else {
+    const entry = state.list?.[state.index];
+    if (entry && !entry.is_parent) {
+      activePath = entry.path;
+    }
+  }
+  for (const li of items) {
+    li.classList.toggle('selected', _pathsEqual(li.dataset.path, activePath));
+  }
+}
+
+export function highlightLibraryByPath(path) {
+  highlightedLibraryPath = path;
+  if (!libraryPanelEl) return;
+  for (const li of libraryPanelEl.querySelectorAll('.library-provider-list li')) {
+    li.classList.toggle('selected', _pathsEqual(li.dataset.path, path));
+  }
+}
+
+export function getHighlightedLibrary() {
+  if (!highlightedLibraryPath || !libraryPanelEl) return null;
+  const el = libraryPanelEl.querySelector(`.library-provider-list li[data-path="${CSS.escape(highlightedLibraryPath)}"]`);
+  return el ? { path: highlightedLibraryPath } : null;
+}
+
+export function navigateHighlightedLibrary(delta) {
+  if (!libraryPanelEl) return;
+  const items = Array.from(libraryPanelEl.querySelectorAll('.library-provider-list:not(.collapsed) li'));
+  if (!items.length) return;
+  const currentIndex = items.findIndex(li => _pathsEqual(li.dataset.path, highlightedLibraryPath));
   let nextIndex;
   if (currentIndex === -1) {
     nextIndex = delta > 0 ? 0 : items.length - 1;
@@ -851,6 +1386,10 @@ function wireRowListeners(li) {
     const index = pendingClickIndex;
     if (index === -1) return;
     fileListUl?.focus({ preventScroll: true });
+    const failedItem = Core.getState().list?.[index];
+    if (failedItem?.path && retryGalleryDownload(failedItem.path)) {
+      return;
+    }
     if (Core.getState().index !== index) {
       Core.selectIndex(index);
     }
@@ -983,8 +1522,24 @@ function updateEntry(li, item, index) {
   li.style.top = `${index * ROW_HEIGHT}px`;
   li.style.display = '';
   li.dataset.index = index;
-  li.title = item.name && item.name !== '..' ? item.name : '';
+  const downloadStatus = getGalleryDownloadStatus(item.path);
+  const hasDownloadError = downloadStatus === 'error';
+  const isPendingDownload = !hasDownloadError
+    && !item.is_dir
+    && !item.is_parent
+    && (downloadStatus === 'pending' || downloadStatus === 'downloading' || item.size === 0);
+
+  li.title = item.name && item.name !== '..'
+    ? (hasDownloadError ? `${item.displayName || item.name}\nDownload failed. Click to retry.` : (item.displayName || item.name))
+    : '';
   li.classList.toggle('is-hidden-entry', !!item.is_hidden);
+  li.classList.toggle('is-pending-download', isPendingDownload);
+  li.classList.toggle('is-download-error', hasDownloadError);
+  if (hasDownloadError) {
+    li.dataset.downloadStatus = 'error';
+  } else {
+    delete li.dataset.downloadStatus;
+  }
 
   const state = Core.getState();
   const isThumbnail = state.fileListViewMode === 'thumbnail';
@@ -992,7 +1547,7 @@ function updateEntry(li, item, index) {
   if (!slots) return;
 
   if (isThumbnail) {
-    if (slots.thumbTitle) slots.thumbTitle.textContent = item.name || '';
+    if (slots.thumbTitle) slots.thumbTitle.textContent = item.displayName || item.name || '';
     if (slots.thumbMeta) {
       if (item.is_parent) {
         slots.thumbMeta.textContent = 'Parent folder';
@@ -1000,6 +1555,8 @@ function updateEntry(li, item, index) {
         slots.thumbMeta.textContent = 'Drive';
       } else if (item.is_dir) {
         slots.thumbMeta.textContent = item.date ? `Folder • ${item.date}` : 'Folder';
+      } else if (hasDownloadError) {
+        slots.thumbMeta.textContent = 'Download failed. Click to retry.';
       } else {
         const ext = (item.ext || '').toUpperCase();
         slots.thumbMeta.textContent = ext ? (item.date ? `${ext} • ${item.date}` : ext) : (item.date || '');
@@ -1136,8 +1693,8 @@ function updateEntry(li, item, index) {
     }
   } else {
     updateRowIcon(slots, item);
-    if (slots.label) slots.label.textContent = item.name || '';
-    if (slots.ext) slots.ext.textContent = item.is_dir ? 'DIR' : (item.ext || '');
+    if (slots.label) slots.label.textContent = item.displayName || item.name || '';
+    if (slots.ext) slots.ext.textContent = hasDownloadError ? 'FAILED' : (item.is_dir ? 'DIR' : (item.ext || ''));
     if (slots.date) slots.date.textContent = item.date || '';
   }
 }
@@ -1195,6 +1752,11 @@ function renderVisibleSlice() {
     imageViewportStart = startIndex;
     imageViewportEnd = endIndex;
   }
+
+  // Pipe viewport bounds to the URL download queue: visible rows + 1 buffer row on each side
+  const downloadStart = Math.max(0, rawStart - VIEWPORT_MARGIN);
+  const downloadEnd = Math.min(total, rawStart + visibleCount + VIEWPORT_MARGIN);
+  setDownloadVisibleRange(downloadStart, downloadEnd);
 
   // Phase 1: Reclaim offscreen rows into freePool (VS Code RowCache pattern)
   for (const [idx, li] of activeRows) {
@@ -1486,10 +2048,14 @@ export function renderFilePanel(state) {
     const entry = state.list?.[state.index];
     if (entry && !entry.is_parent) {
       updateFavoriteBtn(entry.path);
-      if (favoritesBtnEl) favoritesBtnEl.disabled = false;
+      if (favoritesBtnEl) {
+        favoritesBtnEl.disabled = false;
+        favoritesBtnEl.tabIndex = 0;
+      }
     } else {
       if (favoritesBtnEl) {
         favoritesBtnEl.disabled = true;
+        favoritesBtnEl.tabIndex = -1;
         const svg = favoritesBtnEl.querySelector('svg');
         if (svg) svg.setAttribute('fill', 'none');
         favoritesBtnEl.classList.remove('active');
@@ -1499,6 +2065,7 @@ export function renderFilePanel(state) {
 
   // Sync Favorites highlighting to the active file-panel item.
   updateFavoritesSelection(state);
+  updateLibrarySelection(state);
 
   if (currentDir !== currentPath) {
     currentPath = currentDir;
@@ -1607,7 +2174,13 @@ export function initFilePanel(deps) {
 
   if (favoritesBtnEl) {
     favoritesBtnEl.disabled = true;
+    favoritesBtnEl.tabIndex = -1;
     favoritesBtnEl.addEventListener('click', toggleFavoriteCurrent);
+  }
+
+  const actionButtons = filePanel.querySelectorAll('.file-panel-actions .icon-btn');
+  if (actionButtons.length) {
+    makeListNavigable(actionButtons, { horizontal: true, vertical: false, loop: true });
   }
 
   btnToggleViewMode = document.getElementById('btn-toggle-view-mode');
@@ -1648,14 +2221,63 @@ export function initFilePanel(deps) {
   // Config loads asynchronously after init, so re-render once it arrives.
   favoritesExpanded = !getFavoritesCollapsed();
   renderFavorites();
+
+  // Wire Library UI.
+  libraryPanelEl = document.getElementById('file-panel-library');
+
+  if (libraryPanelEl) {
+    makeContainerNavigable(libraryPanelEl, '.library-provider-list:not(.collapsed) li', {
+      vertical: true,
+      horizontal: false,
+      loop: false,
+      onAction: (index, item, e) => {
+        const path = item.dataset.path;
+        if (path) {
+          panelKeyboardActive = true;
+          openLibraryEntry({ path, is_dir: true });
+        }
+      },
+      onCancel: () => {
+        panelKeyboardActive = false;
+        highlightLibraryByPath('');
+        if (document.activeElement && libraryPanelEl.contains(document.activeElement)) {
+          document.activeElement.blur();
+        }
+      }
+    });
+  }
+
+  renderLibrary();
+
+  window.addEventListener('quivit-library-updated', () => {
+    renderLibrary();
+  });
+
+  if (window.__TAURI__?.event?.listen) {
+    window.__TAURI__.event.listen('library-changed', () => {
+      renderLibrary().catch(err => {
+        console.error('[FilePanel] Failed to refresh Library after a filesystem change:', err);
+      });
+      refreshFavoritesAfterFilesystemChange();
+    }).catch(console.error);
+
+    window.__TAURI__.event.listen('directory-changed', () => {
+      refreshFavoritesAfterFilesystemChange();
+    }).catch(console.error);
+  }
+
+  window.addEventListener('focus', refreshFavoritesAfterFilesystemChange);
+
   window.addEventListener('quivit-config-loaded', () => {
     favoritesExpanded = !getFavoritesCollapsed();
     renderFavorites();
+    refreshFavoritesAfterFilesystemChange();
     // Re-measure rows so custom CSS font sizes apply.
     const oldHeight = ROW_HEIGHT;
     measureRowHeight();
     if (oldHeight !== ROW_HEIGHT) {
       initDomPool();
+      lastRenderedList = null;
     }
     if (Core) renderFilePanel(Core.getState());
   });
@@ -1666,6 +2288,7 @@ export function initFilePanel(deps) {
     measureRowHeight();
     if (oldHeight !== ROW_HEIGHT) {
       initDomPool();
+      lastRenderedList = null;
     }
     recalculateMinColWidths();
     normalizeColumnWidths('name');
@@ -1882,4 +2505,19 @@ export function focusFileList() {
 
 export function isFileListFocused() {
   return !!(fileListUl && document.activeElement && fileListUl.contains(document.activeElement));
+}
+
+export function getFileListViewportRange() {
+  if (!fileListUl) return { start: 0, end: 0 };
+  if (!ROW_HEIGHT) measureRowHeight();
+  const total = Core.getState().list?.length || 0;
+  const scrollTop = fileListUl.scrollTop;
+  const clientH = fileListUl.clientHeight || 600;
+  const rowH = ROW_HEIGHT || 22;
+  const rawStart = Math.floor(scrollTop / rowH);
+  const visibleCount = Math.ceil(clientH / rowH);
+  return {
+    start: Math.max(0, rawStart - VIEWPORT_MARGIN),
+    end: Math.min(total, rawStart + visibleCount + VIEWPORT_MARGIN)
+  };
 }

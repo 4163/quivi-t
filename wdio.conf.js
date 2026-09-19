@@ -8,6 +8,17 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 process.env.QUIVIT_E2E_SUITE = '1';
 
 let devStateRestored = false;
+const originalLocalAppData = process.env.LOCALAPPDATA;
+const e2eLocalAppData = path.resolve(__dirname, 'src-tauri/target/debug/.e2e-localappdata');
+
+function resetE2eLocalAppData() {
+  const targetDir = path.resolve(__dirname, 'src-tauri/target/debug');
+  if (!e2eLocalAppData.startsWith(`${targetDir}${path.sep}`)) {
+    throw new Error('Refusing to clear an E2E library outside the debug target directory');
+  }
+  try { fs.rmSync(e2eLocalAppData, { recursive: true, force: true }); } catch {}
+}
+
 function restoreAndCleanDevState(targetDir, backupDir, isolatedFiles) {
   if (devStateRestored) return;
   devStateRestored = true;
@@ -92,6 +103,9 @@ export const config = {
       'quivit_favorites.json',
       'custom_css.css',
     ];
+
+    process.env.LOCALAPPDATA = e2eLocalAppData;
+    resetE2eLocalAppData();
 
     // Back up real dev exe-dir state before isolation wipes it. Record and
     // diagnose share the debug exe dir with `tauri dev`, so wiping without
@@ -263,6 +277,12 @@ export const config = {
     // onPrepare backed up. Without restore, a portable dev config stays
     // wiped and the next `tauri dev` starts from factory defaults.
     restoreAndCleanDevState(targetDir, backupDir, isolatedFiles);
+    resetE2eLocalAppData();
+    if (originalLocalAppData === undefined) {
+      delete process.env.LOCALAPPDATA;
+    } else {
+      process.env.LOCALAPPDATA = originalLocalAppData;
+    }
 
     if (process.platform === 'win32') {
       spawnSync(

@@ -67,11 +67,6 @@
 - Build on the preloading and image caching infrastructure, but treat continuous Manhwa rendering as its own post-release slice.
 - **Active Item Synchronization:** As the user scrolls vertically through the continuous strip, dynamically track the currently visible image and keep the active item selection in the file list and status bar perfectly in sync.
 
-### Web Fetching (Manga/Manwha)
-- Add a webfetch capability via a standalone JS script (maybe into their own dir to keep decoupled: but only if each website needs complex fetch parsing); manga/manwha websites, etc.
-- If an API exists for the target site, use it.
-- Entry point: goes into the menubar File dropdown.
-
 ### Detach Image Window
 - Add the ability to pop the currently viewed image out into its own standalone window, separate from the main QuiviT UI.
 - Relevant alongside Double Page View and File List Detach/Drag-and-Drop as they share the same "detach" interaction paradigm.

@@ -24,7 +24,7 @@ export function hasUsableMenubarBind(binds, candidateBinds = normalizeList(binds
 export function validateKeybindSafety(config) {
   const binds = config?.frontend_data?.keybinds || {};
   if (!hasUsableMenubarBind(binds)) {
-    return { ok: false, message: 'Toggle Menu Bar needs at least one non-conflicting binding.' };
+    return { ok: false, message: 'Keep one Menu Bar shortcut that does not conflict with another shortcut.' };
   }
   return { ok: true, message: '' };
 }

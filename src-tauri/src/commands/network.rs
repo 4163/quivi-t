@@ -1,0 +1,380 @@
+use serde::Serialize;
+use std::fs::{self, File};
+use std::io::{Read, Write};
+use std::path::{Component, Path};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use tauri::Emitter;
+
+const NETWORK_TIMEOUT: Duration = Duration::from_secs(30);
+const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 QuiviT/1.0";
+const MANIFEST_BASE_URL: &str = "https://raw.githubusercontent.com/4163/quivi-t/extractors/";
+const DOWNLOAD_CHUNK_SIZE: usize = 32 * 1024;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DownloadThresholdEvent<'a> {
+    request_id: &'a str,
+    queue_generation: u64,
+}
+
+pub struct DownloadCancelFlag(pub Arc<AtomicU64>);
+
+static DL_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+static EXTRACTOR_CACHE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+fn get_agent() -> &'static ureq::Agent {
+    static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
+    AGENT.get_or_init(|| {
+        ureq::AgentBuilder::new()
+            .timeout(NETWORK_TIMEOUT)
+            .user_agent(USER_AGENT)
+            .build()
+    })
+}
+
+#[tauri::command(async)]
+pub fn fetch_text(url: String) -> Result<String, String> {
+    let agent = get_agent();
+    let response = agent
+        .get(&url)
+        .call()
+        .map_err(|e| format!("Network request failed: {e}"))?;
+
+    response
+        .into_string()
+        .map_err(|e| format!("Failed to read response body: {e}"))
+}
+
+#[tauri::command(async)]
+pub fn fetch_extractor_text(relative_path: String) -> Result<String, String> {
+    if !is_safe_extractor_path(&relative_path) {
+        return Err("Invalid extractor path".to_string());
+    }
+    // Local-first: check working directory and ancestor directories for extractors/ (dev mode).
+    if let Ok(cwd) = std::env::current_dir() {
+        let mut cur = Some(cwd.as_path());
+        while let Some(dir) = cur {
+            let local = dir.join("extractors").join(&relative_path);
+            if local.is_file() {
+                return fs::read_to_string(&local)
+                    .map_err(|e| format!("Failed to read local extractor: {e}"));
+            }
+            cur = dir.parent();
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        let mut cur = exe.parent();
+        while let Some(dir) = cur {
+            let local = dir.join("extractors").join(&relative_path);
+            if local.is_file() {
+                return fs::read_to_string(&local)
+                    .map_err(|e| format!("Failed to read local extractor: {e}"));
+            }
+            cur = dir.parent();
+        }
+    }
+    // Production checks the trusted registry source on every request. A
+    // successful response replaces the disk cache; an outage falls back to
+    // the last complete manifest or extractor source.
+    let url = format!("{MANIFEST_BASE_URL}{relative_path}");
+    let agent = get_agent();
+    let remote = agent
+        .get(&url)
+        .call()
+        .map_err(|e| format!("Network request failed: {e}"))
+        .and_then(|response| {
+            response
+                .into_string()
+                .map_err(|e| format!("Failed to read response body: {e}"))
+        });
+
+    if let Ok(cache_path) = cached_extractor_path(&relative_path) {
+        return resolve_remote_extractor_text(&cache_path, remote);
+    }
+
+    remote
+}
+
+fn extractor_cache_dir() -> Result<std::path::PathBuf, String> {
+    let local = std::env::var("LOCALAPPDATA").map_err(|_| "LOCALAPPDATA not set".to_string())?;
+    Ok(Path::new(&local).join("QuiviT").join("extractor-cache"))
+}
+
+fn cached_extractor_path(relative_path: &str) -> Result<std::path::PathBuf, String> {
+    if !is_safe_extractor_path(relative_path) {
+        return Err("Invalid extractor path".to_string());
+    }
+    Ok(extractor_cache_dir()?.join(relative_path))
+}
+
+fn read_cached_extractor_text(cache_path: &Path) -> Result<String, String> {
+    fs::read_to_string(cache_path).map_err(|e| format!("Failed to read cached extractor: {e}"))
+}
+
+fn resolve_remote_extractor_text(
+    cache_path: &Path,
+    remote: Result<String, String>,
+) -> Result<String, String> {
+    match remote {
+        Ok(source) => {
+            let _ = cache_extractor_text_at(cache_path, &source);
+            Ok(source)
+        }
+        Err(remote_error) => read_cached_extractor_text(cache_path)
+            .map_err(|_| format!("{remote_error}. No cached extractor source is available")),
+    }
+}
+
+fn cache_extractor_text_at(cache_path: &Path, source: &str) -> Result<(), String> {
+    let parent = cache_path
+        .parent()
+        .ok_or_else(|| "Invalid extractor cache path".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|e| format!("Failed to create extractor cache directory: {e}"))?;
+
+    let name = cache_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "Invalid extractor cache filename".to_string())?;
+    let temp_path = parent.join(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        EXTRACTOR_CACHE_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+
+    fs::write(&temp_path, source).map_err(|e| format!("Failed to write extractor cache: {e}"))?;
+
+    if fs::rename(&temp_path, cache_path).is_err() {
+        fs::copy(&temp_path, cache_path)
+            .map_err(|e| format!("Failed to finalize extractor cache: {e}"))?;
+        let _ = fs::remove_file(&temp_path);
+    }
+
+    Ok(())
+}
+
+fn is_safe_extractor_path(relative_path: &str) -> bool {
+    let path = Path::new(relative_path);
+    if relative_path.is_empty() || path.is_absolute() {
+        return false;
+    }
+    if !path
+        .components()
+        .all(|component| matches!(component, Component::Normal(_)))
+    {
+        return false;
+    }
+    relative_path == "manifest.json"
+        || path.extension().and_then(|extension| extension.to_str()) == Some("js")
+}
+
+#[tauri::command(async)]
+pub fn download_to_file(
+    app: tauri::AppHandle,
+    url: String,
+    dest_path: String,
+    request_id: Option<String>,
+    queue_generation: Option<u64>,
+    threshold_percent: Option<u8>,
+) -> Result<(), String> {
+    use tauri::Manager;
+
+    let dest = Path::new(&dest_path);
+    crate::commands::library::ensure_library_write_allowed(dest)?;
+    let library_write_root = crate::commands::library::library_write_scope(dest)?;
+    if let Some(library_root) = &library_write_root {
+        crate::commands::library::ensure_library_root_writable(library_root)?;
+    }
+    if dest.is_file() && dest.metadata().map(|m| m.len() > 0).unwrap_or(false) {
+        return Ok(());
+    }
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create destination directory: {e}"))?;
+    }
+
+    let cancel = app.state::<DownloadCancelFlag>().0.clone();
+
+    let my_gen = cancel.load(Ordering::SeqCst);
+
+    let agent = get_agent();
+    let response = agent
+        .get(&url)
+        .call()
+        .map_err(|e| format!("Download request failed: {e}"))?;
+
+    // Fast-fail: abort before creating temp file if cancelled while waiting for response headers
+    if cancel.load(Ordering::SeqCst) != my_gen {
+        return Err("Download cancelled".to_string());
+    }
+
+    // Stream download into a temporary file in OS temp directory so that
+    // chunk writes do not trigger filesystem watcher events in the gallery folder.
+    let temp_name = format!(
+        "quivit_dl_{}_{}_{}.tmp",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0),
+        DL_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+    );
+    let temp_dest = std::env::temp_dir().join(temp_name);
+
+    let content_length = response
+        .header("content-length")
+        .and_then(|value| value.parse::<u64>().ok());
+    let threshold_bytes = match (content_length, threshold_percent) {
+        (Some(length), Some(percent)) if (1..100).contains(&percent) => {
+            Some(length.saturating_mul(u64::from(percent)).saturating_add(99) / 100)
+        }
+        _ => None,
+    };
+    let mut threshold_emitted = threshold_bytes.is_none();
+    let mut bytes_written = 0_u64;
+    let mut reader = response.into_reader();
+    let mut file =
+        File::create(&temp_dest).map_err(|e| format!("Failed to create temp file: {e}"))?;
+
+    let mut buf = vec![0u8; DOWNLOAD_CHUNK_SIZE];
+    loop {
+        if let Some(library_root) = &library_write_root {
+            if let Err(err) = crate::commands::library::ensure_library_root_writable(library_root) {
+                drop(file);
+                let _ = fs::remove_file(&temp_dest);
+                return Err(err);
+            }
+        }
+        if cancel.load(Ordering::SeqCst) != my_gen {
+            drop(file);
+            let _ = fs::remove_file(&temp_dest);
+            return Err("Download cancelled".to_string());
+        }
+
+        let n = reader.read(&mut buf).map_err(|e| {
+            let _ = fs::remove_file(&temp_dest);
+            format!("Failed to read download content: {e}")
+        })?;
+
+        if n == 0 {
+            break;
+        }
+
+        // Fast-fail: abort immediately if cancel arrived while blocked in socket read
+        if cancel.load(Ordering::SeqCst) != my_gen {
+            drop(file);
+            let _ = fs::remove_file(&temp_dest);
+            return Err("Download cancelled".to_string());
+        }
+
+        file.write_all(&buf[..n]).map_err(|e| {
+            let _ = fs::remove_file(&temp_dest);
+            format!("Failed to write download content: {e}")
+        })?;
+        bytes_written = bytes_written.saturating_add(n as u64);
+
+        if !threshold_emitted && threshold_bytes.is_some_and(|threshold| bytes_written >= threshold)
+        {
+            threshold_emitted = true;
+            if let (Some(request_id), Some(queue_generation)) = (&request_id, queue_generation) {
+                let _ = app.emit(
+                    "quivit-download-threshold",
+                    DownloadThresholdEvent {
+                        request_id,
+                        queue_generation,
+                    },
+                );
+            }
+        }
+    }
+
+    drop(file);
+
+    if cancel.load(Ordering::SeqCst) != my_gen {
+        let _ = fs::remove_file(&temp_dest);
+        return Err("Download cancelled".to_string());
+    }
+    if let Some(library_root) = &library_write_root {
+        if let Err(err) = crate::commands::library::ensure_library_root_writable(library_root) {
+            let _ = fs::remove_file(&temp_dest);
+            return Err(err);
+        }
+    }
+
+    // Atomically move or copy finished file into final destination.
+    if fs::rename(&temp_dest, dest).is_err() {
+        fs::copy(&temp_dest, dest).map_err(|e| {
+            let _ = fs::remove_file(&temp_dest);
+            format!("Failed to finalize downloaded file: {e}")
+        })?;
+        let _ = fs::remove_file(&temp_dest);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_download(app: tauri::AppHandle) {
+    use tauri::Manager;
+    app.state::<DownloadCancelFlag>()
+        .0
+        .fetch_add(1, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fetch_extractor_text_finds_local_manifest() {
+        let res = fetch_extractor_text("manifest.json".to_string());
+        assert!(res.is_ok(), "Failed to fetch manifest: {:?}", res.err());
+        let content = res.unwrap();
+        assert!(content.contains("\"extractors\""));
+    }
+
+    #[test]
+    fn extractor_paths_reject_traversal_and_absolute_files() {
+        assert!(is_safe_extractor_path("manifest.json"));
+        assert!(is_safe_extractor_path("sites/example.js"));
+        assert!(!is_safe_extractor_path("../Cargo.toml"));
+        assert!(!is_safe_extractor_path("C:\\Windows\\win.ini"));
+        assert!(!is_safe_extractor_path("manifest.txt"));
+    }
+
+    #[test]
+    fn extractor_cache_refreshes_and_falls_back_to_nested_source() {
+        let root = std::env::temp_dir().join(format!(
+            "quivit_extractor_cache_test_{}_{}",
+            std::process::id(),
+            EXTRACTOR_CACHE_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let cache_path = root.join("sites").join("example.js");
+
+        let source =
+            resolve_remote_extractor_text(&cache_path, Ok("export const version = 1;".to_string()))
+                .unwrap();
+        assert_eq!(source, "export const version = 1;");
+        assert_eq!(
+            fs::read_to_string(&cache_path).unwrap(),
+            "export const version = 1;"
+        );
+
+        let cached = resolve_remote_extractor_text(
+            &cache_path,
+            Err("Network request failed: offline".to_string()),
+        )
+        .unwrap();
+        assert_eq!(cached, "export const version = 1;");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn download_threshold_rounds_up_to_the_first_written_byte() {
+        let threshold = 101_u64.saturating_mul(50).saturating_add(99) / 100;
+        assert_eq!(threshold, 51);
+    }
+}

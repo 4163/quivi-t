@@ -1,13 +1,17 @@
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{mpsc, Mutex};
+use std::time::Duration;
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{Emitter, Manager};
+
+const LIBRARY_CHANGE_DEBOUNCE_MS: u64 = 250;
 
 pub struct WatcherState {
     pub watcher: Option<RecommendedWatcher>,
     pub parent_watcher: Option<RecommendedWatcher>,
     pub config_watcher: Option<RecommendedWatcher>,
+    pub library_watcher: Option<RecommendedWatcher>,
 }
 
 impl WatcherState {
@@ -16,6 +20,7 @@ impl WatcherState {
             watcher: None,
             parent_watcher: None,
             config_watcher: None,
+            library_watcher: None,
         }
     }
 }
@@ -31,8 +36,17 @@ pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String
 
     // Watch for changes inside the directory.
     let app_clone = app.clone();
-    let mut watcher = notify::recommended_watcher(move |_res: notify::Result<Event>| {
-        let _ = app_clone.emit("directory-changed", ());
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
+        if let Ok(event) = res {
+            match event.kind {
+                notify::EventKind::Create(_)
+                | notify::EventKind::Remove(_)
+                | notify::EventKind::Modify(notify::event::ModifyKind::Name(_)) => {
+                    let _ = app_clone.emit("directory-changed", ());
+                }
+                _ => {}
+            }
+        }
     })
     .map_err(|e| format!("Failed to create watcher: {}", e))?;
 
@@ -63,6 +77,79 @@ pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String
     }
 
     Ok(())
+}
+
+fn create_library_watcher(
+    app: tauri::AppHandle,
+    library_path: &str,
+) -> Result<RecommendedWatcher, String> {
+    let (change_tx, change_rx) = mpsc::channel::<()>();
+    let mut watcher = match notify::recommended_watcher(move |res: notify::Result<Event>| {
+        if let Ok(event) = res {
+            let changes_library_tree = matches!(
+                event.kind,
+                notify::EventKind::Create(_)
+                    | notify::EventKind::Remove(_)
+                    | notify::EventKind::Modify(notify::event::ModifyKind::Name(_))
+            ) || matches!(
+                event.kind,
+                notify::EventKind::Modify(notify::event::ModifyKind::Data(_))
+            ) && event.paths.iter().any(|path| {
+                path.file_name().and_then(|name| name.to_str()) == Some("gallery.json")
+            });
+
+            if changes_library_tree {
+                let _ = change_tx.send(());
+            }
+        }
+    }) {
+        Ok(watcher) => watcher,
+        Err(err) => return Err(format!("Failed to create Library watcher: {err}")),
+    };
+
+    if let Err(err) = watcher.watch(Path::new(&library_path), RecursiveMode::Recursive) {
+        return Err(format!("Failed to watch Library directory: {err}"));
+    }
+
+    std::thread::spawn(move || {
+        while change_rx.recv().is_ok() {
+            loop {
+                match change_rx.recv_timeout(Duration::from_millis(LIBRARY_CHANGE_DEBOUNCE_MS)) {
+                    Ok(()) => continue,
+                    Err(mpsc::RecvTimeoutError::Timeout) => break,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                }
+            }
+            let _ = app.emit("library-changed", ());
+        }
+    });
+
+    Ok(watcher)
+}
+
+pub fn validate_library_watch_path(path: &Path) -> Result<(), String> {
+    let mut watcher = notify::recommended_watcher(|_| {})
+        .map_err(|err| format!("Failed to create Library watcher: {err}"))?;
+    watcher
+        .watch(path, RecursiveMode::Recursive)
+        .map_err(|err| format!("Failed to watch Library directory: {err}"))
+}
+
+#[tauri::command]
+pub fn rebind_library_watcher(app: tauri::AppHandle) -> Result<(), String> {
+    let library_path = crate::commands::shell::get_library_dir()?;
+    let watcher = create_library_watcher(app.clone(), &library_path)?;
+    app.state::<Mutex<WatcherState>>()
+        .lock()
+        .unwrap()
+        .library_watcher = Some(watcher);
+    Ok(())
+}
+
+pub fn spawn_library_watcher(app: tauri::AppHandle) {
+    if let Err(err) = rebind_library_watcher(app) {
+        eprintln!("Failed to start Library watcher: {err}");
+    }
 }
 
 pub fn spawn_config_file_watcher(app: tauri::AppHandle) {

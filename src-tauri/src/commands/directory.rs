@@ -5,6 +5,8 @@ use crate::formats::*;
 use crate::models::*;
 use crate::platform::attributes::is_hidden_path;
 
+const MAX_LIBRARY_TREE_DEPTH: usize = 8;
+
 pub fn read_directory_impl(
     path: &str,
     show_hidden: bool,
@@ -179,5 +181,437 @@ pub fn read_text_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 pub fn write_text_file(path: String, content: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    crate::commands::library::ensure_library_write_allowed(p)?;
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub fn create_placeholder_files(dir: String, filenames: Vec<String>) -> Result<(), String> {
+    let dir_path = Path::new(&dir);
+    crate::commands::library::ensure_library_write_allowed(dir_path)?;
+    if !dir_path.exists() {
+        fs::create_dir_all(dir_path).map_err(|e| e.to_string())?;
+    }
+    for filename in filenames {
+        let file_path = dir_path.join(filename);
+        if !file_path.exists() {
+            let _ = fs::File::create(&file_path);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn remove_file(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    crate::commands::library::ensure_library_write_allowed(p)?;
+    if p.exists() {
+        fs::remove_file(p).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn read_library_tree() -> Result<Vec<LibraryProviderEntry>, String> {
+    let lib_dir_str = crate::commands::shell::get_library_dir()?;
+    let lib_dir = Path::new(&lib_dir_str);
+    if !lib_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let provider_entries = fs::read_dir(lib_dir).map_err(|e| e.to_string())?;
+    let mut providers = Vec::new();
+
+    for entry in provider_entries.flatten() {
+        let file_type = match entry.file_type() {
+            Ok(ft) => ft,
+            Err(_) => continue,
+        };
+        if !file_type.is_dir() {
+            continue;
+        }
+
+        let provider_path = entry.path();
+        let provider_name = provider_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string();
+
+        if provider_name.is_empty() {
+            continue;
+        }
+
+        let nodes = read_library_nodes(&provider_path, 0);
+
+        providers.push(LibraryProviderEntry {
+            name: provider_name,
+            path: provider_path.to_string_lossy().into_owned(),
+            nodes,
+        });
+    }
+
+    providers.sort_by(|a, b| natord::compare(&a.name, &b.name));
+    Ok(providers)
+}
+
+fn read_library_nodes(dir: &Path, depth: usize) -> Vec<LibraryNode> {
+    let mut nodes = Vec::new();
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return nodes,
+    };
+
+    for entry in entries.flatten() {
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(_) => continue,
+        };
+        let path = entry.path();
+        let name = match path.file_name().and_then(|part| part.to_str()) {
+            Some(name) if !name.is_empty() && name != "gallery.json" => name.to_string(),
+            _ => continue,
+        };
+        let is_dir = file_type.is_dir();
+        let is_file = file_type.is_file();
+        if !is_dir && !is_file {
+            continue;
+        }
+        if is_file
+            && (depth > 0
+                || !path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(is_image_ext))
+        {
+            continue;
+        }
+
+        let created_millis = entry
+            .metadata()
+            .ok()
+            .and_then(|metadata| metadata.created().or_else(|_| metadata.modified()).ok())
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis() as u64)
+            .unwrap_or(0);
+        let date = if created_millis > 0 {
+            created_millis.to_string()
+        } else {
+            String::new()
+        };
+
+        let (title, image_count, is_gallery) = if is_dir {
+            read_gallery_metadata(&path)
+        } else {
+            (None, 0, false)
+        };
+        let children = if is_dir && !is_gallery && depth < MAX_LIBRARY_TREE_DEPTH {
+            read_library_nodes(&path, depth + 1)
+        } else {
+            Vec::new()
+        };
+        if is_dir && !is_gallery && children.is_empty() {
+            continue;
+        }
+
+        nodes.push(LibraryNode {
+            name,
+            path: path.to_string_lossy().into_owned(),
+            title,
+            date,
+            created_millis,
+            is_dir,
+            is_gallery,
+            image_count,
+            children,
+        });
+    }
+
+    nodes.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.created_millis.cmp(&b.created_millis))
+            .then_with(|| natord::compare(&a.name, &b.name))
+    });
+    nodes
+}
+
+fn read_gallery_metadata(path: &Path) -> (Option<String>, usize, bool) {
+    let sidecar_path = path.join("gallery.json");
+    if !sidecar_path.is_file() {
+        return (None, 0, false);
+    }
+    let sidecar_text = match fs::read_to_string(sidecar_path) {
+        Ok(sidecar_text) => sidecar_text,
+        Err(_) => return (None, 0, false),
+    };
+    let metadata = match serde_json::from_str::<serde_json::Value>(&sidecar_text) {
+        Ok(metadata) => metadata,
+        Err(_) => return (None, 0, false),
+    };
+    let title = metadata
+        .get("title")
+        .and_then(|title| title.as_str())
+        .filter(|title| !title.is_empty())
+        .map(str::to_string);
+    let image_count = metadata
+        .get("images")
+        .and_then(|images| images.as_array())
+        .map_or(0, Vec::len);
+    (title, image_count, true)
+}
+
+fn remove_file_robust(path: &Path) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if let Ok(meta) = fs::metadata(path) {
+        if meta.permissions().readonly() {
+            let mut perms = meta.permissions();
+            perms.set_readonly(false);
+            let _ = fs::set_permissions(path, perms);
+        }
+    }
+    for attempt in 0..10 {
+        match fs::remove_file(path) {
+            Ok(_) => return Ok(()),
+            Err(e) if attempt == 9 => return Err(e),
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(50)),
+        }
+    }
+    Ok(())
+}
+
+fn remove_dir_contents_and_self(dir: &Path) -> std::io::Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if let Ok(meta) = entry.metadata() {
+            if meta.permissions().readonly() {
+                let mut perms = meta.permissions();
+                perms.set_readonly(false);
+                let _ = fs::set_permissions(&path, perms);
+            }
+            if meta.is_dir() {
+                remove_dir_contents_and_self(&path)?;
+            } else {
+                remove_file_robust(&path)?;
+            }
+        }
+    }
+    fs::remove_dir(dir)
+}
+
+fn remove_dir_all_robust(dir: &Path) -> std::io::Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    for attempt in 0..10 {
+        match remove_dir_contents_and_self(dir) {
+            Ok(_) => return Ok(()),
+            Err(e) if attempt == 9 => return Err(e),
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(50)),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn move_to_recycle_bin(path: &Path) -> std::io::Result<()> {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::{
+        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE,
+        SHFILEOPSTRUCTW,
+    };
+
+    let path_str = path.to_string_lossy();
+    let clean_path = path_str.strip_prefix(r"\\?\").unwrap_or(&path_str);
+
+    let mut wide: Vec<u16> = clean_path.encode_utf16().collect();
+    wide.push(0);
+    wide.push(0);
+
+    let mut op = SHFILEOPSTRUCTW {
+        hwnd: Default::default(),
+        wFunc: FO_DELETE,
+        pFrom: PCWSTR(wide.as_ptr()),
+        pTo: PCWSTR::null(),
+        fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI).0 as u16,
+        fAnyOperationsAborted: Default::default(),
+        hNameMappings: std::ptr::null_mut(),
+        lpszProgressTitle: PCWSTR::null(),
+    };
+
+    let ret = unsafe { SHFileOperationW(&mut op) };
+    if ret == 0 && !op.fAnyOperationsAborted.as_bool() {
+        Ok(())
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("SHFileOperationW failed with return code {ret}"),
+        ))
+    }
+}
+
+#[tauri::command(async)]
+pub fn remove_directory(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    crate::commands::library::ensure_library_write_allowed(p)?;
+    if !p.exists() {
+        return Ok(());
+    }
+
+    let lib_dir_str = crate::commands::shell::get_library_dir()?;
+    let lib_dir = Path::new(&lib_dir_str);
+
+    let canonical_lib = fs::canonicalize(lib_dir)
+        .map_err(|e| format!("Failed to canonicalize library root: {e}"))?;
+    let canonical_target =
+        fs::canonicalize(p).map_err(|e| format!("Failed to canonicalize target path: {e}"))?;
+
+    if !canonical_target.starts_with(&canonical_lib) || canonical_target == canonical_lib {
+        return Err("Cannot remove path outside of library root".into());
+    }
+
+    #[cfg(windows)]
+    let recycled = move_to_recycle_bin(&canonical_target).is_ok();
+    #[cfg(not(windows))]
+    let recycled = false;
+
+    if !recycled && canonical_target.exists() {
+        if canonical_target.is_dir() {
+            remove_dir_all_robust(&canonical_target).map_err(|e| e.to_string())?;
+        } else {
+            remove_file_robust(&canonical_target).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn library_nodes_preserve_nested_gallery_paths() {
+        let root = std::env::temp_dir().join(format!(
+            "quivit_library_nodes_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let chapter = root.join("Series").join("Volume 01").join("Chapter 02");
+        fs::create_dir_all(&chapter).unwrap();
+        fs::write(
+            chapter.join("gallery.json"),
+            r#"{"title":"Chapter 02","images":[{"filename":"001.png"}]}"#,
+        )
+        .unwrap();
+
+        let nodes = read_library_nodes(&root, 0);
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].name, "Series");
+        assert_eq!(nodes[0].children[0].name, "Volume 01");
+        assert!(nodes[0].children[0].children[0].is_gallery);
+        assert_eq!(nodes[0].children[0].children[0].image_count, 1);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn library_nodes_never_include_files_under_subdirectories() {
+        let root = std::env::temp_dir().join(format!(
+            "quivit_library_files_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let provider = root.join("Imgur");
+        let album = provider.join("My Album");
+        fs::create_dir_all(&album).unwrap();
+
+        // Direct raw file under provider root (depth == 0)
+        fs::write(provider.join("direct.png"), "image").unwrap();
+
+        // Files inside album (depth > 0)
+        fs::write(album.join("001.png"), "placeholder").unwrap();
+        fs::write(album.join("002.png"), "placeholder").unwrap();
+
+        // Without gallery.json: album has no subdirectories, so it shouldn't expose files as children
+        let nodes = read_library_nodes(&provider, 0);
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].name, "direct.png");
+        assert!(!nodes[0].is_dir);
+
+        // With gallery.json: album is recognized as a gallery with image_count = 2, children = []
+        fs::write(
+            album.join("gallery.json"),
+            r#"{"title":"My Album","images":[{"filename":"001.png"},{"filename":"002.png"}]}"#,
+        )
+        .unwrap();
+
+        let nodes_with_gallery = read_library_nodes(&provider, 0);
+        assert_eq!(nodes_with_gallery.len(), 2);
+        let gallery_node = nodes_with_gallery.iter().find(|n| n.name == "My Album").unwrap();
+        assert!(gallery_node.is_dir);
+        assert!(gallery_node.is_gallery);
+        assert_eq!(gallery_node.image_count, 2);
+        assert!(gallery_node.children.is_empty());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn test_create_placeholder_files() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("quivit_test_placeholders_{}", std::process::id()));
+        let filenames = vec!["001.png".to_string(), "002.png".to_string()];
+        let res = create_placeholder_files(temp_dir.to_string_lossy().into_owned(), filenames);
+        assert!(res.is_ok());
+
+        assert!(temp_dir.join("001.png").is_file());
+        assert!(temp_dir.join("002.png").is_file());
+        assert_eq!(temp_dir.join("001.png").metadata().unwrap().len(), 0);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn test_remove_file() {
+        let temp_file =
+            std::env::temp_dir().join(format!("quivit_test_remove_{}", std::process::id()));
+        fs::write(&temp_file, "hello").unwrap();
+        assert!(temp_file.is_file());
+
+        let res = remove_file(temp_file.to_string_lossy().into_owned());
+        assert!(res.is_ok());
+        assert!(!temp_file.exists());
+
+        // Deleting non-existent file should succeed as a no-op
+        let res2 = remove_file(temp_file.to_string_lossy().into_owned());
+        assert!(res2.is_ok());
+    }
+
+    #[test]
+    fn test_remove_directory_safety() {
+        let non_existent =
+            std::env::temp_dir().join(format!("quivit_non_existent_{}", std::process::id()));
+        let res = remove_directory(non_existent.to_string_lossy().into_owned());
+        assert!(res.is_ok());
+
+        let outside_dir = std::env::temp_dir();
+        let res_outside = remove_directory(outside_dir.to_string_lossy().into_owned());
+        assert!(res_outside.is_err());
+    }
 }

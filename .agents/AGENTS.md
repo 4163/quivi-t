@@ -1,15 +1,15 @@
-# Custom Agent Rules
-These rules apply to the AI coding assistant.
+# Custom agent rules
+Read every rule and referenced skill before starting work. Confirm adherence to the user.
 
-## Agent Behavior
+## Agent behavior
 - Keep responses concise and focused on the task.
 - Follow existing code style and formatting for each directory and its associated files.
+- Avoid using browser automation/browser subagent, use mocha when possible, or use e2e for any complex frontend problems that requires debugging.
 - For writing work, read `.agents/skills/unslop/SKILL.md` and follow it even if the harness does not auto-load always-active skills. This applies to docs, prompts, comments, and user-facing copy.
 - **Verify:** Run `.agents/skills/verify-implementation/SKILL.md` when finishing a slice or when asked to "verify".
 - **Validate:** Run `.agents/skills/validate-changes/SKILL.md` when explicitly asked to "validate" code. Do not confuse "verify" (tests and docs) with "validate" (architecture review).
-- NEVER (unless instructed otherwise) execute git commit commands or automate git commits. The user handles all commits manually or through the commit pipeline.
 
-## Code Guidelines
+## Code guidelines
 - **Self-documenting code.** Write code that reads clearly on its own. Use descriptive names and flat control flow (early returns over multi-layer nesting). Keep comments minimal and concise. Reserve them for *why*, non-obvious constraints, and maintained module invariants. A short local heading is fine when a file needs to explain an ownership, lifecycle, or persistence rule. Do not add commentary that merely narrates the code.
 - **Performance first.** Avoid dynamic evaluations and allocations in hot paths. Cache aggressively.
   *Practical Examples for Agents:*
@@ -22,10 +22,16 @@ These rules apply to the AI coding assistant.
 - **Measure twice, cut once.** Prefer small, deliberate changes over broad refactors. Before writing a new function, search the existing codebase for one that already does the job. Reuse it or extend it rather than creating a duplicate. If a change would duplicate logic, extract it into a shared helper instead.
 - **Work in logical slices.** Prioritize small, precise code changes rather than big blocks to prevent tooling and scope failures, especially during large refactors. Be surgical!
 - **YAGNI.** Do not add abstractions, features, or complexity without a clear need.
+
+### Guardrails
+- **No automated git commits.** Never execute git commit commands or automate commits unless explicitly instructed. The user handles all commits manually or through the commit pipeline.
 - **Blast radius.** When modifying core cross-cutting surfaces (IPC, configs, cross-window state, protocol URLs, or archives), stop and prove you haven't broken downstream consumers. Do not rely on speculation or writeups. Use the `.agents/skills/blast-radius/SKILL.md` workflow to execute actual checks and confirm safety.
 - **Targeted testing via blast radius.** Do not run the full `cargo test` suite on minor or localized changes. Full suite runs incur high linker and archive extraction overhead (30+ seconds). Derive targeted test commands directly from the diff's blast radius (e.g., `npm test` for pure frontend math/state, `cargo test format_tests` or `cargo test <filter>` for backend). Use `cargo check --tests` during iteration to validate types and test signatures in 2 to 4 seconds. Reserve full suite runs for final slice verification.
+- **Validate before presenting.** Every implementation plan, report, analysis, and roadmap must be compared against `.agents/skills/validate-changes/SKILL.md` rules before presenting it to the user. This applies to all artifacts, as well as any document written under `.agents/`, `.agents/scratch/`, or `.agents/legacy-reports/`. The artifact or document must state at the top that this validation comparison was performed.
+- **No test harness creation during implementation.** Do not create new test suites or test harnesses while implementation work is in progress. Manual runtime tests carry higher value because test harnesses written against incomplete code are fragile and waste implementation time. Edit existing tests only when a code change breaks them (blast radius). However, using cargo, e2e, or mocha to debug the implementation work that is currently being done is allowed.
+- **No premature finalization.** Never declare work done, implemented, or complete until the user explicitly says so. Do not port entries to `implemented.md`, write completion summaries, or treat a slice as finished on your own.
 
-## Architecture Rules
+## Architecture rules
 
 Keep the codebase from drifting into mixed patterns. Apply these on every change. Order for UI work is structure, then presentation, then behavior.
 
@@ -37,7 +43,7 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 - **Do not split a single owner** into sibling files that all touch the same surface. That relocates coupling without removing it.
 - **Refactors do not change behavior** unless there is a practical function or UX/performance win.
 
-### HTML-First Rendering
+### HTML-first rendering
 - Prefer static markup over `createElement` / `innerHTML` for stable chrome (menus, rows, badges, probes, placeholders).
 - Toggle visibility and state with CSS classes or tokens. Do not remove and re-insert nodes to hide them.
 - When a node must be created at runtime, declare a placeholder or template in HTML first.
@@ -45,7 +51,7 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 - A dynamically sized pool is fine when the count depends on viewport or font size.
 - Default update path: `textContent`, `src`, `classList`, `data-*`.
 
-### CSS Source of Truth
+### CSS source of truth
 - Shared tokens, resets, and cross-page rules live in `global.css`. Each HTML page has its own sheet for layout and components.
 - Design tokens are CSS custom properties on `:root` in `global.css`. Page sheets consume them; they do not redeclare the token set.
 - **CSS is the visual source of truth.** JS must not set intrinsic visual values (`width`, `height`, `display`, `cursor`, `opacity`, `color`, `image-rendering`, etc.) via inline `style` or presentational HTML attributes.
@@ -55,16 +61,17 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
   2. **Component.** Host node for coordinated child state.
   3. **Leaf.** The target element.
 
-### JS Module Ownership
+### JS module ownership
 - The state machine owns app state and has no DOM. UI modules subscribe to it and render themselves.
 - Domain logic lives in pure service modules (no `document`). Action ids, labels, defaults, and handlers have one registry; other files derive from it. Filter and scaler methods live under `services/filters` and `services/scaling`; the GL runtime does not know their names; overlay canvases have one UI owner.
 - Each UI feature owns its DOM and self-subscribes. Bootstrap stays thin: init + a slim state fan-out. It does not render another module's surface.
+- `urlLoader.js` owns remote extractor validation, URL import, and gallery download coordination without owning DOM. `main/urlOverlay.js` owns `#url-overlay`; `filepanel/libraryStore.js` owns Library tree data and persistence while `filePanel.js` owns its rendering.
 - Shared cross-window helpers (theme, preview, window fit) stay out of the state machine and out of feature UI files.
 - New frontend work extends this layering. Do not dump new DOM into bootstrap or new domain logic into a UI file. Frontend unit tests live in `mocha/`, while E2E tests, action recorder shims, and replay diagnostic probes live in `e2e/`, strictly outside `src/` to prevent embedding test or diagnostic machinery into the release bundle via `frontendDist: "../src"`.
 
-### Rust Module Ownership
+### Rust module ownership
 - The crate root is bootstrap: plugin wiring, command registration, main-window construction, config-watcher start. It does not grow archive, protocol, command, or test bodies.
 - Domain logic lives in `archives/` (readers + `ArchiveCache` facade), `formats.rs`, and `ico.rs`. Callers use facade methods, not another module's internals.
-- `commands/` is the Tauri IPC surface. Each command file owns one family (directory, archives, animation, watchers, associations, shell) and adapts domain modules. It does not grow archive, window, or config internals.
+- `commands/` is the Tauri IPC surface. Each command file owns one family (directory, archives, animation, library, network, watchers, associations, shell) and adapts domain modules. It does not grow archive, window, or config internals.
 - Protocol, windows, platform, and config stay out of bootstrap and out of each other: `protocol.rs` owns `quivit://`, `windows.rs` owns window lifecycle and size constants, `platform/` owns OS integrations, `config.rs` is persistence only. `models.rs` is the IPC contract. Tests live under `tests/` via `#[path]`; do not widen visibility for tests.
 - New backend work extends this layering. Do not dump new domain into `lib.rs`, new window code into `config.rs`, or a second copy of a helper that already exists. Keep IPC command names, JSON shapes, and `quivit://` URLs stable unless the change is a practical function or performance win.

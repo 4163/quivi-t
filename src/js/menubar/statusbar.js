@@ -42,6 +42,14 @@ export const Statusbar = {
     this.syncSpreadIndicator(Core.getState());
 
     if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('quivit-download-complete', () => {
+        this.update(Core.getState());
+      });
+
+      window.addEventListener('quivit-download-status', () => {
+        this.update(Core.getState());
+      });
+
       window.addEventListener('quivit-refresh-start', () => {
         if (!statusbar) return;
         clearTimeout(_refreshTimer);
@@ -87,6 +95,15 @@ export const Statusbar = {
     }
   },
 
+  isCurrentEntryDownloading(state) {
+    const s = state || Core.getState();
+    const currentEntry = s.list?.[s.index];
+    if (!currentEntry || currentEntry.is_dir || currentEntry.is_parent) return false;
+    const targetPath = currentEntry.path || (currentEntry.name && s.directory ? `${s.directory}\\${currentEntry.name}` : null);
+    if (!targetPath) return false;
+    return typeof Core.isDownloading === 'function' && Core.isDownloading(targetPath);
+  },
+
   // Called from Core.onStateChange. Owns fit mode, formatted index,
   // and non-image placeholders. For non-image entries also writes filename
   // since viewer.js won't fire for those.
@@ -106,6 +123,18 @@ export const Statusbar = {
     if (statusIndex) {
       const text = FsUtils.formatStatusIndex(state);
       if (statusIndex.textContent !== text) statusIndex.textContent = text;
+    }
+
+    // Downloading entries show 'Downloading...' in status-filename and N/A dims/zoom.
+    const isDownloading = this.isCurrentEntryDownloading(state);
+    if (isDownloading) {
+      if (statusDims) statusDims.textContent = 'N/A';
+      if (statusZoom) statusZoom.textContent = 'N/A';
+      if (statusName) {
+        statusName.textContent = 'Downloading...';
+        statusName.title = state.filename ? `${state.filename} (Downloading...)` : 'Downloading...';
+      }
+      return;
     }
 
     // Non-image entries (folders, archives, `..`, drives) have no dimensions
@@ -129,6 +158,9 @@ export const Statusbar = {
   // Called by viewer.js to report image lifecycle events. Writes filename,
   // dims, and zoom at the exact moment they become valid.
   setImage({ filename, dims, zoom, isError, isLoading }) {
+    if (this.isCurrentEntryDownloading()) {
+      return;
+    }
     if (isLoading) {
       if (statusName && !statusName.textContent) {
         const liveName = filename || Core.getState().filename || '';

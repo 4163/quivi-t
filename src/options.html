@@ -30,9 +30,9 @@
           Show hidden folders and files
         </label>
         <div class="input-group">
-          <label for="opt-start-dir">Default Start Directory:</label>
+          <label for="opt-start-dir">Default start directory</label>
           <div class="flex-row">
-            <input type="text" id="opt-start-dir" placeholder="No directory selected" />
+            <input type="text" id="opt-start-dir" placeholder="Loading..." />
             <button id="btn-browse-start">Browse...</button>
           </div>
         </div>
@@ -99,6 +99,17 @@
           <button type="button" class="segmented-btn" data-anime4k-variant="normal" title="20 shader passes">Normal (CNN VL)</button>
           <button type="button" class="segmented-btn" data-anime4k-variant="fast" title="11 shader passes">Fast (CNN M)</button>
         </div>
+      </div>
+      <div class="options-section">
+        <h3>Library location</h3>
+        <div class="input-group">
+          <label for="opt-library-path">Imported URLs</label>
+          <div class="flex-row">
+            <input type="text" id="opt-library-path" placeholder="Loading..." />
+            <button id="btn-browse-library" type="button">Browse...</button>
+          </div>
+        </div>
+        <p class="hint">Leave blank to use the default folder. Library files and folders are moved to the new location dynamically.</p>
       </div>
       <div class="options-section">
         <h3>Configuration Persistence</h3>
@@ -341,6 +352,10 @@
             <div class="keybind-tags" data-action="cmd-open-file"></div>
           </div>
           <div class="keybind-item">
+            <span class="keybind-name">Open URL</span>
+            <div class="keybind-tags" data-action="cmd-use-url"></div>
+          </div>
+          <div class="keybind-item">
             <span class="keybind-name">Toggle Thumbnail / List View</span>
             <div class="keybind-tags" data-action="cmd-toggle-file-list-view-mode"></div>
           </div>
@@ -374,27 +389,27 @@
           <button id="btn-assoc-deselect-all" class="secondary">Deselect All</button>
         </div>
         <h4>Icon Preview</h4>
-        <div class="associations-list" id="associations-container">
-          <div class="assoc-mascots-wrapper" id="assoc-mascots-wrapper">
-            <div class="assoc-mascots" id="assoc-mascots">
-              <div class="assoc-mascot-box" data-group="mascot">
-                <img src="/assets/icons/_mascot-formats.svg" class="assoc-mascot-svg" alt="Standard formats">
-                <img class="assoc-format-icon" alt="">
-              </div>
-              <div class="assoc-mascot-box" data-group="moe1">
-                <img src="/assets/icons/_moe-1-formats.svg" class="assoc-mascot-svg" alt="Extended formats">
-                <img class="assoc-format-icon" alt="">
-              </div>
-              <div class="assoc-mascot-box" data-group="moe3">
-                <img src="/assets/icons/_moe-3-formats.svg" class="assoc-mascot-svg" alt="Comic archives">
-                <img class="assoc-format-icon" alt="">
-              </div>
-              <div class="assoc-mascot-box" data-group="stoic">
-                <img src="/assets/icons/_stoic-formats.svg" class="assoc-mascot-svg" alt="Plain archives">
-                <img class="assoc-format-icon" alt="">
-              </div>
+        <div class="assoc-mascots-wrapper">
+          <div class="assoc-mascots" id="assoc-mascots">
+            <div class="assoc-mascot-box" data-group="mascot">
+              <img src="/assets/icons/_mascot-formats.svg" class="assoc-mascot-svg" alt="Standard formats">
+              <img class="assoc-format-icon" alt="">
+            </div>
+            <div class="assoc-mascot-box" data-group="moe1">
+              <img src="/assets/icons/_moe-1-formats.svg" class="assoc-mascot-svg" alt="Extended formats">
+              <img class="assoc-format-icon" alt="">
+            </div>
+            <div class="assoc-mascot-box" data-group="moe3">
+              <img src="/assets/icons/_moe-3-formats.svg" class="assoc-mascot-svg" alt="Comic archives">
+              <img class="assoc-format-icon" alt="">
+            </div>
+            <div class="assoc-mascot-box" data-group="stoic">
+              <img src="/assets/icons/_stoic-formats.svg" class="assoc-mascot-svg" alt="Plain archives">
+              <img class="assoc-format-icon" alt="">
             </div>
           </div>
+        </div>
+        <div class="associations-list" id="associations-container">
           <h4 class="assoc-header">Image</h4>
           <div class="assoc-grid">
             <label class="checkbox-label assoc-label">

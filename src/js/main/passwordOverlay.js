@@ -23,6 +23,10 @@ function _show(archivePath, encryption, shouldFocus = true) {
   _overlay.classList.remove('error');
   _overlay.classList.add('active');
 
+  if (typeof window !== 'undefined' && window.dispatchEvent) {
+    window.dispatchEvent(new CustomEvent('quivit-reset-held-keys'));
+  }
+
   if (encryption === 'password_incorrect') {
     _errorEl.textContent = 'Incorrect password';
     _overlay.classList.add('error');
@@ -70,13 +74,22 @@ export function initPasswordOverlay({ overlay, Core, FsUtils, focusFileList, isF
     }
   });
 
-  _input.addEventListener('keyup', (e) => {
-    e.stopPropagation();
+  _input.addEventListener('paste', () => {
+    window.dispatchEvent?.(new CustomEvent('quivit-reset-held-keys'));
   });
 
   // Block mousedown so viewport pan doesn't start through the overlay.
   overlay.addEventListener('mousedown', (e) => {
     e.stopPropagation();
+  });
+
+  overlay.addEventListener('pointerdown', (e) => {
+    if (e.target === overlay) {
+      const state = _Core.getState();
+      if (state.mode !== 'archive') {
+        _Core.selectIndex(-1);
+      }
+    }
   });
 
   overlay.addEventListener('keydown', (e) => {
@@ -86,6 +99,7 @@ export function initPasswordOverlay({ overlay, Core, FsUtils, focusFileList, isF
       if (state.mode === 'archive') {
         _FsUtils.openParent();
       } else {
+        _Core.selectIndex(-1);
         _focusFileList();
       }
     }
@@ -95,7 +109,7 @@ export function initPasswordOverlay({ overlay, Core, FsUtils, focusFileList, isF
     const enc = state.archiveEncryption;
     const isLocked = enc === 'password_required' || enc === 'password_incorrect';
 
-    if (isLocked && state.archivePath) {
+    if (isLocked && state.archivePath && (state.mode === 'archive' || state.index !== -1)) {
       if (!_overlay.classList.contains('active') || _lockedArchivePath !== state.archivePath || enc === 'password_incorrect') {
         const isFocused = _isFileListFocused();
         const shouldFocus = (state.mode === 'archive' && !state.isSiblingNavigation) || (!isFocused && enc === 'password_incorrect');

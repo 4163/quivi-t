@@ -66,7 +66,6 @@
   --fs-36:   2.25rem;
   --fs-40:   2.5rem;
   --fs-50:   3.125rem;
-  --fs-169:  10.5625rem;
 
   /* Opaque grill layout */
   --grill-spacing-px: 8;
@@ -104,6 +103,7 @@
     --grill-lines:  rgba(60, 200, 170, 0.6);
     --grill-border: rgba(60, 200, 170, 0.6);
   }
+  /* Format icon filters stay with the theme palette to keep dark mode rules together. */
   .assoc-mascot-svg,
   .assoc-mascot-box.is-active .assoc-format-icon {
     filter: drop-shadow(2px 0 0 var(--accent))

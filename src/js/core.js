@@ -47,6 +47,8 @@ const invoke = window.__TAURI__?.core?.invoke;
 const ANIM_MEMO_CAPACITY = 512;
 const _animMemo = new BoundedMap(ANIM_MEMO_CAPACITY);
 
+let _placeholderCheck = null;
+
 const _state = {
   /** @type {'empty'|'image'|'archive'} */
   mode: 'empty',
@@ -167,7 +169,18 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   if (index === -1) {
     _state.index = -1;
     _state.filename = '';
+    FsUtils.revokeIfObjectURL(_state.src);
     _state.src = '';
+    _state.isSpread = false;
+    _state.naturalWidth = 0;
+    _state.naturalHeight = 0;
+    _state.isSiblingNavigation = false;
+    _state.isAnimated = false;
+    _state.loopCount = 0;
+    if (_state.mode !== 'archive') {
+      _state.archivePath = '';
+      _state.archiveEncryption = null;
+    }
     _notify();
     return;
   }
@@ -205,6 +218,12 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   } else {
     newSrc = await FsUtils.buildFileSrc(file.path);
     if (_state.index !== index) return;
+
+    // Image bridging: if the target file is a 0-byte placeholder awaiting
+    // download, keep the previous viewer image until the download completes.
+    if (_placeholderCheck && _placeholderCheck(file.path)) {
+      newSrc = _state.src;
+    }
   }
 
   if (_state.mode !== 'archive') {
@@ -214,7 +233,8 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
       if (enc === 'password_required' || enc === 'password_incorrect') {
         _state.archivePath = file.path;
         _state.archiveEncryption = enc;
-        _state.filename = `Password required: ${file.name}`;
+        const lockSuffix = enc === 'password_incorrect' ? 'password incorrect' : 'password required';
+        _state.filename = `${file.name}: ${lockSuffix}`;
         newSrc = '';
       } else {
         _state.archivePath = '';
@@ -223,6 +243,11 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
     } else {
       _state.archivePath = '';
       _state.archiveEncryption = null;
+    }
+  } else {
+    if ((_state.archiveEncryption === 'password_required' || _state.archiveEncryption === 'password_incorrect') && !file.is_parent) {
+      const lockSuffix = _state.archiveEncryption === 'password_incorrect' ? 'password incorrect' : 'password required';
+      _state.filename = `${file.name}: ${lockSuffix}`;
     }
   }
 
@@ -311,6 +336,18 @@ export const Core = {
   setState(partial) {
     Object.assign(_state, partial);
     _notify();
+  },
+
+  setPlaceholderCheck(fn) {
+    _placeholderCheck = typeof fn === 'function' ? fn : null;
+  },
+
+  isDownloading(path) {
+    return _placeholderCheck ? _placeholderCheck(path) : false;
+  },
+
+  isPlaceholder(path) {
+    return _placeholderCheck ? _placeholderCheck(path) : false;
   },
 
   setFileListVisible(visible, options = {}) {
@@ -556,25 +593,22 @@ export const Core = {
     
     // Pick the startup path.
     const fd = _state.config.frontend_data || {};
-    let startPath = '';
     let args = [];
     
     if (window.__TAURI__) {
       args = await invoke('get_initial_args').catch(() => []);
     }
-    
-    if (args.length > 1) {
-      startPath = args[1];
-    } else if (fd.continue_last !== false && fd.last_opened_path) {
-      startPath = fd.last_opened_path;
-    } else if (fd.start_dir) {
-      startPath = fd.start_dir;
-    } else {
-      startPath = await invoke('get_default_dir').catch(() => '');
+
+    let defaultDir = '';
+    const hasExplicit = Array.isArray(args) && args.slice(1).some(arg => typeof arg === 'string' && !arg.startsWith('-'));
+    const hasContinueLast = fd.continue_last !== false && fd.last_opened_path;
+    if (!hasExplicit && !hasContinueLast && !fd.start_dir && window.__TAURI__) {
+      defaultDir = await invoke('get_default_dir').catch(() => '');
     }
+
+    const { path: startPath, explicitOpen } = resolveStartupTarget(args, fd, defaultDir);
     
     if (startPath && window.__TAURI__) {
-      const explicitOpen = args.length > 1;
       FsUtils.loadFile(startPath, {
         restoreLastImage: !explicitOpen,
         preferInitial: explicitOpen,
@@ -589,3 +623,23 @@ export const Core = {
     }
   }
 };
+
+export function resolveStartupTarget(args = [], frontendData = {}, defaultDir = '') {
+  const explicitArg = Array.isArray(args)
+    ? args.slice(1).find(arg => typeof arg === 'string' && !arg.startsWith('-'))
+    : null;
+
+  if (explicitArg) {
+    return { path: explicitArg, explicitOpen: true };
+  }
+
+  if (frontendData.continue_last !== false && frontendData.last_opened_path) {
+    return { path: frontendData.last_opened_path, explicitOpen: false };
+  }
+
+  if (frontendData.start_dir) {
+    return { path: frontendData.start_dir, explicitOpen: false };
+  }
+
+  return { path: defaultDir || '', explicitOpen: false };
+}

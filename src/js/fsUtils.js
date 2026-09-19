@@ -358,6 +358,31 @@ export const FsUtils = {
     if (!_isCurrentGeneration(options.generation)) return;
 
     let files = this.buildDirectoryList(result);
+
+    if (result.directory) {
+      try {
+        const sidecarPath = `${result.directory}\\gallery.json`;
+        const content = await invoke('read_text_file', { path: sidecarPath });
+        const data = JSON.parse(content);
+        if (data && Array.isArray(data.images)) {
+          const nameMap = new Map();
+          for (const img of data.images) {
+            if (img.filename) {
+              nameMap.set(img.filename, img.displayName || img.filename);
+            }
+          }
+          for (const file of files) {
+            if (nameMap.has(file.name)) {
+              file.displayName = nameMap.get(file.name);
+            }
+          }
+        }
+      } catch (err) {
+        // Not a gallery directory or gallery.json missing, ignore
+      }
+      files = files.filter(f => f.name.toLowerCase() !== 'gallery.json');
+    }
+
     const prefs = DirectoryPrefs.getSortPrefs(result.directory);
     files = applySort(files, prefs.col, prefs.desc);
 
@@ -450,7 +475,8 @@ export const FsUtils = {
       if (enc === 'password_required' || enc === 'password_incorrect') {
         archivePath = selectedEntry.path;
         archiveEncryption = enc;
-        filename = `Password required: ${selectedEntry.name}`;
+        const lockSuffix = enc === 'password_incorrect' ? 'password incorrect' : 'password required';
+        filename = `${selectedEntry.name}: ${lockSuffix}`;
       }
     }
 
@@ -523,14 +549,17 @@ export const FsUtils = {
       const isPasswordBlocked = result.encryption === 'password_required' || result.encryption === 'password_incorrect';
       if (isPasswordBlocked) {
         const archiveName = basename(result.archive_path) || result.archive_path;
-        const lockLabel = result.encryption === 'password_required'
-          ? `Password required: ${archiveName}`
-          : `Password incorrect! ${archiveName}`;
+        const lockSuffix = result.encryption === 'password_incorrect' ? 'password incorrect' : 'password required';
+        const initialIndex = files.length > 1 ? 1 : (files.length > 0 ? 0 : -1);
+        const activeFile = initialIndex >= 0 && files[initialIndex] && !files[initialIndex].is_parent
+          ? files[initialIndex].name
+          : archiveName;
+        const lockLabel = `${activeFile}: ${lockSuffix}`;
 
         Core.setState({
           mode: 'archive',
           list: files,
-          index: files.length > 1 ? 1 : (files.length > 0 ? 0 : -1),
+          index: initialIndex,
           archivePath: result.archive_path,
           archiveMetadataFiles: metaFiles,
           archiveEncryption: result.encryption,

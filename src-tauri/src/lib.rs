@@ -9,7 +9,8 @@ pub mod protocol;
 pub mod utils;
 pub mod windows;
 
-use std::sync::{Mutex, RwLock};
+use std::sync::atomic::AtomicU64;
+use std::sync::{Arc, Mutex, RwLock};
 use tauri::{Emitter, Manager};
 
 use archives::*;
@@ -39,7 +40,7 @@ pub fn run() {
             if let Some(main_window) = app.get_webview_window("main") {
                 let _ = main_window.show();
                 let _ = main_window.set_focus();
-                let path_arg = argv.iter().skip(1).find(|arg| !arg.starts_with("--"));
+                let path_arg = argv.iter().skip(1).find(|arg| !arg.starts_with('-'));
                 if let Some(path) = path_arg {
                     let _ = main_window.emit("single-instance-open", path.clone());
                 }
@@ -50,6 +51,7 @@ pub fn run() {
     builder = builder
         .manage(RwLock::new(ArchiveCache::new(cache_mb)))
         .manage(Mutex::new(WatcherState::new()))
+        .manage(network::DownloadCancelFlag(Arc::new(AtomicU64::new(0))))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
@@ -72,6 +74,7 @@ pub fn run() {
             windows::apply_shell_background(&main_window, &config);
             platform::icons::warmup();
             crate::commands::watchers::spawn_config_file_watcher(app.handle().clone());
+            crate::commands::watchers::spawn_library_watcher(app.handle().clone());
             crate::archives::cache::acquire_temp_lock();
             crate::archives::cache::cleanup_orphaned_temp_dirs();
 
@@ -112,7 +115,20 @@ pub fn run() {
         update_theme,
         pick_folder,
         check_is_animated,
-        resolve_archive_temp_origin
+        resolve_archive_temp_origin,
+        fetch_text,
+        fetch_extractor_text,
+        download_to_file,
+        get_library_dir,
+        get_default_library_dir,
+        move_library,
+        library_move_in_progress,
+        rebind_library_watcher,
+        create_placeholder_files,
+        remove_file,
+        remove_directory,
+        read_library_tree,
+        cancel_download
     ]);
 
     crate::protocol::register_quivit_protocol(builder)

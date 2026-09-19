@@ -18,7 +18,7 @@ export function initKeybindUi(containerId, config, showStatus) {
 
   function showLockedBindingStatus(actionId, bind) {
     if (actionId === 'cmd-exit-fullscreen-hold' && normalizeCombo(bind) === 'Escape') {
-      showStatus('Fullscreen requires Esc as a fallback.');
+      showStatus('Esc is required to leave full screen.');
     }
   }
 
@@ -96,7 +96,7 @@ export function initKeybindUi(containerId, config, showStatus) {
           if (isLockedBinding(actionId, bindToRemove)) {
             showLockedBindingStatus(actionId, bindToRemove);
           } else if (actionId === MENUBAR_ACTION && !hasUsableMenubarBind(binds, candidateBinds)) {
-            showStatus('Toggle Menu Bar needs at least one non-conflicting binding.');
+            showStatus('Keep one Menu Bar shortcut that does not conflict with another shortcut.');
           } else {
             currentBinds.splice(index, 1);
           }
@@ -104,7 +104,7 @@ export function initKeybindUi(containerId, config, showStatus) {
           const candidateBinds = [...currentBinds];
           candidateBinds[index] = normalizeCombo(finalCombo);
           if (actionId === MENUBAR_ACTION && !hasUsableMenubarBind(binds, candidateBinds)) {
-            showStatus('Toggle Menu Bar needs at least one non-conflicting binding.');
+            showStatus('Keep one Menu Bar shortcut that does not conflict with another shortcut.');
           } else {
             currentBinds = candidateBinds;
           }
@@ -345,7 +345,7 @@ export function initKeybindUi(containerId, config, showStatus) {
           }
           const candidateBinds = currentBinds.filter((_, i) => i !== idx);
           if (actionId === MENUBAR_ACTION && !hasUsableMenubarBind(binds, candidateBinds)) {
-            showStatus('Toggle Menu Bar needs at least one non-conflicting binding.');
+            showStatus('Keep one Menu Bar shortcut that does not conflict with another shortcut.');
             return;
           }
           currentBinds.splice(idx, 1);

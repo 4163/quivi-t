@@ -1,5 +1,7 @@
 # QuiviT Implemented Work
 
+Validation comparison performed: entries are checked against the repository ownership, IPC, state, and documentation rules before they are recorded here.
+
 Date started: 2026-08-01
 
 Shipped, verified work (features / fixes / reports / optimizations). 
@@ -7,6 +9,172 @@ Shipped, verified work (features / fixes / reports / optimizations).
 Note: This file is essentially a changelog dump. Past entries are not actively maintained and may be stale.
 
 ## Fully Implemented
+
+### URL import refinements and Library depth filtering (2026-09-19)
+- **Library depth filtering (`src-tauri/src/commands/directory.rs`, `src/js/filepanel/filePanel.js`):** `read_library_nodes` now restricts files to `depth == 0` (direct standalone image downloads under provider roots). Image files under gallery folders (`depth > 0`) are ignored, preventing placeholder image files from momentarily surfacing as child rows under the provider dropdown. In the frontend, `appendNodes` adds a defense-in-depth guard ignoring non-directory nodes when `depth > 0`.
+- **Atomic gallery initialization (`src/js/urlLoader.js`):** Moved `gallery.json` sidecar write prior to placeholder file creation so the directory is identified as a valid gallery on disk before placeholder creation triggers filesystem watchers.
+- **Open first image configuration (`src/js/urlLoader.js`, `src/js/main/main.js`):** Respected `open_first_image` config option for gallery imports. When disabled, URL import redirects to the directory without targeting or opening the first image, starts the background download queue prioritizing the first image, and synchronizes the queue target on directory transition.
+- **Defensive delete state persistence (`src/js/filepanel/filePanel.js`):** Tracked `activeArmedLibPath` across `renderLibrary()` calls so background download file watcher events do not disarm an armed delete button.
+- **Default shortcut update (`src/js/services/actions.js`, `src/index.html`, `README.md`):** Updated the default keybinding and UI label for `Open URL...` to `Ctrl+I`.
+- **Verification:** Unit test `library_nodes_never_include_files_under_subdirectories` in `commands::directory` (5 passing); `npm test` (71 passing); `cargo check --tests` clean.
+
+### Configurable Library location and Options feedback (2026-09-19)
+- **Live Library relocation (`src-tauri/src/commands/library.rs`, `src-tauri/src/config.rs`):** Options can move the shared URL Library to an existing empty folder without restarting. The backend stages and verifies the copy before saving the new location, blocks Library writes during the move, and keeps the original folder when the switch fails.
+- **Cross-window continuity (`src-tauri/src/commands/watchers.rs`, `src/js/main/main.js`, `src/js/urlLoader.js`):** Running QuiviT processes reload the shared location, rebind their Library watcher, refresh the Library tree, and remap Library paths in navigation, Favorites, sorting, and resume state.
+- **Default location and path cleanup (`src/js/options/options.js`, `src/options.html`, `src-tauri/src/config.rs`):** An empty Library field means `%LOCALAPPDATA%\\QuiviT\\library`; its placeholder shows that path. Windows verbatim `\\?\\` paths are cleaned before they reach configuration, Favorites, or breadcrumbs. The Start directory field follows the same empty-value pattern.
+- **Options feedback (`src/js/options/`):** Status messages use short user-facing language. Library errors explain the next action without showing backend details.
+- **Keybindings (`src/options.html`):** The existing `Open URL...` action now appears under File Operations, directly after Open File / Archive, so its default `Ctrl+I` shortcut can be changed.
+- **Verification:** User confirmed the runtime behavior. `cargo check --tests`; config tests (8 passing); full Rust suite (74 passing); `npm test` (69 passing); action-registry tests (6 passing); JavaScript syntax and diff checks.
+
+### Cross-instance Library updates (2026-09-19)
+- **Shared Library watcher (`src-tauri/src/commands/watchers.rs`, `src-tauri/src/lib.rs`):** Each QuiviT process now recursively watches `%LOCALAPPDATA%/QuiviT/library` from startup. Create, removal, rename, and `gallery.json` data changes coalesce for 250 ms before the process emits `library-changed`.
+- **Library panel refresh (`src/js/filepanel/filePanel.js`):** The Library panel listens for `library-changed` and reloads its tree. The existing active-directory watcher continues to refresh files in an open gallery.
+- **Documentation (`.agents/architecture-state.md`):** Recorded the watcher-to-file-panel event contract.
+- **Verification:** `cargo check --tests`; `cargo test --manifest-path src-tauri/Cargo.toml commands::directory::tests` (4 passing); `npm test` (69 passing); JavaScript syntax, Rust formatting, and diff checks; manual two-instance Library update test passed.
+
+### Remote extractor updates, download recovery, and runtime coverage (2026-09-19)
+- **Remote update and offline cache (`src/js/urlLoader.js`, `src-tauri/src/commands/network.rs`):** Every URL import refreshes the trusted remote manifest. Production fetches cache successful manifest and extractor responses under `%LOCALAPPDATA%/QuiviT/extractor-cache/` and use the last complete response during an outage. Blob-module caching is keyed by extractor ID, manifest version, and source path, so a versioned manifest update loads new extractor code without a QuiviT release.
+- **Per-image failure state (`src/js/filepanel/filePanel.js`, `src/css/main.css`, `src/js/urlLoader.js`):** Gallery downloads that exhaust their retry show a red `FAILED` list entry or an explicit thumbnail message. Clicking a failed entry queues a fresh retry while keeping the active selection intact.
+- **Runtime extractor E2E (`e2e/specs/08-url-loader.e2e.js`, `wdio.conf.js`):** Added an isolated Library test that injects a manifest-only extractor at runtime, drives the Ctrl+U flow, and checks nested gallery persistence and extractor fetches without relying on a third-party site or a user Library.
+- **Documentation (`.agents/url-feature-roadmap.md`, `.agents/architecture-state.md`):** Recorded the release-independent extractor goal and the persistent cache behavior.
+- **Verification:** `node --check` for changed JavaScript and E2E modules; `npm test` (69 passing); `cargo check --tests`; `cargo test --manifest-path src-tauri/Cargo.toml network::tests` (4 passing); isolated URL-loader WDIO run; `git diff --check`.
+
+### Versioned remote extractor contract and nested library paths (2026-09-19)
+- **Manifest and extractor boundary (`extractors/manifest.json`, `src/js/urlLoader.js`):** Manifest version 1 now requires a stable extractor ID, display name, provider-root `libraryPath`, extractor version, safe source path, and URL patterns. Extractor results require a stable gallery ID, provider-relative path segments, and extractor-owned image filenames.
+- **Validation and persistence (`src/js/urlLoader.js`, `src-tauri/src/commands/network.rs`):** The loader rejects malformed manifests, unsafe Windows path segments and filenames, duplicate filenames, unsupported image formats, non-HTTP(S) image URLs, pagination that switches galleries, and attempts to reuse a gallery folder for a different gallery. Rust rejects absolute or traversal-like extractor paths before reading local development files or fetching remote sources. `gallery.json` records gallery identity, relative path, manifest identity, and extractor version alongside image metadata.
+- **Nested library tree (`src-tauri/src/models.rs`, `src-tauri/src/commands/directory.rs`, `src/js/filepanel/libraryStore.js`, `src/js/filepanel/filePanel.js`):** Replaced the fixed provider/gallery IPC shape with recursive `LibraryNode` entries. The Library sidebar renders nested extractor paths with indentation. Only gallery roots and standalone raw images expose deletion controls. Library deletion uses component-aware canonical path containment.
+- **Imgur migration (`extractors/imgur.js`):** Imgur emits the v1 gallery descriptor while retaining its own filename convention and extension cleanup.
+- **Documentation (`.agents/url-feature-roadmap.md`, `.agents/architecture-state.md`):** Recorded the v1 authoring contract, progressive queue policy, recursive library ownership, and safe backend extractor fetches.
+- **Verification:** `node --check` for changed frontend/extractor modules and tests; focused URL-loader tests (13 passing); focused Rust extractor-path and nested-tree tests; `cargo check --tests`; full frontend unit suite (67 passing); `git diff --check`.
+
+### Imgur filename ownership and URL queue policy (2026-09-19)
+- Imgur keeps its provider-specific gallery filename convention. The URL loader preserves extractor-provided names and generates a generic numbered fallback only when an extractor omits one.
+- Imgur removes one final extension from a description only when it matches the image's real extension. A mismatched suffix stays, and repeated matching suffixes retain all but the final one before the filename extension is added.
+- `gallery.json` now uses the complete filename as the file-panel display name, including the image format. The original description remains sidecar metadata.
+- Updated the URL feature roadmap to document the intended progressive download queue: the active image goes first, visible prefetches may overlap after a known-length request reaches 50%, and navigation changes cancel the old generation.
+- Verification: `node --check` for `src/js/urlLoader.js` and `extractors/imgur.js`; focused URL-loader tests (11 passing); full frontend unit suite (65 passing); `git diff --check`.
+
+### Downloading statusbar reflection and library UX refinements (2026-09-18)
+- **Statusbar downloading indicator (`src/js/menubar/statusbar.js`, `src/js/core.js`, `src/js/urlLoader.js`):**
+  - Added `Core.isDownloading` and `Core.isPlaceholder` querying the active download queue.
+  - Added real-time `quivit-download-status` events on queue start, teardown, and per-item worker status transitions.
+  - In `Statusbar.update`, when the active entry is downloading in an active queue, `.status-filename` displays `Downloading...` (with title `<filename> (Downloading...)`), and sets `dims` and `zoom` to `N/A`.
+  - Guarded `Statusbar.setImage` against overwriting while the active entry is downloading.
+  - Added listeners in `Statusbar` for `quivit-download-complete` and `quivit-download-status` to re-sync `Statusbar.update` dynamically as downloads start and finish.
+- **Provider hierarchy and defensive delete refinements (`src/index.html`, `src/css/main.css`, `src/js/filepanel/filePanel.js`):**
+  - Flattened provider headers and lists directly into `#file-panel-library` at the same DOM depth as favorites.
+  - Replaced SVG delete box with `.lib-remove-box` CSS element (10px x 10px, 1px border, 2px radius). Disarms strictly on outside clicks (`pointerdown`) or Escape key, removing auto-timers and hover disarm.
+  - Fixed active gallery folder highlighting when browsing provider root directories.
+  - Fixed thumbnail placeholder visibility so placeholders cleanly hide once thumbnails load across all lists.
+- **Backend raw file deletion (`src-tauri/src/commands/directory.rs`):**
+  - Updated `remove_directory` to support deleting raw standalone files via `fs::remove_file` when the target is a file inside the library root, fixing deletion of raw library items.
+- **Sequential download queue (`src/js/urlLoader.js`):**
+  - Set `DOWNLOAD_CONCURRENCY` to 1 for sequential downloads.
+- **Verification:**
+  - `node --check` clean across all modified JavaScript files.
+  - `npm test` passing (58/58).
+  - `cargo check --tests` and `cargo test` passing (70/70).
+
+
+### File panel library section and gallery management (2026-09-18)
+- **Rust library scanning and folder deletion (`src-tauri/src/models.rs`, `src-tauri/src/commands/directory.rs`, `src-tauri/src/lib.rs`):**
+  - Added `LibraryProviderEntry` and `LibraryGalleryEntry` models.
+  - Implemented `read_library_tree` to enumerate provider directories, gallery folders, and raw files with creation timestamps and sidecar titles.
+  - Implemented `remove_directory` with strict canonical path guard checking that targets reside inside the library root.
+  - Registered commands in the Tauri invoke handler and added safety unit test.
+- **Frontend library store (`src/js/filepanel/libraryStore.js`):**
+  - Pure service module managing IPC calls for library scanning and directory removal.
+  - Manages localStorage persistence for provider group collapsed states (`quivit_library_providers_collapsed`).
+- **File panel UI and navigation parity (`src/index.html`, `src/css/main.css`, `src/js/filepanel/filePanel.js`):**
+  - Added static `#file-panel-library` markup below Favorites with zero-space empty state (`#file-panel-library.is-empty { display: none; }`).
+  - Implemented direct provider dropdowns (e.g. `IMGUR ▼`) directly under Favorites without an outer "Library" header.
+  - Rendered native Windows shell icons (`getIconHtml(item)`) for galleries and downloaded raw files.
+  - Navigation matches favorites: single click highlights, double click opens directory, single click opens raw files, Enter/Space opens focused item.
+  - Added defensive two-step delete button defaulting to an empty box matching the original X svg size (`<rect x="6" y="6" width="12" height="12"/>`). First click arms the button into the close X in danger red with confirmation tooltip; second click executes permanent deletion on disk. Auto-disarms on mouseleave, focusout, or Escape.
+  - Wired `cmd-next` and `cmd-prev` action routing via `isLibraryFocused` and `navigateHighlightedLibrary`.
+  - Dispatches `quivit-library-updated` event on gallery downloads in `src/js/urlLoader.js` to refresh the tree automatically.
+- **Verification:**
+  - Verified with `node --check` across modified JavaScript files.
+  - Verified with `npm test` (58/58 passing).
+  - Verified with `cargo check --tests` and `cargo test test_remove_directory` (1/1 passing).
+
+### Imgur Direct URL & Raw Lifecycle Handling (2026-09-18)
+- **Rust file deletion command (`src-tauri/src/commands/directory.rs`, `src-tauri/src/lib.rs`):**
+  - Added `remove_file(path: String) -> Result<(), String>` command to delete files from disk.
+  - Registered `remove_file` in the Tauri command handler list.
+  - Added backend unit test verifying file deletion and safe no-op on missing paths.
+- **Extractor definitions (`extractors/manifest.json`, `extractors/imgur.js`):**
+  - Updated manifest pattern to match direct images on `i.imgur.com` and single image paths.
+  - Added `isDirectUrl(url)` and `parseDirectUrl(url)` to identify direct image URLs and extract image hashes, extensions, filenames, and canonical URLs without fetching HTML.
+- **URL loader orchestration (`src/js/urlLoader.js`, `src/js/main/main.js`):**
+  - Added `findMatchingGalleryImage(providerPath, directUrl, hash)` to search existing gallery sidecars under the provider root. If a matching gallery exists, QuiviT jumps directly to that file in the viewer.
+  - Added raw download fallback. If no gallery matches, QuiviT downloads the raw image directly under `library/<provider>/<hash>.<ext>` and opens it immediately.
+  - Added `cleanupMatchingRawFiles(providerPath, images)`. When a full gallery finishes, QuiviT deletes any loose raw files whose hashes or filenames match images in the new gallery.
+  - Updated `urlOverlay` submission in `main.js` to pass `targetName` to `FsUtils.loadFile(galleryPath, { targetName })`.
+- **Verification:**
+  - Added unit test suite in `mocha/urlLoader.test.js` covering direct URL parsing, sidecar matching, and loose raw file cleanup.
+  - Verified with `node --check` across modified JavaScript files.
+  - Verified with `npm test` (58/58 passing).
+  - Verified with `cargo check --tests` and `cargo test test_remove_file` (1/1 passing).
+
+### Remote Extractor Registry & Dynamic Module Loader (2026-09-18)
+- **Manifest registry and reference extractor (`extractors/`):**
+  - Created `extractors/manifest.json` version 1 registering Imgur album and gallery URL patterns and source script reference.
+  - Implemented `extractors/imgur.js` satisfying `{ match, extract }` contract, extracting album payloads from embedded JSON scripts with fallbacks to `og:image` and HTML title.
+  - Standardized `ExtractionResult` structure containing `provider`, `title`, `images` array with direct URLs/filenames, and `nextPageUrl`.
+- **Orchestrator implementation (`src/js/urlLoader.js`):**
+  - Implemented remote manifest fetching from GitHub raw URL with memory caching.
+  - Added URL pattern matching with regular expression safety guards against malformed patterns.
+  - Built dynamic module loader using `Blob` URLs and `import()`, backed by `BoundedMap` (capacity 20) with automatic `URL.revokeObjectURL` on eviction.
+  - Added extraction result validation enforcing required `provider` and `images` array fields.
+  - Added pagination loop supporting `nextPageUrl` with safety cap `MAX_PAGINATION_PAGES = 50`.
+- **Held key status indicator reset on input overlays (`src/js/shortcuts.js`, `src/js/main/urlOverlay.js`, `src/js/main/passwordOverlay.js`):**
+  - Added `clearHeldKeys` routine resetting `activeKeys`, `activeButtons`, and updating the statusbar scroll indicator.
+  - Wired `focusin`, `paste`, and `quivit-reset-held-keys` event listeners in `shortcuts.js` to ensure held indicators clear when focusing or pasting into input fields.
+  - Removed `e.stopPropagation()` from input `keyup` listeners in both overlays so key releases reach window event listeners.
+- **Verification:**
+  - Added unit test suite in `mocha/urlLoader.test.js` covering pattern matching, result validation, and pagination constant integrity.
+  - Verified with `node --check` across all touched JavaScript modules.
+  - Verified with `npm test` (68 passing).
+  - Verified with `cargo check --tests` (clean).
+  - Confirmed interactive runtime behavior in running dev instance.
+
+### Password Overlay Deselection Fix (2026-09-18)
+- **State cleanup on deselect (`src/js/core.js`):**
+  - Updated `_selectEntry(-1)` to clear `archivePath` and `archiveEncryption` when in directory mode (`mode !== 'archive'`), and reset lingering image state.
+- **Overlay dismissal and backdrop handling (`src/js/main/passwordOverlay.js`):**
+  - Added backdrop `pointerdown` listener to deselect the active entry and dismiss the overlay when clicking empty space outside the prompt.
+  - Updated overlay `Escape` key handler to deselect the entry and return focus to the file list in directory mode.
+  - Guarded `onStateChange` listener so the overlay only shows when an archive is active or the current container is an archive.
+- **Password status label format (`src/js/core.js`, `src/js/fsUtils.js`):**
+  - Updated lock status labels from `'Password required: <name>'` to `'<name>: password required'` (and `'<name>: password incorrect'`).
+  - Formatted active file entries inside a locked archive container to display `${file.name}: password required` in the statusbar while awaiting password input.
+- **Verification:**
+  - Added unit tests in `mocha/core.test.js` verifying `selectIndex(-1)` clears encryption state in directory mode, preserves it in archive mode, and formats locked archive entries as `<name>: password required`.
+  - Verified with `node --check` across modified files.
+  - Verified with `npm test` (57/57 passing).
+  - Verified with `cargo check --tests` (clean).
+
+### Use URL Initial Setup (2026-09-17)
+- **Rust network proxy (`commands/network.rs`):**
+  - Added `ureq = "2.10"` to `Cargo.toml` with default rustls for synchronous HTTP requests.
+  - Implemented `fetch_text(url)` to retrieve remote HTML and text.
+  - Implemented `download_to_file(url, dest_path)` for streaming remote files directly to disk with directory creation and atomic file replacement.
+  - Registered commands in `commands/mod.rs` and `lib.rs` invoke handler.
+- **Action and menu integration:**
+  - Added `cmd-use-url` to `src/js/services/actions.js` with shortcut `Ctrl+U`, label `Use URL...`, and category `File Operations`.
+  - Added `Use URL...` item to File dropdown menu in `src/index.html`.
+- **UI modal overlay and orchestrator:**
+  - Added `#url-overlay` to `src/index.html` inside `#viewport` matching the layout and styling of `#password-overlay` and `#drop-overlay`.
+  - Extended `#url-overlay`, `.url-prompt`, `.url-field`, and `.url-error` styles in `src/css/main.css`.
+  - Implemented `src/js/main/urlOverlay.js` to manage focus, keyboard trapping, submit actions, Esc dismissal, and automatic transition-out when interacting with the file list or backdrop.
+  - Created `src/js/urlLoader.js` service orchestrator providing `isValidUrl`, `openPrompt`, and proxy helper functions.
+  - Wired `urlOverlay` and `UrlLoader` into `src/js/main/main.js` and `actionCtx`.
+- **Verification:**
+  - Added `mocha/urlLoader.test.js` covering action registration, dispatch, URL validation, and service lifecycle.
+  - Verified with `node --check` across modified JavaScript files.
+  - Verified with `npm test` (54 passing).
+  - Verified with `cargo check --tests` and `cargo test` (65 passing).
 
 ### Diagnostics Runner Reliability (2026-09-15)
 - **Runner reliability (`runner.e2e.js`):**

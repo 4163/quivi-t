@@ -9,12 +9,14 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-next', label: 'Next Item', defaultBinds: ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'], category: 'Navigation',
     run: (ctx) => {
       if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(1);
+      else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(1);
       else ctx.Core.navigate(1);
     }
   },
   { id: 'cmd-prev', label: 'Previous Item', defaultBinds: ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'], category: 'Navigation',
     run: (ctx) => {
       if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(-1);
+      else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(-1);
       else ctx.Core.navigate(-1);
     }
   },
@@ -235,6 +237,9 @@ export const ACTION_REGISTRY = [
   },
   { id: 'cmd-open-file', label: 'Open File / Archive', defaultBinds: 'Ctrl+Shift+o', category: 'File Operations',
     run: (ctx) => ctx.FsUtils.openFileDialog()
+  },
+  { id: 'cmd-use-url', label: 'Open URL...', defaultBinds: 'Ctrl+i', category: 'File Operations',
+    run: (ctx) => ctx.UrlLoader?.openPrompt()
   },
   { id: 'cmd-refresh', label: 'Refresh', defaultBinds: ['6', 'Ctrl+r'], category: 'File Operations',
     run: (ctx) => ctx.FsUtils.refresh()
