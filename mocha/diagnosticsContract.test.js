@@ -49,12 +49,15 @@ describe('Diagnostics system contract integrity', () => {
       const viewerRender = fs.readFileSync(viewerRenderPath, 'utf-8');
       const viewerPipelines = fs.readFileSync(viewerPipelinesPath, 'utf-8');
 
-      // #viewer-img-wrapper and #statusbar must exist in index.html
+      // #viewer-img-wrapper, #statusbar, and video pool elements must exist in index.html
       assert.ok(indexHtml.includes('id="viewer-img-wrapper"'), 'index.html must define id="viewer-img-wrapper"');
       assert.ok(indexHtml.includes('id="statusbar"'), 'index.html must define id="statusbar"');
+      assert.ok(indexHtml.includes('id="viewer-video"'), 'index.html must define id="viewer-video"');
+      assert.ok(indexHtml.includes('id="viewer-video-b"'), 'index.html must define id="viewer-video-b"');
 
-      // viewerRender must use viewer-img class and active / bridge pool roles
+      // viewerRender must use viewer-img and viewer-video classes, plus active / bridge pool roles
       assert.ok(viewerRender.includes('viewer-img'), 'viewerRender.js must reference viewer-img class');
+      assert.ok(viewerRender.includes('viewer-video'), 'viewerRender.js must reference viewer-video class');
       assert.ok(viewerRender.includes('active'), 'viewerRender.js must manage active pool role');
       assert.ok(viewerRender.includes('bridge'), 'viewerRender.js must manage bridge pool role');
 

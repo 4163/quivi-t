@@ -337,11 +337,15 @@ export function initReplayDiagnostics() {
     const imgWrapper = document.getElementById('viewer-img-wrapper');
     const activeImg = imgWrapper?.querySelector('.viewer-img.active');
     const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge') ?? imgWrapper?.querySelector('.viewer-img.bridge');
+    const activeVideo = imgWrapper?.querySelector('.viewer-video.active');
+    const bridgeVideo = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-video.bridge') ?? imgWrapper?.querySelector('.viewer-video.bridge');
     const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
     const filterCanvas = document.getElementById('viewer-filter-canvas');
 
     const activeOpacity = activeImg ? parseFloat(window.getComputedStyle(activeImg).opacity) : 0;
     const bridgeOpacity = bridgeImg ? parseFloat(window.getComputedStyle(bridgeImg).opacity) : 0;
+    const activeVideoOpacity = activeVideo ? parseFloat(window.getComputedStyle(activeVideo).opacity) : 0;
+    const bridgeVideoOpacity = bridgeVideo ? parseFloat(window.getComputedStyle(bridgeVideo).opacity) : 0;
     const lanczosOpacity = lanczosCanvas ? parseFloat(window.getComputedStyle(lanczosCanvas).opacity) : 0;
     const filterOpacity = filterCanvas ? parseFloat(window.getComputedStyle(filterCanvas).opacity) : 0;
 
@@ -350,9 +354,11 @@ export function initReplayDiagnostics() {
 
     const hasActive = !!(activeImg && activeOpacity > 0 && activeImg.complete && activeImg.naturalWidth > 0);
     const hasBridge = !!(bridgeImg && bridgeOpacity > 0 && bridgeImg.naturalWidth > 0);
+    const hasActiveVideo = !!(activeVideo && activeVideoOpacity > 0 && activeVideo.readyState >= 2 && activeVideo.videoWidth > 0);
+    const hasBridgeVideo = !!(bridgeVideo && bridgeVideoOpacity > 0 && bridgeVideo.readyState >= 2);
     const hasCanvas = (lanczosReady && lanczosOpacity > 0) || (filterReady && filterOpacity > 0);
 
-    return hasActive || hasBridge || hasCanvas;
+    return hasActive || hasBridge || hasActiveVideo || hasBridgeVideo || hasCanvas;
   }
 
   function _initViewerProbe() {
@@ -419,6 +425,14 @@ export function initReplayDiagnostics() {
                 role,
                 src: m.target.getAttribute('src') || m.target.src || null,
               });
+            } else if (m.attributeName === 'class' && m.target.classList.contains('viewer-video')) {
+              const isActive = m.target.classList.contains('active');
+              const isBridge = m.target.classList.contains('bridge');
+              const role = isActive ? 'active' : (isBridge ? 'bridge' : 'idle');
+              recordEvent('viewer', 'video-role-change', {
+                role,
+                src: m.target.dataset?.vidSrc || m.target.getAttribute('src') || m.target.src || null,
+              });
             } else if (m.attributeName === 'data-render-ready') {
               const ready = m.target.getAttribute('data-render-ready') === 'true';
               recordEvent('viewer', 'canvas-ready-change', {
@@ -468,6 +482,8 @@ export function initReplayDiagnostics() {
       const imgWrapper = document.getElementById('viewer-img-wrapper');
       const activeImg = imgWrapper?.querySelector('.viewer-img.active');
       const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge') ?? imgWrapper?.querySelector('.viewer-img.bridge');
+      const activeVideo = imgWrapper?.querySelector('.viewer-video.active');
+      const bridgeVideo = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-video.bridge') ?? imgWrapper?.querySelector('.viewer-video.bridge');
       const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
       const filterCanvas = document.getElementById('viewer-filter-canvas');
 
@@ -480,6 +496,11 @@ export function initReplayDiagnostics() {
         activeOpacity: activeImg ? parseFloat(window.getComputedStyle(activeImg).opacity) : 0,
         bridgeSrc: bridgeImg?.getAttribute('src') || bridgeImg?.src || null,
         bridgeOpacity: bridgeImg ? parseFloat(window.getComputedStyle(bridgeImg).opacity) : 0,
+        activeVideoSrc: activeVideo?.dataset?.vidSrc || activeVideo?.getAttribute('src') || activeVideo?.src || null,
+        activeVideoReadyState: activeVideo?.readyState || 0,
+        activeVideoOpacity: activeVideo ? parseFloat(window.getComputedStyle(activeVideo).opacity) : 0,
+        bridgeVideoSrc: bridgeVideo?.dataset?.vidSrc || bridgeVideo?.getAttribute('src') || bridgeVideo?.src || null,
+        bridgeVideoOpacity: bridgeVideo ? parseFloat(window.getComputedStyle(bridgeVideo).opacity) : 0,
         lanczosReady: lanczosCanvas?.getAttribute('data-render-ready') === 'true',
         lanczosOpacity: lanczosCanvas ? parseFloat(window.getComputedStyle(lanczosCanvas).opacity) : 0,
         filterReady: filterCanvas?.getAttribute('data-render-ready') === 'true',
