@@ -340,6 +340,101 @@ pub fn read_library_tree() -> Result<Vec<LibraryProviderEntry>, String> {
     Ok(providers)
 }
 
+fn remove_file_robust(path: &Path) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if let Ok(meta) = fs::metadata(path) {
+        if meta.permissions().readonly() {
+            let mut perms = meta.permissions();
+            perms.set_readonly(false);
+            let _ = fs::set_permissions(path, perms);
+        }
+    }
+    for attempt in 0..10 {
+        match fs::remove_file(path) {
+            Ok(_) => return Ok(()),
+            Err(e) if attempt == 9 => return Err(e),
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(50)),
+        }
+    }
+    Ok(())
+}
+
+fn remove_dir_contents_and_self(dir: &Path) -> std::io::Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if let Ok(meta) = entry.metadata() {
+            if meta.permissions().readonly() {
+                let mut perms = meta.permissions();
+                perms.set_readonly(false);
+                let _ = fs::set_permissions(&path, perms);
+            }
+            if meta.is_dir() {
+                remove_dir_contents_and_self(&path)?;
+            } else {
+                remove_file_robust(&path)?;
+            }
+        }
+    }
+    fs::remove_dir(dir)
+}
+
+fn remove_dir_all_robust(dir: &Path) -> std::io::Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    for attempt in 0..10 {
+        match remove_dir_contents_and_self(dir) {
+            Ok(_) => return Ok(()),
+            Err(e) if attempt == 9 => return Err(e),
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(50)),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn move_to_recycle_bin(path: &Path) -> std::io::Result<()> {
+    use windows::Win32::UI::Shell::{
+        SHFileOperationW, SHFILEOPSTRUCTW, FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION,
+        FOF_NOERRORUI, FOF_SILENT,
+    };
+    use windows::core::PCWSTR;
+
+    let path_str = path.to_string_lossy();
+    let clean_path = path_str.strip_prefix(r"\\?\").unwrap_or(&path_str);
+
+    let mut wide: Vec<u16> = clean_path.encode_utf16().collect();
+    wide.push(0);
+    wide.push(0);
+
+    let mut op = SHFILEOPSTRUCTW {
+        hwnd: Default::default(),
+        wFunc: FO_DELETE,
+        pFrom: PCWSTR(wide.as_ptr()),
+        pTo: PCWSTR::null(),
+        fFlags: (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI).0 as u16,
+        fAnyOperationsAborted: Default::default(),
+        hNameMappings: std::ptr::null_mut(),
+        lpszProgressTitle: PCWSTR::null(),
+    };
+
+    let ret = unsafe { SHFileOperationW(&mut op) };
+    if ret == 0 && !op.fAnyOperationsAborted.as_bool() {
+        Ok(())
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("SHFileOperationW failed with return code {ret}"),
+        ))
+    }
+}
+
 #[tauri::command(async)]
 pub fn remove_directory(path: String) -> Result<(), String> {
     let p = Path::new(&path);
@@ -355,14 +450,24 @@ pub fn remove_directory(path: String) -> Result<(), String> {
     let canonical_target = fs::canonicalize(p)
         .map_err(|e| format!("Failed to canonicalize target path: {e}"))?;
 
-    if !canonical_target.starts_with(&canonical_lib) || canonical_target == canonical_lib {
+    let lib_str = canonical_lib.to_string_lossy().to_lowercase();
+    let target_str = canonical_target.to_string_lossy().to_lowercase();
+
+    if !target_str.starts_with(&lib_str) || target_str == lib_str {
         return Err("Cannot remove path outside of library root".into());
     }
 
-    if canonical_target.is_dir() {
-        fs::remove_dir_all(&canonical_target).map_err(|e| e.to_string())?;
-    } else {
-        fs::remove_file(&canonical_target).map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    let recycled = move_to_recycle_bin(&canonical_target).is_ok();
+    #[cfg(not(windows))]
+    let recycled = false;
+
+    if !recycled && canonical_target.exists() {
+        if canonical_target.is_dir() {
+            remove_dir_all_robust(&canonical_target).map_err(|e| e.to_string())?;
+        } else {
+            remove_file_robust(&canonical_target).map_err(|e| e.to_string())?;
+        }
     }
     Ok(())
 }

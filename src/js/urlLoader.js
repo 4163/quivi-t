@@ -912,6 +912,13 @@ export function isGalleryDownloading(dirPath) {
   return _pathsEqual(dirPath, _activeGalleryPath);
 }
 
+export function cancelGalleryDownloads(galleryPath) {
+  if (!galleryPath) return;
+  if (_activeGalleryPath && _pathsEqual(_activeGalleryPath, galleryPath)) {
+    _teardownActiveQueue();
+  }
+}
+
 function _teardownActiveQueue() {
   if (_activeQueue) {
     _activeQueue.cancel();
@@ -993,6 +1000,7 @@ export const UrlLoader = {
   normalizeUrl,
   isValidUrl,
   isGalleryDownloading,
+  cancelGalleryDownloads,
   isPlaceholderFile,
   setVisibleRange,
   fetchRemoteText,

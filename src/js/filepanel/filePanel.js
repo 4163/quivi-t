@@ -21,7 +21,7 @@ import {
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
-import { setVisibleRange as setDownloadVisibleRange } from '../urlLoader.js';
+import { setVisibleRange as setDownloadVisibleRange, cancelGalleryDownloads } from '../urlLoader.js';
 
 let _activeViewerKey = null;
 let _activeViewerBlob = null;
@@ -949,15 +949,18 @@ function buildLibraryEntry(item) {
     markIfAnimatedSvg(targetSrc, item.path);
   }
 
-  // Defensive deletion button
+  // Defensive deletion button (moves to Recycle Bin)
   const removeBtn = document.createElement('button');
   removeBtn.className = 'lib-remove';
   removeBtn.tabIndex = -1;
+  removeBtn.title = 'Move to Recycle Bin';
+  removeBtn.setAttribute('aria-label', 'Move to Recycle Bin');
   removeBtn.innerHTML = EMPTY_BOX_HTML;
 
   const disarm = () => {
     removeBtn.classList.remove('is-confirming');
-    removeBtn.title = '';
+    removeBtn.title = 'Move to Recycle Bin';
+    removeBtn.setAttribute('aria-label', 'Move to Recycle Bin');
     removeBtn.innerHTML = EMPTY_BOX_HTML;
     if (activeArmedRemoveBtn === removeBtn) {
       activeArmedRemoveBtn = null;
@@ -971,6 +974,7 @@ function buildLibraryEntry(item) {
     }
     removeBtn.classList.add('is-confirming');
     removeBtn.title = 'Delete local';
+    removeBtn.setAttribute('aria-label', 'Delete local');
     removeBtn.innerHTML = CLOSE_X_SVG;
     activeArmedRemoveBtn = removeBtn;
     activeArmedDisarmFn = disarm;
@@ -985,8 +989,35 @@ function buildLibraryEntry(item) {
 
     disarm();
     try {
+      if (typeof cancelGalleryDownloads === 'function') {
+        cancelGalleryDownloads(item.path);
+      }
+
+      const state = Core?.getState?.();
+      const curDir = (state?.directory || '').replace(/\\/g, '/').toLowerCase();
+      const targetDir = (item.path || '').replace(/\\/g, '/').toLowerCase();
+      const isInside = curDir === targetDir || (targetDir && curDir.startsWith(targetDir + '/'));
+
+      if (isInside && FsUtils?.openParent) {
+        await FsUtils.openParent();
+      }
+
+      if (targetDir) {
+        for (const key of Array.from(thumbnailCache.keys())) {
+          const k = String(key).replace(/\\/g, '/').toLowerCase();
+          if (k.includes(targetDir)) {
+            thumbnailCache.delete(key);
+          }
+        }
+      }
+
       await deleteGallery(item.path);
-      renderLibrary();
+      await renderLibrary();
+
+      const parentOfTarget = targetDir.includes('/') ? targetDir.substring(0, targetDir.lastIndexOf('/')) : '';
+      if (FsUtils?.refresh && (isInside || curDir === targetDir || curDir === parentOfTarget)) {
+        await FsUtils.refresh();
+      }
     } catch (err) {
       console.error('[FilePanel] Delete failed:', err);
     }

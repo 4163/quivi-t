@@ -330,10 +330,11 @@ body.resizing-col { cursor: col-resize !important; }
 #file-panel-favorites {
   background: var(--surface);
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border);
 }
 
-#file-panel-favorites.collapsed {
+#file-panel-favorites.collapsed,
+#file-panel:has(#file-panel-library.is-empty) #file-panel-favorites {
   border-bottom: unset;
 }
 

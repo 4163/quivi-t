@@ -60,6 +60,8 @@ function _setError(message) {
 }
 
 async function _handleSubmit() {
+  if (_overlay?.classList.contains('loading')) return;
+  _input.blur();
   const url = _input.value.trim();
   if (!url) {
     _setError('Please enter a URL');
@@ -96,10 +98,17 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
 
   overlay.querySelector('form').addEventListener('submit', (e) => {
     e.preventDefault();
+    _input.blur();
     _handleSubmit();
   });
 
   _input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      _input.blur();
+      _handleSubmit();
+      return;
+    }
     if (e.key !== 'Escape') {
       e.stopPropagation();
     }

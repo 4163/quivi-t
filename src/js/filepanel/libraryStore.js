@@ -34,9 +34,12 @@ export async function deleteGallery(path) {
   if (!window.__TAURI__ || !path) return false;
   try {
     await window.__TAURI__.core.invoke('remove_directory', { path });
+    const cleanTarget = path.replace(/\\/g, '/').toLowerCase();
     for (const provider of _libraryTreeCache) {
       if (Array.isArray(provider.galleries)) {
-        const idx = provider.galleries.findIndex((g) => g.path === path);
+        const idx = provider.galleries.findIndex((g) => {
+          return g.path && g.path.replace(/\\/g, '/').toLowerCase() === cleanTarget;
+        });
         if (idx !== -1) {
           provider.galleries.splice(idx, 1);
           break;
