@@ -5,6 +5,8 @@ use crate::formats::*;
 use crate::models::*;
 use crate::platform::attributes::is_hidden_path;
 
+const MAX_LIBRARY_TREE_DEPTH: usize = 8;
+
 pub fn read_directory_impl(
     path: &str,
     show_hidden: bool,
@@ -241,103 +243,117 @@ pub fn read_library_tree() -> Result<Vec<LibraryProviderEntry>, String> {
             continue;
         }
 
-        let mut galleries = Vec::new();
-        if let Ok(gallery_entries) = fs::read_dir(&provider_path) {
-            for g_entry in gallery_entries.flatten() {
-                let g_type = match g_entry.file_type() {
-                    Ok(ft) => ft,
-                    Err(_) => continue,
-                };
-                let g_path = g_entry.path();
-                let g_name = g_path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("")
-                    .to_string();
-
-                if g_name.is_empty() {
-                    continue;
-                }
-
-                let is_dir = g_type.is_dir();
-                let is_file = g_type.is_file();
-
-                if !is_dir && !is_file {
-                    continue;
-                }
-
-                if is_file {
-                    if let Some(ext) = g_path.extension().and_then(|e| e.to_str()) {
-                        if !is_image_ext(ext) {
-                            continue;
-                        }
-                    } else {
-                        continue;
-                    }
-                }
-
-                let metadata = g_entry.metadata().ok();
-                let created_millis = metadata
-                    .as_ref()
-                    .and_then(|m| m.created().or_else(|_| m.modified()).ok())
-                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0);
-
-                let date_str = if created_millis > 0 {
-                    created_millis.to_string()
-                } else {
-                    String::new()
-                };
-
-                let mut title = None;
-                let mut image_count = 0;
-
-                if is_dir {
-                    let sidecar_path = g_path.join("gallery.json");
-                    if sidecar_path.is_file() {
-                        if let Ok(sidecar_text) = fs::read_to_string(&sidecar_path) {
-                            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&sidecar_text) {
-                                if let Some(t) = v.get("title").and_then(|t| t.as_str()) {
-                                    if !t.is_empty() {
-                                        title = Some(t.to_string());
-                                    }
-                                }
-                                if let Some(imgs) = v.get("images").and_then(|i| i.as_array()) {
-                                    image_count = imgs.len();
-                                }
-                            }
-                        }
-                    }
-                }
-
-                galleries.push(LibraryGalleryEntry {
-                    name: g_name,
-                    path: g_path.to_string_lossy().into_owned(),
-                    title,
-                    date: date_str,
-                    created_millis,
-                    is_dir,
-                    image_count,
-                });
-            }
-        }
-
-        galleries.sort_by(|a, b| {
-            a.created_millis
-                .cmp(&b.created_millis)
-                .then_with(|| natord::compare(&a.name, &b.name))
-        });
+        let nodes = read_library_nodes(&provider_path, 0);
 
         providers.push(LibraryProviderEntry {
             name: provider_name,
             path: provider_path.to_string_lossy().into_owned(),
-            galleries,
+            nodes,
         });
     }
 
     providers.sort_by(|a, b| natord::compare(&a.name, &b.name));
     Ok(providers)
+}
+
+fn read_library_nodes(dir: &Path, depth: usize) -> Vec<LibraryNode> {
+    let mut nodes = Vec::new();
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return nodes,
+    };
+
+    for entry in entries.flatten() {
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(_) => continue,
+        };
+        let path = entry.path();
+        let name = match path.file_name().and_then(|part| part.to_str()) {
+            Some(name) if !name.is_empty() && name != "gallery.json" => name.to_string(),
+            _ => continue,
+        };
+        let is_dir = file_type.is_dir();
+        let is_file = file_type.is_file();
+        if !is_dir && !is_file {
+            continue;
+        }
+        if is_file && !path.extension().and_then(|ext| ext.to_str()).is_some_and(is_image_ext) {
+            continue;
+        }
+
+        let created_millis = entry
+            .metadata()
+            .ok()
+            .and_then(|metadata| metadata.created().or_else(|_| metadata.modified()).ok())
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis() as u64)
+            .unwrap_or(0);
+        let date = if created_millis > 0 {
+            created_millis.to_string()
+        } else {
+            String::new()
+        };
+
+        let (title, image_count, is_gallery) = if is_dir {
+            read_gallery_metadata(&path)
+        } else {
+            (None, 0, false)
+        };
+        let children = if is_dir && !is_gallery && depth < MAX_LIBRARY_TREE_DEPTH {
+            read_library_nodes(&path, depth + 1)
+        } else {
+            Vec::new()
+        };
+        if is_dir && !is_gallery && children.is_empty() {
+            continue;
+        }
+
+        nodes.push(LibraryNode {
+            name,
+            path: path.to_string_lossy().into_owned(),
+            title,
+            date,
+            created_millis,
+            is_dir,
+            is_gallery,
+            image_count,
+            children,
+        });
+    }
+
+    nodes.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.created_millis.cmp(&b.created_millis))
+            .then_with(|| natord::compare(&a.name, &b.name))
+    });
+    nodes
+}
+
+fn read_gallery_metadata(path: &Path) -> (Option<String>, usize, bool) {
+    let sidecar_path = path.join("gallery.json");
+    if !sidecar_path.is_file() {
+        return (None, 0, false);
+    }
+    let sidecar_text = match fs::read_to_string(sidecar_path) {
+        Ok(sidecar_text) => sidecar_text,
+        Err(_) => return (None, 0, false),
+    };
+    let metadata = match serde_json::from_str::<serde_json::Value>(&sidecar_text) {
+        Ok(metadata) => metadata,
+        Err(_) => return (None, 0, false),
+    };
+    let title = metadata
+        .get("title")
+        .and_then(|title| title.as_str())
+        .filter(|title| !title.is_empty())
+        .map(str::to_string);
+    let image_count = metadata
+        .get("images")
+        .and_then(|images| images.as_array())
+        .map_or(0, Vec::len);
+    (title, image_count, true)
 }
 
 fn remove_file_robust(path: &Path) -> std::io::Result<()> {
@@ -450,10 +466,7 @@ pub fn remove_directory(path: String) -> Result<(), String> {
     let canonical_target = fs::canonicalize(p)
         .map_err(|e| format!("Failed to canonicalize target path: {e}"))?;
 
-    let lib_str = canonical_lib.to_string_lossy().to_lowercase();
-    let target_str = canonical_target.to_string_lossy().to_lowercase();
-
-    if !target_str.starts_with(&lib_str) || target_str == lib_str {
+    if !canonical_target.starts_with(&canonical_lib) || canonical_target == canonical_lib {
         return Err("Cannot remove path outside of library root".into());
     }
 
@@ -475,6 +488,34 @@ pub fn remove_directory(path: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn library_nodes_preserve_nested_gallery_paths() {
+        let root = std::env::temp_dir().join(format!(
+            "quivit_library_nodes_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let chapter = root.join("Series").join("Volume 01").join("Chapter 02");
+        fs::create_dir_all(&chapter).unwrap();
+        fs::write(
+            chapter.join("gallery.json"),
+            r#"{"title":"Chapter 02","images":[{"filename":"001.png"}]}"#,
+        )
+        .unwrap();
+
+        let nodes = read_library_nodes(&root, 0);
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].name, "Series");
+        assert_eq!(nodes[0].children[0].name, "Volume 01");
+        assert!(nodes[0].children[0].children[0].is_gallery);
+        assert_eq!(nodes[0].children[0].children[0].image_count, 1);
+
+        let _ = fs::remove_dir_all(root);
+    }
 
     #[test]
     fn test_create_placeholder_files() {
@@ -516,5 +557,3 @@ mod tests {
         assert!(res_outside.is_err());
     }
 }
-
-

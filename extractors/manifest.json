@@ -4,6 +4,8 @@
     {
       "id": "imgur",
       "name": "Imgur",
+      "libraryPath": "Imgur",
+      "version": 1,
       "patterns": [
         "^https?://(www\\.)?imgur\\.com/(a|gallery)/",
         "^https?://(www\\.|i\\.)?imgur\\.com/([a-zA-Z0-9]+)(\\.[a-zA-Z0-9]+)?$"

@@ -19,10 +19,18 @@
 import { BoundedMap } from './services/cache.js';
 
 const EXTRACTOR_MODULE_CACHE_CAPACITY = 20;
+export const EXTRACTOR_MANIFEST_VERSION = 1;
 export const MAX_PAGINATION_PAGES = 50;
 const DOWNLOAD_QUEUE_RETRY_LIMIT = 1;
 export const PREFETCH_START_THRESHOLD_PERCENT = 50;
 const RESERVED_DEVICE_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
+const SAFE_EXTRACTOR_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const SAFE_EXTRACTOR_SOURCE_RE = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*\.js$/i;
+const WINDOWS_NAME_FORBIDDEN_RE = /[<>:"/\\|?*\x00-\x1F]/;
+const SUPPORTED_IMAGE_EXTENSIONS = new Set([
+  'apng', 'avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'png', 'svg', 'webp'
+]);
+export const MAX_GALLERY_PATH_DEPTH = 8;
 
 let _urlOverlay = null;
 let _Core = null;
@@ -46,27 +54,58 @@ const _extractorCache = new BoundedMap(EXTRACTOR_MODULE_CACHE_CAPACITY, (id) => 
   }
 });
 
-// -- Path sanitization --
+function _validateWindowsName(value, label) {
+  if (typeof value !== 'string' || !value || value !== value.trim()) {
+    throw new Error(`Extractor returned an invalid ${label}`);
+  }
+  const deviceBase = value.split('.', 1)[0];
+  if (value === '.' || value === '..' || value.length > 100
+    || WINDOWS_NAME_FORBIDDEN_RE.test(value) || /[. ]$/.test(value)
+    || RESERVED_DEVICE_NAMES.test(deviceBase)) {
+    throw new Error(`Extractor returned an unsafe ${label}: ${value}`);
+  }
+  return value;
+}
 
-export function sanitizePathSegment(name) {
-  if (typeof name !== 'string') return 'unnamed';
-  let sanitized = name
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
-    .trim()
-    .replace(/[. ]+$/, '');
-
-  if (!sanitized) return 'unnamed';
-
-  if (RESERVED_DEVICE_NAMES.test(sanitized)) {
-    sanitized = `_${sanitized}`;
+function _validateImage(image, index) {
+  if (!image || typeof image !== 'object' || !isValidUrl(image.url)) {
+    throw new Error(`Extractor returned an invalid image URL at index ${index}`);
   }
 
-  if (sanitized.length > 100) {
-    sanitized = sanitized.slice(0, 100).replace(/[. ]+$/, '');
-    if (!sanitized) return 'unnamed';
+  const filename = _validateWindowsName(image.filename, `filename at index ${index}`);
+  const extension = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
+  if (!extension || !SUPPORTED_IMAGE_EXTENSIONS.has(extension)) {
+    throw new Error(`Extractor returned an unsupported image filename at index ${index}`);
   }
+}
 
-  return sanitized;
+function _validateGallery(gallery) {
+  if (!gallery || typeof gallery !== 'object' || typeof gallery.id !== 'string' || !gallery.id.trim()) {
+    throw new Error("Extractor returned invalid result: missing gallery id");
+  }
+  if (!Array.isArray(gallery.relativePath) || gallery.relativePath.length === 0
+    || gallery.relativePath.length > MAX_GALLERY_PATH_DEPTH) {
+    throw new Error("Extractor returned invalid result: gallery relativePath must be a non-empty path");
+  }
+  for (const segment of gallery.relativePath) {
+    _validateWindowsName(segment, 'gallery path segment');
+  }
+}
+
+function _galleryMatches(a, b) {
+  if (a?.id !== b?.id || a?.relativePath?.length !== b?.relativePath?.length) return false;
+  return a.relativePath.every((segment, index) => segment === b.relativePath[index]);
+}
+
+function _validateGalleryImageNames(images) {
+  const filenames = new Set();
+  for (const image of images) {
+    const filename = image.filename.toLowerCase();
+    if (filenames.has(filename)) {
+      throw new Error(`Extractor returned duplicate filename: ${image.filename}`);
+    }
+    filenames.add(filename);
+  }
 }
 
 // -- URL validation and normalization --
@@ -442,11 +481,41 @@ export async function fetchManifest() {
     throw new Error(`Failed to parse extractor manifest: ${e.message}`);
   }
 
-  if (!manifest || typeof manifest.version !== 'number' || !Array.isArray(manifest.extractors)) {
-    throw new Error('Invalid extractor manifest format');
+  _manifestCache = validateManifest(manifest);
+  return manifest;
+}
+
+export function validateManifest(manifest) {
+  if (!manifest || manifest.version !== EXTRACTOR_MANIFEST_VERSION || !Array.isArray(manifest.extractors)) {
+    throw new Error('Unsupported extractor manifest version');
   }
 
-  _manifestCache = manifest;
+  const ids = new Set();
+  for (const entry of manifest.extractors) {
+    if (!entry || !SAFE_EXTRACTOR_ID_RE.test(entry.id || '') || ids.has(entry.id)) {
+      throw new Error('Extractor manifest contains an invalid or duplicate id');
+    }
+    if (typeof entry.name !== 'string' || !entry.name.trim()
+      || typeof entry.libraryPath !== 'string'
+      || !Number.isInteger(entry.version) || entry.version < 1
+      || !SAFE_EXTRACTOR_SOURCE_RE.test(entry.source || '') || entry.source.includes('..')
+      || !Array.isArray(entry.patterns) || entry.patterns.length === 0) {
+      throw new Error(`Extractor manifest entry '${entry.id}' is invalid`);
+    }
+    _validateWindowsName(entry.libraryPath, `library path for '${entry.id}'`);
+    for (const pattern of entry.patterns) {
+      if (typeof pattern !== 'string') {
+        throw new Error(`Extractor manifest entry '${entry.id}' has an invalid pattern`);
+      }
+      try {
+        new RegExp(pattern);
+      } catch {
+        throw new Error(`Extractor manifest entry '${entry.id}' has a malformed pattern`);
+      }
+    }
+    ids.add(entry.id);
+  }
+
   return manifest;
 }
 
@@ -469,7 +538,8 @@ export function findExtractor(url, manifest) {
 // -- Dynamic module loading --
 
 export async function loadExtractorModule(entry) {
-  const cached = _extractorCache.get(entry.id);
+  const cacheKey = `${entry.id}@${entry.version}`;
+  const cached = _extractorCache.get(cacheKey);
   if (cached) return cached;
 
   const source = await fetchExtractorText(entry.source);
@@ -490,29 +560,35 @@ export async function loadExtractorModule(entry) {
     throw new Error(`Extractor '${entry.id}' missing required match() or extract() export`);
   }
 
-  _blobUrls.set(entry.id, blobUrl);
-  _extractorCache.set(entry.id, mod);
+  _blobUrls.set(cacheKey, blobUrl);
+  _extractorCache.set(cacheKey, mod);
   return mod;
 }
 
 // -- Gallery extraction --
 
-function _validateResult(result) {
+export function validateExtractorResult(result, entry) {
   if (!result || typeof result.provider !== 'string') {
     throw new Error("Extractor returned invalid result: missing 'provider' field");
   }
+  if (entry && result.provider !== entry.name) {
+    throw new Error(`Extractor provider '${result.provider}' does not match manifest entry '${entry.name}'`);
+  }
+  _validateGallery(result.gallery);
   if (!Array.isArray(result.images)) {
     throw new Error("Extractor returned invalid result: 'images' must be an array");
   }
+  result.images.forEach(_validateImage);
+  _validateGalleryImageNames(result.images);
   return result;
 }
 
-export function extractGallery(extractor, html, url, context = {}) {
+export function extractGallery(extractor, html, url, context = {}, entry = null) {
   const result = extractor.extract(html, url, context);
   if (result && typeof result.then === 'function') {
-    return result.then((res) => _validateResult(res));
+    return result.then((res) => validateExtractorResult(res, entry));
   }
-  return _validateResult(result);
+  return validateExtractorResult(result, entry);
 }
 
 // -- Gallery Matching & Standalone Raw Cleanup --
@@ -520,18 +596,13 @@ export function extractGallery(extractor, html, url, context = {}) {
 export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
   if (typeof window === 'undefined' || !window.__TAURI__) return null;
   try {
-    const dirResult = await window.__TAURI__.core.invoke('read_directory', {
-      path: providerPath,
-      showHidden: false
-    });
-    if (!dirResult?.files) return null;
-
     const normalizedDirectUrl = normalizeUrl(directUrl);
     const targetHash = hash ? hash.toLowerCase() : null;
+    const directories = [{ path: providerPath, depth: 0 }];
 
-    for (const entry of dirResult.files) {
-      if (!entry.is_dir) continue;
-      const sidecarPath = `${entry.path}\\gallery.json`;
+    while (directories.length > 0) {
+      const current = directories.shift();
+      const sidecarPath = `${current.path}\\gallery.json`;
       try {
         const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
         const sidecar = JSON.parse(sidecarText);
@@ -556,7 +627,7 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
 
           if (isMatch) {
             return {
-              galleryPath: entry.path,
+              galleryPath: current.path,
               targetName: img.filename,
               image: img
             };
@@ -564,6 +635,15 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
         }
       } catch {
         // Not a gallery directory or invalid JSON; continue scanning.
+      }
+
+      if (current.depth >= MAX_GALLERY_PATH_DEPTH) continue;
+      const dirResult = await window.__TAURI__.core.invoke('read_directory', {
+        path: current.path,
+        showHidden: false
+      });
+      for (const entry of dirResult?.files || []) {
+        if (entry.is_dir) directories.push({ path: entry.path, depth: current.depth + 1 });
       }
     }
   } catch {
@@ -629,8 +709,10 @@ export async function loadUrl(urlString) {
   }
 
   const mod = await loadExtractorModule(entry);
-  const providerName = entry.name || 'Unknown';
-  const providerDir = sanitizePathSegment(providerName);
+  if (!mod.match(url)) {
+    throw new Error(`Extractor '${entry.id}' does not support this URL`);
+  }
+  const providerDir = entry.libraryPath;
   const libraryDir = await getLibraryDir();
   const providerPath = `${libraryDir}\\${providerDir}`;
 
@@ -641,6 +723,7 @@ export async function loadUrl(urlString) {
     const hash = directInfo?.hash || null;
     const rawFilename = directInfo?.filename || (url.split('/').pop() || 'image.png');
     const downloadUrl = directInfo?.url || url;
+    _validateImage({ url: downloadUrl, filename: rawFilename }, 0);
 
     // 1. If direct URL has a matching gallery, jump directly to that file
     const match = await findMatchingGalleryImage(providerPath, url, hash);
@@ -667,14 +750,17 @@ export async function loadUrl(urlString) {
   }
 
   const html = await fetchRemoteText(url);
-  const result = await extractGallery(mod, html, url, { fetchText: fetchRemoteText });
+  const result = await extractGallery(mod, html, url, { fetchText: fetchRemoteText }, entry);
 
   // Pagination: follow nextPageUrl until exhausted or safety cap reached.
   let pages = 0;
   let nextUrl = result.nextPageUrl;
   while (nextUrl && pages < MAX_PAGINATION_PAGES) {
     const pageHtml = await fetchRemoteText(nextUrl);
-    const pageResult = await extractGallery(mod, pageHtml, nextUrl, { fetchText: fetchRemoteText });
+    const pageResult = await extractGallery(mod, pageHtml, nextUrl, { fetchText: fetchRemoteText }, entry);
+    if (!_galleryMatches(result.gallery, pageResult.gallery)) {
+      throw new Error('Extractor pagination returned a different gallery');
+    }
     result.images.push(...pageResult.images);
     nextUrl = pageResult.nextPageUrl;
     pages++;
@@ -685,21 +771,10 @@ export async function loadUrl(urlString) {
     throw new Error('No images found in gallery');
   }
 
-  // Ensure filenames are populated
-  result.images.forEach((img, index) => {
-    if (!img.filename) {
-      let ext = '.jpg';
-      try {
-        const pathname = new URL(img.url).pathname;
-        const match = pathname.match(/\.([a-zA-Z0-9]+)$/);
-        if (match) ext = `.${match[1]}`;
-      } catch {}
-      img.filename = `${String(index + 1).padStart(3, '0')}${ext}`;
-    }
-  });
+  _validateGalleryImageNames(result.images);
+  const galleryPath = [libraryDir, providerDir, ...result.gallery.relativePath].join('\\');
 
-  const titleDir = sanitizePathSegment(result.title || 'Untitled Gallery');
-  const galleryPath = `${libraryDir}\\${providerDir}\\${titleDir}`;
+  await ensureGalleryOwnership(galleryPath, result.gallery, url);
 
   // Prepopulate all gallery files as 0-byte placeholders on disk upfront
   if (window.__TAURI__) {
@@ -727,10 +802,16 @@ export async function loadUrl(urlString) {
     provider: result.provider,
     title: result.title || '',
     timestamp: new Date().toISOString(),
+    gallery: {
+      id: result.gallery.id,
+      relativePath: result.gallery.relativePath,
+      extractorId: entry.id,
+      extractorVersion: entry.version
+    },
     images: result.images.map((img) => ({
       filename: img.filename,
-      displayName: img.filename.replace(/\.[^.]+$/, ''),
-      description: img.displayName || '',
+      displayName: img.filename,
+      description: img.description || img.displayName || '',
       sourceUrl: img.url
     }))
   };
@@ -757,6 +838,24 @@ export async function loadUrl(urlString) {
   window.dispatchEvent(new CustomEvent('quivit-library-updated'));
 
   return { galleryPath, result, targetName: result.images[0]?.filename || null };
+}
+
+async function ensureGalleryOwnership(galleryPath, gallery, sourceUrl) {
+  if (typeof window === 'undefined' || !window.__TAURI__) return;
+  try {
+    const content = await window.__TAURI__.core.invoke('read_text_file', {
+      path: `${galleryPath}\\gallery.json`
+    });
+    const existing = JSON.parse(content);
+    const existingId = existing?.gallery?.id;
+    const sameLegacyGallery = !existingId
+      && normalizeUrl(existing?.url || '') === normalizeUrl(sourceUrl);
+    if (existingId !== gallery.id && !sameLegacyGallery) {
+      throw new Error(`Library path is already used by another gallery: ${gallery.relativePath.join(' / ')}`);
+    }
+  } catch (err) {
+    if (String(err?.message || err).includes('Library path is already used')) throw err;
+  }
 }
 
 // -- Gallery queue management and auto-resumption --
@@ -1008,11 +1107,12 @@ export const UrlLoader = {
   downloadFile,
   cancelDownload,
   getLibraryDir,
-  sanitizePathSegment,
   fetchManifest,
+  validateManifest,
   findExtractor,
   loadExtractorModule,
   extractGallery,
+  validateExtractorResult,
   findMatchingGalleryImage,
   cleanupMatchingRawFiles,
   PREFETCH_START_THRESHOLD_PERCENT,

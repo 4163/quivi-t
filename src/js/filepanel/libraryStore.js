@@ -25,27 +25,19 @@ export function getLibraryTree() {
   return _libraryTreeCache;
 }
 
-export function hasGalleries(tree = _libraryTreeCache) {
+export function hasLibraryEntries(tree = _libraryTreeCache) {
   if (!Array.isArray(tree) || tree.length === 0) return false;
-  return tree.some((p) => Array.isArray(p.galleries) && p.galleries.length > 0);
+  return tree.some((provider) => hasNodes(provider.nodes));
 }
 
-export async function deleteGallery(path) {
+function hasNodes(nodes) {
+  return Array.isArray(nodes) && nodes.length > 0;
+}
+
+export async function deleteLibraryEntry(path) {
   if (!window.__TAURI__ || !path) return false;
   try {
     await window.__TAURI__.core.invoke('remove_directory', { path });
-    const cleanTarget = path.replace(/\\/g, '/').toLowerCase();
-    for (const provider of _libraryTreeCache) {
-      if (Array.isArray(provider.galleries)) {
-        const idx = provider.galleries.findIndex((g) => {
-          return g.path && g.path.replace(/\\/g, '/').toLowerCase() === cleanTarget;
-        });
-        if (idx !== -1) {
-          provider.galleries.splice(idx, 1);
-          break;
-        }
-      }
-    }
     return true;
   } catch (err) {
     console.error('[LibraryStore] Failed to remove gallery:', err);

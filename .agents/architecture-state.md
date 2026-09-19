@@ -52,7 +52,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `keybinds.js`: `mergeConfig` + pan/zoom defaults. `DEFAULT_KEYBINDS` is derived from `ACTION_REGISTRY`.
 - `shortcuts.js`: keyboard / mouse / wheel dispatch. Does not write the statusbar.
 - `viewer/`: `viewer.js` facade; `viewerRender.js` owns the image pool and parks the retiring bridge image in the `#viewer-bridge-layer` sibling with its pre-navigation transform frozen in `--bridge-*` props; `viewerPipelines.js` owns the overlay canvases; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
-- `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. List and thumbnail view modes with card grid virtualization. Exports `focusFileList()` and `isFileListFocused()`. `favoritesStore.js` is persistence only (no DOM).
+- `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. List and thumbnail view modes with card grid virtualization. Renders the recursive library tree from `libraryStore.js`; only gallery roots and raw images are removable. Exports `focusFileList()` and `isFileListFocused()`. `favoritesStore.js` and `libraryStore.js` are data-only (no DOM).
 - `fsUtils.js`: filesystem / archive navigation. No DOM.
 - `directoryPrefs.js`: per-directory sort prefs. Sort math is in `services/sorting.js`.
 - `navigationHistory.js`: session-only container Back/Forward.
@@ -73,12 +73,12 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `lib.rs` & `main.rs`: bootstrap, config watcher, and main-window build.
 - `tests/`: in-tree testing for archives, config, formats, protocol, and temp archive origin.
 - `config.rs`: `AppConfig` / persistence / portable / pending promotion.
-- `commands/`: Tauri command surface (directory, archives, animation, watcher, associations, shell). `list_archive` accepts `password: Option<String>`. `drop_all_archives_cache` and `resolve_archive_temp_origin` are archive lifecycle commands.
+- `commands/`: Tauri command surface (directory, archives, animation, watcher, associations, shell). `list_archive` accepts `password: Option<String>`. `drop_all_archives_cache` and `resolve_archive_temp_origin` are archive lifecycle commands. `network.rs` validates extractor file paths; `read_library_tree` returns recursive provider nodes with gallery roots identified by `gallery.json`.
 - `archives/` & `formats.rs`: archive readers + `ArchiveCache` (two-archive sliding buffer, `MAX_OPEN_ARCHIVES = 2`) and format / animation registry.
 - `protocol.rs`: `quivit://` handler. Routes: `/archive/` (entry data, `no-store`), `/thumb/` (96×96 shell thumbnails), `/icon/` (shell icons, `?size=large` for 32×32). `asset://` for direct file access.
 - `platform/`: `icons.rs` (shell icons), `thumbnails.rs` (96×96 `IShellItemImageFactory`), `temp_archive.rs` (external archiver temp origin resolution), `attributes.rs` (dotfile visibility), `dialog.rs` (native folder picker with Library virtual folder resolution). `windows.rs`: window lifecycle and size constants.
 - `ico.rs`: ICO spritesheets.
-- `models.rs`: IPC structs. `FileEntry.size: u64`, `ArchiveEncryptionStatus`, `ArchiveReadResult.encryption`, `TempArchiveOrigin`.
+- `models.rs`: IPC structs. `FileEntry.size: u64`, `ArchiveEncryptionStatus`, `ArchiveReadResult.encryption`, `TempArchiveOrigin`, `LibraryNode`.
 - `utils.rs`: Base64 and URL encoding helpers.
 
 **Testing & Diagnostics:**

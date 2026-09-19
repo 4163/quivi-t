@@ -13,8 +13,8 @@ import {
 } from './favoritesStore.js';
 import {
   fetchLibraryTree,
-  hasGalleries,
-  deleteGallery,
+  hasLibraryEntries,
+  deleteLibraryEntry,
   getProviderCollapsed,
   saveProviderCollapsed
 } from './libraryStore.js';
@@ -842,10 +842,11 @@ function formatLibraryDate(dateStr) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function buildLibraryEntry(item) {
+function buildLibraryEntry(item, depth = 0) {
   const li = document.createElement('li');
   li.title = item.title ? `${item.title}\n${item.path}` : item.path;
   li.dataset.path = item.path;
+  li.style.setProperty('--library-indent', `${depth * 12}px`);
   li.setAttribute('role', 'option');
   li.setAttribute('tabindex', '0');
 
@@ -949,10 +950,13 @@ function buildLibraryEntry(item) {
     markIfAnimatedSvg(targetSrc, item.path);
   }
 
+  const canDelete = item.is_gallery || !item.is_dir;
+
   // Defensive deletion button (moves to Recycle Bin)
   const removeBtn = document.createElement('button');
   removeBtn.className = 'lib-remove';
   removeBtn.tabIndex = -1;
+  removeBtn.hidden = !canDelete;
   removeBtn.title = 'Move to Recycle Bin';
   removeBtn.setAttribute('aria-label', 'Move to Recycle Bin');
   removeBtn.innerHTML = EMPTY_BOX_HTML;
@@ -980,48 +984,50 @@ function buildLibraryEntry(item) {
     activeArmedDisarmFn = disarm;
   };
 
-  removeBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    if (!removeBtn.classList.contains('is-confirming')) {
-      arm();
-      return;
-    }
-
-    disarm();
-    try {
-      if (typeof cancelGalleryDownloads === 'function') {
-        cancelGalleryDownloads(item.path);
+  if (canDelete) {
+    removeBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!removeBtn.classList.contains('is-confirming')) {
+        arm();
+        return;
       }
 
-      const state = Core?.getState?.();
-      const curDir = (state?.directory || '').replace(/\\/g, '/').toLowerCase();
-      const targetDir = (item.path || '').replace(/\\/g, '/').toLowerCase();
-      const isInside = curDir === targetDir || (targetDir && curDir.startsWith(targetDir + '/'));
+      disarm();
+      try {
+        if (typeof cancelGalleryDownloads === 'function') {
+          cancelGalleryDownloads(item.path);
+        }
 
-      if (isInside && FsUtils?.openParent) {
-        await FsUtils.openParent();
-      }
+        const state = Core?.getState?.();
+        const curDir = (state?.directory || '').replace(/\\/g, '/').toLowerCase();
+        const targetDir = (item.path || '').replace(/\\/g, '/').toLowerCase();
+        const isInside = curDir === targetDir || (targetDir && curDir.startsWith(targetDir + '/'));
 
-      if (targetDir) {
-        for (const key of Array.from(thumbnailCache.keys())) {
-          const k = String(key).replace(/\\/g, '/').toLowerCase();
-          if (k.includes(targetDir)) {
-            thumbnailCache.delete(key);
+        if (isInside && FsUtils?.openParent) {
+          await FsUtils.openParent();
+        }
+
+        if (targetDir) {
+          for (const key of Array.from(thumbnailCache.keys())) {
+            const k = String(key).replace(/\\/g, '/').toLowerCase();
+            if (k.includes(targetDir)) {
+              thumbnailCache.delete(key);
+            }
           }
         }
-      }
 
-      await deleteGallery(item.path);
-      await renderLibrary();
+        await deleteLibraryEntry(item.path);
+        await renderLibrary();
 
-      const parentOfTarget = targetDir.includes('/') ? targetDir.substring(0, targetDir.lastIndexOf('/')) : '';
-      if (FsUtils?.refresh && (isInside || curDir === targetDir || curDir === parentOfTarget)) {
-        await FsUtils.refresh();
+        const parentOfTarget = targetDir.includes('/') ? targetDir.substring(0, targetDir.lastIndexOf('/')) : '';
+        if (FsUtils?.refresh && (isInside || curDir === targetDir || curDir === parentOfTarget)) {
+          await FsUtils.refresh();
+        }
+      } catch (err) {
+        console.error('[FilePanel] Delete failed:', err);
       }
-    } catch (err) {
-      console.error('[FilePanel] Delete failed:', err);
-    }
-  });
+    });
+  }
 
   li.appendChild(itemName);
   li.appendChild(itemExt);
@@ -1038,7 +1044,7 @@ function buildLibraryEntry(item) {
         if (btn) btn.tabIndex = -1;
       }
     }
-    removeBtn.tabIndex = 0;
+    removeBtn.tabIndex = canDelete ? 0 : -1;
   });
 
   removeBtn.addEventListener('focus', () => {
@@ -1075,7 +1081,7 @@ export async function renderLibrary() {
   if (!libraryPanelEl) return;
   disarmActiveRemoveBtn();
   const tree = await fetchLibraryTree();
-  const hasAny = hasGalleries(tree);
+  const hasAny = hasLibraryEntries(tree);
 
   libraryPanelEl.classList.toggle('is-empty', !hasAny);
   libraryPanelEl.innerHTML = '';
@@ -1084,7 +1090,7 @@ export async function renderLibrary() {
   let allCollapsed = true;
 
   for (const provider of tree) {
-    if (!provider.galleries || provider.galleries.length === 0) continue;
+    if (!provider.nodes || provider.nodes.length === 0) continue;
 
     const isProvCollapsed = getProviderCollapsed(provider.name);
     if (!isProvCollapsed) allCollapsed = false;
@@ -1103,7 +1109,7 @@ export async function renderLibrary() {
     listUl.className = 'library-provider-list';
     if (isProvCollapsed) listUl.classList.add('collapsed');
     listUl.setAttribute('role', 'listbox');
-    listUl.setAttribute('aria-label', `${provider.name} galleries`);
+    listUl.setAttribute('aria-label', `${provider.name} library`);
 
     const toggleProv = () => {
       const nowCollapsed = !listUl.classList.contains('collapsed');
@@ -1125,9 +1131,13 @@ export async function renderLibrary() {
       }
     });
 
-    for (const g of provider.galleries) {
-      listUl.appendChild(buildLibraryEntry(g));
-    }
+    const appendNodes = (nodes, depth) => {
+      for (const node of nodes) {
+        listUl.appendChild(buildLibraryEntry(node, depth));
+        if (node.children?.length) appendNodes(node.children, depth + 1);
+      }
+    };
+    appendNodes(provider.nodes, 0);
 
     libraryPanelEl.appendChild(provHeader);
     libraryPanelEl.appendChild(listUl);

@@ -20,14 +20,48 @@ const DATA_PATTERNS = [
 
 const FILENAME_FORBIDDEN_RE = /[<>:"/\\|?*\x00-\x1F]/g;
 const FILENAME_MAX_LEN = 80;
+const PATH_SEGMENT_MAX_LEN = 100;
+const RESERVED_DEVICE_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
 
-function sanitizeDescription(desc) {
-  if (!desc || typeof desc !== 'string') return '';
-  let s = desc.replace(FILENAME_FORBIDDEN_RE, '_').trim().replace(/[. ]+$/, '');
-  if (s.length > FILENAME_MAX_LEN) {
-    s = s.slice(0, FILENAME_MAX_LEN).replace(/[. ]+$/, '');
+function sanitizePathSegment(value) {
+  let sanitized = String(value || 'Untitled Gallery')
+    .replace(FILENAME_FORBIDDEN_RE, '_')
+    .trim()
+    .replace(/[. ]+$/, '');
+  if (!sanitized) return 'Untitled Gallery';
+  if (RESERVED_DEVICE_NAMES.test(sanitized)) sanitized = `_${sanitized}`;
+  if (sanitized.length > PATH_SEGMENT_MAX_LEN) {
+    sanitized = sanitized.slice(0, PATH_SEGMENT_MAX_LEN).replace(/[. ]+$/, '');
   }
-  return s;
+  return sanitized || 'Untitled Gallery';
+}
+
+function stripMatchingFormat(description, extension) {
+  if (!description || typeof description !== 'string') return '';
+
+  const cleanDescription = description.trim();
+  const normalizedExtension = typeof extension === 'string' && extension.startsWith('.')
+    ? extension.toLowerCase()
+    : `.${String(extension || '').toLowerCase()}`;
+
+  if (!normalizedExtension || !cleanDescription.toLowerCase().endsWith(normalizedExtension)) {
+    return cleanDescription;
+  }
+
+  return cleanDescription.slice(0, -normalizedExtension.length).trim();
+}
+
+function sanitizeDescription(description, extension) {
+  let sanitized = stripMatchingFormat(description, extension)
+    .replace(FILENAME_FORBIDDEN_RE, '_')
+    .trim()
+    .replace(/[. ]+$/, '');
+
+  if (sanitized.length > FILENAME_MAX_LEN) {
+    sanitized = sanitized.slice(0, FILENAME_MAX_LEN).replace(/[. ]+$/, '');
+  }
+
+  return sanitized;
 }
 
 function digitPadWidth(count) {
@@ -35,10 +69,9 @@ function digitPadWidth(count) {
   return Math.max(1, Math.ceil(Math.log10(count + 1)));
 }
 
-function formatFilename(index, total, ext, description) {
-  const padded = String(index + 1).padStart(digitPadWidth(total), '0');
-  const clean = sanitizeDescription(description);
-  return clean ? `${padded}_${clean}${ext}` : `${padded}${ext}`;
+function formatFilename(index, total, extension, description) {
+  const itemNumber = String(index + 1).padStart(digitPadWidth(total), '0');
+  return description ? `${itemNumber}_${description}${extension}` : `${itemNumber}${extension}`;
 }
 
 export function parseDirectUrl(url) {
@@ -130,8 +163,7 @@ export async function extract(html, url, context = {}) {
       rawEntries.push({
         url: imageUrl,
         ext: normalizedExt,
-        description: entry.title || entry.description || '',
-        displayName: entry.title || entry.description || ''
+        description: entry.title || entry.description || ''
       });
     }
 
@@ -156,8 +188,7 @@ export async function extract(html, url, context = {}) {
         rawEntries.push({
           url: imageUrl,
           ext: normalizedExt,
-          description: entry.title || entry.description || '',
-          displayName: entry.title || entry.description || ''
+          description: entry.title || entry.description || ''
         });
       }
     } catch {
@@ -174,20 +205,22 @@ export async function extract(html, url, context = {}) {
         rawEntries.push({
           url: imageUrl,
           ext: '.jpg',
-          description: '',
-          displayName: ''
+          description: ''
         });
       }
     }
   }
 
-  // Format filenames with correct digit padding now that total count is known.
   const total = rawEntries.length;
-  const images = rawEntries.map((entry, i) => ({
-    url: entry.url,
-    filename: formatFilename(i, total, entry.ext, entry.description),
-    displayName: entry.displayName || `Image ${i + 1}`
-  }));
+  const images = rawEntries.map((entry, index) => {
+    const description = sanitizeDescription(entry.description, entry.ext);
+    return {
+      url: entry.url,
+      filename: formatFilename(index, total, entry.ext, description),
+      displayName: description || `Image ${index + 1}`,
+      description
+    };
+  });
 
   if (!title) {
     const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
@@ -196,9 +229,14 @@ export async function extract(html, url, context = {}) {
     }
   }
 
+  const galleryTitle = title || `Imgur ${albumId}`;
   return {
     provider: 'Imgur',
-    title: title || `Imgur ${albumId}`,
+    title: galleryTitle,
+    gallery: {
+      id: `imgur-${albumId}`,
+      relativePath: [sanitizePathSegment(galleryTitle)]
+    },
     images,
     nextPageUrl: null
   };

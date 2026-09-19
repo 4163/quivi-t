@@ -1,5 +1,7 @@
 # QuiviT Implemented Work
 
+Validation comparison performed: entries are checked against the repository ownership, IPC, state, and documentation rules before they are recorded here.
+
 Date started: 2026-08-01
 
 Shipped, verified work (features / fixes / reports / optimizations). 
@@ -7,6 +9,21 @@ Shipped, verified work (features / fixes / reports / optimizations).
 Note: This file is essentially a changelog dump. Past entries are not actively maintained and may be stale.
 
 ## Fully Implemented
+
+### Versioned remote extractor contract and nested library paths (2026-09-19)
+- **Manifest and extractor boundary (`extractors/manifest.json`, `src/js/urlLoader.js`):** Manifest version 1 now requires a stable extractor ID, display name, provider-root `libraryPath`, extractor version, safe source path, and URL patterns. Extractor results require a stable gallery ID, provider-relative path segments, and extractor-owned image filenames.
+- **Validation and persistence (`src/js/urlLoader.js`, `src-tauri/src/commands/network.rs`):** The loader rejects malformed manifests, unsafe Windows path segments and filenames, duplicate filenames, unsupported image formats, non-HTTP(S) image URLs, pagination that switches galleries, and attempts to reuse a gallery folder for a different gallery. Rust rejects absolute or traversal-like extractor paths before reading local development files or fetching remote sources. `gallery.json` records gallery identity, relative path, manifest identity, and extractor version alongside image metadata.
+- **Nested library tree (`src-tauri/src/models.rs`, `src-tauri/src/commands/directory.rs`, `src/js/filepanel/libraryStore.js`, `src/js/filepanel/filePanel.js`):** Replaced the fixed provider/gallery IPC shape with recursive `LibraryNode` entries. The Library sidebar renders nested extractor paths with indentation. Only gallery roots and standalone raw images expose deletion controls. Library deletion uses component-aware canonical path containment.
+- **Imgur migration (`extractors/imgur.js`):** Imgur emits the v1 gallery descriptor while retaining its own filename convention and extension cleanup.
+- **Documentation (`.agents/url-feature-roadmap.md`, `.agents/architecture-state.md`):** Recorded the v1 authoring contract, progressive queue policy, recursive library ownership, and safe backend extractor fetches.
+- **Verification:** `node --check` for changed frontend/extractor modules and tests; focused URL-loader tests (13 passing); focused Rust extractor-path and nested-tree tests; `cargo check --tests`; full frontend unit suite (67 passing); `git diff --check`.
+
+### Imgur filename ownership and URL queue policy (2026-09-19)
+- Imgur keeps its provider-specific gallery filename convention. The URL loader preserves extractor-provided names and generates a generic numbered fallback only when an extractor omits one.
+- Imgur removes one final extension from a description only when it matches the image's real extension. A mismatched suffix stays, and repeated matching suffixes retain all but the final one before the filename extension is added.
+- `gallery.json` now uses the complete filename as the file-panel display name, including the image format. The original description remains sidecar metadata.
+- Updated the URL feature roadmap to document the intended progressive download queue: the active image goes first, visible prefetches may overlap after a known-length request reaches 50%, and navigation changes cancel the old generation.
+- Verification: `node --check` for `src/js/urlLoader.js` and `extractors/imgur.js`; focused URL-loader tests (11 passing); full frontend unit suite (65 passing); `git diff --check`.
 
 ### Downloading statusbar reflection and library UX refinements (2026-09-18)
 - **Statusbar downloading indicator (`src/js/menubar/statusbar.js`, `src/js/core.js`, `src/js/urlLoader.js`):**

@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::Path;
+use std::path::{Component, Path};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -48,6 +48,9 @@ pub fn fetch_text(url: String) -> Result<String, String> {
 
 #[tauri::command(async)]
 pub fn fetch_extractor_text(relative_path: String) -> Result<String, String> {
+    if !is_safe_extractor_path(&relative_path) {
+        return Err("Invalid extractor path".to_string());
+    }
     // Local-first: check working directory and ancestor directories for extractors/ (dev mode).
     if let Ok(cwd) = std::env::current_dir() {
         let mut cur = Some(cwd.as_path());
@@ -81,6 +84,18 @@ pub fn fetch_extractor_text(relative_path: String) -> Result<String, String> {
     response
         .into_string()
         .map_err(|e| format!("Failed to read response body: {e}"))
+}
+
+fn is_safe_extractor_path(relative_path: &str) -> bool {
+    let path = Path::new(relative_path);
+    if relative_path.is_empty() || path.is_absolute() {
+        return false;
+    }
+    if !path.components().all(|component| matches!(component, Component::Normal(_))) {
+        return false;
+    }
+    relative_path == "manifest.json"
+        || path.extension().and_then(|extension| extension.to_str()) == Some("js")
 }
 
 #[tauri::command(async)]
@@ -228,6 +243,15 @@ mod tests {
         assert!(res.is_ok(), "Failed to fetch manifest: {:?}", res.err());
         let content = res.unwrap();
         assert!(content.contains("\"extractors\""));
+    }
+
+    #[test]
+    fn extractor_paths_reject_traversal_and_absolute_files() {
+        assert!(is_safe_extractor_path("manifest.json"));
+        assert!(is_safe_extractor_path("sites/example.js"));
+        assert!(!is_safe_extractor_path("../Cargo.toml"));
+        assert!(!is_safe_extractor_path("C:\\Windows\\win.ini"));
+        assert!(!is_safe_extractor_path("manifest.txt"));
     }
 
     #[test]

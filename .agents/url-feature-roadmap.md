@@ -1,3 +1,7 @@
+# Validation comparison performed
+
+This roadmap was checked against the repository architecture rules. It keeps extractor parsing separate from the loader, library UI, and Rust IPC ownership.
+
 # Use URL feature roadmap
 
 Design discussion captured 2026-09-17. This is the agreed direction, not an implementation plan. Details marked TBD will be resolved during implementation slices.
@@ -31,14 +35,33 @@ Trust model: the manifest URL is hardcoded to the project's own repository. Same
 
 Extractor caching (persist to disk between sessions vs memory-only) is TBD.
 
-### Extractor contract
+### Extractor contract (version 1)
 
 Each extractor exports two functions:
 
 - `match(url)` returns whether this extractor handles the given URL.
-- `extract(html, url)` receives fetched page content and returns image URLs, titles, folder structure hints, and pagination info. No app imports, no DOM access, no side effects.
+- `extract(html, url, context)` receives fetched page content and returns image URLs, filenames, a gallery identity, its folder path, and pagination info. `context.fetchText()` is available for extractor-owned API or pagination requests. Extractors have no app imports, DOM access, or side effects.
 
-The exact return shape will be defined during implementation. The principle is that extractors are pure: data in, data out. The orchestrator handles everything else.
+The loader validates this shape before writing any library files:
+
+```js
+{
+  provider: "Provider name", // exactly matches the manifest entry name
+  title: "Readable gallery title",
+  gallery: {
+    id: "provider-stable-gallery-id",
+    relativePath: ["Series", "Volume 01", "Chapter 02"]
+  },
+  images: [{
+    url: "https://cdn.example/image.png",
+    filename: "001_Cover.png",
+    description: "Cover"
+  }],
+  nextPageUrl: null
+}
+```
+
+`gallery.id` is stable for the source gallery. `relativePath` is a non-empty sequence of safe directory names beneath the manifest-owned provider directory. Extractors own the path and image filenames. The loader rejects path separators, traversal names, reserved Windows names, invalid or duplicate filenames, non-HTTP(S) image URLs, and unsupported image formats. Pagination responses must describe the same `gallery.id` and relative path as the first response.
 
 ### CORS and the Rust HTTP proxy
 
@@ -102,7 +125,7 @@ The archive system has two extraction models:
 
 URL downloading is closest to the RAR model: sequential background work where entries become available progressively. But the trigger for what to download next comes from what's visible in the file panel, not from walking the archive sequentially.
 
-### Viewport-driven queue
+### Viewport-driven progressive queue
 
 Modeled after the existing thumbnail system in `filePanel.js`. The thumbnail system (`commitPendingThumbnails`) works like this:
 
@@ -114,9 +137,12 @@ The URL download queue follows the same pattern:
 
 1. The extractor runs once and returns the full image URL list. The file panel shows all entries immediately with placeholders.
 2. The download queue processes images visible in the file panel + 1 buffer row on each side.
-3. Downloads happen sequentially (one at a time) through the Rust backend. Each completed download writes to the library directory. The file panel row updates from placeholder to loaded.
-4. The active viewer image always gets top priority regardless of file panel scroll position.
-5. On jump (user navigates from image A to image G): the queue reorders. New priority is G forward (G, H, I... Z), then wrap back (F, E, D... A). But the queue still only contains entries visible in the file panel + buffer, not the entire gallery.
+3. The active viewer image downloads first. Once it is available, the queue starts the next visible prefetch. When a prefetch with a known content length reaches 50%, the next eligible prefetch may begin. Responses without a content length remain sequential.
+4. Each completed download writes to the library directory. The file panel row updates from placeholder to loaded.
+5. The active viewer image always gets top priority regardless of file panel scroll position. A jump cancels in-flight work from the old priority generation before starting the new active image.
+6. On jump (user navigates from image A to image G): the queue reorders. New priority is G forward (G, H, I... Z), then wrap back (F, E, D... A). But the queue still only contains entries visible in the file panel + buffer, not the entire gallery.
+
+This progressive overlap is intentional. It keeps browsing responsive without opening a large number of simultaneous connections, and should not be changed to a strictly sequential queue.
 
 ### Pagination
 
@@ -140,7 +166,7 @@ The library directory mirrors the logical structure the extractor provides:
 
 ```
 library/
-  <provider>/
+  <manifest libraryPath>/
     <gallery-title>/
       <volume>/
         <chapter>/
@@ -149,7 +175,7 @@ library/
           ...
 ```
 
-The exact depth and naming depends on what the extractor returns. A flat gallery (like a booru page) might be just `provider/gallery-title/001.jpg`. A manga series with volumes and chapters gets the full tree. The orchestrator builds the folder structure; the extractor describes it.
+The exact depth and naming depends on what the extractor returns. A flat gallery might be just `provider/gallery-title/001.jpg`. A manga series with volumes and chapters gets the full tree. The manifest owns the stable provider root (`libraryPath`); the extractor describes every path segment below it and all image filenames.
 
 ### Configurable location (later)
 
@@ -181,7 +207,7 @@ The input overlay/dialog for entering a URL is TBD. Options discussed but not de
 
 ### Display names
 
-Images on disk are numbered files (`001.jpg`, etc.) or have whatever names the source site uses. The file panel should show meaningful names from the extractor (page numbers, chapter names, original filenames from the site). This requires a display-name mapping from the orchestrator. The exact mechanism (a sidecar JSON in each folder, or an in-memory map) is TBD.
+Each gallery writes `gallery.json` beside its files. It stores the source URL, manifest/extractor versions, gallery ID, relative path, title, and each image's filename, description, and source URL. The file panel reads the sidecar and uses the extractor-provided filename as the display name. The sidecar also lets the loader resume the same gallery and prevents a different gallery from silently reusing its folder path.
 
 ## Error handling
 
@@ -201,7 +227,6 @@ These are decisions explicitly deferred, not forgotten:
 - Extractor caching: persist to disk between sessions, or memory-only?
 - Ctrl+U input surface: modal, inline, or popup?
 - State machine integration: new mode, flag on existing mode, or derived from directory path?
-- Display name mechanism: sidecar JSON or in-memory map?
 - Options page section for library path (later, not initial scope)
 - Manifest hosting URL (GitHub raw, CDN, or self-hosted)
 - Registry/manifest versioning and update checking frequency

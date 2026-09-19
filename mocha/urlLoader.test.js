@@ -4,6 +4,8 @@ import {
   PREFETCH_START_THRESHOLD_PERCENT,
   normalizeUrl,
   isValidUrl,
+  validateManifest,
+  validateExtractorResult,
   findMatchingGalleryImage,
   cleanupMatchingRawFiles
 } from '../src/js/urlLoader.js';
@@ -128,6 +130,62 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
     });
   });
 
+  describe('remote extractor contract', () => {
+    const manifestEntry = {
+      id: 'example',
+      name: 'Example',
+      libraryPath: 'Example',
+      version: 1,
+      source: 'example.js',
+      patterns: ['^https://example\\.test/']
+    };
+
+    it('accepts a versioned manifest and a safe nested gallery result', () => {
+      const manifest = validateManifest({ version: 1, extractors: [manifestEntry] });
+      assert.equal(manifest.extractors[0].id, 'example');
+
+      const result = validateExtractorResult({
+        provider: 'Example',
+        gallery: { id: 'series-42', relativePath: ['Series', 'Volume 01', 'Chapter 02'] },
+        images: [{ url: 'https://cdn.example.test/001.png', filename: '001.png' }]
+      }, manifestEntry);
+      assert.equal(result.gallery.relativePath[2], 'Chapter 02');
+    });
+
+    it('rejects unsafe paths, duplicate filenames, and malformed manifest sources', () => {
+      assert.throws(() => validateExtractorResult({
+        provider: 'Example',
+        gallery: { id: 'series-42', relativePath: ['Series', '..'] },
+        images: [{ url: 'https://cdn.example.test/001.png', filename: '001.png' }]
+      }, manifestEntry), /unsafe gallery path segment/);
+
+      assert.throws(() => validateExtractorResult({
+        provider: 'Example',
+        gallery: { id: 'series-42', relativePath: ['Series'] },
+        images: [
+          { url: 'https://cdn.example.test/001.png', filename: '001.png' },
+          { url: 'https://cdn.example.test/002.png', filename: '001.png' }
+        ]
+      }, manifestEntry), /duplicate filename/);
+
+      assert.throws(() => validateExtractorResult({
+        provider: 'Example',
+        gallery: { id: 'series-42', relativePath: ['Series'] },
+        images: [{ url: 'https://cdn.example.test/001.png', filename: 'CON.png' }]
+      }, manifestEntry), /unsafe filename/);
+
+      assert.throws(() => validateManifest({
+        version: 1,
+        extractors: [{ ...manifestEntry, source: '../example.js' }]
+      }), /invalid/);
+
+      assert.throws(() => validateManifest({
+        version: 1,
+        extractors: [{ ...manifestEntry, libraryPath: '..' }]
+      }), /unsafe library path/);
+    });
+  });
+
   describe('Imgur extractor direct URL parsing', () => {
     it('matches albums, galleries, direct images, and single posts', () => {
       assert.equal(ImgurExtractor.match('https://imgur.com/a/17vF37d'), true);
@@ -149,6 +207,36 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         ext: '.png',
         filename: '04XS16K.png',
         url: 'https://i.imgur.com/04XS16K.png'
+      });
+    });
+
+    it('strips only the final matching image format from descriptions', async () => {
+      const ajaxBody = JSON.stringify({
+        data: {
+          images: [
+            { hash: 'first', ext: '.png', description: 'First.png' },
+            { hash: 'second', ext: '.png', description: 'Keep.jpg' },
+            { hash: 'third', ext: '.png', description: 'Repeat.png.png' }
+          ]
+        }
+      });
+      const gallery = await ImgurExtractor.extract('<title>Format handling - Imgur</title>', 'https://imgur.com/a/formattest', {
+        fetchText: async () => ajaxBody
+      });
+
+      assert.deepEqual(gallery.images.map((image) => image.description), [
+        'First',
+        'Keep.jpg',
+        'Repeat.png'
+      ]);
+      assert.deepEqual(gallery.images.map((image) => image.filename), [
+        '1_First.png',
+        '2_Keep.jpg.png',
+        '3_Repeat.png.png'
+      ]);
+      assert.deepEqual(gallery.gallery, {
+        id: 'imgur-formattest',
+        relativePath: ['Format handling']
       });
     });
   });
