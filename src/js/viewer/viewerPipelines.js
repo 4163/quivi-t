@@ -26,6 +26,7 @@ export function createViewerPipelines(viewportState) {
   let _livePumpImg = null;
   let _livePumpBlobUrl = null;
   let _livePumpLastDrawnFrameIndex = -1;
+  let _videoReadyListener = null;
   const _liveStagingCanvas = document.createElement('canvas');
 
   const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
@@ -53,6 +54,10 @@ export function createViewerPipelines(viewportState) {
     } catch {
       return src.toLowerCase().endsWith('.svg');
     }
+  }
+
+  function isVideoSource(el) {
+    return el?.tagName === 'VIDEO';
   }
 
   function _resolveActiveFilter(state) {
@@ -99,13 +104,15 @@ export function createViewerPipelines(viewportState) {
 
   function _applyScaling(incomingFilter, incomingIsAnimated) {
     const live = Core.getState();
+    const isVideo = isVideoSource(_activeSource);
     const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : !!live?.isAnimated;
     const isSvg = isSvgSource(_activeSource?.src);
-    const scaling = getEffectiveScaling(live?.scalingMode, isAnimated, isSvg);
+    const isMoving = isAnimated || isVideo;
+    const scaling = getEffectiveScaling(live?.scalingMode, isMoving, isSvg);
 
     const activeFilter = incomingFilter !== undefined ? incomingFilter : _resolveActiveFilter(live);
     
-    const useWebGlForLanczos = scaling === 'lanczos' && isAnimated && !isSvg && activeFilter === null;
+    const useWebGlForLanczos = scaling === 'lanczos' && isMoving && !isSvg && activeFilter === null;
     const usesWebgl = activeFilter !== null || useWebGlForLanczos;
     const usesLanczos = scaling === 'lanczos' && !usesWebgl;
     
@@ -185,7 +192,7 @@ export function createViewerPipelines(viewportState) {
   }
 
   function _applyTransform() {
-    if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated) return;
+    if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated || isVideoSource(_activeSource)) return;
     if (!_activeSource || !_activeSource.complete || _activeSource.naturalWidth <= 0 || _activeSource.naturalHeight <= 0) return;
     
     const geom = viewportState.getGeometry();
@@ -212,7 +219,8 @@ export function createViewerPipelines(viewportState) {
 
   function _triggerRender() {
     const live = Core.getState();
-    const liveAnimated = !!live?.isAnimated;
+    const isVideo = isVideoSource(_activeSource);
+    const liveAnimated = !!live?.isAnimated || isVideo;
     const isSvg = isSvgSource(_activeSource?.src);
     const scaling = getEffectiveScaling(live?.scalingMode, liveAnimated, isSvg);
     
@@ -265,11 +273,23 @@ export function createViewerPipelines(viewportState) {
   }
 
   let _visibilityListener = null;
+  let _videoSeekListener = null;
+  let _videoTimeListener = null;
+  let _videoElAttached = null;
 
   function _stopLivePump() {
     if (_visibilityListener) {
       document.removeEventListener('visibilitychange', _visibilityListener);
       _visibilityListener = null;
+    }
+    if (_videoElAttached) {
+      if (_videoReadyListener) _videoElAttached.removeEventListener('canplay', _videoReadyListener);
+      if (_videoSeekListener) _videoElAttached.removeEventListener('seeked', _videoSeekListener);
+      if (_videoTimeListener) _videoElAttached.removeEventListener('timeupdate', _videoTimeListener);
+      _videoElAttached = null;
+      _videoReadyListener = null;
+      _videoSeekListener = null;
+      _videoTimeListener = null;
     }
     if (_livePumpRaf) {
       cancelAnimationFrame(_livePumpRaf);
@@ -294,23 +314,120 @@ export function createViewerPipelines(viewportState) {
 
   async function _syncLivePump() {
     const live = Core.getState();
+    const isVideo = isVideoSource(_activeSource);
     const isAnimated = !!live?.isAnimated;
     const isSvg = isSvgSource(_activeSource?.src);
-    const scaling = getEffectiveScaling(live?.scalingMode, isAnimated, isSvg);
+    const isMoving = isAnimated || isVideo;
+    const scaling = getEffectiveScaling(live?.scalingMode, isMoving, isSvg);
     const activeFilter = _resolveActiveFilter(live);
-    const useLivePump = (isAnimated || isSvg) && (activeFilter !== null || scaling === 'lanczos');
+    const useLivePump = (isMoving || isSvg) && (activeFilter !== null || scaling === 'lanczos');
 
     if (!useLivePump || !_activeSource) {
       _stopLivePump();
       return;
     }
 
-    const currentSrc = _activeSource.src;
+    const currentSrc = _activeSource.dataset?.vidSrc || _activeSource.getAttribute('src') || _activeSource.src || '';
     if (_livePumpSrc === currentSrc && _livePumpRaf) return;
 
     _stopLivePump();
     _livePumpSrc = currentSrc;
     _livePumpLastDrawnFrameIndex = -1;
+
+    // --- Video Pump ---
+    if (isVideo) {
+      const videoEl = _activeSource;
+      _videoElAttached = videoEl;
+      let pumpVisible = false;
+      let stagingCtx = null;
+      let lastCurrentTime = -1;
+      let lastGeometryHash = '';
+      let lastFilter = pipeline?.filter;
+      const ANIME4K_MAX_EDGE = 2048;
+
+      function renderFrame() {
+        if (_livePumpSrc !== currentSrc || _activeSource !== videoEl) return;
+        if (!pipeline || pipeline.type !== 'webgl') return;
+
+        const vw = videoEl.videoWidth;
+        const vh = videoEl.videoHeight;
+        if (vw <= 0 || vh <= 0) return;
+
+        let drawW = vw;
+        let drawH = vh;
+
+        if (_lastActiveFilter === 'anime4k') {
+          const maxEdge = Math.max(vw, vh);
+          if (maxEdge > ANIME4K_MAX_EDGE) {
+            const ratio = ANIME4K_MAX_EDGE / maxEdge;
+            drawW = Math.round(vw * ratio);
+            drawH = Math.round(vh * ratio);
+          }
+        }
+
+        if (_liveStagingCanvas.width !== drawW) _liveStagingCanvas.width = drawW;
+        if (_liveStagingCanvas.height !== drawH) _liveStagingCanvas.height = drawH;
+        if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d');
+        stagingCtx.drawImage(videoEl, 0, 0, drawW, drawH);
+
+        const geom = viewportState.getGeometry();
+        pipeline.updateSource(_liveStagingCanvas);
+        pipeline.render(videoEl, geom, true);
+
+        if (!pumpVisible) {
+          pumpVisible = true;
+          if (filterCanvas) filterCanvas.setAttribute('data-render-ready', 'true');
+          const vpEl = document.getElementById('viewport');
+          if (vpEl && (_lastActiveFilter || pipeline.filter === 'lanczos')) {
+            vpEl.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
+          }
+        }
+      }
+
+      function startVideoLoop() {
+        if (_livePumpSrc !== currentSrc) return;
+
+        function pumpTickVideo() {
+          if (_livePumpSrc !== currentSrc || _activeSource !== videoEl) return;
+
+          if (videoEl.readyState >= 2 && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+            const currentTime = videoEl.currentTime;
+            const geom = viewportState.getGeometry();
+            const geomHash = `${geom.scale}_${geom.tx}_${geom.ty}_${geom.rotation}_${geom.flipX}_${geom.flipY}_${geom.viewport?.clientWidth}_${geom.viewport?.clientHeight}`;
+            const curFilter = pipeline?.filter;
+
+            const needsRender = currentTime !== lastCurrentTime || geomHash !== lastGeometryHash || curFilter !== lastFilter || !pumpVisible;
+
+            if (needsRender) {
+              renderFrame();
+              lastCurrentTime = currentTime;
+              lastGeometryHash = geomHash;
+              lastFilter = curFilter;
+            }
+          }
+
+          _livePumpRaf = requestAnimationFrame(pumpTickVideo);
+        }
+
+        _videoSeekListener = () => renderFrame();
+        _videoTimeListener = () => renderFrame();
+        videoEl.addEventListener('seeked', _videoSeekListener);
+        videoEl.addEventListener('timeupdate', _videoTimeListener);
+
+        _livePumpRaf = requestAnimationFrame(pumpTickVideo);
+      }
+
+      if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+        startVideoLoop();
+      } else {
+        _videoReadyListener = () => {
+          _videoReadyListener = null;
+          startVideoLoop();
+        };
+        videoEl.addEventListener('canplay', _videoReadyListener, { once: true });
+      }
+      return;
+    }
 
     // --- SVG DOM Fallback Pump ---
     if (isSvg) {
@@ -554,9 +671,10 @@ export function createViewerPipelines(viewportState) {
 
   Core.onStateChange((state) => {
     const newFilter = _resolveActiveFilter(state);
+    const isVideo = isVideoSource(_activeSource);
     const newIsAnimated = !!state.isAnimated;
     const newIsSvg = _activeSource?.src?.toLowerCase().includes('.svg') ?? false;
-    const newScaling = getEffectiveScaling(state.scalingMode, newIsAnimated, newIsSvg);
+    const newScaling = getEffectiveScaling(state.scalingMode, newIsAnimated || isVideo, newIsSvg);
     const newVariant = newFilter === 'anime4k' ? state?.config?.frontend_data?.filter_options?.anime4k?.variant : null;
     
     if (newFilter !== _lastActiveFilter || newIsAnimated !== _lastIsAnimated || newScaling !== _lastScalingMode || newVariant !== _lastAnime4kVariant) {
@@ -582,6 +700,7 @@ export function createViewerPipelines(viewportState) {
         _applyScaling();
         _scheduleTransform();
         _triggerRender();
+        _syncLivePump();
         return;
       }
       

@@ -14,6 +14,8 @@ export function createGlRuntime(canvas) {
     return { type: 'webgl', render: () => Promise.resolve(null), updateSource() {}, setFilter() {}, cancel() {}, dispose() {} };
   }
 
+  _gl.pixelStorei(_gl.UNPACK_ALIGNMENT, 1);
+
   let _cancelToken = 0;
   let _sourceTexture = null;
   let _texSrc = null;
@@ -170,8 +172,8 @@ export function createGlRuntime(canvas) {
   async function render(imgElement, geometry, skipUpload = false) {
     if (!_active || !_gl || _programs.length === 0) return null;
 
-    const nw = imgElement.naturalWidth || imgElement.width;
-    const nh = imgElement.naturalHeight || imgElement.height;
+    const nw = imgElement.naturalWidth || imgElement.videoWidth || imgElement.width;
+    const nh = imgElement.naturalHeight || imgElement.videoHeight || imgElement.height;
     if (nw <= 0 || nh <= 0) return null;
     
     const token = _cancelToken;

@@ -1645,9 +1645,13 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 }
 
 #viewport[data-filter] #viewer-img-wrapper .viewer-img,
+#viewport[data-filter] #viewer-img-wrapper .viewer-video,
 #viewer-img-wrapper:has(#viewer-lanczos-canvas[data-render-ready="true"]) .viewer-img,
+#viewer-img-wrapper:has(#viewer-lanczos-canvas[data-render-ready="true"]) .viewer-video,
 #viewport[data-filter] #viewer-bridge-layer .viewer-img,
-#viewport:has(#viewer-lanczos-canvas[data-render-ready="true"]) #viewer-bridge-layer .viewer-img {
+#viewport[data-filter] #viewer-bridge-layer .viewer-video,
+#viewport:has(#viewer-lanczos-canvas[data-render-ready="true"]) #viewer-bridge-layer .viewer-img,
+#viewport:has(#viewer-lanczos-canvas[data-render-ready="true"]) #viewer-bridge-layer .viewer-video {
   opacity: 0 !important;
 }
 

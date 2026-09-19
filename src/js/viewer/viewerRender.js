@@ -70,6 +70,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     document.getElementById('viewer-video-b'),
   ].filter(Boolean);
   for (const el of videoEls) {
+    el.crossOrigin = 'anonymous';
     el.loop = true;
     el.muted = true;
     el.playsInline = true;
@@ -87,6 +88,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     viewportState.applyFitMode(live.fitMode, w, h);
     Statusbar.setImage({ filename: live.filename || '', dims: `${w} × ${h}`, zoom: viewportState.getScale() });
     Statusbar.syncSpreadIndicator(live);
+    onActiveImageChanged(el);
   }
 
   function _isVideoState(state) {
@@ -172,7 +174,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _cancelRetiringNode();
       if (img) img.classList.remove('active');
     }
-    onActiveImageChanged(null);
     if (imgWrapper && incoming.parentElement !== imgWrapper) imgWrapper.appendChild(incoming);
     incoming.classList.add('active');
     incoming.muted = true;
@@ -181,6 +182,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _activeMedia = 'video';
     _activeTargetSrc = state.src;
     _forceReloadTarget = false;
+    onActiveImageChanged(incoming);
     viewportState.resetGeometry();
     const vw = incoming.videoWidth || 0;
     const vh = incoming.videoHeight || 0;
@@ -216,6 +218,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _activeVideoEl = null;
     _activeVideoSrc = null;
     _activeMedia = null;
+    onActiveImageChanged(null);
   }
 
   function _releaseBridgeNode(node) {
@@ -510,7 +513,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     if (_isVideoState(state) && videoEls.length > 0) {
       _clearTargetLoadTimer();
       _stopLoadingAnimation();
-      onActiveImageChanged(null);
       const isVideoReload = _forceReloadTarget;
       let videoSrc = state.src;
       if (isVideoReload) {
