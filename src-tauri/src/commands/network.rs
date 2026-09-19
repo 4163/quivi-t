@@ -9,7 +9,7 @@ use tauri::Emitter;
 
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 QuiviT/1.0";
-const MANIFEST_BASE_URL: &str = "https://raw.githubusercontent.com/4163/quivi-t/main/extractors/";
+const MANIFEST_BASE_URL: &str = "https://raw.githubusercontent.com/4163/quivi-t/extractors/";
 const DOWNLOAD_CHUNK_SIZE: usize = 32 * 1024;
 
 #[derive(Clone, Serialize)]

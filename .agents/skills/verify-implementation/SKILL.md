@@ -58,7 +58,7 @@ Each checklist item must be human-readable and self-contained so a tester with n
 
 ### 4. Report and await user signoff
 
-Do not automatically port entries to `.agents/implemented.md` or declare the slice finished. 
+Do not automatically port entries to `.agents/implemented.md` or declare the slice finished.
 
 Stop here. Present the results of the static checks and the manual runtime checklist to the user. Wait for the user to explicitly confirm that the checks passed and that the slice is approved for finalization.
 

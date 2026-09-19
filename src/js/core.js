@@ -643,4 +643,3 @@ export function resolveStartupTarget(args = [], frontendData = {}, defaultDir = 
 
   return { path: defaultDir || '', explicitOpen: false };
 }
-

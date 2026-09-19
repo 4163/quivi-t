@@ -37,6 +37,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - Filter preference is stored as `active_filter` (id) and `filter_options` (bag), replacing individual booleans.
 - Additional `frontend_data` preferences: `hide_cursor_delay_sec`, `file_list_view_mode`, `spread_enabled`, `spread_direction`, `spread_mode` (derived from enabled + direction).
 - `frontend_data.library_path` is an optional absolute shared URL Library location. When absent, the Library is `%LOCALAPPDATA%\\QuiviT\\library`. `retired_library_paths` blocks writes to a prior root, never to the active one.
+- Remote extractors live on the dedicated orphan `extractors` deployment branch. Manifest and site scripts are fetched from GitHub Raw at runtime; successful responses cache under `%LOCALAPPDATA%\QuiviT\extractor-cache\` for offline fallback.
 - Bounded in-memory session caches include archive passwords and encryption state in `fsUtils.js`, file-panel and Library thumbnails, animation metadata in `core.js`, and remote extractor modules in `urlLoader.js`.
 - Theme/CSS live previews are ephemeral until Options Apply. They must not persist to `localStorage` while previewing.
 
@@ -77,7 +78,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `config.rs`: `AppConfig` / persistence / portable / pending promotion.
 - `commands/`: Tauri IPC surface. Each command file owns one family.
 - `commands/library.rs`: live Library relocation and write guards. `commands/watchers.rs`: configured-Library watcher and `library-changed` events.
-- `commands/network.rs`: remote text, extractor cache, streamed download, and cancellation commands. `commands/directory.rs`: recursive `gallery.json`-backed Library tree.
+- `commands/network.rs`: remote text, extractor caching from the extractors branch, streamed download, and cancellation commands. `commands/directory.rs`: recursive `gallery.json`-backed Library tree.
 - `commands/archives.rs`: `list_archive` accepts `password: Option<String>`; archive lifecycle commands are `drop_all_archives_cache` and `resolve_archive_temp_origin`.
 - `archives/` & `formats.rs`: archive readers + `ArchiveCache` (two-archive sliding buffer, `MAX_OPEN_ARCHIVES = 2`) and format / animation registry.
 - `protocol.rs`: `quivit://` handler. Routes: `/archive/` (entry data, `no-store`), `/thumb/` (96×96 shell thumbnails), `/icon/` (shell icons, `?size=large` for 32×32). `asset://` for direct file access.

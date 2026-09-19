@@ -234,6 +234,12 @@ Testing spans three focused layers:
 
 > **Design Principle:** New DOM belongs in the module that already owns that surface. New domain logic belongs in `core.js` or `services/`. Do not grow `main.js` back into a god file.
 
+### Web Import
+
+ **File → Open URL...** imports galleries and images from supported websites directly into the local Library.
+
+QuiviT checks the dedicated `extractors` branch for website support at runtime, caching modules under `%LOCALAPPDATA%\QuiviT\extractor-cache` for offline use. See the [`extractors`](https://github.com/4163/quivi-t/tree/extractors) branch for supported sites and extractor documentation.
+
 ### File Associations (Windows)
 
 **Options → File Types** registers image and archive formats with QuiviT. Registration is per-user (no admin rights required): it writes `HKCU\Software\Classes` ProgIDs, dumps format icons to the roaming config directory, and registers QuiviT as an app in **Windows Settings → Default Apps**. The "Open Windows Default Apps Settings" button deep-links straight to QuiviT's entry.
@@ -355,7 +361,8 @@ QuiviT/
 │  ├─ sorting.test.js             # Archive natural sort order
 │  ├─ urlLoader.test.js           # URL registry, extractor, and download queue rules
 │  └─ viewerMath.test.js          # Viewport scaling, transforms, and spread geometry
-├─ extractors/                    # Runtime extractor manifest and modules
+├─ extractors/ (orphan branch)    # Remote registry for runtime site extractors
+│  ├─ README.md                   # Authoring contract and contribution guidelines
 │  ├─ manifest.json               # Versioned registry for remote extractors
 │  └─ imgur.js                    # Imgur extractor
 ├─ src/
