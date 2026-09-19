@@ -236,9 +236,9 @@ Testing spans three focused layers:
 
 ### Web Import
 
- **File → Open URL...** imports galleries and images from supported websites directly into the local Library.
+**File → Open URL...** imports galleries and images from supported websites directly into the local Library.
 
-QuiviT checks the dedicated `extractors` branch for website support at runtime, caching modules under `%LOCALAPPDATA%\QuiviT\extractor-cache` for offline use. See the [`extractors`](https://github.com/4163/quivi-t/tree/extractors) branch for supported sites and extractor documentation.
+QuiviT checks the [`extractors`](https://github.com/4163/quivi-t/tree/extractors) branch for website support at runtime, caching modules under `%LOCALAPPDATA%\QuiviT\extractor-cache` for offline use. That registry lists supported sites and authoring documentation.
 
 ### File Associations (Windows)
 
