@@ -56,6 +56,53 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   let _retireRaf = null;
   let _lastRenderedIsAnimated = false;
   let _lastRenderedArchivePath = null;
+  let _activeVideoSrc = null;
+
+  const viewerVideo = document.getElementById('viewer-video');
+  if (viewerVideo) {
+    viewerVideo.loop = true;
+    viewerVideo.muted = true;
+    viewerVideo.playsInline = true;
+    viewerVideo.preload = 'auto';
+    viewerVideo.addEventListener('loadedmetadata', () => {
+      const w = viewerVideo.videoWidth || 0;
+      const h = viewerVideo.videoHeight || 0;
+      if (!w || !h) return;
+      Core.setImageDimensions(w, h);
+      const live = Core.getState();
+      viewportState.applyFitMode(live.fitMode, w, h);
+      Statusbar.setImage({ filename: live.filename || '', dims: `${w} × ${h}`, zoom: viewportState.getScale() });
+      Statusbar.syncSpreadIndicator(live);
+    });
+    viewerVideo.addEventListener('error', () => {
+      Statusbar.setImage({ isError: true });
+    });
+  }
+
+  function _isVideoState(state) {
+    const entry = state?.list?.[state.index];
+    if (entry && !entry.is_dir && !entry.is_parent) {
+      if (FsUtils.isVideoEntry?.(entry)) return true;
+      if (FsUtils.isVideo?.(entry.name || entry.path || '')) return true;
+    }
+    if (state?.filename && FsUtils.isVideo?.(state.filename)) return true;
+    return false;
+  }
+
+  function _hideVideo() {
+    _activeVideoSrc = null;
+    if (viewerVideo) {
+      viewerVideo.pause();
+      viewerVideo.classList.remove('active');
+      viewerVideo.removeAttribute('src');
+      viewerVideo.load();
+    }
+  }
+
+  function _hideImages() {
+    _cancelRetiringNode();
+    if (img) img.classList.remove('active');
+  }
 
   function _releaseBridgeNode(node) {
     node.classList.remove('bridge');
@@ -327,6 +374,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _cancelRetiringNode();
     _stopLoadingAnimation();
     _activeTargetSrc = null;
+    _hideVideo();
     _poolGeneration += 1;
     _activationGeneration += 1;
     _clearTargetLoadTimer();
@@ -362,6 +410,47 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       clearDisplayedImage();
       return;
     }
+
+    if (_isVideoState(state) && viewerVideo) {
+      _clearTargetLoadTimer();
+      _stopLoadingAnimation();
+      _hideImages();
+      onActiveImageChanged(null);
+      const isVideoReload = _forceReloadTarget;
+      let videoSrc = state.src;
+      if (isVideoReload) {
+        videoSrc = state.src.includes('?') ? `${state.src}&_t=${Date.now()}` : `${state.src}?_t=${Date.now()}`;
+      }
+      const videoChanged = videoSrc !== _activeVideoSrc || isVideoReload || !viewerVideo.classList.contains('active');
+      _activeTargetSrc = state.src;
+      _forceReloadTarget = false;
+      if (videoChanged) {
+        _activeVideoSrc = videoSrc;
+        viewerVideo.src = videoSrc;
+        viewerVideo.load();
+      }
+      if (imgWrapper && viewerVideo.parentElement !== imgWrapper) imgWrapper.appendChild(viewerVideo);
+      viewerVideo.classList.add('active');
+      if (videoChanged) viewportState.resetGeometry();
+      const vw = viewerVideo.videoWidth || 0;
+      const vh = viewerVideo.videoHeight || 0;
+      if (vw && vh && (videoChanged || _lastFitModeGen !== state.fitModeGen)) {
+        if (videoChanged) Core.setImageDimensions(vw, vh);
+        viewportState.applyFitMode(state.fitMode, vw, vh);
+        Statusbar.setImage({ filename: state.filename || '', dims: `${vw} × ${vh}`, zoom: viewportState.getScale() });
+      } else if (videoChanged) {
+        Statusbar.setImage({ filename: state.filename || '', dims: '', zoom: viewportState.getScale() });
+      }
+      Statusbar.syncSpreadIndicator(state);
+      viewerVideo.muted = true;
+      viewerVideo.play().catch(() => {});
+      _lastFitModeGen = state.fitModeGen;
+      _lastSpreadEnabled = state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? _lastSpreadEnabled;
+      _lastSpreadDirection = state.spreadDirection ?? state.config?.frontend_data?.spread_direction ?? _lastSpreadDirection;
+      _lastSpreadStep = state.spreadStep;
+      return;
+    }
+    if (viewerVideo && viewerVideo.classList.contains('active')) _hideVideo();
 
     const desiredSrcs = new Set([state.src]);
     if (_isVisibleImage(img) && img.dataset.poolSrc) desiredSrcs.add(img.dataset.poolSrc);
@@ -509,7 +598,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       imgWrapper.style.transform = viewportState.getTransform();
       imgWrapper.style.setProperty('--zoom-scale', viewportState.getScale());
     }
-    if (img && img.src) {
+    if ((img && img.src) || (viewerVideo && viewerVideo.classList.contains('active'))) {
       Statusbar.setZoom(viewportState.getScale());
     }
   });

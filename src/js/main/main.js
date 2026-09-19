@@ -25,6 +25,7 @@ import { initDropZone } from './dropzone.js';
 import { initPasswordOverlay } from './passwordOverlay.js';
 import { initUrlOverlay } from './urlOverlay.js';
 import { UrlLoader } from '../urlLoader.js';
+import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
 
 // Reset the options tab on startup so each session starts on General.
 localStorage.removeItem('options-active-tab');
@@ -92,6 +93,7 @@ const actionCtx = {
   get openMetadataWindow() { return openMetadataWindow; },
   get toggleFullscreen() { return toggleFullscreen; },
   get UrlLoader() { return UrlLoader; },
+  get ViewerAudio() { return ViewerAudio; },
   isFavoritesFocused: () => !!document.activeElement?.closest('#favorites-list'),
   isLibraryFocused: () => !!document.activeElement?.closest('#file-panel-library, .library-provider-list'),
   get keyboardPanStep() { return keyboardPanStep; },
@@ -196,6 +198,7 @@ const urlOverlay = initUrlOverlay({
 });
 UrlLoader.init({ Core, FsUtils, urlOverlay, getFileListViewportRange });
 initMetadataBadge({ Core, FsUtils, badgeEl: metadataBadgeEl });
+initViewerAudio({ Core, FsUtils });
 initLifecycle({ Core, FsUtils, UrlLoader });
 
 let previewTheme = null;

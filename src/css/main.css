@@ -601,12 +601,137 @@ li:hover > .fav-remove,
   color: var(--accent);
 }
 
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 #status-metadata-badge {
   display: none;
 }
 
 #status-metadata-badge.is-visible {
   display: flex;
+}
+
+/* Audio controls fixed in bottom-left of viewport.
+   Mirrors the spread-indicator chrome: translucent surface, token border. */
+.audio-control-container {
+  display: none;
+  align-items: center;
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 5;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 4px;
+  padding: 2px;
+  transition: opacity 0.12s linear;
+}
+
+.audio-control-container.is-visible {
+  display: flex;
+}
+
+#viewport.cursor-hidden .audio-control-container {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* When the spread indicator is also visible, stack above it. */
+#viewport:has(#spread-indicator:not(:empty)) .audio-control-container {
+  bottom: 38px;
+}
+
+#btn-audio-toggle {
+  position: relative;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+
+#btn-audio-toggle .audio-icon {
+  display: none;
+  width: var(--fs-16);
+  height: var(--fs-16);
+}
+
+#btn-audio-toggle:disabled .audio-icon-volume-off {
+  display: block;
+}
+
+#btn-audio-toggle:not(:disabled)[data-state="muted"] .audio-icon-volume-x {
+  display: block;
+}
+
+#btn-audio-toggle:not(:disabled)[data-state="zero"] .audio-icon-volume {
+  display: block;
+}
+
+#btn-audio-toggle:not(:disabled)[data-state="low"] .audio-icon-volume-1 {
+  display: block;
+}
+
+#btn-audio-toggle:not(:disabled)[data-state="high"] .audio-icon-volume-2 {
+  display: block;
+}
+
+.volume-popover {
+  display: flex;
+  align-items: center;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: max-width 0.18s ease, opacity 0.12s ease, padding 0.18s ease;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.audio-control-container:hover .volume-popover:not(.is-disabled),
+.audio-control-container:focus-within .volume-popover:not(.is-disabled) {
+  max-width: calc(var(--fs-16) * 5 + 8px);
+  opacity: 1;
+  pointer-events: auto;
+  padding: 0 6px 0 2px;
+}
+
+.volume-popover.is-disabled {
+  display: none !important;
+}
+
+#audio-volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: calc(var(--fs-16) * 5);
+  height: var(--fs-11);
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  display: block;
+}
+
+#audio-volume-slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+#audio-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: min(var(--fs-11), 12px);
+  height: min(var(--fs-11), 12px);
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  margin-top: calc((3px - min(var(--fs-11), 12px)) / 2);
 }
 
 #file-panel-header {
@@ -934,16 +1059,19 @@ li:hover > .fav-remove,
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder:not([data-type]) .icon-image,
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="image"] .icon-image,
+#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="video"] .icon-video,
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="folder"] .icon-folder,
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="archive"] .icon-archive,
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="file"] .icon-file,
 #file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder:not([data-type]) .icon-image,
 #file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="image"] .icon-image,
+#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="video"] .icon-video,
 #file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="folder"] .icon-folder,
 #file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="archive"] .icon-archive,
 #file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="file"] .icon-file,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-placeholder:not([data-type]) .icon-image,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-placeholder[data-type="image"] .icon-image,
+#file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-placeholder[data-type="video"] .icon-video,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-placeholder[data-type="folder"] .icon-folder,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-placeholder[data-type="archive"] .icon-archive,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-placeholder[data-type="file"] .icon-file {
@@ -1411,6 +1539,19 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 }
 
 .viewer-img.active {
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+.viewer-video {
+  display: none;
+  max-width: none;
+  position: relative;
+  z-index: 1;
+}
+
+.viewer-video.active {
   display: block;
   position: relative;
   z-index: 1;

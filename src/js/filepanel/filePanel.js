@@ -279,12 +279,13 @@ let imageViewportStart = 0;
 let imageViewportEnd = 0;
 let lastScrollTop = 0;
 let scrollDirection = 1;
-const PLACEHOLDER_HTML = '<svg class="placeholder-icon icon-image" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><svg class="placeholder-icon icon-folder" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg><svg class="placeholder-icon icon-archive" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></svg><svg class="placeholder-icon icon-file" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+const PLACEHOLDER_HTML = '<svg class="placeholder-icon icon-image" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><svg class="placeholder-icon icon-folder" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg><svg class="placeholder-icon icon-archive" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"></rect><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path><path d="M10 12h4"></path></svg><svg class="placeholder-icon icon-video" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg><svg class="placeholder-icon icon-file" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
 
 export function getPlaceholderType(item) {
   if (!item) return 'file';
   if (item.is_dir || item.is_parent || item.is_drive) return 'folder';
   if (FsUtils.isArchiveEntry(item) || FsUtils.isArchive(item.name || item.path || '')) return 'archive';
+  if (FsUtils.isVideoEntry?.(item) || FsUtils.isVideo?.(item.name || item.path || '')) return 'video';
   if (FsUtils.isImageEntry(item) || FsUtils.isImage(item.name || item.path || '')) return 'image';
   return 'file';
 }
@@ -669,7 +670,7 @@ function buildFavoriteEntry(fav) {
   thumbImg.onerror = () => {
     thumbImg.onerror = null;
     const currentSrc = thumbImg.getAttribute('src') || '';
-    if (currentSrc.includes('/thumb/')) {
+    if (currentSrc.includes('/thumb/') && !FsUtils.isVideo?.(fav.path || '')) {
       thumbImg.onerror = () => {
         thumbImg.onerror = null;
         const iconPath = FsUtils._isPathSpecificIcon(ext) ? fav.path : '';
@@ -965,7 +966,7 @@ function buildLibraryEntry(item, depth = 0) {
   thumbImg.onerror = () => {
     thumbImg.onerror = null;
     const currentSrc = thumbImg.getAttribute('src') || '';
-    if (currentSrc.includes('/thumb/')) {
+    if (currentSrc.includes('/thumb/') && !FsUtils.isVideo?.(item.path || '')) {
       thumbImg.onerror = () => {
         thumbImg.onerror = null;
         const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
@@ -1583,7 +1584,7 @@ function updateEntry(li, item, index) {
       slots.thumbImg.onerror = () => {
         slots.thumbImg.onerror = null;
         const currentSrc = slots.thumbImg.getAttribute('src') || '';
-        if (currentSrc.includes('/thumb/')) {
+        if (currentSrc.includes('/thumb/') && !FsUtils.isVideo?.(item.path || '')) {
           slots.thumbImg.onerror = () => {
             slots.thumbImg.onerror = null;
             const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';

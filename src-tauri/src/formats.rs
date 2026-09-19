@@ -1,3 +1,5 @@
+use std::io::{Read, Seek, SeekFrom};
+
 use crate::models::AnimationInfo;
 use serde::{Deserialize, Serialize};
 
@@ -478,4 +480,47 @@ fn check_svg(bytes: &[u8]) -> bool {
         || bytes
             .windows(6)
             .any(|w| w == b"<set\t\n" || w == b"<set\r\n") // Just in case, though <set > is enough usually
+}
+
+/// Checks if an MP4 file or stream contains an audio track.
+/// Scans the top-level ISOBMFF boxes for `moov`, then checks if `moov`
+/// contains sound stream markers (`soun` handler or `smhd` sound media header).
+pub fn check_mp4_has_audio<R: Read + Seek>(reader: &mut R) -> bool {
+    let mut header = [0u8; 8];
+    while reader.read_exact(&mut header).is_ok() {
+        let size32 = u32::from_be_bytes([header[0], header[1], header[2], header[3]]) as u64;
+        let typ = &header[4..8];
+
+        let (box_size, header_len) = if size32 == 1 {
+            let mut s64 = [0u8; 8];
+            if reader.read_exact(&mut s64).is_err() {
+                return false;
+            }
+            (u64::from_be_bytes(s64), 16u64)
+        } else if size32 == 0 {
+            (0, 8u64)
+        } else {
+            (size32, 8u64)
+        };
+
+        if typ == b"moov" {
+            let read_len = if box_size > header_len {
+                ((box_size - header_len) as usize).min(10 * 1024 * 1024)
+            } else {
+                10 * 1024 * 1024
+            };
+            let mut moov_buf = vec![0u8; read_len];
+            let n = reader.read(&mut moov_buf).unwrap_or(0);
+            let moov_bytes = &moov_buf[..n];
+            return moov_bytes.windows(4).any(|w| w == b"soun" || w == b"smhd");
+        }
+
+        if box_size == 0 || box_size < header_len {
+            break;
+        }
+        if reader.seek(SeekFrom::Current((box_size - header_len) as i64)).is_err() {
+            break;
+        }
+    }
+    false
 }

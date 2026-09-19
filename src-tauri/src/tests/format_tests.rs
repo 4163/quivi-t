@@ -1,4 +1,6 @@
-use crate::formats::{check_animation_status, is_archive_ext, is_image_ext, is_metadata_ext};
+use crate::formats::{
+    check_animation_status, check_mp4_has_audio, is_archive_ext, is_image_ext, is_metadata_ext,
+};
 
 #[test]
 fn test_is_image_ext() {
@@ -209,4 +211,49 @@ fn test_is_animated_truncated() {
     assert!(!check_animation_status(b"RIFF").is_animated);
     assert!(!check_animation_status(b"\x89PNG").is_animated);
     assert!(!check_animation_status(b"\0\0\0\x18ftyp").is_animated);
+}
+
+#[test]
+fn test_check_mp4_has_audio() {
+    use std::io::Cursor;
+
+    // MP4 with moov but no audio tracks (video only)
+    let mut mp4_no_audio = ftyp_box(b"isom", &[*b"mp41"]);
+    let mut moov_no_audio = empty_box(b"moov");
+    moov_no_audio.extend_from_slice(&empty_box(b"trak"));
+    moov_no_audio.extend_from_slice(&empty_box(b"mdia"));
+    moov_no_audio.extend_from_slice(b"\0\0\0\x10hdlrvide\0\0\0\0");
+    let moov_len = moov_no_audio.len() as u32;
+    moov_no_audio[0..4].copy_from_slice(&moov_len.to_be_bytes());
+    mp4_no_audio.extend_from_slice(&moov_no_audio);
+
+    let mut cursor = Cursor::new(&mp4_no_audio);
+    assert!(!check_mp4_has_audio(&mut cursor));
+
+    // MP4 with audio track (contains soun handler in moov)
+    let mut mp4_audio = ftyp_box(b"isom", &[*b"mp41"]);
+    let mut moov_audio = empty_box(b"moov");
+    moov_audio.extend_from_slice(b"\0\0\0\x10hdlrsoun\0\0\0\0");
+    let moov_len = moov_audio.len() as u32;
+    moov_audio[0..4].copy_from_slice(&moov_len.to_be_bytes());
+    mp4_audio.extend_from_slice(&moov_audio);
+
+    let mut cursor = Cursor::new(&mp4_audio);
+    assert!(check_mp4_has_audio(&mut cursor));
+
+    // Truncated / empty bytes
+    let mut empty_cursor = Cursor::new(b"");
+    assert!(!check_mp4_has_audio(&mut empty_cursor));
+
+    // Test real library files if present on disk
+    let no_audio_path = std::path::Path::new(r"C:\Users\x4163\AppData\Local\QuiviT\library\Imgur\vnSzv5X.mp4");
+    if no_audio_path.is_file() {
+        let mut f = std::fs::File::open(no_audio_path).unwrap();
+        assert!(!check_mp4_has_audio(&mut f));
+    }
+    let yes_audio_path = std::path::Path::new(r"C:\Users\x4163\AppData\Local\QuiviT\library\Imgur\w2npfQH.mp4");
+    if yes_audio_path.is_file() {
+        let mut f = std::fs::File::open(yes_audio_path).unwrap();
+        assert!(check_mp4_has_audio(&mut f));
+    }
 }

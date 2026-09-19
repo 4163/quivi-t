@@ -115,6 +115,7 @@ pub fn run() {
         update_theme,
         pick_folder,
         check_is_animated,
+        check_media_audio,
         resolve_archive_temp_origin,
         fetch_text,
         fetch_extractor_text,
