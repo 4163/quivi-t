@@ -65,12 +65,13 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 - The state machine owns app state and has no DOM. UI modules subscribe to it and render themselves.
 - Domain logic lives in pure service modules (no `document`). Action ids, labels, defaults, and handlers have one registry; other files derive from it. Filter and scaler methods live under `services/filters` and `services/scaling`; the GL runtime does not know their names; overlay canvases have one UI owner.
 - Each UI feature owns its DOM and self-subscribes. Bootstrap stays thin: init + a slim state fan-out. It does not render another module's surface.
+- `urlLoader.js` owns remote extractor validation, URL import, and gallery download coordination without owning DOM. `main/urlOverlay.js` owns `#url-overlay`; `filepanel/libraryStore.js` owns Library tree data and persistence while `filePanel.js` owns its rendering.
 - Shared cross-window helpers (theme, preview, window fit) stay out of the state machine and out of feature UI files.
 - New frontend work extends this layering. Do not dump new DOM into bootstrap or new domain logic into a UI file. Frontend unit tests live in `mocha/`, while E2E tests, action recorder shims, and replay diagnostic probes live in `e2e/`, strictly outside `src/` to prevent embedding test or diagnostic machinery into the release bundle via `frontendDist: "../src"`.
 
 ### Rust module ownership
 - The crate root is bootstrap: plugin wiring, command registration, main-window construction, config-watcher start. It does not grow archive, protocol, command, or test bodies.
 - Domain logic lives in `archives/` (readers + `ArchiveCache` facade), `formats.rs`, and `ico.rs`. Callers use facade methods, not another module's internals.
-- `commands/` is the Tauri IPC surface. Each command file owns one family (directory, archives, animation, library, watchers, associations, shell) and adapts domain modules. It does not grow archive, window, or config internals.
+- `commands/` is the Tauri IPC surface. Each command file owns one family (directory, archives, animation, library, network, watchers, associations, shell) and adapts domain modules. It does not grow archive, window, or config internals.
 - Protocol, windows, platform, and config stay out of bootstrap and out of each other: `protocol.rs` owns `quivit://`, `windows.rs` owns window lifecycle and size constants, `platform/` owns OS integrations, `config.rs` is persistence only. `models.rs` is the IPC contract. Tests live under `tests/` via `#[path]`; do not widen visibility for tests.
 - New backend work extends this layering. Do not dump new domain into `lib.rs`, new window code into `config.rs`, or a second copy of a helper that already exists. Keep IPC command names, JSON shapes, and `quivit://` URLs stable unless the change is a practical function or performance win.

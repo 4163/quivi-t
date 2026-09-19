@@ -19,7 +19,7 @@ Ctrl+U opens an input for a URL. The app fetches the page, identifies the site, 
 ## Terminology
 
 - **Extractors**: per-site JS modules that parse a page and return image URLs. Named after the convention in yt-dlp and gallery-dl. Not "vendors" (that directory holds third-party libraries like pica.js), not "providers" or "adapters."
-- **Manifest**: `manifest.json` inside the `extractors/` directory at the repo root. Lists available extractors, their site-matching patterns, remote download URLs, and version numbers. Just `manifest.json` because the directory name already scopes it. The app fetches it at runtime from the GitHub raw URL.
+- **Manifest**: `manifest.json` at the root of the dedicated `extractors` deployment branch. It lists available extractors, their site-matching patterns, relative source paths, and version numbers. The app resolves those paths beneath its trusted GitHub Raw base URL.
 - **Library**: the persistent on-disk directory where downloaded images live. `%LOCALAPPDATA%/QuiviT/library/`. Named by analogy with Calibre, Komga, and other media managers. Not "downloads" (too generic, doesn't convey persistence) or "temp" (this data survives restarts).
 - **Orchestrator**: the main JS module that owns the Ctrl+U flow, manifest fetching, extractor loading, and download queue lifecycle. Separate from extractors, which are pure data transformers.
 
@@ -31,11 +31,13 @@ A JSON schema (CSS selectors, regex patterns) breaks the moment a site has pagin
 
 ### Remote extractor loading
 
-Extractors are not shipped with the executable. A remote `manifest.json` lives at a fixed trusted URL, currently GitHub Raw for the project's repository. The app fetches the manifest, finds the extractor matching the user's URL by pattern, downloads that extractor's JS source via the Rust backend, and loads it in the frontend.
+Extractors are not shipped with the executable. The runtime registry lives at the root of the project's dedicated orphan `extractors` branch, which contains only `manifest.json` and extractor modules. The app fetches the manifest from that fixed GitHub Raw location, finds the extractor matching the user's URL by pattern, downloads that extractor's JS source via the Rust backend, and loads it in the frontend.
 
 Loading mechanism: Rust fetches the JS source as text, returns it to the frontend, frontend wraps it in a Blob URL and uses dynamic `import()`. No `eval()`. ES module `import()` from blob URLs works in WebView2/Chromium.
 
-Trust model: `MANIFEST_BASE_URL` is a compiled deployment constant. It currently points to the project's GitHub Raw repository. Changing the host means changing that one trusted HTTPS source for both the manifest and modules. It is not an end-user setting or a product decision that needs separate roadmap work.
+Trust model: `MANIFEST_BASE_URL` is a compiled deployment constant. Its target is `https://raw.githubusercontent.com/4163/quivi-t/extractors/`, where `extractors` is the dedicated deployment branch rather than an application-development branch. Changing the host means changing that one trusted HTTPS source for both the manifest and modules. It is not an end-user setting.
+
+Publishing model: the `extractors` branch is the canonical runtime source, not a mirror of `main` or a release branch. Each extractor change updates its module and any required manifest version in one commit, so clients see a coherent registry revision. Maintainers can use a dedicated Git worktree for that branch; no QuiviT application branch needs to be merged or released to publish website support.
 
 Every URL import checks the remote manifest so a newly published extractor or version reaches an already-running app. The backend writes each successful manifest and extractor response to `%LOCALAPPDATA%/QuiviT/extractor-cache/`. If the remote request fails, it uses the last complete cached response. The cache is a fallback, not a second registry. The frontend module cache key includes the extractor id, version, and source path, so a changed manifest entry loads fresh code.
 
@@ -112,17 +114,16 @@ Two categories: app code that ships in the executable, and extractor files that 
 - `src/index.html`. File menu item.
 - File panel library section rendering (in `filePanel.js` or a new sibling module)
 
-**Does not ship** (repo root, fetched at runtime from GitHub raw URL):
+**Does not ship** (the dedicated orphan `extractors` branch, fetched at runtime from GitHub Raw):
 
 ```
-extractors/
-  manifest.json        <- registry listing available extractors
-  danbooru.js          <- per-site extractor modules
-  mangadex.js
-  ...
+manifest.json          <- registry listing available extractors
+danbooru.js             <- per-site extractor modules
+mangadex.js
+...
 ```
 
-Same pattern as `mocha/` and `e2e/`: lives in the repo for development, excluded from the executable because `frontendDist` only includes `src/` and `bundle.resources` only maps `themes/`. No `.taurignore` entry needed.
+The app build does not include this branch. `frontendDist` includes only `src/`, and `bundle.resources` maps only `themes/`, so no `.taurignore` rule is needed.
 
 ## Download strategy
 
@@ -199,11 +200,11 @@ The eventual move must validate the destination before it changes configuration,
 
 ### File panel integration
 
-The file panel gets a new collapsible section below Favorites. Structurally identical to `#file-panel-favorites`: a header with a toggle icon, a list underneath, collapse/expand on click.
+The file panel places provider sections directly below Favorites. There is no outer Library header. Each provider is its own collapsible dropdown, with its folder tree underneath: gallery titles, volumes, chapters, and images. Clicking a gallery entry navigates the main file list into that folder, same as clicking a favorited folder.
 
-Each provider is its own collapsible dropdown. Underneath, the folder tree the extractor built: gallery titles, volumes, chapters, images. Clicking a gallery entry navigates the main file list into that folder, same as clicking a favorited folder. Ordered by first-added (oldest at top, newest at bottom, within each provider section).
+Provider sections are ordered alphabetically. Within each provider tree, directories appear before raw images and entries use their filesystem creation time, oldest first, with natural-name ordering as a tie-breaker.
 
-The existing CSS for `.file-panel-favorites`, `#file-panel-favorites-header`, and `#favorites-list` provides the styling foundation. The new section reuses the same visual language: muted uppercase header text, hover highlight, toggle arrow, border separator.
+The existing Favorites styling provides the foundation: muted uppercase provider text, hover highlight, toggle arrow, and a border separator.
 
 Each entry has a delete button styled after `.fav-remove` (X icon, hidden by default, visible on hover/focus, danger color on hover). Delete removes both the file panel entry and the on-disk folder.
 
