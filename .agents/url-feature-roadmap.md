@@ -31,11 +31,11 @@ A JSON schema (CSS selectors, regex patterns) breaks the moment a site has pagin
 
 ### Remote extractor loading
 
-Extractors are not shipped with the executable. A remote `manifest.json` lives at a fixed trusted URL (the project's GitHub repository). The app fetches the manifest, finds the extractor matching the user's URL by pattern, downloads that extractor's JS source via the Rust backend, and loads it in the frontend.
+Extractors are not shipped with the executable. A remote `manifest.json` lives at a fixed trusted URL, currently GitHub Raw for the project's repository. The app fetches the manifest, finds the extractor matching the user's URL by pattern, downloads that extractor's JS source via the Rust backend, and loads it in the frontend.
 
 Loading mechanism: Rust fetches the JS source as text, returns it to the frontend, frontend wraps it in a Blob URL and uses dynamic `import()`. No `eval()`. ES module `import()` from blob URLs works in WebView2/Chromium.
 
-Trust model: the manifest URL is hardcoded to the project's own repository. Same trust model as browser extensions auto-updating.
+Trust model: `MANIFEST_BASE_URL` is a compiled deployment constant. It currently points to the project's GitHub Raw repository. Changing the host means changing that one trusted HTTPS source for both the manifest and modules. It is not an end-user setting or a product decision that needs separate roadmap work.
 
 Every URL import checks the remote manifest so a newly published extractor or version reaches an already-running app. The backend writes each successful manifest and extractor response to `%LOCALAPPDATA%/QuiviT/extractor-cache/`. If the remote request fails, it uses the last complete cached response. The cache is a fallback, not a second registry. The frontend module cache key includes the extractor id, version, and source path, so a changed manifest entry loads fresh code.
 
@@ -75,6 +75,12 @@ All HTTP fetching goes through the Rust backend. Two Tauri commands:
 
 - `fetch_text(url)` for HTML pages, the manifest, and extractor JS sources. Returns the response body as a string.
 - `download_to_file(url, dest_path)` for images. Streams directly to disk on a background thread without shuttling bytes through IPC. Can report progress (bytes written) if a progress indicator is added later.
+
+### Authenticated sites (deferred)
+
+The URL feature has no supported credential, cookie-persistence, or login model. This is intentionally out of scope for now.
+
+An extractor can own a site's login endpoints and response parsing, but authentication cannot live solely in a remote extractor. QuiviT would need to own user consent, secure credential or session storage, scoped request credentials, logout, and failure states. Do not add generic authentication scaffolding until a chosen provider defines the required login mechanism.
 
 ### HTTP client crate: ureq
 
@@ -160,7 +166,7 @@ Multi-page galleries: the extractor fetches all page URLs during the initial pro
 
 Shared across all QuiviT instances. No per-PID isolation (unlike the archive temp system which uses `%TEMP%/QuiviT/pid-<PID>/`). Multiple instances read from and write to the same directory.
 
-Cross-instance sync: the existing file watcher system (`notify` crate, already used for config file watching) can watch the library directory so all open instances see new files appear dynamically.
+Cross-instance sync: every running QuiviT process recursively watches the shared Library. Filesystem changes coalesce before the process refreshes its Library tree; the existing active-directory watcher refreshes an open gallery's files.
 
 No auto-cleanup. Downloaded content persists across restarts. The user manages their library manually via a delete button in the file panel (same pattern as the favorites remove button, `.fav-remove`).
 
@@ -181,9 +187,13 @@ library/
 
 The exact depth and naming depends on what the extractor returns. A flat gallery might be just `provider/gallery-title/001.jpg`. A manga series with volumes and chapters gets the full tree. The manifest owns the stable provider root (`libraryPath`); the extractor describes every path segment below it and all image filenames.
 
-### Configurable location (later)
+### Configurable Library location (next planning slice)
 
-The Options page will have a section between Filters and Configuration Persistence. Uses the existing `.input-group` pattern (text input + Browse button) for the library path. When changed, the backend moves existing files from the old location to the new one. This is not part of the initial implementation scope.
+This is the next planned task. No implementation starts until its migration and multi-instance behavior are agreed.
+
+The default remains `%LOCALAPPDATA%/QuiviT/library/`. Options will expose a library-path input and Browse button between Filters and Configuration Persistence. The chosen path is a persistent user preference.
+
+The eventual move must validate the destination before it changes configuration, retain the source Library on a failed move, and keep all running instances on one shared Library. The plan must cover active downloads, destination conflicts, and watcher rebinding before code is written.
 
 ## UX/UI
 
@@ -199,15 +209,11 @@ Each entry has a delete button styled after `.fav-remove` (X icon, hidden by def
 
 ### Ctrl+U input
 
-The input overlay/dialog for entering a URL is TBD. Options discussed but not decided:
-
-- Modal overlay (like the password overlay pattern)
-- Inline input in the file panel header
-- Small popup dialog
+Implemented as a modal overlay. It accepts a URL, delegates loading to the orchestrator, and opens the resulting gallery path in the existing file-view flow.
 
 ### State machine
 
-`core.js` currently has modes `'empty' | 'image' | 'archive'`. A URL gallery maps to `'image'` mode with the library subfolder as the directory. The file panel needs to know it's in "library mode" to show the gallery's display names (from the extractor) instead of raw temp filenames. How this flag is tracked is TBD.
+`core.js` uses the existing `'image'` mode for URL galleries, with the Library subfolder as the directory. `gallery.json` supplies display names, source URLs, and gallery identity, so no separate Library mode is needed.
 
 ### Display names
 
@@ -224,11 +230,7 @@ Handled during implementation iteration, not pre-designed. The known error state
 
 Each needs a user-visible response in the UI. The specifics will be decided as the UI takes shape.
 
-## Open items
+## Deferred items
 
-These are decisions explicitly deferred, not forgotten:
-
-- Ctrl+U input surface: modal, inline, or popup?
-- State machine integration: new mode, flag on existing mode, or derived from directory path?
-- Options page section for library path (later, not initial scope)
-- Manifest hosting URL (GitHub raw, CDN, or self-hosted)
+- Configurable Library location is the next planning slice. Its scope is defined above, but implementation needs an approved migration plan.
+- Authenticated or cookie-gated sites have no active plan. Revisit them only for a chosen provider and a defined authentication model.

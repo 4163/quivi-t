@@ -2188,6 +2188,14 @@ export function initFilePanel(deps) {
     renderLibrary();
   });
 
+  if (window.__TAURI__?.event?.listen) {
+    window.__TAURI__.event.listen('library-changed', () => {
+      renderLibrary().catch(err => {
+        console.error('[FilePanel] Failed to refresh Library after a filesystem change:', err);
+      });
+    }).catch(console.error);
+  }
+
   window.addEventListener('quivit-config-loaded', () => {
     favoritesExpanded = !getFavoritesCollapsed();
     renderFavorites();

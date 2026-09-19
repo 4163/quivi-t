@@ -74,6 +74,7 @@ pub fn run() {
             windows::apply_shell_background(&main_window, &config);
             platform::icons::warmup();
             crate::commands::watchers::spawn_config_file_watcher(app.handle().clone());
+            crate::commands::watchers::spawn_library_watcher(app.handle().clone());
             crate::archives::cache::acquire_temp_lock();
             crate::archives::cache::cleanup_orphaned_temp_dirs();
 

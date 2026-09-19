@@ -1,13 +1,17 @@
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{mpsc, Mutex};
+use std::time::Duration;
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{Emitter, Manager};
+
+const LIBRARY_CHANGE_DEBOUNCE_MS: u64 = 250;
 
 pub struct WatcherState {
     pub watcher: Option<RecommendedWatcher>,
     pub parent_watcher: Option<RecommendedWatcher>,
     pub config_watcher: Option<RecommendedWatcher>,
+    pub library_watcher: Option<RecommendedWatcher>,
 }
 
 impl WatcherState {
@@ -16,6 +20,7 @@ impl WatcherState {
             watcher: None,
             parent_watcher: None,
             config_watcher: None,
+            library_watcher: None,
         }
     }
 }
@@ -72,6 +77,65 @@ pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String
     }
 
     Ok(())
+}
+
+pub fn spawn_library_watcher(app: tauri::AppHandle) {
+    let library_path = match crate::commands::shell::get_library_dir() {
+        Ok(path) => path,
+        Err(err) => {
+            eprintln!("Failed to resolve Library directory for watching: {err}");
+            return;
+        }
+    };
+    let (change_tx, change_rx) = mpsc::channel::<()>();
+    let mut watcher = match notify::recommended_watcher(move |res: notify::Result<Event>| {
+        if let Ok(event) = res {
+            let changes_library_tree = matches!(
+                event.kind,
+                notify::EventKind::Create(_)
+                    | notify::EventKind::Remove(_)
+                    | notify::EventKind::Modify(notify::event::ModifyKind::Name(_))
+            ) || matches!(
+                event.kind,
+                notify::EventKind::Modify(notify::event::ModifyKind::Data(_))
+            ) && event.paths.iter().any(|path| {
+                path.file_name().and_then(|name| name.to_str()) == Some("gallery.json")
+            });
+
+            if changes_library_tree {
+                let _ = change_tx.send(());
+            }
+        }
+    }) {
+        Ok(watcher) => watcher,
+        Err(err) => {
+            eprintln!("Failed to create Library watcher: {err}");
+            return;
+        }
+    };
+
+    if let Err(err) = watcher.watch(Path::new(&library_path), RecursiveMode::Recursive) {
+        eprintln!("Failed to watch Library directory: {err}");
+        return;
+    }
+
+    app.state::<Mutex<WatcherState>>()
+        .lock()
+        .unwrap()
+        .library_watcher = Some(watcher);
+
+    std::thread::spawn(move || {
+        while change_rx.recv().is_ok() {
+            loop {
+                match change_rx.recv_timeout(Duration::from_millis(LIBRARY_CHANGE_DEBOUNCE_MS)) {
+                    Ok(()) => continue,
+                    Err(mpsc::RecvTimeoutError::Timeout) => break,
+                    Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                }
+            }
+            let _ = app.emit("library-changed", ());
+        }
+    });
 }
 
 pub fn spawn_config_file_watcher(app: tauri::AppHandle) {

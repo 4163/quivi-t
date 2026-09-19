@@ -10,6 +10,12 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Cross-instance Library updates (2026-09-19)
+- **Shared Library watcher (`src-tauri/src/commands/watchers.rs`, `src-tauri/src/lib.rs`):** Each QuiviT process now recursively watches `%LOCALAPPDATA%/QuiviT/library` from startup. Create, removal, rename, and `gallery.json` data changes coalesce for 250 ms before the process emits `library-changed`.
+- **Library panel refresh (`src/js/filepanel/filePanel.js`):** The Library panel listens for `library-changed` and reloads its tree. The existing active-directory watcher continues to refresh files in an open gallery.
+- **Documentation (`.agents/architecture-state.md`):** Recorded the watcher-to-file-panel event contract.
+- **Verification:** `cargo check --tests`; `cargo test --manifest-path src-tauri/Cargo.toml commands::directory::tests` (4 passing); `npm test` (69 passing); JavaScript syntax, Rust formatting, and diff checks; manual two-instance Library update test passed.
+
 ### Remote extractor updates, download recovery, and runtime coverage (2026-09-19)
 - **Remote update and offline cache (`src/js/urlLoader.js`, `src-tauri/src/commands/network.rs`):** Every URL import refreshes the trusted remote manifest. Production fetches cache successful manifest and extractor responses under `%LOCALAPPDATA%/QuiviT/extractor-cache/` and use the last complete response during an outage. Blob-module caching is keyed by extractor ID, manifest version, and source path, so a versioned manifest update loads new extractor code without a QuiviT release.
 - **Per-image failure state (`src/js/filepanel/filePanel.js`, `src/css/main.css`, `src/js/urlLoader.js`):** Gallery downloads that exhaust their retry show a red `FAILED` list entry or an explicit thumbnail message. Clicking a failed entry queues a fresh retry while keeping the active selection intact.
