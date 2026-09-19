@@ -10,12 +10,20 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### URL import refinements and Library depth filtering (2026-09-19)
+- **Library depth filtering (`src-tauri/src/commands/directory.rs`, `src/js/filepanel/filePanel.js`):** `read_library_nodes` now restricts files to `depth == 0` (direct standalone image downloads under provider roots). Image files under gallery folders (`depth > 0`) are ignored, preventing placeholder image files from momentarily surfacing as child rows under the provider dropdown. In the frontend, `appendNodes` adds a defense-in-depth guard ignoring non-directory nodes when `depth > 0`.
+- **Atomic gallery initialization (`src/js/urlLoader.js`):** Moved `gallery.json` sidecar write prior to placeholder file creation so the directory is identified as a valid gallery on disk before placeholder creation triggers filesystem watchers.
+- **Open first image configuration (`src/js/urlLoader.js`, `src/js/main/main.js`):** Respected `open_first_image` config option for gallery imports. When disabled, URL import redirects to the directory without targeting or opening the first image, starts the background download queue prioritizing the first image, and synchronizes the queue target on directory transition.
+- **Defensive delete state persistence (`src/js/filepanel/filePanel.js`):** Tracked `activeArmedLibPath` across `renderLibrary()` calls so background download file watcher events do not disarm an armed delete button.
+- **Default shortcut update (`src/js/services/actions.js`, `src/index.html`, `README.md`):** Updated the default keybinding and UI label for `Open URL...` to `Ctrl+I`.
+- **Verification:** Unit test `library_nodes_never_include_files_under_subdirectories` in `commands::directory` (5 passing); `npm test` (71 passing); `cargo check --tests` clean.
+
 ### Configurable Library location and Options feedback (2026-09-19)
 - **Live Library relocation (`src-tauri/src/commands/library.rs`, `src-tauri/src/config.rs`):** Options can move the shared URL Library to an existing empty folder without restarting. The backend stages and verifies the copy before saving the new location, blocks Library writes during the move, and keeps the original folder when the switch fails.
 - **Cross-window continuity (`src-tauri/src/commands/watchers.rs`, `src/js/main/main.js`, `src/js/urlLoader.js`):** Running QuiviT processes reload the shared location, rebind their Library watcher, refresh the Library tree, and remap Library paths in navigation, Favorites, sorting, and resume state.
 - **Default location and path cleanup (`src/js/options/options.js`, `src/options.html`, `src-tauri/src/config.rs`):** An empty Library field means `%LOCALAPPDATA%\\QuiviT\\library`; its placeholder shows that path. Windows verbatim `\\?\\` paths are cleaned before they reach configuration, Favorites, or breadcrumbs. The Start directory field follows the same empty-value pattern.
 - **Options feedback (`src/js/options/`):** Status messages use short user-facing language. Library errors explain the next action without showing backend details.
-- **Keybindings (`src/options.html`):** The existing `Open URL...` action now appears under File Operations, directly after Open File / Archive, so its default `Ctrl+U` shortcut can be changed.
+- **Keybindings (`src/options.html`):** The existing `Open URL...` action now appears under File Operations, directly after Open File / Archive, so its default `Ctrl+I` shortcut can be changed.
 - **Verification:** User confirmed the runtime behavior. `cargo check --tests`; config tests (8 passing); full Rust suite (74 passing); `npm test` (69 passing); action-registry tests (6 passing); JavaScript syntax and diff checks.
 
 ### Cross-instance Library updates (2026-09-19)

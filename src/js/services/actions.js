@@ -238,7 +238,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-open-file', label: 'Open File / Archive', defaultBinds: 'Ctrl+Shift+o', category: 'File Operations',
     run: (ctx) => ctx.FsUtils.openFileDialog()
   },
-  { id: 'cmd-use-url', label: 'Open URL...', defaultBinds: 'Ctrl+u', category: 'File Operations',
+  { id: 'cmd-use-url', label: 'Open URL...', defaultBinds: 'Ctrl+i', category: 'File Operations',
     run: (ctx) => ctx.UrlLoader?.openPrompt()
   },
   { id: 'cmd-refresh', label: 'Refresh', defaultBinds: ['6', 'Ctrl+r'], category: 'File Operations',

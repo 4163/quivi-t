@@ -191,7 +191,7 @@ const urlOverlay = initUrlOverlay({
   focusFileList,
   onSubmit: async (url) => {
     const { galleryPath, targetName } = await UrlLoader.loadUrl(url);
-    await FsUtils.loadFile(galleryPath, { targetName });
+    await FsUtils.loadFile(galleryPath, targetName ? { targetName } : {});
   }
 });
 UrlLoader.init({ Core, FsUtils, urlOverlay, getFileListViewportRange });

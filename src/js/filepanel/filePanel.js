@@ -313,8 +313,10 @@ let highlightedLibraryPath = '';
 
 let activeArmedRemoveBtn = null;
 let activeArmedDisarmFn = null;
+let activeArmedLibPath = '';
 
 function disarmActiveRemoveBtn() {
+  activeArmedLibPath = '';
   if (activeArmedDisarmFn) {
     const fn = activeArmedDisarmFn;
     activeArmedRemoveBtn = null;
@@ -1020,6 +1022,9 @@ function buildLibraryEntry(item, depth = 0) {
     removeBtn.title = 'Move to Recycle Bin';
     removeBtn.setAttribute('aria-label', 'Move to Recycle Bin');
     removeBtn.innerHTML = EMPTY_BOX_HTML;
+    if (_pathsEqual(activeArmedLibPath, item.path)) {
+      activeArmedLibPath = '';
+    }
     if (activeArmedRemoveBtn === removeBtn) {
       activeArmedRemoveBtn = null;
       activeArmedDisarmFn = null;
@@ -1034,9 +1039,14 @@ function buildLibraryEntry(item, depth = 0) {
     removeBtn.title = 'Delete local';
     removeBtn.setAttribute('aria-label', 'Delete local');
     removeBtn.innerHTML = CLOSE_X_SVG;
+    activeArmedLibPath = item.path || '';
     activeArmedRemoveBtn = removeBtn;
     activeArmedDisarmFn = disarm;
   };
+
+  if (canDelete && item.path && _pathsEqual(item.path, activeArmedLibPath)) {
+    arm();
+  }
 
   if (canDelete) {
     removeBtn.addEventListener('click', async (e) => {
@@ -1142,13 +1152,15 @@ function buildLibraryEntry(item, depth = 0) {
 
 export async function renderLibrary() {
   if (!libraryPanelEl) return;
-  disarmActiveRemoveBtn();
   const tree = await fetchLibraryTree();
   const hasAny = hasLibraryEntries(tree);
 
   libraryPanelEl.classList.toggle('is-empty', !hasAny);
   libraryPanelEl.innerHTML = '';
-  if (!hasAny) return;
+  if (!hasAny) {
+    disarmActiveRemoveBtn();
+    return;
+  }
 
   let allCollapsed = true;
 
@@ -1196,6 +1208,7 @@ export async function renderLibrary() {
 
     const appendNodes = (nodes, depth) => {
       for (const node of nodes) {
+        if (!node.is_dir && depth > 0) continue;
         listUl.appendChild(buildLibraryEntry(node, depth));
         if (node.children?.length) appendNodes(node.children, depth + 1);
       }
@@ -1207,6 +1220,12 @@ export async function renderLibrary() {
   }
 
   libraryPanelEl.classList.toggle('all-collapsed', allCollapsed);
+
+  if (activeArmedLibPath && (!activeArmedRemoveBtn || !libraryPanelEl.contains(activeArmedRemoveBtn))) {
+    activeArmedLibPath = '';
+    activeArmedRemoveBtn = null;
+    activeArmedDisarmFn = null;
+  }
 
   if (Core) updateLibrarySelection(Core.getState());
 }

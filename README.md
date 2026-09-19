@@ -77,9 +77,9 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Fullscreen | `4` / `Alt+Enter` |
 | Exit fullscreen (Hold) | `Escape` |
 | **File Operations** | |
-| Open directory... | `Ctrl+O` |
-| Open File / Archive... | `Ctrl+Shift+O` |
-| Open URL... | `Ctrl+U` |
+| Open directory | `Ctrl+O` |
+| Open File / Archive | `Ctrl+Shift+O` |
+| Open URL | `Ctrl+I` |
 | Refresh | `6` / `Ctrl+R` |
 
 ## Custom CSS

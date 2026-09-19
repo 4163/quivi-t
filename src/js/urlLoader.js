@@ -824,27 +824,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   await ensureGalleryOwnership(galleryPath, result.gallery, url);
 
-  // Prepopulate all gallery files as 0-byte placeholders on disk upfront
-  if (window.__TAURI__) {
-    const filenames = result.images.map((img) => img.filename);
-    await window.__TAURI__.core.invoke('create_placeholder_files', {
-      dir: galleryPath,
-      filenames
-    });
-  }
-
-  const downloadItems = result.images.map((img, i) => ({
-    url: img.url,
-    destPath: `${galleryPath}\\${img.filename}`,
-    galleryIndex: i
-  }));
-
-  // Eagerly download image at index 0 first
-  if (downloadItems.length > 0) {
-    await downloadFile(downloadItems[0].url, downloadItems[0].destPath);
-  }
-
-  // Write gallery.json sidecar
+  // Write gallery.json sidecar first so the directory is recognized as a gallery immediately
   const sidecar = {
     url,
     provider: result.provider,
@@ -871,13 +851,40 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     });
   }
 
+  // Prepopulate all gallery files as 0-byte placeholders on disk upfront
+  if (window.__TAURI__) {
+    const filenames = result.images.map((img) => img.filename);
+    await window.__TAURI__.core.invoke('create_placeholder_files', {
+      dir: galleryPath,
+      filenames
+    });
+  }
+
+  const state = _Core?.getState?.();
+  const openFirstImage = state?.config?.frontend_data?.open_first_image === true;
+
+  const downloadItems = result.images.map((img, i) => ({
+    url: img.url,
+    destPath: `${galleryPath}\\${img.filename}`,
+    galleryIndex: i,
+    status: 'pending'
+  }));
+
+  // Eagerly download image at index 0 first only when open_first_image is enabled
+  if (openFirstImage && downloadItems.length > 0) {
+    await downloadFile(downloadItems[0].url, downloadItems[0].destPath);
+    downloadItems[0].status = 'completed';
+  }
+
   // Prune any standalone raw files under the provider root that are part of this gallery
   await cleanupMatchingRawFiles(providerPath, result.images);
 
-  // Background queue for remaining images (index 0 already downloaded eagerly)
-  if (downloadItems.length > 1) {
-    downloadItems[0].status = 'completed';
-    _startGalleryQueue(galleryPath, downloadItems);
+  // Background queue for remaining images
+  if (downloadItems.length > 0) {
+    const initialTarget = openFirstImage
+      ? (downloadItems[1]?.destPath || null)
+      : downloadItems[0].destPath;
+    _startGalleryQueue(galleryPath, downloadItems, { initialTarget });
   } else {
     _activeGalleryPath = galleryPath;
     _activeGalleryItems = downloadItems;
@@ -885,7 +892,8 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   window.dispatchEvent(new CustomEvent('quivit-library-updated'));
 
-  return { galleryPath, result, targetName: result.images[0]?.filename || null };
+  const targetName = openFirstImage ? (result.images[0]?.filename || null) : null;
+  return { galleryPath, result, targetName };
 }
 
 async function ensureGalleryOwnership(galleryPath, gallery, sourceUrl) {
@@ -908,7 +916,7 @@ async function ensureGalleryOwnership(galleryPath, gallery, sourceUrl) {
 
 // -- Gallery queue management and auto-resumption --
 
-function _startGalleryQueue(galleryPath, items) {
+function _startGalleryQueue(galleryPath, items, options = {}) {
   if (_activeQueue) {
     _activeQueue.cancel();
     _activeQueue = null;
@@ -962,11 +970,23 @@ function _startGalleryQueue(galleryPath, items) {
   }));
 
   const state = _Core?.getState?.();
-  if (state?.directory && _pathsEqual(state.directory, galleryPath) && state.list?.[state.index]) {
+  let prioritizedTarget = null;
+  if (options.initialTarget) {
+    prioritizedTarget = options.initialTarget;
+  } else if (state?.directory && _pathsEqual(state.directory, galleryPath) && state.list?.[state.index]) {
     const currentEntry = state.list[state.index];
     const targetPath = currentEntry?.path || (currentEntry?.name ? `${galleryPath}\\${currentEntry.name}` : null);
-    if (targetPath) {
-      _activeQueue.prioritize(targetPath);
+    if (targetPath && !currentEntry.is_parent) {
+      prioritizedTarget = targetPath;
+    }
+  }
+
+  if (prioritizedTarget) {
+    _activeQueue.prioritize(prioritizedTarget);
+  } else {
+    const firstPending = items.find(i => i.status === 'pending');
+    if (firstPending) {
+      _activeQueue.prioritize(firstPending.destPath);
     }
   }
 
@@ -1160,10 +1180,9 @@ export const UrlLoader = {
           if (dir) {
             resumeGalleryDownloads(dir, state.list).catch(() => {});
           }
-          return;
         }
 
-        // Same directory: resume if queue is missing or not active for this gallery
+        // Check if queue is missing or not active for this gallery
         if (!_activeQueue || !_activeQueue.isActive || !_pathsEqual(dir, _activeGalleryPath)) {
           if (dir) {
             resumeGalleryDownloads(dir, state.list).catch(() => {});
@@ -1174,7 +1193,7 @@ export const UrlLoader = {
         if (!state.list || state.index < 0 || state.index >= state.list.length) return;
 
         const currentEntry = state.list[state.index];
-        if (!currentEntry) return;
+        if (!currentEntry || currentEntry.is_parent) return;
 
         const targetPath = currentEntry.path || (currentEntry.name ? `${_activeGalleryPath}\\${currentEntry.name}` : null);
         if (targetPath) {

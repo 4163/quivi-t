@@ -282,10 +282,11 @@ fn read_library_nodes(dir: &Path, depth: usize) -> Vec<LibraryNode> {
             continue;
         }
         if is_file
-            && !path
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .is_some_and(is_image_ext)
+            && (depth > 0
+                || !path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(is_image_ext))
         {
             continue;
         }
@@ -522,6 +523,51 @@ mod tests {
         assert_eq!(nodes[0].children[0].name, "Volume 01");
         assert!(nodes[0].children[0].children[0].is_gallery);
         assert_eq!(nodes[0].children[0].children[0].image_count, 1);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn library_nodes_never_include_files_under_subdirectories() {
+        let root = std::env::temp_dir().join(format!(
+            "quivit_library_files_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let provider = root.join("Imgur");
+        let album = provider.join("My Album");
+        fs::create_dir_all(&album).unwrap();
+
+        // Direct raw file under provider root (depth == 0)
+        fs::write(provider.join("direct.png"), "image").unwrap();
+
+        // Files inside album (depth > 0)
+        fs::write(album.join("001.png"), "placeholder").unwrap();
+        fs::write(album.join("002.png"), "placeholder").unwrap();
+
+        // Without gallery.json: album has no subdirectories, so it shouldn't expose files as children
+        let nodes = read_library_nodes(&provider, 0);
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].name, "direct.png");
+        assert!(!nodes[0].is_dir);
+
+        // With gallery.json: album is recognized as a gallery with image_count = 2, children = []
+        fs::write(
+            album.join("gallery.json"),
+            r#"{"title":"My Album","images":[{"filename":"001.png"},{"filename":"002.png"}]}"#,
+        )
+        .unwrap();
+
+        let nodes_with_gallery = read_library_nodes(&provider, 0);
+        assert_eq!(nodes_with_gallery.len(), 2);
+        let gallery_node = nodes_with_gallery.iter().find(|n| n.name == "My Album").unwrap();
+        assert!(gallery_node.is_dir);
+        assert!(gallery_node.is_gallery);
+        assert_eq!(gallery_node.image_count, 2);
+        assert!(gallery_node.children.is_empty());
 
         let _ = fs::remove_dir_all(root);
     }
