@@ -79,7 +79,9 @@ export function parseDirectUrl(url) {
   const m = url.match(IMGUR_DIRECT_RE);
   if (!m) return null;
   const hash = m[1];
-  const ext = `.${m[2].toLowerCase()}`;
+  let rawExt = m[2].toLowerCase();
+  if (rawExt === 'gifv') rawExt = 'mp4';
+  const ext = `.${rawExt}`;
   return {
     provider: 'Imgur',
     hash,
@@ -106,7 +108,8 @@ export async function extract(html, url, context = {}) {
       images: [{
         url: direct.url,
         filename: direct.filename,
-        displayName: direct.hash
+        displayName: direct.hash,
+        hasSound: direct.ext === '.mp4'
       }],
       nextPageUrl: null
     };
@@ -151,8 +154,9 @@ export async function extract(html, url, context = {}) {
       if (!entry) continue;
 
       const hash = entry.hash || entry.id || entry.name || '';
-      const ext = entry.ext || entry.type?.split('/')?.pop() || '.jpg';
-      const normalizedExt = ext.startsWith('.') ? ext : `.${ext}`;
+      let ext = entry.ext || entry.type?.split('/')?.pop() || '.jpg';
+      if (ext.toLowerCase() === 'gifv' || ext.toLowerCase() === '.gifv') ext = '.mp4';
+      const normalizedExt = ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`;
 
       let imageUrl = entry.url || entry.link || '';
       if (!imageUrl && hash) {
@@ -163,7 +167,8 @@ export async function extract(html, url, context = {}) {
       rawEntries.push({
         url: imageUrl,
         ext: normalizedExt,
-        description: entry.title || entry.description || ''
+        description: entry.title || entry.description || '',
+        hasSound: Boolean(entry.has_sound)
       });
     }
 
@@ -218,7 +223,8 @@ export async function extract(html, url, context = {}) {
       url: entry.url,
       filename: formatFilename(index, total, entry.ext, description),
       displayName: description || `Image ${index + 1}`,
-      description
+      description,
+      hasSound: entry.hasSound ?? false
     };
   });
 
