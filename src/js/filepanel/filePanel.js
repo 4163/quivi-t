@@ -9,7 +9,8 @@ import {
   saveFavoritesCollapsed,
   isFavorite,
   toggleFavorite,
-  saveFavorites
+  saveFavorites,
+  reconcileFavorites
 } from './favoritesStore.js';
 import {
   fetchLibraryTree,
@@ -575,7 +576,10 @@ const CLOSE_X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"
 function openFavorite(fav) {
   focusMainListOnNextRender = true;
   if (FsUtils) {
-    FsUtils.loadFile(fav.path).catch(console.error);
+    FsUtils.loadFile(fav.path).catch(err => {
+      console.error(err);
+      refreshFavoritesAfterFilesystemChange();
+    });
   }
 }
 
@@ -759,6 +763,9 @@ function buildFavoriteEntry(fav) {
 function renderFavorites() {
   if (!favoritesListUl) return;
   const favs = getFavorites();
+  if (!favs.some(favorite => favorite.path === highlightedFavoritePath)) {
+    highlightedFavoritePath = '';
+  }
   
   if (favoritesHeaderEl) {
     favoritesHeaderEl.classList.toggle('hidden', favs.length === 0);
@@ -779,6 +786,22 @@ function renderFavorites() {
     if (icon) icon.textContent = favoritesExpanded ? '▲' : '▼';
   }
   if (Core) updateFavoritesSelection(Core.getState());
+}
+
+let favoritesRefreshTimer = null;
+
+function refreshFavoritesAfterFilesystemChange() {
+  clearTimeout(favoritesRefreshTimer);
+  favoritesRefreshTimer = setTimeout(() => {
+    reconcileFavorites().then(changed => {
+      if (!changed) return;
+      renderFavorites();
+      const state = Core.getState();
+      updateFavoriteBtn(state.list?.[state.index]?.path || '');
+    }).catch(err => {
+      console.error('[FilePanel] Failed to reconcile Favorites after a filesystem change:', err);
+    });
+  }, 250);
 }
 
 function toggleFavoritesExpanded() {
@@ -2193,12 +2216,20 @@ export function initFilePanel(deps) {
       renderLibrary().catch(err => {
         console.error('[FilePanel] Failed to refresh Library after a filesystem change:', err);
       });
+      refreshFavoritesAfterFilesystemChange();
+    }).catch(console.error);
+
+    window.__TAURI__.event.listen('directory-changed', () => {
+      refreshFavoritesAfterFilesystemChange();
     }).catch(console.error);
   }
+
+  window.addEventListener('focus', refreshFavoritesAfterFilesystemChange);
 
   window.addEventListener('quivit-config-loaded', () => {
     favoritesExpanded = !getFavoritesCollapsed();
     renderFavorites();
+    refreshFavoritesAfterFilesystemChange();
     // Re-measure rows so custom CSS font sizes apply.
     const oldHeight = ROW_HEIGHT;
     measureRowHeight();
