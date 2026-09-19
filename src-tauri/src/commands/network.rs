@@ -182,6 +182,11 @@ pub fn download_to_file(
     use tauri::Manager;
 
     let dest = Path::new(&dest_path);
+    crate::commands::library::ensure_library_write_allowed(dest)?;
+    let library_write_root = crate::commands::library::library_write_scope(dest)?;
+    if let Some(library_root) = &library_write_root {
+        crate::commands::library::ensure_library_root_writable(library_root)?;
+    }
     if dest.is_file() && dest.metadata().map(|m| m.len() > 0).unwrap_or(false) {
         return Ok(());
     }
@@ -235,6 +240,13 @@ pub fn download_to_file(
 
     let mut buf = vec![0u8; DOWNLOAD_CHUNK_SIZE];
     loop {
+        if let Some(library_root) = &library_write_root {
+            if let Err(err) = crate::commands::library::ensure_library_root_writable(library_root) {
+                drop(file);
+                let _ = fs::remove_file(&temp_dest);
+                return Err(err);
+            }
+        }
         if cancel.load(Ordering::SeqCst) != my_gen {
             drop(file);
             let _ = fs::remove_file(&temp_dest);
@@ -283,6 +295,12 @@ pub fn download_to_file(
     if cancel.load(Ordering::SeqCst) != my_gen {
         let _ = fs::remove_file(&temp_dest);
         return Err("Download cancelled".to_string());
+    }
+    if let Some(library_root) = &library_write_root {
+        if let Err(err) = crate::commands::library::ensure_library_root_writable(library_root) {
+            let _ = fs::remove_file(&temp_dest);
+            return Err(err);
+        }
     }
 
     // Atomically move or copy finished file into final destination.

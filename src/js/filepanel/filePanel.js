@@ -153,6 +153,11 @@ export function ensureArchiveBlob(src) {
 export const FAVORITES_CACHE_CAPACITY = 250;
 export const favoritesThumbnailCache = new BoundedMap(FAVORITES_CACHE_CAPACITY, _revokeBlobEntry);
 
+export function clearLibraryPathCaches() {
+  thumbnailCache.clear();
+  favoritesThumbnailCache.clear();
+}
+
 // Canonical large format/folder icons (~20 entries).
 // Separate from thumbnailCache so image scrolling can't evict them.
 const staticIconCache = new Map();
@@ -792,7 +797,12 @@ let favoritesRefreshTimer = null;
 
 function refreshFavoritesAfterFilesystemChange() {
   clearTimeout(favoritesRefreshTimer);
-  favoritesRefreshTimer = setTimeout(() => {
+  favoritesRefreshTimer = setTimeout(async () => {
+    const movingLibrary = await window.__TAURI__?.core
+      ?.invoke('library_move_in_progress')
+      .catch(() => false);
+    if (movingLibrary) return;
+
     reconcileFavorites().then(changed => {
       if (!changed) return;
       renderFavorites();

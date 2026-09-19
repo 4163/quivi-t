@@ -141,6 +141,10 @@ body > * {
   flex-direction: column;
 }
 
+.input-group + .hint {
+  margin-top: 8px;
+}
+
 .continue-last-label {
   margin-top: 12px;
 }

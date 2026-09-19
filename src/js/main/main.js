@@ -6,7 +6,7 @@ import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { Viewer } from '../viewer/viewer.js';
 import * as NavigationHistory from '../navigationHistory.js';
-import { initFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite, getHighlightedLibrary, navigateHighlightedLibrary, focusFileList, isFileListFocused, getFileListViewportRange } from '../filepanel/filePanel.js';
+import { initFilePanel, toggleFavoriteCurrent, getHighlightedFavorite, navigateHighlightedFavorite, getHighlightedLibrary, navigateHighlightedLibrary, focusFileList, isFileListFocused, getFileListViewportRange, clearLibraryPathCaches } from '../filepanel/filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from '../shortcuts.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from '../keybinds.js';
@@ -201,6 +201,25 @@ initLifecycle({ Core, FsUtils, UrlLoader });
 let previewTheme = null;
 let previewCss = null;
 
+async function reloadConfigAndSyncLibrary(relocation = null) {
+  const cachedLibraryPath = relocation?.oldPath || UrlLoader.getCachedLibraryDir();
+  await Core.loadConfig();
+  // Another QuiviT process receives the config watcher event but not the
+  // in-process relocation event, so it must replace its old root watcher too.
+  await window.__TAURI__.core.invoke('rebind_library_watcher').catch(err => {
+    console.warn('[Main] Failed to rebind the Library watcher:', err);
+  });
+  const libraryPath = relocation?.libraryPath || await UrlLoader.reloadLibraryDir();
+  const change = UrlLoader.handleLibraryRelocation({
+    oldPath: cachedLibraryPath,
+    libraryPath
+  });
+  if (change.changed) {
+    NavigationHistory.remapLibraryPaths(change.oldPath, change.libraryPath);
+    clearLibraryPathCaches();
+  }
+}
+
 bindKeyboardShortcuts({ Core, dispatchAction: (id, payload) => dispatch(id, payload, actionCtx), dispatchKeyboardPan });
 
 if (window.__TAURI__) {
@@ -210,12 +229,22 @@ if (window.__TAURI__) {
     previewTheme = null;
     previewCss = null;
     resetScrollLatch();
-    Core.loadConfig();
+    reloadConfigAndSyncLibrary().catch(err => {
+      console.error('[Main] Failed to refresh settings:', err);
+    });
   });
 
   listen('config-changed', () => {
     resetScrollLatch();
-    Core.loadConfig();
+    reloadConfigAndSyncLibrary().catch(err => {
+      console.error('[Main] Failed to refresh settings:', err);
+    });
+  });
+
+  listen('library-relocated', (event) => {
+    reloadConfigAndSyncLibrary(event.payload).catch(err => {
+      console.error('[Main] Failed to activate relocated Library:', err);
+    });
   });
 
   listen('theme-preview', (e) => {

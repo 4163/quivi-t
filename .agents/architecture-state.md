@@ -36,6 +36,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `default_sort` is config-file-only; the UI writes only per-directory sort prefs. Archive cache budget is config-file-only, no UI.
 - Filter preference is stored as `active_filter` (id) and `filter_options` (bag), replacing individual booleans.
 - Additional `frontend_data` preferences: `hide_cursor_delay_sec`, `file_list_view_mode`, `spread_enabled`, `spread_direction`, `spread_mode` (derived from enabled + direction).
+- `frontend_data.library_path` is an optional absolute shared URL Library location. When absent, the Library is `%LOCALAPPDATA%\\QuiviT\\library`.
 - Bounded in-memory session caches: `fsUtils.js` archive password (50) and encryption status (100); `filePanel.js` thumbnail (250); `core.js` animation memo (512). All use `BoundedMap` from `services/cache.js`.
 - Theme/CSS live previews are ephemeral until Options Apply. They must not persist to `localStorage` while previewing.
 
@@ -56,6 +57,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `fsUtils.js`: filesystem / archive navigation. No DOM.
 - `directoryPrefs.js`: per-directory sort prefs. Sort math is in `services/sorting.js`.
 - `navigationHistory.js`: session-only container Back/Forward.
+- `urlLoader.js`: URL import and download queue. Caches the active Library path and updates it after a location change.
 - `metadata.js`: comic/archive metadata parsing. `metadata-window.js`: that window's controller.
 - `menubar.js`: dropdown interaction. `menubar/chrome.js`: menu/status visibility. `menubar/statusbar.js`: sole `#statusbar` writer. Dual spread indicator routing (`.status-spread` in statusbar, `#spread-indicator` viewport overlay).
 - `keyboardNav.js`: generic list/tab navigation.
@@ -73,7 +75,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `lib.rs` & `main.rs`: bootstrap, config watcher, and main-window build.
 - `tests/`: in-tree testing for archives, config, formats, protocol, and temp archive origin.
 - `config.rs`: `AppConfig` / persistence / portable / pending promotion.
-- `commands/`: Tauri command surface (directory, archives, animation, watcher, associations, shell). `list_archive` accepts `password: Option<String>`. `drop_all_archives_cache` and `resolve_archive_temp_origin` are archive lifecycle commands. `network.rs` validates extractor file paths, refreshes remote sources, and falls back to its `%LOCALAPPDATA%/QuiviT/extractor-cache/`; `read_library_tree` returns recursive provider nodes with gallery roots identified by `gallery.json`. `watchers.rs` watches the shared Library recursively and emits coalesced `library-changed` events for the file panel.
+- `commands/`: Tauri command surface (directory, archives, animation, library, watcher, associations, shell). `library.rs` owns live relocation and write guards. `watchers.rs` watches the configured Library recursively, rebinds after relocation, and emits coalesced `library-changed` events. `list_archive` accepts `password: Option<String>`. `drop_all_archives_cache` and `resolve_archive_temp_origin` are archive lifecycle commands. `network.rs` validates extractor file paths, refreshes remote sources, and falls back to its `%LOCALAPPDATA%/QuiviT/extractor-cache/`; `read_library_tree` returns recursive provider nodes with gallery roots identified by `gallery.json`.
 - `archives/` & `formats.rs`: archive readers + `ArchiveCache` (two-archive sliding buffer, `MAX_OPEN_ARCHIVES = 2`) and format / animation registry.
 - `protocol.rs`: `quivit://` handler. Routes: `/archive/` (entry data, `no-store`), `/thumb/` (96×96 shell thumbnails), `/icon/` (shell icons, `?size=large` for 32×32). `asset://` for direct file access.
 - `platform/`: `icons.rs` (shell icons), `thumbnails.rs` (96×96 `IShellItemImageFactory`), `temp_archive.rs` (external archiver temp origin resolution), `attributes.rs` (dotfile visibility), `dialog.rs` (native folder picker with Library virtual folder resolution). `windows.rs`: window lifecycle and size constants.

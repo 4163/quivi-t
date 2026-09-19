@@ -100,7 +100,6 @@ pub(crate) fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, Str
     Ok(files)
 }
 
-
 pub(crate) fn extract_tar_to_temp(
     archive_path: String,
     temp_dir: PathBuf,

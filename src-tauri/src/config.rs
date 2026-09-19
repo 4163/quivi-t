@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 use tauri_plugin_opener::OpenerExt;
 
+pub const LIBRARY_PATH_KEY: &str = "library_path";
+pub const RETIRED_LIBRARY_PATHS_KEY: &str = "retired_library_paths";
+
 /// Write-to-tmp then rename. Prevents half-written config on crash.
 fn atomic_write(path: &Path, data: impl AsRef<[u8]>) -> std::io::Result<()> {
     let tmp = path.with_extension("tmp");
@@ -126,6 +129,140 @@ pub fn load_config_early() -> AppConfig {
     }
 }
 
+pub fn default_library_dir() -> Result<PathBuf, String> {
+    let local = std::env::var("LOCALAPPDATA").map_err(|_| "LOCALAPPDATA not set".to_string())?;
+    Ok(Path::new(&local).join("QuiviT").join("library"))
+}
+
+/// `std::fs::canonicalize` returns a Windows verbatim path (`\\?\C:\...`).
+/// Keep that form inside filesystem operations, but never expose or persist it
+/// as a user-facing Library location.
+pub fn display_path(path: &Path) -> String {
+    let value = path.to_string_lossy().replace('/', "\\");
+    #[cfg(windows)]
+    {
+        if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+            return format!(r"\\{rest}");
+        }
+        if let Some(rest) = value.strip_prefix(r"\\?\") {
+            return rest.to_string();
+        }
+    }
+    value
+}
+
+pub fn library_dir_from_config(config: &AppConfig) -> Result<PathBuf, String> {
+    let Some(path) = config
+        .frontend_data
+        .get(LIBRARY_PATH_KEY)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+    else {
+        return default_library_dir();
+    };
+
+    let path = PathBuf::from(path);
+    if !path.is_absolute() {
+        return Err("Library location must be an absolute path".into());
+    }
+    Ok(path)
+}
+
+pub fn configured_library_dir() -> Result<PathBuf, String> {
+    library_dir_from_config(&load_config_early())
+}
+
+pub fn same_library_location(left: &AppConfig, right: &AppConfig) -> Result<bool, String> {
+    let left = library_dir_from_config(left)?;
+    let right = library_dir_from_config(right)?;
+    #[cfg(windows)]
+    {
+        return Ok(display_path(&left).eq_ignore_ascii_case(&display_path(&right)));
+    }
+    #[cfg(not(windows))]
+    Ok(left == right)
+}
+
+fn clean_saved_path(path: &str) -> String {
+    display_path(Path::new(path))
+}
+
+/// Older live moves wrote Windows canonical paths into frontend state. Clean
+/// those values as they cross the configuration boundary so session restore,
+/// Favorites, and breadcrumbs never expose a `\\?\` prefix.
+fn normalize_library_location_paths(config: &mut AppConfig) {
+    let Some(data) = config.frontend_data.as_object_mut() else {
+        return;
+    };
+
+    for key in [LIBRARY_PATH_KEY, "last_opened_path"] {
+        if let Some(path) = data.get(key).and_then(|value| value.as_str()) {
+            data.insert(key.to_string(), serde_json::json!(clean_saved_path(path)));
+        }
+    }
+
+    if let Some(last_active) = data
+        .get_mut("last_active_image")
+        .and_then(|value| value.as_object_mut())
+    {
+        for key in ["container", "path"] {
+            if let Some(path) = last_active.get(key).and_then(|value| value.as_str()) {
+                last_active.insert(key.to_string(), serde_json::json!(clean_saved_path(path)));
+            }
+        }
+    }
+
+    if let Some(favorites) = data
+        .get_mut("favorites")
+        .and_then(|value| value.as_array_mut())
+    {
+        for favorite in favorites {
+            let Some(favorite) = favorite.as_object_mut() else {
+                continue;
+            };
+            let Some(path) = favorite.get("path").and_then(|value| value.as_str()) else {
+                continue;
+            };
+            let (filesystem_path, archive_entry) = path.split_once('|').unwrap_or((path, ""));
+            let normalized = clean_saved_path(filesystem_path);
+            let value = if archive_entry.is_empty() {
+                normalized
+            } else {
+                format!("{normalized}|{archive_entry}")
+            };
+            favorite.insert("path".to_string(), serde_json::json!(value));
+        }
+    }
+
+    if let Some(sort_preferences) = data
+        .get_mut("directory_sort")
+        .and_then(|value| value.as_object_mut())
+    {
+        let normalized = sort_preferences
+            .iter()
+            .map(|(path, value)| (path.clone(), clean_saved_path(path), value.clone()))
+            .collect::<Vec<_>>();
+        for (original, replacement, value) in normalized {
+            if original != replacement {
+                sort_preferences.remove(&original);
+                sort_preferences.insert(replacement, value);
+            }
+        }
+    }
+
+    if let Some(retired) = data
+        .get_mut(RETIRED_LIBRARY_PATHS_KEY)
+        .and_then(|value| value.as_array_mut())
+    {
+        for path in retired {
+            if let Some(path_text) = path.as_str() {
+                *path = serde_json::json!(clean_saved_path(path_text));
+            }
+        }
+    }
+}
+
 // Startup-only settings use a pending value so they take effect after restart.
 // Options writes `pending_single_instance`; the UI never writes the effective
 // `single_instance`. On the next launch, promote the pending value, drop the
@@ -216,7 +353,8 @@ pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
         read_json_file(&get_exe_dir().join("quivit_config.json")).unwrap_or_default()
     } else {
         let dir = roaming_dir(&app_handle);
-        let mut cfg: AppConfig = read_json_file(&dir.join("quivit_config.json")).unwrap_or_default();
+        let mut cfg: AppConfig =
+            read_json_file(&dir.join("quivit_config.json")).unwrap_or_default();
         // New layout: state, directory-sort, and favorites live in their own files.
         // Legacy layout (everything in quivit_config.json) loads unchanged.
         merge_file_into(&dir.join("quivit_state.json"), &mut cfg.frontend_data);
@@ -224,10 +362,7 @@ pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
             &dir.join("quivit_directory_sort.json"),
             &mut cfg.frontend_data,
         );
-        merge_file_into(
-            &dir.join("quivit_favorites.json"),
-            &mut cfg.frontend_data,
-        );
+        merge_file_into(&dir.join("quivit_favorites.json"), &mut cfg.frontend_data);
 
         // Roaming mode stores custom CSS in its own file.
         let css_path = dir.join("custom_css.css");
@@ -237,6 +372,8 @@ pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
 
         cfg
     };
+
+    normalize_library_location_paths(&mut config);
 
     if is_e2e_suite() {
         config.frontend_data["e2e_suite"] = serde_json::json!(true);
@@ -281,8 +418,11 @@ pub fn open_local_data_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| format!("Failed to open local data directory: {e}"))
 }
 
-#[tauri::command]
-pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Result<(), String> {
+pub fn save_config_unchecked(
+    app_handle: tauri::AppHandle,
+    mut config: AppConfig,
+) -> Result<(), String> {
+    normalize_library_location_paths(&mut config);
     if let Some(obj) = config.frontend_data.as_object_mut() {
         obj.remove("e2e_suite");
     }
@@ -352,6 +492,22 @@ pub fn save_config(app_handle: tauri::AppHandle, mut config: AppConfig) -> Resul
         }
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn save_config(app_handle: tauri::AppHandle, config: AppConfig) -> Result<(), String> {
+    if crate::commands::library::library_move_in_progress()? {
+        return Err(
+            "Library relocation is in progress. Try saving settings again when it finishes.".into(),
+        );
+    }
+
+    let current = load_config(app_handle.clone());
+    if !same_library_location(&current, &config)? {
+        return Err("Use the Library location control to move the Library. Settings saves cannot change its path.".into());
+    }
+
+    save_config_unchecked(app_handle, config)
 }
 
 #[cfg(test)]

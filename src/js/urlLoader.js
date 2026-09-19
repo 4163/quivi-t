@@ -177,11 +177,35 @@ export async function getLibraryDir() {
   return dir;
 }
 
+export async function reloadLibraryDir() {
+  _libraryDirCache = null;
+  return getLibraryDir();
+}
+
+export function getCachedLibraryDir() {
+  return _libraryDirCache;
+}
+
 // -- Path comparison helper --
 
 function _pathsEqual(a, b) {
   if (!a || !b) return false;
   return a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase();
+}
+
+function _isPathWithin(path, root) {
+  if (!path || !root) return false;
+  const cleanPath = String(path).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const cleanRoot = String(root).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  return cleanPath === cleanRoot || cleanPath.startsWith(`${cleanRoot}/`);
+}
+
+function _rebasePath(path, oldRoot, newRoot) {
+  if (!_isPathWithin(path, oldRoot)) return path;
+  const cleanPath = String(path).replace(/\\/g, '/');
+  const cleanRoot = String(oldRoot).replace(/\\/g, '/').replace(/\/+$/, '');
+  const suffix = cleanPath.slice(cleanRoot.length);
+  return `${String(newRoot).replace(/[\\/]+$/, '')}${suffix.replace(/\//g, '\\')}`;
 }
 
 // -- Staggered Download Queue --
@@ -1046,6 +1070,35 @@ function _teardownActiveQueue() {
   }));
 }
 
+export function handleLibraryRelocation({ oldPath, libraryPath } = {}) {
+  const previousPath = oldPath || _libraryDirCache;
+  const nextPath = libraryPath || _libraryDirCache;
+  _libraryDirCache = nextPath || null;
+
+  if (!previousPath || !nextPath || _pathsEqual(previousPath, nextPath)) {
+    window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+    return { oldPath: previousPath || '', libraryPath: nextPath || '', changed: false };
+  }
+
+  _teardownActiveQueue();
+  window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+
+  const state = _Core?.getState?.();
+  if (state?.directory && _isPathWithin(state.directory, previousPath) && _FsUtils) {
+    const remappedDirectory = _rebasePath(state.directory, previousPath, nextPath);
+    const targetName = state.list?.[state.index]?.name || state.filename || '';
+    _FsUtils.loadFile(remappedDirectory, {
+      history: 'skip',
+      targetName,
+      restoreLastImage: false
+    }).catch(err => {
+      console.error('[UrlLoader] Failed to open the relocated Library directory:', err);
+    });
+  }
+
+  return { oldPath: previousPath, libraryPath: nextPath, changed: true };
+}
+
 let _getFileListViewportRange = null;
 
 export const UrlLoader = {
@@ -1054,6 +1107,7 @@ export const UrlLoader = {
     _FsUtils = FsUtils;
     _urlOverlay = urlOverlay;
     _getFileListViewportRange = typeof getFileListViewportRange === 'function' ? getFileListViewportRange : null;
+    getLibraryDir().catch(() => {});
 
     if (!_downloadThresholdUnlisten && window.__TAURI__?.event?.listen) {
       window.__TAURI__.event.listen('quivit-download-threshold', (event) => {
@@ -1125,6 +1179,9 @@ export const UrlLoader = {
   downloadFile,
   cancelDownload,
   getLibraryDir,
+  reloadLibraryDir,
+  getCachedLibraryDir,
+  handleLibraryRelocation,
   fetchManifest,
   getExtractorCacheKey,
   validateManifest,

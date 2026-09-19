@@ -19,6 +19,24 @@ function sameContainer(a, b) {
   return entryKey(a) === entryKey(b);
 }
 
+function remapPath(path, oldRoot, newRoot) {
+  if (!path || !oldRoot || !newRoot) return path;
+  const cleanPath = String(path).replace(/\\/g, '/');
+  const cleanOldRoot = String(oldRoot).replace(/\\/g, '/').replace(/\/+$/, '');
+  if (cleanPath.toLowerCase() !== cleanOldRoot.toLowerCase()
+    && !cleanPath.toLowerCase().startsWith(`${cleanOldRoot.toLowerCase()}/`)) {
+    return path;
+  }
+  const suffix = cleanPath.slice(cleanOldRoot.length);
+  return `${String(newRoot).replace(/[\\/]+$/, '')}${suffix.replace(/\//g, '\\')}`;
+}
+
+function remapEntry(entry, oldRoot, newRoot) {
+  if (!entry) return;
+  entry.containerPath = remapPath(entry.containerPath, oldRoot, newRoot);
+  entry.selectedPath = remapPath(entry.selectedPath, oldRoot, newRoot);
+}
+
 function pushLimited(stack, entry) {
   if (!entry) return;
   if (sameContainer(stack[stack.length - 1], entry)) return;
@@ -99,4 +117,11 @@ export function canGoBack() {
 
 export function canGoForward() {
   return forwardStack.length > 0;
+}
+
+export function remapLibraryPaths(oldRoot, newRoot) {
+  if (!oldRoot || !newRoot || String(oldRoot).toLowerCase() === String(newRoot).toLowerCase()) return;
+  backStack.forEach(entry => remapEntry(entry, oldRoot, newRoot));
+  forwardStack.forEach(entry => remapEntry(entry, oldRoot, newRoot));
+  emitChange();
 }

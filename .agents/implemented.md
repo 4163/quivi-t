@@ -10,6 +10,14 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Configurable Library location and Options feedback (2026-09-19)
+- **Live Library relocation (`src-tauri/src/commands/library.rs`, `src-tauri/src/config.rs`):** Options can move the shared URL Library to an existing empty folder without restarting. The backend stages and verifies the copy before saving the new location, blocks Library writes during the move, and keeps the original folder when the switch fails.
+- **Cross-window continuity (`src-tauri/src/commands/watchers.rs`, `src/js/main/main.js`, `src/js/urlLoader.js`):** Running QuiviT processes reload the shared location, rebind their Library watcher, refresh the Library tree, and remap Library paths in navigation, Favorites, sorting, and resume state.
+- **Default location and path cleanup (`src/js/options/options.js`, `src/options.html`, `src-tauri/src/config.rs`):** An empty Library field means `%LOCALAPPDATA%\\QuiviT\\library`; its placeholder shows that path. Windows verbatim `\\?\\` paths are cleaned before they reach configuration, Favorites, or breadcrumbs. The Start directory field follows the same empty-value pattern.
+- **Options feedback (`src/js/options/`):** Status messages use short user-facing language. Library errors explain the next action without showing backend details.
+- **Keybindings (`src/options.html`):** The existing `Open URL...` action now appears under File Operations, directly after Open File / Archive, so its default `Ctrl+U` shortcut can be changed.
+- **Verification:** User confirmed the runtime behavior. `cargo check --tests`; config tests (8 passing); full Rust suite (74 passing); `npm test` (69 passing); action-registry tests (6 passing); JavaScript syntax and diff checks.
+
 ### Cross-instance Library updates (2026-09-19)
 - **Shared Library watcher (`src-tauri/src/commands/watchers.rs`, `src-tauri/src/lib.rs`):** Each QuiviT process now recursively watches `%LOCALAPPDATA%/QuiviT/library` from startup. Create, removal, rename, and `gallery.json` data changes coalesce for 250 ms before the process emits `library-changed`.
 - **Library panel refresh (`src/js/filepanel/filePanel.js`):** The Library panel listens for `library-changed` and reloads its tree. The existing active-directory watcher continues to refresh files in an open gallery.

@@ -278,11 +278,16 @@ impl ArchiveCache {
                 let start = std::time::Instant::now();
                 while !guard.extracted.contains(entry_name) && !guard.finished {
                     let elapsed = start.elapsed();
-                    if elapsed >= timeout { break; }
-                    let (next, timed_out) = cvar.wait_timeout(guard, timeout - elapsed)
+                    if elapsed >= timeout {
+                        break;
+                    }
+                    let (next, timed_out) = cvar
+                        .wait_timeout(guard, timeout - elapsed)
                         .map_err(|e| e.to_string())?;
                     guard = next;
-                    if timed_out.timed_out() { break; }
+                    if timed_out.timed_out() {
+                        break;
+                    }
                 }
                 if !guard.extracted.contains(entry_name) {
                     return Err(format!(
@@ -295,9 +300,9 @@ impl ArchiveCache {
                 let mut f = std::fs::File::open(&file_path)
                     .map_err(|e| format!("Cannot open extracted entry {entry_name}: {e}"))?;
                 let mut buf = vec![0u8; limit];
-                let n = f.read(&mut buf).map_err(|e| {
-                    format!("Cannot read extracted entry header {entry_name}: {e}")
-                })?;
+                let n = f
+                    .read(&mut buf)
+                    .map_err(|e| format!("Cannot read extracted entry header {entry_name}: {e}"))?;
                 buf.truncate(n);
                 Ok(buf)
             }

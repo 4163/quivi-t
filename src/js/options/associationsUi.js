@@ -16,7 +16,7 @@ const EXT_TO_GROUP = new Map([
 ]);
 
 export async function applyAssociations(statusCallback) {
-  if (!invoke) return;
+  if (!invoke) return false;
   const toRegister = [];
   const toUnregister = [];
   document.querySelectorAll('.assoc-checkbox').forEach(cb => {
@@ -31,20 +31,22 @@ export async function applyAssociations(statusCallback) {
     }
   });
   
-  if (toRegister.length === 0 && toUnregister.length === 0) return;
+  if (toRegister.length === 0 && toUnregister.length === 0) return true;
 
   try {
-    if (statusCallback) statusCallback('Applying associations...');
+    if (statusCallback) statusCallback('Updating file types...');
     if (toUnregister.length > 0) {
       await invoke('unregister_associations', { extensions: toUnregister });
     }
     if (toRegister.length > 0) {
       await invoke('register_associations', { extensions: toRegister });
     }
-    if (statusCallback) statusCallback('Associations updated successfully.');
+    if (statusCallback) statusCallback('File types updated.');
+    return true;
   } catch (err) {
     console.error('[Assoc] Apply error:', err);
-    if (statusCallback) statusCallback('Failed to apply associations: ' + err);
+    if (statusCallback) statusCallback('Could not update file types.');
+    return false;
   }
 }
 
@@ -99,7 +101,7 @@ export async function initAssociationsUi(containerId, statusCallback) {
         try {
           await invoke('open_in_explorer', { path: "ms-settings:defaultapps" });
         } catch (err2) {
-          statusCallback('Failed to open Windows Settings.');
+          statusCallback('Could not open Windows Settings.');
         }
       }
     };

@@ -182,6 +182,7 @@ pub fn read_text_file(path: String) -> Result<String, String> {
 #[tauri::command]
 pub fn write_text_file(path: String, content: String) -> Result<(), String> {
     let p = Path::new(&path);
+    crate::commands::library::ensure_library_write_allowed(p)?;
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -191,6 +192,7 @@ pub fn write_text_file(path: String, content: String) -> Result<(), String> {
 #[tauri::command(async)]
 pub fn create_placeholder_files(dir: String, filenames: Vec<String>) -> Result<(), String> {
     let dir_path = Path::new(&dir);
+    crate::commands::library::ensure_library_write_allowed(dir_path)?;
     if !dir_path.exists() {
         fs::create_dir_all(dir_path).map_err(|e| e.to_string())?;
     }
@@ -206,6 +208,7 @@ pub fn create_placeholder_files(dir: String, filenames: Vec<String>) -> Result<(
 #[tauri::command]
 pub fn remove_file(path: String) -> Result<(), String> {
     let p = Path::new(&path);
+    crate::commands::library::ensure_library_write_allowed(p)?;
     if p.exists() {
         fs::remove_file(p).map_err(|e| e.to_string())?;
     }
@@ -278,7 +281,12 @@ fn read_library_nodes(dir: &Path, depth: usize) -> Vec<LibraryNode> {
         if !is_dir && !is_file {
             continue;
         }
-        if is_file && !path.extension().and_then(|ext| ext.to_str()).is_some_and(is_image_ext) {
+        if is_file
+            && !path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(is_image_ext)
+        {
             continue;
         }
 
@@ -416,11 +424,11 @@ fn remove_dir_all_robust(dir: &Path) -> std::io::Result<()> {
 
 #[cfg(windows)]
 fn move_to_recycle_bin(path: &Path) -> std::io::Result<()> {
-    use windows::Win32::UI::Shell::{
-        SHFileOperationW, SHFILEOPSTRUCTW, FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION,
-        FOF_NOERRORUI, FOF_SILENT,
-    };
     use windows::core::PCWSTR;
+    use windows::Win32::UI::Shell::{
+        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE,
+        SHFILEOPSTRUCTW,
+    };
 
     let path_str = path.to_string_lossy();
     let clean_path = path_str.strip_prefix(r"\\?\").unwrap_or(&path_str);
@@ -454,6 +462,7 @@ fn move_to_recycle_bin(path: &Path) -> std::io::Result<()> {
 #[tauri::command(async)]
 pub fn remove_directory(path: String) -> Result<(), String> {
     let p = Path::new(&path);
+    crate::commands::library::ensure_library_write_allowed(p)?;
     if !p.exists() {
         return Ok(());
     }
@@ -463,8 +472,8 @@ pub fn remove_directory(path: String) -> Result<(), String> {
 
     let canonical_lib = fs::canonicalize(lib_dir)
         .map_err(|e| format!("Failed to canonicalize library root: {e}"))?;
-    let canonical_target = fs::canonicalize(p)
-        .map_err(|e| format!("Failed to canonicalize target path: {e}"))?;
+    let canonical_target =
+        fs::canonicalize(p).map_err(|e| format!("Failed to canonicalize target path: {e}"))?;
 
     if !canonical_target.starts_with(&canonical_lib) || canonical_target == canonical_lib {
         return Err("Cannot remove path outside of library root".into());
@@ -519,7 +528,8 @@ mod tests {
 
     #[test]
     fn test_create_placeholder_files() {
-        let temp_dir = std::env::temp_dir().join(format!("quivit_test_placeholders_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("quivit_test_placeholders_{}", std::process::id()));
         let filenames = vec!["001.png".to_string(), "002.png".to_string()];
         let res = create_placeholder_files(temp_dir.to_string_lossy().into_owned(), filenames);
         assert!(res.is_ok());
@@ -533,7 +543,8 @@ mod tests {
 
     #[test]
     fn test_remove_file() {
-        let temp_file = std::env::temp_dir().join(format!("quivit_test_remove_{}", std::process::id()));
+        let temp_file =
+            std::env::temp_dir().join(format!("quivit_test_remove_{}", std::process::id()));
         fs::write(&temp_file, "hello").unwrap();
         assert!(temp_file.is_file());
 
@@ -548,7 +559,8 @@ mod tests {
 
     #[test]
     fn test_remove_directory_safety() {
-        let non_existent = std::env::temp_dir().join(format!("quivit_non_existent_{}", std::process::id()));
+        let non_existent =
+            std::env::temp_dir().join(format!("quivit_non_existent_{}", std::process::id()));
         let res = remove_directory(non_existent.to_string_lossy().into_owned());
         assert!(res.is_ok());
 
