@@ -36,7 +36,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `default_sort` is config-file-only; the UI writes only per-directory sort prefs. Archive cache budget is config-file-only, no UI.
 - Filter preference is stored as `active_filter` (id) and `filter_options` (bag), replacing individual booleans.
 - Additional `frontend_data` preferences: `hide_cursor_delay_sec`, `file_list_view_mode`, `spread_enabled`, `spread_direction`, `spread_mode` (derived from enabled + direction).
-- `frontend_data.library_path` is an optional absolute shared URL Library location. When absent, the Library is `%LOCALAPPDATA%\\QuiviT\\library`; `retired_library_paths` prevents writes to a prior root during live relocation.
+- `frontend_data.library_path` is an optional absolute shared URL Library location. When absent, the Library is `%LOCALAPPDATA%\\QuiviT\\library`. `retired_library_paths` blocks writes to a prior root, never to the active one.
 - Bounded in-memory session caches include archive passwords and encryption state in `fsUtils.js`, file-panel and Library thumbnails, animation metadata in `core.js`, and remote extractor modules in `urlLoader.js`.
 - Theme/CSS live previews are ephemeral until Options Apply. They must not persist to `localStorage` while previewing.
 

@@ -53,6 +53,14 @@ function _hide(opts = {}) {
   }
 }
 
+function _errorText(err) {
+  // Tauri IPC rejections arrive as plain strings without `.message`.
+  // Prefer the real backend text over the generic fallback.
+  if (typeof err === 'string' && err) return err;
+  if (typeof err?.message === 'string' && err.message) return err.message;
+  return 'Failed to open URL';
+}
+
 function _setError(message) {
   if (!_overlay || !_errorEl) return;
   _errorEl.textContent = message || '';
@@ -79,7 +87,7 @@ async function _handleSubmit() {
     if (_onSubmit) await _onSubmit(url);
     _hide({ restoreFocus: true });
   } catch (err) {
-    _setError(err.message || 'Failed to open URL');
+    _setError(_errorText(err));
   } finally {
     _input.disabled = false;
     if (submitBtn) submitBtn.disabled = false;

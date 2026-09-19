@@ -5,6 +5,8 @@ import {
   normalizeUrl,
   isValidUrl,
   getExtractorCacheKey,
+  isLibraryLocationError,
+  remapLibraryPath,
   validateManifest,
   validateExtractorResult,
   findMatchingGalleryImage,
@@ -139,6 +141,36 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.equal(queue.getStatus('C:\\gallery\\broken.jpg'), 'error');
 
       queue.cancel();
+    });
+  });
+
+  describe('library relocation recovery', () => {
+    it('recognizes retired-path and relocation rejections in either shape', () => {
+      assert.equal(isLibraryLocationError('This Library location was retired by a live move. Reload QuiviT before downloading or changing its files.'), true);
+      assert.equal(isLibraryLocationError('Library relocation is in progress. The pending write was cancelled.'), true);
+      assert.equal(isLibraryLocationError(new Error('Library relocation is in progress. The pending write was cancelled.')), true);
+      assert.equal(isLibraryLocationError('Network request failed'), false);
+      assert.equal(isLibraryLocationError(new Error('No images found in gallery')), false);
+      assert.equal(isLibraryLocationError(null), false);
+    });
+
+    it('remaps stale library paths onto the live root', () => {
+      assert.equal(
+        remapLibraryPath('C:\\old\\Library\\Imgur\\g', 'C:\\old\\Library', 'D:\\Lib'),
+        'D:\\Lib\\Imgur\\g'
+      );
+      assert.equal(
+        remapLibraryPath('C:\\old\\Library', 'C:\\old\\Library', 'D:\\Lib'),
+        'D:\\Lib'
+      );
+      assert.equal(
+        remapLibraryPath('C:\\other\\place', 'C:\\old\\Library', 'D:\\Lib'),
+        'C:\\other\\place'
+      );
+      assert.equal(
+        remapLibraryPath('C:\\old\\Library\\g', 'C:\\old\\Library', 'C:\\old\\Library'),
+        'C:\\old\\Library\\g'
+      );
     });
   });
 

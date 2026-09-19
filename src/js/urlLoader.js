@@ -740,8 +740,28 @@ export async function loadUrl(urlString) {
   if (!mod.match(url)) {
     throw new Error(`Extractor '${entry.id}' does not support this URL`);
   }
+  try {
+    return await _loadUrlWithLibraryDir(url, mod, entry, await getLibraryDir());
+  } catch (err) {
+    if (!isLibraryLocationError(err)) throw err;
+    // The cached Library root went stale (e.g. the location moved in another
+    // window). Refresh it and retry the import once against the live root.
+    return await _loadUrlWithLibraryDir(url, mod, entry, await reloadLibraryDir());
+  }
+}
+
+export function isLibraryLocationError(err) {
+  const text = typeof err === 'string' ? err : err?.message || '';
+  return /retired|relocation is in progress|pending write was cancelled|Reload QuiviT/i.test(String(text || ''));
+}
+
+export function remapLibraryPath(path, oldRoot, newRoot) {
+  if (!path || !oldRoot || !newRoot || _pathsEqual(oldRoot, newRoot)) return path;
+  return _rebasePath(path, oldRoot, newRoot);
+}
+
+async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   const providerDir = entry.libraryPath;
-  const libraryDir = await getLibraryDir();
   const providerPath = `${libraryDir}\\${providerDir}`;
 
   // Direct image handling (e.g. https://i.imgur.com/04XS16K.png)
@@ -1179,6 +1199,10 @@ export const UrlLoader = {
   downloadFile,
   cancelDownload,
   getLibraryDir,
+  reloadLibraryDir,
+  getCachedLibraryDir,
+  remapLibraryPath,
+  isLibraryLocationError,
   reloadLibraryDir,
   getCachedLibraryDir,
   handleLibraryRelocation,

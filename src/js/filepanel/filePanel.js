@@ -26,7 +26,11 @@ import {
   setVisibleRange as setDownloadVisibleRange,
   cancelGalleryDownloads,
   getGalleryDownloadStatus,
-  retryGalleryDownload
+  retryGalleryDownload,
+  reloadLibraryDir,
+  getCachedLibraryDir,
+  remapLibraryPath,
+  isLibraryLocationError
 } from '../urlLoader.js';
 
 let _activeViewerKey = null;
@@ -1066,7 +1070,16 @@ function buildLibraryEntry(item, depth = 0) {
           }
         }
 
-        await deleteLibraryEntry(item.path);
+        await deleteLibraryEntry(item.path).catch(async (err) => {
+          if (!isLibraryLocationError(err)) throw err;
+          // The entry was rendered from a stale Library root (the location
+          // moved in another window). Remap it onto the live root and retry.
+          const staleRoot = typeof getCachedLibraryDir === 'function' ? getCachedLibraryDir() : '';
+          const liveRoot = typeof reloadLibraryDir === 'function' ? await reloadLibraryDir() : '';
+          const remapped = remapLibraryPath(item.path, staleRoot, liveRoot);
+          if (remapped === item.path) throw err;
+          await deleteLibraryEntry(remapped);
+        });
         await renderLibrary();
 
         const parentOfTarget = targetDir.includes('/') ? targetDir.substring(0, targetDir.lastIndexOf('/')) : '';

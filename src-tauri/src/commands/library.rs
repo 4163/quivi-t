@@ -168,8 +168,15 @@ fn relocation_lock_ancestor(path: &Path) -> Option<PathBuf> {
 }
 
 pub fn ensure_library_write_allowed(path: &Path) -> Result<(), String> {
-    let config = config::load_config_early();
-    let is_retired_path = config
+    // The active root is always writable while no move is in flight. Resolve
+    // it first so a stale retired entry can never lock out the Library: the
+    // retired list is append-only history, and previous roots may coincide
+    // with the current one after a move back to a prior location.
+    if let Some(library_root) = library_write_scope(path)? {
+        ensure_library_root_writable(&library_root)?;
+        return Ok(());
+    }
+    let is_retired_path = config::load_config_early()
         .frontend_data
         .get(RETIRED_LIBRARY_PATHS_KEY)
         .and_then(|value| value.as_array())
@@ -187,9 +194,6 @@ pub fn ensure_library_write_allowed(path: &Path) -> Result<(), String> {
     }
     if relocation_lock_ancestor(path).is_some() {
         return Err("Library relocation is in progress. The pending write was cancelled.".into());
-    }
-    if let Some(library_root) = library_write_scope(path)? {
-        ensure_library_root_writable(&library_root)?;
     }
     Ok(())
 }
@@ -621,4 +625,18 @@ pub async fn move_library(
     tauri::async_runtime::spawn_blocking(move || move_library_impl(app_handle, config, destination))
         .await
         .map_err(|err| format!("Library relocation worker failed: {err}"))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn active_library_root_stays_writable_despite_retired_history() {
+        // Regression guard: the retired list is append-only history and may
+        // name the active root after a move back to a prior location. Writes
+        // under the configured root must still be allowed.
+        let root = crate::config::configured_library_dir().expect("library dir resolves");
+        assert!(ensure_library_write_allowed(&root.join("probe")).is_ok());
+    }
 }
