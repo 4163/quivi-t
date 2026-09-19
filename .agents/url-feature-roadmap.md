@@ -2,6 +2,10 @@
 
 This roadmap was checked against the repository architecture rules. It keeps extractor parsing separate from the loader, library UI, and Rust IPC ownership.
 
+## Forefront shipping goal
+
+Before this work ships to `refactor/backend-cl-prep/`, QuiviT must let maintainers add or replace an individual website extractor without changing or releasing any QuiviT files. A new or updated extractor must reach users through the remote manifest automatically. End users should not need to install an update, copy a file, or change a setting to receive website support.
+
 # Use URL feature roadmap
 
 Design discussion captured 2026-09-17. This is the agreed direction, not an implementation plan. Details marked TBD will be resolved during implementation slices.
@@ -33,7 +37,7 @@ Loading mechanism: Rust fetches the JS source as text, returns it to the fronten
 
 Trust model: the manifest URL is hardcoded to the project's own repository. Same trust model as browser extensions auto-updating.
 
-Extractor caching (persist to disk between sessions vs memory-only) is TBD.
+Every URL import checks the remote manifest so a newly published extractor or version reaches an already-running app. The backend writes each successful manifest and extractor response to `%LOCALAPPDATA%/QuiviT/extractor-cache/`. If the remote request fails, it uses the last complete cached response. The cache is a fallback, not a second registry. The frontend module cache key includes the extractor id, version, and source path, so a changed manifest entry loads fresh code.
 
 ### Extractor contract (version 1)
 
@@ -224,9 +228,7 @@ Each needs a user-visible response in the UI. The specifics will be decided as t
 
 These are decisions explicitly deferred, not forgotten:
 
-- Extractor caching: persist to disk between sessions, or memory-only?
 - Ctrl+U input surface: modal, inline, or popup?
 - State machine integration: new mode, flag on existing mode, or derived from directory path?
 - Options page section for library path (later, not initial scope)
 - Manifest hosting URL (GitHub raw, CDN, or self-hosted)
-- Registry/manifest versioning and update checking frequency

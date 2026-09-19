@@ -470,8 +470,8 @@ export class DownloadQueue {
 
 // -- Manifest and extractor matching --
 
-export async function fetchManifest() {
-  if (_manifestCache) return _manifestCache;
+export async function fetchManifest({ refresh = false } = {}) {
+  if (_manifestCache && !refresh) return _manifestCache;
 
   const text = await fetchExtractorText('manifest.json');
   let manifest;
@@ -538,7 +538,7 @@ export function findExtractor(url, manifest) {
 // -- Dynamic module loading --
 
 export async function loadExtractorModule(entry) {
-  const cacheKey = `${entry.id}@${entry.version}`;
+  const cacheKey = getExtractorCacheKey(entry);
   const cached = _extractorCache.get(cacheKey);
   if (cached) return cached;
 
@@ -563,6 +563,10 @@ export async function loadExtractorModule(entry) {
   _blobUrls.set(cacheKey, blobUrl);
   _extractorCache.set(cacheKey, mod);
   return mod;
+}
+
+export function getExtractorCacheKey(entry) {
+  return `${entry.id}@${entry.version}:${entry.source}`;
 }
 
 // -- Gallery extraction --
@@ -702,7 +706,7 @@ export async function loadUrl(urlString) {
     throw new Error('Please enter a valid URL');
   }
 
-  const manifest = await fetchManifest();
+  const manifest = await fetchManifest({ refresh: true });
   const entry = findExtractor(url, manifest);
   if (!entry) {
     throw new Error('No extractor available for this site');
@@ -991,6 +995,18 @@ export function isPlaceholderFile(filePath) {
   return status === 'pending' || status === 'downloading';
 }
 
+export function getGalleryDownloadStatus(filePath) {
+  if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath || !filePath) return null;
+  return _activeQueue.getStatus(filePath);
+}
+
+export function retryGalleryDownload(filePath) {
+  if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath || !filePath) return false;
+  if (_activeQueue.getStatus(filePath) !== 'error') return false;
+  _activeQueue.prioritize(filePath);
+  return true;
+}
+
 export function setVisibleRange(start, end) {
   if (_activeQueue) {
     _activeQueue.setVisibleRange(start, end);
@@ -1101,6 +1117,8 @@ export const UrlLoader = {
   isGalleryDownloading,
   cancelGalleryDownloads,
   isPlaceholderFile,
+  getGalleryDownloadStatus,
+  retryGalleryDownload,
   setVisibleRange,
   fetchRemoteText,
   fetchExtractorText,
@@ -1108,6 +1126,7 @@ export const UrlLoader = {
   cancelDownload,
   getLibraryDir,
   fetchManifest,
+  getExtractorCacheKey,
   validateManifest,
   findExtractor,
   loadExtractorModule,

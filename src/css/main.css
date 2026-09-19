@@ -847,6 +847,9 @@ li:hover > .fav-remove,
 .library-provider-list .is-hidden-entry .item-name > img,
 #file-list .is-hidden-entry .item-icon-svg { opacity: 0.65; }
 #file-list .is-pending-download { opacity: 0.65; }
+#file-list .is-download-error { color: var(--danger); }
+#file-list .is-download-error .item-ext,
+#file-list .is-download-error .item-thumbnail-meta { color: var(--danger); }
 #file-list .item-label, #favorites-list .item-label, .library-provider-list .item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #file-list .item-ext, #favorites-list .item-ext, .library-provider-list .item-ext  { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); padding-left: 8px; }
 #file-list .item-date, #favorites-list .item-date, .library-provider-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-10); color: var(--text-dim); padding-left: 8px; }

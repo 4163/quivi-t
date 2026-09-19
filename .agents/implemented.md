@@ -10,6 +10,13 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 
 ## Fully Implemented
 
+### Remote extractor updates, download recovery, and runtime coverage (2026-09-19)
+- **Remote update and offline cache (`src/js/urlLoader.js`, `src-tauri/src/commands/network.rs`):** Every URL import refreshes the trusted remote manifest. Production fetches cache successful manifest and extractor responses under `%LOCALAPPDATA%/QuiviT/extractor-cache/` and use the last complete response during an outage. Blob-module caching is keyed by extractor ID, manifest version, and source path, so a versioned manifest update loads new extractor code without a QuiviT release.
+- **Per-image failure state (`src/js/filepanel/filePanel.js`, `src/css/main.css`, `src/js/urlLoader.js`):** Gallery downloads that exhaust their retry show a red `FAILED` list entry or an explicit thumbnail message. Clicking a failed entry queues a fresh retry while keeping the active selection intact.
+- **Runtime extractor E2E (`e2e/specs/08-url-loader.e2e.js`, `wdio.conf.js`):** Added an isolated Library test that injects a manifest-only extractor at runtime, drives the Ctrl+U flow, and checks nested gallery persistence and extractor fetches without relying on a third-party site or a user Library.
+- **Documentation (`.agents/url-feature-roadmap.md`, `.agents/architecture-state.md`):** Recorded the release-independent extractor goal and the persistent cache behavior.
+- **Verification:** `node --check` for changed JavaScript and E2E modules; `npm test` (69 passing); `cargo check --tests`; `cargo test --manifest-path src-tauri/Cargo.toml network::tests` (4 passing); isolated URL-loader WDIO run; `git diff --check`.
+
 ### Versioned remote extractor contract and nested library paths (2026-09-19)
 - **Manifest and extractor boundary (`extractors/manifest.json`, `src/js/urlLoader.js`):** Manifest version 1 now requires a stable extractor ID, display name, provider-root `libraryPath`, extractor version, safe source path, and URL patterns. Extractor results require a stable gallery ID, provider-relative path segments, and extractor-owned image filenames.
 - **Validation and persistence (`src/js/urlLoader.js`, `src-tauri/src/commands/network.rs`):** The loader rejects malformed manifests, unsafe Windows path segments and filenames, duplicate filenames, unsupported image formats, non-HTTP(S) image URLs, pagination that switches galleries, and attempts to reuse a gallery folder for a different gallery. Rust rejects absolute or traversal-like extractor paths before reading local development files or fetching remote sources. `gallery.json` records gallery identity, relative path, manifest identity, and extractor version alongside image metadata.

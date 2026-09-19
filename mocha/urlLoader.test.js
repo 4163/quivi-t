@@ -4,6 +4,7 @@ import {
   PREFETCH_START_THRESHOLD_PERCENT,
   normalizeUrl,
   isValidUrl,
+  getExtractorCacheKey,
   validateManifest,
   validateExtractorResult,
   findMatchingGalleryImage,
@@ -109,6 +110,36 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
 
       queue.cancel();
     });
+
+    it('reports a failed image after its single retry and restarts it on priority', async () => {
+      const statuses = [];
+      let attempts = 0;
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/broken.jpg', destPath: 'C:\\gallery\\broken.jpg', galleryIndex: 0 }
+      ], {
+        visibleStart: 0,
+        visibleEnd: 1,
+        downloadFile: async () => {
+          attempts++;
+          throw new Error('Network request failed');
+        },
+        onItemStatusChanged: (_destPath, status) => statuses.push(status)
+      });
+
+      queue.prioritize('C:\\gallery\\broken.jpg');
+      await flushQueue();
+
+      assert.equal(attempts, 2);
+      assert.equal(queue.getStatus('C:\\gallery\\broken.jpg'), 'error');
+      assert.deepEqual(statuses, ['downloading', 'error']);
+
+      queue.prioritize('C:\\gallery\\broken.jpg');
+      await flushQueue();
+      assert.equal(attempts, 4);
+      assert.equal(queue.getStatus('C:\\gallery\\broken.jpg'), 'error');
+
+      queue.cancel();
+    });
   });
 
   describe('normalizeUrl and isValidUrl', () => {
@@ -183,6 +214,17 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         version: 1,
         extractors: [{ ...manifestEntry, libraryPath: '..' }]
       }), /unsafe library path/);
+    });
+
+    it('changes the module cache key when a remote extractor changes', () => {
+      assert.notEqual(
+        getExtractorCacheKey({ id: 'example', version: 1, source: 'example.js' }),
+        getExtractorCacheKey({ id: 'example', version: 2, source: 'example.js' })
+      );
+      assert.notEqual(
+        getExtractorCacheKey({ id: 'example', version: 2, source: 'example.js' }),
+        getExtractorCacheKey({ id: 'example', version: 2, source: 'sites/example.js' })
+      );
     });
   });
 

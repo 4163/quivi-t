@@ -22,6 +22,7 @@ struct DownloadThresholdEvent<'a> {
 pub struct DownloadCancelFlag(pub Arc<AtomicU64>);
 
 static DL_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+static EXTRACTOR_CACHE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn get_agent() -> &'static ureq::Agent {
     static AGENT: std::sync::OnceLock<ureq::Agent> = std::sync::OnceLock::new();
@@ -74,16 +75,84 @@ pub fn fetch_extractor_text(relative_path: String) -> Result<String, String> {
             cur = dir.parent();
         }
     }
-    // Remote fallback: production or file not found locally.
+    // Production checks the trusted registry source on every request. A
+    // successful response replaces the disk cache; an outage falls back to
+    // the last complete manifest or extractor source.
     let url = format!("{MANIFEST_BASE_URL}{relative_path}");
     let agent = get_agent();
-    let response = agent
+    let remote = agent
         .get(&url)
         .call()
-        .map_err(|e| format!("Network request failed: {e}"))?;
-    response
-        .into_string()
-        .map_err(|e| format!("Failed to read response body: {e}"))
+        .map_err(|e| format!("Network request failed: {e}"))
+        .and_then(|response| {
+            response
+                .into_string()
+                .map_err(|e| format!("Failed to read response body: {e}"))
+        });
+
+    if let Ok(cache_path) = cached_extractor_path(&relative_path) {
+        return resolve_remote_extractor_text(&cache_path, remote);
+    }
+
+    remote
+}
+
+fn extractor_cache_dir() -> Result<std::path::PathBuf, String> {
+    let local = std::env::var("LOCALAPPDATA").map_err(|_| "LOCALAPPDATA not set".to_string())?;
+    Ok(Path::new(&local).join("QuiviT").join("extractor-cache"))
+}
+
+fn cached_extractor_path(relative_path: &str) -> Result<std::path::PathBuf, String> {
+    if !is_safe_extractor_path(relative_path) {
+        return Err("Invalid extractor path".to_string());
+    }
+    Ok(extractor_cache_dir()?.join(relative_path))
+}
+
+fn read_cached_extractor_text(cache_path: &Path) -> Result<String, String> {
+    fs::read_to_string(cache_path).map_err(|e| format!("Failed to read cached extractor: {e}"))
+}
+
+fn resolve_remote_extractor_text(
+    cache_path: &Path,
+    remote: Result<String, String>,
+) -> Result<String, String> {
+    match remote {
+        Ok(source) => {
+            let _ = cache_extractor_text_at(cache_path, &source);
+            Ok(source)
+        }
+        Err(remote_error) => read_cached_extractor_text(cache_path)
+            .map_err(|_| format!("{remote_error}. No cached extractor source is available")),
+    }
+}
+
+fn cache_extractor_text_at(cache_path: &Path, source: &str) -> Result<(), String> {
+    let parent = cache_path
+        .parent()
+        .ok_or_else(|| "Invalid extractor cache path".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|e| format!("Failed to create extractor cache directory: {e}"))?;
+
+    let name = cache_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "Invalid extractor cache filename".to_string())?;
+    let temp_path = parent.join(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        EXTRACTOR_CACHE_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+
+    fs::write(&temp_path, source).map_err(|e| format!("Failed to write extractor cache: {e}"))?;
+
+    if fs::rename(&temp_path, cache_path).is_err() {
+        fs::copy(&temp_path, cache_path)
+            .map_err(|e| format!("Failed to finalize extractor cache: {e}"))?;
+        let _ = fs::remove_file(&temp_path);
+    }
+
+    Ok(())
 }
 
 fn is_safe_extractor_path(relative_path: &str) -> bool {
@@ -91,7 +160,10 @@ fn is_safe_extractor_path(relative_path: &str) -> bool {
     if relative_path.is_empty() || path.is_absolute() {
         return false;
     }
-    if !path.components().all(|component| matches!(component, Component::Normal(_))) {
+    if !path
+        .components()
+        .all(|component| matches!(component, Component::Normal(_)))
+    {
         return false;
     }
     relative_path == "manifest.json"
@@ -252,6 +324,34 @@ mod tests {
         assert!(!is_safe_extractor_path("../Cargo.toml"));
         assert!(!is_safe_extractor_path("C:\\Windows\\win.ini"));
         assert!(!is_safe_extractor_path("manifest.txt"));
+    }
+
+    #[test]
+    fn extractor_cache_refreshes_and_falls_back_to_nested_source() {
+        let root = std::env::temp_dir().join(format!(
+            "quivit_extractor_cache_test_{}_{}",
+            std::process::id(),
+            EXTRACTOR_CACHE_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let cache_path = root.join("sites").join("example.js");
+
+        let source =
+            resolve_remote_extractor_text(&cache_path, Ok("export const version = 1;".to_string()))
+                .unwrap();
+        assert_eq!(source, "export const version = 1;");
+        assert_eq!(
+            fs::read_to_string(&cache_path).unwrap(),
+            "export const version = 1;"
+        );
+
+        let cached = resolve_remote_extractor_text(
+            &cache_path,
+            Err("Network request failed: offline".to_string()),
+        )
+        .unwrap();
+        assert_eq!(cached, "export const version = 1;");
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

@@ -21,7 +21,12 @@ import {
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
-import { setVisibleRange as setDownloadVisibleRange, cancelGalleryDownloads } from '../urlLoader.js';
+import {
+  setVisibleRange as setDownloadVisibleRange,
+  cancelGalleryDownloads,
+  getGalleryDownloadStatus,
+  retryGalleryDownload
+} from '../urlLoader.js';
 
 let _activeViewerKey = null;
 let _activeViewerBlob = null;
@@ -209,28 +214,40 @@ let currentPath = '';
 
 // Virtualization (VS Code RowCache pattern)
 let activeRows = new Map();
-// When a download completes, remove the pending-download dim from the matching row.
-window.addEventListener('quivit-download-complete', (e) => {
-  const destPath = e.detail?.destPath;
+function updateDownloadRow(destPath, status, size = 0) {
   if (!destPath) return;
-  const destName = destPath.replace(/\\/g, '/').split('/').pop().toLowerCase();
   const state = Core.getState();
   for (const [idx, li] of activeRows) {
-    if (li.dataset.index !== undefined) {
-      const item = state.list?.[idx];
-      if (item && item.name && item.name.toLowerCase() === destName) {
-        li.classList.remove('is-pending-download');
-        item.size = e.detail?.size || 1;
-        if (state.fileListViewMode === 'thumbnail' && li._slots?.thumbImg) {
-          const targetSrc = FsUtils.buildThumbnailSrc(item, state);
-          if (targetSrc && li._slots.thumbImg.getAttribute('src') !== targetSrc) {
-            li._slots.thumbImg.src = targetSrc;
-            li._slots.thumbImg.classList.add('is-loaded');
-          }
-        }
-        break;
+    if (li.dataset.index === undefined) continue;
+    const item = state.list?.[idx];
+    if (!item || !_pathsEqual(item.path, destPath)) continue;
+
+    if (status === 'completed') {
+      item.size = size || 1;
+    }
+    updateEntry(li, item, idx);
+
+    if (status === 'completed' && state.fileListViewMode === 'thumbnail' && li._slots?.thumbImg) {
+      const targetSrc = FsUtils.buildThumbnailSrc(item, state);
+      if (targetSrc && li._slots.thumbImg.getAttribute('src') !== targetSrc) {
+        li._slots.thumbImg.src = targetSrc;
+        li._slots.thumbImg.classList.add('is-loaded');
       }
     }
+    break;
+  }
+}
+
+// Completed downloads gain their real size so future renders no longer treat
+// them as placeholders. Queue status events repaint the visible row in place.
+window.addEventListener('quivit-download-complete', (e) => {
+  updateDownloadRow(e.detail?.destPath, 'completed', e.detail?.size);
+});
+
+window.addEventListener('quivit-download-status', (e) => {
+  const { destPath, status } = e.detail || {};
+  if (destPath && status) {
+    updateDownloadRow(destPath, status);
   }
 });
 let freePool = [];
@@ -1304,6 +1321,10 @@ function wireRowListeners(li) {
     const index = pendingClickIndex;
     if (index === -1) return;
     fileListUl?.focus({ preventScroll: true });
+    const failedItem = Core.getState().list?.[index];
+    if (failedItem?.path && retryGalleryDownload(failedItem.path)) {
+      return;
+    }
     if (Core.getState().index !== index) {
       Core.selectIndex(index);
     }
@@ -1436,9 +1457,24 @@ function updateEntry(li, item, index) {
   li.style.top = `${index * ROW_HEIGHT}px`;
   li.style.display = '';
   li.dataset.index = index;
-  li.title = item.name && item.name !== '..' ? (item.displayName || item.name) : '';
+  const downloadStatus = getGalleryDownloadStatus(item.path);
+  const hasDownloadError = downloadStatus === 'error';
+  const isPendingDownload = !hasDownloadError
+    && !item.is_dir
+    && !item.is_parent
+    && (downloadStatus === 'pending' || downloadStatus === 'downloading' || item.size === 0);
+
+  li.title = item.name && item.name !== '..'
+    ? (hasDownloadError ? `${item.displayName || item.name}\nDownload failed. Click to retry.` : (item.displayName || item.name))
+    : '';
   li.classList.toggle('is-hidden-entry', !!item.is_hidden);
-  li.classList.toggle('is-pending-download', item.size === 0 && !item.is_dir && !item.is_parent);
+  li.classList.toggle('is-pending-download', isPendingDownload);
+  li.classList.toggle('is-download-error', hasDownloadError);
+  if (hasDownloadError) {
+    li.dataset.downloadStatus = 'error';
+  } else {
+    delete li.dataset.downloadStatus;
+  }
 
   const state = Core.getState();
   const isThumbnail = state.fileListViewMode === 'thumbnail';
@@ -1454,6 +1490,8 @@ function updateEntry(li, item, index) {
         slots.thumbMeta.textContent = 'Drive';
       } else if (item.is_dir) {
         slots.thumbMeta.textContent = item.date ? `Folder • ${item.date}` : 'Folder';
+      } else if (hasDownloadError) {
+        slots.thumbMeta.textContent = 'Download failed. Click to retry.';
       } else {
         const ext = (item.ext || '').toUpperCase();
         slots.thumbMeta.textContent = ext ? (item.date ? `${ext} • ${item.date}` : ext) : (item.date || '');
@@ -1591,7 +1629,7 @@ function updateEntry(li, item, index) {
   } else {
     updateRowIcon(slots, item);
     if (slots.label) slots.label.textContent = item.displayName || item.name || '';
-    if (slots.ext) slots.ext.textContent = item.is_dir ? 'DIR' : (item.ext || '');
+    if (slots.ext) slots.ext.textContent = hasDownloadError ? 'FAILED' : (item.is_dir ? 'DIR' : (item.ext || ''));
     if (slots.date) slots.date.textContent = item.date || '';
   }
 }
