@@ -593,25 +593,22 @@ export const Core = {
     
     // Pick the startup path.
     const fd = _state.config.frontend_data || {};
-    let startPath = '';
     let args = [];
     
     if (window.__TAURI__) {
       args = await invoke('get_initial_args').catch(() => []);
     }
-    
-    if (args.length > 1) {
-      startPath = args[1];
-    } else if (fd.continue_last !== false && fd.last_opened_path) {
-      startPath = fd.last_opened_path;
-    } else if (fd.start_dir) {
-      startPath = fd.start_dir;
-    } else {
-      startPath = await invoke('get_default_dir').catch(() => '');
+
+    let defaultDir = '';
+    const hasExplicit = Array.isArray(args) && args.slice(1).some(arg => typeof arg === 'string' && !arg.startsWith('-'));
+    const hasContinueLast = fd.continue_last !== false && fd.last_opened_path;
+    if (!hasExplicit && !hasContinueLast && !fd.start_dir && window.__TAURI__) {
+      defaultDir = await invoke('get_default_dir').catch(() => '');
     }
+
+    const { path: startPath, explicitOpen } = resolveStartupTarget(args, fd, defaultDir);
     
     if (startPath && window.__TAURI__) {
-      const explicitOpen = args.length > 1;
       FsUtils.loadFile(startPath, {
         restoreLastImage: !explicitOpen,
         preferInitial: explicitOpen,
@@ -626,3 +623,24 @@ export const Core = {
     }
   }
 };
+
+export function resolveStartupTarget(args = [], frontendData = {}, defaultDir = '') {
+  const explicitArg = Array.isArray(args)
+    ? args.slice(1).find(arg => typeof arg === 'string' && !arg.startsWith('-'))
+    : null;
+
+  if (explicitArg) {
+    return { path: explicitArg, explicitOpen: true };
+  }
+
+  if (frontendData.continue_last !== false && frontendData.last_opened_path) {
+    return { path: frontendData.last_opened_path, explicitOpen: false };
+  }
+
+  if (frontendData.start_dir) {
+    return { path: frontendData.start_dir, explicitOpen: false };
+  }
+
+  return { path: defaultDir || '', explicitOpen: false };
+}
+

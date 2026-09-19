@@ -13,7 +13,7 @@ if (typeof window === 'undefined') {
   };
 }
 
-const { Core } = await import('../src/js/core.js');
+const { Core, resolveStartupTarget } = await import('../src/js/core.js');
 const {
   DEFAULT_SPREAD_ENABLED,
   DEFAULT_SPREAD_MODE,
@@ -267,6 +267,36 @@ describe('Core state machine', () => {
       Core.selectIndex(0);
       assert.equal(Core.getState().index, 0);
       assert.equal(Core.getState().filename, '..');
+    });
+  });
+
+  describe('startup target resolution', () => {
+    it('ignores CLI flags and honors continue_last with last_opened_path', () => {
+      const args = ['tauri-app.exe', '--e2e-suite'];
+      const target = resolveStartupTarget(args, { continue_last: true, last_opened_path: 'C:\\manga' });
+      assert.equal(target.path, 'C:\\manga');
+      assert.equal(target.explicitOpen, false);
+    });
+
+    it('uses explicit path when provided as non-flag CLI argument', () => {
+      const args = ['tauri-app.exe', '--e2e-suite', 'C:\\explicit\\image.png'];
+      const target = resolveStartupTarget(args, { continue_last: true, last_opened_path: 'C:\\manga' });
+      assert.equal(target.path, 'C:\\explicit\\image.png');
+      assert.equal(target.explicitOpen, true);
+    });
+
+    it('falls back to start_dir when continue_last is false or last_opened_path missing', () => {
+      const args = ['tauri-app.exe', '--e2e-suite'];
+      const target = resolveStartupTarget(args, { continue_last: false, last_opened_path: 'C:\\manga', start_dir: 'C:\\start' });
+      assert.equal(target.path, 'C:\\start');
+      assert.equal(target.explicitOpen, false);
+    });
+
+    it('falls back to defaultDir when no path preferences exist', () => {
+      const args = ['tauri-app.exe', '--e2e-suite'];
+      const target = resolveStartupTarget(args, { continue_last: true }, 'C:\\Pictures');
+      assert.equal(target.path, 'C:\\Pictures');
+      assert.equal(target.explicitOpen, false);
     });
   });
 });

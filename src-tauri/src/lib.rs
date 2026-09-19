@@ -40,7 +40,7 @@ pub fn run() {
             if let Some(main_window) = app.get_webview_window("main") {
                 let _ = main_window.show();
                 let _ = main_window.set_focus();
-                let path_arg = argv.iter().skip(1).find(|arg| !arg.starts_with("--"));
+                let path_arg = argv.iter().skip(1).find(|arg| !arg.starts_with('-'));
                 if let Some(path) = path_arg {
                     let _ = main_window.emit("single-instance-open", path.clone());
                 }
