@@ -6,6 +6,7 @@ import { Statusbar } from '../menubar/statusbar.js';
 const PRELOAD_HALF = 1;
 const VIEWER_IMAGE_POOL_CAPACITY = 4;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
+const VIDEO_READY_TIMEOUT_MS = 2000;
 const LOADING_LABEL = 'Loading...';
 
 export function createViewerRenderer(viewportState, onActiveImageChanged = () => {}) {
@@ -57,26 +58,35 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   let _lastRenderedIsAnimated = false;
   let _lastRenderedArchivePath = null;
   let _activeVideoSrc = null;
+  let _activeVideoEl = null;
+  let _activeMedia = null;
+  let _pendingVideoEl = null;
+  let _videoGeneration = 0;
+  let _videoWaitTimer = null;
+  let _videoPreloadTimer = null;
 
-  const viewerVideo = document.getElementById('viewer-video');
-  if (viewerVideo) {
-    viewerVideo.loop = true;
-    viewerVideo.muted = true;
-    viewerVideo.playsInline = true;
-    viewerVideo.preload = 'auto';
-    viewerVideo.addEventListener('loadedmetadata', () => {
-      const w = viewerVideo.videoWidth || 0;
-      const h = viewerVideo.videoHeight || 0;
-      if (!w || !h) return;
-      Core.setImageDimensions(w, h);
-      const live = Core.getState();
-      viewportState.applyFitMode(live.fitMode, w, h);
-      Statusbar.setImage({ filename: live.filename || '', dims: `${w} × ${h}`, zoom: viewportState.getScale() });
-      Statusbar.syncSpreadIndicator(live);
-    });
-    viewerVideo.addEventListener('error', () => {
-      Statusbar.setImage({ isError: true });
-    });
+  const videoEls = [
+    document.getElementById('viewer-video'),
+    document.getElementById('viewer-video-b'),
+  ].filter(Boolean);
+  for (const el of videoEls) {
+    el.loop = true;
+    el.muted = true;
+    el.playsInline = true;
+    el.preload = 'auto';
+    el.addEventListener('loadedmetadata', () => _onVideoMetadata(el));
+  }
+
+  function _onVideoMetadata(el) {
+    if (el !== _activeVideoEl || _activeMedia !== 'video') return;
+    const w = el.videoWidth || 0;
+    const h = el.videoHeight || 0;
+    if (!w || !h) return;
+    Core.setImageDimensions(w, h);
+    const live = Core.getState();
+    viewportState.applyFitMode(live.fitMode, w, h);
+    Statusbar.setImage({ filename: live.filename || '', dims: `${w} × ${h}`, zoom: viewportState.getScale() });
+    Statusbar.syncSpreadIndicator(live);
   }
 
   function _isVideoState(state) {
@@ -89,19 +99,123 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     return false;
   }
 
-  function _hideVideo() {
-    _activeVideoSrc = null;
-    if (viewerVideo) {
-      viewerVideo.pause();
-      viewerVideo.classList.remove('active');
-      viewerVideo.removeAttribute('src');
-      viewerVideo.load();
-    }
+  function _pickIncomingVideoEl(videoSrc) {
+    const buffered = videoEls.find((el) => el !== _activeVideoEl && el.dataset.vidSrc === videoSrc);
+    if (buffered) return buffered;
+    return videoEls.find((el) => el !== _activeVideoEl) || videoEls[0];
   }
 
-  function _hideImages() {
+  function _clearVideoWait() {
+    if (_videoWaitTimer) clearTimeout(_videoWaitTimer);
+    _videoWaitTimer = null;
+  }
+
+  function _clearVideoPreload() {
+    if (_videoPreloadTimer) clearTimeout(_videoPreloadTimer);
+    _videoPreloadTimer = null;
+  }
+
+  function _scheduleVideoPreload(state) {
+    _clearVideoPreload();
+    _videoPreloadTimer = setTimeout(() => {
+      _videoPreloadTimer = null;
+      const live = Core.getState();
+      if (live.src !== state.src || live.index !== state.index) return;
+      const neighbors = FsUtils.neighborVideoEntries(live, state.index, PRELOAD_HALF);
+      const target = neighbors.find((src) => src && !videoEls.some((el) => el.dataset.vidSrc === src));
+      if (!target) return;
+      const idle = videoEls.find((el) => el !== _activeVideoEl && el !== _pendingVideoEl);
+      if (!idle) return;
+      idle.dataset.vidSrc = target;
+      idle.src = target;
+      idle.load();
+    }, 120);
+  }
+
+  function _parkNodeInBridge(node) {
+    const frozen = viewportState.getGeometry ? viewportState.getGeometry() : null;
     _cancelRetiringNode();
-    if (img) img.classList.remove('active');
+    if (node.tagName === 'VIDEO') node.pause();
+    node.classList.remove('active');
+    if (frozen && bridgeLayer) {
+      node.style.setProperty('--bridge-tx', `${frozen.tx}px`);
+      node.style.setProperty('--bridge-ty', `${frozen.ty}px`);
+      node.style.setProperty('--bridge-rot', `${frozen.rotation}deg`);
+      node.style.setProperty('--bridge-sx', `${frozen.flipX * frozen.scale}`);
+      node.style.setProperty('--bridge-sy', `${frozen.flipY * frozen.scale}`);
+      bridgeLayer.appendChild(node);
+    }
+    node.classList.add('bridge');
+    _retiringNode = node;
+    _retireRaf = requestAnimationFrame(() => {
+      _retireRaf = requestAnimationFrame(() => {
+        if (_retiringNode === node) {
+          _releaseBridgeNode(node);
+          _retiringNode = null;
+        }
+        _retireRaf = null;
+      });
+    });
+  }
+
+  function _swapInVideo(incoming, state) {
+    _clearVideoWait();
+    _videoGeneration += 1;
+    _pendingVideoEl = null;
+    const outgoingVideo = _activeVideoEl && _activeVideoEl !== incoming ? _activeVideoEl : null;
+    if (outgoingVideo) {
+      _parkNodeInBridge(outgoingVideo);
+    } else if (_activeMedia === 'image' && img && img.src && img.classList.contains('active')) {
+      _parkNodeInBridge(img);
+      img = null;
+    } else {
+      _cancelRetiringNode();
+      if (img) img.classList.remove('active');
+    }
+    onActiveImageChanged(null);
+    if (imgWrapper && incoming.parentElement !== imgWrapper) imgWrapper.appendChild(incoming);
+    incoming.classList.add('active');
+    incoming.muted = true;
+    _activeVideoEl = incoming;
+    _activeVideoSrc = incoming.dataset.vidSrc || state.src;
+    _activeMedia = 'video';
+    _activeTargetSrc = state.src;
+    _forceReloadTarget = false;
+    viewportState.resetGeometry();
+    const vw = incoming.videoWidth || 0;
+    const vh = incoming.videoHeight || 0;
+    if (vw && vh) {
+      Core.setImageDimensions(vw, vh);
+      viewportState.applyFitMode(state.fitMode, vw, vh);
+      Statusbar.setImage({ filename: state.filename || '', dims: `${vw} × ${vh}`, zoom: viewportState.getScale() });
+    } else {
+      Statusbar.setImage({ filename: state.filename || '', dims: '', zoom: viewportState.getScale() });
+    }
+    Statusbar.syncSpreadIndicator(state);
+    incoming.play().catch(() => {});
+    _lastFitModeGen = state.fitModeGen;
+    _lastSpreadEnabled = state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? _lastSpreadEnabled;
+    _lastSpreadDirection = state.spreadDirection ?? state.config?.frontend_data?.spread_direction ?? _lastSpreadDirection;
+    _lastSpreadStep = state.spreadStep;
+    _scheduleVideoPreload(state);
+  }
+
+  function _hideVideo() {
+    _videoGeneration += 1;
+    _clearVideoWait();
+    _clearVideoPreload();
+    _pendingVideoEl = null;
+    for (const el of videoEls) {
+      el.pause();
+      el.classList.remove('active');
+      el.removeAttribute('src');
+      el.load();
+      el.dataset.vidSrc = '';
+      if (imgWrapper && el.parentElement !== imgWrapper) imgWrapper.appendChild(el);
+    }
+    _activeVideoEl = null;
+    _activeVideoSrc = null;
+    _activeMedia = null;
   }
 
   function _releaseBridgeNode(node) {
@@ -282,29 +396,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
   function _activatePoolNode(el, filename, state) {
     if (img && img !== el) {
-      const frozen = viewportState.getGeometry ? viewportState.getGeometry() : null;
-      _cancelRetiringNode();
-      const outgoing = img;
-      outgoing.classList.remove('active');
-      if (frozen && bridgeLayer) {
-        outgoing.style.setProperty('--bridge-tx', `${frozen.tx}px`);
-        outgoing.style.setProperty('--bridge-ty', `${frozen.ty}px`);
-        outgoing.style.setProperty('--bridge-rot', `${frozen.rotation}deg`);
-        outgoing.style.setProperty('--bridge-sx', `${frozen.flipX * frozen.scale}`);
-        outgoing.style.setProperty('--bridge-sy', `${frozen.flipY * frozen.scale}`);
-        bridgeLayer.appendChild(outgoing);
-      }
-      outgoing.classList.add('bridge');
-      _retiringNode = outgoing;
-      _retireRaf = requestAnimationFrame(() => {
-        _retireRaf = requestAnimationFrame(() => {
-          if (_retiringNode === outgoing) {
-            _releaseBridgeNode(outgoing);
-            _retiringNode = null;
-          }
-          _retireRaf = null;
-        });
-      });
+      _parkNodeInBridge(img);
     }
 
     img = el;
@@ -389,6 +481,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _forceReloadTarget = true;
       _reloadTimestamp = Date.now();
       _activeTargetSrc = null;
+      _videoGeneration += 1;
+      _clearVideoWait();
+      _clearVideoPreload();
+      _pendingVideoEl = null;
     });
   }
 
@@ -411,46 +507,72 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       return;
     }
 
-    if (_isVideoState(state) && viewerVideo) {
+    if (_isVideoState(state) && videoEls.length > 0) {
       _clearTargetLoadTimer();
       _stopLoadingAnimation();
-      _hideImages();
       onActiveImageChanged(null);
       const isVideoReload = _forceReloadTarget;
       let videoSrc = state.src;
       if (isVideoReload) {
         videoSrc = state.src.includes('?') ? `${state.src}&_t=${Date.now()}` : `${state.src}?_t=${Date.now()}`;
       }
-      const videoChanged = videoSrc !== _activeVideoSrc || isVideoReload || !viewerVideo.classList.contains('active');
+      const videoChanged = videoSrc !== _activeVideoSrc || isVideoReload || _activeMedia !== 'video';
       _activeTargetSrc = state.src;
       _forceReloadTarget = false;
       if (videoChanged) {
-        _activeVideoSrc = videoSrc;
-        viewerVideo.src = videoSrc;
-        viewerVideo.load();
-      }
-      if (imgWrapper && viewerVideo.parentElement !== imgWrapper) imgWrapper.appendChild(viewerVideo);
-      viewerVideo.classList.add('active');
-      if (videoChanged) viewportState.resetGeometry();
-      const vw = viewerVideo.videoWidth || 0;
-      const vh = viewerVideo.videoHeight || 0;
-      if (vw && vh && (videoChanged || _lastFitModeGen !== state.fitModeGen)) {
-        if (videoChanged) Core.setImageDimensions(vw, vh);
-        viewportState.applyFitMode(state.fitMode, vw, vh);
-        Statusbar.setImage({ filename: state.filename || '', dims: `${vw} × ${vh}`, zoom: viewportState.getScale() });
-      } else if (videoChanged) {
+        const gen = ++_videoGeneration;
+        _clearVideoWait();
+        _clearVideoPreload();
+        const incoming = _pickIncomingVideoEl(videoSrc);
+        _pendingVideoEl = incoming;
+        const ready = () => {
+          if (gen !== _videoGeneration || Core.getState().src !== state.src) return;
+          _swapInVideo(incoming, state);
+        };
+        const onVideoError = () => {
+          if (gen !== _videoGeneration || Core.getState().src !== state.src) return;
+          _swapInVideo(incoming, state);
+          Statusbar.setImage({ isError: true });
+        };
         Statusbar.setImage({ filename: state.filename || '', dims: '', zoom: viewportState.getScale() });
+        if (incoming.getAttribute('src') === videoSrc && incoming.readyState >= 2) {
+          ready();
+        } else {
+          incoming.dataset.vidSrc = videoSrc;
+          incoming.src = videoSrc;
+          incoming.load();
+          incoming.addEventListener('canplay', ready, { once: true });
+          incoming.addEventListener('error', onVideoError, { once: true });
+          _videoWaitTimer = setTimeout(ready, VIDEO_READY_TIMEOUT_MS);
+        }
+      } else if (_activeVideoEl) {
+        if (imgWrapper && _activeVideoEl.parentElement !== imgWrapper) imgWrapper.appendChild(_activeVideoEl);
+        _activeVideoEl.classList.add('active');
+        _activeVideoEl.play().catch(() => {});
+        const vw = _activeVideoEl.videoWidth || 0;
+        const vh = _activeVideoEl.videoHeight || 0;
+        if (vw && vh && _lastFitModeGen !== state.fitModeGen) {
+          viewportState.applyFitMode(state.fitMode, vw, vh);
+          Statusbar.setImage({ filename: state.filename || '', dims: `${vw} × ${vh}`, zoom: viewportState.getScale() });
+        }
+        _lastFitModeGen = state.fitModeGen;
       }
-      Statusbar.syncSpreadIndicator(state);
-      viewerVideo.muted = true;
-      viewerVideo.play().catch(() => {});
-      _lastFitModeGen = state.fitModeGen;
       _lastSpreadEnabled = state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? _lastSpreadEnabled;
       _lastSpreadDirection = state.spreadDirection ?? state.config?.frontend_data?.spread_direction ?? _lastSpreadDirection;
       _lastSpreadStep = state.spreadStep;
       return;
     }
-    if (viewerVideo && viewerVideo.classList.contains('active')) _hideVideo();
+    if (_activeMedia === 'video') {
+      _clearVideoWait();
+      _clearVideoPreload();
+      if (_pendingVideoEl && _pendingVideoEl !== _activeVideoEl) {
+        _pendingVideoEl.removeAttribute('src');
+        _pendingVideoEl.load();
+        _pendingVideoEl.dataset.vidSrc = '';
+        _pendingVideoEl = null;
+      }
+      if (img && !_isVisibleImage(img)) img = null;
+    }
 
     const desiredSrcs = new Set([state.src]);
     if (_isVisibleImage(img) && img.dataset.poolSrc) desiredSrcs.add(img.dataset.poolSrc);
@@ -543,8 +665,15 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
             return;
           }
           _stopLoadingAnimation();
+          if (_activeMedia === 'video' && _activeVideoEl) {
+            _activeVideoEl.pause();
+            _activeVideoEl.classList.remove('active');
+            _activeVideoEl = null;
+          }
+          _activeMedia = 'image';
           if (activeEl) _activatePoolNode(activeEl, state.filename, state);
           _schedulePoolPreloads(neighborSrcs, generation);
+          _scheduleVideoPreload(state);
         }).catch((err) => {
           if (activation !== _activationGeneration || Core.getState().src !== state.src) {
             _stopLoadingAnimation();
@@ -598,7 +727,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       imgWrapper.style.transform = viewportState.getTransform();
       imgWrapper.style.setProperty('--zoom-scale', viewportState.getScale());
     }
-    if ((img && img.src) || (viewerVideo && viewerVideo.classList.contains('active'))) {
+    if ((img && img.src) || _activeVideoEl) {
       Statusbar.setZoom(viewportState.getScale());
     }
   });

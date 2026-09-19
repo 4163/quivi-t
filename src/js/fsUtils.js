@@ -334,6 +334,28 @@ export const FsUtils = {
     return srcs;
   },
 
+  neighborVideoEntries(state, index, half) {
+    if (!state || !state.list || state.mode === 'empty') return [];
+
+    const entrySrcAt = (idx) => {
+      const entry = state.list[idx];
+      if (!entry || entry.is_dir || entry.is_parent || !this.isVideoEntry(entry)) return null;
+      if (state.mode === 'archive') {
+        return this.buildArchiveSrc(state.archivePath, entry.name);
+      }
+      return this.buildFileSrcSync(entry.path);
+    };
+
+    const srcs = [];
+    for (let i = 1; i <= half; i++) {
+      const ahead = entrySrcAt(index + i);
+      if (ahead && ahead !== state.src) srcs.push(ahead);
+      const behind = entrySrcAt(index - i);
+      if (behind && behind !== state.src) srcs.push(behind);
+    }
+    return srcs;
+  },
+
   firstImageIndex(list, preferredIndex = 0) {
     if (this.isImageEntry(list[preferredIndex])) return preferredIndex;
     const next = list.findIndex(e => this.isImageEntry(e));
