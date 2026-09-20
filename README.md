@@ -88,6 +88,7 @@ export async function extract(html, url, context) {
 - `gallery.id`: Stable unique identifier for the gallery on that site.
 - `gallery.relativePath`: Array of safe directory names under `libraryPath`. Maximum depth is 8.
 - `images`: Array of media entries with direct HTTP or HTTPS download URLs and safe filenames.
+- `targetFilename`: Optional string filename of a target image within `images`. When specified, QuiviT eagerly downloads this image first, opens the viewer centered on it, and prefetches remaining images around it.
 - `nextPageUrl`: Next page URL for multi-page galleries, or `null` when complete. Consecutive pages must preserve identical `gallery.id` and `gallery.relativePath`.
 
 ### Safety rules
@@ -106,6 +107,7 @@ The following sample galleries are verified working in QuiviT and serve as refer
 | Imgur | Anime Reaction Gifs | [https://imgur.com/gallery/anime-reaction-gifs-ADdqF](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) | `.gif` | 50 | Working | Large animation batch (50 items), download concurrency |
 | Imgur | Azuma - Seihantai | [https://imgur.com/a/azuma-seihantai-17vF37d](https://imgur.com/a/azuma-seihantai-17vF37d) | `.png` | 41 | Working | Album `/a/` route, multi-image manga set, description parsing |
 | Imgur | Just some Witch Watch OP clips | [https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) | `.mp4` | 8 | Working | Video extraction, hashtag route (`#/t/anime`) |
+| MangaDex | Boku wa Ohime-sama ni Narenai, Ch. 1 | [https://mangadex.org/chapter/0aaf8b27-0013-4ae0-8935-91a089466874](https://mangadex.org/chapter/0aaf8b27-0013-4ae0-8935-91a089466874) | `.png` | 15 | Working | MangaDex REST API, `@home` image delivery, nested relativePath (`[manga, chapter]`) |
 
 ## Authoring and testing workflow
 
