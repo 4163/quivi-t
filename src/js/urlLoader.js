@@ -841,7 +841,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       displayName: img.filename,
       description: img.description || img.displayName || '',
       sourceUrl: img.url,
-      hasSound: Boolean(img.hasSound)
+      hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
     }))
   };
 

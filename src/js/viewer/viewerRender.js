@@ -191,7 +191,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       viewportState.applyFitMode(state.fitMode, vw, vh);
       Statusbar.setImage({ filename: state.filename || '', dims: `${vw} × ${vh}`, zoom: viewportState.getScale() });
     } else {
-      Statusbar.setImage({ filename: state.filename || '', dims: '', zoom: viewportState.getScale() });
+      Statusbar.setImage({ filename: state.filename || '', zoom: viewportState.getScale() });
     }
     Statusbar.syncSpreadIndicator(state);
     incoming.play().catch(() => {});
@@ -536,7 +536,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
           _swapInVideo(incoming, state);
           Statusbar.setImage({ isError: true });
         };
-        Statusbar.setImage({ filename: state.filename || '', dims: '', zoom: viewportState.getScale() });
+        Statusbar.setImage({ filename: state.filename || '', zoom: viewportState.getScale() });
         if (incoming.getAttribute('src') === videoSrc && incoming.readyState >= 2) {
           ready();
         } else {

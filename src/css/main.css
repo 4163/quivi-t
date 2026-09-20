@@ -592,7 +592,7 @@ li:hover > .fav-remove,
   justify-content: center;
 }
 
-.icon-btn:hover {
+.icon-btn:not(:disabled):hover {
   background: var(--hover-bg);
   color: var(--text);
 }
@@ -657,6 +657,15 @@ li:hover > .fav-remove,
   display: none;
   width: var(--fs-16);
   height: var(--fs-16);
+}
+
+#btn-audio-toggle:disabled {
+  cursor: not-allowed;
+}
+
+#btn-audio-toggle:disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
 }
 
 #btn-audio-toggle:disabled .audio-icon-volume-off {

@@ -137,17 +137,17 @@ export const Statusbar = {
       return;
     }
 
-    // Non-image entries (folders, archives, `..`, drives) have no dimensions
+    // Non-media entries (folders, archives, `..`, drives) have no dimensions
     // or zoom level. Write N/A placeholders and the entry filename (viewer.js
-    // won't fire for these since there is no image to load).
+    // won't fire for these since there is no image or video to load).
     const currentEntry = state.list?.[state.index];
-    const isImage = !!currentEntry && FsUtils.isImageEntry(currentEntry) && state.src;
-    if (!isImage) {
-      if (statusDims) statusDims.textContent = 'N/A';
-      if (statusZoom) statusZoom.textContent = 'N/A';
+    const isMedia = !!currentEntry && (FsUtils.isImageEntry(currentEntry) || FsUtils.isVideoEntry?.(currentEntry)) && state.src;
+    if (!isMedia) {
+      if (statusDims && statusDims.textContent !== 'N/A') statusDims.textContent = 'N/A';
+      if (statusZoom && statusZoom.textContent !== 'N/A') statusZoom.textContent = 'N/A';
       if (statusName) {
-        statusName.textContent = state.filename || '';
-        statusName.title = state.filename || '';
+        if (statusName.textContent !== (state.filename || '')) statusName.textContent = state.filename || '';
+        if (statusName.title !== (state.filename || '')) statusName.title = state.filename || '';
       }
     } else if (statusName && state.filename && statusName.textContent !== state.filename) {
       statusName.textContent = state.filename;
@@ -170,23 +170,26 @@ export const Statusbar = {
       return;
     }
     if (isError) {
-      if (statusDims) statusDims.textContent = 'Error';
-      if (statusZoom) statusZoom.textContent = 'N/A';
-      if (statusName && filename !== undefined) {
+      if (statusDims && statusDims.textContent !== 'Error') statusDims.textContent = 'Error';
+      if (statusZoom && statusZoom.textContent !== 'N/A') statusZoom.textContent = 'N/A';
+      if (statusName && filename !== undefined && statusName.textContent !== filename) {
         statusName.textContent = filename;
         statusName.title = filename;
       }
       return;
     }
-    if (statusName && filename !== undefined) {
+    if (statusName && filename !== undefined && statusName.textContent !== filename) {
       statusName.textContent = filename;
       statusName.title = filename;
     }
-    if (statusDims && dims !== undefined) {
+    if (statusDims && dims && statusDims.textContent !== dims) {
       statusDims.textContent = dims;
     }
     if (statusZoom && zoom !== undefined) {
-      statusZoom.textContent = `${Math.round(zoom * 100)}%`;
+      const zoomText = `${Math.round(zoom * 100)}%`;
+      if (statusZoom.textContent !== zoomText) {
+        statusZoom.textContent = zoomText;
+      }
     }
     this.syncSpreadIndicator(Core.getState());
   },

@@ -430,4 +430,34 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.equal(deleted[0], 'C:\\library\\Imgur\\04XS16K.png');
     });
   });
+
+  describe('Imgur extractor audio detection', () => {
+    it('preserves hasSound true/false from AJAX responses and keeps unknown mp4 audio undefined', async () => {
+      const mockAjaxData = {
+        data: {
+          images: [
+            { hash: 'vidAudio', ext: '.mp4', has_sound: true, title: 'Video With Sound' },
+            { hash: 'vidSilent', ext: '.mp4', has_sound: false, title: 'Video Without Sound' },
+            { hash: 'vidUnknown', ext: '.mp4', title: 'Video Unknown Audio' },
+            { hash: 'staticImg', ext: '.jpg', title: 'Static Picture' }
+          ]
+        }
+      };
+
+      const result = await ImgurExtractor.extract(
+        '<html><head><title>Test Album - Imgur</title></head><body></body></html>',
+        'https://imgur.com/gallery/test123',
+        {
+          fetchText: async () => JSON.stringify(mockAjaxData)
+        }
+      );
+
+      assert.equal(result.images.length, 4);
+      assert.equal(result.images[0].hasSound, true);
+      assert.equal(result.images[1].hasSound, false);
+      assert.equal(result.images[2].hasSound, undefined);
+      assert.equal(result.images[3].hasSound, false);
+    });
+  });
 });
+
