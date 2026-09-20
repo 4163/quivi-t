@@ -60,6 +60,76 @@ export function resolveMangaTitle(titleMap, altTitles = []) {
   return 'Unknown Manga';
 }
 
+export function buildMangaComicInfo(mangaData, overrides = {}) {
+  const attrs = mangaData?.attributes || {};
+  const rels = mangaData?.relationships || [];
+
+  const author = rels.find(r => r.type === 'author')?.attributes?.name || '';
+  const artist = rels.find(r => r.type === 'artist')?.attributes?.name || author;
+
+  const rawTags = Array.isArray(attrs.tags) ? attrs.tags : [];
+  const genreList = [];
+  const tagList = [];
+
+  for (const tag of rawTags) {
+    const tagName = tag.attributes?.name?.en || Object.values(tag.attributes?.name || {})[0] || '';
+    if (!tagName) continue;
+    if (tag.attributes?.group === 'genre') {
+      genreList.push(tagName);
+    } else {
+      tagList.push(tagName);
+    }
+  }
+
+  const demographicRaw = attrs.publicationDemographic || '';
+  const demographic = demographicRaw ? demographicRaw.charAt(0).toUpperCase() + demographicRaw.slice(1) : '';
+  if (demographic && !tagList.includes(demographic)) {
+    tagList.unshift(demographic);
+  }
+
+  const summary = (typeof attrs.description === 'object' && attrs.description)
+    ? (attrs.description.en || Object.values(attrs.description)[0] || '')
+    : (typeof attrs.description === 'string' ? attrs.description : '');
+
+  const statusRaw = attrs.status || '';
+  const status = statusRaw ? statusRaw.charAt(0).toUpperCase() + statusRaw.slice(1) : '';
+
+  const info = {
+    Series: overrides.Series || resolveMangaTitle(attrs.title, attrs.altTitles),
+    Writer: overrides.Writer !== undefined ? overrides.Writer : author,
+    Penciller: overrides.Penciller !== undefined ? overrides.Penciller : artist,
+    Genre: overrides.Genre !== undefined ? overrides.Genre : genreList.join(', '),
+    Tags: overrides.Tags !== undefined ? overrides.Tags : tagList.join(', '),
+    Demographic: overrides.Demographic !== undefined ? overrides.Demographic : demographic,
+    Summary: overrides.Summary !== undefined ? overrides.Summary : summary.trim(),
+    Year: overrides.Year !== undefined ? overrides.Year : (attrs.year || null),
+    Manga: 'YesAndRightToLeft',
+    Web: overrides.Web || '',
+    ...overrides
+  };
+
+  if (status && !info.Status) {
+    info.Status = status;
+  }
+
+  for (const [k, v] of Object.entries(info)) {
+    if (v === undefined || v === null || v === '') {
+      delete info[k];
+    }
+  }
+
+  return { ComicInfo: info };
+}
+
+export function formatChapterMetadataTitle(attributes) {
+  const { chapter, title } = attributes || {};
+  const chLabel = chapter ? `Ch. ${chapter}` : 'Oneshot';
+  if (title && title.trim()) {
+    return `${chLabel} - ${title.trim()}`;
+  }
+  return chLabel;
+}
+
 export function formatChapterLabel(attributes) {
   const { volume, chapter, title } = attributes || {};
   const segments = [];
@@ -325,7 +395,7 @@ export async function extract(html, url, context = {}) {
   }
 
   const chapterId = parsed.chapterId;
-  const chapterApiUrl = `https://api.mangadex.org/chapter/${chapterId}?includes%5B%5D=manga`;
+  const chapterApiUrl = `https://api.mangadex.org/chapter/${chapterId}?includes%5B%5D=manga&includes%5B%5D=scanlation_group`;
   const chapterText = await context.fetchText(chapterApiUrl);
   let chapterPayload;
   try {
@@ -353,6 +423,21 @@ export async function extract(html, url, context = {}) {
     mangaRelationship?.attributes?.title,
     mangaRelationship?.attributes?.altTitles
   );
+
+  let mangaData = mangaRelationship;
+  const mangaId = mangaRelationship?.id;
+  if (mangaId && typeof context.fetchText === 'function') {
+    try {
+      const mangaText = await context.fetchText(`https://api.mangadex.org/manga/${mangaId}?includes%5B%5D=author&includes%5B%5D=artist`);
+      const payload = JSON.parse(mangaText);
+      if (payload?.data) {
+        mangaData = payload.data;
+        if (rawMangaTitle === 'Unknown Manga') {
+          rawMangaTitle = resolveMangaTitle(payload.data.attributes?.title, payload.data.attributes?.altTitles);
+        }
+      }
+    } catch (_) {}
+  }
 
   if (rawMangaTitle === 'Unknown Manga' && html) {
     const ogTitleMatch = html.match(/<meta\s+[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
@@ -417,6 +502,23 @@ export async function extract(html, url, context = {}) {
     ? images[targetPage - 1].filename
     : null;
 
+  const scanlationRel = chapterPayload.data.relationships?.find((rel) => rel.type === 'scanlation_group');
+  const scanlator = scanlationRel?.attributes?.name || '';
+  const chNum = chapterAttributes.chapter || '';
+  const volNum = chapterAttributes.volume || '';
+
+  const metadata = buildMangaComicInfo(mangaData, {
+    Series: rawMangaTitle,
+    Title: formatChapterMetadataTitle(chapterAttributes),
+    Number: chNum || undefined,
+    Volume: volNum || undefined,
+    Translator: scanlator || undefined,
+    Notes: scanlator ? `Scanlation: ${scanlator}` : undefined,
+    LanguageISO: chapterAttributes.translatedLanguage || 'en',
+    PageCount: total,
+    Web: `https://mangadex.org/chapter/${chapterId}`
+  });
+
   return {
     provider: 'MangaDex',
     title: fullTitle,
@@ -426,6 +528,7 @@ export async function extract(html, url, context = {}) {
       relativePath: [flatFolderName]
     },
     images,
+    metadata,
     nextPageUrl: null
   };
 }
@@ -435,7 +538,7 @@ export async function extractTitle(mangaId, url, context = {}) {
     throw new Error('Context missing fetchText helper for MangaDex API requests');
   }
 
-  const mangaUrl = `https://api.mangadex.org/manga/${mangaId}?includes%5B%5D=cover_art`;
+  const mangaUrl = `https://api.mangadex.org/manga/${mangaId}?includes%5B%5D=cover_art&includes%5B%5D=author&includes%5B%5D=artist`;
   const mangaText = await context.fetchText(mangaUrl);
   let mangaPayload;
   try {
@@ -454,6 +557,11 @@ export async function extractTitle(mangaId, url, context = {}) {
     mangaPayload?.data?.attributes?.altTitles
   );
   const titleFolderName = sanitizePathSegment(mangaTitle);
+
+  const metadata = buildMangaComicInfo(mangaPayload?.data, {
+    Series: mangaTitle,
+    Web: url
+  });
 
   let cover = null;
   const coverRel = mangaPayload?.data?.relationships?.find((r) => r.type === 'cover_art');
@@ -494,14 +602,18 @@ export async function extractTitle(mangaId, url, context = {}) {
   }
 
   const seenPaths = new Set();
+  const seenLanguages = new Map();
+  const seenVolumes = new Map();
   const chapters = [];
 
   for (const entry of allFeedEntries) {
     if (entry.attributes?.externalUrl) continue;
 
     const langCode = entry.attributes?.translatedLanguage || 'other';
-    const langFolder = sanitizePathSegment(resolveLanguageName(langCode));
-    const volFolder = sanitizePathSegment(formatVolumeFolder(entry.attributes?.volume));
+    const langName = resolveLanguageName(langCode);
+    const langFolder = sanitizePathSegment(langName);
+    const rawVolume = entry.attributes?.volume;
+    const volFolder = sanitizePathSegment(formatVolumeFolder(rawVolume));
     const groupName = entry.relationships?.find((r) => r.type === 'scanlation_group')?.attributes?.name || '';
     let chFolder = formatTitleChapterFolder(entry.attributes, groupName);
 
@@ -513,11 +625,71 @@ export async function extractTitle(mangaId, url, context = {}) {
     }
     seenPaths.add(pathKey);
 
+    const langKey = langFolder.toLowerCase();
+    if (!seenLanguages.has(langKey)) {
+      seenLanguages.set(langKey, { langCode, langName, langFolder });
+    }
+
+    const volKey = `${langFolder}/${volFolder}`.toLowerCase();
+    if (!seenVolumes.has(volKey)) {
+      seenVolumes.set(volKey, { langCode, langFolder, volFolder, rawVolume });
+    }
+
+    const chNum = entry.attributes?.chapter || '';
+    const chTitleAttr = entry.attributes?.title || '';
+    let chTitle = chNum ? `Ch. ${chNum}` : 'Oneshot';
+    if (chTitleAttr && chTitleAttr.trim()) {
+      chTitle = `${chTitle} - ${chTitleAttr.trim()}`;
+    }
+
+    const chapterMetadata = buildMangaComicInfo(mangaPayload?.data, {
+      Series: mangaTitle,
+      Title: chTitle,
+      Volume: rawVolume || undefined,
+      Number: chNum || undefined,
+      LanguageISO: langCode,
+      Translator: groupName || undefined,
+      Notes: groupName ? `Scanlation: ${groupName}` : undefined,
+      PageCount: typeof entry.attributes?.pages === 'number' ? entry.attributes.pages : undefined,
+      Web: `https://mangadex.org/chapter/${chapterId}`
+    });
+
     chapters.push({
       id: `mangadex-${chapterId}`,
       title: `${mangaTitle} - ${formatChapterLabel(entry.attributes)}`,
       sourceUrl: `https://mangadex.org/chapter/${chapterId}`,
-      relativePath: [titleFolderName, langFolder, volFolder, chFolder]
+      relativePath: [titleFolderName, langFolder, volFolder, chFolder],
+      metadata: chapterMetadata
+    });
+  }
+
+  const folders = [];
+  for (const { langCode, langName, langFolder } of seenLanguages.values()) {
+    folders.push({
+      relativePath: [titleFolderName, langFolder],
+      metadata: buildMangaComicInfo(mangaPayload?.data, {
+        Series: mangaTitle,
+        Title: `${mangaTitle} (${langName})`,
+        LanguageISO: langCode,
+        Web: url
+      })
+    });
+  }
+
+  for (const { langCode, langFolder, volFolder, rawVolume } of seenVolumes.values()) {
+    const volNum = (rawVolume !== undefined && rawVolume !== null && rawVolume !== '' && rawVolume !== 'none')
+      ? String(rawVolume).trim()
+      : null;
+    const volTitle = volNum !== null ? `Volume ${volNum}` : 'No Volume';
+    folders.push({
+      relativePath: [titleFolderName, langFolder, volFolder],
+      metadata: buildMangaComicInfo(mangaPayload?.data, {
+        Series: mangaTitle,
+        Title: volTitle,
+        Volume: volNum || undefined,
+        LanguageISO: langCode,
+        Web: url
+      })
     });
   }
 
@@ -526,6 +698,8 @@ export async function extractTitle(mangaId, url, context = {}) {
     isSeries: true,
     title: mangaTitle,
     rootRelativePath: [titleFolderName],
+    metadata,
+    folders,
     cleanup: {
       removeMatchingChapters: true,
       removeLooseCovers: false
@@ -540,7 +714,7 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
     throw new Error('Context missing fetchText helper for MangaDex API requests');
   }
 
-  const mangaUrl = `https://api.mangadex.org/manga/${mangaId}`;
+  const mangaUrl = `https://api.mangadex.org/manga/${mangaId}?includes%5B%5D=cover_art&includes%5B%5D=author&includes%5B%5D=artist`;
   const mangaText = await context.fetchText(mangaUrl);
   let mangaPayload;
   try {
@@ -560,6 +734,14 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
   );
   const titleFolderName = sanitizePathSegment(mangaTitle);
   const coversRootFolder = sanitizePathSegment(`${titleFolderName} (Covers)`);
+
+  const metadata = buildMangaComicInfo(mangaPayload?.data, {
+    Series: mangaTitle,
+    Title: `${mangaTitle} (Covers)`,
+    Summary: `Cover art collection for ${mangaTitle}.`,
+    Tags: 'Cover Gallery, Artbook',
+    Web: url
+  });
 
   let offset = 0;
   const allCovers = [];
@@ -585,6 +767,22 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
 
   if (allCovers.length === 0) {
     throw new Error('No cover art found for this manga');
+  }
+
+  let cover = null;
+  const coverRel = mangaPayload?.data?.relationships?.find((r) => r.type === 'cover_art');
+  const coverFileName = coverRel?.attributes?.fileName || allCovers[0]?.attributes?.fileName;
+  if (coverFileName) {
+    const dotIdx = coverFileName.lastIndexOf('.');
+    const coverExt = dotIdx > 0 ? coverFileName.slice(dotIdx).toLowerCase() : '.jpg';
+    const coverHash = dotIdx > 0 ? coverFileName.slice(0, dotIdx) : coverFileName;
+    cover = {
+      url: `https://uploads.mangadex.org/covers/${mangaId}/${coverFileName}`,
+      filename: `Cover${coverExt}`,
+      rawFileName: coverFileName,
+      hash: coverHash,
+      volume: coverRel?.attributes?.volume || allCovers[0]?.attributes?.volume || null
+    };
   }
 
   const covers = [];
@@ -710,6 +908,16 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
     const langName = sanitizePathSegment(resolveLanguageName(matchedCode));
     const images = buildImageList(groupCovers);
 
+    const localeMetadata = buildMangaComicInfo(mangaPayload?.data, {
+      Series: mangaTitle,
+      Title: `${mangaTitle} - Covers (${langName})`,
+      Summary: `Cover art collection for ${mangaTitle}.`,
+      Tags: 'Cover Gallery, Artbook',
+      Web: url,
+      LanguageISO: matchedCode !== 'other' ? matchedCode : undefined,
+      PageCount: groupCovers.length
+    });
+
     return {
       provider: 'MangaDex',
       title: `${mangaTitle} - Covers (${langName})`,
@@ -719,6 +927,13 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
       },
       images,
       covers,
+      metadata: localeMetadata,
+      folders: [
+        {
+          relativePath: [coversRootFolder],
+          metadata
+        }
+      ],
       cleanup: {
         removeMatchingChapters: false,
         removeLooseCovers: true
@@ -732,6 +947,16 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
     const langName = sanitizePathSegment(resolveLanguageName(singleLoc));
     const images = buildImageList(groupCovers);
 
+    const localeMetadata = buildMangaComicInfo(mangaPayload?.data, {
+      Series: mangaTitle,
+      Title: `${mangaTitle} - Covers (${langName})`,
+      Summary: `Cover art collection for ${mangaTitle}.`,
+      Tags: 'Cover Gallery, Artbook',
+      Web: url,
+      LanguageISO: singleLoc !== 'other' ? singleLoc : undefined,
+      PageCount: groupCovers.length
+    });
+
     return {
       provider: 'MangaDex',
       title: `${mangaTitle} - Covers (${langName})`,
@@ -741,6 +966,13 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
       },
       images,
       covers,
+      metadata: localeMetadata,
+      folders: [
+        {
+          relativePath: [coversRootFolder],
+          metadata
+        }
+      ],
       cleanup: {
         removeMatchingChapters: false,
         removeLooseCovers: true
@@ -750,13 +982,23 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
   }
 
   const chapters = [];
-  for (const [loc] of localeGroups.entries()) {
+  for (const [loc, groupCovers] of localeGroups.entries()) {
     const langName = sanitizePathSegment(resolveLanguageName(loc));
     chapters.push({
       id: `mangadex-${mangaId}-covers-${loc}`,
       title: `${mangaTitle} - Covers (${langName})`,
       sourceUrl: `https://mangadex.org/title/${mangaId}?tab=art&locale=${loc}`,
-      relativePath: [coversRootFolder, langName]
+      relativePath: [coversRootFolder, langName],
+      images: buildImageList(groupCovers),
+      metadata: buildMangaComicInfo(mangaPayload?.data, {
+        Series: mangaTitle,
+        Title: `${mangaTitle} - Covers (${langName})`,
+        Summary: `Cover art collection for ${mangaTitle}.`,
+        Tags: 'Cover Gallery, Artbook',
+        Web: `https://mangadex.org/title/${mangaId}?tab=art&locale=${loc}`,
+        LanguageISO: loc !== 'other' ? loc : undefined,
+        PageCount: groupCovers.length
+      })
     });
   }
 
@@ -765,8 +1007,9 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
     isSeries: true,
     title: `${mangaTitle} (Covers)`,
     rootRelativePath: [coversRootFolder],
-    cover: null,
+    cover,
     covers,
+    metadata,
     cleanup: {
       removeMatchingChapters: false,
       removeLooseCovers: true
