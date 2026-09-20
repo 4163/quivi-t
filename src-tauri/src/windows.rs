@@ -198,7 +198,15 @@ pub async fn fit_options_window(app: tauri::AppHandle, width: f64) -> Result<(),
         .get_webview_window("options")
         .ok_or_else(|| "options window not found".to_string())?;
 
-    center_window_over_main(&app, &options, width, OPTIONS_INITIAL_H)
+    let visible = options.is_visible().unwrap_or(false);
+    if visible {
+        options
+            .set_size(tauri::LogicalSize::new(width, OPTIONS_INITIAL_H))
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        center_window_over_main(&app, &options, width, OPTIONS_INITIAL_H)
+    }
 }
 
 #[tauri::command]
@@ -207,7 +215,15 @@ pub async fn fit_metadata_window(app: tauri::AppHandle, height: f64) -> Result<(
         .get_webview_window("metadata")
         .ok_or_else(|| "metadata window not found".to_string())?;
 
-    center_window_over_main(&app, &metadata, META_INITIAL_W, height)
+    let visible = metadata.is_visible().unwrap_or(false);
+    if visible {
+        metadata
+            .set_size(tauri::LogicalSize::new(META_INITIAL_W, height))
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        center_window_over_main(&app, &metadata, META_INITIAL_W, height)
+    }
 }
 
 #[tauri::command]
