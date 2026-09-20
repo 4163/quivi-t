@@ -168,7 +168,7 @@ export async function extract(html, url, context = {}) {
         url: imageUrl,
         ext: normalizedExt,
         description: entry.title || entry.description || '',
-        hasSound: Boolean(entry.has_sound)
+        hasSound: entry.has_sound !== undefined ? Boolean(entry.has_sound) : undefined
       });
     }
 
@@ -193,7 +193,8 @@ export async function extract(html, url, context = {}) {
         rawEntries.push({
           url: imageUrl,
           ext: normalizedExt,
-          description: entry.title || entry.description || ''
+          description: entry.title || entry.description || '',
+          hasSound: entry.has_sound !== undefined ? Boolean(entry.has_sound) : undefined
         });
       }
     } catch {
@@ -224,7 +225,7 @@ export async function extract(html, url, context = {}) {
       filename: formatFilename(index, total, entry.ext, description),
       displayName: description || `Image ${index + 1}`,
       description,
-      hasSound: entry.hasSound ?? false
+      hasSound: entry.hasSound !== undefined ? entry.hasSound : (entry.ext === '.mp4' ? undefined : false)
     };
   });
 
