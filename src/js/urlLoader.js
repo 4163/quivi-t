@@ -1328,6 +1328,12 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     // 1. If direct URL is already recorded in root gallery.json or a chapter gallery, jump directly to that file
     const existingMatch = await findMatchingGalleryImage(providerPath, url, rawStem);
     if (existingMatch) {
+      // If the matched file is a 0-byte placeholder, download it eagerly before jumping
+      const matchSize = (await _readFileSizes(existingMatch.galleryPath)).get(existingMatch.targetName.toLowerCase());
+      if (matchSize !== undefined && matchSize === 0 && existingMatch.image?.sourceUrl) {
+        const destPath = `${existingMatch.galleryPath}\\${existingMatch.targetName}`;
+        await downloadFile(existingMatch.image.sourceUrl, destPath);
+      }
       return {
         galleryPath: existingMatch.galleryPath,
         targetName: existingMatch.targetName,
@@ -1348,6 +1354,11 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     if (hash && hash !== rawStem) {
       const secondMatch = await findMatchingGalleryImage(providerPath, downloadUrl, hash);
       if (secondMatch) {
+        const secondSize = (await _readFileSizes(secondMatch.galleryPath)).get(secondMatch.targetName.toLowerCase());
+        if (secondSize !== undefined && secondSize === 0 && secondMatch.image?.sourceUrl) {
+          const destPath = `${secondMatch.galleryPath}\\${secondMatch.targetName}`;
+          await downloadFile(secondMatch.image.sourceUrl, destPath);
+        }
         return {
           galleryPath: secondMatch.galleryPath,
           targetName: secondMatch.targetName,
@@ -1449,47 +1460,65 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       const CHUNK_SIZE = 25;
       for (let i = 0; i < result.chapters.length; i += CHUNK_SIZE) {
         const chunk = result.chapters.slice(i, i + CHUNK_SIZE);
-        await Promise.all(chunk.map((chapter) => {
+        await Promise.all(chunk.map(async (chapter) => {
           const chapterPath = [libraryDir, providerDir, ...chapter.relativePath].join('\\');
-          const chapterImages = Array.isArray(chapter.images) ? chapter.images.map((img) => ({
-            filename: img.filename,
-            displayName: img.filename,
-            description: img.description || img.displayName || '',
-            sourceUrl: img.url,
-            fallbackUrl: img.fallbackUrl,
-            hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
-          })) : [];
 
-          const stubSidecar = {
-            url: chapter.sourceUrl,
-            provider: result.provider,
-            title: chapter.title || '',
-            timestamp: new Date().toISOString(),
-            gallery: {
-              id: chapter.id,
-              relativePath: chapter.relativePath,
-              extractorId: entry.id,
-              extractorVersion: entry.version
-            },
-            unresolved: chapterImages.length === 0,
-            sourceUrl: chapter.sourceUrl,
-            images: chapterImages
-          };
-          return window.__TAURI__.core.invoke('write_text_file', {
-            path: `${chapterPath}\\gallery.json`,
-            content: JSON.stringify(stubSidecar, null, 2)
-          }).then(async () => {
+          // Skip chapters that have already been resolved (have real image data on disk).
+          // Only create or overwrite stubs for new chapters or still-unresolved ones.
+          let existingSidecar = null;
+          try {
+            const existingText = await window.__TAURI__.core.invoke('read_text_file', {
+              path: `${chapterPath}\\gallery.json`
+            });
+            existingSidecar = JSON.parse(existingText);
+          } catch {
+            // No existing sidecar; this is a new chapter.
+          }
+
+          const alreadyResolved = existingSidecar && existingSidecar.unresolved !== true
+            && Array.isArray(existingSidecar.images) && existingSidecar.images.length > 0;
+
+          if (!alreadyResolved) {
+            const chapterImages = Array.isArray(chapter.images) ? chapter.images.map((img) => ({
+              filename: img.filename,
+              displayName: img.filename,
+              description: img.description || img.displayName || '',
+              sourceUrl: img.url,
+              fallbackUrl: img.fallbackUrl,
+              hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
+            })) : [];
+
+            const stubSidecar = {
+              url: chapter.sourceUrl,
+              provider: result.provider,
+              title: chapter.title || '',
+              timestamp: new Date().toISOString(),
+              gallery: {
+                id: chapter.id,
+                relativePath: chapter.relativePath,
+                extractorId: entry.id,
+                extractorVersion: entry.version
+              },
+              unresolved: chapterImages.length === 0,
+              sourceUrl: chapter.sourceUrl,
+              images: chapterImages
+            };
+            await window.__TAURI__.core.invoke('write_text_file', {
+              path: `${chapterPath}\\gallery.json`,
+              content: JSON.stringify(stubSidecar, null, 2)
+            });
             if (chapterImages.length > 0) {
-              const filenames = chapterImages.map((img) => img.filename);
               await window.__TAURI__.core.invoke('create_placeholder_files', {
                 dir: chapterPath,
-                filenames
+                filenames: chapterImages.map((img) => img.filename)
               }).catch(() => {});
             }
-            if (chapter.metadata) {
-              return writeGalleryMetadata(chapterPath, chapter.metadata);
-            }
-          });
+          }
+
+          // Always refresh metadata regardless of resolution state
+          if (chapter.metadata) {
+            await writeGalleryMetadata(chapterPath, chapter.metadata);
+          }
         }));
       }
       window.dispatchEvent(new CustomEvent('quivit-library-updated'));
@@ -1526,14 +1555,95 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   _validateGalleryImageNames(result.images);
 
-  // If this chapter or gallery already exists inside an existing series tree, jump to it directly
+  // If this gallery already exists locally, update it additively instead of bailing out.
+  // Full reorder: the fresh result.images becomes the authoritative order. Download status
+  // is determined from file sizes on disk (size > 0 means already downloaded).
   const existingGallery = await findMatchingGalleryBySourceUrl(providerPath, url, result.gallery?.id);
   if (existingGallery) {
+    const existingPath = existingGallery.galleryPath;
+    const existingSidecar = existingGallery.sidecar;
+    const sizeMap = await _readFileSizes(existingPath);
+
+    const updatedSidecar = {
+      url,
+      provider: result.provider,
+      title: result.title || existingSidecar?.title || '',
+      timestamp: new Date().toISOString(),
+      gallery: {
+        id: result.gallery.id,
+        relativePath: result.gallery.relativePath,
+        extractorId: entry.id,
+        extractorVersion: entry.version
+      },
+      images: result.images.map((img) => ({
+        filename: img.filename,
+        displayName: img.filename,
+        description: img.description || img.displayName || '',
+        sourceUrl: img.url,
+        fallbackUrl: img.fallbackUrl,
+        hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
+      }))
+    };
+
+    if (window.__TAURI__) {
+      await window.__TAURI__.core.invoke('write_text_file', {
+        path: `${existingPath}\\gallery.json`,
+        content: JSON.stringify(updatedSidecar, null, 2)
+      });
+      if (result.metadata) {
+        await writeGalleryMetadata(existingPath, result.metadata);
+      }
+      if (Array.isArray(result.folders)) {
+        for (const folder of result.folders) {
+          if (!folder?.metadata || !Array.isArray(folder.relativePath)) continue;
+          const folderPath = [libraryDir, providerDir, ...folder.relativePath].join('\\');
+          await writeGalleryMetadata(folderPath, folder.metadata);
+        }
+      }
+
+      // Create placeholders for any new images not yet on disk
+      const newFilenames = result.images
+        .filter((img) => !sizeMap.has(img.filename.toLowerCase()))
+        .map((img) => img.filename);
+      if (newFilenames.length > 0) {
+        await window.__TAURI__.core.invoke('create_placeholder_files', {
+          dir: existingPath,
+          filenames: newFilenames
+        });
+      }
+    }
+
+    // Build download items with status derived from disk
+    const downloadItems = result.images.map((img, i) => {
+      const fileSize = sizeMap.get(img.filename.toLowerCase());
+      return {
+        url: img.url,
+        fallbackUrl: img.fallbackUrl,
+        destPath: `${existingPath}\\${img.filename}`,
+        filename: img.filename,
+        galleryIndex: i,
+        status: (fileSize !== undefined && fileSize > 0) ? 'completed' : 'pending'
+      };
+    });
+
+    const hasPending = downloadItems.some((i) => i.status === 'pending');
+    if (hasPending) {
+      const targetItem = result.targetFilename
+        ? downloadItems.find((item) => item.status === 'pending'
+          && (item.filename || '').toLowerCase() === result.targetFilename.toLowerCase())
+        : null;
+      const initialTarget = targetItem?.destPath
+        || downloadItems.find((i) => i.status === 'pending')?.destPath || null;
+      _startGalleryQueue(existingPath, downloadItems, { initialTarget });
+    }
+
+    await cleanupMatchingProviderEntries(providerPath, result);
+    window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+
     return {
-      galleryPath: existingGallery.galleryPath,
+      galleryPath: existingPath,
       result,
-      targetName: result.targetFilename || null,
-      isDirectMatch: true
+      targetName: result.targetFilename || null
     };
   }
 
@@ -1667,6 +1777,24 @@ async function ensureGalleryOwnership(galleryPath, gallery, sourceUrl) {
     }
   } catch (err) {
     if (String(err?.message || err).includes('Library path is already used')) throw err;
+  }
+}
+
+// -- File size reading for download status determination --
+
+async function _readFileSizes(galleryPath) {
+  if (!window.__TAURI__) return new Map();
+  try {
+    const dirResult = await window.__TAURI__.core.invoke('read_directory', {
+      path: galleryPath, showHidden: false
+    });
+    const sizeMap = new Map();
+    for (const entry of dirResult?.files || []) {
+      if (entry.name) sizeMap.set(entry.name.toLowerCase(), entry.size ?? 0);
+    }
+    return sizeMap;
+  } catch {
+    return new Map();
   }
 }
 

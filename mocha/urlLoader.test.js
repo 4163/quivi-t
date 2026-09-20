@@ -1291,6 +1291,11 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.ok(matchById);
       assert.equal(matchById.galleryPath, 'C:\\library\\MangaDex\\Akebi-chan no Sailor Fuku\\English\\Vol. 01\\Ch. 01');
 
+      // The update path depends on the sidecar being returned with gallery and sourceUrl fields
+      assert.ok(matchById.sidecar);
+      assert.equal(matchById.sidecar.gallery.id, 'mangadex-0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d');
+      assert.equal(matchById.sidecar.sourceUrl, 'https://mangadex.org/chapter/0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d');
+
       const matchByUrl = await findMatchingGalleryBySourceUrl(
         'C:\\library\\MangaDex',
         'https://mangadex.org/chapter/0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d'
@@ -1303,6 +1308,49 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         'https://mangadex.org/chapter/non-existent'
       );
       assert.equal(noMatch, null);
+    });
+
+    it('returns sidecar with images array suitable for re-import update diffing', async () => {
+      if (!globalThis.window) globalThis.window = {};
+
+      const sidecarData = {
+        url: 'https://imgur.com/a/test123',
+        provider: 'Imgur',
+        gallery: { id: 'imgur-test123', relativePath: ['Test Gallery'] },
+        images: [
+          { filename: '01.jpg', sourceUrl: 'https://i.imgur.com/AAA.jpg' },
+          { filename: '02.jpg', sourceUrl: 'https://i.imgur.com/BBB.jpg' }
+        ]
+      };
+
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') {
+              if (args.path === 'C:\\library\\Imgur') {
+                return { files: [{ name: 'Test Gallery', path: 'C:\\library\\Imgur\\Test Gallery', is_dir: true }] };
+              }
+              return { files: [] };
+            }
+            if (cmd === 'read_text_file') {
+              if (args.path === 'C:\\library\\Imgur\\Test Gallery\\gallery.json') {
+                return JSON.stringify(sidecarData);
+              }
+              throw new Error('Not found');
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      const match = await findMatchingGalleryBySourceUrl('C:\\library\\Imgur', 'https://imgur.com/a/test123');
+      assert.ok(match);
+      assert.ok(match.sidecar);
+      assert.ok(Array.isArray(match.sidecar.images));
+      assert.equal(match.sidecar.images.length, 2);
+      assert.equal(match.sidecar.images[0].filename, '01.jpg');
+      assert.equal(match.sidecar.images[1].sourceUrl, 'https://i.imgur.com/BBB.jpg');
+      assert.equal(match.sidecar.gallery.id, 'imgur-test123');
     });
   });
 
