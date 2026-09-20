@@ -102,12 +102,17 @@ export async function extract(html, url, context) {
 
 The following sample galleries are verified working in QuiviT and serve as reference test suites to track provider features, format support, and URL routing edge cases:
 
-| Provider | Title | Source URL | Format | Items | Status | Edge Cases Covered |
-| :--- | :--- | :--- | :--- | :---: | :--- | :--- |
-| Imgur | Anime Reaction Gifs | [https://imgur.com/gallery/anime-reaction-gifs-ADdqF](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) | `.gif` | 50 | Working | Large animation batch (50 items), download concurrency |
-| Imgur | Azuma - Seihantai | [https://imgur.com/a/azuma-seihantai-17vF37d](https://imgur.com/a/azuma-seihantai-17vF37d) | `.png` | 41 | Working | Album `/a/` route, multi-image manga set, description parsing |
-| Imgur | Just some Witch Watch OP clips | [https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) | `.mp4` | 8 | Working | Video extraction, hashtag route (`#/t/anime`) |
-| MangaDex | Boku wa Ohime-sama ni Narenai, Ch. 1 | [https://mangadex.org/chapter/0aaf8b27-0013-4ae0-8935-91a089466874](https://mangadex.org/chapter/0aaf8b27-0013-4ae0-8935-91a089466874) | `.png` | 15 | Working | MangaDex REST API, `@home` image delivery, nested relativePath (`[manga, chapter]`) |
+| Provider | Title | Format | Items | Status | Edge Cases Covered | Source URL |
+| :--- | :--- | :--- | :---: | :--- | :--- | :---: |
+| Imgur | Anime Reaction Gifs | `.gif` | 50 | Working | Large animation batch (50 items), download concurrency | [Link](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) |
+| Imgur | Azuma - Seihantai | `.png` | 41 | Working | Album `/a/` route, multi-image manga set, description parsing | [Link](https://imgur.com/a/azuma-seihantai-17vF37d) |
+| Imgur | Just some Witch Watch OP clips | `.mp4` | 8 | Working | Video extraction, hashtag route (`#/t/anime`) | [Link](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) |
+| Imgur | Direct image sample | `.png` | 1 | Working | Direct CDN image URL (`i.imgur.com`), gallery match lookup or root download | [Link](https://i.imgur.com/4Q6rSDi.png) |
+| MangaDex | Akebi-chan no Sailor Fuku, Ch. 1 | `.jpg` | 33 | Working | Chapter `/chapter/{id}` route, REST API payload, chapter folder formatting, `@home` delivery | [Link](https://mangadex.org/chapter/0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d) |
+| MangaDex | Akebi-chan no Sailor Fuku (Chapters) | `.jpg` | Series | Working | Series `/title/{id}` route with `?tab=chapters`, feed pagination, volume and group folder hierarchy, series sidecar | [Link](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=chapters) |
+| MangaDex | Akebi-chan no Sailor Fuku (Covers) | `.jpg` | Covers | Working | Art gallery `/title/{id}?tab=art`, multi-locale pagination, zero-padded volume filenames, bracketed descriptions, root loose cover cleanup | [Link](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=art) |
+| MangaDex | Akebi-chan no Sailor Fuku - Vol. 16 Cover | `.jpg` | 1 | Working | Direct cover URL `/covers/{mangaId}/{fileName}`, friendly name resolution via API, root `gallery.json` recording and deduplication | [Link](https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg) |
+| MangaDex | Reader blob URL | N/A | 0 | Rejected | Browser ephemeral blob URL detection, rejected with descriptive guidance to use chapter URL | [Link](blob:https://mangadex.org/a357d5db-d810-4566-b0aa-cba411aa9460) |
 
 ## Authoring and testing workflow
 
