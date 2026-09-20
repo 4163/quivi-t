@@ -125,6 +125,9 @@ export function normalizeUrl(urlString) {
   let trimmed = urlString.trim();
   if (!trimmed) return '';
 
+  if (/^blob:/i.test(trimmed)) {
+    return trimmed;
+  }
   if (/^http:\/\//i.test(trimmed)) {
     trimmed = trimmed.replace(/^http:\/\//i, 'https://');
   } else if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed)) {
@@ -139,7 +142,7 @@ export function isValidUrl(urlString) {
   if (!normalized) return false;
   try {
     const parsed = new URL(normalized);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'blob:';
   } catch {
     return false;
   }
@@ -267,7 +270,8 @@ export class DownloadQueue {
       const cleanItem = item.destPath.replace(/\\/g, '/').toLowerCase();
       if (cleanItem === cleanTarget) return true;
       if (item.filename && item.filename.toLowerCase() === targetName) return true;
-      if (cleanTarget.endsWith('/' + item.filename.toLowerCase()) || cleanItem.endsWith('/' + targetName)) return true;
+      if (item.filename && cleanTarget.endsWith('/' + item.filename.toLowerCase())) return true;
+      if (cleanItem.endsWith('/' + targetName)) return true;
       return false;
     }) || null;
   }
@@ -618,6 +622,11 @@ export function validateExtractorResult(result, entry) {
   }
   result.images.forEach(_validateImage);
   _validateGalleryImageNames(result.images);
+  if (result.targetFilename !== undefined && result.targetFilename !== null) {
+    if (typeof result.targetFilename !== 'string' || !result.targetFilename.trim()) {
+      throw new Error("Extractor returned invalid result: 'targetFilename' must be a non-empty string");
+    }
+  }
   return result;
 }
 
@@ -808,7 +817,9 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   const isDirect = (typeof mod.isDirectUrl === 'function' && mod.isDirectUrl(url))
     || isDirectMediaUrl(url);
   if (isDirect) {
-    const directInfo = typeof mod.parseDirectUrl === 'function' ? mod.parseDirectUrl(url) : null;
+    const directInfo = typeof mod.parseDirectUrl === 'function'
+      ? await mod.parseDirectUrl(url, { fetchText: fetchRemoteText })
+      : null;
     const hash = directInfo?.hash || extractUrlStem(url);
     const rawFilename = directInfo?.filename || (url.split(/[?#]/)[0].split('/').pop() || 'image.png');
     const downloadUrl = directInfo?.url || url;
@@ -838,7 +849,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     };
   }
 
-  const html = await fetchRemoteText(url);
+  const html = url.startsWith('blob:') ? '' : await fetchRemoteText(url);
   const result = await extractGallery(mod, html, url, { fetchText: fetchRemoteText }, entry);
 
   // Pagination: follow nextPageUrl until exhausted or safety cap reached.
@@ -908,12 +919,22 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   const downloadItems = result.images.map((img, i) => ({
     url: img.url,
     destPath: `${galleryPath}\\${img.filename}`,
+    filename: img.filename,
     galleryIndex: i,
     status: 'pending'
   }));
 
-  // Eagerly download image at index 0 first only when open_first_image is enabled
-  if (openFirstImage && downloadItems.length > 0) {
+  const targetItem = result.targetFilename
+    ? downloadItems.find((item) => (item.filename || '').toLowerCase() === result.targetFilename.toLowerCase())
+    : null;
+
+  // Eagerly download target image first:
+  // - If extractor specifies targetFilename (e.g. /chapter/.../36), download that target image immediately.
+  // - Otherwise, download image 0 only when open_first_image is enabled.
+  if (targetItem) {
+    await downloadFile(targetItem.url, targetItem.destPath);
+    targetItem.status = 'completed';
+  } else if (openFirstImage && downloadItems.length > 0) {
     await downloadFile(downloadItems[0].url, downloadItems[0].destPath);
     downloadItems[0].status = 'completed';
   }
@@ -923,9 +944,9 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   // Background queue for remaining images
   if (downloadItems.length > 0) {
-    const initialTarget = openFirstImage
-      ? (downloadItems[1]?.destPath || null)
-      : downloadItems[0].destPath;
+    const initialTarget = targetItem
+      ? (downloadItems.find((i) => i.status === 'pending')?.destPath || null)
+      : (openFirstImage ? (downloadItems[1]?.destPath || null) : downloadItems[0].destPath);
     _startGalleryQueue(galleryPath, downloadItems, { initialTarget });
   } else {
     _activeGalleryPath = galleryPath;
@@ -934,7 +955,9 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   window.dispatchEvent(new CustomEvent('quivit-library-updated'));
 
-  const targetName = openFirstImage ? (result.images[0]?.filename || null) : null;
+  const targetName = targetItem
+    ? targetItem.filename
+    : (openFirstImage ? (result.images[0]?.filename || null) : null);
   return { galleryPath, result, targetName };
 }
 

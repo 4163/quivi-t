@@ -12,9 +12,12 @@ import {
   findMatchingGalleryImage,
   cleanupMatchingRawFiles,
   extractUrlStem,
-  isDirectMediaUrl
+  isDirectMediaUrl,
+  findExtractor
 } from '../src/js/urlLoader.js';
 import * as ImgurExtractor from '../extractors/imgur.js';
+import * as MangaDexExtractor from '../extractors/mangadex.js';
+import fs from 'node:fs';
 
 function createDeferred() {
   let resolve;
@@ -212,9 +215,11 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       const result = validateExtractorResult({
         provider: 'Example',
         gallery: { id: 'series-42', relativePath: ['Series', 'Volume 01', 'Chapter 02'] },
-        images: [{ url: 'https://cdn.example.test/001.png', filename: '001.png' }]
+        images: [{ url: 'https://cdn.example.test/001.png', filename: '001.png' }],
+        targetFilename: '001.png'
       }, manifestEntry);
       assert.equal(result.gallery.relativePath[2], 'Chapter 02');
+      assert.equal(result.targetFilename, '001.png');
     });
 
     it('rejects unsafe paths, duplicate filenames, and malformed manifest sources', () => {
@@ -238,6 +243,20 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         gallery: { id: 'series-42', relativePath: ['Series'] },
         images: [{ url: 'https://cdn.example.test/001.png', filename: 'CON.png' }]
       }, manifestEntry), /unsafe filename/);
+
+      assert.throws(() => validateExtractorResult({
+        provider: 'Example',
+        gallery: { id: 'series-42', relativePath: ['Series'] },
+        images: [{ url: 'https://cdn.example.test/001.png', filename: '001.png' }],
+        targetFilename: '   '
+      }, manifestEntry), /targetFilename/);
+
+      assert.throws(() => validateExtractorResult({
+        provider: 'Example',
+        gallery: { id: 'series-42', relativePath: ['Series'] },
+        images: [{ url: 'https://cdn.example.test/001.png', filename: '001.png' }],
+        targetFilename: 123
+      }, manifestEntry), /targetFilename/);
 
       assert.throws(() => validateManifest({
         version: 1,
@@ -551,5 +570,239 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.equal(result.images[3].hasSound, false);
     });
   });
+
+  describe('MangaDex extractor and manifest integration', () => {
+    it('validates the live extractor manifest including mangadex', () => {
+      const manifestJson = JSON.parse(fs.readFileSync('extractors/manifest.json', 'utf8'));
+      const manifest = validateManifest(manifestJson);
+      const mangadexEntry = manifest.extractors.find((e) => e.id === 'mangadex');
+      assert.ok(mangadexEntry);
+      assert.equal(mangadexEntry.name, 'MangaDex');
+      assert.equal(mangadexEntry.libraryPath, 'MangaDex');
+      assert.equal(mangadexEntry.source, 'mangadex.js');
+    });
+
+    it('matches MangaDex chapter, title, blob, and direct media URLs and rejects other domains', () => {
+      assert.equal(MangaDexExtractor.match('https://mangadex.org/chapter/0aaf8b27-0013-4ae0-8935-91a089466874'), true);
+      assert.equal(MangaDexExtractor.match('https://mangadex.org/chapter/0aaf8b27-0013-4ae0-8935-91a089466874/1'), true);
+      assert.equal(MangaDexExtractor.match('https://mangadex.org/chapter/0aaf8b27-0013-4ae0-8935-91a089466874?page=2#reader'), true);
+      assert.equal(MangaDexExtractor.match('https://mangadex.cc/chapter/0aaf8b27-0013-4ae0-8935-91a089466874'), true);
+      assert.equal(MangaDexExtractor.match('https://mangadex.org/title/127820bd-8fc5-47b8-8782-e680317bf41d'), true);
+      assert.equal(MangaDexExtractor.match('blob:https://mangadex.org/daa47d83-3e22-4bc4-86a8-7968d37cdf75'), true);
+      assert.equal(MangaDexExtractor.match('https://uploads.mangadex.org/covers/127820bd-8fc5-47b8-8782-e680317bf41d/cover.jpg'), true);
+      assert.equal(MangaDexExtractor.match('https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg'), true);
+      assert.equal(MangaDexExtractor.match('https://cmdxd98sb0x3yprd.mangadex.network/data/7c07a7fecb2fe3868aa22aae2edf0e5a/1-sample.png'), true);
+      assert.equal(MangaDexExtractor.match('https://example.com/chapter/0aaf8b27-0013-4ae0-8935-91a089466874'), false);
+    });
+
+    it('rejects blob URLs with a clear explanation', async () => {
+      await assert.rejects(
+        () => MangaDexExtractor.extract('', 'blob:https://mangadex.org/daa47d83-3e22-4bc4-86a8-7968d37cdf75'),
+        /blob URLs are not supported/i
+      );
+    });
+
+    it('rejects series title URLs with a helpful prompt to use chapter links', async () => {
+      await assert.rejects(
+        () => MangaDexExtractor.extract('', 'https://mangadex.org/title/127820bd-8fc5-47b8-8782-e680317bf41d'),
+        /MangaDex series links contain multiple chapters/
+      );
+    });
+
+    it('extracts chapter images and formats flat relativePath under manga title and chapter label', async () => {
+      const mockChapterResponse = {
+        result: 'ok',
+        data: {
+          id: '0aaf8b27-0013-4ae0-8935-91a089466874',
+          attributes: {
+            volume: '1',
+            chapter: '1',
+            title: '',
+            externalUrl: null
+          },
+          relationships: [
+            {
+              id: '127820bd-8fc5-47b8-8782-e680317bf41d',
+              type: 'manga',
+              attributes: {
+                title: { 'ja-ro': 'Boku wa Ohime-sama ni Narenai' }
+              }
+            }
+          ]
+        }
+      };
+
+      const mockAtHomeResponse = {
+        result: 'ok',
+        baseUrl: 'https://cmdxd98sb0x3yprd.mangadex.network',
+        chapter: {
+          hash: '7c07a7fecb2fe3868aa22aae2edf0e5a',
+          data: [
+            '1-fefb667afaf589128da66a6a08dfd064c39d9d4c8ed9e30512de2b75d6908c6a.png',
+            '2-42ced2fe027a854e2e75ea48e4daf0243448c79b605e19e2e944d6bff14ef0aa.png'
+          ]
+        }
+      };
+
+      const manifestJson = JSON.parse(fs.readFileSync('extractors/manifest.json', 'utf8'));
+      const mangadexEntry = manifestJson.extractors.find((e) => e.id === 'mangadex');
+
+      // 1. Chapter URL without target page
+      const result = await MangaDexExtractor.extract(
+        '<meta property="og:title" content="Boku wa Ohime-sama ni Narenai - Vol. 1 Ch. 1 - MangaDex">',
+        'https://mangadex.org/chapter/0aaf8b27-0013-4ae0-8935-91a089466874',
+        {
+          fetchText: async (url) => {
+            if (url.includes('/chapter/')) return JSON.stringify(mockChapterResponse);
+            if (url.includes('/at-home/server/')) return JSON.stringify(mockAtHomeResponse);
+            throw new Error(`Unexpected fetch URL: ${url}`);
+          }
+        }
+      );
+
+      validateExtractorResult(result, mangadexEntry);
+
+      assert.equal(result.provider, 'MangaDex');
+      assert.equal(result.title, 'Boku wa Ohime-sama ni Narenai - Vol. 1 Ch. 1');
+      assert.equal(result.targetFilename, null);
+      assert.deepEqual(result.gallery, {
+        id: 'mangadex-0aaf8b27-0013-4ae0-8935-91a089466874',
+        relativePath: ['Boku wa Ohime-sama ni Narenai - Vol. 1 Ch. 1']
+      });
+      assert.equal(result.images.length, 2);
+      assert.equal(result.images[0].filename, '01.png');
+      assert.equal(result.images[1].filename, '02.png');
+      assert.equal(result.images[0].url, 'https://cmdxd98sb0x3yprd.mangadex.network/data/7c07a7fecb2fe3868aa22aae2edf0e5a/1-fefb667afaf589128da66a6a08dfd064c39d9d4c8ed9e30512de2b75d6908c6a.png');
+
+      // 2. Chapter URL with target page /2
+      const resultPage2 = await MangaDexExtractor.extract(
+        '<meta property="og:title" content="Boku wa Ohime-sama ni Narenai - Vol. 1 Ch. 1 - MangaDex">',
+        'https://mangadex.org/chapter/0aaf8b27-0013-4ae0-8935-91a089466874/2',
+        {
+          fetchText: async (url) => {
+            if (url.includes('/chapter/')) return JSON.stringify(mockChapterResponse);
+            if (url.includes('/at-home/server/')) return JSON.stringify(mockAtHomeResponse);
+            throw new Error(`Unexpected fetch URL: ${url}`);
+          }
+        }
+      );
+
+      assert.equal(resultPage2.targetFilename, '02.png');
+    });
+
+    it('handles external chapters, missing chapters, and empty image sets', async () => {
+      // 1. External chapter
+      const mockExternalChapter = {
+        result: 'ok',
+        data: {
+          id: '11111111-2222-3333-4444-555555555555',
+          attributes: { externalUrl: 'https://mangaplus.shueisha.co.jp' }
+        }
+      };
+      await assert.rejects(
+        () => MangaDexExtractor.extract('', 'https://mangadex.org/chapter/11111111-2222-3333-4444-555555555555', {
+          fetchText: async () => JSON.stringify(mockExternalChapter)
+        }),
+        /external service/
+      );
+
+      // 2. Chapter not found
+      const mockErrorChapter = {
+        result: 'error',
+        errors: [{ detail: 'Chapter `xyz` not found.' }]
+      };
+      await assert.rejects(
+        () => MangaDexExtractor.extract('', 'https://mangadex.org/chapter/22222222-3333-4444-5555-666666666666', {
+          fetchText: async () => JSON.stringify(mockErrorChapter)
+        }),
+        /Chapter `xyz` not found/
+      );
+
+      // 3. Empty image set
+      const mockEmptyChapter = {
+        result: 'ok',
+        data: {
+          id: '33333333-4444-5555-6666-777777777777',
+          attributes: { chapter: '1' }
+        }
+      };
+      const mockEmptyAtHome = {
+        result: 'ok',
+        baseUrl: 'https://cdn.example.test',
+        chapter: { hash: 'hash123', data: [], dataSaver: [] }
+      };
+      await assert.rejects(
+        () => MangaDexExtractor.extract('', 'https://mangadex.org/chapter/33333333-4444-5555-6666-777777777777', {
+          fetchText: async (url) => {
+            if (url.includes('/chapter/')) return JSON.stringify(mockEmptyChapter);
+            return JSON.stringify(mockEmptyAtHome);
+          }
+        }),
+        /No images found in chapter/
+      );
+    });
+
+    it('parses direct MangaDex cover art and CDN image URLs', async () => {
+      assert.equal(MangaDexExtractor.isDirectUrl('https://uploads.mangadex.org/covers/127820bd-8fc5-47b8-8782-e680317bf41d/cover.jpg'), true);
+      assert.equal(MangaDexExtractor.isDirectUrl('https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg'), true);
+      assert.equal(MangaDexExtractor.isDirectUrl('https://cmdxd98sb0x3yprd.mangadex.network/data/7c07a7fecb2fe3868aa22aae2edf0e5a/1-sample.png'), true);
+      assert.equal(MangaDexExtractor.isDirectUrl('https://mangadex.org/chapter/0aaf8b27-0013-4ae0-8935-91a089466874'), false);
+
+      const manifestJson = JSON.parse(fs.readFileSync('extractors/manifest.json', 'utf8'));
+      const manifest = validateManifest(manifestJson);
+      assert.equal(findExtractor('https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg', manifest)?.id, 'mangadex');
+
+      // 1. Raw fallback when no context.fetchText is provided
+      const coverInfo = await MangaDexExtractor.parseDirectUrl('https://uploads.mangadex.org/covers/127820bd-8fc5-47b8-8782-e680317bf41d/cover.jpg');
+      assert.deepEqual(coverInfo, {
+        provider: 'MangaDex',
+        hash: 'cover',
+        ext: '.jpg',
+        filename: 'cover.jpg',
+        url: 'https://uploads.mangadex.org/covers/127820bd-8fc5-47b8-8782-e680317bf41d/cover.jpg'
+      });
+
+      // 2. Friendly filename resolution via MangaDex API
+      const mockMangaResponse = {
+        result: 'ok',
+        data: {
+          attributes: {
+            title: { 'ja-ro': 'Bakemonogatari' }
+          }
+        }
+      };
+      const mockCoverResponse = {
+        result: 'ok',
+        data: [
+          {
+            attributes: {
+              fileName: '03a1927d-9c79-4bc8-9d06-502cbeb408ff.jpg',
+              volume: '22'
+            }
+          }
+        ]
+      };
+
+      const resolvedCover = await MangaDexExtractor.parseDirectUrl(
+        'https://mangadex.org/covers/4265c437-7d57-4d31-9b1d-0e574a07b7b7/03a1927d-9c79-4bc8-9d06-502cbeb408ff.jpg',
+        {
+          fetchText: async (url) => {
+            if (url.includes('/manga/')) return JSON.stringify(mockMangaResponse);
+            if (url.includes('/cover?')) return JSON.stringify(mockCoverResponse);
+            throw new Error(`Unexpected URL: ${url}`);
+          }
+        }
+      );
+
+      assert.deepEqual(resolvedCover, {
+        provider: 'MangaDex',
+        hash: '03a1927d-9c79-4bc8-9d06-502cbeb408ff',
+        ext: '.jpg',
+        filename: 'Bakemonogatari - Vol. 22 Cover.jpg',
+        url: 'https://mangadex.org/covers/4265c437-7d57-4d31-9b1d-0e574a07b7b7/03a1927d-9c79-4bc8-9d06-502cbeb408ff.jpg'
+      });
+    });
+  });
 });
+
 
