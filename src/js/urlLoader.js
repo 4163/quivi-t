@@ -82,6 +82,9 @@ function _validateImage(image, index) {
   if (!image || typeof image !== 'object' || !isValidUrl(image.url)) {
     throw new Error(`Extractor returned an invalid image URL at index ${index}`);
   }
+  if (image.fallbackUrl && !isValidUrl(image.fallbackUrl)) {
+    throw new Error(`Extractor returned an invalid image fallback URL at index ${index}`);
+  }
 
   const filename = _validateWindowsName(image.filename, `filename at index ${index}`);
   const extension = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
@@ -242,6 +245,7 @@ export class DownloadQueue {
     this._downloadFile = options.downloadFile || downloadFile;
     this._cancelDownload = options.cancelDownload || cancelDownload;
     this._prefetchStartThresholdPercent = options.prefetchStartThresholdPercent ?? PREFETCH_START_THRESHOLD_PERCENT;
+    this._retryDelayMs = options.retryDelayMs ?? 0;
     this._cancelled = false;
     this._activeDestPath = null;
     this._visibleStart = options.visibleStart ?? 0;
@@ -441,10 +445,12 @@ export class DownloadQueue {
   async _runAttempt(attempt) {
     const { item } = attempt;
     let success = false;
+    let currentUrl = item.url;
+    let fallbackTried = false;
 
     while (!success && item.retryCount <= DOWNLOAD_QUEUE_RETRY_LIMIT && this._isCurrentAttempt(attempt)) {
       try {
-        await this._downloadFile(item.url, item.destPath, {
+        await this._downloadFile(currentUrl, item.destPath, {
           requestId: attempt.requestId,
           queueGeneration: attempt.generation,
           thresholdPercent: attempt.kind === 'prefetch' ? this._prefetchStartThresholdPercent : null
@@ -456,8 +462,25 @@ export class DownloadQueue {
           item.retryCount = 0;
           break;
         }
+
+        const fallback = item.fallbackUrl || (
+          currentUrl && /https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network\//i.test(currentUrl)
+            ? currentUrl.replace(/^https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network/i, 'https://uploads.mangadex.org')
+            : null
+        );
+
+        if (!fallbackTried && fallback && fallback !== currentUrl) {
+          currentUrl = fallback;
+          fallbackTried = true;
+          continue;
+        }
+
         item.retryCount++;
-        if (item.retryCount > DOWNLOAD_QUEUE_RETRY_LIMIT) {
+        if (item.retryCount <= DOWNLOAD_QUEUE_RETRY_LIMIT) {
+          if (this._retryDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, this._retryDelayMs));
+          }
+        } else {
           console.warn(`[DownloadQueue] Failed to download ${item.url}:`, err);
         }
       }
@@ -483,6 +506,12 @@ export class DownloadQueue {
     } else {
       this._updateStatus(item, 'pending');
     }
+
+    if (attempt.kind === 'active') {
+      this._prefetchUnlocked = true;
+    }
+    this._admitPendingPrefetch();
+    this._refreshWhenComplete();
   }
 
   _refreshWhenComplete() {
@@ -1014,6 +1043,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       displayName: img.filename,
       description: img.description || img.displayName || '',
       sourceUrl: img.url,
+      fallbackUrl: img.fallbackUrl,
       hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
     }))
   };
@@ -1039,6 +1069,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   const downloadItems = result.images.map((img, i) => ({
     url: img.url,
+    fallbackUrl: img.fallbackUrl,
     destPath: `${galleryPath}\\${img.filename}`,
     filename: img.filename,
     galleryIndex: i,
@@ -1049,15 +1080,33 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     ? downloadItems.find((item) => (item.filename || '').toLowerCase() === result.targetFilename.toLowerCase())
     : null;
 
-  // Eagerly download target image first:
-  // - If extractor specifies targetFilename (e.g. /chapter/.../36), download that target image immediately.
-  // - Otherwise, download image 0 only when open_first_image is enabled.
+  const _eagerDownload = async (item) => {
+    try {
+      await downloadFile(item.url, item.destPath);
+      item.status = 'completed';
+    } catch (err) {
+      const fallback = item.fallbackUrl || (
+        item.url && /https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network\//i.test(item.url)
+          ? item.url.replace(/^https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network/i, 'https://uploads.mangadex.org')
+          : null
+      );
+      if (fallback && fallback !== item.url) {
+        try {
+          await downloadFile(fallback, item.destPath);
+          item.status = 'completed';
+          return;
+        } catch (fallbackErr) {
+          console.warn('[UrlLoader] Eager download failed with fallback:', fallbackErr);
+        }
+      }
+      console.warn('[UrlLoader] Eager download failed:', err);
+    }
+  };
+
   if (targetItem) {
-    await downloadFile(targetItem.url, targetItem.destPath);
-    targetItem.status = 'completed';
+    await _eagerDownload(targetItem);
   } else if (openFirstImage && downloadItems.length > 0) {
-    await downloadFile(downloadItems[0].url, downloadItems[0].destPath);
-    downloadItems[0].status = 'completed';
+    await _eagerDownload(downloadItems[0]);
   }
 
   // Prune any standalone raw files under the provider root that are part of this gallery
@@ -1230,6 +1279,7 @@ export async function resolveUnresolvedGallery(galleryPath) {
         displayName: img.filename,
         description: img.description || img.displayName || '',
         sourceUrl: img.url,
+        fallbackUrl: img.fallbackUrl,
         hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
       }))
     };
@@ -1255,7 +1305,20 @@ export async function resolveUnresolvedGallery(galleryPath) {
       try {
         await downloadFile(eagerImg.url, `${galleryPath}\\${eagerImg.filename}`);
       } catch (err) {
-        console.warn('[UrlLoader] Failed to eagerly download first image:', err);
+        const fallback = eagerImg.fallbackUrl || (
+          eagerImg.url && /https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network\//i.test(eagerImg.url)
+            ? eagerImg.url.replace(/^https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network/i, 'https://uploads.mangadex.org')
+            : null
+        );
+        if (fallback && fallback !== eagerImg.url) {
+          try {
+            await downloadFile(fallback, `${galleryPath}\\${eagerImg.filename}`);
+          } catch (fallbackErr) {
+            console.warn('[UrlLoader] Failed to eagerly download first image with fallback:', fallbackErr);
+          }
+        } else {
+          console.warn('[UrlLoader] Failed to eagerly download first image:', err);
+        }
       }
     }
 
@@ -1314,6 +1377,7 @@ export async function resumeGalleryDownloads(galleryPath, list) {
       const isDownloaded = size !== undefined && size > 0;
       allItems.push({
         url: img.sourceUrl || img.url,
+        fallbackUrl: img.fallbackUrl,
         destPath,
         galleryIndex: index,
         status: isDownloaded ? 'completed' : 'pending'
