@@ -38,7 +38,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - Additional `frontend_data` preferences: `hide_cursor_delay_sec`, `file_list_view_mode`, `spread_enabled`, `spread_direction`, `spread_mode` (derived from enabled + direction).
 - `frontend_data.library_path` is an optional absolute shared URL Library location. When absent, the Library is `%LOCALAPPDATA%\\QuiviT\\library`. `retired_library_paths` blocks writes to a prior root, never to the active one.
 - Remote extractors live on the dedicated orphan `extractors` deployment branch. Manifest and site scripts are fetched from GitHub Raw at runtime; successful responses cache under `%LOCALAPPDATA%\QuiviT\extractor-cache\` for offline fallback.
-- Bounded in-memory session caches include archive passwords and encryption state in `fsUtils.js`, file-panel and Library thumbnails, animation metadata in `core.js`, and remote extractor modules in `urlLoader.js`.
+- Bounded in-memory session caches include archive passwords and encryption state in `fsUtils.js`, file-panel and Library thumbnails, animation metadata in `core.js`, remote extractor modules in `urlLoader.js`, and per-file audio state and audio probe results in `viewerAudio.js`.
 - Theme/CSS live previews are ephemeral until Options Apply. They must not persist to `localStorage` while previewing.
 
 **CSS:**
@@ -53,12 +53,12 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `shared/`: cross-window: `theme.js` / `themePrePaint.js`, `configPreview.js`, `windowFit.js`, `blobImage.js`.
 - `keybinds.js`: `mergeConfig` + pan/zoom defaults. `DEFAULT_KEYBINDS` is derived from `ACTION_REGISTRY`.
 - `shortcuts.js`: keyboard / mouse / wheel dispatch. Does not write the statusbar.
-- `viewer/`: `viewer.js` facade; `viewerRender.js` owns the image pool and parks the retiring bridge image in the `#viewer-bridge-layer` sibling with its pre-navigation transform frozen in `--bridge-*` props; `viewerPipelines.js` owns the overlay canvases; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
+- `viewer/`: `viewer.js` facade; `viewerRender.js` owns image and video pools and parks retiring bridge elements in `#viewer-bridge-layer` with pre-navigation transforms frozen in `--bridge-*` props; `viewerPipelines.js` owns overlay canvases and streams image and video frames through WebGL; `viewerAudio.js` owns `#viewer-audio`, per-file volume/mute state, and viewport audio controls; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
 - `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. List and thumbnail view modes with card grid virtualization. Renders the recursive library tree from `libraryStore.js`; only gallery roots and raw images are removable. Exports `focusFileList()` and `isFileListFocused()`. `favoritesStore.js` and `libraryStore.js` are data-only (no DOM).
 - `fsUtils.js`: filesystem / archive navigation. No DOM.
 - `directoryPrefs.js`: per-directory sort prefs. Sort math is in `services/sorting.js`.
 - `navigationHistory.js`: session-only container Back/Forward.
-- `urlLoader.js`: non-DOM URL import coordinator. Validates remote registry modules, owns the gallery queue, and follows Library relocation.
+- `urlLoader.js`: non-DOM URL import coordinator. Validates remote registry modules, detects provider-agnostic direct media, owns the gallery queue, and follows Library relocation.
 - `metadata.js`: comic/archive metadata parsing. `metadata-window.js`: that window's controller.
 - `menubar.js`: dropdown interaction. `menubar/chrome.js`: menu/status visibility. `menubar/statusbar.js`: sole `#statusbar` writer. Dual spread indicator routing (`.status-spread` in statusbar, `#spread-indicator` viewport overlay).
 - `keyboardNav.js`: generic list/tab navigation.
@@ -79,8 +79,9 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `commands/`: Tauri IPC surface. Each command file owns one family.
 - `commands/library.rs`: live Library relocation and write guards. `commands/watchers.rs`: configured-Library watcher and `library-changed` events.
 - `commands/network.rs`: remote text, extractor caching from the extractors branch, streamed download, and cancellation commands. `commands/directory.rs`: recursive `gallery.json`-backed Library tree.
+- `commands/animation.rs`: `check_is_animated` and `check_media_audio` (ISOBMFF sound track detection).
 - `commands/archives.rs`: `list_archive` accepts `password: Option<String>`; archive lifecycle commands are `drop_all_archives_cache` and `resolve_archive_temp_origin`.
-- `archives/` & `formats.rs`: archive readers + `ArchiveCache` (two-archive sliding buffer, `MAX_OPEN_ARCHIVES = 2`) and format / animation registry.
+- `archives/` & `formats.rs`: archive readers + `ArchiveCache` (two-archive sliding buffer, `MAX_OPEN_ARCHIVES = 2`), format/animation registry, and ISOBMFF box parser for MP4 audio detection.
 - `protocol.rs`: `quivit://` handler. Routes: `/archive/` (entry data, `no-store`), `/thumb/` (96×96 shell thumbnails), `/icon/` (shell icons, `?size=large` for 32×32). `asset://` for direct file access.
 - `platform/`: `icons.rs` (shell icons), `thumbnails.rs` (96×96 `IShellItemImageFactory`), `temp_archive.rs` (external archiver temp origin resolution), `attributes.rs` (dotfile visibility), `dialog.rs` (native folder picker with Library virtual folder resolution). `windows.rs`: window lifecycle and size constants.
 - `ico.rs`: ICO spritesheets.

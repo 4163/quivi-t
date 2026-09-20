@@ -34,6 +34,8 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **File Panel**: Switchable list and thumbnail view modes with virtualized card grid layout, Favorites, and provider-organized URL Library galleries.
 - **Performance**: Fast O(1) virtualized rendering handles folders and archives with thousands of items instantly. Caching native shell icons and thumbnails eliminates UI pop-in.
 
+> QuiviT is strictly a comic and manga reader for the time being. Zero-flicker navigation, WebGL shader filtering (including Lanczos) are already implemented and optimized for video formats, but general local video playback is intentionally deferred. Video playback is currently only enabled for galleries from provider-specific sites.
+
 ## Shortcuts & Controls
 
 The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`), native mouse inputs (`MouseMiddle`, `MouseForward`), double-click gestures (`DoubleClick`), and scroll-wheel capture with modifiers (`Ctrl+ScrollUp`). All keybinds can be configured dynamically in the Options menu with built-in conflict highlighting.
@@ -55,6 +57,7 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Fit window | `Shift+F` |
 | Fit width / height if larger | `Q` / `E` |
 | Fit window if larger | `F` |
+| Mute viewer audio | `M` |
 | **Scaling Method** | |
 | Scale: Previous / Next | `[` / `]` |
 | **Zoom** | |
@@ -155,10 +158,12 @@ The following system defaults are used:
 - **Secondary Windows:** Options and Archive Info windows size to their content and open centered over the main window.
 - **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
 - **History Trail:** Menu bar **Folder → Back / Forward** (`Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only: opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
+- **Library Location:** Defaults to `%LOCALAPPDATA%\QuiviT\library`. Configurable in **Options → General → Library location**, which relocates existing imported folders to the new folder and updates the active configuration.
 - **Library Deletion:** Deleting folders or images from the Library in the file panel sends them to the Windows Recycle Bin rather than permanently deleting them, and cancels any active background downloads for that folder.
 - **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor, or the Drives view at the root.
 - **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting on or off requires an app restart to take effect.
 - **Default Sort:** `name` ascending. Per-directory preferences are cached for up to 100 directories, with the oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort` (`col`: `name`, `ext`, or `date`; `desc`: `false` = ascending, `true` = descending). Directories without a saved preference in `quivit_directory_sort.json` fall back to it.
+- **Video Audio:** Videos with audio tracks default to muted at 50% volume and must be unmuted manually for each file. Volume adjustments and unmuted state persist per file across the current session only.
 - **Thumbnail Loading:** In thumbnail view, shell thumbnails (JPG, PNG, BMP, GIF) load concurrently from the OS cache at 96x96. Archive images and non-shell file thumbnails (WebP, AVIF, SVG, fallback images) have no pre-scaled cache and decode full-size 1:1 images, so they load one at a time in scroll direction order with only visible rows plus one buffer row active. This carries a higher per-image performance cost than shell thumbnails, especially for large or animated images.
 - **Image Swap Buffer:** The DOM viewer keeps a decoded previous image visible while the next target image loads, then waits for a short 45ms settled-navigation window before committing the swap. This is an intentional WebView2/HTML `<img>` tradeoff: it slightly delays final activation during rapid navigation, but prevents visible blank-frame flicker that can occur when very large images are decoded, uploaded, or repainted by the browser.
 
@@ -203,7 +208,7 @@ The frontend is split into a state machine, pure services, and single-owner UI m
 - `core.js`: App state and configuration. No DOM.
 - `services/`: Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), `cache.js` (`BoundedMap`, `BoundedSet`), `metadataFiles.js`, key combos, keybind rules, sorting, viewer math. Filter logic lives in `filters/`, scaling in `scaling/`, and the WebGL runtime/catalog in `pipelines/`.
 - `shared/`: Cross-window theme/CSS apply, pre-paint injector, config preview / emergency reset, window fit.
-- `viewer/`: Facade plus render pool, overlay canvas owner (`viewerPipelines.js`), and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
+- `viewer/`: Facade plus render pool (`viewerRender.js` for images and video), overlay canvas owner (`viewerPipelines.js`), audio controls (`viewerAudio.js`), and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
 - `filepanel/`: File list (virtualized) with list and thumbnail view modes. Columns, breadcrumb, resize, Favorites persistence, and the recursive Library tree. `libraryStore.js` is the Library data layer.
 - `menubar/`: Chrome visibility and the sole `#statusbar` writer with dual spread indicator routing. `menubar.js` owns dropdown interaction.
 - `main/`: Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge, password overlay, and the URL overlay.
@@ -321,6 +326,7 @@ AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/sk
 | **E2E Testing** | WebdriverIO (`@wdio/tauri-service`) | End-to-end desktop testing via `tauri-driver` and `msedgedriver` |
 | **Replay Diagnostics** | WebdriverIO / In-Browser Probes | Deterministic scenario replay, frame blackout detection, and pipeline telemetry |
 | **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG/AVIF playback under filters and Lanczos |
+| **Video Playback** | HTML5 `<video>` / `<audio>` | MP4 playback with WebGL shader filtering, zero-flicker bridging, and native ISOBMFF sound track detection |
 | **Lanczos Scaling** | `pica` | Off-thread still-image Lanczos resize |
 | **WebGL Filters** | WebGL2 | Anime4K, CRT, Phosphor, Scanlines, and per-frame Lanczos on animated images |
 | **Archives (ZIP/CBZ)** | `zip` | Fast on-demand extraction and password decryption |
@@ -430,9 +436,10 @@ QuiviT/
 │     │  └─ pica.js               # High quality image resizing
 │     └─ viewer/
 │        ├─ viewer.js             # Facade
-│        ├─ viewerRender.js       # Image pool + transforms
+│        ├─ viewerRender.js       # Image and video pools + transforms
 │        ├─ viewerPipelines.js    # Overlay canvas and WebGL owner
-│        └─ viewerGestures.js     # Pan input
+│        ├─ viewerGestures.js     # Pan input
+│        └─ viewerAudio.js        # Viewport audio controls, mute toggle, and volume slider
 ├─ src-tauri/
 │  ├─ capabilities/
 │  │  └─ default.json             # Tauri permissions for main/options/metadata windows
