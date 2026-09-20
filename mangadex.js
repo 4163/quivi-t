@@ -156,8 +156,39 @@ export function parseTitleMatch(url) {
   if (!url || typeof url !== 'string') return null;
   const match = url.match(MANGADEX_TITLE_RE);
   if (!match) return null;
+
+  let isArtTab = false;
+  let localeFilter = null;
+
+  try {
+    const parsed = new URL(url);
+    const tab = parsed.searchParams.get('tab');
+    if (tab === 'art' || parsed.hash === '#art') {
+      isArtTab = true;
+    }
+    const loc = parsed.searchParams.get('locale');
+    if (loc) {
+      localeFilter = loc.toLowerCase().trim();
+      isArtTab = true;
+    } else if (parsed.hash && parsed.hash !== '#art') {
+      localeFilter = parsed.hash.replace(/^#/, '').toLowerCase().trim();
+      isArtTab = true;
+    }
+  } catch {
+    if (/[?&#]tab=art\b/i.test(url) || /#art\b/i.test(url)) {
+      isArtTab = true;
+    }
+    const locMatch = url.match(/[?&#]locale=([a-zA-Z-]+)/i);
+    if (locMatch) {
+      localeFilter = locMatch[1].toLowerCase().trim();
+      isArtTab = true;
+    }
+  }
+
   return {
-    mangaId: match[1].toLowerCase()
+    mangaId: match[1].toLowerCase(),
+    isArtTab,
+    localeFilter
   };
 }
 
@@ -225,6 +256,7 @@ export async function parseDirectUrl(url, context = {}) {
       hash,
       ext,
       filename: friendlyFilename,
+      rawFileName: rawFilename,
       url
     };
   }
@@ -240,6 +272,7 @@ export async function parseDirectUrl(url, context = {}) {
       hash,
       ext,
       filename: rawFilename,
+      rawFileName: rawFilename,
       url
     };
   }
@@ -262,6 +295,9 @@ export async function extract(html, url, context = {}) {
 
   const titleParsed = parseTitleMatch(url);
   if (titleParsed?.mangaId) {
+    if (titleParsed.isArtTab) {
+      return await extractArt(titleParsed.mangaId, url, context, titleParsed.localeFilter);
+    }
     return await extractTitle(titleParsed.mangaId, url, context);
   }
 
@@ -495,6 +531,246 @@ export async function extractTitle(mangaId, url, context = {}) {
       removeLooseCovers: false
     },
     cover,
+    chapters
+  };
+}
+
+export async function extractArt(mangaId, url, context = {}, localeFilter = null) {
+  if (typeof context.fetchText !== 'function') {
+    throw new Error('Context missing fetchText helper for MangaDex API requests');
+  }
+
+  const mangaUrl = `https://api.mangadex.org/manga/${mangaId}`;
+  const mangaText = await context.fetchText(mangaUrl);
+  let mangaPayload;
+  try {
+    mangaPayload = JSON.parse(mangaText);
+  } catch (err) {
+    throw new Error(`Failed to parse MangaDex manga API response: ${err.message}`);
+  }
+
+  if (mangaPayload?.result === 'error') {
+    const errorDetail = mangaPayload.errors?.[0]?.detail || 'Manga not found on MangaDex';
+    throw new Error(errorDetail);
+  }
+
+  const mangaTitle = resolveMangaTitle(
+    mangaPayload?.data?.attributes?.title,
+    mangaPayload?.data?.attributes?.altTitles
+  );
+  const titleFolderName = sanitizePathSegment(mangaTitle);
+  const coversRootFolder = sanitizePathSegment(`${titleFolderName} (Covers)`);
+
+  let offset = 0;
+  const allCovers = [];
+  while (true) {
+    const coversApiUrl = `https://api.mangadex.org/cover?manga%5B%5D=${mangaId}&limit=100&offset=${offset}&order%5Bvolume%5D=asc`;
+    const coversText = await context.fetchText(coversApiUrl);
+    let coversPayload;
+    try {
+      coversPayload = JSON.parse(coversText);
+    } catch (err) {
+      throw new Error(`Failed to parse MangaDex covers response: ${err.message}`);
+    }
+
+    const entries = Array.isArray(coversPayload?.data) ? coversPayload.data : [];
+    allCovers.push(...entries);
+
+    const total = coversPayload?.total || 0;
+    if (entries.length === 0 || allCovers.length >= total) {
+      break;
+    }
+    offset += entries.length;
+  }
+
+  if (allCovers.length === 0) {
+    throw new Error('No cover art found for this manga');
+  }
+
+  const covers = [];
+  for (const c of allCovers) {
+    const rawFileName = c.attributes?.fileName;
+    if (!rawFileName) continue;
+    const dotIdx = rawFileName.lastIndexOf('.');
+    const ext = dotIdx > 0 ? rawFileName.slice(dotIdx).toLowerCase() : '.jpg';
+    const hash = dotIdx > 0 ? rawFileName.slice(0, dotIdx) : rawFileName;
+    const vol = c.attributes?.volume;
+    const num = (vol !== null && vol !== undefined && vol !== '' && !isNaN(parseFloat(vol))) ? parseFloat(vol) : null;
+
+    const filenames = [rawFileName];
+    if (mangaTitle && mangaTitle !== 'Unknown Manga') {
+      if (num !== null) {
+        filenames.push(`${sanitizePathSegment(`${mangaTitle} - Vol. ${vol} Cover`)}${ext}`);
+        filenames.push(`${sanitizePathSegment(`${mangaTitle} - Vol. ${String(num).padStart(2, '0')} Cover`)}${ext}`);
+      } else if (vol && String(vol).trim()) {
+        filenames.push(`${sanitizePathSegment(`${mangaTitle} - Vol. ${vol} Cover`)}${ext}`);
+      } else {
+        filenames.push(`${sanitizePathSegment(`${mangaTitle} Cover`)}${ext}`);
+      }
+    }
+
+    covers.push({
+      rawFileName,
+      hash,
+      volume: vol || null,
+      filenames,
+      url: `https://uploads.mangadex.org/covers/${mangaId}/${rawFileName}`
+    });
+  }
+
+  const localeGroups = new Map();
+  for (const c of allCovers) {
+    const rawLoc = c.attributes?.locale;
+    const loc = (rawLoc && typeof rawLoc === 'string') ? rawLoc.toLowerCase().trim() : 'other';
+    if (!localeGroups.has(loc)) localeGroups.set(loc, []);
+    localeGroups.get(loc).push(c);
+  }
+
+  const buildImageList = (groupCovers) => {
+    const sorted = [...groupCovers].sort((a, b) => {
+      const volA = a.attributes?.volume;
+      const volB = b.attributes?.volume;
+      const numA = (volA !== null && volA !== undefined && volA !== '' && !isNaN(parseFloat(volA))) ? parseFloat(volA) : null;
+      const numB = (volB !== null && volB !== undefined && volB !== '' && !isNaN(parseFloat(volB))) ? parseFloat(volB) : null;
+      if (numA !== null && numB !== null) return numA - numB;
+      if (numA !== null) return -1;
+      if (numB !== null) return 1;
+      return (a.attributes?.version || 0) - (b.attributes?.version || 0);
+    });
+
+    let maxNum = 0;
+    for (const c of sorted) {
+      const v = c.attributes?.volume;
+      if (v !== null && v !== undefined && v !== '' && !isNaN(parseFloat(v))) {
+        maxNum = Math.max(maxNum, Math.floor(parseFloat(v)));
+      }
+    }
+    const padWidth = digitPadWidth(maxNum || 1);
+
+    const seenFilenames = new Set();
+    const images = [];
+    let extraCounter = 1;
+
+    for (const c of sorted) {
+      const rawFileName = c.attributes?.fileName;
+      if (!rawFileName) continue;
+      const dotIdx = rawFileName.lastIndexOf('.');
+      const ext = dotIdx > 0 ? rawFileName.slice(dotIdx).toLowerCase() : '.jpg';
+      const hash = dotIdx > 0 ? rawFileName.slice(0, dotIdx) : rawFileName;
+      const vol = c.attributes?.volume;
+      const num = (vol !== null && vol !== undefined && vol !== '' && !isNaN(parseFloat(vol))) ? parseFloat(vol) : null;
+      const desc = (c.attributes?.description || '').trim();
+
+      let baseName = '';
+      if (num !== null) {
+        const padded = String(num).padStart(padWidth, '0');
+        baseName = `Vol. ${padded}`;
+      } else if (vol && String(vol).trim()) {
+        baseName = `Vol. ${sanitizePathSegment(vol)}`;
+      } else {
+        baseName = desc ? 'Extra' : `Extra ${String(extraCounter++).padStart(2, '0')}`;
+      }
+
+      if (desc && !/^https?:\/\//i.test(desc)) {
+        const cleanDesc = sanitizePathSegment(desc).slice(0, 40);
+        if (cleanDesc) {
+          baseName = `${baseName} [${cleanDesc}]`;
+        }
+      }
+
+      let filename = `${baseName}${ext}`;
+      if (seenFilenames.has(filename.toLowerCase())) {
+        filename = `${baseName} (${hash.slice(0, 8)})${ext}`;
+      }
+      seenFilenames.add(filename.toLowerCase());
+
+      images.push({
+        url: `https://uploads.mangadex.org/covers/${mangaId}/${rawFileName}`,
+        fallbackUrl: `https://uploads.mangadex.org/covers/${mangaId}/${rawFileName}`,
+        filename,
+        rawFileName,
+        hash,
+        description: desc || (vol ? `Volume ${vol}` : 'Cover Art')
+      });
+    }
+    return images;
+  };
+
+  if (localeFilter) {
+    const targetLoc = localeFilter.toLowerCase();
+    const groupEntry = [...localeGroups.entries()].find(
+      ([code]) => code === targetLoc || resolveLanguageName(code).toLowerCase() === targetLoc
+    );
+
+    if (!groupEntry || groupEntry[1].length === 0) {
+      throw new Error(`No cover art found for locale: ${localeFilter}`);
+    }
+
+    const [matchedCode, groupCovers] = groupEntry;
+    const langName = sanitizePathSegment(resolveLanguageName(matchedCode));
+    const images = buildImageList(groupCovers);
+
+    return {
+      provider: 'MangaDex',
+      title: `${mangaTitle} - Covers (${langName})`,
+      gallery: {
+        id: `mangadex-${mangaId}-covers-${matchedCode}`,
+        relativePath: [coversRootFolder, langName]
+      },
+      images,
+      covers,
+      cleanup: {
+        removeMatchingChapters: false,
+        removeLooseCovers: true
+      },
+      nextPageUrl: null
+    };
+  }
+
+  if (localeGroups.size === 1) {
+    const [singleLoc, groupCovers] = [...localeGroups.entries()][0];
+    const langName = sanitizePathSegment(resolveLanguageName(singleLoc));
+    const images = buildImageList(groupCovers);
+
+    return {
+      provider: 'MangaDex',
+      title: `${mangaTitle} - Covers (${langName})`,
+      gallery: {
+        id: `mangadex-${mangaId}-covers-${singleLoc}`,
+        relativePath: [coversRootFolder, langName]
+      },
+      images,
+      covers,
+      cleanup: {
+        removeMatchingChapters: false,
+        removeLooseCovers: true
+      },
+      nextPageUrl: null
+    };
+  }
+
+  const chapters = [];
+  for (const [loc] of localeGroups.entries()) {
+    const langName = sanitizePathSegment(resolveLanguageName(loc));
+    chapters.push({
+      id: `mangadex-${mangaId}-covers-${loc}`,
+      title: `${mangaTitle} - Covers (${langName})`,
+      sourceUrl: `https://mangadex.org/title/${mangaId}?tab=art&locale=${loc}`,
+      relativePath: [coversRootFolder, langName]
+    });
+  }
+
+  return {
+    provider: 'MangaDex',
+    isSeries: true,
+    title: `${mangaTitle} (Covers)`,
+    rootRelativePath: [coversRootFolder],
+    cover: null,
+    covers,
+    cleanup: {
+      removeMatchingChapters: false,
+      removeLooseCovers: true
+    },
     chapters
   };
 }
