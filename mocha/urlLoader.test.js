@@ -10,7 +10,9 @@ import {
   validateManifest,
   validateExtractorResult,
   findMatchingGalleryImage,
-  cleanupMatchingRawFiles
+  cleanupMatchingRawFiles,
+  extractUrlStem,
+  isDirectMediaUrl
 } from '../src/js/urlLoader.js';
 import * as ImgurExtractor from '../extractors/imgur.js';
 
@@ -390,6 +392,48 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       );
       assert.equal(noMatch, null);
     });
+
+    it('finds matching video entry for non-Imgur provider using generic stem', async () => {
+      const mockDirs = {
+        'C:\\library\\Example': {
+          files: [
+            { name: 'Video Album', path: 'C:\\library\\Example\\Video Album', is_dir: true }
+          ]
+        }
+      };
+
+      const mockFiles = {
+        'C:\\library\\Example\\Video Album\\gallery.json': JSON.stringify({
+          url: 'https://example.test/album/1',
+          provider: 'Example',
+          images: [
+            { filename: '1_sample_clip.mp4', sourceUrl: 'https://cdn.example.test/videos/sample_clip.mp4' }
+          ]
+        })
+      };
+
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') return mockDirs[args.path] || { files: [] };
+            if (cmd === 'read_text_file') {
+              if (mockFiles[args.path]) return mockFiles[args.path];
+              throw new Error('File not found');
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      const match = await findMatchingGalleryImage(
+        'C:\\library\\Example',
+        'https://cdn.example.test/videos/sample_clip.mp4'
+      );
+
+      assert.ok(match);
+      assert.equal(match.galleryPath, 'C:\\library\\Example\\Video Album');
+      assert.equal(match.targetName, '1_sample_clip.mp4');
+    });
   });
 
   describe('cleanupMatchingRawFiles', () => {
@@ -428,6 +472,54 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       // Only 04XS16K.png should be deleted
       assert.equal(deleted.length, 1);
       assert.equal(deleted[0], 'C:\\library\\Imgur\\04XS16K.png');
+    });
+
+    it('cleans up loose raw video files for non-Imgur providers using generic stems', async () => {
+      const deleted = [];
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') {
+              return {
+                files: [
+                  { name: 'sample_clip.mp4', path: 'C:\\library\\Example\\sample_clip.mp4', is_dir: false },
+                  { name: 'other_video.mp4', path: 'C:\\library\\Example\\other_video.mp4', is_dir: false }
+                ]
+              };
+            }
+            if (cmd === 'remove_file') {
+              deleted.push(args.path);
+              return;
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      const galleryImages = [
+        { filename: '1_sample_clip.mp4', sourceUrl: 'https://cdn.example.test/videos/sample_clip.mp4?auth=xyz' }
+      ];
+
+      await cleanupMatchingRawFiles('C:\\library\\Example', galleryImages);
+      assert.equal(deleted.length, 1);
+      assert.equal(deleted[0], 'C:\\library\\Example\\sample_clip.mp4');
+    });
+  });
+
+  describe('extractUrlStem and isDirectMediaUrl', () => {
+    it('extracts stems from URLs, filenames, and handles query parameters', () => {
+      assert.equal(extractUrlStem('https://i.imgur.com/04XS16K.png'), '04xs16k');
+      assert.equal(extractUrlStem('https://cdn.example.test/videos/sample_clip.mp4?auth=xyz#t=10'), 'sample_clip');
+      assert.equal(extractUrlStem('01_sample_clip.mp4'), '01_sample_clip');
+      assert.equal(extractUrlStem(''), '');
+    });
+
+    it('identifies direct media URLs across supported formats', () => {
+      assert.equal(isDirectMediaUrl('https://example.test/video.mp4'), true);
+      assert.equal(isDirectMediaUrl('https://example.test/photo.jpg?size=large'), true);
+      assert.equal(isDirectMediaUrl('https://example.test/anim.gif'), true);
+      assert.equal(isDirectMediaUrl('https://example.test/page.html'), false);
+      assert.equal(isDirectMediaUrl('https://example.test/gallery/123'), false);
     });
   });
 
