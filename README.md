@@ -87,15 +87,25 @@ export async function extract(html, url, context) {
 - `title`: String gallery name.
 - `gallery.id`: Stable unique identifier for the gallery on that site.
 - `gallery.relativePath`: Array of safe directory names under `libraryPath`. Maximum depth is 8.
-- `images`: Array of image entries with direct HTTP or HTTPS download URLs and safe filenames.
+- `images`: Array of media entries with direct HTTP or HTTPS download URLs and safe filenames.
 - `nextPageUrl`: Next page URL for multi-page galleries, or `null` when complete. Consecutive pages must preserve identical `gallery.id` and `gallery.relativePath`.
 
 ### Safety rules
 
 - Extractors must be pure data parsers. Do not import external packages, touch window globals, or mutate DOM.
 - Path segments and filenames must not contain path separators (`/` or `\`), traversal segments (`..`), or Windows reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`).
-- File extensions must be supported image formats: `jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, or `ico`.
+- File extensions must be supported media formats: `jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`, or `mp4`.
 - Duplicate filenames within one gallery are rejected.
+
+## Verified test galleries
+
+The following sample galleries are verified working in QuiviT and serve as reference test suites to track provider features, format support, and URL routing edge cases:
+
+| Provider | Title | Source URL | Format | Items | Status | Edge Cases Covered |
+| :--- | :--- | :--- | :--- | :---: | :--- | :--- |
+| Imgur | Anime Reaction Gifs | [https://imgur.com/gallery/anime-reaction-gifs-ADdqF](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) | `.gif` | 50 | Working | Large animation batch (50 items), download concurrency |
+| Imgur | Azuma - Seihantai | [https://imgur.com/a/azuma-seihantai-17vF37d](https://imgur.com/a/azuma-seihantai-17vF37d) | `.png` | 41 | Working | Album `/a/` route, multi-image manga set, description parsing |
+| Imgur | Just some Witch Watch OP clips | [https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) | `.mp4` | 8 | Working | Video extraction, hashtag route (`#/t/anime`) |
 
 ## Authoring and testing workflow
 
