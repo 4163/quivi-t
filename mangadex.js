@@ -369,6 +369,7 @@ export async function extract(html, url, context = {}) {
 
     return {
       url: `${baseUrl}/${qualityFolder}/${chapterHash}/${rawName}`,
+      fallbackUrl: `https://uploads.mangadex.org/${qualityFolder}/${chapterHash}/${rawName}`,
       filename,
       displayName: `Page ${index + 1}`,
       description: `Page ${index + 1} of ${total}`
