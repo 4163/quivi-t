@@ -425,9 +425,13 @@ export async function extractTitle(mangaId, url, context = {}) {
   if (coverFileName) {
     const dotIdx = coverFileName.lastIndexOf('.');
     const coverExt = dotIdx > 0 ? coverFileName.slice(dotIdx).toLowerCase() : '.jpg';
+    const coverHash = dotIdx > 0 ? coverFileName.slice(0, dotIdx) : coverFileName;
     cover = {
       url: `https://uploads.mangadex.org/covers/${mangaId}/${coverFileName}`,
-      filename: `Cover${coverExt}`
+      filename: `Cover${coverExt}`,
+      rawFileName: coverFileName,
+      hash: coverHash,
+      volume: coverRel?.attributes?.volume || null
     };
   }
 
@@ -486,6 +490,10 @@ export async function extractTitle(mangaId, url, context = {}) {
     isSeries: true,
     title: mangaTitle,
     rootRelativePath: [titleFolderName],
+    cleanup: {
+      removeMatchingChapters: true,
+      removeLooseCovers: false
+    },
     cover,
     chapters
   };
