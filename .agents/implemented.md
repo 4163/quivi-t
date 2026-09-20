@@ -1352,29 +1352,6 @@ Note: This file is essentially a changelog dump. Past entries are not actively m
 - `main.js` now tracks `previewTheme`/`previewCss` from the `theme-preview`/`css-preview` events and re-applies them on every config reload (`quivit-config-loaded`); they are cleared only on Options Apply (`config-updated`). Plain `config-changed` reloads keep the preview.
 - `options.js` tracks a `previewing` flag (set on theme click / CSS preview; cleared on Apply, Close, and the emergency reset) that gates `refreshLiveConfigState()` so reloads don't revert the preview. Previews now persist until Apply or close-without-Apply.
 
-## Verified Commands Used
-
-```powershell
-node --check src\js\main.js
-node --check src\js\filePanel.js
-node --check src\js\shortcuts.js
-node --check src\js\options.js
-node --check src\js\viewer.js
-node --check src\js\keybinds.js
-cd src-tauri
-cargo check
-```
-
-## Runtime Smoke Tests Completed
-
-- Launched `npm run tauri dev`.
-- Pressed `3`; Options opened.
-- Confirmed Tauri capability validation passed after Options close permission was added.
-
-## Not Yet Fully Implemented
-
-See `.agents/implementation-plan - additions.md` for the active backlog and sequencing.
-
 ### UI Module Decoupling
 - Decoupled `menubar.js` logic and DOM bindings.
 - Decoupled `keybindUi.js` from the options window, isolating configuration rendering and conflict tracking.

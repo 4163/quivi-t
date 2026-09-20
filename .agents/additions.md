@@ -12,7 +12,6 @@
   - Middle-click removes a favorite directly: intentionally NOT mappable to a keybind; just document it in the README Features section where favorites is covered.
   - Ordering: implement the advanced favorites next, but FIRST rename the current favorites names in JS/HTML/CSS (functions, classes, IDs) to "bookmark".
   - README: document the favorites system under Features; afterwards place the bookmark (legacy favorites) system entry under it, described simply as a bookmark that works similarly to favorites.
-  - Favorites file-list remove-button (X) visibility: currently an active/highlighted item makes its X button visible; it should only be visible on hover, or when focused via Tab keyboard navigation: not merely because the item is the active selection.
 - **Improve favorites system:** add a Favorites dropdown under the menu bar to load/save favorites. Consider an input for titles, only if the styling/intuitiveness of the dropdown interaction is good.
 - **Separate bookmarks system (legacy favorites):** placed under the favorites section, acting like the old favorites. The JS names across both can be consolidated into the same thing: the only difference is saving/loading favorites as a favorites list.
 
@@ -21,17 +20,14 @@
   - **Investigation Needed:** The exact trigger and root cause are unconfirmed. Candidates to test during implementation include `activeKeys` remaining latched due to missed `keyup` events during window focus switches, WebView2 losing document focus to window chrome, or Tauri fullscreen event listeners.
   - **Target Outcome:** Ensure keyboard shortcuts and `Escape` always work reliably in fullscreen mode across multi-monitor setups and focus changes.
 - **Emergency Boss Key:** Add an "Emergency Button" to hide the application into the system tray, with a configurable keybind.
-- **Synchronous Canvas Double-Buffer for Zero-Flicker Viewport Transitions (Future Consideration):** Evaluate replacing DOM-element image swapping with an offscreen or double-buffered WebGL / 2D canvas flip when transitioning images or rendering complex multi-image layouts. This eliminates any remaining compositor texture-upload latency at the cost of managing a unified canvas rendering pipeline. Revisit during or after Double Page View and Manga Spread implementation in the Component Library.
 - **Initial HTML Loading (LCP):** Completely remove the blank page time on initial loading of both HTML pages before the main UI renders. It's currently acting this way because we are optimizing for LCP on the flickering of themes. Refer to the way LCP is handled on `E:\Projects\PixiJS Live2D Spine (Springfield)` for reference.
 
 ### CSS, Styling & Code Structure (Refactoring)
 - **Persistent Root Column Sizes:** Treat CSS root column sizes as persistent data saved via WebView2. Add a reset column sizes button in the options (under General).
 - **Syntax Highlighting:** Add syntax highlighting to the Custom CSS field in Customization using an available font (fonts that have syntax highlighting) or a small library.
-- **Custom CSS Persistence Bugs:** Fix custom CSS persistence. Fix the bug where it sometimes doesn't apply on restart, or applies even when it was removed. **Note: Unsure if this bug still exists, as it has not been encountered since the major syncing refactor.**
 
 ### Supported Formats & Advanced Icons (Complex)
 - **File Association Prompt:** Add a prompt notification at the center of the screen pointing users to the File Associations tab (reminding them that they can and should set file associations). On-boarding experinece.
-- **Missing .ico Spritesheets:** Fix bug where certain ICO files (like `test-files/endfield.ico`) do not get the spritesheet treatment.
 - **Advanced .ico Processing:** Improve .ico processing (performance-first). Change the .ico processing and rendering spec:
   1. Add a 'ICO Spritesheet' to the view dropdown under 'opaque canvas' (make sure this is configurable in the keybinds option). Default: ON.
   2. OFF: .ico files should not be processed at all and should just act as a legacy image file. ON: .ico files should be processed.
@@ -49,23 +45,15 @@
 
 *Items deliberately deferred until after the initial release. Low priority by design: do not start without re-validating the need.*
 
-### File List Relocation, Detach & Drag-and-Drop
-- Add a way to change the location of the file list (left default, top, bottom, right). Detached as well? Maybe drag-and-droppable: how practical would the implementation be?
-- Using a JS library sounds ideal; this has been done before on a smaller scale at `E:\Projects\x4163-apps\dither-app` (not sure if it's the best/most-used library: performance-first). Prioritize clean/snappy user interaction with no jank.
-- Partial implementation via UI buttons (detach + move location) is acceptable pre-release; drag-and-drop capabilities should be implemented after release.
-
-### File List Thumbnail View
-- Add a thumbnail/medium view mode to the file list: image files show a medium-size preview thumbnail, non-image items (folders, archives, `..`) show a medium-size icon.
-- Medium icons have a partial backend already: `get_native_icon` fetches 16×16 shell icons via `SHGFI_SMALLICON`. A medium variant would need `SHGFI_LARGEICON`/32×32: mind the documented Windows shell scaling bug that returns open-folder variants when requesting large icons downscaled (`ico.rs` already works around this).
-- Image previews: reuse the existing `asset://` / `quivit://` src pipeline (`fsUtils.js` `buildArchiveSrc`) to generate thumbnails on demand; lean on the existing off-screen preloader / caching patterns.
-- **Placement TBD:** the toggle-button location is unresolved: `.file-panel-actions` (the bottom action strip holding Open Explorer / Open Folder / Favorite / metadata badge) feels iffy. Alternatives to explore: a view-mode control in the file-panel header (above the column-header row), a View-menu item, or a `cmd-*` keybind like the existing view toggles.
-- **Performance-first:** only load thumbnails for visible rows (lazy/virtualized), never decode full-size images for the preview, and no overhead in the normal list mode.
-
-
 ### Manhwa Mode (Continuous Vertical Strip)
 - Automatically append pages together vertically on the same canvas page.
 - Build on the preloading and image caching infrastructure, but treat continuous Manhwa rendering as its own post-release slice.
 - **Active Item Synchronization:** As the user scrolls vertically through the continuous strip, dynamically track the currently visible image and keep the active item selection in the file list and status bar perfectly in sync.
+
+### File List Relocation, Detach & Drag-and-Drop
+- Add a way to change the location of the file list (left default, top, bottom, right). Detached as well? Maybe drag-and-droppable: how practical would the implementation be?
+- Using a JS library sounds ideal; this has been done before on a smaller scale at `E:\Projects\x4163-apps\dither-app` (not sure if it's the best/most-used library: performance-first). Prioritize clean/snappy user interaction with no jank.
+- Partial implementation via UI buttons (detach + move location) is acceptable pre-release; drag-and-drop capabilities should be implemented after release.
 
 ### Detach Image Window
 - Add the ability to pop the currently viewed image out into its own standalone window, separate from the main QuiviT UI.
@@ -82,12 +70,6 @@
   - The existing `cmd-next` / `cmd-prev` keybinds should tie into frame stepping when an animated file is active.
 - **Layout:** Sits at the bottom of the canvas viewer (not full-width of the window). Height should always match `#file-panel-actions` via a shared CSS variable so it stays visually consistent. Exact width behavior TBD: full width feels off for files with few frames, so consider a constrained or content-aware width.
 - **Performance-first**: snappy (not sluggish) interaction with little to no visual delays/jank (delayed responses/unresponsiveness, flickering etc.), and only activate timeline logic when an animated format is detected; no overhead for static images.
-
-### UI Sound Design (Low/Last Priority)
-- Add custom SFX for UI interactions (e.g. button clicks, menu toggles, opening folders, error bumps).
-- Needs a toggle in the Options menu to disable sounds for users who prefer a silent experience.
-- Provide a volume slider or rely on system volume.
-- Audio assets should be small and fast-loading, or even script-generated (e.g. 8-bit style SFX).
 
 ### Native 7-Zip Sidecar Extraction (7Z/CB7 speed)
 - **Note.** Out of scope. The original UI-blocking bug was already solved in pure Rust. The speed gap does not manifest as a real UX problem, and the sidecar adds deployment complexity plus re-introduces partial-file race concerns.

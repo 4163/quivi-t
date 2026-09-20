@@ -1,7 +1,7 @@
 ---
 name: familiarize
 description: Use at the very start of a session to familiarize yourself with this repository before proceeding with actual work.
-argument-hint: "<low|skim|surface|normal> [task to prepare for]"
+argument-hint: "<low|docs|skim|surface|normal> [task to prepare for]"
 ---
 
 # Familiarize
@@ -10,7 +10,7 @@ Three tiers control how deep you go. The user specifies the tier, or you infer i
 
 ## Tiers
 
-### Low
+### Low / docs
 
 Read agent guidelines only. No codebase exploration.
 
