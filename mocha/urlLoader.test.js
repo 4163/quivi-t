@@ -15,7 +15,8 @@ import {
   findMatchingGalleryBySourceUrl,
   extractUrlStem,
   isDirectMediaUrl,
-  findExtractor
+  findExtractor,
+  recordRootMediaDownload
 } from '../src/js/urlLoader.js';
 import * as ImgurExtractor from '../extractors/imgur.js';
 import * as MangaDexExtractor from '../extractors/mangadex.js';
@@ -662,6 +663,248 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       ]);
     });
 
+    it('removes all matching loose root covers across multiple volumes when covers array is provided', async () => {
+      if (!globalThis.window) globalThis.window = {};
+
+      const deletedFiles = [];
+
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') {
+              return {
+                files: [
+                  { name: '47df7fb5-dc37-492f-98bc-affe54b74960.jpg', path: 'C:\\library\\MangaDex\\47df7fb5-dc37-492f-98bc-affe54b74960.jpg', is_dir: false },
+                  { name: 'Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg', path: 'C:\\library\\MangaDex\\Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg', is_dir: false },
+                  { name: '08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg', path: 'C:\\library\\MangaDex\\08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg', is_dir: false },
+                  { name: 'Akebi-chan no Sailor Fuku - Vol. 1 Cover.jpg', path: 'C:\\library\\MangaDex\\Akebi-chan no Sailor Fuku - Vol. 1 Cover.jpg', is_dir: false },
+                  { name: 'unrelated_series_cover.jpg', path: 'C:\\library\\MangaDex\\unrelated_series_cover.jpg', is_dir: false },
+                  { name: 'keep_me.png', path: 'C:\\library\\MangaDex\\keep_me.png', is_dir: false }
+                ]
+              };
+            }
+            if (cmd === 'remove_file') {
+              deletedFiles.push(args.path);
+              return;
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      const artResult = {
+        provider: 'MangaDex',
+        isSeries: true,
+        title: 'Akebi-chan no Sailor Fuku',
+        rootRelativePath: ['Akebi-chan no Sailor Fuku (Covers)'],
+        cleanup: {
+          removeLooseCovers: true
+        },
+        covers: [
+          {
+            hash: '47df7fb5-dc37-492f-98bc-affe54b74960',
+            rawFileName: '47df7fb5-dc37-492f-98bc-affe54b74960.jpg',
+            volume: '16',
+            url: 'https://uploads.mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg'
+          },
+          {
+            hash: '08812a68-c09d-48a8-9b3d-e0326a25b00f',
+            rawFileName: '08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg',
+            volume: '1',
+            url: 'https://uploads.mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg'
+          }
+        ],
+        chapters: []
+      };
+
+      await cleanupMatchingProviderEntries('C:\\library\\MangaDex', artResult);
+
+      assert.deepEqual(deletedFiles, [
+        'C:\\library\\MangaDex\\47df7fb5-dc37-492f-98bc-affe54b74960.jpg',
+        'C:\\library\\MangaDex\\Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg',
+        'C:\\library\\MangaDex\\08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg',
+        'C:\\library\\MangaDex\\Akebi-chan no Sailor Fuku - Vol. 1 Cover.jpg'
+      ]);
+    });
+
+    it('records root direct downloads into gallery.json and deduplicates entries', async () => {
+      if (!globalThis.window) globalThis.window = {};
+
+      const writtenFiles = {};
+
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_text_file') {
+              if (writtenFiles[args.path]) return writtenFiles[args.path];
+              throw new Error('File not found');
+            }
+            if (cmd === 'write_text_file') {
+              writtenFiles[args.path] = args.content;
+              return;
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      await recordRootMediaDownload('C:\\library\\MangaDex', 'MangaDex', {
+        filename: 'Akebi-chan no Sailor Fuku - Vol. 1 Cover.jpg',
+        rawFileName: '08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg',
+        hash: '08812a68-c09d-48a8-9b3d-e0326a25b00f',
+        sourceUrl: 'https://mangadex.org/covers/770c61b9/08812a68.jpg',
+        url: 'https://uploads.mangadex.org/covers/770c61b9/08812a68.jpg'
+      });
+
+      const sidecar = JSON.parse(writtenFiles['C:\\library\\MangaDex\\gallery.json']);
+      assert.equal(sidecar.isRoot, true);
+      assert.equal(sidecar.provider, 'MangaDex');
+      assert.equal(sidecar.images.length, 1);
+      assert.equal(sidecar.images[0].filename, 'Akebi-chan no Sailor Fuku - Vol. 1 Cover.jpg');
+      assert.equal(sidecar.images[0].rawFileName, '08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg');
+      assert.equal(sidecar.images[0].hash, '08812a68-c09d-48a8-9b3d-e0326a25b00f');
+
+      // Recording same item again updates existing entry without duplicate
+      await recordRootMediaDownload('C:\\library\\MangaDex', 'MangaDex', {
+        filename: 'Akebi-chan no Sailor Fuku - Vol. 1 Cover.jpg',
+        rawFileName: '08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg',
+        hash: '08812a68-c09d-48a8-9b3d-e0326a25b00f',
+        sourceUrl: 'https://mangadex.org/covers/770c61b9/08812a68.jpg',
+        url: 'https://uploads.mangadex.org/covers/770c61b9/08812a68.jpg'
+      });
+
+      const updated = JSON.parse(writtenFiles['C:\\library\\MangaDex\\gallery.json']);
+      assert.equal(updated.images.length, 1);
+    });
+
+    it('cleans up loose covers recorded in root gallery.json and prunes sidecar', async () => {
+      if (!globalThis.window) globalThis.window = {};
+
+      const deletedFiles = [];
+      let updatedSidecarContent = null;
+      let sidecarDeleted = false;
+
+      const initialSidecar = {
+        provider: 'MangaDex',
+        isRoot: true,
+        images: [
+          {
+            filename: 'Custom Cover Name.jpg',
+            rawFileName: '08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg',
+            hash: '08812a68-c09d-48a8-9b3d-e0326a25b00f',
+            sourceUrl: 'https://mangadex.org/covers/770c61b9/08812a68.jpg',
+            url: 'https://uploads.mangadex.org/covers/770c61b9/08812a68.jpg'
+          },
+          {
+            filename: 'Other Manga Cover.jpg',
+            rawFileName: 'other-hash.jpg',
+            hash: 'other-hash',
+            sourceUrl: 'https://mangadex.org/covers/other/other-hash.jpg',
+            url: 'https://uploads.mangadex.org/covers/other/other-hash.jpg'
+          }
+        ]
+      };
+
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') {
+              return {
+                files: [
+                  { name: 'Custom Cover Name.jpg', path: 'C:\\library\\MangaDex\\Custom Cover Name.jpg', is_dir: false },
+                  { name: 'Other Manga Cover.jpg', path: 'C:\\library\\MangaDex\\Other Manga Cover.jpg', is_dir: false },
+                  { name: 'gallery.json', path: 'C:\\library\\MangaDex\\gallery.json', is_dir: false }
+                ]
+              };
+            }
+            if (cmd === 'read_text_file') {
+              if (args.path === 'C:\\library\\MangaDex\\gallery.json') {
+                return JSON.stringify(initialSidecar);
+              }
+              throw new Error('File not found');
+            }
+            if (cmd === 'remove_file') {
+              deletedFiles.push(args.path);
+              if (args.path === 'C:\\library\\MangaDex\\gallery.json') {
+                sidecarDeleted = true;
+              }
+              return;
+            }
+            if (cmd === 'write_text_file') {
+              if (args.path === 'C:\\library\\MangaDex\\gallery.json') {
+                updatedSidecarContent = JSON.parse(args.content);
+              }
+              return;
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      const result = {
+        provider: 'MangaDex',
+        cleanup: {
+          removeLooseCovers: true
+        },
+        covers: [
+          {
+            hash: '08812a68-c09d-48a8-9b3d-e0326a25b00f',
+            rawFileName: '08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg'
+          }
+        ]
+      };
+
+      await cleanupMatchingProviderEntries('C:\\library\\MangaDex', result);
+
+      assert.deepEqual(deletedFiles, ['C:\\library\\MangaDex\\Custom Cover Name.jpg']);
+      assert.equal(sidecarDeleted, false);
+      assert.ok(updatedSidecarContent);
+      assert.equal(updatedSidecarContent.images.length, 1);
+      assert.equal(updatedSidecarContent.images[0].filename, 'Other Manga Cover.jpg');
+    });
+
+    it('findMatchingGalleryImage finds root gallery.json downloads avoiding redundant downloads', async () => {
+      if (!globalThis.window) globalThis.window = {};
+
+      const rootSidecar = {
+        provider: 'MangaDex',
+        isRoot: true,
+        images: [
+          {
+            filename: 'Akebi-chan no Sailor Fuku - Vol. 1 Cover.jpg',
+            rawFileName: '08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg',
+            hash: '08812a68-c09d-48a8-9b3d-e0326a25b00f',
+            sourceUrl: 'https://mangadex.org/covers/770c61b9/08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg',
+            url: 'https://uploads.mangadex.org/covers/770c61b9/08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg'
+          }
+        ]
+      };
+
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_text_file' && args.path === 'C:\\library\\MangaDex\\gallery.json') {
+              return JSON.stringify(rootSidecar);
+            }
+            if (cmd === 'read_directory') {
+              return { files: [] };
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      const match = await findMatchingGalleryImage(
+        'C:\\library\\MangaDex',
+        'https://uploads.mangadex.org/covers/770c61b9/08812a68-c09d-48a8-9b3d-e0326a25b00f.jpg',
+        '08812a68-c09d-48a8-9b3d-e0326a25b00f'
+      );
+
+      assert.ok(match);
+      assert.equal(match.galleryPath, 'C:\\library\\MangaDex');
+      assert.equal(match.targetName, 'Akebi-chan no Sailor Fuku - Vol. 1 Cover.jpg');
+    });
+
     it('delegates to raw image cleanup when result is a standard gallery', async () => {
       if (!globalThis.window) globalThis.window = {};
 
@@ -1196,6 +1439,7 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         hash: 'cover',
         ext: '.jpg',
         filename: 'cover.jpg',
+        rawFileName: 'cover.jpg',
         url: 'https://uploads.mangadex.org/covers/127820bd-8fc5-47b8-8782-e680317bf41d/cover.jpg'
       });
 
@@ -1236,8 +1480,190 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         hash: '03a1927d-9c79-4bc8-9d06-502cbeb408ff',
         ext: '.jpg',
         filename: 'Bakemonogatari - Vol. 22 Cover.jpg',
+        rawFileName: '03a1927d-9c79-4bc8-9d06-502cbeb408ff.jpg',
         url: 'https://mangadex.org/covers/4265c437-7d57-4d31-9b1d-0e574a07b7b7/03a1927d-9c79-4bc8-9d06-502cbeb408ff.jpg'
       });
+    });
+
+    it('detects MangaDex art tab and locale filter in parseTitleMatch', () => {
+      const match1 = MangaDexExtractor.parseTitleMatch('https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=art');
+      assert.equal(match1.mangaId, '770c61b9-0ef2-460b-8c25-c10ab23349ce');
+      assert.equal(match1.isArtTab, true);
+      assert.equal(match1.localeFilter, null);
+
+      const match2 = MangaDexExtractor.parseTitleMatch('https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=art&locale=ja');
+      assert.equal(match2.mangaId, '770c61b9-0ef2-460b-8c25-c10ab23349ce');
+      assert.equal(match2.isArtTab, true);
+      assert.equal(match2.localeFilter, 'ja');
+
+      const match3 = MangaDexExtractor.parseTitleMatch('https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku#art');
+      assert.equal(match3.isArtTab, true);
+
+      const match4 = MangaDexExtractor.parseTitleMatch('https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku#es');
+      assert.equal(match4.isArtTab, true);
+      assert.equal(match4.localeFilter, 'es');
+
+      const matchNormal = MangaDexExtractor.parseTitleMatch('https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku');
+      assert.equal(matchNormal.isArtTab, false);
+      assert.equal(matchNormal.localeFilter, null);
+    });
+
+    it('extracts multi-locale MangaDex cover art as series shape', async () => {
+      const mangaId = '770c61b9-0ef2-460b-8c25-c10ab23349ce';
+      const mockManga = {
+        result: 'ok',
+        data: {
+          id: mangaId,
+          attributes: { title: { en: 'Akebi-chan no Sailor Fuku' } }
+        }
+      };
+      const mockCovers = {
+        result: 'ok',
+        total: 3,
+        data: [
+          {
+            id: 'cov-1',
+            attributes: { volume: '1', locale: 'ja', fileName: 'hash1.jpg' }
+          },
+          {
+            id: 'cov-2',
+            attributes: { volume: '2', locale: 'ja', fileName: 'hash2.jpg' }
+          },
+          {
+            id: 'cov-3',
+            attributes: { volume: '1', locale: 'es', fileName: 'hash3.jpg' }
+          }
+        ]
+      };
+
+      const result = await MangaDexExtractor.extract(
+        '',
+        `https://mangadex.org/title/${mangaId}/akebi-chan-no-sailor-fuku?tab=art`,
+        {
+          fetchText: async (url) => {
+            if (url.includes('/manga/')) return JSON.stringify(mockManga);
+            if (url.includes('/cover?')) return JSON.stringify(mockCovers);
+            throw new Error(`Unexpected URL: ${url}`);
+          }
+        }
+      );
+
+      assert.equal(result.provider, 'MangaDex');
+      assert.equal(result.isSeries, true);
+      assert.equal(result.title, 'Akebi-chan no Sailor Fuku (Covers)');
+      assert.deepEqual(result.rootRelativePath, ['Akebi-chan no Sailor Fuku (Covers)']);
+      assert.equal(result.cover, null);
+      assert.equal(result.covers.length, 3);
+      assert.deepEqual(result.cleanup, {
+        removeMatchingChapters: false,
+        removeLooseCovers: true
+      });
+      assert.equal(result.chapters.length, 2);
+      assert.deepEqual(result.chapters[0], {
+        id: `mangadex-${mangaId}-covers-ja`,
+        title: 'Akebi-chan no Sailor Fuku - Covers (Japanese)',
+        sourceUrl: `https://mangadex.org/title/${mangaId}?tab=art&locale=ja`,
+        relativePath: ['Akebi-chan no Sailor Fuku (Covers)', 'Japanese']
+      });
+      assert.deepEqual(result.chapters[1], {
+        id: `mangadex-${mangaId}-covers-es`,
+        title: 'Akebi-chan no Sailor Fuku - Covers (Spanish)',
+        sourceUrl: `https://mangadex.org/title/${mangaId}?tab=art&locale=es`,
+        relativePath: ['Akebi-chan no Sailor Fuku (Covers)', 'Spanish']
+      });
+    });
+
+    it('extracts single-locale MangaDex cover art as gallery with clean volume names, bracketed descriptions, and URL sanitization', async () => {
+      const mangaId = '770c61b9-0ef2-460b-8c25-c10ab23349ce';
+      const mockManga = {
+        result: 'ok',
+        data: {
+          id: mangaId,
+          attributes: { title: { en: 'Akebi-chan no Sailor Fuku' } }
+        }
+      };
+      const mockCovers = {
+        result: 'ok',
+        total: 4,
+        data: [
+          {
+            id: 'cov-1',
+            attributes: { volume: '1', locale: 'ja', fileName: 'vol1.jpg', description: '' }
+          },
+          {
+            id: 'cov-2',
+            attributes: { volume: '2', locale: 'ja', fileName: 'vol2_special.jpg', description: 'Special Edition' }
+          },
+          {
+            id: 'cov-3',
+            attributes: { volume: null, locale: 'ja', fileName: 'extra.jpg', description: 'Bonus Art' }
+          },
+          {
+            id: 'cov-4',
+            attributes: { volume: '10', locale: 'ja', fileName: 'vol10.jpg', description: 'https://twitter.com/author/status/123' }
+          }
+        ]
+      };
+
+      const result = await MangaDexExtractor.extract(
+        '',
+        `https://mangadex.org/title/${mangaId}/akebi-chan-no-sailor-fuku?tab=art&locale=ja`,
+        {
+          fetchText: async (url) => {
+            if (url.includes('/manga/')) return JSON.stringify(mockManga);
+            if (url.includes('/cover?')) return JSON.stringify(mockCovers);
+            throw new Error(`Unexpected URL: ${url}`);
+          }
+        }
+      );
+
+      assert.equal(result.provider, 'MangaDex');
+      assert.equal(result.isSeries, undefined);
+      assert.equal(result.title, 'Akebi-chan no Sailor Fuku - Covers (Japanese)');
+      assert.deepEqual(result.gallery, {
+        id: `mangadex-${mangaId}-covers-ja`,
+        relativePath: ['Akebi-chan no Sailor Fuku (Covers)', 'Japanese']
+      });
+      assert.equal(result.images.length, 4);
+
+      // Volume 1: zero-padded to 2 digits, no description
+      assert.equal(result.images[0].filename, 'Vol. 01.jpg');
+      assert.equal(result.images[0].description, 'Volume 1');
+
+      // Volume 2: bracketed description
+      assert.equal(result.images[1].filename, 'Vol. 02 [Special Edition].jpg');
+      assert.equal(result.images[1].description, 'Special Edition');
+
+      // Volume 10: URL in description is sanitized out of filename, preserved in description
+      assert.equal(result.images[2].filename, 'Vol. 10.jpg');
+      assert.equal(result.images[2].description, 'https://twitter.com/author/status/123');
+
+      // Null volume: Extra [Bonus Art]
+      assert.equal(result.images[3].filename, 'Extra [Bonus Art].jpg');
+      assert.equal(result.images[3].description, 'Bonus Art');
+
+      // Disambiguation of collisions
+      const mockCollisions = {
+        result: 'ok',
+        total: 2,
+        data: [
+          { id: 'c1', attributes: { volume: '1', locale: 'ja', fileName: 'aaaa1111-bbbb.jpg' } },
+          { id: 'c2', attributes: { volume: '1', locale: 'ja', fileName: 'cccc2222-dddd.jpg' } }
+        ]
+      };
+      const collisionResult = await MangaDexExtractor.extract(
+        '',
+        `https://mangadex.org/title/${mangaId}/akebi-chan-no-sailor-fuku?tab=art&locale=ja`,
+        {
+          fetchText: async (url) => {
+            if (url.includes('/manga/')) return JSON.stringify(mockManga);
+            if (url.includes('/cover?')) return JSON.stringify(mockCollisions);
+            throw new Error(`Unexpected URL: ${url}`);
+          }
+        }
+      );
+      assert.equal(collisionResult.images[0].filename, 'Vol. 01.jpg');
+      assert.equal(collisionResult.images[1].filename, 'Vol. 01 (cccc2222).jpg');
     });
   });
 });

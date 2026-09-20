@@ -859,7 +859,11 @@ export async function cleanupMatchingRawFiles(providerPath, images) {
     const matchFilenames = new Set();
 
     for (const img of images) {
+      if (!img) continue;
       if (img.filename) matchFilenames.add(img.filename.toLowerCase());
+      if (img.rawFileName) matchFilenames.add(img.rawFileName.toLowerCase());
+      if (img.hash) matchStems.add(img.hash.toLowerCase());
+      if (img.stem) matchStems.add(img.stem.toLowerCase());
       const src = img.sourceUrl || img.url || '';
       if (src) {
         const stem = extractUrlStem(src);
@@ -886,6 +890,66 @@ export async function cleanupMatchingRawFiles(providerPath, images) {
   }
 }
 
+export async function recordRootMediaDownload(providerPath, providerName, item) {
+  if (typeof window === 'undefined' || !window.__TAURI__ || !item?.filename) return;
+  const sidecarPath = `${providerPath}\\gallery.json`;
+  let sidecar = null;
+  try {
+    const text = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+    sidecar = JSON.parse(text);
+  } catch {
+    // Root sidecar does not exist yet
+  }
+
+  if (!sidecar || typeof sidecar !== 'object') {
+    sidecar = {
+      provider: providerName || 'Library',
+      isRoot: true,
+      title: `${providerName || 'Library'} Downloads`,
+      timestamp: new Date().toISOString(),
+      images: []
+    };
+  }
+  if (!Array.isArray(sidecar.images)) {
+    sidecar.images = [];
+  }
+
+  const itemHash = (item.hash || extractUrlStem(item.url || item.sourceUrl || '')).toLowerCase();
+  const itemRaw = (item.rawFileName || '').toLowerCase();
+  const itemName = (item.filename || '').toLowerCase();
+  const itemUrl = normalizeUrl(item.url || item.sourceUrl || '').toLowerCase();
+
+  sidecar.images = sidecar.images.filter((img) => {
+    const h = (img.hash || extractUrlStem(img.url || img.sourceUrl || '')).toLowerCase();
+    const r = (img.rawFileName || '').toLowerCase();
+    const n = (img.filename || '').toLowerCase();
+    const u = normalizeUrl(img.url || img.sourceUrl || '').toLowerCase();
+    if (itemHash && h === itemHash) return false;
+    if (itemRaw && r === itemRaw) return false;
+    if (itemName && n === itemName) return false;
+    if (itemUrl && u === itemUrl) return false;
+    return true;
+  });
+
+  sidecar.images.push({
+    filename: item.filename,
+    rawFileName: item.rawFileName || item.filename,
+    hash: item.hash || extractUrlStem(item.url || item.sourceUrl || ''),
+    sourceUrl: item.sourceUrl || item.url || '',
+    url: item.url || item.sourceUrl || '',
+    timestamp: item.timestamp || new Date().toISOString()
+  });
+
+  try {
+    await window.__TAURI__.core.invoke('write_text_file', {
+      path: sidecarPath,
+      content: JSON.stringify(sidecar, null, 2)
+    });
+  } catch (err) {
+    console.warn('[UrlLoader] Failed to write root gallery.json:', err);
+  }
+}
+
 export async function cleanupMatchingProviderEntries(providerPath, result) {
   if (typeof window === 'undefined' || !window.__TAURI__ || !result || typeof result !== 'object') {
     return;
@@ -903,93 +967,185 @@ export async function cleanupMatchingProviderEntries(providerPath, result) {
     if (!dirResult?.files) return;
 
     const cleanupPolicy = result.cleanup || {};
+    const shouldRemoveChapters = result.isSeries === true && cleanupPolicy.removeMatchingChapters !== false;
+    const shouldRemoveCovers = cleanupPolicy.removeLooseCovers === true;
+    const shouldRemoveLooseFiles = !result.isSeries && cleanupPolicy.removeLooseFiles !== false && Array.isArray(result.images);
 
-    if (result.isSeries === true) {
-      const shouldRemoveChapters = cleanupPolicy.removeMatchingChapters !== false;
-      const shouldRemoveCovers = cleanupPolicy.removeLooseCovers === true;
+    const seriesRootName = (result.rootRelativePath?.[0] || result.title || '').toLowerCase();
+    const chapterIds = new Set();
+    const chapterUrls = new Set();
 
-      const seriesRootName = (result.rootRelativePath?.[0] || result.title || '').toLowerCase();
-      const chapterIds = new Set();
-      const chapterUrls = new Set();
-
-      if (shouldRemoveChapters && Array.isArray(result.chapters)) {
-        for (const ch of result.chapters) {
-          if (ch?.id) chapterIds.add(ch.id.toLowerCase());
-          const norm = normalizeUrl(ch?.sourceUrl || ch?.url || '');
-          if (norm) chapterUrls.add(norm.toLowerCase());
-        }
+    if (shouldRemoveChapters && Array.isArray(result.chapters)) {
+      for (const ch of result.chapters) {
+        if (ch?.id) chapterIds.add(ch.id.toLowerCase());
+        const norm = normalizeUrl(ch?.sourceUrl || ch?.url || '');
+        if (norm) chapterUrls.add(norm.toLowerCase());
       }
+    }
 
-      // Exact cover identifiers only. Avoids broad fuzzy deletion of unrelated volume artwork.
-      const exactCoverNames = new Set();
-      const exactCoverHashes = new Set();
-      if (shouldRemoveCovers && result.cover) {
-        if (result.cover.rawFileName) {
-          exactCoverNames.add(result.cover.rawFileName.toLowerCase());
+    // Exact cover identifiers only. Supports result.covers array, result.cover, and cleanupPolicy.matchStems.
+    const exactCoverNames = new Set();
+    const exactCoverHashes = new Set();
+    const coverList = Array.isArray(result.covers) ? result.covers : (result.cover ? [result.cover] : []);
+
+    const coverUrls = new Set();
+    if (shouldRemoveCovers && coverList.length > 0) {
+      for (const c of coverList) {
+        if (!c) continue;
+        if (c.rawFileName) {
+          exactCoverNames.add(c.rawFileName.toLowerCase());
+          const stem = c.rawFileName.replace(/\.[^.]+$/, '').toLowerCase();
+          if (stem) exactCoverHashes.add(stem);
         }
-        if (result.cover.hash) {
-          exactCoverHashes.add(result.cover.hash.toLowerCase());
+        if (c.filename && c.filename.toLowerCase() !== 'cover.jpg' && c.filename.toLowerCase() !== 'cover.png') {
+          exactCoverNames.add(c.filename.toLowerCase());
+          const stem = c.filename.replace(/\.[^.]+$/, '').toLowerCase();
+          if (stem) exactCoverHashes.add(stem);
         }
-        if (result.cover.url) {
-          const stem = extractUrlStem(result.cover.url);
+        if (Array.isArray(c.filenames)) {
+          for (const fn of c.filenames) {
+            if (fn) {
+              exactCoverNames.add(fn.toLowerCase());
+              const stem = fn.replace(/\.[^.]+$/, '').toLowerCase();
+              if (stem) exactCoverHashes.add(stem);
+            }
+          }
+        }
+        if (c.hash) exactCoverHashes.add(c.hash.toLowerCase());
+        if (c.url) {
+          const stem = extractUrlStem(c.url);
           if (stem) exactCoverHashes.add(stem.toLowerCase());
+          coverUrls.add(normalizeUrl(c.url).toLowerCase());
         }
-        if (result.title && result.cover.volume) {
-          const friendlyStem = `${result.title} - Vol. ${result.cover.volume} Cover`.toLowerCase();
-          exactCoverHashes.add(friendlyStem);
+        if (c.sourceUrl) {
+          coverUrls.add(normalizeUrl(c.sourceUrl).toLowerCase());
+        }
+        if (result.title && c.volume) {
+          exactCoverHashes.add(`${result.title} - Vol. ${c.volume} Cover`.toLowerCase());
         }
       }
+    }
+    if (Array.isArray(cleanupPolicy.matchStems)) {
+      for (const s of cleanupPolicy.matchStems) {
+        if (s) exactCoverHashes.add(s.toLowerCase());
+      }
+    }
+    if (Array.isArray(cleanupPolicy.matchFilenames)) {
+      for (const f of cleanupPolicy.matchFilenames) {
+        if (f) {
+          exactCoverNames.add(f.toLowerCase());
+          const stem = f.replace(/\.[^.]+$/, '').toLowerCase();
+          if (stem) exactCoverHashes.add(stem);
+        }
+      }
+    }
 
-      for (const entry of dirResult.files) {
-        const lowerName = (entry.name || '').toLowerCase();
+    // Check provider root gallery.json for recorded direct downloads
+    let rootSidecar = null;
+    const rootSidecarPath = `${providerPath}\\gallery.json`;
+    if (shouldRemoveCovers) {
+      try {
+        const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: rootSidecarPath });
+        rootSidecar = JSON.parse(sidecarText);
+        if (rootSidecar && Array.isArray(rootSidecar.images)) {
+          for (const img of rootSidecar.images) {
+            const imgStem = (img.hash || extractUrlStem(img.url || img.sourceUrl || '')).toLowerCase();
+            const imgRaw = (img.rawFileName || '').toLowerCase();
+            const imgName = (img.filename || '').toLowerCase();
+            const fileBase = imgName.replace(/\.[^.]+$/, '');
+            const imgSource = normalizeUrl(img.sourceUrl || '').toLowerCase();
+            const imgUrl = normalizeUrl(img.url || '').toLowerCase();
 
-        if (entry.is_dir) {
-          if (!shouldRemoveChapters || lowerName === seriesRootName) continue;
+            const isCoverMatch = (imgStem && exactCoverHashes.has(imgStem))
+              || (imgRaw && exactCoverNames.has(imgRaw))
+              || (fileBase && exactCoverHashes.has(fileBase))
+              || (imgName && exactCoverNames.has(imgName))
+              || (imgSource && coverUrls.has(imgSource))
+              || (imgUrl && coverUrls.has(imgUrl));
 
-          const sidecarPath = `${entry.path}\\gallery.json`;
-          let isMatch = false;
+            if (isCoverMatch) {
+              if (img.filename) exactCoverNames.add(imgName);
+              if (fileBase) exactCoverHashes.add(fileBase);
+            }
+          }
+        }
+      } catch {
+        // No root gallery.json or read failed.
+      }
+    }
+
+    for (const entry of dirResult.files) {
+      const lowerName = (entry.name || '').toLowerCase();
+
+      if (entry.is_dir) {
+        if (!shouldRemoveChapters || lowerName === seriesRootName) continue;
+
+        const sidecarPath = `${entry.path}\\gallery.json`;
+        let isMatch = false;
+        try {
+          const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+          const sidecar = JSON.parse(sidecarText);
+          const sidecarId = sidecar?.gallery?.id?.toLowerCase();
+          const sidecarUrl = normalizeUrl(sidecar?.sourceUrl || sidecar?.url || '').toLowerCase();
+
+          if (sidecarId && chapterIds.has(sidecarId)) {
+            isMatch = true;
+          } else if (sidecarUrl && chapterUrls.has(sidecarUrl)) {
+            isMatch = true;
+          }
+        } catch {
+          // Not a valid gallery sidecar, skip
+        }
+
+        if (isMatch) {
           try {
-            const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
-            const sidecar = JSON.parse(sidecarText);
-            const sidecarId = sidecar?.gallery?.id?.toLowerCase();
-            const sidecarUrl = normalizeUrl(sidecar?.sourceUrl || sidecar?.url || '').toLowerCase();
-
-            if (sidecarId && chapterIds.has(sidecarId)) {
-              isMatch = true;
-            } else if (sidecarUrl && chapterUrls.has(sidecarUrl)) {
-              isMatch = true;
-            }
-          } catch {
-            // Not a valid gallery sidecar, skip
+            await window.__TAURI__.core.invoke('remove_directory', { path: entry.path });
+          } catch (err) {
+            console.warn('[UrlLoader] Failed to remove matching standalone chapter directory:', entry.path, err);
           }
+        }
+      } else if (shouldRemoveCovers) {
+        if (lowerName === 'gallery.json') continue;
+        const dotIndex = lowerName.lastIndexOf('.');
+        const fileBase = (dotIndex > 0 ? lowerName.slice(0, dotIndex) : lowerName).toLowerCase();
 
-          if (isMatch) {
-            try {
-              await window.__TAURI__.core.invoke('remove_directory', { path: entry.path });
-            } catch (err) {
-              console.warn('[UrlLoader] Failed to remove matching standalone chapter directory:', entry.path, err);
-            }
-          }
-        } else if (shouldRemoveCovers) {
-          const dotIndex = lowerName.lastIndexOf('.');
-          const fileBase = (dotIndex > 0 ? lowerName.slice(0, dotIndex) : lowerName).toLowerCase();
+        const isCoverMatch = exactCoverNames.has(lowerName)
+          || exactCoverHashes.has(fileBase);
 
-          const isCoverMatch = exactCoverNames.has(lowerName)
-            || exactCoverHashes.has(fileBase);
-
-          if (isCoverMatch) {
-            try {
-              await window.__TAURI__.core.invoke('remove_file', { path: entry.path });
-            } catch (err) {
-              console.warn('[UrlLoader] Failed to remove loose cover file:', entry.path, err);
-            }
+        if (isCoverMatch) {
+          try {
+            await window.__TAURI__.core.invoke('remove_file', { path: entry.path });
+          } catch (err) {
+            console.warn('[UrlLoader] Failed to remove loose cover file:', entry.path, err);
           }
         }
       }
-    } else if (Array.isArray(result.images) && result.images.length > 0) {
-      if (cleanupPolicy.removeLooseFiles !== false) {
-        await cleanupMatchingRawFiles(providerPath, result.images);
+    }
+
+    if (rootSidecar && Array.isArray(rootSidecar.images)) {
+      const remaining = rootSidecar.images.filter((img) => {
+        const lower = (img.filename || '').toLowerCase();
+        const base = lower.replace(/\.[^.]+$/, '');
+        return !exactCoverNames.has(lower) && !exactCoverHashes.has(base);
+      });
+      try {
+        if (remaining.length > 0) {
+          rootSidecar.images = remaining;
+          await window.__TAURI__.core.invoke('write_text_file', {
+            path: rootSidecarPath,
+            content: JSON.stringify(rootSidecar, null, 2)
+          });
+        } else {
+          await window.__TAURI__.core.invoke('remove_file', { path: rootSidecarPath });
+        }
+      } catch {
+        // Non-fatal root sidecar update failure
       }
+    }
+
+    if (shouldRemoveLooseFiles) {
+      const allImages = Array.isArray(result.covers) ? [...result.images, ...result.covers] : result.images;
+      await cleanupMatchingRawFiles(providerPath, allImages);
     }
   } catch {
     // Provider directory does not exist or read failed.
@@ -1042,34 +1198,59 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   const isDirect = (typeof mod.isDirectUrl === 'function' && mod.isDirectUrl(url))
     || isDirectMediaUrl(url);
   if (isDirect) {
-    const directInfo = typeof mod.parseDirectUrl === 'function'
-      ? await mod.parseDirectUrl(url, { fetchText: fetchRemoteText })
-      : null;
-    const hash = directInfo?.hash || extractUrlStem(url);
-    const rawFilename = directInfo?.filename || (url.split(/[?#]/)[0].split('/').pop() || 'image.png');
-    const downloadUrl = directInfo?.url || url;
-    _validateImage({ url: downloadUrl, filename: rawFilename }, 0);
+    const rawStem = extractUrlStem(url);
 
-    // 1. If direct URL has a matching gallery, jump directly to that file
-    const match = await findMatchingGalleryImage(providerPath, url, hash);
-    if (match) {
+    // 1. If direct URL is already recorded in root gallery.json or a chapter gallery, jump directly to that file
+    const existingMatch = await findMatchingGalleryImage(providerPath, url, rawStem);
+    if (existingMatch) {
       return {
-        galleryPath: match.galleryPath,
-        targetName: match.targetName,
+        galleryPath: existingMatch.galleryPath,
+        targetName: existingMatch.targetName,
         isDirectMatch: true
       };
     }
 
-    // 2. Otherwise, dump it raw under the provider root (e.g. Provider/image.png)
-    const destPath = `${providerPath}\\${rawFilename}`;
+    const directInfo = typeof mod.parseDirectUrl === 'function'
+      ? await mod.parseDirectUrl(url, { fetchText: fetchRemoteText })
+      : null;
+    const hash = directInfo?.hash || rawStem;
+    const targetFilename = directInfo?.filename || (url.split(/[?#]/)[0].split('/').pop() || 'image.png');
+    const rawFilename = directInfo?.rawFileName || (url.split(/[?#]/)[0].split('/').pop() || targetFilename);
+    const downloadUrl = directInfo?.url || url;
+    _validateImage({ url: downloadUrl, filename: targetFilename }, 0);
+
+    // If parseDirectUrl resolved a new hash, check once more before downloading
+    if (hash && hash !== rawStem) {
+      const secondMatch = await findMatchingGalleryImage(providerPath, downloadUrl, hash);
+      if (secondMatch) {
+        return {
+          galleryPath: secondMatch.galleryPath,
+          targetName: secondMatch.targetName,
+          isDirectMatch: true
+        };
+      }
+    }
+
+    // 2. Download raw under the provider root (e.g. Provider/image.png)
+    const destPath = `${providerPath}\\${targetFilename}`;
     if (window.__TAURI__) {
       await downloadFile(downloadUrl, destPath);
+
+      // Save metadata to root gallery.json
+      await recordRootMediaDownload(providerPath, directInfo?.provider || entry.displayName || entry.id, {
+        filename: targetFilename,
+        rawFileName: rawFilename,
+        hash,
+        sourceUrl: url,
+        url: downloadUrl
+      });
+
       window.dispatchEvent(new CustomEvent('quivit-library-updated'));
     }
 
     return {
       galleryPath: providerPath,
-      targetName: rawFilename,
+      targetName: targetFilename,
       isRaw: true
     };
   }
