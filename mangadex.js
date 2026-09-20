@@ -82,6 +82,85 @@ export function parseChapterMatch(url) {
   };
 }
 
+const LANGUAGE_NAMES = {
+  en: 'English',
+  ja: 'Japanese',
+  'ja-ro': 'Japanese (Romaji)',
+  es: 'Spanish',
+  'es-la': 'Spanish (Latin America)',
+  fr: 'French',
+  de: 'German',
+  it: 'Italian',
+  pt: 'Portuguese',
+  'pt-br': 'Portuguese (Brazil)',
+  ru: 'Russian',
+  id: 'Indonesian',
+  vi: 'Vietnamese',
+  zh: 'Chinese (Simplified)',
+  'zh-hk': 'Chinese (Traditional)',
+  ko: 'Korean',
+  th: 'Thai',
+  tl: 'Tagalog',
+  pl: 'Polish',
+  uk: 'Ukrainian',
+  ar: 'Arabic',
+  tr: 'Turkish',
+  hu: 'Hungarian',
+  cs: 'Czech',
+  hi: 'Hindi',
+  ms: 'Malay',
+  nl: 'Dutch',
+  sv: 'Swedish',
+  no: 'Norwegian',
+  da: 'Danish',
+  fi: 'Finnish',
+  el: 'Greek',
+  bg: 'Bulgarian',
+  he: 'Hebrew',
+  fa: 'Persian',
+  bn: 'Bengali',
+  ca: 'Catalan',
+  ro: 'Romanian',
+  la: 'Latin',
+  my: 'Burmese',
+  mn: 'Mongolian'
+};
+
+export function resolveLanguageName(code) {
+  if (!code || typeof code !== 'string') return 'Other';
+  const lower = code.toLowerCase().trim();
+  return LANGUAGE_NAMES[lower] || lower.toUpperCase();
+}
+
+export function formatVolumeFolder(volume) {
+  if (volume === undefined || volume === null || volume === '' || volume === 'none') {
+    return 'No Volume';
+  }
+  const clean = String(volume).trim();
+  const num = parseFloat(clean);
+  if (!isNaN(num) && Number.isInteger(num)) {
+    const padded = clean.length === 1 ? `0${clean}` : clean;
+    return `Vol. ${padded}`;
+  }
+  return `Vol. ${clean}`;
+}
+
+export function formatTitleChapterFolder(attributes, groupName) {
+  const chapterLabel = formatChapterLabel(attributes);
+  const groupClean = groupName && groupName !== 'No Group' ? groupName.trim() : '';
+  const folderName = groupClean ? `${chapterLabel} [${groupClean}]` : chapterLabel;
+  return sanitizePathSegment(folderName);
+}
+
+export function parseTitleMatch(url) {
+  if (!url || typeof url !== 'string') return null;
+  const match = url.match(MANGADEX_TITLE_RE);
+  if (!match) return null;
+  return {
+    mangaId: match[1].toLowerCase()
+  };
+}
+
 export function isBlobUrl(url) {
   if (!url || typeof url !== 'string') return false;
   return MANGADEX_BLOB_RE.test(url);
@@ -181,8 +260,9 @@ export async function extract(html, url, context = {}) {
     throw new Error('Direct blob URLs are not supported. Download the image directly, or use the website URL if supported.');
   }
 
-  if (isTitleUrl(url)) {
-    throw new Error('MangaDex series links contain multiple chapters. Please open and copy the URL of the specific chapter you want to read, such as https://mangadex.org/chapter/...');
+  const titleParsed = parseTitleMatch(url);
+  if (titleParsed?.mangaId) {
+    return await extractTitle(titleParsed.mangaId, url, context);
   }
 
   const direct = await parseDirectUrl(url, context);
@@ -310,5 +390,102 @@ export async function extract(html, url, context = {}) {
     },
     images,
     nextPageUrl: null
+  };
+}
+
+export async function extractTitle(mangaId, url, context = {}) {
+  if (typeof context.fetchText !== 'function') {
+    throw new Error('Context missing fetchText helper for MangaDex API requests');
+  }
+
+  const mangaUrl = `https://api.mangadex.org/manga/${mangaId}?includes%5B%5D=cover_art`;
+  const mangaText = await context.fetchText(mangaUrl);
+  let mangaPayload;
+  try {
+    mangaPayload = JSON.parse(mangaText);
+  } catch (err) {
+    throw new Error(`Failed to parse MangaDex manga API response: ${err.message}`);
+  }
+
+  if (mangaPayload?.result === 'error') {
+    const errorDetail = mangaPayload.errors?.[0]?.detail || 'Manga not found on MangaDex';
+    throw new Error(errorDetail);
+  }
+
+  const mangaTitle = resolveMangaTitle(
+    mangaPayload?.data?.attributes?.title,
+    mangaPayload?.data?.attributes?.altTitles
+  );
+  const titleFolderName = sanitizePathSegment(mangaTitle);
+
+  let cover = null;
+  const coverRel = mangaPayload?.data?.relationships?.find((r) => r.type === 'cover_art');
+  const coverFileName = coverRel?.attributes?.fileName;
+  if (coverFileName) {
+    const dotIdx = coverFileName.lastIndexOf('.');
+    const coverExt = dotIdx > 0 ? coverFileName.slice(dotIdx).toLowerCase() : '.jpg';
+    cover = {
+      url: `https://uploads.mangadex.org/covers/${mangaId}/${coverFileName}`,
+      filename: `Cover${coverExt}`
+    };
+  }
+
+  let offset = 0;
+  const allFeedEntries = [];
+  while (true) {
+    const feedUrl = `https://api.mangadex.org/manga/${mangaId}/feed?limit=500&offset=${offset}&includes%5B%5D=scanlation_group&order%5Bvolume%5D=asc&order%5Bchapter%5D=asc`;
+    const feedText = await context.fetchText(feedUrl);
+    let feedPayload;
+    try {
+      feedPayload = JSON.parse(feedText);
+    } catch (err) {
+      throw new Error(`Failed to parse MangaDex chapter feed: ${err.message}`);
+    }
+
+    const entries = Array.isArray(feedPayload?.data) ? feedPayload.data : [];
+    allFeedEntries.push(...entries);
+
+    const total = feedPayload?.total || 0;
+    if (entries.length === 0 || allFeedEntries.length >= total) {
+      break;
+    }
+    offset += entries.length;
+  }
+
+  const seenPaths = new Set();
+  const chapters = [];
+
+  for (const entry of allFeedEntries) {
+    if (entry.attributes?.externalUrl) continue;
+
+    const langCode = entry.attributes?.translatedLanguage || 'other';
+    const langFolder = sanitizePathSegment(resolveLanguageName(langCode));
+    const volFolder = sanitizePathSegment(formatVolumeFolder(entry.attributes?.volume));
+    const groupName = entry.relationships?.find((r) => r.type === 'scanlation_group')?.attributes?.name || '';
+    let chFolder = formatTitleChapterFolder(entry.attributes, groupName);
+
+    const chapterId = entry.id;
+    let pathKey = `${langFolder}/${volFolder}/${chFolder}`.toLowerCase();
+    if (seenPaths.has(pathKey)) {
+      chFolder = sanitizePathSegment(`${chFolder} (${chapterId.slice(0, 8)})`);
+      pathKey = `${langFolder}/${volFolder}/${chFolder}`.toLowerCase();
+    }
+    seenPaths.add(pathKey);
+
+    chapters.push({
+      id: `mangadex-${chapterId}`,
+      title: `${mangaTitle} - ${formatChapterLabel(entry.attributes)}`,
+      sourceUrl: `https://mangadex.org/chapter/${chapterId}`,
+      relativePath: [titleFolderName, langFolder, volFolder, chFolder]
+    });
+  }
+
+  return {
+    provider: 'MangaDex',
+    isSeries: true,
+    title: mangaTitle,
+    rootRelativePath: [titleFolderName],
+    cover,
+    chapters
   };
 }
