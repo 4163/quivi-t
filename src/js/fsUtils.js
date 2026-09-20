@@ -7,12 +7,12 @@ import { createHistoryEntry, recordNavigation } from './navigationHistory.js';
 const { invoke } = window.__TAURI__.core;
 
 export const SUPPORTED_IMAGES = new Set([
-  'jpg', 'jpeg', 'png', 'gif', 'webp', 'apng', 'svg', 'bmp', 'ico', 'avif',
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'apng', 'svg', 'bmp', 'ico', 'avif', 'mp4'
 ]);
 
 export const SUPPORTED_ARCHIVES = new Set(['zip', 'cbz', 'rar', 'cbr', '7z', 'cb7', 'cbt', 'tar']);
 
-export const SHELL_THUMBNAIL_EXTS = new Set(['jpg', 'jpeg', 'png', 'bmp', 'dib', 'gif', 'ico']);
+export const SHELL_THUMBNAIL_EXTS = new Set(['jpg', 'jpeg', 'png', 'bmp', 'dib', 'gif', 'ico', 'mp4']);
 
 function _ext(name) {
   return name.split('.').pop().toLowerCase();
@@ -116,9 +116,11 @@ export const FsUtils = {
   basename,
   isArchive(name) { return SUPPORTED_ARCHIVES.has(_ext(name)); },
   isImage(name) { return SUPPORTED_IMAGES.has(_ext(name)); },
+  isVideo(name) { return _ext(name) === 'mp4'; },
   isIco(name) { return _ext(name) === 'ico'; },
   isArchiveEntry(entry) { return entry && !entry.is_dir && this.isArchive(entry.name); },
   isImageEntry(entry) { return entry && !entry.is_dir && this.isImage(entry.name); },
+  isVideoEntry(entry) { return entry && !entry.is_dir && this.isVideo(entry.name); },
 
   async checkArchiveEncryption(archivePath) {
     if (!archivePath || !this.isArchive(archivePath)) return null;
@@ -231,6 +233,9 @@ export const FsUtils = {
 
   async buildFileSrc(filePath) {
     if (filePath.startsWith('blob:')) return filePath;
+    if (this.isVideo(filePath)) {
+      return window.__TAURI__.core.convertFileSrc(filePath);
+    }
     if (this.isIco(filePath) && window.__TAURI__) {
       try {
         return await invoke('get_ico_frames', { path: filePath });
@@ -245,7 +250,22 @@ export const FsUtils = {
   // caller handles them through buildFileSrc().
   buildFileSrcSync(filePath) {
     if (filePath.startsWith('blob:')) return filePath;
+    // Video viewer needs the real file URL. Thumbnails use buildThumbnailSrc.
     return window.__TAURI__.core.convertFileSrc(filePath);
+  },
+
+  buildAudioSrc(filePath) {
+    if (!filePath || filePath.startsWith('blob:')) return '';
+    return window.__TAURI__ ? window.__TAURI__.core.convertFileSrc(filePath) : filePath;
+  },
+
+  async checkMediaAudio(filePath, archivePath = null) {
+    if (!filePath || !window.__TAURI__) return false;
+    try {
+      return await invoke('check_media_audio', { path: filePath, archivePath });
+    } catch {
+      return false;
+    }
   },
 
   formatEntry(entry) {
@@ -294,6 +314,7 @@ export const FsUtils = {
     const entrySrcAt = (idx) => {
       const entry = state.list[idx];
       if (!entry || entry.is_dir || entry.is_parent || !this.isImageEntry(entry)) return null;
+      if (this.isVideoEntry(entry)) return null;
       if (state.mode === 'archive') {
         // Archive ico now serves full file (quivit://archive/...) like other archive images. Shell cannot read inside archive
         return this.buildArchiveSrc(state.archivePath, entry.name);
@@ -301,6 +322,28 @@ export const FsUtils = {
       // Disk ico now serves shell thumb (buildThumbnailSrc handles it), but viewer still uses spritesheet via buildFileSrc async path
       // For neighbor preload we keep ico excluded here because viewer ico is data: URL spritesheet, not asset://
       return this.isIco(entry.path) ? null : this.buildFileSrcSync(entry.path);
+    };
+
+    const srcs = [];
+    for (let i = 1; i <= half; i++) {
+      const ahead = entrySrcAt(index + i);
+      if (ahead && ahead !== state.src) srcs.push(ahead);
+      const behind = entrySrcAt(index - i);
+      if (behind && behind !== state.src) srcs.push(behind);
+    }
+    return srcs;
+  },
+
+  neighborVideoEntries(state, index, half) {
+    if (!state || !state.list || state.mode === 'empty') return [];
+
+    const entrySrcAt = (idx) => {
+      const entry = state.list[idx];
+      if (!entry || entry.is_dir || entry.is_parent || !this.isVideoEntry(entry)) return null;
+      if (state.mode === 'archive') {
+        return this.buildArchiveSrc(state.archivePath, entry.name);
+      }
+      return this.buildFileSrcSync(entry.path);
     };
 
     const srcs = [];
@@ -366,14 +409,21 @@ export const FsUtils = {
         const data = JSON.parse(content);
         if (data && Array.isArray(data.images)) {
           const nameMap = new Map();
+          const soundMap = new Map();
           for (const img of data.images) {
             if (img.filename) {
               nameMap.set(img.filename, img.displayName || img.filename);
+              if (img.hasSound !== undefined) {
+                soundMap.set(img.filename, Boolean(img.hasSound));
+              }
             }
           }
           for (const file of files) {
             if (nameMap.has(file.name)) {
               file.displayName = nameMap.get(file.name);
+            }
+            if (soundMap.has(file.name)) {
+              file.hasSound = soundMap.get(file.name);
             }
           }
         }

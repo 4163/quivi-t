@@ -112,6 +112,9 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-toggle-transparent', label: 'Toggle Opaque Canvas', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.toggleTransparentBg()
   },
+  { id: 'cmd-toggle-audio', label: 'Mute Viewer Audio', defaultBinds: 'm', category: 'View',
+    run: (ctx) => ctx.ViewerAudio?.toggleAudioMute()
+  },
   { id: 'cmd-spread-off', label: 'Spread Off', defaultBinds: [], category: 'Spread View',
     run: (ctx) => ctx.Core.setSpreadMode('off', { persist: true })
   },

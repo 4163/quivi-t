@@ -34,6 +34,9 @@ pub fn read_directory_impl(
         ""
     };
 
+    let is_library_or_gallery = dir.join("gallery.json").is_file()
+        || crate::commands::library::is_within_library(dir);
+
     let mut files = Vec::new();
 
     if let Ok(entries) = fs::read_dir(dir) {
@@ -54,7 +57,10 @@ pub fn read_directory_impl(
                 if is_dir {
                     include = true;
                 } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                    if is_image_ext(ext) || is_archive_ext(ext) {
+                    if is_image_ext(ext)
+                        || is_archive_ext(ext)
+                        || (is_library_or_gallery && ext.eq_ignore_ascii_case("mp4"))
+                    {
                         include = true;
                         ext_upper = ext.to_uppercase();
                     }
@@ -286,7 +292,7 @@ fn read_library_nodes(dir: &Path, depth: usize) -> Vec<LibraryNode> {
                 || !path
                     .extension()
                     .and_then(|ext| ext.to_str())
-                    .is_some_and(is_image_ext))
+                    .is_some_and(|ext| is_image_ext(ext) || ext.eq_ignore_ascii_case("mp4")))
         {
             continue;
         }

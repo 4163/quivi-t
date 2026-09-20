@@ -1,9 +1,19 @@
 /**
  * urlLoader.js: orchestrator for loading remote galleries via URL.
  *
- * Fetches a remote manifest, matches user URLs to site-specific
- * extractors, loads extractor modules via Blob URL + dynamic import(),
- * and coordinates page fetching and gallery extraction.
+ * Forefront architectural goal:
+ * QuiviT must let maintainers add or replace an individual website extractor
+ * without changing or releasing any QuiviT files. A new or updated extractor
+ * must reach users through the remote manifest automatically. End users should
+ * not need to install an update, copy a file, or change a setting to receive
+ * website support.
+ *
+ * Invariants:
+ * - urlLoader.js is strictly provider-agnostic. Domain names, site-specific
+ *   selectors, and vendor regexes belong exclusively inside extractor modules.
+ * - Fetches remote manifest, matches user URLs to extractors, and dynamically
+ *   imports extractor modules via Blob URL + dynamic import().
+ * - Coordinates page fetching, pagination, gallery sidecars, and direct media.
  *
  * Download lifecycle:
  * - Queue items track a galleryIndex so the viewport filter can decide
@@ -28,7 +38,7 @@ const SAFE_EXTRACTOR_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SAFE_EXTRACTOR_SOURCE_RE = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*\.js$/i;
 const WINDOWS_NAME_FORBIDDEN_RE = /[<>:"/\\|?*\x00-\x1F]/;
 const SUPPORTED_IMAGE_EXTENSIONS = new Set([
-  'apng', 'avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'png', 'svg', 'webp'
+  'apng', 'avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'mp4', 'png', 'svg', 'webp'
 ]);
 export const MAX_GALLERY_PATH_DEPTH = 8;
 
@@ -621,11 +631,44 @@ export function extractGallery(extractor, html, url, context = {}, entry = null)
 
 // -- Gallery Matching & Standalone Raw Cleanup --
 
+export function extractUrlStem(urlOrFilename) {
+  if (!urlOrFilename || typeof urlOrFilename !== 'string') return '';
+  try {
+    const rawPath = urlOrFilename.includes('://')
+      ? new URL(urlOrFilename).pathname
+      : urlOrFilename;
+    const cleanPath = rawPath.split(/[?#]/)[0];
+    const segment = cleanPath.split(/[\\/]/).pop() || '';
+    const dotIdx = segment.lastIndexOf('.');
+    return (dotIdx > 0 ? segment.slice(0, dotIdx) : segment).toLowerCase();
+  } catch {
+    const clean = urlOrFilename.split(/[?#]/)[0];
+    const segment = clean.split(/[\\/]/).pop() || '';
+    const dotIdx = segment.lastIndexOf('.');
+    return (dotIdx > 0 ? segment.slice(0, dotIdx) : segment).toLowerCase();
+  }
+}
+
+export function isDirectMediaUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const rawPath = url.includes('://') ? new URL(url).pathname : url;
+    const cleanPath = rawPath.split(/[?#]/)[0];
+    const segment = cleanPath.split(/[\\/]/).pop() || '';
+    const dotIdx = segment.lastIndexOf('.');
+    if (dotIdx > 0) {
+      const ext = segment.slice(dotIdx + 1).toLowerCase();
+      return SUPPORTED_IMAGE_EXTENSIONS.has(ext);
+    }
+  } catch {}
+  return false;
+}
+
 export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
   if (typeof window === 'undefined' || !window.__TAURI__) return null;
   try {
     const normalizedDirectUrl = normalizeUrl(directUrl);
-    const targetHash = hash ? hash.toLowerCase() : null;
+    const targetStem = (hash ? hash.toLowerCase() : '') || extractUrlStem(directUrl);
     const directories = [{ path: providerPath, depth: 0 }];
 
     while (directories.length > 0) {
@@ -643,12 +686,11 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
           let isMatch = false;
           if (imgSource && normalizedDirectUrl && imgSource.toLowerCase() === normalizedDirectUrl.toLowerCase()) {
             isMatch = true;
-          } else if (targetHash) {
-            const sourceHashMatch = imgSource.match(/(?:i\.)?imgur\.com\/(?:a\/|gallery\/)?([a-zA-Z0-9]+)(?:\.[a-zA-Z0-9]+)?/i);
-            const sourceHash = sourceHashMatch ? sourceHashMatch[1].toLowerCase() : null;
-            if (sourceHash && sourceHash === targetHash) {
+          } else if (targetStem) {
+            const sourceStem = extractUrlStem(imgSource);
+            if (sourceStem && sourceStem === targetStem) {
               isMatch = true;
-            } else if (imgFilename.toLowerCase().includes(targetHash)) {
+            } else if (imgFilename.toLowerCase().includes(targetStem)) {
               isMatch = true;
             }
           }
@@ -689,17 +731,15 @@ export async function cleanupMatchingRawFiles(providerPath, images) {
     });
     if (!dirResult?.files) return;
 
-    const matchHashes = new Set();
+    const matchStems = new Set();
     const matchFilenames = new Set();
 
     for (const img of images) {
       if (img.filename) matchFilenames.add(img.filename.toLowerCase());
       const src = img.sourceUrl || img.url || '';
       if (src) {
-        const hashMatch = src.match(/(?:i\.)?imgur\.com\/(?:a\/|gallery\/)?([a-zA-Z0-9]+)(?:\.[a-zA-Z0-9]+)?/i);
-        if (hashMatch) {
-          matchHashes.add(hashMatch[1].toLowerCase());
-        }
+        const stem = extractUrlStem(src);
+        if (stem) matchStems.add(stem);
       }
     }
 
@@ -707,9 +747,9 @@ export async function cleanupMatchingRawFiles(providerPath, images) {
       if (entry.is_dir) continue;
       const lowerName = entry.name.toLowerCase();
       const dotIndex = lowerName.lastIndexOf('.');
-      const fileBase = dotIndex > 0 ? lowerName.slice(0, dotIndex) : lowerName;
+      const fileBase = (dotIndex > 0 ? lowerName.slice(0, dotIndex) : lowerName).toLowerCase();
 
-      if (matchHashes.has(fileBase) || matchFilenames.has(lowerName)) {
+      if (matchStems.has(fileBase) || matchFilenames.has(lowerName)) {
         try {
           await window.__TAURI__.core.invoke('remove_file', { path: entry.path });
         } catch {
@@ -764,12 +804,13 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   const providerDir = entry.libraryPath;
   const providerPath = `${libraryDir}\\${providerDir}`;
 
-  // Direct image handling (e.g. https://i.imgur.com/04XS16K.png)
-  const isDirect = typeof mod.isDirectUrl === 'function' && mod.isDirectUrl(url);
+  // Direct media handling (e.g. images and videos)
+  const isDirect = (typeof mod.isDirectUrl === 'function' && mod.isDirectUrl(url))
+    || isDirectMediaUrl(url);
   if (isDirect) {
     const directInfo = typeof mod.parseDirectUrl === 'function' ? mod.parseDirectUrl(url) : null;
-    const hash = directInfo?.hash || null;
-    const rawFilename = directInfo?.filename || (url.split('/').pop() || 'image.png');
+    const hash = directInfo?.hash || extractUrlStem(url);
+    const rawFilename = directInfo?.filename || (url.split(/[?#]/)[0].split('/').pop() || 'image.png');
     const downloadUrl = directInfo?.url || url;
     _validateImage({ url: downloadUrl, filename: rawFilename }, 0);
 
@@ -783,7 +824,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       };
     }
 
-    // 2. Otherwise, dump it raw under the provider root (e.g. Imgur/04XS16K.png)
+    // 2. Otherwise, dump it raw under the provider root (e.g. Provider/image.png)
     const destPath = `${providerPath}\\${rawFilename}`;
     if (window.__TAURI__) {
       await downloadFile(downloadUrl, destPath);
@@ -840,7 +881,8 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       filename: img.filename,
       displayName: img.filename,
       description: img.description || img.displayName || '',
-      sourceUrl: img.url
+      sourceUrl: img.url,
+      hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
     }))
   };
 

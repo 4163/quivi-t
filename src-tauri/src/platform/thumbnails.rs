@@ -22,7 +22,7 @@ use windows::Win32::UI::Shell::{
 };
 
 #[cfg(windows)]
-const SHELL_THUMB_EXTS: &[&str] = &["jpg", "jpeg", "png", "bmp", "dib", "gif", "ico"];
+const SHELL_THUMB_EXTS: &[&str] = &["jpg", "jpeg", "png", "bmp", "dib", "gif", "ico", "mp4"];
 
 // RAII guards matching the pattern in icons.rs (file-private there).
 

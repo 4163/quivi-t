@@ -295,6 +295,8 @@ fn guess_mime(name: &str) -> &'static str {
         "image/avif"
     } else if ext.eq_ignore_ascii_case("apng") {
         "image/apng"
+    } else if ext.eq_ignore_ascii_case("mp4") {
+        "video/mp4"
     } else {
         "application/octet-stream"
     }

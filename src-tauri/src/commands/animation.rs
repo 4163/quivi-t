@@ -26,3 +26,22 @@ pub fn check_is_animated(
         ))
     }
 }
+
+#[tauri::command(async)]
+pub fn check_media_audio(
+    path: String,
+    archive_path: Option<String>,
+    state: tauri::State<'_, RwLock<ArchiveCache>>,
+) -> Result<bool, String> {
+    if let Some(arc_path) = archive_path {
+        let entry_bytes = {
+            let mut cache = state.write().map_err(|e| e.to_string())?;
+            cache.read_entry_header(&arc_path, &path, 524_288)?
+        };
+        let mut cursor = std::io::Cursor::new(&entry_bytes);
+        Ok(crate::formats::check_mp4_has_audio(&mut cursor))
+    } else {
+        let mut f = fs::File::open(&path).map_err(|e| format!("Cannot open file: {}", e))?;
+        Ok(crate::formats::check_mp4_has_audio(&mut f))
+    }
+}

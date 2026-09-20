@@ -56,6 +56,13 @@ fn path_is_within(path: &Path, root: &Path) -> bool {
     path == root || path.starts_with(&format!("{root}\\"))
 }
 
+pub(crate) fn is_within_library(path: &Path) -> bool {
+    let Ok(library_root) = crate::config::configured_library_dir() else {
+        return false;
+    };
+    path_is_within(path, &library_root)
+}
+
 fn same_path(left: &Path, right: &Path) -> bool {
     normalized_path(left) == normalized_path(right)
 }
