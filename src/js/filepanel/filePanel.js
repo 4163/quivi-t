@@ -1232,12 +1232,26 @@ function updateLibrarySelection(state) {
   if (!items.length) return;
 
   const containerPath = state.mode === 'archive' ? state.archivePath : state.directory;
-  const isContainerInLibrary = containerPath && items.some(li => _pathsEqual(li.dataset.path, containerPath));
+  const containerNorm = containerPath ? containerPath.replace(/\\/g, '/').toLowerCase() : '';
 
+  // Find the deepest library item that is either the current directory or an
+  // ancestor of it. This keeps provider entries highlighted while browsing
+  // subdirectories (e.g. chapters inside a manga folder).
   let activePath = '';
-  if (isContainerInLibrary) {
-    activePath = containerPath;
-  } else {
+  if (containerNorm) {
+    let bestLen = 0;
+    for (const li of items) {
+      const itemNorm = (li.dataset.path || '').replace(/\\/g, '/').toLowerCase();
+      if (!itemNorm) continue;
+      if (containerNorm === itemNorm || containerNorm.startsWith(itemNorm + '/')) {
+        if (itemNorm.length > bestLen) {
+          bestLen = itemNorm.length;
+          activePath = li.dataset.path;
+        }
+      }
+    }
+  }
+  if (!activePath) {
     const entry = state.list?.[state.index];
     if (entry && !entry.is_parent) {
       activePath = entry.path;
