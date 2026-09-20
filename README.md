@@ -81,15 +81,134 @@ export async function extract(html, url, context) {
 }
 ```
 
-### Return object fields
+### Return shapes
+
+An extractor returns either a single gallery result or a series result.
+
+#### Single gallery
+
+```js
+return {
+  provider: 'Example',
+  title: 'Gallery Title',
+  gallery: {
+    id: 'gallery-123',
+    relativePath: ['Category', 'Gallery Title']
+  },
+  images: [
+    {
+      url: 'https://cdn.example.com/images/001.jpg',
+      filename: '001.jpg',
+      description: 'Page 1'
+    }
+  ],
+  metadata: {
+    ComicInfo: {
+      Series: 'Series Name',
+      Title: 'Gallery Title',
+      Summary: 'Synopsis...'
+    }
+  },
+  nextPageUrl: null
+};
+```
 
 - `provider`: String matching the `name` defined in `manifest.json`.
 - `title`: String gallery name.
 - `gallery.id`: Stable unique identifier for the gallery on that site.
 - `gallery.relativePath`: Array of safe directory names under `libraryPath`. Maximum depth is 8.
 - `images`: Array of media entries with direct HTTP or HTTPS download URLs and safe filenames.
+- `metadata`: Optional metadata payload for the gallery folder. An object serializes to `comicinfo.json`. A string starting with `<` serializes to `comicinfo.xml`. An object with `{ filename, content }` writes a custom file.
 - `targetFilename`: Optional string filename of a target image within `images`. When specified, QuiviT eagerly downloads this image first, opens the viewer centered on it, and prefetches remaining images around it.
 - `nextPageUrl`: Next page URL for multi-page galleries, or `null` when complete. Consecutive pages must preserve identical `gallery.id` and `gallery.relativePath`.
+
+#### Series
+
+Extractors that index multi-chapter manga or multi-part releases set `isSeries: true`:
+
+```js
+return {
+  provider: 'Example',
+  isSeries: true,
+  title: 'Series Title',
+  rootRelativePath: ['Series Title'],
+  metadata: {
+    ComicInfo: {
+      Series: 'Series Title',
+      Summary: 'Series synopsis...',
+      Writer: 'Author'
+    }
+  },
+  cover: {
+    url: 'https://cdn.example.com/cover.jpg',
+    filename: 'Cover.jpg'
+  },
+  folders: [
+    {
+      relativePath: ['Series Title', 'English'],
+      metadata: {
+        ComicInfo: {
+          Series: 'Series Title',
+          Title: 'Series Title (English)',
+          LanguageISO: 'en'
+        }
+      }
+    }
+  ],
+  chapters: [
+    {
+      id: 'chapter-1',
+      title: 'Series Title - Ch. 1',
+      sourceUrl: 'https://example.com/chapter/1',
+      relativePath: ['Series Title', 'English', 'Vol. 01', 'Ch. 01 - Intro'],
+      metadata: {
+        ComicInfo: {
+          Series: 'Series Title',
+          Title: 'Ch. 01 - Intro',
+          Number: '1',
+          Volume: '1',
+          LanguageISO: 'en',
+          PageCount: 20
+        }
+      }
+    }
+  ]
+};
+```
+
+- `isSeries`: Set to `true` to declare a series result.
+- `rootRelativePath`: Array of directory segments for the series root folder under `libraryPath`.
+- `metadata`: Optional metadata written directly to the series root folder.
+- `cover`: Optional cover image downloaded directly into the series root folder.
+- `folders`: Optional array of intermediate or auxiliary folders (`{ relativePath, metadata }`). QuiviT writes metadata directly into each folder.
+- `chapters`: Array of chapter stubs. Each entry requires `id`, `sourceUrl`, and `relativePath`. When `metadata` is included, QuiviT writes it directly into the chapter folder. When opening an unresolved chapter, QuiviT calls `extract()` on the chapter's `sourceUrl` and refreshes its metadata on resolution.
+
+### Folder metadata model
+
+QuiviT uses direct 1:1 folder metadata lookups. It checks only the active folder for metadata files (`comicinfo.json`, `comicinfo.xml`, `meta.json`, `comet.xml`, `metadata.opf`) without parent directory inheritance or recursive scans.
+
+Extractors supply tailored metadata directly for each folder tier:
+
+| Field | Series root `{Series}/` | Language `{Series}/{Lang}/` | Volume `.../Vol. {X}/` | Chapter `.../Ch. {Y}/` | Standalone / Art collection |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `Series` | Yes | Yes | Yes | Yes | Yes |
+| `Title` | Omitted | `"{Series} ({Lang})"` | `"Volume {X}"` | `"Ch. {Y} - {Title}"` | `"{Series} (Covers)"` |
+| `Volume` | Omitted | Omitted | `"{X}"` | `"{X}"` | Omitted |
+| `Number` | Omitted | Omitted | Omitted | `"{Y}"` | Omitted |
+| `LanguageISO` | Omitted | `"{code}"` | `"{code}"` | `"{code}"` | Omitted |
+| `Translator` | Omitted | Omitted | Omitted | `"{Scanlator}"` | Omitted |
+| `Notes` | Omitted | Omitted | Omitted | `"Scanlation: ..."` | Omitted |
+| `PageCount` | Omitted | Omitted | Omitted | `"{count}"` | Omitted |
+| `Web` | Series URL | Series URL | Series URL | Chapter URL | Source URL |
+| `Summary` | Series synopsis | Series synopsis | Series synopsis | Series synopsis | Collection synopsis |
+| `Tags` | Series tags | Series tags | Series tags | Series tags | `"Cover Gallery, Artbook"` |
+| `Genre` | Yes | Yes | Yes | Yes | Yes |
+| `Demographic` | Yes | Yes | Yes | Yes | Yes |
+| `Writer` | Yes | Yes | Yes | Yes | Yes |
+| `Penciller` | Yes | Yes | Yes | Yes | Yes |
+| `Year` | Yes | Yes | Yes | Yes | Yes |
+| `Status` | Yes | Yes | Yes | Yes | Yes |
+| `Manga` | Yes | Yes | Yes | Yes | Yes |
 
 ### Safety rules
 
@@ -102,17 +221,17 @@ export async function extract(html, url, context) {
 
 The following sample galleries are verified working in QuiviT and serve as reference test suites to track provider features, format support, and URL routing edge cases:
 
-| Provider | Title | Format | Items | Status | Edge Cases Covered | Source URL |
-| :--- | :--- | :--- | :---: | :--- | :--- | :---: |
-| Imgur | Anime Reaction Gifs | `.gif` | 50 | Working | Large animation batch (50 items), download concurrency | [Link](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) |
-| Imgur | Azuma - Seihantai | `.png` | 41 | Working | Album `/a/` route, multi-image manga set, description parsing | [Link](https://imgur.com/a/azuma-seihantai-17vF37d) |
-| Imgur | Just some Witch Watch OP clips | `.mp4` | 8 | Working | Video extraction, hashtag route (`#/t/anime`) | [Link](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) |
-| Imgur | Direct image sample | `.png` | 1 | Working | Direct CDN image URL (`i.imgur.com`), gallery match lookup or root download | [Link](https://i.imgur.com/4Q6rSDi.png) |
-| MangaDex | Akebi-chan no Sailor Fuku, Ch. 1 | `.jpg` | 33 | Working | Chapter `/chapter/{id}` route, REST API payload, chapter folder formatting, `@home` delivery | [Link](https://mangadex.org/chapter/0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d) |
-| MangaDex | Akebi-chan no Sailor Fuku (Chapters) | `.jpg` | Series | Working | Series `/title/{id}` route with `?tab=chapters`, feed pagination, volume and group folder hierarchy, series sidecar | [Link](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=chapters) |
-| MangaDex | Akebi-chan no Sailor Fuku (Covers) | `.jpg` | Covers | Working | Art gallery `/title/{id}?tab=art`, multi-locale pagination, zero-padded volume filenames, bracketed descriptions, root loose cover cleanup | [Link](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=art) |
-| MangaDex | Akebi-chan no Sailor Fuku - Vol. 16 Cover | `.jpg` | 1 | Working | Direct cover URL `/covers/{mangaId}/{fileName}`, friendly name resolution via API, root `gallery.json` recording and deduplication | [Link](https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg) |
-| MangaDex | Reader blob URL | N/A | 0 | Rejected | Browser ephemeral blob URL detection, rejected with descriptive guidance to use chapter URL | [Link](blob:https://mangadex.org/a357d5db-d810-4566-b0aa-cba411aa9460) |
+| Provider | Test Target | Import Type | Library Destination | Verified Behavior |
+| :--- | :--- | :--- | :--- | :--- |
+| Imgur | [Anime Reaction Gifs](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) | Gallery (50 GIFs) | `Imgur/Anime Reaction Gifs/` | Large animation batch, download concurrency, prefetch threshold |
+| Imgur | [Azuma - Seihantai](https://imgur.com/a/azuma-seihantai-17vF37d) | Album (41 PNGs) | `Imgur/Azuma - Seihantai/` | Album `/a/` route, multi-image manga set, description sanitization |
+| Imgur | [Witch Watch OP clips](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) | Gallery (8 MP4s) | `Imgur/Just some Witch Watch OP clips/` | Video extraction, audio stream detection, hashtag route (`#/t/anime`) |
+| Imgur | [Direct image sample](https://i.imgur.com/4Q6rSDi.png) | Direct Media | `Imgur/4Q6rSDi.png` | Direct CDN URL (`i.imgur.com`), gallery match lookup, root sidecar recording |
+| MangaDex | [Akebi-chan no Sailor Fuku, Ch. 1](https://mangadex.org/chapter/0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d) | Single Chapter (33 JPGs) | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 1 Ch. 1/` | Chapter `/chapter/{id}` route, `@home` coordinates, ComicInfo metadata sidecar |
+| MangaDex | [Akebi-chan no Sailor Fuku (Chapters)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=chapters) | Multi-Chapter Series | `MangaDex/Akebi-chan no Sailor Fuku/{Language}/{Volume}/{Chapter}/` | Series `/title/{id}` route with `?tab=chapters`, feed pagination, volume hierarchy, 5-tier folder metadata sidecars |
+| MangaDex | [Akebi-chan no Sailor Fuku (Covers)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=art) | Art Collection (Covers) | `MangaDex/Akebi-chan no Sailor Fuku (Covers)/Cover.jpg` + `{Language}/` | Art gallery `/title/{id}?tab=art`, multi-locale pagination, root `Cover.jpg`, volume filenames, root loose cover cleanup |
+| MangaDex | [Akebi-chan no Sailor Fuku - Vol. 16 Cover](https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg) | Direct Media | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg` | Direct cover URL `/covers/{mangaId}/{fileName}`, friendly API title resolution, root `gallery.json` deduplication |
+| MangaDex | [Reader blob URL](blob:https://mangadex.org/a357d5db-d810-4566-b0aa-cba411aa9460) | Unsupported URL | *None (Rejected)* | Browser ephemeral blob URL detection, descriptive rejection guiding user to chapter link |
 
 ## Authoring and testing workflow
 
