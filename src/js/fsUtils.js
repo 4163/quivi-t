@@ -26,6 +26,7 @@ let _archivePrefetchTimer = null;
 let _archivePrefetchSeq = 0;
 const _unlockedArchivePasswords = new BoundedMap(50);
 const _archiveEncryptionCache = new BoundedMap(100);
+let _directoryPreparationHook = null;
 
 function _nextNavigationGeneration() {
   _navigationGeneration += 1;
@@ -114,6 +115,9 @@ function findNearestSurvivingIndex(oldList, oldIndex, newFiles) {
 
 export const FsUtils = {
   basename,
+  setDirectoryPreparationHook(hook) {
+    _directoryPreparationHook = typeof hook === 'function' ? hook : null;
+  },
   isArchive(name) { return SUPPORTED_ARCHIVES.has(_ext(name)); },
   isImage(name) { return SUPPORTED_IMAGES.has(_ext(name)); },
   isVideo(name) { return _ext(name) === 'mp4'; },
@@ -819,6 +823,14 @@ export const FsUtils = {
       if (SUPPORTED_ARCHIVES.has(ext)) {
         return this.loadArchive(path, options.targetName || options.targetPath || '', options);
       } else {
+        if (_directoryPreparationHook) {
+          try {
+            await _directoryPreparationHook(path);
+          } catch (err) {
+            console.warn('[Core] Directory preparation hook error:', err);
+          }
+          if (!_isCurrentGeneration(options.generation)) return;
+        }
         const result = await invoke('read_directory', { path, showHidden: this.showHidden(), targetName: options.targetName });
         if (!_isCurrentGeneration(options.generation)) return;
         this.applyDirectoryResult(result, options);

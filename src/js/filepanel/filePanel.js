@@ -1207,14 +1207,9 @@ export async function renderLibrary() {
       }
     });
 
-    const appendNodes = (nodes, depth) => {
-      for (const node of nodes) {
-        if (!node.is_dir && depth > 0) continue;
-        listUl.appendChild(buildLibraryEntry(node, depth));
-        if (node.children?.length) appendNodes(node.children, depth + 1);
-      }
-    };
-    appendNodes(provider.nodes, 0);
+    for (const node of provider.nodes) {
+      listUl.appendChild(buildLibraryEntry(node, 0));
+    }
 
     libraryPanelEl.appendChild(provHeader);
     libraryPanelEl.appendChild(listUl);

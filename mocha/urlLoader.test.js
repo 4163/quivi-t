@@ -602,10 +602,178 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       );
     });
 
-    it('rejects series title URLs with a helpful prompt to use chapter links', async () => {
-      await assert.rejects(
-        () => MangaDexExtractor.extract('', 'https://mangadex.org/title/127820bd-8fc5-47b8-8782-e680317bf41d'),
-        /MangaDex series links contain multiple chapters/
+    it('extracts series title metadata and formats Option A chapter hierarchy with Cover.jpg', async () => {
+      const mangaId = '770c61b9-0ef2-460b-8c25-c10ab23349ce';
+      const mockMangaResponse = {
+        result: 'ok',
+        data: {
+          id: mangaId,
+          attributes: {
+            title: { en: 'Akebi-chan no Sailor Fuku' },
+            altTitles: []
+          },
+          relationships: [
+            {
+              type: 'cover_art',
+              attributes: {
+                fileName: '47df7fb5-dc37-492f-98bc-affe54b74960.jpg'
+              }
+            }
+          ]
+        }
+      };
+
+      const mockFeedResponse = {
+        result: 'ok',
+        total: 4,
+        data: [
+          {
+            id: 'chap-0001-aaaa-bbbb-cccc-dddddddddddd',
+            attributes: {
+              volume: '1',
+              chapter: '0',
+              title: 'Prologue: A Girl Runs So Freely',
+              translatedLanguage: 'en'
+            },
+            relationships: [
+              {
+                type: 'scanlation_group',
+                attributes: { name: 'nojay' }
+              }
+            ]
+          },
+          {
+            id: 'chap-0002-aaaa-bbbb-cccc-dddddddddddd',
+            attributes: {
+              volume: '1',
+              chapter: '1',
+              title: 'The Sailor Suit',
+              translatedLanguage: 'en'
+            },
+            relationships: []
+          },
+          {
+            id: 'chap-0003-aaaa-bbbb-cccc-dddddddddddd',
+            attributes: {
+              volume: null,
+              chapter: '1',
+              title: 'The Sailor Suit (Different Vol)',
+              translatedLanguage: 'en'
+            },
+            relationships: []
+          },
+          {
+            id: 'chap-0004-aaaa-bbbb-cccc-dddddddddddd',
+            attributes: {
+              volume: '1',
+              chapter: '1',
+              title: 'The Sailor Suit',
+              translatedLanguage: 'en'
+            },
+            relationships: []
+          }
+        ]
+      };
+
+      const seriesResult = await MangaDexExtractor.extract(
+        '',
+        `https://mangadex.org/title/${mangaId}/akebi-chan-no-sailor-fuku`,
+        {
+          fetchText: async (url) => {
+            if (url.includes('/manga/') && !url.includes('/feed')) {
+              return JSON.stringify(mockMangaResponse);
+            }
+            if (url.includes('/feed')) {
+              return JSON.stringify(mockFeedResponse);
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+          }
+        }
+      );
+
+      assert.equal(seriesResult.provider, 'MangaDex');
+      assert.equal(seriesResult.isSeries, true);
+      assert.equal(seriesResult.title, 'Akebi-chan no Sailor Fuku');
+      assert.deepEqual(seriesResult.rootRelativePath, ['Akebi-chan no Sailor Fuku']);
+      assert.deepEqual(seriesResult.cover, {
+        url: `https://uploads.mangadex.org/covers/${mangaId}/47df7fb5-dc37-492f-98bc-affe54b74960.jpg`,
+        filename: 'Cover.jpg'
+      });
+
+      assert.equal(seriesResult.chapters.length, 4);
+
+      // Chapter 0 with group
+      assert.deepEqual(seriesResult.chapters[0], {
+        id: 'mangadex-chap-0001-aaaa-bbbb-cccc-dddddddddddd',
+        title: 'Akebi-chan no Sailor Fuku - Vol. 1 Ch. 0 - Prologue: A Girl Runs So Freely',
+        sourceUrl: 'https://mangadex.org/chapter/chap-0001-aaaa-bbbb-cccc-dddddddddddd',
+        relativePath: [
+          'Akebi-chan no Sailor Fuku',
+          'English',
+          'Vol. 01',
+          'Vol. 1 Ch. 0 - Prologue_ A Girl Runs So Freely [nojay]'
+        ]
+      });
+
+      // Chapter 1 without group
+      assert.deepEqual(seriesResult.chapters[1], {
+        id: 'mangadex-chap-0002-aaaa-bbbb-cccc-dddddddddddd',
+        title: 'Akebi-chan no Sailor Fuku - Vol. 1 Ch. 1 - The Sailor Suit',
+        sourceUrl: 'https://mangadex.org/chapter/chap-0002-aaaa-bbbb-cccc-dddddddddddd',
+        relativePath: [
+          'Akebi-chan no Sailor Fuku',
+          'English',
+          'Vol. 01',
+          'Vol. 1 Ch. 1 - The Sailor Suit'
+        ]
+      });
+
+      // Chapter with null volume -> 'No Volume'
+      assert.deepEqual(seriesResult.chapters[2].relativePath, [
+        'Akebi-chan no Sailor Fuku',
+        'English',
+        'No Volume',
+        'Ch. 1 - The Sailor Suit (Different Vol)'
+      ]);
+
+      // Chapter with colliding path -> disambiguated with chapter ID prefix
+      assert.deepEqual(seriesResult.chapters[3].relativePath, [
+        'Akebi-chan no Sailor Fuku',
+        'English',
+        'Vol. 01',
+        'Vol. 1 Ch. 1 - The Sailor Suit (chap-000)'
+      ]);
+
+      // Validate against extractor result validator
+      const validated = validateExtractorResult(seriesResult, { name: 'MangaDex' });
+      assert.equal(validated.isSeries, true);
+
+      // Validate rejects invalid series results
+      assert.throws(
+        () => validateExtractorResult({ provider: 'MangaDex', isSeries: true, rootRelativePath: [] }),
+        /rootRelativePath must be a non-empty path/
+      );
+      assert.throws(
+        () => validateExtractorResult({ provider: 'MangaDex', isSeries: true, rootRelativePath: ['test'], chapters: 'invalid' }),
+        /'chapters' must be an array/
+      );
+      assert.throws(
+        () => validateExtractorResult({
+          provider: 'MangaDex',
+          isSeries: true,
+          rootRelativePath: ['test'],
+          chapters: [{ id: '', sourceUrl: 'https://mangadex.org', relativePath: ['a'] }]
+        }),
+        /missing chapter id/
+      );
+      assert.throws(
+        () => validateExtractorResult({
+          provider: 'MangaDex',
+          isSeries: true,
+          rootRelativePath: ['test'],
+          chapters: [{ id: '1', sourceUrl: '', relativePath: ['a'] }]
+        }),
+        /invalid chapter sourceUrl/
       );
     });
 

@@ -53,6 +53,7 @@ let _activeGalleryItems = null;
 let _coreStateUnsubscribe = null;
 let _downloadThresholdUnlisten = null;
 let _nextDownloadQueueId = 0;
+const _resolvingGalleries = new Set();
 
 // Blob URLs tracked separately for revocation on cache eviction.
 const _blobUrls = new Map();
@@ -616,6 +617,43 @@ export function validateExtractorResult(result, entry) {
   if (entry && result.provider !== entry.name) {
     throw new Error(`Extractor provider '${result.provider}' does not match manifest entry '${entry.name}'`);
   }
+
+  if (result.isSeries === true) {
+    if (!Array.isArray(result.rootRelativePath) || result.rootRelativePath.length === 0
+      || result.rootRelativePath.length > MAX_GALLERY_PATH_DEPTH) {
+      throw new Error("Extractor returned invalid series result: rootRelativePath must be a non-empty path");
+    }
+    for (const segment of result.rootRelativePath) {
+      _validateWindowsName(segment, 'series root relativePath segment');
+    }
+    if (result.cover) {
+      _validateImage(result.cover, 'cover');
+    }
+    if (!Array.isArray(result.chapters)) {
+      throw new Error("Extractor returned invalid series result: 'chapters' must be an array");
+    }
+    for (let i = 0; i < result.chapters.length; i++) {
+      const chapter = result.chapters[i];
+      if (!chapter || typeof chapter !== 'object') {
+        throw new Error(`Extractor returned invalid chapter at index ${i}`);
+      }
+      if (typeof chapter.id !== 'string' || !chapter.id.trim()) {
+        throw new Error(`Extractor returned missing chapter id at index ${i}`);
+      }
+      if (!isValidUrl(chapter.sourceUrl)) {
+        throw new Error(`Extractor returned invalid chapter sourceUrl at index ${i}`);
+      }
+      if (!Array.isArray(chapter.relativePath) || chapter.relativePath.length === 0
+        || chapter.relativePath.length > MAX_GALLERY_PATH_DEPTH) {
+        throw new Error(`Extractor returned invalid chapter relativePath at index ${i}`);
+      }
+      for (const segment of chapter.relativePath) {
+        _validateWindowsName(segment, `chapter relativePath segment at index ${i}`);
+      }
+    }
+    return result;
+  }
+
   _validateGallery(result.gallery);
   if (!Array.isArray(result.images)) {
     throw new Error("Extractor returned invalid result: 'images' must be an array");
@@ -852,6 +890,89 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   const html = url.startsWith('blob:') ? '' : await fetchRemoteText(url);
   const result = await extractGallery(mod, html, url, { fetchText: fetchRemoteText }, entry);
 
+  if (result.isSeries) {
+    const seriesPath = [libraryDir, providerDir, ...result.rootRelativePath].join('\\');
+    let coverFilename = null;
+
+    if (result.cover?.url && result.cover?.filename) {
+      coverFilename = result.cover.filename;
+      const coverDestPath = `${seriesPath}\\${coverFilename}`;
+      if (window.__TAURI__) {
+        try {
+          await downloadFile(result.cover.url, coverDestPath);
+        } catch (err) {
+          console.warn('[UrlLoader] Failed to download series cover:', err);
+        }
+      }
+    }
+
+    if (window.__TAURI__) {
+      const seriesSidecar = {
+        url,
+        provider: result.provider,
+        title: result.title || '',
+        timestamp: new Date().toISOString(),
+        gallery: {
+          id: `${entry.id}-series-${result.rootRelativePath.join('-')}`,
+          relativePath: result.rootRelativePath,
+          extractorId: entry.id,
+          extractorVersion: entry.version
+        },
+        images: coverFilename ? [{
+          filename: coverFilename,
+          displayName: coverFilename,
+          description: 'Series Cover',
+          sourceUrl: result.cover?.url || ''
+        }] : []
+      };
+
+      try {
+        await window.__TAURI__.core.invoke('write_text_file', {
+          path: `${seriesPath}\\gallery.json`,
+          content: JSON.stringify(seriesSidecar, null, 2)
+        });
+      } catch (err) {
+        console.warn('[UrlLoader] Failed to write series gallery.json:', err);
+      }
+    }
+
+    if (window.__TAURI__ && Array.isArray(result.chapters)) {
+      const CHUNK_SIZE = 25;
+      for (let i = 0; i < result.chapters.length; i += CHUNK_SIZE) {
+        const chunk = result.chapters.slice(i, i + CHUNK_SIZE);
+        await Promise.all(chunk.map((chapter) => {
+          const chapterPath = [libraryDir, providerDir, ...chapter.relativePath].join('\\');
+          const stubSidecar = {
+            url: chapter.sourceUrl,
+            provider: result.provider,
+            title: chapter.title || '',
+            timestamp: new Date().toISOString(),
+            gallery: {
+              id: chapter.id,
+              relativePath: chapter.relativePath,
+              extractorId: entry.id,
+              extractorVersion: entry.version
+            },
+            unresolved: true,
+            sourceUrl: chapter.sourceUrl,
+            images: []
+          };
+          return window.__TAURI__.core.invoke('write_text_file', {
+            path: `${chapterPath}\\gallery.json`,
+            content: JSON.stringify(stubSidecar, null, 2)
+          });
+        }));
+      }
+      window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+    }
+
+    const state = _Core?.getState?.();
+    const openFirstImage = state?.config?.frontend_data?.open_first_image === true;
+    const targetName = (openFirstImage && coverFilename) ? coverFilename : null;
+
+    return { galleryPath: seriesPath, result, targetName };
+  }
+
   // Pagination: follow nextPageUrl until exhausted or safety cap reached.
   let pages = 0;
   let nextUrl = result.nextPageUrl;
@@ -1060,19 +1181,120 @@ function _startGalleryQueue(galleryPath, items, options = {}) {
   });
 }
 
+export async function resolveUnresolvedGallery(galleryPath) {
+  if (!galleryPath || !window.__TAURI__) return false;
+  if (_resolvingGalleries.has(galleryPath)) return false;
+  if (_libraryDirCache && !_isPathWithin(galleryPath, _libraryDirCache)) {
+    return false;
+  }
+
+  const sidecarPath = `${galleryPath}\\gallery.json`;
+  let content = null;
+  try {
+    content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+  } catch {
+    return false;
+  }
+  if (!content) return false;
+
+  let data = null;
+  try {
+    data = JSON.parse(content);
+  } catch {
+    return false;
+  }
+  if (!data?.unresolved || !data?.sourceUrl) return false;
+
+  _resolvingGalleries.add(galleryPath);
+  try {
+    const manifest = await fetchManifest();
+    const entry = findExtractor(data.sourceUrl, manifest);
+    if (!entry) return false;
+    const mod = await loadExtractorModule(entry);
+    const fullResult = await extractGallery(mod, '', data.sourceUrl, { fetchText: fetchRemoteText }, entry);
+    if (!fullResult?.images || fullResult.images.length === 0) return false;
+
+    const updatedSidecar = {
+      url: data.sourceUrl,
+      provider: fullResult.provider,
+      title: fullResult.title || data.title || '',
+      timestamp: new Date().toISOString(),
+      gallery: {
+        id: fullResult.gallery?.id || data.gallery?.id,
+        relativePath: data.gallery?.relativePath || fullResult.gallery?.relativePath,
+        extractorId: entry.id,
+        extractorVersion: entry.version
+      },
+      images: fullResult.images.map((img) => ({
+        filename: img.filename,
+        displayName: img.filename,
+        description: img.description || img.displayName || '',
+        sourceUrl: img.url,
+        hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
+      }))
+    };
+
+    await window.__TAURI__.core.invoke('write_text_file', {
+      path: sidecarPath,
+      content: JSON.stringify(updatedSidecar, null, 2)
+    });
+
+    const filenames = fullResult.images.map((img) => img.filename);
+    await window.__TAURI__.core.invoke('create_placeholder_files', {
+      dir: galleryPath,
+      filenames
+    });
+
+    const state = _Core?.getState?.();
+    const openFirstImage = state?.config?.frontend_data?.open_first_image === true;
+    const eagerImg = fullResult.targetFilename
+      ? fullResult.images.find((img) => img.filename.toLowerCase() === fullResult.targetFilename.toLowerCase())
+      : (openFirstImage ? fullResult.images[0] : null);
+
+    if (eagerImg) {
+      try {
+        await downloadFile(eagerImg.url, `${galleryPath}\\${eagerImg.filename}`);
+      } catch (err) {
+        console.warn('[UrlLoader] Failed to eagerly download first image:', err);
+      }
+    }
+
+    return true;
+  } finally {
+    _resolvingGalleries.delete(galleryPath);
+  }
+}
+
 export async function resumeGalleryDownloads(galleryPath, list) {
   if (!galleryPath || !window.__TAURI__) return false;
   if (_activeQueue && _activeQueue.isActive && _pathsEqual(_activeGalleryPath, galleryPath)) {
     return true;
   }
+  if (_resolvingGalleries.has(galleryPath)) {
+    return false;
+  }
 
   try {
     const sidecarPath = `${galleryPath}\\gallery.json`;
-    const content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+    let content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
     if (!content) return false;
 
-    const data = JSON.parse(content);
-    if (!data || !Array.isArray(data.images) || data.images.length === 0) {
+    let data = JSON.parse(content);
+    if (!data) return false;
+
+    if (data.unresolved && data.sourceUrl) {
+      const resolved = await resolveUnresolvedGallery(galleryPath);
+      if (!resolved) return false;
+
+      content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+      data = JSON.parse(content);
+
+      if (_FsUtils?.refresh && _pathsEqual(_Core?.getState?.()?.directory, galleryPath)) {
+        await _FsUtils.refresh();
+      }
+    }
+
+    if (!Array.isArray(data.images) || data.images.length === 0) {
       return false;
     }
 
@@ -1228,6 +1450,12 @@ export const UrlLoader = {
       _Core.setPlaceholderCheck((path) => isPlaceholderFile(path));
     }
 
+    // Register directory preparation hook so fsUtils can resolve chapter stubs
+    // before reading directory, eliminating empty file list flashes.
+    if (_FsUtils && typeof _FsUtils.setDirectoryPreparationHook === 'function') {
+      _FsUtils.setDirectoryPreparationHook((path) => resolveUnresolvedGallery(path));
+    }
+
     if (_Core && typeof _Core.onStateChange === 'function' && !_coreStateUnsubscribe) {
       let _lastSyncDirectory = null;
 
@@ -1270,6 +1498,7 @@ export const UrlLoader = {
   openPrompt,
   loadUrl,
   resumeGalleryDownloads,
+  resolveUnresolvedGallery,
   normalizeUrl,
   isValidUrl,
   isGalleryDownloading,

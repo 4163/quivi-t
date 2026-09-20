@@ -5,8 +5,6 @@ use crate::formats::*;
 use crate::models::*;
 use crate::platform::attributes::is_hidden_path;
 
-const MAX_LIBRARY_TREE_DEPTH: usize = 8;
-
 pub fn read_directory_impl(
     path: &str,
     show_hidden: bool,
@@ -252,7 +250,7 @@ pub fn read_library_tree() -> Result<Vec<LibraryProviderEntry>, String> {
             continue;
         }
 
-        let nodes = read_library_nodes(&provider_path, 0);
+        let nodes = read_library_nodes(&provider_path);
 
         providers.push(LibraryProviderEntry {
             name: provider_name,
@@ -265,7 +263,7 @@ pub fn read_library_tree() -> Result<Vec<LibraryProviderEntry>, String> {
     Ok(providers)
 }
 
-fn read_library_nodes(dir: &Path, depth: usize) -> Vec<LibraryNode> {
+fn read_library_nodes(dir: &Path) -> Vec<LibraryNode> {
     let mut nodes = Vec::new();
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
@@ -288,11 +286,10 @@ fn read_library_nodes(dir: &Path, depth: usize) -> Vec<LibraryNode> {
             continue;
         }
         if is_file
-            && (depth > 0
-                || !path
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    .is_some_and(|ext| is_image_ext(ext) || ext.eq_ignore_ascii_case("mp4")))
+            && !path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| is_image_ext(ext) || ext.eq_ignore_ascii_case("mp4"))
         {
             continue;
         }
@@ -315,12 +312,7 @@ fn read_library_nodes(dir: &Path, depth: usize) -> Vec<LibraryNode> {
         } else {
             (None, 0, false)
         };
-        let children = if is_dir && !is_gallery && depth < MAX_LIBRARY_TREE_DEPTH {
-            read_library_nodes(&path, depth + 1)
-        } else {
-            Vec::new()
-        };
-        if is_dir && !is_gallery && children.is_empty() {
+        if is_dir && !is_gallery {
             continue;
         }
 
@@ -333,7 +325,7 @@ fn read_library_nodes(dir: &Path, depth: usize) -> Vec<LibraryNode> {
             is_dir,
             is_gallery,
             image_count,
-            children,
+            children: Vec::new(),
         });
     }
 
@@ -506,7 +498,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn library_nodes_preserve_nested_gallery_paths() {
+    fn library_nodes_are_single_galleries_without_nested_tree() {
         let root = std::env::temp_dir().join(format!(
             "quivit_library_nodes_{}_{}",
             std::process::id(),
@@ -515,20 +507,21 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let chapter = root.join("Series").join("Volume 01").join("Chapter 02");
-        fs::create_dir_all(&chapter).unwrap();
+        let series = root.join("Series");
+        fs::create_dir_all(&series).unwrap();
         fs::write(
-            chapter.join("gallery.json"),
-            r#"{"title":"Chapter 02","images":[{"filename":"001.png"}]}"#,
+            series.join("gallery.json"),
+            r#"{"title":"Series Title","images":[{"filename":"Cover.jpg"}]}"#,
         )
         .unwrap();
 
-        let nodes = read_library_nodes(&root, 0);
+        let nodes = read_library_nodes(&root);
         assert_eq!(nodes.len(), 1);
         assert_eq!(nodes[0].name, "Series");
-        assert_eq!(nodes[0].children[0].name, "Volume 01");
-        assert!(nodes[0].children[0].children[0].is_gallery);
-        assert_eq!(nodes[0].children[0].children[0].image_count, 1);
+        assert_eq!(nodes[0].title.as_deref(), Some("Series Title"));
+        assert!(nodes[0].is_gallery);
+        assert_eq!(nodes[0].image_count, 1);
+        assert!(nodes[0].children.is_empty());
 
         let _ = fs::remove_dir_all(root);
     }
@@ -547,15 +540,15 @@ mod tests {
         let album = provider.join("My Album");
         fs::create_dir_all(&album).unwrap();
 
-        // Direct raw file under provider root (depth == 0)
+        // Direct raw file under provider root
         fs::write(provider.join("direct.png"), "image").unwrap();
 
-        // Files inside album (depth > 0)
+        // Files inside album
         fs::write(album.join("001.png"), "placeholder").unwrap();
         fs::write(album.join("002.png"), "placeholder").unwrap();
 
-        // Without gallery.json: album has no subdirectories, so it shouldn't expose files as children
-        let nodes = read_library_nodes(&provider, 0);
+        // Without gallery.json: album is not a recognized gallery, so it's skipped
+        let nodes = read_library_nodes(&provider);
         assert_eq!(nodes.len(), 1);
         assert_eq!(nodes[0].name, "direct.png");
         assert!(!nodes[0].is_dir);
@@ -567,7 +560,7 @@ mod tests {
         )
         .unwrap();
 
-        let nodes_with_gallery = read_library_nodes(&provider, 0);
+        let nodes_with_gallery = read_library_nodes(&provider);
         assert_eq!(nodes_with_gallery.len(), 2);
         let gallery_node = nodes_with_gallery.iter().find(|n| n.name == "My Album").unwrap();
         assert!(gallery_node.is_dir);
