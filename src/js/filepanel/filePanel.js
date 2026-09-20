@@ -2169,6 +2169,15 @@ export function initFilePanel(deps) {
 
   Core.onStateChange(() => renderFilePanel(Core.getState()));
 
+  // Deferred video support lists mp4 only in Library/gallery dirs, so icon:mp4
+  // never warms through normal browsing. Prime it here through the shared
+  // per-ext path so the first gallery open paints sync like every other ext.
+  try {
+    if (window.__TAURI__ && !iconCache.has('mp4') && localStorage.getItem('icon:mp4') === null) {
+      fetchNativeIcon('', 'mp4', 'small');
+    }
+  } catch (e) {}
+
   // When focus leaves the file panel entirely (e.g. user clicks the viewport),
   // surrender keyboard ownership so arrow keys revert to the viewer.
   filePanel.addEventListener('focusout', (e) => {
