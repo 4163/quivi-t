@@ -1679,7 +1679,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   /* The solid base hides the checkerboard. */
   background-color: var(--grill-bg);
   /* Mixed pixel and percentage stops keep stripe widths steady. */
-  background-image: linear-gradient(-45deg,
+  background-image: linear-gradient(var(--grill-angle, -45deg),
     transparent 0,
     transparent calc(25% - var(--grill-thickness-pct) / 2),
     var(--grill-lines) 0,

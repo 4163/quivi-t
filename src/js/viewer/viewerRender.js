@@ -728,6 +728,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     if (imgWrapper) {
       imgWrapper.style.transform = viewportState.getTransform();
       imgWrapper.style.setProperty('--zoom-scale', viewportState.getScale());
+      imgWrapper.style.setProperty('--grill-angle', viewportState.getGrillAngle());
     }
     if ((img && img.src) || _activeVideoEl) {
       Statusbar.setZoom(viewportState.getScale());

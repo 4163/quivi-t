@@ -186,4 +186,53 @@ describe('viewerMath', () => {
       assert.equal(pt.y, 50);
     });
   });
+
+  describe('grill counter-angle calculations', () => {
+    it('defaults to -45deg at 0 rotation and no flip', () => {
+      const state = createViewportState();
+      assert.equal(state.getGrillAngle(), '-45deg');
+    });
+
+    it('inverts angle on 90 and 270 degree rotation, preserves on 0 and 180', () => {
+      const state = createViewportState();
+      state.rotate(90);
+      assert.equal(state.getGrillAngle(), '45deg');
+      state.rotate(90); // 180deg
+      assert.equal(state.getGrillAngle(), '-45deg');
+      state.rotate(90); // 270deg
+      assert.equal(state.getGrillAngle(), '45deg');
+      state.rotate(90); // 360/0deg
+      assert.equal(state.getGrillAngle(), '-45deg');
+      state.rotate(-90); // 270/-90deg
+      assert.equal(state.getGrillAngle(), '45deg');
+    });
+
+    it('inverts angle on single axis flip and restores on dual flip', () => {
+      const state = createViewportState();
+      state.flip('x');
+      assert.equal(state.getGrillAngle(), '45deg');
+      state.flip('y');
+      assert.equal(state.getGrillAngle(), '-45deg');
+      state.flip('x');
+      assert.equal(state.getGrillAngle(), '45deg');
+      state.flip('y');
+      assert.equal(state.getGrillAngle(), '-45deg');
+    });
+
+    it('correctly calculates parity for composite rotation and flip', () => {
+      const state = createViewportState();
+      state.rotate(90);
+      state.flip('x');
+      assert.equal(state.getGrillAngle(), '-45deg');
+
+      state.flip('y');
+      assert.equal(state.getGrillAngle(), '45deg');
+
+      state.rotate(90); // 180deg + flip x + flip y -> net 0 flip
+      assert.equal(state.getGrillAngle(), '-45deg');
+
+      state.resetGeometry();
+      assert.equal(state.getGrillAngle(), '-45deg');
+    });
+  });
 });

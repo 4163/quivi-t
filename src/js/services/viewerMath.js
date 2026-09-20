@@ -5,7 +5,7 @@ export function checkIsSpread(w, h) {
   return (w / h) >= 1.2;
 }
 
-export function createViewportState({ getViewport }) {
+export function createViewportState({ getViewport = () => ({ clientWidth: 1000, clientHeight: 800, left: 0, top: 0 }) } = {}) {
   let _scale = 1;
   let _tx = 0;
   let _ty = 0;
@@ -256,9 +256,18 @@ export function createViewportState({ getViewport }) {
     return _spreadStep;
   }
 
+  function getGrillAngle() {
+    const isRot90or270 = Math.abs(Math.round(_rotation / 90)) % 2 === 1;
+    const isFlipX = _flipX === -1;
+    const isFlipY = _flipY === -1;
+    const inverted = (isRot90or270 !== (isFlipX !== isFlipY));
+    return inverted ? '45deg' : '-45deg';
+  }
+
   return {
     subscribe: (fn) => listeners.push(fn),
     getTransform: () => `translate(calc(-50% + ${_tx}px), calc(-50% + ${_ty}px)) rotate(${_rotation}deg) scale(${_flipX * _scale}, ${_flipY * _scale})`,
+    getGrillAngle,
     getScale: () => _scale,
     getTx: () => _tx,
     getTy: () => _ty,
