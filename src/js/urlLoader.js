@@ -54,6 +54,7 @@ let _coreStateUnsubscribe = null;
 let _downloadThresholdUnlisten = null;
 let _nextDownloadQueueId = 0;
 const _resolvingGalleries = new Set();
+const _resumingGalleries = new Map();
 
 // Blob URLs tracked separately for revocation on cache eviction.
 const _blobUrls = new Map();
@@ -234,6 +235,7 @@ export class DownloadQueue {
       const filename = item.filename || (destPath ? destPath.replace(/\\/g, '/').split('/').pop() : '');
       return {
         url: item.url,
+        fallbackUrl: item.fallbackUrl || null,
         destPath,
         filename,
         galleryIndex: item.galleryIndex ?? i,
@@ -340,14 +342,14 @@ export class DownloadQueue {
     if (activeItem) pivotGi = activeItem.galleryIndex;
 
     const visiblePending = pending.filter((item) => this._isInViewport(item));
-    if (visiblePending.length === 0) return null;
+    const candidates = visiblePending.length > 0 ? visiblePending : pending;
 
-    const forward = visiblePending
+    const forward = candidates
       .filter((item) => item.galleryIndex >= pivotGi)
       .sort((a, b) => a.galleryIndex - b.galleryIndex);
     if (forward.length > 0) return forward[0];
 
-    const backward = visiblePending
+    const backward = candidates
       .filter((item) => item.galleryIndex < pivotGi)
       .sort((a, b) => b.galleryIndex - a.galleryIndex);
     return backward[0] || null;
@@ -1855,64 +1857,78 @@ export async function resumeGalleryDownloads(galleryPath, list) {
   if (_resolvingGalleries.has(galleryPath)) {
     return false;
   }
+  if (_resumingGalleries.has(galleryPath)) {
+    return _resumingGalleries.get(galleryPath);
+  }
 
-  try {
-    const sidecarPath = `${galleryPath}\\gallery.json`;
-    let content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
-    if (!content) return false;
+  const resumePromise = (async () => {
+    try {
+      const sidecarPath = `${galleryPath}\\gallery.json`;
+      let content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+      if (!content) return false;
 
-    let data = JSON.parse(content);
-    if (!data) return false;
+      let data = JSON.parse(content);
+      if (!data) return false;
 
-    if (data.unresolved && data.sourceUrl) {
-      const resolved = await resolveUnresolvedGallery(galleryPath);
-      if (!resolved) return false;
+      if (data.unresolved && data.sourceUrl) {
+        const resolved = await resolveUnresolvedGallery(galleryPath);
+        if (!resolved) return false;
 
-      content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
-      data = JSON.parse(content);
+        content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+        data = JSON.parse(content);
 
-      if (_FsUtils?.refresh && _pathsEqual(_Core?.getState?.()?.directory, galleryPath)) {
-        await _FsUtils.refresh();
-      }
-    }
-
-    if (!Array.isArray(data.images) || data.images.length === 0) {
-      return false;
-    }
-
-    const sizeMap = new Map();
-    if (Array.isArray(list)) {
-      for (const item of list) {
-        if (item && item.name) {
-          sizeMap.set(item.name.toLowerCase(), item.size ?? 0);
+        if (_FsUtils?.refresh && _pathsEqual(_Core?.getState?.()?.directory, galleryPath)) {
+          await _FsUtils.refresh();
+          const freshList = _Core?.getState?.()?.list;
+          if (Array.isArray(freshList)) {
+            list = freshList;
+          }
         }
       }
-    }
 
-    const allItems = [];
-    data.images.forEach((img, index) => {
-      const destPath = `${galleryPath}\\${img.filename}`;
-      const size = sizeMap.get(img.filename.toLowerCase());
-      const isDownloaded = size !== undefined && size > 0;
-      allItems.push({
-        url: img.sourceUrl || img.url,
-        fallbackUrl: img.fallbackUrl,
-        destPath,
-        galleryIndex: index,
-        status: isDownloaded ? 'completed' : 'pending'
+      if (!Array.isArray(data.images) || data.images.length === 0) {
+        return false;
+      }
+
+      const sizeMap = new Map();
+      if (Array.isArray(list)) {
+        for (const item of list) {
+          if (item && item.name) {
+            sizeMap.set(item.name.toLowerCase(), item.size ?? 0);
+          }
+        }
+      }
+
+      const allItems = [];
+      data.images.forEach((img, index) => {
+        const destPath = `${galleryPath}\\${img.filename}`;
+        const size = sizeMap.get(img.filename.toLowerCase());
+        const isDownloaded = size !== undefined && size > 0;
+        allItems.push({
+          url: img.sourceUrl || img.url,
+          fallbackUrl: img.fallbackUrl,
+          destPath,
+          galleryIndex: index,
+          status: isDownloaded ? 'completed' : 'pending'
+        });
       });
-    });
 
-    const hasPending = allItems.some((i) => i.status === 'pending');
-    if (!hasPending) {
+      const hasPending = allItems.some((i) => i.status === 'pending');
+      if (!hasPending) {
+        return false;
+      }
+
+      _startGalleryQueue(galleryPath, allItems);
+      return true;
+    } catch {
       return false;
+    } finally {
+      _resumingGalleries.delete(galleryPath);
     }
+  })();
 
-    _startGalleryQueue(galleryPath, allItems);
-    return true;
-  } catch {
-    return false;
-  }
+  _resumingGalleries.set(galleryPath, resumePromise);
+  return resumePromise;
 }
 
 // -- Placeholder and bridging queries --
@@ -2056,11 +2072,12 @@ export const UrlLoader = {
           if (dir) {
             resumeGalleryDownloads(dir, state.list).catch(() => {});
           }
+          return;
         }
 
         // Check if queue is missing or not active for this gallery
         if (!_activeQueue || !_activeQueue.isActive || !_pathsEqual(dir, _activeGalleryPath)) {
-          if (dir) {
+          if (dir && !_resumingGalleries.has(dir)) {
             resumeGalleryDownloads(dir, state.list).catch(() => {});
           }
           return;

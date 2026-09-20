@@ -151,6 +151,64 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
 
       queue.cancel();
     });
+
+    it('falls back to fallbackUrl when primary url fails', async () => {
+      const urlsAttempted = [];
+      const queue = new DownloadQueue([
+        {
+          url: 'https://cdn.example.test/001.jpg',
+          fallbackUrl: 'https://origin.example.test/001.jpg',
+          destPath: 'C:\\gallery\\001.jpg',
+          galleryIndex: 0
+        }
+      ], {
+        visibleStart: 0,
+        visibleEnd: 1,
+        downloadFile: async (url) => {
+          urlsAttempted.push(url);
+          if (url.includes('cdn')) {
+            throw new Error('CDN gateway timeout 504');
+          }
+        }
+      });
+
+      queue.prioritize('C:\\gallery\\001.jpg');
+      await flushQueue();
+
+      assert.deepEqual(urlsAttempted, [
+        'https://cdn.example.test/001.jpg',
+        'https://origin.example.test/001.jpg'
+      ]);
+      assert.equal(queue.getStatus('C:\\gallery\\001.jpg'), 'completed');
+
+      queue.cancel();
+    });
+
+    it('continues prefetching backlog items when visible range is empty or unset', async () => {
+      const downloaded = [];
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 }
+      ], {
+        visibleStart: 0,
+        visibleEnd: 0,
+        downloadFile: async (_url, destPath) => {
+          downloaded.push(destPath);
+        }
+      });
+
+      queue.prioritize('C:\\gallery\\001.jpg');
+      await flushQueue();
+
+      assert.deepEqual(downloaded, [
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\002.jpg',
+        'C:\\gallery\\003.jpg'
+      ]);
+
+      queue.cancel();
+    });
   });
 
   describe('library relocation recovery', () => {
