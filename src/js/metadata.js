@@ -14,6 +14,41 @@ import { findMetadataEntry } from './services/metadataFiles.js';
 
 export { findMetadataEntry };
 
+export function parseMetadataText(text, entryName) {
+  if (!text || typeof text !== 'string') return null;
+  const name = (entryName || '').replace(/\\/g, '/').split('/').pop().toLowerCase();
+
+  if (name.endsWith('.json')) {
+    try {
+      const data = JSON.parse(text);
+      if (name === 'meta.json' || (Array.isArray(data?.tags) && data.tags.some(t => t && typeof t === 'object' && t.type))) {
+        return parseGalleryMetaJson(data);
+      }
+      return parseComicInfoJson(data);
+    } catch {
+      return null;
+    }
+  }
+
+  if (name.endsWith('.xml') || name.endsWith('.opf')) {
+    try {
+      const doc = new DOMParser().parseFromString(text, 'text/xml');
+      if (doc.querySelector('parsererror')) return null;
+
+      if (name === 'metadata.opf') {
+        return parseOpf(doc);
+      } else {
+        // ComicInfo.xml and CoMet.xml share similar element names.
+        return parseComicInfo(doc);
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Fetches and parses metadata from the given archive.
  * @param {string} archivePath - Absolute path to the archive file.
@@ -34,30 +69,33 @@ export async function fetchMetadata(archivePath, fileNames) {
     return null;
   }
 
-  const name = entry.replace(/\\/g, '/').split('/').pop().toLowerCase();
-  if (name.endsWith('.json')) {
-    try {
-      const data = JSON.parse(text);
-      if (name === 'meta.json' || (Array.isArray(data?.tags) && data.tags.some(t => t && typeof t === 'object' && t.type))) {
-        return parseGalleryMetaJson(data);
-      }
-      return parseComicInfoJson(data);
-    } catch {
-      return null;
-    }
-  }
+  return parseMetadataText(text, entry);
+}
+
+/**
+ * Fetches and parses metadata for a directory within an imported library.
+ * Walks upward through parent directories to inherit metadata.
+ * @param {string} dirPath - Absolute path to the directory.
+ * @returns {Promise<{ meta: ComicMeta, metaPath: string, dirPath: string }|null>}
+ */
+export async function fetchDirectoryMetadata(dirPath) {
+  if (!dirPath || typeof dirPath !== 'string') return null;
+  if (!window.__TAURI__) return null;
 
   try {
-    const doc = new DOMParser().parseFromString(text, 'text/xml');
-    if (doc.querySelector('parsererror')) return null;
+    const res = await window.__TAURI__.core.invoke('find_directory_metadata', { dirPath });
+    if (!res || !res.content) return null;
 
-    if (name === 'metadata.opf') {
-      return parseOpf(doc);
-    } else {
-      // ComicInfo.xml and CoMet.xml share similar element names.
-      return parseComicInfo(doc);
-    }
-  } catch {
+    const meta = parseMetadataText(res.content, res.meta_path);
+    if (!meta) return null;
+
+    return {
+      meta,
+      metaPath: res.meta_path,
+      dirPath: res.dir_path
+    };
+  } catch (err) {
+    console.warn('[Metadata] Failed to fetch directory metadata:', err);
     return null;
   }
 }
@@ -130,7 +168,14 @@ export function parseComicInfoJson(raw) {
   const editor      = get('Editor', 'editor', 'editors', 'Editors');
   const publisher   = get('Publisher', 'publisher');
   const genre       = get('Genre', 'genre', 'genres', 'Genres');
-  const tags        = get('Tags', 'tags');
+  const demographic = get('Demographic', 'demographic', 'AgeRating', 'ageRating');
+  let tags          = get('Tags', 'tags');
+  if (demographic) {
+    const normTags = tags.toLowerCase().split(',').map(s => s.trim());
+    if (!normTags.includes(demographic.toLowerCase().trim())) {
+      tags = tags ? `${demographic}, ${tags}` : demographic;
+    }
+  }
   const pageCount   = getNum('PageCount', 'pageCount', 'pages', 'Pages');
   const manga       = getManga();
   const languageISO = get('LanguageISO', 'languageISO', 'languageIso', 'language', 'Language');

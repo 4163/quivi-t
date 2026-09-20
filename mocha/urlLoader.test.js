@@ -16,7 +16,8 @@ import {
   extractUrlStem,
   isDirectMediaUrl,
   findExtractor,
-  recordRootMediaDownload
+  recordRootMediaDownload,
+  writeGalleryMetadata
 } from '../src/js/urlLoader.js';
 import * as ImgurExtractor from '../extractors/imgur.js';
 import * as MangaDexExtractor from '../extractors/mangadex.js';
@@ -455,6 +456,224 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.ok(match);
       assert.equal(match.galleryPath, 'C:\\library\\Example\\Video Album');
       assert.equal(match.targetName, '1_sample_clip.mp4');
+    });
+
+    it('prioritizes content image in child gallery over parent series Cover.jpg placeholder', async () => {
+      const mockDirs = {
+        'C:\\library\\MangaDex': {
+          files: [
+            { name: 'Akebi (Covers)', path: 'C:\\library\\MangaDex\\Akebi (Covers)', is_dir: true }
+          ]
+        },
+        'C:\\library\\MangaDex\\Akebi (Covers)': {
+          files: [
+            { name: 'Japanese', path: 'C:\\library\\MangaDex\\Akebi (Covers)\\Japanese', is_dir: true }
+          ]
+        },
+        'C:\\library\\MangaDex\\Akebi (Covers)\\Japanese': {
+          files: []
+        }
+      };
+
+      const mockFiles = {
+        'C:\\library\\MangaDex\\Akebi (Covers)\\gallery.json': JSON.stringify({
+          url: 'https://mangadex.org/title/123?tab=art',
+          provider: 'MangaDex',
+          images: [
+            {
+              filename: 'Cover.jpg',
+              description: 'Series Cover',
+              sourceUrl: 'https://uploads.mangadex.org/covers/123/hash16.jpg'
+            }
+          ]
+        }),
+        'C:\\library\\MangaDex\\Akebi (Covers)\\Japanese\\gallery.json': JSON.stringify({
+          url: 'https://mangadex.org/title/123?tab=art&locale=ja',
+          provider: 'MangaDex',
+          images: [
+            {
+              filename: 'Vol. 16.jpg',
+              description: 'Volume 16',
+              sourceUrl: 'https://uploads.mangadex.org/covers/123/hash16.jpg'
+            }
+          ]
+        })
+      };
+
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') return mockDirs[args.path] || { files: [] };
+            if (cmd === 'read_text_file') {
+              if (mockFiles[args.path]) return mockFiles[args.path];
+              throw new Error('File not found');
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      const match = await findMatchingGalleryImage(
+        'C:\\library\\MangaDex',
+        'https://mangadex.org/covers/123/hash16.jpg',
+        'hash16'
+      );
+
+      assert.ok(match);
+      assert.equal(match.galleryPath, 'C:\\library\\MangaDex\\Akebi (Covers)\\Japanese');
+      assert.equal(match.targetName, 'Vol. 16.jpg');
+    });
+
+    it('falls back to parent series Cover.jpg if child gallery image was not downloaded', async () => {
+      const mockDirs = {
+        'C:\\library\\MangaDex': {
+          files: [
+            { name: 'Akebi (Covers)', path: 'C:\\library\\MangaDex\\Akebi (Covers)', is_dir: true }
+          ]
+        },
+        'C:\\library\\MangaDex\\Akebi (Covers)': {
+          files: []
+        }
+      };
+
+      const mockFiles = {
+        'C:\\library\\MangaDex\\Akebi (Covers)\\gallery.json': JSON.stringify({
+          url: 'https://mangadex.org/title/123?tab=art',
+          provider: 'MangaDex',
+          images: [
+            {
+              filename: 'Cover.jpg',
+              description: 'Series Cover',
+              sourceUrl: 'https://uploads.mangadex.org/covers/123/hash16.jpg'
+            }
+          ]
+        })
+      };
+
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') return mockDirs[args.path] || { files: [] };
+            if (cmd === 'read_text_file') {
+              if (mockFiles[args.path]) return mockFiles[args.path];
+              throw new Error('File not found');
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      const match = await findMatchingGalleryImage(
+        'C:\\library\\MangaDex',
+        'https://mangadex.org/covers/123/hash16.jpg',
+        'hash16'
+      );
+
+      assert.ok(match);
+      assert.equal(match.galleryPath, 'C:\\library\\MangaDex\\Akebi (Covers)');
+      assert.equal(match.targetName, 'Cover.jpg');
+    });
+
+    it('adheres to 3-tier priority order: content cover > covers root cover > series root cover', async () => {
+      const mockDirs = {
+        'C:\\library\\MangaDex': {
+          files: [
+            { name: 'Akebi', path: 'C:\\library\\MangaDex\\Akebi', is_dir: true },
+            { name: 'Akebi (Covers)', path: 'C:\\library\\MangaDex\\Akebi (Covers)', is_dir: true }
+          ]
+        },
+        'C:\\library\\MangaDex\\Akebi': { files: [] },
+        'C:\\library\\MangaDex\\Akebi (Covers)': {
+          files: [
+            { name: 'Japanese', path: 'C:\\library\\MangaDex\\Akebi (Covers)\\Japanese', is_dir: true }
+          ]
+        },
+        'C:\\library\\MangaDex\\Akebi (Covers)\\Japanese': { files: [] }
+      };
+
+      const mockFiles = {
+        'C:\\library\\MangaDex\\Akebi\\gallery.json': JSON.stringify({
+          url: 'https://mangadex.org/title/123',
+          provider: 'MangaDex',
+          title: 'Akebi',
+          images: [
+            {
+              filename: 'Cover.jpg',
+              description: 'Series Cover',
+              sourceUrl: 'https://uploads.mangadex.org/covers/123/hash16.jpg'
+            }
+          ]
+        }),
+        'C:\\library\\MangaDex\\Akebi (Covers)\\gallery.json': JSON.stringify({
+          url: 'https://mangadex.org/title/123?tab=art',
+          provider: 'MangaDex',
+          title: 'Akebi (Covers)',
+          images: [
+            {
+              filename: 'Cover.jpg',
+              description: 'Series Cover',
+              sourceUrl: 'https://uploads.mangadex.org/covers/123/hash16.jpg'
+            }
+          ]
+        }),
+        'C:\\library\\MangaDex\\Akebi (Covers)\\Japanese\\gallery.json': JSON.stringify({
+          url: 'https://mangadex.org/title/123?tab=art&locale=ja',
+          provider: 'MangaDex',
+          title: 'Akebi - Covers (Japanese)',
+          images: [
+            {
+              filename: 'Vol. 16.jpg',
+              description: 'Volume 16',
+              sourceUrl: 'https://uploads.mangadex.org/covers/123/hash16.jpg'
+            }
+          ]
+        })
+      };
+
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') return mockDirs[args.path] || { files: [] };
+            if (cmd === 'read_text_file') {
+              if (mockFiles[args.path]) return mockFiles[args.path];
+              throw new Error('File not found');
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      // 1. All three present: Priority 1 wins (Japanese/Vol. 16.jpg)
+      const match1 = await findMatchingGalleryImage(
+        'C:\\library\\MangaDex',
+        'https://mangadex.org/covers/123/hash16.jpg',
+        'hash16'
+      );
+      assert.ok(match1);
+      assert.equal(match1.galleryPath, 'C:\\library\\MangaDex\\Akebi (Covers)\\Japanese');
+      assert.equal(match1.targetName, 'Vol. 16.jpg');
+
+      // 2. Remove child gallery Vol. 16.jpg: Priority 2 wins (Akebi (Covers)/Cover.jpg over Akebi/Cover.jpg)
+      delete mockFiles['C:\\library\\MangaDex\\Akebi (Covers)\\Japanese\\gallery.json'];
+      const match2 = await findMatchingGalleryImage(
+        'C:\\library\\MangaDex',
+        'https://mangadex.org/covers/123/hash16.jpg',
+        'hash16'
+      );
+      assert.ok(match2);
+      assert.equal(match2.galleryPath, 'C:\\library\\MangaDex\\Akebi (Covers)');
+      assert.equal(match2.targetName, 'Cover.jpg');
+
+      // 3. Remove covers collection: Priority 3 wins (Akebi/Cover.jpg)
+      delete mockFiles['C:\\library\\MangaDex\\Akebi (Covers)\\gallery.json'];
+      const match3 = await findMatchingGalleryImage(
+        'C:\\library\\MangaDex',
+        'https://mangadex.org/covers/123/hash16.jpg',
+        'hash16'
+      );
+      assert.ok(match3);
+      assert.equal(match3.galleryPath, 'C:\\library\\MangaDex\\Akebi');
+      assert.equal(match3.targetName, 'Cover.jpg');
     });
   });
 
@@ -1215,30 +1434,28 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.equal(seriesResult.chapters.length, 4);
 
       // Chapter 0 with group
-      assert.deepEqual(seriesResult.chapters[0], {
-        id: 'mangadex-chap-0001-aaaa-bbbb-cccc-dddddddddddd',
-        title: 'Akebi-chan no Sailor Fuku - Vol. 1 Ch. 0 - Prologue: A Girl Runs So Freely',
-        sourceUrl: 'https://mangadex.org/chapter/chap-0001-aaaa-bbbb-cccc-dddddddddddd',
-        relativePath: [
-          'Akebi-chan no Sailor Fuku',
-          'English',
-          'Vol. 01',
-          'Vol. 1 Ch. 0 - Prologue_ A Girl Runs So Freely [nojay]'
-        ]
-      });
+      assert.equal(seriesResult.chapters[0].id, 'mangadex-chap-0001-aaaa-bbbb-cccc-dddddddddddd');
+      assert.equal(seriesResult.chapters[0].title, 'Akebi-chan no Sailor Fuku - Vol. 1 Ch. 0 - Prologue: A Girl Runs So Freely');
+      assert.equal(seriesResult.chapters[0].sourceUrl, 'https://mangadex.org/chapter/chap-0001-aaaa-bbbb-cccc-dddddddddddd');
+      assert.deepEqual(seriesResult.chapters[0].relativePath, [
+        'Akebi-chan no Sailor Fuku',
+        'English',
+        'Vol. 01',
+        'Vol. 1 Ch. 0 - Prologue_ A Girl Runs So Freely [nojay]'
+      ]);
+      assert.notEqual(seriesResult.chapters[0].metadata, undefined);
 
       // Chapter 1 without group
-      assert.deepEqual(seriesResult.chapters[1], {
-        id: 'mangadex-chap-0002-aaaa-bbbb-cccc-dddddddddddd',
-        title: 'Akebi-chan no Sailor Fuku - Vol. 1 Ch. 1 - The Sailor Suit',
-        sourceUrl: 'https://mangadex.org/chapter/chap-0002-aaaa-bbbb-cccc-dddddddddddd',
-        relativePath: [
-          'Akebi-chan no Sailor Fuku',
-          'English',
-          'Vol. 01',
-          'Vol. 1 Ch. 1 - The Sailor Suit'
-        ]
-      });
+      assert.equal(seriesResult.chapters[1].id, 'mangadex-chap-0002-aaaa-bbbb-cccc-dddddddddddd');
+      assert.equal(seriesResult.chapters[1].title, 'Akebi-chan no Sailor Fuku - Vol. 1 Ch. 1 - The Sailor Suit');
+      assert.equal(seriesResult.chapters[1].sourceUrl, 'https://mangadex.org/chapter/chap-0002-aaaa-bbbb-cccc-dddddddddddd');
+      assert.deepEqual(seriesResult.chapters[1].relativePath, [
+        'Akebi-chan no Sailor Fuku',
+        'English',
+        'Vol. 01',
+        'Vol. 1 Ch. 1 - The Sailor Suit'
+      ]);
+      assert.notEqual(seriesResult.chapters[1].metadata, undefined);
 
       // Chapter with null volume -> 'No Volume'
       assert.deepEqual(seriesResult.chapters[2].relativePath, [
@@ -1552,25 +1769,29 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.equal(result.isSeries, true);
       assert.equal(result.title, 'Akebi-chan no Sailor Fuku (Covers)');
       assert.deepEqual(result.rootRelativePath, ['Akebi-chan no Sailor Fuku (Covers)']);
-      assert.equal(result.cover, null);
+      assert.notEqual(result.cover, null);
+      assert.equal(result.cover.filename, 'Cover.jpg');
       assert.equal(result.covers.length, 3);
       assert.deepEqual(result.cleanup, {
         removeMatchingChapters: false,
         removeLooseCovers: true
       });
       assert.equal(result.chapters.length, 2);
-      assert.deepEqual(result.chapters[0], {
-        id: `mangadex-${mangaId}-covers-ja`,
-        title: 'Akebi-chan no Sailor Fuku - Covers (Japanese)',
-        sourceUrl: `https://mangadex.org/title/${mangaId}?tab=art&locale=ja`,
-        relativePath: ['Akebi-chan no Sailor Fuku (Covers)', 'Japanese']
-      });
-      assert.deepEqual(result.chapters[1], {
-        id: `mangadex-${mangaId}-covers-es`,
-        title: 'Akebi-chan no Sailor Fuku - Covers (Spanish)',
-        sourceUrl: `https://mangadex.org/title/${mangaId}?tab=art&locale=es`,
-        relativePath: ['Akebi-chan no Sailor Fuku (Covers)', 'Spanish']
-      });
+      assert.equal(result.chapters[0].id, `mangadex-${mangaId}-covers-ja`);
+      assert.equal(result.chapters[0].title, 'Akebi-chan no Sailor Fuku - Covers (Japanese)');
+      assert.equal(result.chapters[0].sourceUrl, `https://mangadex.org/title/${mangaId}?tab=art&locale=ja`);
+      assert.deepEqual(result.chapters[0].relativePath, ['Akebi-chan no Sailor Fuku (Covers)', 'Japanese']);
+      assert.notEqual(result.chapters[0].metadata, undefined);
+      assert.equal(result.chapters[0].metadata.ComicInfo.LanguageISO, 'ja');
+      assert.equal(result.chapters[0].metadata.ComicInfo.PageCount, 2);
+
+      assert.equal(result.chapters[1].id, `mangadex-${mangaId}-covers-es`);
+      assert.equal(result.chapters[1].title, 'Akebi-chan no Sailor Fuku - Covers (Spanish)');
+      assert.equal(result.chapters[1].sourceUrl, `https://mangadex.org/title/${mangaId}?tab=art&locale=es`);
+      assert.deepEqual(result.chapters[1].relativePath, ['Akebi-chan no Sailor Fuku (Covers)', 'Spanish']);
+      assert.notEqual(result.chapters[1].metadata, undefined);
+      assert.equal(result.chapters[1].metadata.ComicInfo.LanguageISO, 'es');
+      assert.equal(result.chapters[1].metadata.ComicInfo.PageCount, 1);
     });
 
     it('extracts single-locale MangaDex cover art as gallery with clean volume names, bracketed descriptions, and URL sanitization', async () => {
@@ -1666,6 +1887,444 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.equal(collisionResult.images[1].filename, 'Vol. 01 (cccc2222).jpg');
     });
   });
+
+  describe('writeGalleryMetadata and generic extractor metadata contract', () => {
+    it('validates extractor metadata shape and rejects unsafe metadata properties', () => {
+      // Valid metadata object
+      assert.doesNotThrow(() => {
+        validateExtractorResult({
+          provider: 'MangaDex',
+          gallery: { id: 'test', relativePath: ['test'] },
+          images: [{ url: 'https://example.com/1.jpg', filename: '1.jpg' }],
+          metadata: { ComicInfo: { Title: 'Test' } }
+        });
+      });
+
+      // Valid metadata string
+      assert.doesNotThrow(() => {
+        validateExtractorResult({
+          provider: 'MangaDex',
+          gallery: { id: 'test', relativePath: ['test'] },
+          images: [{ url: 'https://example.com/1.jpg', filename: '1.jpg' }],
+          metadata: '<ComicInfo><Title>Test</Title></ComicInfo>'
+        });
+      });
+
+      // Invalid metadata type (number)
+      assert.throws(() => {
+        validateExtractorResult({
+          provider: 'MangaDex',
+          gallery: { id: 'test', relativePath: ['test'] },
+          images: [{ url: 'https://example.com/1.jpg', filename: '1.jpg' }],
+          metadata: 12345
+        });
+      }, /'metadata' must be an object or string/);
+
+      // Unsafe metadata filename
+      assert.throws(() => {
+        validateExtractorResult({
+          provider: 'MangaDex',
+          gallery: { id: 'test', relativePath: ['test'] },
+          images: [{ url: 'https://example.com/1.jpg', filename: '1.jpg' }],
+          metadata: { filename: '..\\traversal.json', content: '{}' }
+        });
+      }, /unsafe metadata filename/);
+
+      // Unsafe chapter metadata filename
+      assert.throws(() => {
+        validateExtractorResult({
+          provider: 'MangaDex',
+          isSeries: true,
+          rootRelativePath: ['Series'],
+          chapters: [{
+            id: 'ch-1',
+            title: 'Ch 1',
+            sourceUrl: 'https://mangadex.org/chapter/1',
+            relativePath: ['Series', 'Ch 1'],
+            metadata: { filename: 'COM1', content: '{}' }
+          }]
+        });
+      }, /unsafe chapter metadata filename/);
+
+      // Valid folders array
+      assert.doesNotThrow(() => {
+        validateExtractorResult({
+          provider: 'MangaDex',
+          isSeries: true,
+          rootRelativePath: ['Series'],
+          folders: [{
+            relativePath: ['Series', 'English'],
+            metadata: { ComicInfo: { Title: 'Series (English)' } }
+          }],
+          chapters: []
+        });
+      });
+
+      // Invalid folders type (not array)
+      assert.throws(() => {
+        validateExtractorResult({
+          provider: 'MangaDex',
+          isSeries: true,
+          rootRelativePath: ['Series'],
+          folders: 'not-an-array',
+          chapters: []
+        });
+      }, /'folders' must be an array/);
+
+      // Unsafe folder path segment
+      assert.throws(() => {
+        validateExtractorResult({
+          provider: 'MangaDex',
+          isSeries: true,
+          rootRelativePath: ['Series'],
+          folders: [{
+            relativePath: ['Series', '..'],
+            metadata: {}
+          }],
+          chapters: []
+        });
+      }, /unsafe folder relativePath segment/);
+
+      // Unsafe folder metadata filename
+      assert.throws(() => {
+        validateExtractorResult({
+          provider: 'MangaDex',
+          isSeries: true,
+          rootRelativePath: ['Series'],
+          folders: [{
+            relativePath: ['Series', 'English'],
+            metadata: { filename: 'NUL', content: '{}' }
+          }],
+          chapters: []
+        });
+      }, /unsafe folder metadata filename/);
+    });
+
+    it('writes comicinfo.json for structured metadata object', async () => {
+      const written = [];
+      const origInvoke = window.__TAURI__?.core?.invoke;
+      if (!window.__TAURI__) {
+        globalThis.window = { __TAURI__: { core: {} } };
+      }
+      window.__TAURI__.core.invoke = async (cmd, args) => {
+        if (cmd === 'write_text_file') {
+          written.push(args);
+          return;
+        }
+        if (origInvoke) return origInvoke(cmd, args);
+      };
+
+      try {
+        await writeGalleryMetadata('C:\\Library\\MangaDex\\Series', {
+          ComicInfo: { Title: 'Series Name', Writer: 'Author' }
+        });
+
+        assert.equal(written.length, 1);
+        assert.equal(written[0].path, 'C:\\Library\\MangaDex\\Series\\comicinfo.json');
+        const parsed = JSON.parse(written[0].content);
+        assert.equal(parsed.ComicInfo.Title, 'Series Name');
+        assert.equal(parsed.ComicInfo.Writer, 'Author');
+      } finally {
+        if (origInvoke) window.__TAURI__.core.invoke = origInvoke;
+      }
+    });
+
+    it('writes comicinfo.xml for XML string and custom filename when specified', async () => {
+      const written = [];
+      const origInvoke = window.__TAURI__?.core?.invoke;
+      if (!window.__TAURI__) {
+        globalThis.window = { __TAURI__: { core: {} } };
+      }
+      window.__TAURI__.core.invoke = async (cmd, args) => {
+        if (cmd === 'write_text_file') {
+          written.push(args);
+          return;
+        }
+        if (origInvoke) return origInvoke(cmd, args);
+      };
+
+      try {
+        // XML string -> comicinfo.xml
+        await writeGalleryMetadata('C:\\Library\\MangaDex\\Series', '<?xml version="1.0"?><ComicInfo></ComicInfo>');
+        assert.equal(written.length, 1);
+        assert.equal(written[0].path, 'C:\\Library\\MangaDex\\Series\\comicinfo.xml');
+
+        // Custom filename and content
+        await writeGalleryMetadata('C:\\Library\\MangaDex\\Series', {
+          filename: 'metadata.opf',
+          content: '<package></package>'
+        });
+        assert.equal(written.length, 2);
+        assert.equal(written[1].path, 'C:\\Library\\MangaDex\\Series\\metadata.opf');
+        assert.equal(written[1].content, '<package></package>');
+
+        // No-ops on null or empty
+        await writeGalleryMetadata(null, { test: 1 });
+        await writeGalleryMetadata('C:\\test', null);
+        assert.equal(written.length, 2);
+      } finally {
+        if (origInvoke) window.__TAURI__.core.invoke = origInvoke;
+      }
+    });
+
+    it('MangaDex standalone chapter extraction returns ComicInfo metadata with chapter title and scanlator', async () => {
+      const chapterId = '0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d';
+      const mangaId = '770c61b9-0ef2-460b-8c25-c10ab23349ce';
+
+      const mockChapter = {
+        result: 'ok',
+        data: {
+          id: chapterId,
+          attributes: {
+            volume: '1',
+            chapter: '1',
+            title: 'First Day',
+            translatedLanguage: 'en',
+            hash: 'ch-hash-123',
+            data: ['01.jpg', '02.jpg']
+          },
+          relationships: [
+            { id: mangaId, type: 'manga' },
+            { id: 'group-1', type: 'scanlation_group', attributes: { name: 'Scan Team' } }
+          ]
+        }
+      };
+
+      const mockManga = {
+        result: 'ok',
+        data: {
+          id: mangaId,
+          attributes: {
+            title: { en: 'Akebi-chan no Sailor Fuku' },
+            publicationDemographic: 'seinen',
+            tags: [
+              { attributes: { group: 'genre', name: { en: 'Comedy' } } },
+              { attributes: { group: 'theme', name: { en: 'School Life' } } }
+            ],
+            description: { en: 'A slice of life manga.' }
+          },
+          relationships: [
+            { type: 'author', attributes: { name: 'HIRO' } },
+            { type: 'artist', attributes: { name: 'HIRO' } }
+          ]
+        }
+      };
+
+      const mockAtHome = {
+        result: 'ok',
+        baseUrl: 'https://uploads.mangadex.org',
+        chapter: { hash: 'ch-hash-123', data: ['01.jpg', '02.jpg'] }
+      };
+
+      const result = await MangaDexExtractor.extract(
+        '',
+        `https://mangadex.org/chapter/${chapterId}`,
+        {
+          fetchText: async (url) => {
+            if (url.includes('/chapter/')) return JSON.stringify(mockChapter);
+            if (url.includes('/manga/')) return JSON.stringify(mockManga);
+            if (url.includes('/at-home/')) return JSON.stringify(mockAtHome);
+            throw new Error(`Unexpected URL: ${url}`);
+          }
+        }
+      );
+
+      assert.equal(result.provider, 'MangaDex');
+      assert.notEqual(result.metadata, null);
+      const comicInfo = result.metadata.ComicInfo;
+      assert.equal(comicInfo.Series, 'Akebi-chan no Sailor Fuku');
+      assert.equal(comicInfo.Title, 'Ch. 1 - First Day');
+      assert.equal(comicInfo.Writer, 'HIRO');
+      assert.equal(comicInfo.Penciller, 'HIRO');
+      assert.equal(comicInfo.Genre, 'Comedy');
+      assert.equal(comicInfo.Tags, 'Seinen, School Life');
+      assert.equal(comicInfo.Demographic, 'Seinen');
+      assert.equal(comicInfo.Number, '1');
+      assert.equal(comicInfo.Volume, '1');
+      assert.equal(comicInfo.Translator, 'Scan Team');
+      assert.equal(comicInfo.Notes, 'Scanlation: Scan Team');
+      assert.equal(comicInfo.LanguageISO, 'en');
+      assert.equal(comicInfo.PageCount, 2);
+      assert.equal(comicInfo.Web, `https://mangadex.org/chapter/${chapterId}`);
+    });
+
+    it('MangaDex series extraction produces 5-tier folder metadata matching the exact field specification', async () => {
+      const mangaId = '770c61b9-0ef2-460b-8c25-c10ab23349ce';
+      const mockManga = {
+        result: 'ok',
+        data: {
+          id: mangaId,
+          attributes: {
+            title: { en: 'Akebi-chan no Sailor Fuku' },
+            publicationDemographic: 'seinen',
+            status: 'ongoing',
+            year: 2016,
+            tags: [
+              { attributes: { group: 'genre', name: { en: 'Comedy' } } }
+            ],
+            description: { en: 'Series synopsis.' }
+          },
+          relationships: [
+            { type: 'author', attributes: { name: 'HIRO' } },
+            { type: 'artist', attributes: { name: 'HIRO' } }
+          ]
+        }
+      };
+
+      const mockFeed = {
+        result: 'ok',
+        total: 1,
+        data: [
+          {
+            id: 'ch-1',
+            attributes: {
+              volume: '1',
+              chapter: '1',
+              title: 'First Day',
+              translatedLanguage: 'en',
+              pages: 24
+            },
+            relationships: [
+              { type: 'scanlation_group', attributes: { name: 'Scan Team' } }
+            ]
+          }
+        ]
+      };
+
+      const result = await MangaDexExtractor.extract(
+        '',
+        `https://mangadex.org/title/${mangaId}`,
+        {
+          fetchText: async (url) => {
+            if (url.includes('/feed?')) return JSON.stringify(mockFeed);
+            if (url.includes('/manga/')) return JSON.stringify(mockManga);
+            throw new Error(`Unexpected URL: ${url}`);
+          }
+        }
+      );
+
+      assert.equal(result.isSeries, true);
+      assert.equal(result.title, 'Akebi-chan no Sailor Fuku');
+
+      // 1. Series Root {Series}/
+      const rootMeta = result.metadata.ComicInfo;
+      assert.equal(rootMeta.Series, 'Akebi-chan no Sailor Fuku');
+      assert.equal(rootMeta.Title, undefined);
+      assert.equal(rootMeta.Volume, undefined);
+      assert.equal(rootMeta.Number, undefined);
+      assert.equal(rootMeta.LanguageISO, undefined);
+      assert.equal(rootMeta.Translator, undefined);
+      assert.equal(rootMeta.Notes, undefined);
+      assert.equal(rootMeta.PageCount, undefined);
+      assert.equal(rootMeta.Web, `https://mangadex.org/title/${mangaId}`);
+      assert.equal(rootMeta.Summary, 'Series synopsis.');
+      assert.equal(rootMeta.Genre, 'Comedy');
+      assert.equal(rootMeta.Demographic, 'Seinen');
+      assert.equal(rootMeta.Writer, 'HIRO');
+      assert.equal(rootMeta.Penciller, 'HIRO');
+      assert.equal(rootMeta.Year, 2016);
+      assert.equal(rootMeta.Status, 'Ongoing');
+      assert.equal(rootMeta.Manga, 'YesAndRightToLeft');
+
+      // 2. Language Folder {Series}/{Lang}/
+      const langFolder = result.folders.find(f => f.relativePath.length === 2 && f.relativePath[1] === 'English');
+      assert.notEqual(langFolder, undefined);
+      const langMeta = langFolder.metadata.ComicInfo;
+      assert.equal(langMeta.Series, 'Akebi-chan no Sailor Fuku');
+      assert.equal(langMeta.Title, 'Akebi-chan no Sailor Fuku (English)');
+      assert.equal(langMeta.LanguageISO, 'en');
+      assert.equal(langMeta.Volume, undefined);
+      assert.equal(langMeta.Number, undefined);
+      assert.equal(langMeta.Translator, undefined);
+      assert.equal(langMeta.Notes, undefined);
+      assert.equal(langMeta.PageCount, undefined);
+      assert.equal(langMeta.Web, `https://mangadex.org/title/${mangaId}`);
+      assert.equal(langMeta.Summary, 'Series synopsis.');
+
+      // 3. Volume Folder .../Vol. {X}/
+      const volFolder = result.folders.find(f => f.relativePath.length === 3 && f.relativePath[2] === 'Vol. 01');
+      assert.notEqual(volFolder, undefined);
+      const volMeta = volFolder.metadata.ComicInfo;
+      assert.equal(volMeta.Series, 'Akebi-chan no Sailor Fuku');
+      assert.equal(volMeta.Title, 'Volume 1');
+      assert.equal(volMeta.Volume, '1');
+      assert.equal(volMeta.LanguageISO, 'en');
+      assert.equal(volMeta.Number, undefined);
+      assert.equal(volMeta.Translator, undefined);
+      assert.equal(volMeta.Notes, undefined);
+      assert.equal(volMeta.PageCount, undefined);
+      assert.equal(volMeta.Web, `https://mangadex.org/title/${mangaId}`);
+
+      // 4. Chapter Folder .../Ch. {Y}/
+      assert.equal(result.chapters.length, 1);
+      const chMeta = result.chapters[0].metadata.ComicInfo;
+      assert.equal(chMeta.Series, 'Akebi-chan no Sailor Fuku');
+      assert.equal(chMeta.Title, 'Ch. 1 - First Day');
+      assert.equal(chMeta.Volume, '1');
+      assert.equal(chMeta.Number, '1');
+      assert.equal(chMeta.LanguageISO, 'en');
+      assert.equal(chMeta.Translator, 'Scan Team');
+      assert.equal(chMeta.Notes, 'Scanlation: Scan Team');
+      assert.equal(chMeta.PageCount, 24);
+      assert.equal(chMeta.Web, 'https://mangadex.org/chapter/ch-1');
+
+      // 5. Art Collection {Series} (Covers)/
+      const mockCovers = {
+        result: 'ok',
+        total: 1,
+        data: [
+          {
+            attributes: { fileName: 'cover1.jpg', volume: '1', locale: 'ja' }
+          }
+        ]
+      };
+      const artResult = await MangaDexExtractor.extract(
+        '',
+        `https://mangadex.org/title/${mangaId}#art`,
+        {
+          fetchText: async (url) => {
+            if (url.includes('/cover?')) return JSON.stringify(mockCovers);
+            if (url.includes('/manga/')) return JSON.stringify(mockManga);
+            throw new Error(`Unexpected URL: ${url}`);
+          }
+        }
+      );
+      const rootArtMeta = (artResult.folders && artResult.folders[0]?.metadata)
+        ? artResult.folders[0].metadata.ComicInfo
+        : artResult.metadata.ComicInfo;
+      assert.equal(rootArtMeta.Series, 'Akebi-chan no Sailor Fuku');
+      assert.equal(rootArtMeta.Title, 'Akebi-chan no Sailor Fuku (Covers)');
+      assert.equal(rootArtMeta.Summary, 'Cover art collection for Akebi-chan no Sailor Fuku.');
+      assert.equal(rootArtMeta.Tags, 'Cover Gallery, Artbook');
+      assert.equal(rootArtMeta.Volume, undefined);
+      assert.equal(rootArtMeta.Number, undefined);
+      assert.equal(rootArtMeta.LanguageISO, undefined);
+      assert.equal(rootArtMeta.Translator, undefined);
+      assert.equal(rootArtMeta.Notes, undefined);
+      assert.equal(rootArtMeta.PageCount, undefined);
+      assert.equal(rootArtMeta.Web, `https://mangadex.org/title/${mangaId}#art`);
+
+      const localeArtMeta = artResult.metadata.ComicInfo;
+      assert.equal(localeArtMeta.Title, 'Akebi-chan no Sailor Fuku - Covers (Japanese)');
+      assert.equal(localeArtMeta.LanguageISO, 'ja');
+      assert.equal(localeArtMeta.PageCount, 1);
+    });
+
+    it('MangaDex direct covers do not produce metadata sidecar to prevent root collisions', async () => {
+      const mangaId = '770c61b9-0ef2-460b-8c25-c10ab23349ce';
+      const result = await MangaDexExtractor.extract(
+        '',
+        `https://mangadex.org/covers/${mangaId}/cover123.jpg`,
+        {
+          fetchText: async () => JSON.stringify({ data: { attributes: { title: { en: 'Direct Cover' } } } })
+        }
+      );
+
+      assert.equal(result.provider, 'MangaDex');
+      assert.equal(result.metadata, undefined);
+    });
+  });
 });
+
 
 

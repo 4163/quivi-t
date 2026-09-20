@@ -493,6 +493,55 @@ pub fn remove_directory(path: String) -> Result<(), String> {
     Ok(())
 }
 
+const METADATA_FILENAMES: [&str; 6] = [
+    "comicinfo.xml",
+    "comicinfo.json",
+    "meta.json",
+    "comet.xml",
+    "comet.json",
+    "metadata.opf",
+];
+
+#[tauri::command(async)]
+pub fn find_directory_metadata(dir_path: String) -> Result<Option<DirectoryMetadataResult>, String> {
+    let input_path = Path::new(&dir_path);
+    if !input_path.exists() {
+        return Ok(None);
+    }
+
+    let dir = if input_path.is_file() {
+        input_path.parent().unwrap_or(Path::new(""))
+    } else {
+        input_path
+    };
+
+    if !crate::commands::library::is_within_library(dir) {
+        return Ok(None);
+    }
+
+    if let Ok(entries) = fs::read_dir(dir) {
+        let entries_vec: Vec<_> = entries.flatten().collect();
+        for target in &METADATA_FILENAMES {
+            if let Some(entry) = entries_vec.iter().find(|e| {
+                e.file_name()
+                    .to_str()
+                    .is_some_and(|name| name.eq_ignore_ascii_case(target))
+            }) {
+                let meta_path = entry.path();
+                if let Ok(content) = fs::read_to_string(&meta_path) {
+                    return Ok(Some(DirectoryMetadataResult {
+                        meta_path: meta_path.to_string_lossy().into_owned(),
+                        content,
+                        dir_path: dir.to_string_lossy().into_owned(),
+                    }));
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

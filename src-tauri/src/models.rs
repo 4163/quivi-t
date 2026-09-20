@@ -75,6 +75,14 @@ pub struct DirectoryReadResult {
     pub parent_directory: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DirectoryMetadataResult {
+    pub meta_path: String,
+    pub content: String,
+    pub dir_path: String,
+}
+
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ArchiveEncryptionStatus {

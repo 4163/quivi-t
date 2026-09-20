@@ -463,11 +463,7 @@ export class DownloadQueue {
           break;
         }
 
-        const fallback = item.fallbackUrl || (
-          currentUrl && /https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network\//i.test(currentUrl)
-            ? currentUrl.replace(/^https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network/i, 'https://uploads.mangadex.org')
-            : null
-        );
+        const fallback = item.fallbackUrl || null;
 
         if (!fallbackTried && fallback && fallback !== currentUrl) {
           currentUrl = fallback;
@@ -647,6 +643,42 @@ export function validateExtractorResult(result, entry) {
     throw new Error(`Extractor provider '${result.provider}' does not match manifest entry '${entry.name}'`);
   }
 
+  if (result.metadata !== undefined && result.metadata !== null) {
+    if (typeof result.metadata !== 'string' && typeof result.metadata !== 'object') {
+      throw new Error("Extractor returned invalid result: 'metadata' must be an object or string");
+    }
+    if (typeof result.metadata === 'object' && typeof result.metadata.filename === 'string') {
+      _validateWindowsName(result.metadata.filename, 'metadata filename');
+    }
+  }
+
+  if (result.folders !== undefined && result.folders !== null) {
+    if (!Array.isArray(result.folders)) {
+      throw new Error("Extractor returned invalid result: 'folders' must be an array");
+    }
+    for (let i = 0; i < result.folders.length; i++) {
+      const folder = result.folders[i];
+      if (!folder || typeof folder !== 'object') {
+        throw new Error(`Extractor returned invalid folder at index ${i}`);
+      }
+      if (!Array.isArray(folder.relativePath) || folder.relativePath.length === 0
+        || folder.relativePath.length > MAX_GALLERY_PATH_DEPTH) {
+        throw new Error(`Extractor returned invalid folder relativePath at index ${i}`);
+      }
+      for (const segment of folder.relativePath) {
+        _validateWindowsName(segment, `folder relativePath segment at index ${i}`);
+      }
+      if (folder.metadata !== undefined && folder.metadata !== null) {
+        if (typeof folder.metadata !== 'string' && typeof folder.metadata !== 'object') {
+          throw new Error(`Extractor returned invalid metadata on folder at index ${i}`);
+        }
+        if (typeof folder.metadata === 'object' && typeof folder.metadata.filename === 'string') {
+          _validateWindowsName(folder.metadata.filename, `folder metadata filename at index ${i}`);
+        }
+      }
+    }
+  }
+
   if (result.isSeries === true) {
     if (!Array.isArray(result.rootRelativePath) || result.rootRelativePath.length === 0
       || result.rootRelativePath.length > MAX_GALLERY_PATH_DEPTH) {
@@ -678,6 +710,14 @@ export function validateExtractorResult(result, entry) {
       }
       for (const segment of chapter.relativePath) {
         _validateWindowsName(segment, `chapter relativePath segment at index ${i}`);
+      }
+      if (chapter.metadata !== undefined && chapter.metadata !== null) {
+        if (typeof chapter.metadata !== 'string' && typeof chapter.metadata !== 'object') {
+          throw new Error(`Extractor returned invalid metadata on chapter at index ${i}`);
+        }
+        if (typeof chapter.metadata === 'object' && typeof chapter.metadata.filename === 'string') {
+          _validateWindowsName(chapter.metadata.filename, `chapter metadata filename at index ${i}`);
+        }
       }
     }
     return result;
@@ -740,43 +780,84 @@ export function isDirectMediaUrl(url) {
   return false;
 }
 
+function _getGalleryMatchPriority(galleryPath, sidecar, img) {
+  const isSeriesCover = img.description === 'Series Cover' || img.isSeriesCover === true;
+  const pathNorm = (galleryPath || '').toLowerCase();
+  const sidecarTitle = (sidecar?.title || '').toLowerCase();
+  const galleryId = (sidecar?.gallery?.id || '').toLowerCase();
+
+  const isCoversGallery = pathNorm.includes('(covers)')
+    || pathNorm.includes('\\covers')
+    || pathNorm.includes('/covers')
+    || sidecarTitle.includes('(covers)')
+    || sidecarTitle.includes('covers')
+    || galleryId.includes('-covers');
+
+  if (!isSeriesCover) {
+    // 1. Concrete content image inside a covers gallery/chapter (e.g. Covers\Japanese\Vol. 16.jpg)
+    if (isCoversGallery) return 100;
+    // Concrete content image in another gallery
+    return 80;
+  }
+
+  // 2. Series cover in a dedicated covers collection (e.g. Akebi-chan no Sailor Fuku (Covers)\Cover.jpg)
+  if (isCoversGallery) return 50;
+
+  // 3. Series cover in a standard series (e.g. Akebi-chan no Sailor Fuku\Cover.jpg)
+  return 10;
+}
+
 export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
   if (typeof window === 'undefined' || !window.__TAURI__) return null;
   try {
     const normalizedDirectUrl = normalizeUrl(directUrl);
     const targetStem = (hash ? hash.toLowerCase() : '') || extractUrlStem(directUrl);
     const directories = [{ path: providerPath, depth: 0 }];
+    let bestMatch = null;
+    let bestScore = -1;
 
     while (directories.length > 0) {
       const current = directories.shift();
       const sidecarPath = `${current.path}\\gallery.json`;
+      let sidecar = null;
       try {
         const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
-        const sidecar = JSON.parse(sidecarText);
-        if (!Array.isArray(sidecar.images)) continue;
+        sidecar = JSON.parse(sidecarText);
+        if (Array.isArray(sidecar.images)) {
+          for (const img of sidecar.images) {
+            const imgSource = normalizeUrl(img.sourceUrl || '');
+            const imgFilename = img.filename || '';
+            const imgHash = (img.hash ? img.hash.toLowerCase() : '');
 
-        for (const img of sidecar.images) {
-          const imgSource = normalizeUrl(img.sourceUrl || '');
-          const imgFilename = img.filename || '';
-
-          let isMatch = false;
-          if (imgSource && normalizedDirectUrl && imgSource.toLowerCase() === normalizedDirectUrl.toLowerCase()) {
-            isMatch = true;
-          } else if (targetStem) {
-            const sourceStem = extractUrlStem(imgSource);
-            if (sourceStem && sourceStem === targetStem) {
+            let isMatch = false;
+            if (imgSource && normalizedDirectUrl && imgSource.toLowerCase() === normalizedDirectUrl.toLowerCase()) {
               isMatch = true;
-            } else if (imgFilename.toLowerCase().includes(targetStem)) {
-              isMatch = true;
+            } else if (targetStem) {
+              const sourceStem = extractUrlStem(imgSource);
+              if (sourceStem && sourceStem === targetStem) {
+                isMatch = true;
+              } else if (imgHash && imgHash === targetStem) {
+                isMatch = true;
+              } else if (imgFilename.toLowerCase().includes(targetStem)) {
+                isMatch = true;
+              }
             }
-          }
 
-          if (isMatch) {
-            return {
-              galleryPath: current.path,
-              targetName: img.filename,
-              image: img
-            };
+            if (isMatch) {
+              const score = _getGalleryMatchPriority(current.path, sidecar, img);
+              const matchResult = {
+                galleryPath: current.path,
+                targetName: img.filename,
+                image: img
+              };
+              if (score >= 100) {
+                return matchResult;
+              }
+              if (score > bestScore) {
+                bestScore = score;
+                bestMatch = matchResult;
+              }
+            }
           }
         }
       } catch {
@@ -788,10 +869,17 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
         path: current.path,
         showHidden: false
       });
-      for (const entry of dirResult?.files || []) {
-        if (entry.is_dir) directories.push({ path: entry.path, depth: current.depth + 1 });
+      const subdirs = (dirResult?.files || []).filter((entry) => entry.is_dir);
+      subdirs.sort((a, b) => {
+        const aCovers = (a.path || '').toLowerCase().includes('covers') ? 1 : 0;
+        const bCovers = (b.path || '').toLowerCase().includes('covers') ? 1 : 0;
+        return bCovers - aCovers;
+      });
+      for (const entry of subdirs) {
+        directories.push({ path: entry.path, depth: current.depth + 1 });
       }
     }
+    return bestMatch;
   } catch {
     // Provider directory may not exist yet or failed to read.
   }
@@ -947,6 +1035,41 @@ export async function recordRootMediaDownload(providerPath, providerName, item) 
     });
   } catch (err) {
     console.warn('[UrlLoader] Failed to write root gallery.json:', err);
+  }
+}
+
+export async function writeGalleryMetadata(targetDir, metadata) {
+  if (!targetDir || !metadata || typeof window === 'undefined' || !window.__TAURI__) return;
+
+  let filename = 'comicinfo.json';
+  let content = '';
+
+  if (typeof metadata === 'string') {
+    content = metadata;
+    if (metadata.trim().startsWith('<')) {
+      filename = 'comicinfo.xml';
+    }
+  } else if (typeof metadata === 'object') {
+    if (typeof metadata.filename === 'string' && metadata.content !== undefined) {
+      filename = _validateWindowsName(metadata.filename, 'metadata filename');
+      content = typeof metadata.content === 'string'
+        ? metadata.content
+        : JSON.stringify(metadata.content, null, 2);
+    } else {
+      filename = 'comicinfo.json';
+      content = JSON.stringify(metadata, null, 2);
+    }
+  }
+
+  if (!content) return;
+
+  try {
+    await window.__TAURI__.core.invoke('write_text_file', {
+      path: `${targetDir}\\${filename}`,
+      content
+    });
+  } catch (err) {
+    console.warn('[UrlLoader] Failed to write gallery metadata:', err);
   }
 }
 
@@ -1302,6 +1425,22 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       } catch (err) {
         console.warn('[UrlLoader] Failed to write series gallery.json:', err);
       }
+
+      if (result.metadata) {
+        await writeGalleryMetadata(seriesPath, result.metadata);
+      }
+
+      if (Array.isArray(result.folders)) {
+        const FOLDER_CHUNK_SIZE = 25;
+        for (let i = 0; i < result.folders.length; i += FOLDER_CHUNK_SIZE) {
+          const chunk = result.folders.slice(i, i + FOLDER_CHUNK_SIZE);
+          await Promise.all(chunk.map((folder) => {
+            if (!folder?.metadata || !Array.isArray(folder.relativePath)) return Promise.resolve();
+            const folderPath = [libraryDir, providerDir, ...folder.relativePath].join('\\');
+            return writeGalleryMetadata(folderPath, folder.metadata);
+          }));
+        }
+      }
     }
 
     if (window.__TAURI__ && Array.isArray(result.chapters)) {
@@ -1310,6 +1449,15 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
         const chunk = result.chapters.slice(i, i + CHUNK_SIZE);
         await Promise.all(chunk.map((chapter) => {
           const chapterPath = [libraryDir, providerDir, ...chapter.relativePath].join('\\');
+          const chapterImages = Array.isArray(chapter.images) ? chapter.images.map((img) => ({
+            filename: img.filename,
+            displayName: img.filename,
+            description: img.description || img.displayName || '',
+            sourceUrl: img.url,
+            fallbackUrl: img.fallbackUrl,
+            hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
+          })) : [];
+
           const stubSidecar = {
             url: chapter.sourceUrl,
             provider: result.provider,
@@ -1321,13 +1469,24 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
               extractorId: entry.id,
               extractorVersion: entry.version
             },
-            unresolved: true,
+            unresolved: chapterImages.length === 0,
             sourceUrl: chapter.sourceUrl,
-            images: []
+            images: chapterImages
           };
           return window.__TAURI__.core.invoke('write_text_file', {
             path: `${chapterPath}\\gallery.json`,
             content: JSON.stringify(stubSidecar, null, 2)
+          }).then(async () => {
+            if (chapterImages.length > 0) {
+              const filenames = chapterImages.map((img) => img.filename);
+              await window.__TAURI__.core.invoke('create_placeholder_files', {
+                dir: chapterPath,
+                filenames
+              }).catch(() => {});
+            }
+            if (chapter.metadata) {
+              return writeGalleryMetadata(chapterPath, chapter.metadata);
+            }
           });
         }));
       }
@@ -1407,6 +1566,16 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       path: `${galleryPath}\\gallery.json`,
       content: JSON.stringify(sidecar, null, 2)
     });
+    if (result.metadata) {
+      await writeGalleryMetadata(galleryPath, result.metadata);
+    }
+    if (Array.isArray(result.folders)) {
+      for (const folder of result.folders) {
+        if (!folder?.metadata || !Array.isArray(folder.relativePath)) continue;
+        const folderPath = [libraryDir, providerDir, ...folder.relativePath].join('\\');
+        await writeGalleryMetadata(folderPath, folder.metadata);
+      }
+    }
   }
 
   // Prepopulate all gallery files as 0-byte placeholders on disk upfront
@@ -1439,11 +1608,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       await downloadFile(item.url, item.destPath);
       item.status = 'completed';
     } catch (err) {
-      const fallback = item.fallbackUrl || (
-        item.url && /https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network\//i.test(item.url)
-          ? item.url.replace(/^https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network/i, 'https://uploads.mangadex.org')
-          : null
-      );
+      const fallback = item.fallbackUrl || null;
       if (fallback && fallback !== item.url) {
         try {
           await downloadFile(fallback, item.destPath);
@@ -1643,6 +1808,10 @@ export async function resolveUnresolvedGallery(galleryPath) {
       content: JSON.stringify(updatedSidecar, null, 2)
     });
 
+    if (fullResult.metadata) {
+      await writeGalleryMetadata(galleryPath, fullResult.metadata);
+    }
+
     const filenames = fullResult.images.map((img) => img.filename);
     await window.__TAURI__.core.invoke('create_placeholder_files', {
       dir: galleryPath,
@@ -1659,11 +1828,7 @@ export async function resolveUnresolvedGallery(galleryPath) {
       try {
         await downloadFile(eagerImg.url, `${galleryPath}\\${eagerImg.filename}`);
       } catch (err) {
-        const fallback = eagerImg.fallbackUrl || (
-          eagerImg.url && /https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network\//i.test(eagerImg.url)
-            ? eagerImg.url.replace(/^https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network/i, 'https://uploads.mangadex.org')
-            : null
-        );
+        const fallback = eagerImg.fallbackUrl || null;
         if (fallback && fallback !== eagerImg.url) {
           try {
             await downloadFile(fallback, `${galleryPath}\\${eagerImg.filename}`);

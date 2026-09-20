@@ -83,6 +83,7 @@ pub fn run() {
 
     builder = builder.invoke_handler(tauri::generate_handler![
         read_directory,
+        find_directory_metadata,
         list_archive,
         drop_archive_cache,
         drop_all_archives_cache,
