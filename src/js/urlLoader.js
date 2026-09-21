@@ -57,11 +57,14 @@ const _resolvingGalleries = new Set();
 const _resumingGalleries = new Map();
 
 // Blob URLs tracked separately for revocation on cache eviction.
+// Each cache key maps to an array of blob URLs (entry + all dep blobs).
 const _blobUrls = new Map();
 const _extractorCache = new BoundedMap(EXTRACTOR_MODULE_CACHE_CAPACITY, (id) => {
-  const url = _blobUrls.get(id);
-  if (url) {
-    URL.revokeObjectURL(url);
+  const urls = _blobUrls.get(id);
+  if (urls) {
+    for (const url of Array.isArray(urls) ? urls : [urls]) {
+      try { URL.revokeObjectURL(url); } catch (_) {}
+    }
     _blobUrls.delete(id);
   }
 });
@@ -85,6 +88,21 @@ function _validateImage(image, index) {
   }
   if (image.fallbackUrl && !isValidUrl(image.fallbackUrl)) {
     throw new Error(`Extractor returned an invalid image fallback URL at index ${index}`);
+  }
+  if (image.headers !== undefined && image.headers !== null) {
+    if (typeof image.headers !== 'object' || Array.isArray(image.headers)) {
+      throw new Error(`Extractor returned invalid image headers at index ${index}`);
+    }
+    for (const [k, v] of Object.entries(image.headers)) {
+      if (typeof k !== 'string' || typeof v !== 'string') {
+        throw new Error(`Extractor returned non-string header entry at index ${index}`);
+      }
+    }
+  }
+  if (image.decryption !== undefined && image.decryption !== null) {
+    if (typeof image.decryption !== 'object' || image.decryption.algorithm !== 'xor' || typeof image.decryption.key !== 'string') {
+      throw new Error(`Extractor returned invalid decryption descriptor at index ${index} (only algorithm: 'xor' is supported)`);
+    }
   }
 
   const filename = _validateWindowsName(image.filename, `filename at index ${index}`);
@@ -177,6 +195,8 @@ export async function downloadFile(url, destPath, options = {}) {
   if (options.requestId) args.requestId = options.requestId;
   if (Number.isInteger(options.queueGeneration)) args.queueGeneration = options.queueGeneration;
   if (Number.isInteger(options.thresholdPercent)) args.thresholdPercent = options.thresholdPercent;
+  if (options.headers) args.headers = options.headers;
+  if (options.xorKey) args.xorKey = options.xorKey;
   return await window.__TAURI__.core.invoke('download_to_file', args);
 }
 
@@ -240,7 +260,9 @@ export class DownloadQueue {
         filename,
         galleryIndex: item.galleryIndex ?? i,
         status: item.status || 'pending',
-        retryCount: 0
+        retryCount: 0,
+        headers: item.headers || null,
+        decryption: item.decryption || null
       };
     });
     this._onItemStatusChanged = options.onItemStatusChanged || null;
@@ -455,7 +477,9 @@ export class DownloadQueue {
         await this._downloadFile(currentUrl, item.destPath, {
           requestId: attempt.requestId,
           queueGeneration: attempt.generation,
-          thresholdPercent: attempt.kind === 'prefetch' ? this._prefetchStartThresholdPercent : null
+          thresholdPercent: attempt.kind === 'prefetch' ? this._prefetchStartThresholdPercent : null,
+          headers: item.headers || undefined,
+          xorKey: item.decryption?.key || undefined
         });
         success = true;
       } catch (err) {
@@ -603,30 +627,142 @@ export function findExtractor(url, manifest) {
 
 // -- Dynamic module loading --
 
+const _EXTRACTOR_HEADER_RE = /^\/\/\s*quivit-(deps|needs):\s*(.+)$/;
+const _IMPORT_SPECIFIER_RE = /(?<=from\s+['"])([^'"]+)(?=['"])/g;
+
+export function _parseExtractorHeaders(sourceText) {
+  const deps = [];
+  const needs = [];
+  for (const line of sourceText.split('\n').slice(0, 5)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const m = _EXTRACTOR_HEADER_RE.exec(trimmed);
+    if (!m) break;
+    const values = m[2].split(',').map((s) => s.trim()).filter(Boolean);
+    if (m[1] === 'deps') deps.push(...values);
+    else needs.push(...values);
+  }
+  return { deps, needs };
+}
+
+async function _resolveDepGraph(entrySource, entryPath) {
+  const graph = new Map();
+  const visiting = new Set();
+
+  async function walk(source, filePath) {
+    const { deps } = _parseExtractorHeaders(source);
+    for (const depPath of deps) {
+      if (graph.has(depPath)) continue;
+      if (!SAFE_EXTRACTOR_SOURCE_RE.test(depPath) || depPath.includes('..')) {
+        throw new Error(`Extractor declares an invalid dependency path: ${depPath}`);
+      }
+      if (visiting.has(depPath)) {
+        throw new Error(`Extractor dependency cycle detected: ${depPath}`);
+      }
+      visiting.add(depPath);
+      const depSource = await fetchExtractorText(depPath);
+      await walk(depSource, depPath);
+      const rewrittenDep = _rewriteImportSpecifiers(depSource, depPath, graph);
+      const depBlob = new Blob([rewrittenDep], { type: 'text/javascript' });
+      const depBlobUrl = URL.createObjectURL(depBlob);
+      graph.set(depPath, { source: depSource, blobUrl: depBlobUrl });
+      visiting.delete(depPath);
+    }
+  }
+
+  await walk(entrySource, entryPath);
+  return graph;
+}
+
+function _resolveImportPath(importerPath, specifier) {
+  if (!specifier.startsWith('.')) {
+    throw new Error(`Extractor imports must use relative paths: ${specifier}`);
+  }
+  const base = importerPath.split('/').slice(0, -1);
+  for (const seg of specifier.split('/')) {
+    if (seg === '.' || seg === '') continue;
+    if (seg === '..') {
+      if (base.length === 0) throw new Error(`Extractor import escapes the branch root: ${specifier}`);
+      base.pop();
+    } else {
+      base.push(seg);
+    }
+  }
+  const resolved = base.join('/');
+  if (!SAFE_EXTRACTOR_SOURCE_RE.test(resolved) || resolved.includes('..')) {
+    throw new Error(`Extractor imports an invalid path: ${specifier}`);
+  }
+  return resolved;
+}
+
+function _rewriteImportSpecifiers(source, importerPath, depGraph) {
+  return source.replace(_IMPORT_SPECIFIER_RE, (specifier) => {
+    // Resolve './proto.js' against the importing file's own directory,
+    // so transitive deps rewrite correctly ('shared/mangaplus.js' + './proto.js').
+    const resolved = _resolveImportPath(importerPath, specifier);
+    const dep = depGraph.get(resolved);
+    if (!dep) throw new Error(`Extractor imports '${specifier}' which is not declared in quivit-deps`);
+    return dep.blobUrl;
+  });
+}
+
+async function _hashDepTexts(depGraph) {
+  if (depGraph.size === 0) return '';
+  const combined = Array.from(depGraph.values()).map((d) => d.source).join('\n');
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(combined));
+  return ':' + Array.from(new Uint8Array(buf)).slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+const SUPPORTED_EXTRACTOR_CAPABILITIES = new Set(['fetchBytes', 'requestHeaders', 'xorDecrypt']);
+
+async function _fetchBytes(url, headers) {
+  if (!window.__TAURI__) {
+    throw new Error('Backend network proxy unavailable in browser environment');
+  }
+  const b64 = await window.__TAURI__.core.invoke('fetch_bytes', { url, headers: headers || undefined });
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
 export async function loadExtractorModule(entry) {
-  const cacheKey = getExtractorCacheKey(entry);
+  const source = await fetchExtractorText(entry.source);
+  const { needs } = _parseExtractorHeaders(source);
+  if (needs.length > 0) {
+    const missing = needs.filter((cap) => !SUPPORTED_EXTRACTOR_CAPABILITIES.has(cap));
+    if (missing.length > 0) {
+      throw new Error(`This extractor requires a newer version of QuiviT (missing: ${missing.join(', ')})`);
+    }
+  }
+  const depGraph = await _resolveDepGraph(source, entry.source);
+  const depHash = await _hashDepTexts(depGraph);
+  const cacheKey = `${entry.id}@${entry.version}:${entry.source}${depHash}`;
+
   const cached = _extractorCache.get(cacheKey);
   if (cached) return cached;
 
-  const source = await fetchExtractorText(entry.source);
-
-  const blob = new Blob([source], { type: 'text/javascript' });
-  const blobUrl = URL.createObjectURL(blob);
+  const rewritten = _rewriteImportSpecifiers(source, entry.source, depGraph);
+  const blob = new Blob([rewritten], { type: 'text/javascript' });
+  const entryBlobUrl = URL.createObjectURL(blob);
 
   let mod;
   try {
-    mod = await import(blobUrl);
+    mod = await import(entryBlobUrl);
   } catch (e) {
-    URL.revokeObjectURL(blobUrl);
+    URL.revokeObjectURL(entryBlobUrl);
+    for (const dep of depGraph.values()) URL.revokeObjectURL(dep.blobUrl);
     throw new Error(`Failed to load extractor '${entry.id}': ${e.message}`);
   }
 
   if (typeof mod.match !== 'function' || typeof mod.extract !== 'function') {
-    URL.revokeObjectURL(blobUrl);
+    URL.revokeObjectURL(entryBlobUrl);
+    for (const dep of depGraph.values()) URL.revokeObjectURL(dep.blobUrl);
     throw new Error(`Extractor '${entry.id}' missing required match() or extract() export`);
   }
 
-  _blobUrls.set(cacheKey, blobUrl);
+  const allBlobUrls = Array.from(depGraph.values()).map((d) => d.blobUrl);
+  allBlobUrls.push(entryBlobUrl);
+  _blobUrls.set(cacheKey, allBlobUrls);
   _extractorCache.set(cacheKey, mod);
   return mod;
 }
@@ -740,11 +876,17 @@ export function validateExtractorResult(result, entry) {
 }
 
 export function extractGallery(extractor, html, url, context = {}, entry = null) {
+  const done = (res) => {
+    if (res && typeof res.error === 'string' && typeof res.provider !== 'string') {
+      throw new Error(res.error);
+    }
+    return validateExtractorResult(res, entry);
+  };
   const result = extractor.extract(html, url, context);
   if (result && typeof result.then === 'function') {
-    return result.then((res) => validateExtractorResult(res, entry));
+    return result.then(done);
   }
-  return validateExtractorResult(result, entry);
+  return done(result);
 }
 
 // -- Gallery Matching & Standalone Raw Cleanup --
@@ -1392,7 +1534,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   }
 
   const html = url.startsWith('blob:') ? '' : await fetchRemoteText(url);
-  const result = await extractGallery(mod, html, url, { fetchText: fetchRemoteText }, entry);
+  const result = await extractGallery(mod, html, url, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
 
   if (result.isSeries) {
     const seriesPath = [libraryDir, providerDir, ...result.rootRelativePath].join('\\');
@@ -1485,7 +1627,9 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
               description: img.description || img.displayName || '',
               sourceUrl: img.url,
               fallbackUrl: img.fallbackUrl,
-              hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
+              hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined,
+              headers: img.headers || undefined,
+              decryption: img.decryption || undefined
             })) : [];
 
             const stubSidecar = {
@@ -1539,7 +1683,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   let nextUrl = result.nextPageUrl;
   while (nextUrl && pages < MAX_PAGINATION_PAGES) {
     const pageHtml = await fetchRemoteText(nextUrl);
-    const pageResult = await extractGallery(mod, pageHtml, nextUrl, { fetchText: fetchRemoteText }, entry);
+    const pageResult = await extractGallery(mod, pageHtml, nextUrl, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
     if (!_galleryMatches(result.gallery, pageResult.gallery)) {
       throw new Error('Extractor pagination returned a different gallery');
     }
@@ -1669,7 +1813,9 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       description: img.description || img.displayName || '',
       sourceUrl: img.url,
       fallbackUrl: img.fallbackUrl,
-      hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
+      hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined,
+      headers: img.headers || undefined,
+      decryption: img.decryption || undefined
     }))
   };
 
@@ -1708,7 +1854,9 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     destPath: `${galleryPath}\\${img.filename}`,
     filename: img.filename,
     galleryIndex: i,
-    status: 'pending'
+    status: 'pending',
+    headers: img.headers || null,
+    decryption: img.decryption || null
   }));
 
   const targetItem = result.targetFilename
@@ -1716,14 +1864,17 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     : null;
 
   const _eagerDownload = async (item) => {
+    const dlOpts = {};
+    if (item.headers) dlOpts.headers = item.headers;
+    if (item.decryption?.key) dlOpts.xorKey = item.decryption.key;
     try {
-      await downloadFile(item.url, item.destPath);
+      await downloadFile(item.url, item.destPath, dlOpts);
       item.status = 'completed';
     } catch (err) {
       const fallback = item.fallbackUrl || null;
       if (fallback && fallback !== item.url) {
         try {
-          await downloadFile(fallback, item.destPath);
+          await downloadFile(fallback, item.destPath, dlOpts);
           item.status = 'completed';
           return;
         } catch (fallbackErr) {
@@ -1905,11 +2056,13 @@ export async function resolveUnresolvedGallery(galleryPath) {
 
   _resolvingGalleries.add(galleryPath);
   try {
-    const manifest = await fetchManifest();
-    const entry = findExtractor(data.sourceUrl, manifest);
+    let entry = findExtractor(data.sourceUrl, await fetchManifest());
+    if (!entry) {
+      entry = findExtractor(data.sourceUrl, await fetchManifest({ refresh: true }));
+    }
     if (!entry) return false;
     const mod = await loadExtractorModule(entry);
-    const fullResult = await extractGallery(mod, '', data.sourceUrl, { fetchText: fetchRemoteText }, entry);
+    const fullResult = await extractGallery(mod, '', data.sourceUrl, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
     if (!fullResult?.images || fullResult.images.length === 0) return false;
 
     const updatedSidecar = {
@@ -1929,7 +2082,9 @@ export async function resolveUnresolvedGallery(galleryPath) {
         description: img.description || img.displayName || '',
         sourceUrl: img.url,
         fallbackUrl: img.fallbackUrl,
-        hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
+        hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined,
+        headers: img.headers || undefined,
+        decryption: img.decryption || undefined
       }))
     };
 
@@ -1955,13 +2110,16 @@ export async function resolveUnresolvedGallery(galleryPath) {
       : (openFirstImage ? fullResult.images[0] : null);
 
     if (eagerImg) {
+      const dlOpts = {};
+      if (eagerImg.headers) dlOpts.headers = eagerImg.headers;
+      if (eagerImg.decryption?.key) dlOpts.xorKey = eagerImg.decryption.key;
       try {
-        await downloadFile(eagerImg.url, `${galleryPath}\\${eagerImg.filename}`);
+        await downloadFile(eagerImg.url, `${galleryPath}\\${eagerImg.filename}`, dlOpts);
       } catch (err) {
         const fallback = eagerImg.fallbackUrl || null;
         if (fallback && fallback !== eagerImg.url) {
           try {
-            await downloadFile(fallback, `${galleryPath}\\${eagerImg.filename}`);
+            await downloadFile(fallback, `${galleryPath}\\${eagerImg.filename}`, dlOpts);
           } catch (fallbackErr) {
             console.warn('[UrlLoader] Failed to eagerly download first image with fallback:', fallbackErr);
           }
@@ -2037,7 +2195,9 @@ export async function resumeGalleryDownloads(galleryPath, list) {
           fallbackUrl: img.fallbackUrl,
           destPath,
           galleryIndex: index,
-          status: isDownloaded ? 'completed' : 'pending'
+          status: isDownloaded ? 'completed' : 'pending',
+          headers: img.headers || null,
+          decryption: img.decryption || null
         });
       });
 

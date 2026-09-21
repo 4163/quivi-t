@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Component, Path};
@@ -11,6 +12,9 @@ const NETWORK_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 QuiviT/1.0";
 const MANIFEST_BASE_URL: &str = "https://raw.githubusercontent.com/4163/quivi-t/extractors/";
 const DOWNLOAD_CHUNK_SIZE: usize = 32 * 1024;
+const HEADER_VALUE_MAX_LEN: usize = 2048;
+const HEADER_MAP_MAX_ENTRIES: usize = 20;
+const DENIED_HEADERS: &[&str] = &["host", "content-length", "cookie", "authorization"];
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +38,23 @@ fn get_agent() -> &'static ureq::Agent {
     })
 }
 
+fn sanitize_headers(headers: &HashMap<String, String>) -> Result<Vec<(&str, &str)>, String> {
+    if headers.len() > HEADER_MAP_MAX_ENTRIES {
+        return Err(format!("Too many request headers (max {HEADER_MAP_MAX_ENTRIES})"));
+    }
+    let mut sanitized = Vec::with_capacity(headers.len());
+    for (name, value) in headers {
+        if DENIED_HEADERS.iter().any(|d| name.eq_ignore_ascii_case(d)) {
+            return Err(format!("Request header '{name}' is not allowed"));
+        }
+        if value.len() > HEADER_VALUE_MAX_LEN {
+            return Err(format!("Request header '{name}' value exceeds {HEADER_VALUE_MAX_LEN} bytes"));
+        }
+        sanitized.push((name.as_str(), value.as_str()));
+    }
+    Ok(sanitized)
+}
+
 #[tauri::command(async)]
 pub fn fetch_text(url: String) -> Result<String, String> {
     let agent = get_agent();
@@ -45,6 +66,33 @@ pub fn fetch_text(url: String) -> Result<String, String> {
     response
         .into_string()
         .map_err(|e| format!("Failed to read response body: {e}"))
+}
+
+#[tauri::command(async)]
+pub fn fetch_bytes(
+    url: String,
+    headers: Option<HashMap<String, String>>,
+) -> Result<String, String> {
+    let agent = get_agent();
+    let mut request = agent.get(&url);
+
+    if let Some(ref h) = headers {
+        for (name, value) in sanitize_headers(h)? {
+            request = request.set(name, value);
+        }
+    }
+
+    let response = request
+        .call()
+        .map_err(|e| format!("Network request failed: {e}"))?;
+
+    let mut bytes = Vec::new();
+    response
+        .into_reader()
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("Failed to read response body: {e}"))?;
+
+    Ok(crate::utils::base64_encode(&bytes))
 }
 
 #[tauri::command(async)]
@@ -178,6 +226,8 @@ pub fn download_to_file(
     request_id: Option<String>,
     queue_generation: Option<u64>,
     threshold_percent: Option<u8>,
+    headers: Option<HashMap<String, String>>,
+    xor_key: Option<String>,
 ) -> Result<(), String> {
     use tauri::Manager;
 
@@ -195,13 +245,28 @@ pub fn download_to_file(
             .map_err(|e| format!("Failed to create destination directory: {e}"))?;
     }
 
+    let xor_bytes = match &xor_key {
+        Some(key) => Some(
+            crate::utils::base64_decode_bytes(key)
+                .ok_or_else(|| "Invalid base64 XOR key".to_string())?,
+        ),
+        None => None,
+    };
+
     let cancel = app.state::<DownloadCancelFlag>().0.clone();
 
     let my_gen = cancel.load(Ordering::SeqCst);
 
     let agent = get_agent();
-    let response = agent
-        .get(&url)
+    let mut request = agent.get(&url);
+
+    if let Some(ref h) = headers {
+        for (name, value) in sanitize_headers(h)? {
+            request = request.set(name, value);
+        }
+    }
+
+    let response = request
         .call()
         .map_err(|e| format!("Download request failed: {e}"))?;
 
@@ -239,6 +304,7 @@ pub fn download_to_file(
         File::create(&temp_dest).map_err(|e| format!("Failed to create temp file: {e}"))?;
 
     let mut buf = vec![0u8; DOWNLOAD_CHUNK_SIZE];
+    let mut xor_key_offset = 0usize;
     loop {
         if let Some(library_root) = &library_write_root {
             if let Err(err) = crate::commands::library::ensure_library_root_writable(library_root) {
@@ -267,6 +333,13 @@ pub fn download_to_file(
             drop(file);
             let _ = fs::remove_file(&temp_dest);
             return Err("Download cancelled".to_string());
+        }
+
+        if let Some(ref key) = xor_bytes {
+            for byte in buf[..n].iter_mut() {
+                *byte ^= key[xor_key_offset % key.len()];
+                xor_key_offset += 1;
+            }
         }
 
         file.write_all(&buf[..n]).map_err(|e| {
@@ -376,5 +449,76 @@ mod tests {
     fn download_threshold_rounds_up_to_the_first_written_byte() {
         let threshold = 101_u64.saturating_mul(50).saturating_add(99) / 100;
         assert_eq!(threshold, 51);
+    }
+
+    #[test]
+    fn sanitize_headers_rejects_denied_names() {
+        let mut h = HashMap::new();
+        h.insert("Host".to_string(), "evil.com".to_string());
+        assert!(sanitize_headers(&h).is_err());
+
+        h.clear();
+        h.insert("COOKIE".to_string(), "session=abc".to_string());
+        assert!(sanitize_headers(&h).is_err());
+
+        h.clear();
+        h.insert("Authorization".to_string(), "Bearer token".to_string());
+        assert!(sanitize_headers(&h).is_err());
+
+        h.clear();
+        h.insert("content-LENGTH".to_string(), "999".to_string());
+        assert!(sanitize_headers(&h).is_err());
+    }
+
+    #[test]
+    fn sanitize_headers_accepts_custom_headers() {
+        let mut h = HashMap::new();
+        h.insert("Plus-Vw-Token".to_string(), "abc123".to_string());
+        h.insert("SESSION-TOKEN".to_string(), "uuid-value".to_string());
+        let result = sanitize_headers(&h).unwrap();
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn sanitize_headers_rejects_oversized_values() {
+        let mut h = HashMap::new();
+        h.insert("X-Custom".to_string(), "x".repeat(HEADER_VALUE_MAX_LEN + 1));
+        assert!(sanitize_headers(&h).is_err());
+    }
+
+    #[test]
+    fn sanitize_headers_rejects_too_many_entries() {
+        let mut h = HashMap::new();
+        for i in 0..=HEADER_MAP_MAX_ENTRIES {
+            h.insert(format!("X-Header-{i}"), "value".to_string());
+        }
+        assert!(sanitize_headers(&h).is_err());
+    }
+
+    #[test]
+    fn sanitize_headers_accepts_empty_map() {
+        let h = HashMap::new();
+        let result = sanitize_headers(&h).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn xor_key_cycles_across_chunk_boundary() {
+        let key = vec![0xAA, 0xBB, 0xCC];
+        let mut data = vec![0u8; 5];
+        let mut key_offset = 0usize;
+        for byte in data.iter_mut() {
+            *byte ^= key[key_offset % key.len()];
+            key_offset += 1;
+        }
+        assert_eq!(data, vec![0xAA, 0xBB, 0xCC, 0xAA, 0xBB]);
+
+        // Second chunk continues from where the first left off
+        let mut data2 = vec![0u8; 4];
+        for byte in data2.iter_mut() {
+            *byte ^= key[key_offset % key.len()];
+            key_offset += 1;
+        }
+        assert_eq!(data2, vec![0xCC, 0xAA, 0xBB, 0xCC]);
     }
 }

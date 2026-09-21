@@ -120,6 +120,7 @@ pub fn run() {
         resolve_archive_temp_origin,
         fetch_text,
         fetch_extractor_text,
+        fetch_bytes,
         download_to_file,
         get_library_dir,
         get_default_library_dir,
