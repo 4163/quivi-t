@@ -365,7 +365,14 @@ export class DownloadQueue {
   }
 
   _isInViewport(item) {
-    return item.galleryIndex >= this._visibleStart && item.galleryIndex < this._visibleEnd;
+    if (this._visibleEnd > this._visibleStart && item.galleryIndex >= this._visibleStart && item.galleryIndex < this._visibleEnd) {
+      return true;
+    }
+    const activeItem = this._findItem(this._activeDestPath);
+    if (activeItem && Math.abs(item.galleryIndex - activeItem.galleryIndex) <= 1) {
+      return true;
+    }
+    return false;
   }
 
   _getNextPrefetchItem() {
@@ -377,7 +384,9 @@ export class DownloadQueue {
     if (activeItem) pivotGi = activeItem.galleryIndex;
 
     const visiblePending = pending.filter((item) => this._isInViewport(item));
-    const candidates = visiblePending.length > 0 ? visiblePending : pending;
+    const hasVisibleRange = this._visibleEnd > this._visibleStart;
+    const candidates = hasVisibleRange ? visiblePending : pending;
+    if (candidates.length === 0) return null;
 
     const forward = candidates
       .filter((item) => item.galleryIndex >= pivotGi)
@@ -2092,6 +2101,14 @@ function _startGalleryQueue(galleryPath, items, options = {}) {
       }
     } catch {}
   }
+  if (initialVisibleEnd <= initialVisibleStart) {
+    const state = _Core?.getState?.();
+    const activeIdx = (state?.directory && _pathsEqual(state.directory, galleryPath) && typeof state.index === 'number' && state.index >= 0)
+      ? state.index
+      : 0;
+    initialVisibleStart = activeIdx;
+    initialVisibleEnd = Math.min(items.length, activeIdx + 2);
+  }
 
   _activeQueue = new DownloadQueue(items, {
     visibleStart: initialVisibleStart,
@@ -2607,6 +2624,13 @@ export const UrlLoader = {
         const targetPath = currentEntry.path || (currentEntry.name ? `${_activeGalleryPath}\\${currentEntry.name}` : null);
         if (targetPath) {
           _activeQueue.prioritize(targetPath);
+        }
+
+        if (!state.fileListVisible) {
+          const total = state.list.length;
+          const vStart = Math.max(0, state.index);
+          const vEnd = Math.min(total, state.index + 2);
+          _activeQueue.setVisibleRange(vStart, vEnd);
         }
       });
     }

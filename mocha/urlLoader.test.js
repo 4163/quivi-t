@@ -209,6 +209,45 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
 
       queue.cancel();
     });
+
+    it('restricts downloads strictly to the visible range and stops without draining backlog', async () => {
+      const downloaded = [];
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 },
+        { url: 'https://example.test/004.jpg', destPath: 'C:\\gallery\\004.jpg', galleryIndex: 3 },
+        { url: 'https://example.test/005.jpg', destPath: 'C:\\gallery\\005.jpg', galleryIndex: 4 }
+      ], {
+        visibleStart: 0,
+        visibleEnd: 2,
+        downloadFile: async (_url, destPath) => {
+          downloaded.push(destPath);
+        }
+      });
+
+      queue.prioritize('C:\\gallery\\001.jpg');
+      await flushQueue();
+
+      // Only items within visible range [0, 2) should download
+      assert.deepEqual(downloaded, [
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\002.jpg'
+      ]);
+
+      // Scrolling down to [2, 4) admits the next slice without downloading offscreen item 4
+      queue.setVisibleRange(2, 4);
+      await flushQueue();
+
+      assert.deepEqual(downloaded, [
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\002.jpg',
+        'C:\\gallery\\003.jpg',
+        'C:\\gallery\\004.jpg'
+      ]);
+
+      queue.cancel();
+    });
   });
 
   describe('library relocation recovery', () => {
