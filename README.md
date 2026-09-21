@@ -13,10 +13,9 @@ QuiviT fetches `manifest.json` and matching extractor scripts directly from this
 
 ## Repository layout
 
-All files in this branch live at the root:
-
 - `manifest.json`: Registry listing available extractors, URL patterns, versions, and source paths.
-- `<site>.js`: Self-contained extractor scripts (for example, `imgur.js`).
+- `<site>.js`: Extractor entries exporting `match` and `extract` (for example, `imgur.js`, `mangadex.js`, `mangaplus.js`).
+- `shared/`: Library modules shared between extractors. Never manifest entries, never loaded directly by the app.
 - `README.md`: Authoring contract and contribution guidelines.
 
 ## Manifest schema
@@ -50,6 +49,36 @@ All files in this branch live at the root:
 - `version`: Positive integer. Bump this number whenever you update an extractor script so running clients invalidate their module cache.
 - `source`: Relative filename for the extractor script. Must end in `.js`. Path traversal is rejected.
 - `patterns`: Array of regular expression strings tested against user URLs.
+
+## Shared dependencies
+
+An extractor that needs shared code declares it in a header comment on the first line:
+
+```js
+// quivit-deps: shared/sanitize.js, shared/mangaplus.js
+import { sanitizePathSegment } from './shared/sanitize.js';
+```
+
+The loader fetches the listed files from this branch, follows their own sub-dependencies, and rewrites the imports at load time. Authors write plain relative imports. Rules:
+
+- Every relative import must be declared in the header. Undeclared imports fail loading with a clear error.
+- Dependency paths must stay inside the branch (no `..`) and end in `.js`.
+- Shared files are libraries only. They must not export `match` or `extract`, and they are never added to the manifest.
+- Pushing a shared fix reaches users on the next load. Bump the version of every entry that depends on it, per the workflow below.
+
+## Host capabilities
+
+Some extractors need host powers beyond `fetchText`. They declare them on the second header line:
+
+```js
+// quivit-needs: fetchBytes, requestHeaders, xorDecrypt
+```
+
+If the running QuiviT does not support a named capability, loading fails fast with an update message instead of a cryptic runtime error. Capabilities are generic client features, defined once in the app:
+
+- `fetchBytes`: Binary fetch returning bytes, for protobuf and other non-text payloads.
+- `requestHeaders`: Custom request headers on fetch and download (session tokens, view tokens).
+- `xorDecrypt`: Per-image descriptors carrying `{ algorithm: 'xor', key }`, decrypted before the file is saved.
 
 ## Extractor module contract
 
@@ -183,6 +212,12 @@ return {
 - `folders`: Optional array of intermediate or auxiliary folders (`{ relativePath, metadata }`). QuiviT writes metadata directly into each folder.
 - `chapters`: Array of chapter stubs. Each entry requires `id`, `sourceUrl`, and `relativePath`. When `metadata` is included, QuiviT writes it directly into the chapter folder. When opening an unresolved chapter, QuiviT calls `extract()` on the chapter's `sourceUrl` and refreshes its metadata on resolution.
 
+### External chapters
+
+A chapter stub may point at another provider instead of hosted pages. Set the stub's `sourceUrl` to the external URL and mark the folder and title so readers can tell where the pages come from. Opening the stub resolves it through whichever entry matches that URL, so the stub author never reimplements the other provider. The MangaDex extractor uses this for MangaPlus pointers, suffixed ` (MANGA Plus)`. Stubs pointing at hosts no entry covers are skipped.
+
+When a site exposes hosted and external chapters through separate listings, merge the passes and dedupe by chapter id. MangaDex needs this because its hosted feed and its external-link feed return disjoint sets.
+
 ### Folder metadata model
 
 QuiviT uses direct 1:1 folder metadata lookups. It checks only the active folder for metadata files (`comicinfo.json`, `comicinfo.xml`, `meta.json`, `comet.xml`, `metadata.opf`) without parent directory inheritance or recursive scans.
@@ -212,7 +247,7 @@ Extractors supply tailored metadata directly for each folder tier:
 
 ### Safety rules
 
-- Extractors must be pure data parsers. Do not import external packages, touch window globals, or mutate DOM.
+- Extractors must be pure data parsers. Import only relative branch files declared in the header. Do not import external packages, touch window globals, or mutate DOM.
 - Path segments and filenames must not contain path separators (`/` or `\`), traversal segments (`..`), or Windows reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`).
 - File extensions must be supported media formats: `jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`, or `mp4`.
 - Duplicate filenames within one gallery are rejected.
@@ -228,6 +263,7 @@ The following sample galleries are verified working in QuiviT and serve as refer
 | Imgur | [Witch Watch OP clips](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) | Gallery (8 MP4s) | `Imgur/Just some Witch Watch OP clips/` | Video extraction, audio stream detection, hashtag route (`#/t/anime`) |
 | Imgur | [Direct image sample](https://i.imgur.com/4Q6rSDi.png) | Direct Media | `Imgur/4Q6rSDi.png` | Direct CDN URL (`i.imgur.com`), gallery match lookup, root sidecar recording |
 | MangaDex | [Akebi-chan no Sailor Fuku (Chapters)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=chapters) | Multi-Chapter Series | `MangaDex/Akebi-chan no Sailor Fuku/{Language}/{Volume}/{Chapter}/` | Series `/title/{id}` route with `?tab=chapters`, feed pagination, volume hierarchy, 5-tier folder metadata sidecars |
+| MangaDex | [【Oshi no Ko】 (Chapters)](https://mangadex.org/title/296cbc31-af1a-4b5b-a34b-fee2b4cad542/-oshi-no-ko?tab=chapters) | Multi-Chapter Series with MangaPlus externals | `MangaDex/【Oshi no Ko】/{Language}/{Volume}/{Chapter}/` | Hosted plus external-link feed merge, MangaPlus stubs with ` (MANGA Plus)` suffix, lazy resolution through the MangaPlus entry |
 | MangaDex | [Akebi-chan no Sailor Fuku, Ch. 1](https://mangadex.org/chapter/0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d) | Single Chapter (33 JPGs) | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 1 Ch. 1/` | Chapter `/chapter/{id}` route, `@home` coordinates, ComicInfo metadata sidecar |
 | MangaDex | [Akebi-chan no Sailor Fuku (Covers)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=art) | Art Collection (Covers) | `MangaDex/Akebi-chan no Sailor Fuku (Covers)/Cover.jpg` + `{Language}/` | Art gallery `/title/{id}?tab=art`, multi-locale pagination, root `Cover.jpg`, volume filenames, root loose cover cleanup |
 | MangaDex | [Akebi-chan no Sailor Fuku - Vol. 16 Cover](https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg) | Direct Media | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg` | Direct cover URL `/covers/{mangaId}/{fileName}`, friendly API title resolution, root `gallery.json` deduplication |
@@ -243,6 +279,6 @@ git worktree add ../quivi-t-extractors extractors
 
 When changing an extractor:
 1. Update or create the `<site>.js` script.
-2. Bump the extractor's `version` integer in `manifest.json`.
+2. Bump the extractor's `version` integer in `manifest.json`. If you touched `shared/`, bump every entry that depends on it.
 3. Commit both files together in a single commit on this branch.
 4. Push the branch to `origin extractors`.

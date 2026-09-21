@@ -5,7 +5,7 @@
       "id": "imgur",
       "name": "Imgur",
       "libraryPath": "Imgur",
-      "version": 1,
+      "version": 2,
       "patterns": [
         "^https?://(www\\.)?imgur\\.com/(a|gallery)/",
         "^https?://(www\\.|i\\.)?imgur\\.com/([a-zA-Z0-9]+)(\\.[a-zA-Z0-9]+)?$"
@@ -16,7 +16,7 @@
       "id": "mangadex",
       "name": "MangaDex",
       "libraryPath": "MangaDex",
-      "version": 2,
+      "version": 4,
       "patterns": [
         "^https?://(www\\.)?mangadex\\.(org|cc)/(chapter|title)/[0-9a-fA-F-]{36}",
         "^blob:https?://(www\\.)?mangadex\\.(org|cc)/",
@@ -24,6 +24,17 @@
         "^https?://[a-zA-Z0-9-]+\\.mangadex\\.network/data(-saver)?/[0-9a-fA-F]{32}/"
       ],
       "source": "mangadex.js"
+    },
+    {
+      "id": "mangaplus",
+      "name": "MangaPlus",
+      "libraryPath": "MangaPlus",
+      "version": 2,
+      "patterns": [
+        "^https?://mangaplus\\.shueisha\\.co\\.jp/viewer/\\d+",
+        "^https?://mangaplus\\.shueisha\\.co\\.jp/titles/\\d+"
+      ],
+      "source": "mangaplus.js"
     }
   ]
 }

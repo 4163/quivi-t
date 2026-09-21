@@ -1,3 +1,4 @@
+// quivit-deps: shared/sanitize.js, shared/mangaplus.js
 /**
  * mangadex.js: MangaDex chapter and media extractor.
  *
@@ -6,28 +7,14 @@
  * direct cover/CDN media, and flat chapter folder naming.
  */
 
+import { sanitizePathSegment } from './shared/sanitize.js';
+import { parseViewerId, cleanViewerUrl } from './shared/mangaplus.js';
+
 const MANGADEX_CHAPTER_RE = /^https?:\/\/(?:www\.)?mangadex\.(?:org|cc)\/chapter\/([0-9a-fA-F-]{36})(?:\/(\d+))?/i;
 const MANGADEX_TITLE_RE = /^https?:\/\/(?:www\.)?mangadex\.(?:org|cc)\/title\/([0-9a-fA-F-]{36})/i;
 const MANGADEX_BLOB_RE = /^blob:https?:\/\/(?:www\.)?mangadex\.(?:org|cc)\//i;
 const MANGADEX_COVER_RE = /^https?:\/\/(?:uploads\.|(?:www\.)?)mangadex\.(?:org|cc)\/covers\/([0-9a-fA-F-]{36})\/([^\s?#]+)$/i;
 const MANGADEX_NETWORK_RE = /^https?:\/\/[a-zA-Z0-9-]+\.mangadex\.network\/data(?:-saver)?\/([0-9a-fA-F]{32})\/([^\s?#]+)$/i;
-
-const FILENAME_FORBIDDEN_RE = /[<>:"/\\|?*\x00-\x1F]/g;
-const PATH_SEGMENT_MAX_LEN = 100;
-const RESERVED_DEVICE_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
-
-export function sanitizePathSegment(value) {
-  let sanitized = String(value || 'Untitled')
-    .replace(FILENAME_FORBIDDEN_RE, '_')
-    .trim()
-    .replace(/[. ]+$/, '');
-  if (!sanitized) return 'Untitled';
-  if (RESERVED_DEVICE_NAMES.test(sanitized)) sanitized = `_${sanitized}`;
-  if (sanitized.length > PATH_SEGMENT_MAX_LEN) {
-    sanitized = sanitized.slice(0, PATH_SEGMENT_MAX_LEN).replace(/[. ]+$/, '');
-  }
-  return sanitized || 'Untitled';
-}
 
 export function digitPadWidth(count) {
   if (count <= 0) return 2;
@@ -579,35 +566,59 @@ export async function extractTitle(mangaId, url, context = {}) {
     };
   }
 
-  let offset = 0;
+  async function pullFeedPages(extraParams) {
+    const collected = [];
+    let pageOffset = 0;
+    while (true) {
+      const feedUrl = `https://api.mangadex.org/manga/${mangaId}/feed?limit=500&offset=${pageOffset}${extraParams}&includes%5B%5D=scanlation_group&order%5Bvolume%5D=asc&order%5Bchapter%5D=asc`;
+      const feedText = await context.fetchText(feedUrl);
+      let feedPayload;
+      try {
+        feedPayload = JSON.parse(feedText);
+      } catch (err) {
+        throw new Error(`Failed to parse MangaDex chapter feed: ${err.message}`);
+      }
+
+      const entries = Array.isArray(feedPayload?.data) ? feedPayload.data : [];
+      collected.push(...entries);
+
+      const total = feedPayload?.total || 0;
+      if (entries.length === 0 || collected.length >= total) {
+        break;
+      }
+      pageOffset += entries.length;
+    }
+    return collected;
+  }
+
+  // The two feed passes are disjoint: the plain feed returns hosted chapters
+  // only, while includeExternalUrl=1 returns link-only chapters but drops the
+  // hosted ones. Merge both with hosted entries winning duplicate ids.
   const allFeedEntries = [];
-  while (true) {
-    const feedUrl = `https://api.mangadex.org/manga/${mangaId}/feed?limit=500&offset=${offset}&includes%5B%5D=scanlation_group&order%5Bvolume%5D=asc&order%5Bchapter%5D=asc`;
-    const feedText = await context.fetchText(feedUrl);
-    let feedPayload;
-    try {
-      feedPayload = JSON.parse(feedText);
-    } catch (err) {
-      throw new Error(`Failed to parse MangaDex chapter feed: ${err.message}`);
+  const seenFeedIds = new Set();
+  for (const extraParams of ['', '&includeExternalUrl=1']) {
+    for (const entry of await pullFeedPages(extraParams)) {
+      if (!entry || typeof entry.id !== 'string' || seenFeedIds.has(entry.id)) continue;
+      seenFeedIds.add(entry.id);
+      allFeedEntries.push(entry);
     }
-
-    const entries = Array.isArray(feedPayload?.data) ? feedPayload.data : [];
-    allFeedEntries.push(...entries);
-
-    const total = feedPayload?.total || 0;
-    if (entries.length === 0 || allFeedEntries.length >= total) {
-      break;
-    }
-    offset += entries.length;
   }
 
   const seenPaths = new Set();
+  const seenExternalUrls = new Set();
   const seenLanguages = new Map();
   const seenVolumes = new Map();
   const chapters = [];
 
   for (const entry of allFeedEntries) {
-    if (entry.attributes?.externalUrl) continue;
+    const rawExternalUrl = entry.attributes?.externalUrl || null;
+    const externalViewerId = parseViewerId(rawExternalUrl);
+    if (rawExternalUrl && !externalViewerId) continue;
+    const externalUrl = externalViewerId ? cleanViewerUrl(rawExternalUrl) : null;
+    if (externalUrl) {
+      if (seenExternalUrls.has(externalUrl)) continue;
+      seenExternalUrls.add(externalUrl);
+    }
 
     const langCode = entry.attributes?.translatedLanguage || 'other';
     const langName = resolveLanguageName(langCode);
@@ -615,7 +626,9 @@ export async function extractTitle(mangaId, url, context = {}) {
     const rawVolume = entry.attributes?.volume;
     const volFolder = sanitizePathSegment(formatVolumeFolder(rawVolume));
     const groupName = entry.relationships?.find((r) => r.type === 'scanlation_group')?.attributes?.name || '';
-    let chFolder = formatTitleChapterFolder(entry.attributes, groupName);
+    let chFolder = externalUrl
+      ? sanitizePathSegment(`${formatChapterLabel(entry.attributes)} (MANGA Plus)`)
+      : formatTitleChapterFolder(entry.attributes, groupName);
 
     const chapterId = entry.id;
     let pathKey = `${langFolder}/${volFolder}/${chFolder}`.toLowerCase();
@@ -641,6 +654,8 @@ export async function extractTitle(mangaId, url, context = {}) {
     if (chTitleAttr && chTitleAttr.trim()) {
       chTitle = `${chTitle} - ${chTitleAttr.trim()}`;
     }
+    if (externalUrl) chTitle = `${chTitle} (MANGA Plus)`;
+    const scanlator = groupName || (externalUrl ? 'MangaPlus' : '');
 
     const chapterMetadata = buildMangaComicInfo(mangaPayload?.data, {
       Series: mangaTitle,
@@ -648,16 +663,16 @@ export async function extractTitle(mangaId, url, context = {}) {
       Volume: rawVolume || undefined,
       Number: chNum || undefined,
       LanguageISO: langCode,
-      Translator: groupName || undefined,
-      Notes: groupName ? `Scanlation: ${groupName}` : undefined,
-      PageCount: typeof entry.attributes?.pages === 'number' ? entry.attributes.pages : undefined,
-      Web: `https://mangadex.org/chapter/${chapterId}`
+      Translator: scanlator || undefined,
+      Notes: scanlator ? `Scanlation: ${scanlator}` : undefined,
+      PageCount: externalUrl ? undefined : (typeof entry.attributes?.pages === 'number' ? entry.attributes.pages : undefined),
+      Web: externalUrl || `https://mangadex.org/chapter/${chapterId}`
     });
 
     chapters.push({
       id: `mangadex-${chapterId}`,
-      title: `${mangaTitle} - ${formatChapterLabel(entry.attributes)}`,
-      sourceUrl: `https://mangadex.org/chapter/${chapterId}`,
+      title: externalUrl ? `${mangaTitle} - ${formatChapterLabel(entry.attributes)} (MANGA Plus)` : `${mangaTitle} - ${formatChapterLabel(entry.attributes)}`,
+      sourceUrl: externalUrl || `https://mangadex.org/chapter/${chapterId}`,
       relativePath: [titleFolderName, langFolder, volFolder, chFolder],
       metadata: chapterMetadata
     });

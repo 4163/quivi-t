@@ -1,9 +1,12 @@
+// quivit-deps: shared/sanitize.js
 /**
  * imgur.js: Imgur album and gallery extractor.
  *
  * Parses album/gallery pages by finding the JSON payload embedded
  * in the HTML source. Returns image URLs, filenames, and display names.
  */
+
+import { sanitizePathSegment } from './shared/sanitize.js';
 
 const IMGUR_ALBUM_RE = /^https?:\/\/(?:www\.)?imgur\.com\/(?:a|gallery)\/(?:[\w-]+-)?([a-zA-Z0-9]+)/i;
 const IMGUR_DIRECT_RE = /^https?:\/\/(?:www\.|i\.)?imgur\.com\/([a-zA-Z0-9]+)\.([a-zA-Z0-9]+)$/i;
@@ -20,22 +23,6 @@ const DATA_PATTERNS = [
 
 const FILENAME_FORBIDDEN_RE = /[<>:"/\\|?*\x00-\x1F]/g;
 const FILENAME_MAX_LEN = 80;
-const PATH_SEGMENT_MAX_LEN = 100;
-const RESERVED_DEVICE_NAMES = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
-
-function sanitizePathSegment(value) {
-  let sanitized = String(value || 'Untitled Gallery')
-    .replace(FILENAME_FORBIDDEN_RE, '_')
-    .trim()
-    .replace(/[. ]+$/, '');
-  if (!sanitized) return 'Untitled Gallery';
-  if (RESERVED_DEVICE_NAMES.test(sanitized)) sanitized = `_${sanitized}`;
-  if (sanitized.length > PATH_SEGMENT_MAX_LEN) {
-    sanitized = sanitized.slice(0, PATH_SEGMENT_MAX_LEN).replace(/[. ]+$/, '');
-  }
-  return sanitized || 'Untitled Gallery';
-}
-
 function stripMatchingFormat(description, extension) {
   if (!description || typeof description !== 'string') return '';
 
