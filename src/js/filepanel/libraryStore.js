@@ -59,8 +59,7 @@ export function saveLibraryCollapsed(collapsed) {
   } catch {}
 }
 
-export function getProviderCollapsed(providerName) {
-  if (!providerName) return false;
+export function getProviderCollapsed(providerName) {  if (!providerName) return false;
   try {
     const raw = localStorage.getItem('quivit_library_providers_collapsed');
     if (!raw) return false;
@@ -79,4 +78,39 @@ export function saveProviderCollapsed(providerName, collapsed) {
     map[providerName] = !!collapsed;
     localStorage.setItem('quivit_library_providers_collapsed', JSON.stringify(map));
   } catch {}
+}
+
+// Provider display order is frontend state: first-seen order sticks, and
+// names never seen before append at the end. Imports never move existing
+// entries. Manual arrange builds on this same list later, so the backend
+// stays out of ordering entirely.
+export function getProviderOrder() {
+  try {
+    const raw = localStorage.getItem('quivit_library_provider_order');
+    const list = raw ? JSON.parse(raw) : [];
+    return Array.isArray(list) ? list.filter((n) => typeof n === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveProviderOrder(order) {
+  try {
+    localStorage.setItem('quivit_library_provider_order', JSON.stringify(order.filter((n) => typeof n === 'string')));
+  } catch {}
+}
+
+export function orderProviders(tree = _libraryTreeCache) {
+  if (!Array.isArray(tree)) return [];
+  const stored = getProviderOrder();
+  const present = new Set(tree.map((p) => p?.name).filter(Boolean));
+  const kept = stored.filter((name) => present.has(name));
+  for (const provider of tree) {
+    if (provider?.name && !kept.includes(provider.name)) {
+      kept.push(provider.name);
+    }
+  }
+  saveProviderOrder(kept);
+  const rank = new Map(kept.map((name, index) => [name, index]));
+  return [...tree].sort((a, b) => (rank.get(a?.name) ?? -1) - (rank.get(b?.name) ?? -1));
 }

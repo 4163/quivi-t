@@ -249,7 +249,6 @@ pub fn read_library_tree() -> Result<Vec<LibraryProviderEntry>, String> {
         if provider_name.is_empty() {
             continue;
         }
-
         let nodes = read_library_nodes(&provider_path);
 
         providers.push(LibraryProviderEntry {

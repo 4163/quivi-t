@@ -17,7 +17,8 @@ import {
   hasLibraryEntries,
   deleteLibraryEntry,
   getProviderCollapsed,
-  saveProviderCollapsed
+  saveProviderCollapsed,
+  orderProviders
 } from './libraryStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
@@ -25,6 +26,8 @@ import { BoundedMap, BoundedSet } from '../services/cache.js';
 import {
   setVisibleRange as setDownloadVisibleRange,
   cancelGalleryDownloads,
+  forgetDeletedLibraryEntry,
+  fetchManifest,
   getGalleryDownloadStatus,
   retryGalleryDownload,
   reloadLibraryDir,
@@ -1091,6 +1094,9 @@ function buildLibraryEntry(item, depth = 0) {
           if (remapped === item.path) throw err;
           await deleteLibraryEntry(remapped);
         });
+        if (typeof forgetDeletedLibraryEntry === 'function') {
+          await forgetDeletedLibraryEntry(item.path).catch(() => {});
+        }
         await renderLibrary();
 
         const parentOfTarget = targetDir.includes('/') ? targetDir.substring(0, targetDir.lastIndexOf('/')) : '';
@@ -1153,8 +1159,19 @@ function buildLibraryEntry(item, depth = 0) {
 
 export async function renderLibrary() {
   if (!libraryPanelEl) return;
-  const tree = await fetchLibraryTree();
+  const tree = orderProviders(await fetchLibraryTree());
   const hasAny = hasLibraryEntries(tree);
+
+  // Display names come from the manifest registry (libraryPath -> name),
+  // so renaming a provider never needs core changes. Directory names stay
+  // the keys for collapse state, element ids, and dataset attributes.
+  let displayNames = null;
+  try {
+    const manifest = await fetchManifest();
+    displayNames = new Map((manifest?.extractors || []).map((e) => [e.libraryPath, e.name]));
+  } catch {
+    displayNames = null;
+  }
 
   libraryPanelEl.classList.toggle('is-empty', !hasAny);
   libraryPanelEl.innerHTML = '';
@@ -1171,6 +1188,8 @@ export async function renderLibrary() {
     const isProvCollapsed = getProviderCollapsed(provider.name);
     if (!isProvCollapsed) allCollapsed = false;
 
+    const displayName = (displayNames && displayNames.get(provider.name)) || provider.name;
+
     const provHeader = document.createElement('div');
     provHeader.className = 'library-provider-header';
     provHeader.tabIndex = 0;
@@ -1178,14 +1197,19 @@ export async function renderLibrary() {
     provHeader.setAttribute('aria-expanded', isProvCollapsed ? 'false' : 'true');
     provHeader.setAttribute('aria-controls', `library-list-${provider.name}`);
     provHeader.dataset.provider = provider.name;
-    provHeader.innerHTML = `<span>${provider.name}</span><span class="toggle-icon">${isProvCollapsed ? '▼' : '▲'}</span>`;
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = displayName;
+    const toggleSpan = document.createElement('span');
+    toggleSpan.className = 'toggle-icon';
+    toggleSpan.textContent = isProvCollapsed ? '▼' : '▲';
+    provHeader.append(labelSpan, toggleSpan);
 
     const listUl = document.createElement('ul');
     listUl.id = `library-list-${provider.name}`;
     listUl.className = 'library-provider-list';
     if (isProvCollapsed) listUl.classList.add('collapsed');
     listUl.setAttribute('role', 'listbox');
-    listUl.setAttribute('aria-label', `${provider.name} library`);
+    listUl.setAttribute('aria-label', `${displayName} library`);
 
     const toggleProv = () => {
       const nowCollapsed = !listUl.classList.contains('collapsed');

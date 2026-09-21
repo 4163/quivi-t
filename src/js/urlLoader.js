@@ -706,9 +706,9 @@ function _rewriteImportSpecifiers(source, importerPath, depGraph) {
   });
 }
 
-async function _hashDepTexts(depGraph) {
-  if (depGraph.size === 0) return '';
-  const combined = Array.from(depGraph.values()).map((d) => d.source).join('\n');
+async function _hashTexts(texts) {
+  if (texts.length === 0) return '';
+  const combined = texts.join('\n');
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(combined));
   return ':' + Array.from(new Uint8Array(buf)).slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
@@ -735,8 +735,8 @@ export async function loadExtractorModule(entry) {
     }
   }
   const depGraph = await _resolveDepGraph(source, entry.source);
-  const depHash = await _hashDepTexts(depGraph);
-  const cacheKey = `${entry.id}@${entry.version}:${entry.source}${depHash}`;
+  const contentHash = await _hashTexts([source, ...Array.from(depGraph.values()).map((d) => d.source)]);
+  const cacheKey = `${entry.id}@${entry.version}:${entry.source}${contentHash}`;
 
   const cached = _extractorCache.get(cacheKey);
   if (cached) return cached;
@@ -1217,6 +1217,49 @@ export async function writeGalleryMetadata(targetDir, metadata) {
   }
 }
 
+// The Library tree lists only direct provider children carrying gallery.json.
+// For gallery paths deeper than one tier, the intermediate folders would stay
+// invisible, so each gets a minimal marker sidecar. Markers carry no url,
+// sourceUrl, or unresolved flag, keeping them invisible to gallery matching,
+// cleanup, and stub resolution. Real sidecars always win: existing files are
+// never overwritten, and later leaf writes replace markers outright.
+async function _ensureIntermediateSidecars(galleryPath, galleryId, relativePath, { provider, entry } = {}) {
+  if (!window.__TAURI__ || !galleryPath || !Array.isArray(relativePath) || relativePath.length < 2) return;
+  const segs = String(galleryPath).split('\\');
+  const rootSegs = segs.slice(0, Math.max(0, segs.length - relativePath.length));
+  for (let depth = 1; depth < relativePath.length; depth++) {
+    const tier = relativePath.slice(0, depth);
+    const tierPath = [...rootSegs, ...tier].join('\\');
+    const sidecarPath = `${tierPath}\\gallery.json`;
+    try {
+      await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+      continue;
+    } catch {
+      // Absent; write a marker below.
+    }
+    const marker = {
+      provider,
+      title: tier[tier.length - 1],
+      timestamp: new Date().toISOString(),
+      gallery: {
+        id: `${galleryId}-tier-${depth}`,
+        relativePath: tier,
+        extractorId: entry?.id,
+        extractorVersion: entry?.version
+      },
+      images: []
+    };
+    try {
+      await window.__TAURI__.core.invoke('write_text_file', {
+        path: sidecarPath,
+        content: JSON.stringify(marker, null, 2)
+      });
+    } catch (err) {
+      console.warn('[UrlLoader] Failed to write intermediate gallery sidecar:', err);
+    }
+  }
+}
+
 export async function cleanupMatchingProviderEntries(providerPath, result) {
   if (typeof window === 'undefined' || !window.__TAURI__ || !result || typeof result !== 'object') {
     return;
@@ -1317,6 +1360,7 @@ export async function cleanupMatchingProviderEntries(providerPath, result) {
         if (rootSidecar && Array.isArray(rootSidecar.images)) {
           for (const img of rootSidecar.images) {
             const imgStem = (img.hash || extractUrlStem(img.url || img.sourceUrl || '')).toLowerCase();
+            const imgUrlStem = extractUrlStem(img.url || img.sourceUrl || '').toLowerCase();
             const imgRaw = (img.rawFileName || '').toLowerCase();
             const imgName = (img.filename || '').toLowerCase();
             const fileBase = imgName.replace(/\.[^.]+$/, '');
@@ -1324,6 +1368,7 @@ export async function cleanupMatchingProviderEntries(providerPath, result) {
             const imgUrl = normalizeUrl(img.url || '').toLowerCase();
 
             const isCoverMatch = (imgStem && exactCoverHashes.has(imgStem))
+              || (imgUrlStem && exactCoverHashes.has(imgUrlStem))
               || (imgRaw && exactCoverNames.has(imgRaw))
               || (fileBase && exactCoverHashes.has(fileBase))
               || (imgName && exactCoverNames.has(imgName))
@@ -1484,7 +1529,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     }
 
     const directInfo = typeof mod.parseDirectUrl === 'function'
-      ? await mod.parseDirectUrl(url, { fetchText: fetchRemoteText })
+      ? await mod.parseDirectUrl(url, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes })
       : null;
     const hash = directInfo?.hash || rawStem;
     const targetFilename = directInfo?.filename || (url.split(/[?#]/)[0].split('/').pop() || 'image.png');
@@ -1734,6 +1779,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
         path: `${existingPath}\\gallery.json`,
         content: JSON.stringify(updatedSidecar, null, 2)
       });
+      await _ensureIntermediateSidecars(existingPath, result.gallery.id, result.gallery.relativePath, { provider: result.provider, entry });
       if (result.metadata) {
         await writeGalleryMetadata(existingPath, result.metadata);
       }
@@ -1766,7 +1812,9 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
         destPath: `${existingPath}\\${img.filename}`,
         filename: img.filename,
         galleryIndex: i,
-        status: (fileSize !== undefined && fileSize > 0) ? 'completed' : 'pending'
+        status: (fileSize !== undefined && fileSize > 0) ? 'completed' : 'pending',
+        headers: img.headers || null,
+        decryption: img.decryption || null
       };
     });
 
@@ -1834,6 +1882,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
         await writeGalleryMetadata(folderPath, folder.metadata);
       }
     }
+    await _ensureIntermediateSidecars(galleryPath, result.gallery.id, result.gallery.relativePath, { provider: result.provider, entry });
   }
 
   // Prepopulate all gallery files as 0-byte placeholders on disk upfront
@@ -2092,6 +2141,7 @@ export async function resolveUnresolvedGallery(galleryPath) {
       path: sidecarPath,
       content: JSON.stringify(updatedSidecar, null, 2)
     });
+    await _ensureIntermediateSidecars(galleryPath, fullResult.gallery?.id || data.gallery?.id, data.gallery?.relativePath || fullResult.gallery?.relativePath, { provider: fullResult.provider, entry });
 
     if (fullResult.metadata) {
       await writeGalleryMetadata(galleryPath, fullResult.metadata);
@@ -2220,6 +2270,39 @@ export async function resumeGalleryDownloads(galleryPath, list) {
 }
 
 // -- Placeholder and bridging queries --
+
+// After a file is moved to the Recycle Bin, drop its record from the parent
+// gallery sidecar so resume and reimport stop treating it as missing and
+// refetching it. Directories need nothing: their sidecar goes with them.
+export async function forgetDeletedLibraryEntry(deletedPath) {
+  if (!window.__TAURI__ || !deletedPath) return false;
+  const normalized = String(deletedPath).replace(/\//g, '\\');
+  const sepIdx = normalized.lastIndexOf('\\');
+  if (sepIdx < 0) return false;
+  const fileName = normalized.slice(sepIdx + 1).toLowerCase();
+  if (!fileName) return false;
+  const sidecarPath = `${normalized.slice(0, sepIdx)}\\gallery.json`;
+  let data = null;
+  try {
+    data = JSON.parse(await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath }));
+  } catch {
+    return false;
+  }
+  if (!data || !Array.isArray(data.images)) return false;
+  const kept = data.images.filter((img) => (img?.filename || '').toLowerCase() !== fileName);
+  if (kept.length === data.images.length) return false;
+  data.images = kept;
+  try {
+    await window.__TAURI__.core.invoke('write_text_file', {
+      path: sidecarPath,
+      content: JSON.stringify(data, null, 2)
+    });
+  } catch (err) {
+    console.warn('[UrlLoader] Failed to prune deleted file from gallery sidecar:', err);
+    return false;
+  }
+  return true;
+}
 
 export function isPlaceholderFile(filePath) {
   if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath) return false;
@@ -2387,6 +2470,7 @@ export const UrlLoader = {
   loadUrl,
   resumeGalleryDownloads,
   resolveUnresolvedGallery,
+  forgetDeletedLibraryEntry,
   normalizeUrl,
   isValidUrl,
   isGalleryDownloading,
