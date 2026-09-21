@@ -1,4 +1,5 @@
-// quivit-deps: shared/sanitize.js, shared/mangaplus.js
+// quivit-deps: shared/sanitize.js, shared/mangaplus.js, shared/kmanga.js
+// quivit-needs: tileDescramble
 /**
  * mangadex.js: MangaDex chapter and media extractor.
  *
@@ -9,6 +10,7 @@
 
 import { sanitizePathSegment } from './shared/sanitize.js';
 import { parseViewerId, cleanViewerUrl } from './shared/mangaplus.js';
+import { parseKmangaEpisodeId, cleanKmangaUrl } from './shared/kmanga.js';
 
 const MANGADEX_CHAPTER_RE = /^https?:\/\/(?:www\.)?mangadex\.(?:org|cc)\/chapter\/([0-9a-fA-F-]{36})(?:\/(\d+))?/i;
 const MANGADEX_TITLE_RE = /^https?:\/\/(?:www\.)?mangadex\.(?:org|cc)\/title\/([0-9a-fA-F-]{36})/i;
@@ -402,6 +404,13 @@ export async function extract(html, url, context = {}) {
   }
 
   if (chapterAttributes.externalUrl) {
+    const extUrl = chapterAttributes.externalUrl;
+    const plusId = parseViewerId(extUrl);
+    const kmangaId = parseKmangaEpisodeId(extUrl);
+    if (plusId || kmangaId) {
+      const providerName = plusId ? 'MANGA Plus' : 'K-Manga';
+      return { error: `This chapter is hosted on ${providerName}. Import it as part of the full series to create a stub that resolves on open.` };
+    }
     throw new Error('This chapter is hosted on an external service and cannot be downloaded directly from MangaDex');
   }
 
@@ -613,12 +622,20 @@ export async function extractTitle(mangaId, url, context = {}) {
   for (const entry of allFeedEntries) {
     const rawExternalUrl = entry.attributes?.externalUrl || null;
     const externalViewerId = parseViewerId(rawExternalUrl);
-    if (rawExternalUrl && !externalViewerId) continue;
-    const externalUrl = externalViewerId ? cleanViewerUrl(rawExternalUrl) : null;
+    const externalKmangaId = parseKmangaEpisodeId(rawExternalUrl);
+    if (rawExternalUrl && !externalViewerId && !externalKmangaId) continue;
+    const isExternalPlus = !!externalViewerId;
+    const isExternalKmanga = !!externalKmangaId;
+    const externalUrl = isExternalPlus
+      ? cleanViewerUrl(rawExternalUrl)
+      : isExternalKmanga
+        ? cleanKmangaUrl(rawExternalUrl)
+        : null;
     if (externalUrl) {
       if (seenExternalUrls.has(externalUrl)) continue;
       seenExternalUrls.add(externalUrl);
     }
+    const externalProvider = isExternalPlus ? 'MANGA Plus' : isExternalKmanga ? 'K-Manga' : null;
 
     const langCode = entry.attributes?.translatedLanguage || 'other';
     const langName = resolveLanguageName(langCode);
@@ -627,7 +644,7 @@ export async function extractTitle(mangaId, url, context = {}) {
     const volFolder = sanitizePathSegment(formatVolumeFolder(rawVolume));
     const groupName = entry.relationships?.find((r) => r.type === 'scanlation_group')?.attributes?.name || '';
     let chFolder = externalUrl
-      ? sanitizePathSegment(`${formatChapterLabel(entry.attributes)} (MANGA Plus)`)
+      ? sanitizePathSegment(`${formatChapterLabel(entry.attributes)} (${externalProvider})`)
       : formatTitleChapterFolder(entry.attributes, groupName);
 
     const chapterId = entry.id;
@@ -654,8 +671,8 @@ export async function extractTitle(mangaId, url, context = {}) {
     if (chTitleAttr && chTitleAttr.trim()) {
       chTitle = `${chTitle} - ${chTitleAttr.trim()}`;
     }
-    if (externalUrl) chTitle = `${chTitle} (MANGA Plus)`;
-    const scanlator = groupName || (externalUrl ? 'MANGA Plus' : '');
+    if (externalUrl) chTitle = `${chTitle} (${externalProvider})`;
+    const scanlator = groupName || (externalUrl ? externalProvider : '');
 
     const chapterMetadata = buildMangaComicInfo(mangaPayload?.data, {
       Series: mangaTitle,
@@ -671,7 +688,7 @@ export async function extractTitle(mangaId, url, context = {}) {
 
     chapters.push({
       id: `mangadex-${chapterId}`,
-      title: externalUrl ? `${mangaTitle} - ${formatChapterLabel(entry.attributes)} (MANGA Plus)` : `${mangaTitle} - ${formatChapterLabel(entry.attributes)}`,
+      title: externalUrl ? `${mangaTitle} - ${formatChapterLabel(entry.attributes)} (${externalProvider})` : `${mangaTitle} - ${formatChapterLabel(entry.attributes)}`,
       sourceUrl: externalUrl || `https://mangadex.org/chapter/${chapterId}`,
       relativePath: [titleFolderName, langFolder, volFolder, chFolder],
       metadata: chapterMetadata
