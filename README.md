@@ -1,26 +1,31 @@
 # QuiviT website extractors
 
-This orphan branch hosts the runtime registry and site extractors for QuiviT web imports.
+Orphan branch hosting the runtime extractor registry for QuiviT web imports. Extractors are fetched, cached, and loaded as dynamic ES modules at runtime, so site support ships without a desktop release.
 
-QuiviT fetches `manifest.json` and matching extractor scripts directly from this branch at runtime. Maintainers can add or update individual website extractors here without rebuilding or releasing the main desktop application.
+## Runtime flow
 
-## How it works
+1. User pastes a URL via Open URL (`Ctrl+I`).
+2. `urlLoader.js` fetches `manifest.json` from this branch, matches the URL against `patterns`.
+3. The matched extractor script is downloaded, cached under `%LOCALAPPDATA%/QuiviT/extractor-cache/`, and loaded as an ES module.
+4. The extractor returns image URLs and gallery metadata. QuiviT downloads images to the user's Library under `libraryPath`.
 
-1. A user triggers Open URL (`Ctrl+I`) in QuiviT and pastes a link.
-2. QuiviT checks `manifest.json` on this branch to find a matching pattern.
-3. The app downloads the matching extractor script, caches it under `%LOCALAPPDATA%/QuiviT/extractor-cache/`, and loads it as a dynamic ES module.
-4. The extractor returns image URLs and gallery metadata. QuiviT then downloads the images to the user's Library.
+## Branch layout
 
-## Repository layout
-
-- `manifest.json`: Registry listing available extractors, URL patterns, versions, and source paths.
-- `<site>.js`: Extractor entries exporting `match` and `extract` (for example, `imgur.js`, `mangadex.js`, `mangaplus.js`).
-- `shared/`: Library modules shared between extractors. Never manifest entries, never loaded directly by the app.
-- `README.md`: Authoring contract and contribution guidelines.
+```
+manifest.json          Registry: id, patterns, version, source path
+imgur.js               Imgur albums, galleries, direct CDN images
+mangadex.js            MangaDex chapters, titles, covers, @home network images
+mangaplus.js           MANGA Plus viewer chapters, title series, signed CDN images
+shared/
+  sanitize.js          Path segment sanitization
+  mangaplus.js         MANGA Plus protobuf viewer client (shared by mangadex.js and mangaplus.js)
+  proto.js             Minimal protobuf varint/length-delimited decoder
+README.md              This contract
+```
 
 ## Manifest schema
 
-`manifest.json` uses version 1:
+Each entry in `manifest.json` registers one extractor. The file itself is the source of truth for live entries and patterns. The shape:
 
 ```json
 {
@@ -30,202 +35,153 @@ QuiviT fetches `manifest.json` and matching extractor scripts directly from this
       "id": "imgur",
       "name": "Imgur",
       "libraryPath": "Imgur",
-      "version": 1,
+      "version": 2,
       "source": "imgur.js",
-      "patterns": [
-        "^https?:\\/\\/(?:[a-zA-Z0-9-]+\\.)?imgur\\.com\\/(?:a|gallery)\\/[a-zA-Z0-9]+",
-        "^https?:\\/\\/(?:i\\.)?imgur\\.com\\/[a-zA-Z0-9]+(\\.[a-zA-Z0-9]+)?$"
-      ]
+      "patterns": ["^https?://..."]
     }
   ]
 }
 ```
 
-### Manifest fields
+| Field | Rule |
+|---|---|
+| `id` | Lower-case letters, numbers, hyphens. Unique. |
+| `name` | Human-readable label shown in status UI. |
+| `libraryPath` | Top-level directory name under the user's Library. |
+| `version` | Positive integer. Bump on every script change to bust the client module cache. |
+| `source` | Relative `.js` filename. Path traversal rejected. |
+| `patterns` | Regex strings tested against user URLs. First match wins across all entries. |
 
-- `id`: Unique identifier using lower-case letters, numbers, and hyphens.
-- `name`: Human-readable name used in status labels.
-- `libraryPath`: Directory name where downloaded galleries land under the user Library.
-- `version`: Positive integer. Bump this number whenever you update an extractor script so running clients invalidate their module cache.
-- `source`: Relative filename for the extractor script. Must end in `.js`. Path traversal is rejected.
-- `patterns`: Array of regular expression strings tested against user URLs.
+## Verified test galleries
 
-## Shared dependencies
+Reference URLs for manual testing. Each row covers a distinct URL route or extraction behavior.
 
-An extractor that needs shared code declares it in a header comment on the first line:
+| Provider | Test target | Import type | Library destination | Verified behavior |
+|:---|:---|:---|:---|:---|
+| Imgur | [Azuma - Seihantai](https://imgur.com/a/azuma-seihantai-17vF37d) | Album (41 PNGs) | `Imgur/Azuma - Seihantai/` | Album `/a/` route, multi-image manga set, description sanitization |
+| Imgur | [Anime Reaction Gifs](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) | Gallery (50 GIFs) | `Imgur/Anime Reaction Gifs/` | Large animation batch, download concurrency, prefetch threshold |
+| Imgur | [Witch Watch OP clips](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) | Gallery (8 MP4s) | `Imgur/Just some Witch Watch OP clips/` | Video extraction, audio stream detection, hashtag route (`#/t/anime`) |
+| Imgur | [Direct image sample](https://i.imgur.com/4Q6rSDi.png) | Direct media | `Imgur/4Q6rSDi.png` | Direct CDN URL (`i.imgur.com`), gallery match lookup, root sidecar recording |
+| MangaDex | [Akebi-chan no Sailor Fuku (Chapters)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=chapters) | Multi-chapter series | `MangaDex/Akebi-chan no Sailor Fuku/{Language}/{Volume}/{Chapter}/` | Series `/title/{id}` route with `?tab=chapters`, feed pagination, volume hierarchy, 5-tier folder metadata |
+| MangaDex | [Oshi no Ko (Chapters)](https://mangadex.org/title/296cbc31-af1a-4b5b-a34b-fee2b4cad542/-oshi-no-ko?tab=chapters) | Series with MANGA Plus externals | `MangaDex/【Oshi no Ko】/{Language}/{Volume}/{Chapter}/` | Hosted + external feed merge, MANGA Plus stubs with ` (MANGA Plus)` suffix, lazy resolution |
+| MangaDex | [Akebi-chan Ch. 1](https://mangadex.org/chapter/0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d) | Single chapter (33 JPGs) | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 1 Ch. 1/` | Chapter `/chapter/{id}` route, `@home` delivery, ComicInfo sidecar |
+| MangaDex | [Akebi-chan (Covers)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=art) | Art collection | `MangaDex/Akebi-chan no Sailor Fuku (Covers)/` | Art `/title/{id}?tab=art`, multi-locale pagination, root cover, volume filenames |
+| MangaDex | [Akebi-chan Vol. 16 Cover](https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg) | Direct media | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg` | Direct cover URL `/covers/{id}/{file}`, API title resolution, root `gallery.json` dedup |
+| MangaDex | [Reader blob URL](blob:https://mangadex.org/a357d5db-d810-4566-b0aa-cba411aa9460) | Unsupported | *Rejected* | Blob URL detection, descriptive rejection guiding user to chapter link |
+| MANGA Plus | [SPY x FAMILY (Chapters)](https://mangaplus.shueisha.co.jp/titles/100056) | Title series | `MangaPlus/SPY x FAMILY (English)/{Chapter}/` | Series `titles/{id}` route via `title_detailV3`, language root, cover, lazy chapter stubs |
+| MANGA Plus | [SPY x FAMILY Ch. 1](https://mangaplus.shueisha.co.jp/viewer/1001834) | Single chapter | `MangaPlus/SPY x FAMILY - Ch. 1 (English)/` | Chapter `viewer/{id}` via `manga_viewer_v3`, XOR decrypt, `Plus-Vw-Token` headers |
+| MANGA Plus | [SPY x FAMILY thumbnail](https://jumpg-assets.tokyo-cdn.com/secure/title/100056/title_thumbnail_portrait_list/313744.jpg?hash=ktoQqLjO4TO9hZz8kWFCvQ&expires=2145884400) | Direct media | `MangaPlus/SPY x FAMILY - 313744 (English).jpg` | Signed CDN URL preserved, friendly filename via title detail with hashed fallback |
+
+## Module contract
+
+An extractor is an ES module. Two exports are required, two are optional.
+
+### Exports
+
+| Export | Required | Signature | Purpose |
+|---|---|---|---|
+| `match` | yes | `(url) => bool` | Returns `true` if this extractor handles the URL. |
+| `extract` | yes | `(html, url, context) => result` | Parses a page and returns a gallery or series result. |
+| `isDirectUrl` | no | `(url) => bool` | Returns `true` for direct media URLs (CDN images, covers). The app skips the HTML fetch and routes through `parseDirectUrl`. |
+| `parseDirectUrl` | no | `(url, context) => { provider, hash, filename, url } \| null` | Resolves a direct media URL. `hash` deduplicates against Library sidecars. Returning `null` falls through to `extract`. |
+
+`context` provides `fetchText(url)`, and when declared, `fetchBytes(url)` and `requestHeaders`.
+
+### Header directives
+
+Extractors declare dependencies and capabilities in their first two lines:
 
 ```js
 // quivit-deps: shared/sanitize.js, shared/mangaplus.js
-import { sanitizePathSegment } from './shared/sanitize.js';
-```
-
-The loader fetches the listed files from this branch, follows their own sub-dependencies, and rewrites the imports at load time. Authors write plain relative imports. Rules:
-
-- Every relative import must be declared in the header. Undeclared imports fail loading with a clear error.
-- Dependency paths must stay inside the branch (no `..`) and end in `.js`.
-- Shared files are libraries only. They must not export `match` or `extract`, and they are never added to the manifest.
-- Pushing a shared fix reaches users on the next load. Bump the version of every entry that depends on it, per the workflow below.
-
-## Host capabilities
-
-Some extractors need host powers beyond `fetchText`. They declare them on the second header line:
-
-```js
 // quivit-needs: fetchBytes, requestHeaders, xorDecrypt
 ```
 
-If the running QuiviT does not support a named capability, loading fails fast with an update message instead of a cryptic runtime error. Capabilities are generic client features, defined once in the app:
+**Dependencies** (`quivit-deps`): The loader fetches listed files from this branch, follows their sub-dependencies, and rewrites imports at load time. Every relative import must appear in the header. `shared/mangaplus.js` transitively pulls `shared/proto.js` without the entry needing to list it.
 
-- `fetchBytes`: Binary fetch returning bytes, for protobuf and other non-text payloads.
-- `requestHeaders`: Custom request headers on fetch and download (session tokens, view tokens).
-- `xorDecrypt`: Per-image descriptors carrying `{ algorithm: 'xor', key }`, decrypted before the file is saved.
+**Capabilities** (`quivit-needs`): If the running QuiviT build does not support a named capability, loading fails fast with an update message.
 
-## Extractor module contract
+| Capability | What it provides |
+|---|---|
+| `fetchBytes` | Binary fetch returning bytes (protobuf, binary payloads). |
+| `requestHeaders` | Custom headers on fetch and download (session tokens, view tokens). |
+| `xorDecrypt` | Per-image `{ algorithm: 'xor', key }` descriptors, decrypted before save. |
 
-An extractor must be an ES module exporting two functions: `match(url)` and `extract(html, url, context)`.
+### Safety rules
 
-```js
-export function match(url) {
-  return /^https?:\/\/(?:[a-zA-Z0-9-]+\.)?example\.com\/gallery\/\d+/i.test(url);
-}
+- Pure data parsers only. No external packages, no `window` globals, no DOM.
+- Path segments and filenames must not contain `/`, `\`, `..`, or Windows reserved device names.
+- File extensions must be supported formats: `jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`, `mp4`.
+- Duplicate filenames within one gallery are rejected.
+- Shared files must not export `match` or `extract`, and are never added to the manifest.
 
-export async function extract(html, url, context) {
-  // Use context.fetchText(pageUrl) for extra pages or API calls.
-  return {
-    provider: 'Example',
-    title: 'Gallery Title',
-    gallery: {
-      id: 'gallery-123',
-      relativePath: ['Category', 'Gallery Title']
-    },
-    images: [
-      {
-        url: 'https://cdn.example.com/images/001.jpg',
-        filename: '001.jpg',
-        description: 'Page 1'
-      }
-    ],
-    nextPageUrl: null
-  };
-}
-```
+## Return shapes
 
-### Return shapes
+`extract` returns one of two shapes: a single gallery or a series.
 
-An extractor returns either a single gallery result or a series result.
-
-#### Single gallery
+### Single gallery
 
 ```js
-return {
-  provider: 'Example',
+{
+  provider: 'Example',         // must match manifest name
   title: 'Gallery Title',
   gallery: {
-    id: 'gallery-123',
-    relativePath: ['Category', 'Gallery Title']
+    id: 'gallery-123',         // stable site-unique id
+    relativePath: ['Category', 'Gallery Title']  // path segments under libraryPath, max depth 8
   },
   images: [
-    {
-      url: 'https://cdn.example.com/images/001.jpg',
-      filename: '001.jpg',
-      description: 'Page 1'
-    }
+    { url: 'https://cdn.example.com/001.jpg', filename: '001.jpg' }
   ],
-  metadata: {
-    ComicInfo: {
-      Series: 'Series Name',
-      Title: 'Gallery Title',
-      Summary: 'Synopsis...'
-    }
+  metadata: {                  // optional, written as comicinfo.json
+    ComicInfo: { Series: 'Name', Title: 'Gallery Title', Summary: '...' }
   },
-  nextPageUrl: null
-};
+  targetFilename: '005.jpg',   // optional: eager-download this image, open viewer on it
+  nextPageUrl: null             // next page URL or null; consecutive pages share gallery.id and relativePath
+}
 ```
 
-- `provider`: String matching the `name` defined in `manifest.json`.
-- `title`: String gallery name.
-- `gallery.id`: Stable unique identifier for the gallery on that site.
-- `gallery.relativePath`: Array of safe directory names under `libraryPath`. Maximum depth is 8.
-- `images`: Array of media entries with direct HTTP or HTTPS download URLs and safe filenames.
-- `metadata`: Optional metadata payload for the gallery folder. An object serializes to `comicinfo.json`. A string starting with `<` serializes to `comicinfo.xml`. An object with `{ filename, content }` writes a custom file.
-- `targetFilename`: Optional string filename of a target image within `images`. When specified, QuiviT eagerly downloads this image first, opens the viewer centered on it, and prefetches remaining images around it.
-- `nextPageUrl`: Next page URL for multi-page galleries, or `null` when complete. Consecutive pages must preserve identical `gallery.id` and `gallery.relativePath`.
+`metadata` serialization: an object writes `comicinfo.json`. A string starting with `<` writes `comicinfo.xml`. An object with `{ filename, content }` writes a custom file.
 
-#### Series
+### Series
 
-Extractors that index multi-chapter manga or multi-part releases set `isSeries: true`:
+Series results index multi-chapter manga. Chapters are stubs resolved lazily when opened.
 
 ```js
-return {
+{
   provider: 'Example',
   isSeries: true,
   title: 'Series Title',
-  rootRelativePath: ['Series Title'],
-  metadata: {
-    ComicInfo: {
-      Series: 'Series Title',
-      Summary: 'Series synopsis...',
-      Writer: 'Author'
-    }
-  },
-  cover: {
-    url: 'https://cdn.example.com/cover.jpg',
-    filename: 'Cover.jpg'
-  },
-  folders: [
-    {
-      relativePath: ['Series Title', 'English'],
-      metadata: {
-        ComicInfo: {
-          Series: 'Series Title',
-          Title: 'Series Title (English)',
-          LanguageISO: 'en'
-        }
-      }
-    }
+  rootRelativePath: ['Series Title'],     // series root under libraryPath
+  metadata: { ComicInfo: { ... } },       // optional, written to the root folder
+  cover: { url: '...', filename: 'Cover.jpg' },  // optional, downloaded into root
+  folders: [                              // optional intermediate folders with metadata
+    { relativePath: ['Series Title', 'English'], metadata: { ... } }
   ],
   chapters: [
     {
-      id: 'chapter-1',
-      title: 'Series Title - Ch. 1',
-      sourceUrl: 'https://example.com/chapter/1',
+      id: 'ch-1',                         // stable chapter id
+      title: 'Ch. 1 - Intro',
+      sourceUrl: 'https://example.com/chapter/1',  // resolved via extract() when opened
       relativePath: ['Series Title', 'English', 'Vol. 01', 'Ch. 01 - Intro'],
-      metadata: {
-        ComicInfo: {
-          Series: 'Series Title',
-          Title: 'Ch. 01 - Intro',
-          Number: '1',
-          Volume: '1',
-          LanguageISO: 'en',
-          PageCount: 20
-        }
-      }
+      metadata: { ComicInfo: { ... } }    // optional, written to the chapter folder
     }
   ]
-};
+}
 ```
 
-- `isSeries`: Set to `true` to declare a series result.
-- `rootRelativePath`: Array of directory segments for the series root folder under `libraryPath`.
-- `metadata`: Optional metadata written directly to the series root folder.
-- `cover`: Optional cover image downloaded directly into the series root folder.
-- `folders`: Optional array of intermediate or auxiliary folders (`{ relativePath, metadata }`). QuiviT writes metadata directly into each folder.
-- `chapters`: Array of chapter stubs. Each entry requires `id`, `sourceUrl`, and `relativePath`. When `metadata` is included, QuiviT writes it directly into the chapter folder. When opening an unresolved chapter, QuiviT calls `extract()` on the chapter's `sourceUrl` and refreshes its metadata on resolution.
+Opening an unresolved chapter calls `extract()` on its `sourceUrl` and refreshes its metadata on resolution.
 
-### External chapters
+### Cross-provider chapters
 
-A chapter stub may point at another provider instead of hosted pages. Set the stub's `sourceUrl` to the external URL and mark the folder and title so readers can tell where the pages come from. Opening the stub resolves it through whichever entry matches that URL, so the stub author never reimplements the other provider. The MangaDex extractor uses this for MANGA Plus pointers, suffixed ` (MANGA Plus)`. Stubs pointing at hosts no entry covers are skipped.
+A chapter stub can point at another provider's URL. The app resolves it through whichever manifest entry matches that URL. The stub author never reimplements the other site's extractor. MangaDex uses this for MANGA Plus pointers, suffixed ` (MANGA Plus)`. Stubs pointing at unmatched hosts are skipped.
 
-When a site exposes hosted and external chapters through separate listings, merge the passes and dedupe by chapter id. MangaDex needs this because its hosted feed and its external-link feed return disjoint sets.
+When a site exposes hosted and external chapters through separate feeds, merge them and dedupe by chapter id. MangaDex needs this because its hosted feed and external-link feed return disjoint sets.
 
-### Folder metadata model
+## Folder metadata model
 
-QuiviT uses direct 1:1 folder metadata lookups. It checks only the active folder for metadata files (`comicinfo.json`, `comicinfo.xml`, `meta.json`, `comet.xml`, `metadata.opf`) without parent directory inheritance or recursive scans.
+QuiviT reads metadata per folder with no parent inheritance. Extractors supply tailored metadata at each tier:
 
-Extractors supply tailored metadata directly for each folder tier:
-
-| Field | Series root `{Series}/` | Language `{Series}/{Lang}/` | Volume `.../Vol. {X}/` | Chapter `.../Ch. {Y}/` | Standalone / Art collection |
-| :--- | :--- | :--- | :--- | :--- | :--- |
+| Field | Series root | Language | Volume | Chapter | Standalone / Art |
+|:---|:---|:---|:---|:---|:---|
 | `Series` | Yes | Yes | Yes | Yes | Yes |
 | `Title` | Omitted | `"{Series} ({Lang})"` | `"Volume {X}"` | `"Ch. {Y} - {Title}"` | `"{Series} (Covers)"` |
 | `Volume` | Omitted | Omitted | `"{X}"` | `"{X}"` | Omitted |
@@ -235,7 +191,7 @@ Extractors supply tailored metadata directly for each folder tier:
 | `Notes` | Omitted | Omitted | Omitted | `"Scanlation: ..."` | Omitted |
 | `PageCount` | Omitted | Omitted | Omitted | `"{count}"` | Omitted |
 | `Web` | Series URL | Series URL | Series URL | Chapter URL | Source URL |
-| `Summary` | Series synopsis | Series synopsis | Series synopsis | Series synopsis | Collection synopsis |
+| `Summary` | Synopsis | Synopsis | Synopsis | Synopsis | Collection synopsis |
 | `Tags` | Series tags | Series tags | Series tags | Series tags | `"Cover Gallery, Artbook"` |
 | `Genre` | Yes | Yes | Yes | Yes | Yes |
 | `Demographic` | Yes | Yes | Yes | Yes | Yes |
@@ -245,36 +201,9 @@ Extractors supply tailored metadata directly for each folder tier:
 | `Status` | Yes | Yes | Yes | Yes | Yes |
 | `Manga` | Yes | Yes | Yes | Yes | Yes |
 
-### Safety rules
+## Authoring workflow
 
-- Extractors must be pure data parsers. Import only relative branch files declared in the header. Do not import external packages, touch window globals, or mutate DOM.
-- Path segments and filenames must not contain path separators (`/` or `\`), traversal segments (`..`), or Windows reserved device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`).
-- File extensions must be supported media formats: `jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`, or `mp4`.
-- Duplicate filenames within one gallery are rejected.
-
-## Verified test galleries
-
-The following sample galleries are verified working in QuiviT and serve as reference test suites to track provider features, format support, and URL routing edge cases:
-
-| Provider | Test Target | Import Type | Library Destination | Verified Behavior |
-| :--- | :--- | :--- | :--- | :--- |
-| Imgur | [Anime Reaction Gifs](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) | Gallery (50 GIFs) | `Imgur/Anime Reaction Gifs/` | Large animation batch, download concurrency, prefetch threshold |
-| Imgur | [Azuma - Seihantai](https://imgur.com/a/azuma-seihantai-17vF37d) | Album (41 PNGs) | `Imgur/Azuma - Seihantai/` | Album `/a/` route, multi-image manga set, description sanitization |
-| Imgur | [Witch Watch OP clips](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) | Gallery (8 MP4s) | `Imgur/Just some Witch Watch OP clips/` | Video extraction, audio stream detection, hashtag route (`#/t/anime`) |
-| Imgur | [Direct image sample](https://i.imgur.com/4Q6rSDi.png) | Direct Media | `Imgur/4Q6rSDi.png` | Direct CDN URL (`i.imgur.com`), gallery match lookup, root sidecar recording |
-| MangaDex | [Akebi-chan no Sailor Fuku (Chapters)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=chapters) | Multi-Chapter Series | `MangaDex/Akebi-chan no Sailor Fuku/{Language}/{Volume}/{Chapter}/` | Series `/title/{id}` route with `?tab=chapters`, feed pagination, volume hierarchy, 5-tier folder metadata sidecars |
-| MangaDex | [【Oshi no Ko】 (Chapters)](https://mangadex.org/title/296cbc31-af1a-4b5b-a34b-fee2b4cad542/-oshi-no-ko?tab=chapters) | Multi-Chapter Series with MANGA Plus externals | `MangaDex/【Oshi no Ko】/{Language}/{Volume}/{Chapter}/` | Hosted plus external-link feed merge, MANGA Plus stubs with ` (MANGA Plus)` suffix, lazy resolution through the MANGA Plus entry |
-| MangaDex | [Akebi-chan no Sailor Fuku Ch. 1](https://mangadex.org/chapter/0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d) | Single Chapter (33 JPGs) | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 1 Ch. 1/` | Chapter `/chapter/{id}` route, `@home` coordinates, ComicInfo metadata sidecar |
-| MangaDex | [Akebi-chan no Sailor Fuku (Covers)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=art) | Art Collection (Covers) | `MangaDex/Akebi-chan no Sailor Fuku (Covers)/Cover.jpg` + `{Language}/` | Art gallery `/title/{id}?tab=art`, multi-locale pagination, root `Cover.jpg`, volume filenames, root loose cover cleanup |
-| MangaDex | [Akebi-chan no Sailor Fuku - Vol. 16 Cover](https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg) | Direct Media | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg` | Direct cover URL `/covers/{mangaId}/{fileName}`, friendly API title resolution, root `gallery.json` deduplication |
-| MangaDex | [Reader blob URL](blob:https://mangadex.org/a357d5db-d810-4566-b0aa-cba411aa9460) | Unsupported URL | *None (Rejected)* | Browser ephemeral blob URL detection, descriptive rejection guiding user to chapter link |
-| MANGA Plus | [SPY x FAMILY (Chapters)](https://mangaplus.shueisha.co.jp/titles/100056) | Title Series | `MangaPlus/SPY x FAMILY (English)/{Chapter}/` | Series `titles/{id}` route via `title_detailV3`, language root, cover, chapter stubs with lazy resolution |
-| MANGA Plus | [SPY x FAMILY Ch. 1](https://mangaplus.shueisha.co.jp/viewer/1001834) | Single Chapter | `MangaPlus/SPY x FAMILY - Ch. 1 (English)/` | Chapter `viewer/{id}` route via `manga_viewer_v3`, XOR decrypt, `Plus-Vw-Token` headers |
-| MANGA Plus | [SPY x FAMILY thumbnail](https://jumpg-assets.tokyo-cdn.com/secure/title/100056/title_thumbnail_portrait_list/313744.jpg?hash=ktoQqLjO4TO9hZz8kWFCvQ&expires=2145884400) | Direct Media | `MangaPlus/SPY x FAMILY - 313744 (English).jpg` | Signed CDN URL preserved for download, friendly filename via title detail with hashed fallback |
-
-## Authoring and testing workflow
-
-Maintainers work on this branch through a Git worktree:
+Work on this branch through a Git worktree:
 
 ```bash
 git worktree add ../quivi-t-extractors extractors
