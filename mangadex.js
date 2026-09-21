@@ -655,7 +655,7 @@ export async function extractTitle(mangaId, url, context = {}) {
       chTitle = `${chTitle} - ${chTitleAttr.trim()}`;
     }
     if (externalUrl) chTitle = `${chTitle} (MANGA Plus)`;
-    const scanlator = groupName || (externalUrl ? 'MangaPlus' : '');
+    const scanlator = groupName || (externalUrl ? 'MANGA Plus' : '');
 
     const chapterMetadata = buildMangaComicInfo(mangaPayload?.data, {
       Series: mangaTitle,

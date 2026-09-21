@@ -27,12 +27,13 @@
     },
     {
       "id": "mangaplus",
-      "name": "MangaPlus",
+      "name": "MANGA Plus",
       "libraryPath": "MangaPlus",
       "version": 2,
       "patterns": [
         "^https?://mangaplus\\.shueisha\\.co\\.jp/viewer/\\d+",
-        "^https?://mangaplus\\.shueisha\\.co\\.jp/titles/\\d+"
+        "^https?://mangaplus\\.shueisha\\.co\\.jp/titles/\\d+",
+        "^https?://[a-z0-9-]+\\.tokyo-cdn\\.com/.+\\.(jpg|jpeg|png|webp|gif|avif|bmp)(\\?.*)?$"
       ],
       "source": "mangaplus.js"
     }
