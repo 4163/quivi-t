@@ -2433,4 +2433,183 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
 });
 
 
+import * as KMangaExtractor from '../extractors/kmanga.js';
+import {
+  buildKmangaHash,
+  buildTileOrder,
+  parseKmangaEpisodeUrl,
+  parseKmangaEpisodeId,
+  cleanKmangaUrl,
+  buildKmangaImages,
+  parseNuxtData
+} from '../extractors/shared/kmanga.js';
+
+describe('K-Manga extractor', () => {
+  describe('URL matching', () => {
+    it('matches episode, title, and CDN URLs and rejects other domains', () => {
+      assert.equal(KMangaExtractor.match('https://kmanga.kodansha.com/title/10072/episode/311334'), true);
+      assert.equal(KMangaExtractor.match('https://kmanga.kodansha.com/title/10072'), true);
+      assert.equal(KMangaExtractor.match('https://cdn.kmanga.kodansha.com/path/to/image.jpg?token=abc'), true);
+      assert.equal(KMangaExtractor.match('https://example.com/title/10072'), false);
+      assert.equal(KMangaExtractor.match(''), false);
+      assert.equal(KMangaExtractor.match(null), false);
+    });
+
+    it('identifies and parses direct CDN image URLs', () => {
+      assert.equal(KMangaExtractor.isDirectUrl('https://cdn.kmanga.kodansha.com/path/to/image.jpg?token=abc'), true);
+      assert.equal(KMangaExtractor.isDirectUrl('https://kmanga.kodansha.com/title/10072'), false);
+
+      const parsed = KMangaExtractor.parseDirectUrl('https://cdn.kmanga.kodansha.com/path/to/image.jpg?token=abc');
+      assert.equal(parsed.provider, 'K-Manga');
+      assert.ok(parsed.filename.endsWith('.jpg'));
+      assert.equal(parsed.url, 'https://cdn.kmanga.kodansha.com/path/to/image.jpg?token=abc');
+
+      assert.equal(KMangaExtractor.parseDirectUrl('https://example.com/image.jpg'), null);
+    });
+  });
+
+  describe('shared/kmanga.js helpers', () => {
+    it('parses episode URLs and extracts episode ids', () => {
+      const parsed = parseKmangaEpisodeUrl('https://kmanga.kodansha.com/title/10072/episode/311334');
+      assert.deepEqual(parsed, { titleId: 10072, episodeId: 311334 });
+      assert.equal(parseKmangaEpisodeId('https://kmanga.kodansha.com/title/10072/episode/311334'), 311334);
+      assert.equal(parseKmangaEpisodeId('https://example.com/episode/311334'), null);
+    });
+
+    it('cleans K-Manga URLs to canonical form', () => {
+      assert.equal(
+        cleanKmangaUrl('https://kmanga.kodansha.com/title/10072/episode/311334?utm_source=mangadex'),
+        'https://kmanga.kodansha.com/title/10072/episode/311334'
+      );
+      assert.equal(cleanKmangaUrl('https://example.com/page'), null);
+    });
+
+    it('computes hash digest matching the recorded 311334 vector', async () => {
+      const hash = await buildKmangaHash({ episode_id: 311334 }, '1999-01', 1821414265);
+      assert.equal(typeof hash, 'string');
+      assert.equal(hash.length, 128);
+      assert.equal(hash, '0f195833a0ec17653a6891abc9c95fc0cd26838a9f2405c7fa4cd4a8e5fd592951c792cd2b45813391e90be89f113ca5c3e5c7ff9d25382eb5cd4964ba3b0147');
+    });
+
+    it('produces a valid tile order permutation', () => {
+      const order = buildTileOrder('r7yw738iu3', 10072, 311334, 4, 4);
+      assert.equal(order.length, 16);
+      assert.deepEqual(order, [12, 5, 13, 6, 7, 10, 3, 1, 9, 14, 8, 2, 4, 0, 11, 15]);
+      const sorted = [...order].sort((a, b) => a - b);
+      assert.deepEqual(sorted, Array.from({ length: 16 }, (_, i) => i));
+    });
+
+    it('builds image array with descramble descriptors', () => {
+      const pages = [
+        'https://cdn.kmanga.kodansha.com/page/001.jpg?token=abc',
+        'https://cdn.kmanga.kodansha.com/page/002.jpg?token=def'
+      ];
+      const images = buildKmangaImages(pages, 'seed123', 10072, 311334);
+      assert.equal(images.length, 2);
+      assert.equal(images[0].filename, '01.jpg');
+      assert.equal(images[1].filename, '02.jpg');
+      assert.equal(images[0].url, pages[0]);
+      assert.deepEqual(images[0].descramble.algorithm, 'tile-grid');
+      assert.equal(images[0].descramble.cols, 4);
+      assert.equal(images[0].descramble.rows, 4);
+      assert.equal(images[0].descramble.order.length, 16);
+    });
+
+    it('parses NUXT_DATA from HTML', () => {
+      const html = '<script id="__NUXT_DATA__">[{"title_name":"Test Manga","episode_id_list":[1,2,3],"author_text":"Author"}]</script>';
+      const data = parseNuxtData(html);
+      assert.ok(Array.isArray(data));
+      assert.equal(data[0].title_name, 'Test Manga');
+    });
+  });
+
+  describe('episode extraction', () => {
+    it('extracts episode with descramble descriptors and metadata', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Attack on Titan","episode_id_list":[311334,311335],"author_text":"Hajime Isayama","synopsis":"A story about titans.","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg"},{"episode_id":311334,"episode_name":"Episode 01"}]</script></html>';
+      const viewerResponse = {
+        data: {
+          viewer_pages: {
+            scramble_seed: 'r7yw738iu3',
+            page_list: [
+              { src: 'https://cdn.kmanga.kodansha.com/page/001.jpg?token=abc' },
+              { src: 'https://cdn.kmanga.kodansha.com/page/002.jpg?token=def' }
+            ],
+            next_episode: { episode_id: 311335 }
+          }
+        }
+      };
+
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/10072/episode/311334',
+        {
+          fetchText: async () => JSON.stringify(viewerResponse)
+        }
+      );
+
+      assert.equal(result.provider, 'K-Manga');
+      assert.equal(result.title, 'Attack on Titan - Episode 01');
+      assert.equal(result.gallery.id, 'kmanga-311334');
+      assert.equal(result.images.length, 2);
+      assert.equal(result.images[0].descramble.algorithm, 'tile-grid');
+      assert.equal(result.images[0].descramble.cols, 4);
+      assert.equal(result.images[0].descramble.rows, 4);
+      assert.equal(result.images[0].descramble.order.length, 16);
+      assert.equal(result.metadata.ComicInfo.Series, 'Attack on Titan');
+      assert.equal(result.metadata.ComicInfo.Writer, 'Hajime Isayama');
+      assert.equal(result.metadata.ComicInfo.PageCount, 2);
+      assert.equal(result.metadata.ComicInfo.Manga, 'YesAndRightToLeft');
+    });
+
+    it('returns error when viewer returns no pages', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Test","episode_id_list":[1]}]</script></html>';
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/10072/episode/311334',
+        {
+          fetchText: async () => JSON.stringify({ data: { viewer_pages: { scramble_seed: '', page_list: [] } } })
+        }
+      );
+
+      assert.ok(result.error);
+      assert.ok(result.error.includes('rental') || result.error.includes('subscription') || result.error.includes('No pages'));
+    });
+  });
+
+  describe('title/series extraction', () => {
+    it('extracts series with chapter stubs from HTML', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Blue Lock","episode_id_list":[100,200,300],"author_text":"Muneyuki Kaneshiro","synopsis":"Soccer manga.","title_grid_wide":"https://cdn.kmanga.kodansha.com/bluelock-cover.jpg"}]</script></html>';
+
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/5678',
+        {}
+      );
+
+      assert.equal(result.provider, 'K-Manga');
+      assert.equal(result.isSeries, true);
+      assert.equal(result.title, 'Blue Lock');
+      assert.deepEqual(result.rootRelativePath, ['Blue Lock']);
+      assert.deepEqual(result.cover, { url: 'https://cdn.kmanga.kodansha.com/bluelock-cover.jpg', filename: 'Cover.jpg' });
+      assert.deepEqual(result.cleanup, { removeMatchingChapters: true, removeLooseCovers: true });
+      assert.equal(result.chapters.length, 3);
+      assert.equal(result.chapters[0].id, 'kmanga-100');
+      assert.equal(result.chapters[0].sourceUrl, 'https://kmanga.kodansha.com/title/5678/episode/100');
+      assert.ok(result.chapters[0].relativePath[0] === 'Blue Lock');
+      assert.equal(result.metadata.ComicInfo.Series, 'Blue Lock');
+      assert.equal(result.metadata.ComicInfo.Writer, 'Muneyuki Kaneshiro');
+    });
+
+    it('returns error when no title metadata found in HTML', async () => {
+      const result = await KMangaExtractor.extract(
+        '<html></html>',
+        'https://kmanga.kodansha.com/title/5678',
+        {}
+      );
+      assert.ok(result.error);
+    });
+  });
+});
+
+
 

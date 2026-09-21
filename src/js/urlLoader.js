@@ -104,6 +104,17 @@ function _validateImage(image, index) {
       throw new Error(`Extractor returned invalid decryption descriptor at index ${index} (only algorithm: 'xor' is supported)`);
     }
   }
+  if (image.descramble !== undefined && image.descramble !== null) {
+    if (typeof image.descramble !== 'object'
+      || image.descramble.algorithm !== 'tile-grid'
+      || typeof image.descramble.cols !== 'number'
+      || typeof image.descramble.rows !== 'number'
+      || !Array.isArray(image.descramble.order)
+      || image.descramble.order.length !== image.descramble.cols * image.descramble.rows
+      || (image.descramble.align !== undefined && typeof image.descramble.align !== 'number')) {
+      throw new Error(`Extractor returned invalid descramble descriptor at index ${index}`);
+    }
+  }
 
   const filename = _validateWindowsName(image.filename, `filename at index ${index}`);
   const extension = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
@@ -173,11 +184,11 @@ export function isValidUrl(urlString) {
 
 // -- Network & Shell proxies --
 
-export async function fetchRemoteText(url) {
+export async function fetchRemoteText(url, headers) {
   if (!window.__TAURI__) {
     throw new Error('Backend network proxy unavailable in browser environment');
   }
-  return await window.__TAURI__.core.invoke('fetch_text', { url });
+  return await window.__TAURI__.core.invoke('fetch_text', { url, headers: headers || undefined });
 }
 
 export async function fetchExtractorText(relativePath) {
@@ -197,6 +208,7 @@ export async function downloadFile(url, destPath, options = {}) {
   if (Number.isInteger(options.thresholdPercent)) args.thresholdPercent = options.thresholdPercent;
   if (options.headers) args.headers = options.headers;
   if (options.xorKey) args.xorKey = options.xorKey;
+  if (options.descramble) args.descramble = options.descramble;
   return await window.__TAURI__.core.invoke('download_to_file', args);
 }
 
@@ -262,7 +274,8 @@ export class DownloadQueue {
         status: item.status || 'pending',
         retryCount: 0,
         headers: item.headers || null,
-        decryption: item.decryption || null
+        decryption: item.decryption || null,
+        descramble: item.descramble || null
       };
     });
     this._onItemStatusChanged = options.onItemStatusChanged || null;
@@ -479,7 +492,8 @@ export class DownloadQueue {
           queueGeneration: attempt.generation,
           thresholdPercent: attempt.kind === 'prefetch' ? this._prefetchStartThresholdPercent : null,
           headers: item.headers || undefined,
-          xorKey: item.decryption?.key || undefined
+          xorKey: item.decryption?.key || undefined,
+          descramble: item.descramble || undefined
         });
         success = true;
       } catch (err) {
@@ -712,7 +726,7 @@ async function _hashTexts(texts) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(combined));
   return ':' + Array.from(new Uint8Array(buf)).slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
-const SUPPORTED_EXTRACTOR_CAPABILITIES = new Set(['fetchBytes', 'requestHeaders', 'xorDecrypt']);
+const SUPPORTED_EXTRACTOR_CAPABILITIES = new Set(['fetchBytes', 'requestHeaders', 'xorDecrypt', 'tileDescramble']);
 
 async function _fetchBytes(url, headers) {
   if (!window.__TAURI__) {
@@ -1519,7 +1533,17 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       const matchSize = (await _readFileSizes(existingMatch.galleryPath)).get(existingMatch.targetName.toLowerCase());
       if (matchSize !== undefined && matchSize === 0 && existingMatch.image?.sourceUrl) {
         const destPath = `${existingMatch.galleryPath}\\${existingMatch.targetName}`;
-        await downloadFile(existingMatch.image.sourceUrl, destPath);
+        const dlOpts = {};
+        if (existingMatch.image.headers) dlOpts.headers = existingMatch.image.headers;
+        if (existingMatch.image.decryption?.key) dlOpts.xorKey = existingMatch.image.decryption.key;
+        if (existingMatch.image.descramble) dlOpts.descramble = existingMatch.image.descramble;
+        try {
+          await downloadFile(existingMatch.image.sourceUrl, destPath, dlOpts);
+        } catch (err) {
+          if (existingMatch.image.fallbackUrl && existingMatch.image.fallbackUrl !== existingMatch.image.sourceUrl) {
+            await downloadFile(existingMatch.image.fallbackUrl, destPath, dlOpts).catch(() => {});
+          }
+        }
       }
       return {
         galleryPath: existingMatch.galleryPath,
@@ -1544,7 +1568,17 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
         const secondSize = (await _readFileSizes(secondMatch.galleryPath)).get(secondMatch.targetName.toLowerCase());
         if (secondSize !== undefined && secondSize === 0 && secondMatch.image?.sourceUrl) {
           const destPath = `${secondMatch.galleryPath}\\${secondMatch.targetName}`;
-          await downloadFile(secondMatch.image.sourceUrl, destPath);
+          const dlOpts = {};
+          if (secondMatch.image.headers) dlOpts.headers = secondMatch.image.headers;
+          if (secondMatch.image.decryption?.key) dlOpts.xorKey = secondMatch.image.decryption.key;
+          if (secondMatch.image.descramble) dlOpts.descramble = secondMatch.image.descramble;
+          try {
+            await downloadFile(secondMatch.image.sourceUrl, destPath, dlOpts);
+          } catch (err) {
+            if (secondMatch.image.fallbackUrl && secondMatch.image.fallbackUrl !== secondMatch.image.sourceUrl) {
+              await downloadFile(secondMatch.image.fallbackUrl, destPath, dlOpts).catch(() => {});
+            }
+          }
         }
         return {
           galleryPath: secondMatch.galleryPath,
@@ -1674,7 +1708,8 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
               fallbackUrl: img.fallbackUrl,
               hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined,
               headers: img.headers || undefined,
-              decryption: img.decryption || undefined
+              decryption: img.decryption || undefined,
+              descramble: img.descramble || undefined
             })) : [];
 
             const stubSidecar = {
@@ -1770,7 +1805,10 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
         description: img.description || img.displayName || '',
         sourceUrl: img.url,
         fallbackUrl: img.fallbackUrl,
-        hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined
+        hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined,
+        headers: img.headers || undefined,
+        decryption: img.decryption || undefined,
+        descramble: img.descramble || undefined
       }))
     };
 
@@ -1814,18 +1852,49 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
         galleryIndex: i,
         status: (fileSize !== undefined && fileSize > 0) ? 'completed' : 'pending',
         headers: img.headers || null,
-        decryption: img.decryption || null
+        decryption: img.decryption || null,
+        descramble: img.descramble || null
       };
     });
 
+    const targetItem = result.targetFilename
+      ? downloadItems.find((item) => (item.filename || '').toLowerCase() === result.targetFilename.toLowerCase())
+      : null;
+
+    const _eagerDownloadExisting = async (item) => {
+      const dlOpts = {};
+      if (item.headers) dlOpts.headers = item.headers;
+      if (item.decryption?.key) dlOpts.xorKey = item.decryption.key;
+      if (item.descramble) dlOpts.descramble = item.descramble;
+      try {
+        await downloadFile(item.url, item.destPath, dlOpts);
+        item.status = 'completed';
+      } catch (err) {
+        const fallback = item.fallbackUrl || null;
+        if (fallback && fallback !== item.url) {
+          try {
+            await downloadFile(fallback, item.destPath, dlOpts);
+            item.status = 'completed';
+            return;
+          } catch (fallbackErr) {
+            console.warn('[UrlLoader] Eager download failed with fallback:', fallbackErr);
+          }
+        }
+        console.warn('[UrlLoader] Eager download failed:', err);
+      }
+    };
+
+    if (targetItem && targetItem.status === 'pending') {
+      await _eagerDownloadExisting(targetItem);
+    } else if (!targetItem && downloadItems.length > 0 && downloadItems[0].status === 'pending') {
+      await _eagerDownloadExisting(downloadItems[0]);
+    }
+
     const hasPending = downloadItems.some((i) => i.status === 'pending');
     if (hasPending) {
-      const targetItem = result.targetFilename
-        ? downloadItems.find((item) => item.status === 'pending'
-          && (item.filename || '').toLowerCase() === result.targetFilename.toLowerCase())
-        : null;
-      const initialTarget = targetItem?.destPath
-        || downloadItems.find((i) => i.status === 'pending')?.destPath || null;
+      const initialTarget = (targetItem && targetItem.status === 'pending')
+        ? targetItem.destPath
+        : (downloadItems.find((i) => i.status === 'pending')?.destPath || null);
       _startGalleryQueue(existingPath, downloadItems, { initialTarget });
     }
 
@@ -1863,7 +1932,8 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       fallbackUrl: img.fallbackUrl,
       hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined,
       headers: img.headers || undefined,
-      decryption: img.decryption || undefined
+      decryption: img.decryption || undefined,
+      descramble: img.descramble || undefined
     }))
   };
 
@@ -1905,7 +1975,8 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     galleryIndex: i,
     status: 'pending',
     headers: img.headers || null,
-    decryption: img.decryption || null
+    decryption: img.decryption || null,
+    descramble: img.descramble || null
   }));
 
   const targetItem = result.targetFilename
@@ -1916,6 +1987,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     const dlOpts = {};
     if (item.headers) dlOpts.headers = item.headers;
     if (item.decryption?.key) dlOpts.xorKey = item.decryption.key;
+    if (item.descramble) dlOpts.descramble = item.descramble;
     try {
       await downloadFile(item.url, item.destPath, dlOpts);
       item.status = 'completed';
@@ -1936,7 +2008,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   if (targetItem) {
     await _eagerDownload(targetItem);
-  } else if (openFirstImage && downloadItems.length > 0) {
+  } else if (downloadItems.length > 0) {
     await _eagerDownload(downloadItems[0]);
   }
 
@@ -1947,7 +2019,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   if (downloadItems.length > 0) {
     const initialTarget = targetItem
       ? (downloadItems.find((i) => i.status === 'pending')?.destPath || null)
-      : (openFirstImage ? (downloadItems[1]?.destPath || null) : downloadItems[0].destPath);
+      : (downloadItems[1]?.destPath || downloadItems[0].destPath);
     _startGalleryQueue(galleryPath, downloadItems, { initialTarget });
   } else {
     _activeGalleryPath = galleryPath;
@@ -1958,7 +2030,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   const targetName = targetItem
     ? targetItem.filename
-    : (openFirstImage ? (result.images[0]?.filename || null) : null);
+    : (result.images[0]?.filename || null);
   return { galleryPath, result, targetName };
 }
 
@@ -2133,7 +2205,8 @@ export async function resolveUnresolvedGallery(galleryPath) {
         fallbackUrl: img.fallbackUrl,
         hasSound: typeof img.hasSound === 'boolean' ? img.hasSound : undefined,
         headers: img.headers || undefined,
-        decryption: img.decryption || undefined
+        decryption: img.decryption || undefined,
+        descramble: img.descramble || undefined
       }))
     };
 
@@ -2153,16 +2226,15 @@ export async function resolveUnresolvedGallery(galleryPath) {
       filenames
     });
 
-    const state = _Core?.getState?.();
-    const openFirstImage = state?.config?.frontend_data?.open_first_image === true;
     const eagerImg = fullResult.targetFilename
       ? fullResult.images.find((img) => img.filename.toLowerCase() === fullResult.targetFilename.toLowerCase())
-      : (openFirstImage ? fullResult.images[0] : null);
+      : (fullResult.images[0] || null);
 
     if (eagerImg) {
       const dlOpts = {};
       if (eagerImg.headers) dlOpts.headers = eagerImg.headers;
       if (eagerImg.decryption?.key) dlOpts.xorKey = eagerImg.decryption.key;
+      if (eagerImg.descramble) dlOpts.descramble = eagerImg.descramble;
       try {
         await downloadFile(eagerImg.url, `${galleryPath}\\${eagerImg.filename}`, dlOpts);
       } catch (err) {
@@ -2247,7 +2319,8 @@ export async function resumeGalleryDownloads(galleryPath, list) {
           galleryIndex: index,
           status: isDownloaded ? 'completed' : 'pending',
           headers: img.headers || null,
-          decryption: img.decryption || null
+          decryption: img.decryption || null,
+          descramble: img.descramble || null
         });
       });
 
@@ -2396,6 +2469,77 @@ export function handleLibraryRelocation({ oldPath, libraryPath } = {}) {
   return { oldPath: previousPath, libraryPath: nextPath, changed: true };
 }
 
+export async function prepareGalleryDirectory(galleryPath, options = {}) {
+  if (!galleryPath || !window.__TAURI__) return false;
+
+  const sidecarPath = `${galleryPath}\\gallery.json`;
+  let content = null;
+  try {
+    content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+  } catch {
+    return false;
+  }
+  if (!content) return false;
+
+  let data = null;
+  try {
+    data = JSON.parse(content);
+  } catch {
+    return false;
+  }
+
+  if (data?.unresolved && data?.sourceUrl) {
+    await resolveUnresolvedGallery(galleryPath);
+    try {
+      content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+      data = JSON.parse(content);
+    } catch {
+      return false;
+    }
+  }
+
+  if (!Array.isArray(data?.images) || data.images.length === 0) return false;
+
+  let targetImg = null;
+  if (options?.targetName) {
+    const cleanTarget = options.targetName.toLowerCase();
+    targetImg = data.images.find((img) => (img.filename || '').toLowerCase() === cleanTarget);
+  }
+  if (!targetImg) {
+    targetImg = data.images[0];
+  }
+  if (!targetImg || (!targetImg.sourceUrl && !targetImg.url)) return false;
+
+  const sizeMap = await _readFileSizes(galleryPath);
+  const targetSize = sizeMap.get((targetImg.filename || '').toLowerCase());
+
+  if (targetSize === undefined || targetSize === 0) {
+    const destPath = `${galleryPath}\\${targetImg.filename}`;
+    const dlOpts = {};
+    if (targetImg.headers) dlOpts.headers = targetImg.headers;
+    if (targetImg.decryption?.key) dlOpts.xorKey = targetImg.decryption.key;
+    if (targetImg.descramble) dlOpts.descramble = targetImg.descramble;
+    const downloadUrl = targetImg.sourceUrl || targetImg.url;
+
+    try {
+      await downloadFile(downloadUrl, destPath, dlOpts);
+    } catch (err) {
+      const fallback = targetImg.fallbackUrl || null;
+      if (fallback && fallback !== downloadUrl) {
+        try {
+          await downloadFile(fallback, destPath, dlOpts);
+        } catch (fallbackErr) {
+          console.warn('[UrlLoader] prepareGalleryDirectory fallback failed:', fallbackErr);
+        }
+      } else {
+        console.warn('[UrlLoader] prepareGalleryDirectory download failed:', err);
+      }
+    }
+  }
+
+  return true;
+}
+
 let _getFileListViewportRange = null;
 
 export const UrlLoader = {
@@ -2421,9 +2565,10 @@ export const UrlLoader = {
     }
 
     // Register directory preparation hook so fsUtils can resolve chapter stubs
-    // before reading directory, eliminating empty file list flashes.
+    // and eagerly download target/first image before reading directory,
+    // eliminating empty file list flashes and 404s.
     if (_FsUtils && typeof _FsUtils.setDirectoryPreparationHook === 'function') {
-      _FsUtils.setDirectoryPreparationHook((path) => resolveUnresolvedGallery(path));
+      _FsUtils.setDirectoryPreparationHook((path, options) => prepareGalleryDirectory(path, options));
     }
 
     if (_Core && typeof _Core.onStateChange === 'function' && !_coreStateUnsubscribe) {
@@ -2470,6 +2615,7 @@ export const UrlLoader = {
   loadUrl,
   resumeGalleryDownloads,
   resolveUnresolvedGallery,
+  prepareGalleryDirectory,
   forgetDeletedLibraryEntry,
   normalizeUrl,
   isValidUrl,

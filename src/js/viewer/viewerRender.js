@@ -489,6 +489,20 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _clearVideoPreload();
       _pendingVideoEl = null;
     });
+
+    window.addEventListener('quivit-download-complete', (e) => {
+      const destPath = e.detail?.destPath;
+      if (!destPath) return;
+      const state = Core.getState();
+      const currentEntry = state.list?.[state.index];
+      const targetPath = currentEntry?.path || (currentEntry?.name && state.directory ? `${state.directory}\\${currentEntry.name}` : null);
+      if (targetPath && targetPath.replace(/\\/g, '/').toLowerCase() === destPath.replace(/\\/g, '/').toLowerCase()) {
+        _forceReloadTarget = true;
+        _reloadTimestamp = Date.now();
+        _activeTargetSrc = null;
+        Core.setState({ fitModeGen: (state.fitModeGen || 0) + 1 });
+      }
+    });
   }
 
   Core.onStateChange((state) => {

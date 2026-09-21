@@ -508,7 +508,12 @@ export const FsUtils = {
     this.revokeIfObjectURL(state.src);
 
     const selectedEntry = files[index];
-    const selectedSrc = this.isImageEntry(selectedEntry) ? await this.buildFileSrc(selectedEntry.path) : '';
+    let selectedSrc = '';
+    if (this.isImageEntry(selectedEntry)) {
+      if (selectedEntry.size !== 0) {
+        selectedSrc = await this.buildFileSrc(selectedEntry.path);
+      }
+    }
     if (!_isCurrentGeneration(options.generation)) return;
 
     let isAnimated = false;
@@ -825,7 +830,7 @@ export const FsUtils = {
       } else {
         if (_directoryPreparationHook) {
           try {
-            await _directoryPreparationHook(path);
+            await _directoryPreparationHook(path, options);
           } catch (err) {
             console.warn('[Core] Directory preparation hook error:', err);
           }
