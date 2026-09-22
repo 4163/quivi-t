@@ -2596,7 +2596,7 @@ describe('K-Manga extractor', () => {
       // 2 pages + 1 cover thumbnail = 3 images
       assert.equal(result.images.length, 3);
       // First image is the cover thumbnail (no descramble)
-      assert.equal(result.images[0].filename, '00.png');
+      assert.equal(result.images[0].filename, '00 - Thumbnail.png');
       assert.equal(result.images[0].descramble, undefined);
       // Remaining images have descramble
       assert.equal(result.images[1].descramble.algorithm, 'tile-grid');
@@ -2710,7 +2710,7 @@ describe('K-Manga extractor', () => {
       assert.equal(result.chapters[2].id, 'kmanga-300');
       // First chapter gets name and thumbnail from Nuxt data
       assert.ok(result.chapters[0].title.includes('Ch. 1'));
-      assert.ok(result.chapters[0].cover);
+      assert.ok(result.covers.length > 0);
       // Subsequent chapters use sequential numbering
       assert.ok(result.chapters[1].title.includes('Ch. 2'));
     });
@@ -2945,7 +2945,7 @@ describe('url layer contract', () => {
       const result = await KMangaExtractor.extract(html, 'https://kmanga.kodansha.com/title/321/episode/555', {
         fetchText: async () => viewer
       });
-      assert.equal(result.images[0].filename, '00.png');
+      assert.equal(result.images[0].filename, '00 - Thumbnail.png');
       assert.deepEqual(result.images[0].supersedes, [thumb]);
     });
 
