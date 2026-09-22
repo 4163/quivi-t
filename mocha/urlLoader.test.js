@@ -17,7 +17,11 @@ import {
   isDirectMediaUrl,
   findExtractor,
   recordRootMediaDownload,
-  writeGalleryMetadata
+  writeGalleryMetadata,
+  buildMatchSets,
+  addCoverIdentifiers,
+  matchSidecarRecord,
+  buildStubCoverRecord
 } from '../src/js/urlLoader.js';
 import * as ImgurExtractor from '../extractors/imgur.js';
 import * as MangaDexExtractor from '../extractors/mangadex.js';
@@ -2718,6 +2722,248 @@ describe('K-Manga extractor', () => {
         {}
       );
       assert.ok(result.error);
+    });
+  });
+});
+
+describe('url layer contract', () => {
+  const contractEntry = {
+    id: 'harbor', name: 'Harbor', libraryPath: 'Harbor',
+    version: 1, source: 'harbor.js', patterns: ['^https?://harbor\\.test/']
+  };
+
+  function mockTauri(dirs, files) {
+    if (!globalThis.window) globalThis.window = {};
+    globalThis.window.__TAURI__ = {
+      core: {
+        invoke: async (cmd, args) => {
+          if (cmd === 'read_directory') return dirs[args.path] || { files: [] };
+          if (cmd === 'read_text_file') {
+            if (files[args.path]) return files[args.path];
+            throw new Error('File not found');
+          }
+          if (cmd === 'remove_file' || cmd === 'remove_directory') {
+            mockTauri.deleted.push(args.path);
+            return;
+          }
+          if (cmd === 'write_text_file') {
+            mockTauri.written = JSON.parse(args.content);
+            return;
+          }
+          throw new Error(`Unknown cmd ${cmd}`);
+        }
+      }
+    };
+    mockTauri.deleted = [];
+    mockTauri.written = null;
+  }
+
+  describe('validation', () => {
+    it('accepts an absorbed-list image and rejects malformed lists', () => {
+      const valid = validateExtractorResult({
+        provider: 'Harbor',
+        gallery: { id: 'harbor-7', relativePath: ['Harbor Bay'] },
+        images: [{
+          url: 'https://cdn.harbor.test/00.png',
+          filename: '00.png',
+          supersedes: ['https://cdn.harbor.test/tide.png']
+        }]
+      }, contractEntry);
+      assert.deepEqual(valid.images[0].supersedes, ['https://cdn.harbor.test/tide.png']);
+
+      assert.throws(() => validateExtractorResult({
+        provider: 'Harbor',
+        gallery: { id: 'harbor-7', relativePath: ['Harbor Bay'] },
+        images: [{ url: 'https://cdn.harbor.test/00.png', filename: '00.png', supersedes: [null] }]
+      }, contractEntry), /supersedes entry/);
+    });
+
+    it('accepts a stub cover and rejects a cover without address', () => {
+      const series = validateExtractorResult({
+        provider: 'Harbor',
+        isSeries: true,
+        rootRelativePath: ['Harbor Bay'],
+        chapters: [{
+          id: 'harbor-c1',
+          sourceUrl: 'https://harbor.test/ch/1',
+          relativePath: ['Harbor Bay', 'Ch. 1'],
+          cover: { url: 'https://cdn.harbor.test/c1.png', filename: 'Ch. 1 Cover.png' }
+        }]
+      }, contractEntry);
+      assert.equal(series.chapters[0].cover.filename, 'Ch. 1 Cover.png');
+
+      assert.throws(() => validateExtractorResult({
+        provider: 'Harbor',
+        isSeries: true,
+        rootRelativePath: ['Harbor Bay'],
+        chapters: [{
+          id: 'harbor-c1',
+          sourceUrl: 'https://harbor.test/ch/1',
+          relativePath: ['Harbor Bay', 'Ch. 1'],
+          cover: { url: '', filename: 'Ch. 1 Cover.png' }
+        }]
+      }, contractEntry), /invalid image URL/);
+    });
+  });
+
+  describe('match sets', () => {
+    it('builds one vocabulary from image-likes plus absorbed lists', () => {
+      const sets = buildMatchSets([{
+        filename: '00.png',
+        url: 'https://cdn.harbor.test/00.png?token=N',
+        hash: 'harbor-00',
+        supersedes: ['https://cdn.harbor.test/tide.png?token=O']
+      }]);
+      assert.ok(sets.urls.has('https://cdn.harbor.test/00.png?token=n'));
+      assert.ok(sets.urls.has('https://cdn.harbor.test/tide.png?token=o'));
+      assert.ok(sets.stems.has('00'));
+      assert.ok(sets.stems.has('tide'));
+      assert.ok(sets.stems.has('harbor-00'));
+      assert.ok(sets.filenames.has('00.png'));
+    });
+
+    it('folds cover extras and policy extras into shared sets', () => {
+      const sets = buildMatchSets([]);
+      addCoverIdentifiers(sets, [{
+        filename: 'Cover.jpg',
+        url: 'https://cdn.harbor.test/cover.jpg',
+        filenames: ['Harbor Bay - Vol. 02 Cover.jpg']
+      }], 'Harbor Bay', { matchStems: ['harbor-extra'] });
+      assert.ok(sets.filenames.has('harbor bay - vol. 02 cover.jpg'));
+      assert.ok(sets.stems.has('harbor bay - vol. 02 cover'));
+      assert.ok(sets.stems.has('harbor-extra'));
+      assert.ok(!sets.filenames.has('cover.jpg'));
+    });
+  });
+
+  describe('record matching', () => {
+    it('ranks exact above fuzzy and covers below content', () => {
+      const keys = { urls: new Set(['https://cdn.polar.test/01.png']), stems: new Set(['frost']) };
+      assert.equal(matchSidecarRecord({
+        filename: 'a.png', sourceUrl: 'https://cdn.polar.test/01.png', url: ''
+      }, keys), 'exact');
+      assert.equal(matchSidecarRecord({
+        filename: 'b.png', sourceUrl: 'https://cdn.polar.test/other.png', hash: 'frost'
+      }, keys), 'fuzzy');
+      assert.equal(matchSidecarRecord({
+        filename: 'c.png', sourceUrl: 'https://cdn.polar.test/unrelated.png'
+      }, keys), 'none');
+      assert.equal(matchSidecarRecord(null, keys), 'none');
+    });
+  });
+
+  describe('unified root cleanup', () => {
+    it('absorbs a renamed standalone and prunes its record', async () => {
+      const tide = 'https://cdn.harbor.test/tide.png';
+      mockTauri(
+        { 'C:\\library\\Harbor': { files: [{ name: 'harbor-tide.png', path: 'C:\\library\\Harbor\\harbor-tide.png', is_dir: false }] } },
+        { 'C:\\library\\Harbor\\gallery.json': JSON.stringify({ provider: 'Harbor', isRoot: true, images: [{ filename: 'harbor-tide.png', sourceUrl: tide, url: tide }] }) }
+      );
+      await cleanupMatchingRawFiles('C:\\library\\Harbor', [{ filename: '00.png', url: tide, sourceUrl: tide }]);
+      assert.deepEqual(mockTauri.deleted, ['C:\\library\\Harbor\\harbor-tide.png', 'C:\\library\\Harbor\\gallery.json']);
+    });
+
+    it('absorbs a host-variant cover through a shared stem', async () => {
+      const stem = 'aaabbbcc-ddeeff';
+      mockTauri(
+        { 'C:\\library\\Harbor': { files: [{ name: 'Harbor - Nb Cover.jpg', path: 'C:\\library\\Harbor\\Harbor - Nb Cover.jpg', is_dir: false }] } },
+        { 'C:\\library\\Harbor\\gallery.json': JSON.stringify({ provider: 'Harbor', isRoot: true, images: [{ filename: 'Harbor - Nb Cover.jpg', rawFileName: `${stem}.jpg`, hash: stem, sourceUrl: `https://cdn.harbor.test/nb/${stem}.jpg`, url: `https://cdn.harbor.test/nb/${stem}.jpg` }] }) }
+      );
+      await cleanupMatchingRawFiles('C:\\library\\Harbor', [{
+        filename: 'Nb.jpg', url: `https://static.harbor.test/nb/${stem}.jpg`, rawFileName: `${stem}.jpg`, hash: stem
+      }]);
+      assert.deepEqual(mockTauri.deleted, ['C:\\library\\Harbor\\Harbor - Nb Cover.jpg', 'C:\\library\\Harbor\\gallery.json']);
+    });
+  });
+
+  describe('contract jump ranking', () => {
+    it('jumps into the gallery copy over a root standalone', async () => {
+      const tide = 'https://cdn.polar.test/tide.png';
+      mockTauri(
+        {
+          'C:\\library\\Polar': { files: [{ name: 'Bay - Ch. 01', path: 'C:\\library\\Polar\\Bay - Ch. 01', is_dir: true }] },
+          'C:\\library\\Polar\\Bay - Ch. 01': { files: [] }
+        },
+        {
+          'C:\\library\\Polar\\gallery.json': JSON.stringify({ provider: 'Polar', isRoot: true, images: [{ filename: 'polar-tide.png', sourceUrl: tide, url: tide }] }),
+          'C:\\library\\Polar\\Bay - Ch. 01\\gallery.json': JSON.stringify({ url: 'https://polar.test/t/1/e/1', provider: 'Polar', gallery: { id: 'polar-1', relativePath: ['Bay - Ch. 01'] }, images: [{ filename: '00.png', sourceUrl: tide, url: tide }] })
+        }
+      );
+      const match = await findMatchingGalleryImage('C:\\library\\Polar', tide, 'tide');
+      assert.ok(match);
+      assert.equal(match.galleryPath, 'C:\\library\\Polar\\Bay - Ch. 01');
+      assert.equal(match.targetName, '00.png');
+    });
+
+    it('an exact address beats a fuzzy stem inside one tier', async () => {
+      const exactUrl = 'https://cdn.polar.test/loose.png';
+      mockTauri(
+        {
+          'C:\\library\\Polar': { files: [{ name: 'Deep Gallery', path: 'C:\\library\\Polar\\Deep Gallery', is_dir: true }] },
+          'C:\\library\\Polar\\Deep Gallery': { files: [] }
+        },
+        {
+          'C:\\library\\Polar\\Deep Gallery\\gallery.json': JSON.stringify({ url: 'https://polar.test/g/9', provider: 'Polar', gallery: { id: 'polar-9', relativePath: ['Deep Gallery'] }, images: [{ filename: 'fuzzy.png', sourceUrl: 'https://cdn.polar.test/other.png?tag=loose' }, { filename: 'exact.png', sourceUrl: exactUrl, url: exactUrl }] })
+        }
+      );
+      const match = await findMatchingGalleryImage('C:\\library\\Polar', exactUrl, 'loose');
+      assert.ok(match);
+      assert.equal(match.galleryPath, 'C:\\library\\Polar\\Deep Gallery');
+      assert.equal(match.targetName, 'exact.png');
+    });
+
+    it('a lone series cover still resolves', async () => {
+      const coverUrl = 'https://cdn.polar.test/cover.jpg';
+      mockTauri(
+        { 'C:\\library\\Polar': { files: [{ name: 'Bay', path: 'C:\\library\\Polar\\Bay', is_dir: true }] }, 'C:\\library\\Polar\\Bay': { files: [] } },
+        { 'C:\\library\\Polar\\Bay\\gallery.json': JSON.stringify({ url: 'https://polar.test/t/2', provider: 'Polar', gallery: { id: 'polar-2', relativePath: ['Bay'] }, images: [{ filename: 'Cover.jpg', description: 'Series Cover', sourceUrl: coverUrl }] }) }
+      );
+      const match = await findMatchingGalleryImage('C:\\library\\Polar', coverUrl, 'cover');
+      assert.ok(match);
+      assert.equal(match.targetName, 'Cover.jpg');
+    });
+  });
+
+  describe('stub cover records', () => {
+    it('maps a valid cover last and rejects bad shapes', () => {
+      assert.deepEqual(buildStubCoverRecord({ url: 'https://cdn.polar.test/c1.png', filename: 'Ch. 1 Cover.png' }), {
+        filename: 'Ch. 1 Cover.png',
+        displayName: 'Ch. 1 Cover.png',
+        description: 'Series Cover',
+        sourceUrl: 'https://cdn.polar.test/c1.png'
+      });
+      assert.equal(buildStubCoverRecord(null), null);
+      assert.equal(buildStubCoverRecord({ url: '', filename: 'Cover.png' }), null);
+    });
+  });
+
+  describe('extractor adoption', () => {
+    it('episode covers carry their absorbed address', async () => {
+      const thumb = 'https://cdn.north.test/tide.png';
+      const html = `<html><script id="__NUXT_DATA__">[{"title_name":"North Star","episode_id_list":[555],"author_text":"Anon"},{"episode_id":555,"episode_name":"07","thumbnail_image_url":"${thumb}"}]</script></html>`;
+      const viewer = JSON.stringify({ data: { viewer_pages: { scramble_seed: 'seed1', page_list: ['https://cdn.north.test/p1.jpg'] } } });
+      const result = await KMangaExtractor.extract(html, 'https://kmanga.kodansha.com/title/321/episode/555', {
+        fetchText: async () => viewer
+      });
+      assert.equal(result.images[0].filename, '00.png');
+      assert.deepEqual(result.images[0].supersedes, [thumb]);
+    });
+
+    it('sized cover variants normalize to their canonical file', async () => {
+      const mangaId = '11111111-2222-4333-8444-555555555555';
+      const canonical = 'abcdef01-2345-6789-abcd-ef0123456789.jpg';
+      const sized = await MangaDexExtractor.parseDirectUrl(`https://mangadex.org/covers/${mangaId}/${canonical}.512.jpg`, {});
+      assert.equal(sized.rawFileName, canonical);
+      const sets = buildMatchSets([{
+        filename: 'Vol. 01.jpg',
+        url: `https://uploads.mangadex.org/covers/${mangaId}/${canonical}`,
+        rawFileName: canonical,
+        hash: canonical.replace(/\.[^.]+$/, '')
+      }]);
+      const verdict = matchSidecarRecord({
+        filename: sized.filename, rawFileName: sized.rawFileName, hash: sized.hash, sourceUrl: sized.url, url: sized.url
+      }, sets);
+      assert.ok(verdict === 'exact' || verdict === 'fuzzy');
     });
   });
 });
