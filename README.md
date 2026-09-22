@@ -69,6 +69,7 @@ Reference URLs for manual testing. Each row covers a distinct URL route or extra
 | MangaDex | [Akebi-chan Ch. 1](https://mangadex.org/chapter/0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d) | Single chapter (33 JPGs) | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 1 Ch. 1/` | Chapter `/chapter/{id}` route, `@home` delivery, ComicInfo sidecar |
 | MangaDex | [Akebi-chan (Covers)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=art) | Art collection | `MangaDex/Akebi-chan no Sailor Fuku (Covers)/` | Art `/title/{id}?tab=art`, multi-locale pagination, root cover, volume filenames |
 | MangaDex | [Akebi-chan Vol. 16 Cover](https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg) | Direct media | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg` | Direct cover URL `/covers/{id}/{file}`, API title resolution, root `gallery.json` dedup |
+| MangaDex | [Akebi-chan Vol. 16 Cover resized](https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg.512.jpg) | Direct media | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg` | Sized variant normalizes to the canonical file, links the art-collection copy |
 | MangaDex | [Reader blob:https:// URL](blob:https://mangadex.org/a357d5db-d810-4566-b0aa-cba411aa9460) | Unsupported | *Rejected* | Blob URL detection, descriptive rejection guiding user to chapter link |
 | MANGA Plus | [SPY x FAMILY (Chapters)](https://mangaplus.shueisha.co.jp/titles/100056) | Title series | `MangaPlus/SPY x FAMILY (English)/{Chapter}/` | Series `titles/{id}` route via `title_detailV3`, language root, cover, lazy chapter stubs |
 | MANGA Plus | [SPY x FAMILY Ch. 1](https://mangaplus.shueisha.co.jp/viewer/1001834) | Single chapter | `MangaPlus/SPY x FAMILY - Ch. 1 (English)/` | Chapter `viewer/{id}` via `manga_viewer_v3`, XOR decrypt, `Plus-Vw-Token` headers |
@@ -89,7 +90,7 @@ An extractor is an ES module. Two exports are required, two are optional.
 | `match` | yes | `(url) => bool` | Returns `true` if this extractor handles the URL. |
 | `extract` | yes | `(html, url, context) => result` | Parses a page and returns a gallery or series result. |
 | `isDirectUrl` | no | `(url) => bool` | Returns `true` for direct media URLs (CDN images, covers). The app skips the HTML fetch and routes through `parseDirectUrl`. |
-| `parseDirectUrl` | no | `(url, context) => { provider, hash, filename, url } \| null` | Resolves a direct media URL. `hash` deduplicates against Library sidecars. Returning `null` falls through to `extract`. |
+| `parseDirectUrl` | no | `(url, context) => { provider, hash, filename, url } \| null` | Resolves a direct media URL. `hash` deduplicates against Library sidecars. Returning `null` falls through to `extract`. Resized variants (such as MangaDex `file.jpg.512.jpg` covers) normalize to the canonical file so they link their gallery copies, while the download still uses the pasted address. |
 
 `context` provides `fetchText(url)`, and when declared, `fetchBytes(url)` and `requestHeaders`.
 
@@ -198,7 +199,7 @@ These rules are the same for every site. The extractor declares facts, the app d
 
 Clearing means deleted: the file plus its Library records. A series import removes standalone chapter folders it absorbs. A gallery import removes absorbed standalone files named in `supersedes`. Finished chapters and covers are never touched by a re-import. There is no file relocation.
 
-Jumping picks where an import lands. A gallery copy beats a loose standalone, which beats a series cover. An exact address match beats a stem match. `targetFilename` names the open target and wins over everything. Otherwise the open-first-image setting governs.
+Jumping picks where an import lands. A gallery copy beats a loose standalone, which beats a series cover. Inside each tier, an exact address match beats a stem match. `targetFilename` names the open target and wins over everything. Otherwise the open-first-image setting governs.
 
 ## Folder metadata model
 
