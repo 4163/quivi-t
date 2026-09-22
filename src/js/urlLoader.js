@@ -11,6 +11,10 @@
  * Invariants:
  * - urlLoader.js is strictly provider-agnostic. Domain names, site-specific
  *   selectors, and vendor regexes belong exclusively inside extractor modules.
+ * - Ownership split: extractors declare site facts (placement, absorbed
+ *   standalones, jump targets). Core decides matching, clearing, queueing,
+ *   and opening through one shared vocabulary, and never interprets what a
+ *   layer means. The extractors README is the contract.
  * - Fetches remote manifest, matches user URLs to extractors, and dynamically
  *   imports extractor modules via Blob URL + dynamic import().
  * - Coordinates page fetching, pagination, gallery sidecars, and direct media.
@@ -1289,21 +1293,20 @@ export async function recordRootMediaDownload(providerPath, providerName, item) 
     sidecar.images = [];
   }
 
-  const itemHash = (item.hash || extractUrlStem(item.url || item.sourceUrl || '')).toLowerCase();
-  const itemRaw = (item.rawFileName || '').toLowerCase();
-  const itemName = (item.filename || '').toLowerCase();
-  const itemUrl = normalizeUrl(item.url || item.sourceUrl || '').toLowerCase();
+  const itemSets = buildMatchSets([{
+    sourceUrl: item.sourceUrl,
+    url: item.url,
+    hash: item.hash,
+    filename: item.filename,
+    rawFileName: item.rawFileName
+  }]);
 
   sidecar.images = sidecar.images.filter((img) => {
-    const h = (img.hash || extractUrlStem(img.url || img.sourceUrl || '')).toLowerCase();
-    const r = (img.rawFileName || '').toLowerCase();
-    const n = (img.filename || '').toLowerCase();
-    const u = normalizeUrl(img.url || img.sourceUrl || '').toLowerCase();
-    if (itemHash && h === itemHash) return false;
-    if (itemRaw && r === itemRaw) return false;
-    if (itemName && n === itemName) return false;
-    if (itemUrl && u === itemUrl) return false;
-    return true;
+    if (!img) return true;
+    if (matchSidecarRecord(img, itemSets) !== 'none') return false;
+    const name = typeof img.filename === 'string' ? img.filename.toLowerCase() : '';
+    const raw = typeof img.rawFileName === 'string' ? img.rawFileName.toLowerCase() : '';
+    return !itemSets.filenames.has(name) && !itemSets.filenames.has(raw);
   });
 
   sidecar.images.push({
