@@ -64,13 +64,13 @@ Core owns the Library: placement-agnostic writes, matching, clearing, queueing, 
 
 Extractors keep returning relative paths, filenames, covers, chapters, folders, and metadata exactly as today. Free depth and naming hold within the filesystem wall. Chapter stubs may carry their own `cover`. One new core behavior closes the gap: series import downloads stub covers next to their stubs, since today only the series `cover` is downloaded and the K MANGA per-stub field would otherwise be dead data.
 
-### Clearing, one optional per-image list
+### Clearing, one shared vocabulary
 
-Images gain optional `supersedes`, an array of URLs or stems naming the prior standalones this image absorbs. Field name locked: `supersedes`. Core feeds those entries into the existing match-set builder in `cleanupMatchingRawFiles` and the existing root sidecar prune. Matching uses normalized source URL equality first, then stem and filename; `supersedes` entries are additionally added to the match set. No list means current behavior exactly. Policy flags (`removeMatchingChapters`, `removeLooseCovers`, `removeLooseFiles`) keep their current defaults and scope. Clearing stays inside one provider folder.
+Images carry optional `supersedes`, an array of URLs or stems naming the prior standalones this image absorbs. Field name locked: `supersedes`. One match-set builder serves series covers, loose covers, and raw files alike, with one sidecar linker, one deleter, and one record pruner. Matching uses normalized address equality first, then shared stems and filenames, with `supersedes` entries added to the set. No list means current behavior exactly. Policy flags (`removeMatchingChapters`, `removeLooseCovers`, `removeLooseFiles`) keep their current defaults and scope. Clearing stays inside one provider folder.
 
-### Jumping, generic default plus explicit override
+### Jumping, contract tiers
 
-Default selection is gallery beats root beats series cover, with exact address beating stem. No depth counting. When an extractor provides a jump target, that target overrides the generic jump-selection logic. The explicit jump-target field was deferred to the jump slice and resolved there: no new field. Tiebreak plus `targetFilename` cover every contract case. True ties between two galleries remain extractor-defined, otherwise core keeps its deterministic existing order so behavior never depends on timestamps. Placeholder eager fill stays on every jump path, and `open_first_image` keeps its current role: the cover opens the viewer only when that setting is on or the extractor target names it.
+Selection ranks gallery content above a loose root file above a series cover, with exact address beating fuzzy inside every tier. No depth counting, no name sniffing. `targetFilename` names the open target and wins. True ties between two galleries remain extractor-defined, otherwise deterministic visit order decides so behavior never depends on timestamps. Placeholder eager fill stays on every jump path, and `open_first_image` keeps its current role.
 
 ### Feed and cross-provider rules, extractor-local
 
@@ -81,6 +81,8 @@ MangaDex hosted-first merging stays a MangaDex convention, not a core law. Core 
 The extractors branch README lists every accepted field and what core does with it. Unlisted fields are ignored. One verified link per behavior stays in the table so anyone retests by pasting. Version bumps ride with script changes. If it is not in the README, it does not exist.
 
 ## Implementation slices in order
+
+Superseded by `.agents/url-import-refactor-checklist.md`, which is the live tracker. The entries below record the original contract build for history.
 
 - [x] Accept and validate `images[i].supersedes` and `chapters[i].cover`, nothing else. Both validation-only, zero behavior change. The explicit jump-target field shape is deferred to the jump slice, which decides whether a new field is needed at all.
 - [x] Feed the absorbed list into the existing cleanup match set and root prune. Done, manual checklist passed.
