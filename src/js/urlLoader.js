@@ -1155,9 +1155,11 @@ export async function cleanupMatchingRawFiles(providerPath, images) {
       }
     }
 
-    // Link root sidecar records by URL equality first: a standalone whose
-    // recorded address matches a gallery image is the same file even when
-    // the gallery renamed it (e.g. thumbnail imports later as 00.png).
+    // Link root sidecar records by URL equality first, then by shared
+    // stems: a standalone whose recorded address matches a gallery image
+    // is the same file even when the gallery renamed it (e.g. thumbnail
+    // imports later as 00.png), and host variants of one address share
+    // a stem even when the full URLs differ (e.g. direct cover links).
     try {
       const sidecarText = await window.__TAURI__.core.invoke('read_text_file', {
         path: `${providerPath}\\gallery.json`
@@ -1169,7 +1171,21 @@ export async function cleanupMatchingRawFiles(providerPath, images) {
           const recordUrls = [record.sourceUrl, record.url]
             .filter((value) => typeof value === 'string' && value)
             .map((value) => normalizeUrl(value).toLowerCase());
-          if (!recordUrls.some((value) => matchUrls.has(value))) continue;
+          const recordStems = new Set();
+          for (const value of [record.sourceUrl, record.url]) {
+            if (typeof value !== 'string' || !value) continue;
+            const stem = extractUrlStem(value);
+            if (stem) recordStems.add(stem);
+          }
+          for (const value of [record.hash, record.rawFileName]) {
+            if (typeof value !== 'string' || !value) continue;
+            recordStems.add(value.toLowerCase());
+            const stem = extractUrlStem(value);
+            if (stem) recordStems.add(stem);
+          }
+          const linked = recordUrls.some((value) => matchUrls.has(value))
+            || [...recordStems].some((stem) => matchStems.has(stem));
+          if (!linked) continue;
           if (record.filename) matchFilenames.add(record.filename.toLowerCase());
           if (record.rawFileName) matchFilenames.add(record.rawFileName.toLowerCase());
         }

@@ -86,6 +86,6 @@ The extractors branch README lists every accepted field and what core does with 
 - [x] Feed the absorbed list into the existing cleanup match set and root prune. Done, manual checklist passed.
 - [x] Prefer gallery over root on score ties, honor the explicit jump target, keep placeholder fill and `open_first_image` behavior. Done, manual checklist passed. No new jump-target field needed; tiebreak plus `targetFilename` cover it. Also fixed the new-gallery return forcing the first image when the setting is off.
 - [x] Download chapter stub covers during series import. Done, manual checklist passed.
-- [ ] Adopt in K MANGA first (thumbnail absorbed list, deepest-gallery jump), then MangaDex art duplicates. Leave Imgur and MANGA Plus alone.
+- [x] Adopt in K MANGA first (thumbnail absorbed list, gallery jump via tiebreak), then MangaDex art duplicates via shared-stem linking. Leave Imgur and MANGA Plus alone. Done, manual checklist passed. Cleared means deleted; no relocation.
 - [ ] Update the extractors README contract and bump touched manifest versions together.
 - [ ] Prove with `npx mocha mocha/urlLoader.test.js`, `npx mocha mocha/diagnosticsContract.test.js`, `node --check` on touched files, then targeted series plus direct specs per the blast-radius matrix.

@@ -1084,6 +1084,62 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.deepEqual(deleted, ['C:\\library\\Example\\kmanga-cover.png', 'C:\\library\\Example\\gallery.json']);
       assert.equal(written, null);
     });
+
+    it('links host-variant direct covers to art images through shared stems', async () => {
+      const mangaId = '770c61b9-0ef2-460b-8c25-c10ab23349ce';
+      const coverFile = '47df7fb5-dc37-492f-98bc-affe54b74960.jpg';
+      const coverStem = '47df7fb5-dc37-492f-98bc-affe54b74960';
+      const friendlyName = 'Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg';
+      const rootSidecar = {
+        provider: 'MangaDex',
+        isRoot: true,
+        images: [
+          {
+            filename: friendlyName,
+            rawFileName: coverFile,
+            hash: coverStem,
+            sourceUrl: `https://www.mangadex.org/covers/${mangaId}/${coverFile}`,
+            url: `https://www.mangadex.org/covers/${mangaId}/${coverFile}`
+          }
+        ]
+      };
+      const deleted = [];
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') {
+              return {
+                files: [
+                  { name: friendlyName, path: `C:\\library\\MangaDex\\${friendlyName}`, is_dir: false }
+                ]
+              };
+            }
+            if (cmd === 'read_text_file') {
+              return JSON.stringify(rootSidecar);
+            }
+            if (cmd === 'remove_file') {
+              deleted.push(args.path);
+              return;
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      await cleanupMatchingRawFiles('C:\\library\\MangaDex', [
+        {
+          filename: 'Vol. 16.jpg',
+          url: `https://uploads.mangadex.org/covers/${mangaId}/${coverFile}`,
+          rawFileName: coverFile,
+          hash: coverStem
+        }
+      ]);
+
+      assert.deepEqual(deleted, [
+        `C:\\library\\MangaDex\\${friendlyName}`,
+        'C:\\library\\MangaDex\\gallery.json'
+      ]);
+    });
   });
 
   describe('cleanupMatchingProviderEntries', () => {
@@ -2836,6 +2892,7 @@ describe('K-Manga extractor', () => {
       // First image is the cover thumbnail (no descramble)
       assert.equal(result.images[0].filename, '00.png');
       assert.equal(result.images[0].descramble, undefined);
+      assert.deepEqual(result.images[0].supersedes, ['https://cdn.kmanga.kodansha.com/thumb/ep311334.png']);
       // Remaining images have descramble
       assert.equal(result.images[1].descramble.algorithm, 'tile-grid');
       assert.equal(result.images[1].descramble.cols, 4);
