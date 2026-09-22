@@ -79,7 +79,7 @@ function hexToBase64(hex) {
 }
 
 export function padIndex(index, total) {
-  const width = Math.max(1, Math.ceil(Math.log10(Math.max(2, total + 1))));
+  const width = Math.max(2, Math.ceil(Math.log10(Math.max(2, total + 1))));
   return String(index + 1).padStart(width, '0');
 }
 

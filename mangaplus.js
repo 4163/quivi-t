@@ -7,7 +7,7 @@
  * viewer and title URLs; series feeds resolve through mangadex.js stubs.
  */
 
-import { parseViewerId, fetchMangaPlusChapter, fetchMangaTitleDetail, buildMangaPlusImages, resolveMangaPlusStatus, padIndex } from './shared/mangaplus.js';
+import { parseViewerId, fetchMangaPlusChapter, fetchMangaTitleDetail, buildMangaPlusImages, resolveMangaPlusStatus } from './shared/mangaplus.js';
 import { sanitizePathSegment } from './shared/sanitize.js';
 
 const MANGAPLUS_CHAPTER_RE = /^https?:\/\/mangaplus\.shueisha\.co\.jp\/viewer\/(\d+)/i;
@@ -128,12 +128,16 @@ async function extractSeries(titleId, url, context) {
     const viewerUrl = `https://mangaplus.shueisha.co.jp/viewer/${cid}`;
     const chTitle = chapterFolderName(entry);
     const chFolder = sanitizePathSegment(chTitle);
-    if (entry.thumbnailUrl) allCovers.push({ url: entry.thumbnailUrl, filename: 'Thumbnail.jpg' });
+    const chCover = entry.thumbnailUrl
+      ? { url: entry.thumbnailUrl, filename: '00 - Thumbnail.jpg' }
+      : null;
+    if (chCover) allCovers.push(chCover);
     chapters.push({
       id: `mangaplus-${cid}`,
       title: `${detail.name} - ${chTitle}`,
       sourceUrl: viewerUrl,
       relativePath: [seriesDir, chFolder],
+      cover: chCover,
       metadata: {
         ComicInfo: seriesComicInfo(detail, {
           Title: chTitle,
@@ -244,15 +248,8 @@ export async function extract(html, url, context) {
   }
   if (thumbnailUrl) {
     const thumbExt = thumbnailUrl.match(/\.(\w+)(?:\?|$)/)?.[1] || 'jpg';
-    const totalWithThumb = images.length + 1;
-    const padWidth = Math.max(1, Math.ceil(Math.log10(Math.max(2, totalWithThumb + 1))));
-    const thumbFilename = `${String(0).padStart(padWidth, '0')} - Thumbnail.${thumbExt}`;
-    // Re-pad existing page filenames to account for the new total.
-    for (let i = 0; i < images.length; i++) {
-      const pageExt = images[i].url.match(/\.(\w+)(?:\?|$)/)?.[1] || 'jpg';
-      images[i].filename = `${padIndex(i, totalWithThumb)}.${pageExt}`;
-    }
-    images.unshift({ url: thumbnailUrl, filename: thumbFilename });
+    const thumbWidth = Math.max(2, Math.ceil(Math.log10(Math.max(2, pages.length + 1))));
+    images.unshift({ url: thumbnailUrl, filename: `${'0'.repeat(thumbWidth)} - Thumbnail.${thumbExt}` });
   }
 
   const info = detail ? seriesComicInfo(detail, {

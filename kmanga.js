@@ -69,8 +69,8 @@ export async function parseDirectUrl(url, context = {}) {
         if (epIdx >= 0) chLabel = `Ch. ${epIdx + 1}`;
       }
       const base = titleName
-        ? sanitizePathSegment(`${titleName} - ${chLabel} Cover`)
-        : sanitizePathSegment(`K MANGA ${titleId} - ${chLabel} Cover`);
+        ? sanitizePathSegment(`${titleName} - ${chLabel} Thumbnail`)
+        : sanitizePathSegment(`K MANGA ${titleId} - ${chLabel} Thumbnail`);
       filename = `${base}.${ext}`;
     } else {
       const base = titleName
@@ -175,12 +175,12 @@ async function extractEpisode(titleId, episodeId, html, url, context) {
 
   const images = buildKmangaImages(viewer.pages, viewer.scrambleSeed, titleId, episodeId);
 
-  // Prepend chapter cover thumbnail as page 0 (no descramble)
+  // Prepend chapter thumbnail as page 0 (no descramble)
   const thumbUrl = epMeta?.thumbnail_image_url || '';
   if (thumbUrl) {
     const thumbExt = (thumbUrl.match(/\.(\w+)(?:\?|$)/)?.[1] || 'png').toLowerCase();
-    const padWidth = Math.max(2, Math.ceil(Math.log10(Math.max(2, viewer.pages.length + 1))));
-    images.unshift({ url: thumbUrl, filename: `${'0'.padStart(padWidth, '0')}.${thumbExt}`, supersedes: [thumbUrl] });
+    const thumbWidth = Math.max(2, Math.ceil(Math.log10(Math.max(2, viewer.pages.length + 1))));
+    images.unshift({ url: thumbUrl, filename: `${'0'.repeat(thumbWidth)} - Thumbnail.${thumbExt}`, supersedes: [thumbUrl] });
   }
 
   const fullTitle = `${seriesName} - ${chapterLabel}`;
@@ -267,18 +267,28 @@ async function extractTitle(titleId, html, url, context) {
   }
 
   const padWidth = Math.max(2, Math.ceil(Math.log10(Math.max(2, freeEpisodeIds.length + 1))));
+  const coverExt = (titleMeta.coverUrl.match(/\.(\w+)(?:\?|$)/)?.[1] || 'jpg').toLowerCase();
+  const cover = titleMeta.coverUrl
+    ? { url: titleMeta.coverUrl, filename: `Cover.${coverExt}` }
+    : null;
+  const allCovers = [];
+  if (cover) allCovers.push(cover);
   const chapters = freeEpisodeIds.map((ep, index) => {
     const num = String(index + 1).padStart(padWidth, '0');
     const chLabel = ep.name ? `Ch. ${ep.name}` : `Ch. ${num}`;
     const chFolder = sanitizePathSegment(chLabel);
     const sourceUrl = `https://kmanga.kodansha.com/title/${titleId}/episode/${ep.id}`;
+    const chCover = ep.thumbnailUrl
+      ? { url: ep.thumbnailUrl, filename: '00 - Thumbnail.png' }
+      : null;
+    if (chCover) allCovers.push(chCover);
 
     return {
       id: `kmanga-${ep.id}`,
       title: `${seriesName} - ${chLabel}`,
       sourceUrl,
       relativePath: [seriesDir, chFolder],
-      cover: ep.thumbnailUrl ? { url: ep.thumbnailUrl, filename: `${chLabel} Cover.png` } : null,
+      cover: chCover,
       metadata: {
         ComicInfo: {
           Series: seriesName,
@@ -305,10 +315,7 @@ async function extractTitle(titleId, html, url, context) {
     if (v === undefined) delete metadata.ComicInfo[k];
   }
 
-  const coverExt = (titleMeta.coverUrl.match(/\.(\w+)(?:\?|$)/)?.[1] || 'jpg').toLowerCase();
-  const cover = titleMeta.coverUrl
-    ? { url: titleMeta.coverUrl, filename: `Cover.${coverExt}` }
-    : null;
+
 
   return {
     provider: 'K MANGA',
@@ -317,6 +324,7 @@ async function extractTitle(titleId, html, url, context) {
     rootRelativePath: [seriesDir],
     metadata,
     cover,
+    covers: allCovers,
     folders: [],
     cleanup: {
       removeMatchingChapters: true,
