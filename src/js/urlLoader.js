@@ -1116,6 +1116,159 @@ export async function findMatchingGalleryBySourceUrl(providerPath, sourceUrl, ga
   return null;
 }
 
+// One match vocabulary for all provider-root cleanup: normalized URLs,
+// stems, and filenames drawn from image-likes plus their supersedes lists.
+export function buildMatchSets(images) {
+  const urls = new Set();
+  const stems = new Set();
+  const filenames = new Set();
+
+  const addSuperseded = (entry) => {
+    if (typeof entry !== 'string' || !entry.trim()) return;
+    const trimmed = entry.trim();
+    urls.add(normalizeUrl(trimmed).toLowerCase());
+    const stem = extractUrlStem(trimmed);
+    if (stem) stems.add(stem);
+  };
+
+  for (const img of images || []) {
+    if (!img) continue;
+    if (typeof img.filename === 'string' && img.filename) filenames.add(img.filename.toLowerCase());
+    if (typeof img.rawFileName === 'string' && img.rawFileName) filenames.add(img.rawFileName.toLowerCase());
+    if (typeof img.hash === 'string' && img.hash) stems.add(img.hash.toLowerCase());
+    if (typeof img.stem === 'string' && img.stem) stems.add(img.stem.toLowerCase());
+    for (const key of ['sourceUrl', 'url']) {
+      const value = img[key];
+      if (typeof value !== 'string' || !value) continue;
+      urls.add(normalizeUrl(value).toLowerCase());
+      const stem = extractUrlStem(value);
+      if (stem) stems.add(stem);
+    }
+    if (Array.isArray(img.supersedes)) {
+      for (const entry of img.supersedes) addSuperseded(entry);
+    }
+  }
+
+  return { urls, stems, filenames };
+}
+
+// Cover identifiers that plain image-likes cannot express: extra filenames
+// per cover, volume-derived names, and policy extras.
+export function addCoverIdentifiers(sets, coverList, seriesTitle, policy = {}) {
+  for (const c of coverList || []) {
+    if (!c) continue;
+    if (Array.isArray(c.filenames)) {
+      for (const fn of c.filenames) {
+        if (typeof fn !== 'string' || !fn) continue;
+        sets.filenames.add(fn.toLowerCase());
+        const stem = fn.replace(/\.[^.]+$/, '').toLowerCase();
+        if (stem) sets.stems.add(stem);
+      }
+    }
+    if (seriesTitle && c.volume) {
+      sets.stems.add(`${seriesTitle} - Vol. ${c.volume} Cover`.toLowerCase());
+    }
+  }
+  if (Array.isArray(policy.matchStems)) {
+    for (const s of policy.matchStems) {
+      if (s) sets.stems.add(String(s).toLowerCase());
+    }
+  }
+  if (Array.isArray(policy.matchFilenames)) {
+    for (const f of policy.matchFilenames) {
+      if (!f) continue;
+      sets.filenames.add(String(f).toLowerCase());
+      const stem = String(f).replace(/\.[^.]+$/, '').toLowerCase();
+      if (stem) sets.stems.add(stem);
+    }
+  }
+  return sets;
+}
+
+// A standalone whose recorded address matches is the same file even when
+// the gallery renamed it, and host variants of one address share a stem
+// even when the full URLs differ.
+async function linkRootSidecarRecords(providerPath, sets) {
+  try {
+    const sidecarText = await window.__TAURI__.core.invoke('read_text_file', {
+      path: `${providerPath}\\gallery.json`
+    });
+    const sidecar = JSON.parse(sidecarText);
+    if (sidecar && Array.isArray(sidecar.images)) {
+      for (const record of sidecar.images) {
+        if (!record) continue;
+        const recordUrls = [record.sourceUrl, record.url]
+          .filter((value) => typeof value === 'string' && value)
+          .map((value) => normalizeUrl(value).toLowerCase());
+        const recordStems = new Set();
+        for (const value of [record.sourceUrl, record.url]) {
+          if (typeof value !== 'string' || !value) continue;
+          const stem = extractUrlStem(value);
+          if (stem) recordStems.add(stem);
+        }
+        for (const value of [record.hash, record.rawFileName]) {
+          if (typeof value !== 'string' || !value) continue;
+          recordStems.add(value.toLowerCase());
+          const stem = extractUrlStem(value);
+          if (stem) recordStems.add(stem);
+        }
+        const linked = recordUrls.some((value) => sets.urls.has(value))
+          || [...recordStems].some((stem) => sets.stems.has(stem));
+        if (!linked) continue;
+        if (record.filename) sets.filenames.add(record.filename.toLowerCase());
+        if (record.rawFileName) sets.filenames.add(record.rawFileName.toLowerCase());
+      }
+    }
+  } catch {
+    // No root sidecar or unreadable; stem and filename matching still applies.
+  }
+}
+
+// Prune the records of deleted files so later jumps stop finding ghosts.
+async function pruneRootSidecarRecords(providerPath, deletedNames) {
+  if (deletedNames.size === 0) return;
+  try {
+    const sidecarPath = `${providerPath}\\gallery.json`;
+    const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+    const sidecar = JSON.parse(sidecarText);
+    if (!sidecar || !Array.isArray(sidecar.images)) return;
+    const remaining = sidecar.images.filter((record) => !deletedNames.has((record?.filename || '').toLowerCase()));
+    if (remaining.length === sidecar.images.length) return;
+    if (remaining.length > 0) {
+      sidecar.images = remaining;
+      await window.__TAURI__.core.invoke('write_text_file', {
+        path: sidecarPath,
+        content: JSON.stringify(sidecar, null, 2)
+      });
+    } else {
+      await window.__TAURI__.core.invoke('remove_file', { path: sidecarPath });
+    }
+  } catch {
+    // Non-fatal sidecar prune failure; files are already deleted.
+  }
+}
+
+async function cleanupRootFiles(providerPath, dirFiles, sets) {
+  await linkRootSidecarRecords(providerPath, sets);
+  const deletedNames = new Set();
+  for (const entry of dirFiles || []) {
+    if (entry.is_dir) continue;
+    const lowerName = (entry.name || '').toLowerCase();
+    if (lowerName === 'gallery.json') continue;
+    const dotIndex = lowerName.lastIndexOf('.');
+    const fileBase = (dotIndex > 0 ? lowerName.slice(0, dotIndex) : lowerName).toLowerCase();
+    if (sets.stems.has(fileBase) || sets.filenames.has(lowerName)) {
+      try {
+        await window.__TAURI__.core.invoke('remove_file', { path: entry.path });
+        deletedNames.add(lowerName);
+      } catch (err) {
+        console.warn('[UrlLoader] Failed to remove matching root file:', entry.path, err);
+      }
+    }
+  }
+  await pruneRootSidecarRecords(providerPath, deletedNames);
+}
+
 export async function cleanupMatchingRawFiles(providerPath, images) {
   if (typeof window === 'undefined' || !window.__TAURI__ || !Array.isArray(images) || images.length === 0) return;
   try {
@@ -1124,114 +1277,7 @@ export async function cleanupMatchingRawFiles(providerPath, images) {
       showHidden: false
     });
     if (!dirResult?.files) return;
-
-    const matchStems = new Set();
-    const matchFilenames = new Set();
-    const matchUrls = new Set();
-
-    const addSuperseded = (entry) => {
-      if (typeof entry !== 'string' || !entry.trim()) return;
-      const trimmed = entry.trim();
-      matchUrls.add(normalizeUrl(trimmed).toLowerCase());
-      const stem = extractUrlStem(trimmed);
-      if (stem) matchStems.add(stem);
-    };
-
-    for (const img of images) {
-      if (!img) continue;
-      if (img.filename) matchFilenames.add(img.filename.toLowerCase());
-      if (img.rawFileName) matchFilenames.add(img.rawFileName.toLowerCase());
-      if (img.hash) matchStems.add(img.hash.toLowerCase());
-      if (img.stem) matchStems.add(img.stem.toLowerCase());
-      for (const key of ['sourceUrl', 'url']) {
-        const value = img[key];
-        if (typeof value !== 'string' || !value) continue;
-        matchUrls.add(normalizeUrl(value).toLowerCase());
-        const stem = extractUrlStem(value);
-        if (stem) matchStems.add(stem);
-      }
-      if (Array.isArray(img.supersedes)) {
-        for (const entry of img.supersedes) addSuperseded(entry);
-      }
-    }
-
-    // Link root sidecar records by URL equality first, then by shared
-    // stems: a standalone whose recorded address matches a gallery image
-    // is the same file even when the gallery renamed it (e.g. thumbnail
-    // imports later as 00.png), and host variants of one address share
-    // a stem even when the full URLs differ (e.g. direct cover links).
-    try {
-      const sidecarText = await window.__TAURI__.core.invoke('read_text_file', {
-        path: `${providerPath}\\gallery.json`
-      });
-      const sidecar = JSON.parse(sidecarText);
-      if (sidecar && Array.isArray(sidecar.images)) {
-        for (const record of sidecar.images) {
-          if (!record) continue;
-          const recordUrls = [record.sourceUrl, record.url]
-            .filter((value) => typeof value === 'string' && value)
-            .map((value) => normalizeUrl(value).toLowerCase());
-          const recordStems = new Set();
-          for (const value of [record.sourceUrl, record.url]) {
-            if (typeof value !== 'string' || !value) continue;
-            const stem = extractUrlStem(value);
-            if (stem) recordStems.add(stem);
-          }
-          for (const value of [record.hash, record.rawFileName]) {
-            if (typeof value !== 'string' || !value) continue;
-            recordStems.add(value.toLowerCase());
-            const stem = extractUrlStem(value);
-            if (stem) recordStems.add(stem);
-          }
-          const linked = recordUrls.some((value) => matchUrls.has(value))
-            || [...recordStems].some((stem) => matchStems.has(stem));
-          if (!linked) continue;
-          if (record.filename) matchFilenames.add(record.filename.toLowerCase());
-          if (record.rawFileName) matchFilenames.add(record.rawFileName.toLowerCase());
-        }
-      }
-    } catch {
-      // No root sidecar or unreadable; stem and filename matching still applies.
-    }
-
-    const deletedNames = new Set();
-    for (const entry of dirResult.files) {
-      if (entry.is_dir) continue;
-      const lowerName = entry.name.toLowerCase();
-      const dotIndex = lowerName.lastIndexOf('.');
-      const fileBase = (dotIndex > 0 ? lowerName.slice(0, dotIndex) : lowerName).toLowerCase();
-
-      if (matchStems.has(fileBase) || matchFilenames.has(lowerName)) {
-        try {
-          await window.__TAURI__.core.invoke('remove_file', { path: entry.path });
-          deletedNames.add(lowerName);
-        } catch {
-          // Ignore individual file deletion errors.
-        }
-      }
-    }
-
-    // Prune the records of deleted files so later jumps stop finding ghosts.
-    if (deletedNames.size === 0) return;
-    try {
-      const sidecarPath = `${providerPath}\\gallery.json`;
-      const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
-      const sidecar = JSON.parse(sidecarText);
-      if (!sidecar || !Array.isArray(sidecar.images)) return;
-      const remaining = sidecar.images.filter((record) => !deletedNames.has((record?.filename || '').toLowerCase()));
-      if (remaining.length === sidecar.images.length) return;
-      if (remaining.length > 0) {
-        sidecar.images = remaining;
-        await window.__TAURI__.core.invoke('write_text_file', {
-          path: sidecarPath,
-          content: JSON.stringify(sidecar, null, 2)
-        });
-      } else {
-        await window.__TAURI__.core.invoke('remove_file', { path: sidecarPath });
-      }
-    } catch {
-      // Non-fatal sidecar prune failure; files are already deleted.
-    }
+    await cleanupRootFiles(providerPath, dirResult.files, buildMatchSets(images));
   } catch {
     // Provider directory does not exist or read failed.
   }
@@ -1421,166 +1467,58 @@ export async function cleanupMatchingProviderEntries(providerPath, result) {
       }
     }
 
-    // Exact cover identifiers only. Supports result.covers array, result.cover, and cleanupPolicy.matchStems.
-    const exactCoverNames = new Set();
-    const exactCoverHashes = new Set();
+    // Covers flow through the same match vocabulary as raw files. Generic
+    // Cover.jpg and Cover.png names stay out so one series cannot clear
+    // another's root cover.
     const coverList = Array.isArray(result.covers) ? result.covers : (result.cover ? [result.cover] : []);
-
-    const coverUrls = new Set();
-    if (shouldRemoveCovers && coverList.length > 0) {
-      for (const c of coverList) {
-        if (!c) continue;
-        if (c.rawFileName) {
-          exactCoverNames.add(c.rawFileName.toLowerCase());
-          const stem = c.rawFileName.replace(/\.[^.]+$/, '').toLowerCase();
-          if (stem) exactCoverHashes.add(stem);
-        }
-        if (c.filename && c.filename.toLowerCase() !== 'cover.jpg' && c.filename.toLowerCase() !== 'cover.png') {
-          exactCoverNames.add(c.filename.toLowerCase());
-          const stem = c.filename.replace(/\.[^.]+$/, '').toLowerCase();
-          if (stem) exactCoverHashes.add(stem);
-        }
-        if (Array.isArray(c.filenames)) {
-          for (const fn of c.filenames) {
-            if (fn) {
-              exactCoverNames.add(fn.toLowerCase());
-              const stem = fn.replace(/\.[^.]+$/, '').toLowerCase();
-              if (stem) exactCoverHashes.add(stem);
-            }
-          }
-        }
-        if (c.hash) exactCoverHashes.add(c.hash.toLowerCase());
-        if (c.url) {
-          const stem = extractUrlStem(c.url);
-          if (stem) exactCoverHashes.add(stem.toLowerCase());
-          coverUrls.add(normalizeUrl(c.url).toLowerCase());
-        }
-        if (c.sourceUrl) {
-          coverUrls.add(normalizeUrl(c.sourceUrl).toLowerCase());
-        }
-        if (result.title && c.volume) {
-          exactCoverHashes.add(`${result.title} - Vol. ${c.volume} Cover`.toLowerCase());
-        }
-      }
-    }
-    if (Array.isArray(cleanupPolicy.matchStems)) {
-      for (const s of cleanupPolicy.matchStems) {
-        if (s) exactCoverHashes.add(s.toLowerCase());
-      }
-    }
-    if (Array.isArray(cleanupPolicy.matchFilenames)) {
-      for (const f of cleanupPolicy.matchFilenames) {
-        if (f) {
-          exactCoverNames.add(f.toLowerCase());
-          const stem = f.replace(/\.[^.]+$/, '').toLowerCase();
-          if (stem) exactCoverHashes.add(stem);
-        }
-      }
-    }
-
-    // Check provider root gallery.json for recorded direct downloads
-    let rootSidecar = null;
-    const rootSidecarPath = `${providerPath}\\gallery.json`;
-    if (shouldRemoveCovers) {
-      try {
-        const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: rootSidecarPath });
-        rootSidecar = JSON.parse(sidecarText);
-        if (rootSidecar && Array.isArray(rootSidecar.images)) {
-          for (const img of rootSidecar.images) {
-            const imgStem = (img.hash || extractUrlStem(img.url || img.sourceUrl || '')).toLowerCase();
-            const imgUrlStem = extractUrlStem(img.url || img.sourceUrl || '').toLowerCase();
-            const imgRaw = (img.rawFileName || '').toLowerCase();
-            const imgName = (img.filename || '').toLowerCase();
-            const fileBase = imgName.replace(/\.[^.]+$/, '');
-            const imgSource = normalizeUrl(img.sourceUrl || '').toLowerCase();
-            const imgUrl = normalizeUrl(img.url || '').toLowerCase();
-
-            const isCoverMatch = (imgStem && exactCoverHashes.has(imgStem))
-              || (imgUrlStem && exactCoverHashes.has(imgUrlStem))
-              || (imgRaw && exactCoverNames.has(imgRaw))
-              || (fileBase && exactCoverHashes.has(fileBase))
-              || (imgName && exactCoverNames.has(imgName))
-              || (imgSource && coverUrls.has(imgSource))
-              || (imgUrl && coverUrls.has(imgUrl));
-
-            if (isCoverMatch) {
-              if (img.filename) exactCoverNames.add(imgName);
-              if (fileBase) exactCoverHashes.add(fileBase);
-            }
-          }
-        }
-      } catch {
-        // No root gallery.json or read failed.
-      }
-    }
+    const GENERIC_COVER_FILENAMES = new Set(['cover.jpg', 'cover.png']);
 
     for (const entry of dirResult.files) {
+      if (!entry.is_dir) continue;
       const lowerName = (entry.name || '').toLowerCase();
+      if (!shouldRemoveChapters || lowerName === seriesRootName) continue;
 
-      if (entry.is_dir) {
-        if (!shouldRemoveChapters || lowerName === seriesRootName) continue;
+      const sidecarPath = `${entry.path}\\gallery.json`;
+      let isMatch = false;
+      try {
+        const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+        const sidecar = JSON.parse(sidecarText);
+        const sidecarId = sidecar?.gallery?.id?.toLowerCase();
+        const sidecarUrl = normalizeUrl(sidecar?.sourceUrl || sidecar?.url || '').toLowerCase();
 
-        const sidecarPath = `${entry.path}\\gallery.json`;
-        let isMatch = false;
+        if (sidecarId && chapterIds.has(sidecarId)) {
+          isMatch = true;
+        } else if (sidecarUrl && chapterUrls.has(sidecarUrl)) {
+          isMatch = true;
+        }
+      } catch {
+        // Not a valid gallery sidecar, skip
+      }
+
+      if (isMatch) {
         try {
-          const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
-          const sidecar = JSON.parse(sidecarText);
-          const sidecarId = sidecar?.gallery?.id?.toLowerCase();
-          const sidecarUrl = normalizeUrl(sidecar?.sourceUrl || sidecar?.url || '').toLowerCase();
-
-          if (sidecarId && chapterIds.has(sidecarId)) {
-            isMatch = true;
-          } else if (sidecarUrl && chapterUrls.has(sidecarUrl)) {
-            isMatch = true;
-          }
-        } catch {
-          // Not a valid gallery sidecar, skip
-        }
-
-        if (isMatch) {
-          try {
-            await window.__TAURI__.core.invoke('remove_directory', { path: entry.path });
-          } catch (err) {
-            console.warn('[UrlLoader] Failed to remove matching standalone chapter directory:', entry.path, err);
-          }
-        }
-      } else if (shouldRemoveCovers) {
-        if (lowerName === 'gallery.json') continue;
-        const dotIndex = lowerName.lastIndexOf('.');
-        const fileBase = (dotIndex > 0 ? lowerName.slice(0, dotIndex) : lowerName).toLowerCase();
-
-        const isCoverMatch = exactCoverNames.has(lowerName)
-          || exactCoverHashes.has(fileBase);
-
-        if (isCoverMatch) {
-          try {
-            await window.__TAURI__.core.invoke('remove_file', { path: entry.path });
-          } catch (err) {
-            console.warn('[UrlLoader] Failed to remove loose cover file:', entry.path, err);
-          }
+          await window.__TAURI__.core.invoke('remove_directory', { path: entry.path });
+        } catch (err) {
+          console.warn('[UrlLoader] Failed to remove matching standalone chapter directory:', entry.path, err);
         }
       }
     }
 
-    if (rootSidecar && Array.isArray(rootSidecar.images)) {
-      const remaining = rootSidecar.images.filter((img) => {
-        const lower = (img.filename || '').toLowerCase();
-        const base = lower.replace(/\.[^.]+$/, '');
-        return !exactCoverNames.has(lower) && !exactCoverHashes.has(base);
-      });
-      try {
-        if (remaining.length > 0) {
-          rootSidecar.images = remaining;
-          await window.__TAURI__.core.invoke('write_text_file', {
-            path: rootSidecarPath,
-            content: JSON.stringify(rootSidecar, null, 2)
-          });
-        } else {
-          await window.__TAURI__.core.invoke('remove_file', { path: rootSidecarPath });
-        }
-      } catch {
-        // Non-fatal root sidecar update failure
-      }
+    if (shouldRemoveCovers && coverList.length > 0) {
+      const coverLikes = coverList
+        .filter((c) => c && typeof c === 'object')
+        .map((c) => ({
+          sourceUrl: c.sourceUrl,
+          url: c.url,
+          hash: c.hash,
+          rawFileName: c.rawFileName,
+          filename: (typeof c.filename === 'string' && GENERIC_COVER_FILENAMES.has(c.filename.toLowerCase()))
+            ? undefined
+            : c.filename
+        }));
+      const sets = buildMatchSets(coverLikes);
+      addCoverIdentifiers(sets, coverList, result.title, cleanupPolicy);
+      await cleanupRootFiles(providerPath, dirResult.files, sets);
     }
 
     if (shouldRemoveLooseFiles) {
@@ -2787,6 +2725,8 @@ export const UrlLoader = {
   validateExtractorResult,
   findMatchingGalleryImage,
   findMatchingGalleryBySourceUrl,
+  buildMatchSets,
+  addCoverIdentifiers,
   cleanupMatchingRawFiles,
   cleanupMatchingProviderEntries,
   PREFETCH_START_THRESHOLD_PERCENT,
