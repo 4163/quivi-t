@@ -7,7 +7,7 @@
  * viewer and title URLs; series feeds resolve through mangadex.js stubs.
  */
 
-import { parseViewerId, fetchMangaPlusChapter, fetchMangaTitleDetail, buildMangaPlusImages, resolveMangaPlusStatus } from './shared/mangaplus.js';
+import { parseViewerId, fetchMangaPlusChapter, fetchMangaTitleDetail, buildMangaPlusImages, resolveMangaPlusStatus, padIndex } from './shared/mangaplus.js';
 import { sanitizePathSegment } from './shared/sanitize.js';
 
 const MANGAPLUS_CHAPTER_RE = /^https?:\/\/mangaplus\.shueisha\.co\.jp\/viewer\/(\d+)/i;
@@ -54,17 +54,31 @@ export async function parseDirectUrl(url, context = {}) {
   if (!m) return null;
   const ext = m[2].toLowerCase();
   if (!CDN_IMAGE_EXTENSIONS.has(ext)) return null;
-  const stem = (m[1].split('/').pop() || 'image').replace(/[^a-z0-9_-]/gi, '_');
+  const path = m[1];
+  const stem = (path.split('/').pop() || 'image').replace(/[^a-z0-9_-]/gi, '_');
   const titleId = (url.match(/\/title\/(\d+)(?:\/|$)/i) || [])[1];
   const hash = titleId ? `mangaplus-${titleId}-${stem}` : `mangaplus-${stem}`;
   let filename = `${hash}.${ext}`;
+
+  const isPortraitList = path.includes('title_thumbnail_portrait_list');
+  const chapterThumbMatch = path.match(/\/chapter\/(\d+)\/chapter_thumbnail\//i);
 
   if (titleId && typeof context?.fetchBytes === 'function') {
     try {
       const detail = await fetchMangaTitleDetail(titleId, context);
       if (detail.name) {
         const languageName = LANGUAGE_NAMES[detail.language] || 'English';
-        filename = sanitizePathSegment(`${detail.name} - ${stem} (${languageName})`) + `.${ext}`;
+        if (isPortraitList) {
+          filename = sanitizePathSegment(`${detail.name} - Cover (${languageName})`) + `.${ext}`;
+        } else if (chapterThumbMatch) {
+          const chapterId = chapterThumbMatch[1];
+          const ch = detail.chapters.find((c) => String(c.chapterId) === chapterId);
+          const chNum = ch ? (ch.name || '').replace(/^#/, '').trim() : '';
+          const label = chNum ? `Ch. ${chNum} Thumbnail` : 'Thumbnail';
+          filename = sanitizePathSegment(`${detail.name} - ${label} (${languageName})`) + `.${ext}`;
+        } else {
+          filename = sanitizePathSegment(`${detail.name} - ${stem} (${languageName})`) + `.${ext}`;
+        }
       }
     } catch {
       // Non-fatal title resolution failure: falls back to hashed filename.
@@ -103,6 +117,10 @@ async function extractSeries(titleId, url, context) {
 
   const seenChapters = new Set();
   const chapters = [];
+  const allCovers = [];
+  if (detail.portraitImageUrl) {
+    allCovers.push({ url: detail.portraitImageUrl, filename: 'Cover.jpg' });
+  }
   for (const entry of detail.chapters) {
     const cid = String(entry.chapterId || '');
     if (!cid || cid === '0' || seenChapters.has(cid)) continue;
@@ -110,6 +128,7 @@ async function extractSeries(titleId, url, context) {
     const viewerUrl = `https://mangaplus.shueisha.co.jp/viewer/${cid}`;
     const chTitle = chapterFolderName(entry);
     const chFolder = sanitizePathSegment(chTitle);
+    if (entry.thumbnailUrl) allCovers.push({ url: entry.thumbnailUrl, filename: 'Thumbnail.jpg' });
     chapters.push({
       id: `mangaplus-${cid}`,
       title: `${detail.name} - ${chTitle}`,
@@ -142,6 +161,7 @@ async function extractSeries(titleId, url, context) {
       })
     },
     cover: detail.portraitImageUrl ? { url: detail.portraitImageUrl, filename: 'Cover.jpg' } : null,
+    covers: allCovers,
     folders: [],
     cleanup: {
       removeMatchingChapters: true,
@@ -215,6 +235,26 @@ export async function extract(html, url, context) {
   const fullTitle = `${seriesTitle} - ${chapterTitle} (${languageName})`;
   const flatFolderName = sanitizePathSegment(fullTitle);
   const images = buildMangaPlusImages(pages, viewToken);
+
+  // Prepend chapter thumbnail as page zero when available.
+  let thumbnailUrl = null;
+  if (detail) {
+    const listed = detail.chapters.find((c) => String(c.chapterId) === String(viewerId));
+    if (listed?.thumbnailUrl) thumbnailUrl = listed.thumbnailUrl;
+  }
+  if (thumbnailUrl) {
+    const thumbExt = thumbnailUrl.match(/\.(\w+)(?:\?|$)/)?.[1] || 'jpg';
+    const totalWithThumb = images.length + 1;
+    const padWidth = Math.max(1, Math.ceil(Math.log10(Math.max(2, totalWithThumb + 1))));
+    const thumbFilename = `${String(0).padStart(padWidth, '0')} - Thumbnail.${thumbExt}`;
+    // Re-pad existing page filenames to account for the new total.
+    for (let i = 0; i < images.length; i++) {
+      const pageExt = images[i].url.match(/\.(\w+)(?:\?|$)/)?.[1] || 'jpg';
+      images[i].filename = `${padIndex(i, totalWithThumb)}.${pageExt}`;
+    }
+    images.unshift({ url: thumbnailUrl, filename: thumbFilename });
+  }
+
   const info = detail ? seriesComicInfo(detail, {
     Title: `${chapterTitle} (${languageName})`,
     Number: chapterNumber || undefined,

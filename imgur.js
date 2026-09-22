@@ -58,28 +58,41 @@ function digitPadWidth(count) {
 
 function formatFilename(index, total, extension, description) {
   const itemNumber = String(index + 1).padStart(digitPadWidth(total), '0');
-  return description ? `${itemNumber}_${description}${extension}` : `${itemNumber}${extension}`;
+  return description ? `${itemNumber} - ${description}${extension}` : `${itemNumber}${extension}`;
 }
 
 export function parseDirectUrl(url) {
   if (!url || typeof url !== 'string') return null;
-  const m = url.match(IMGUR_DIRECT_RE);
-  if (!m) return null;
-  const hash = m[1];
-  let rawExt = m[2].toLowerCase();
-  if (rawExt === 'gifv') rawExt = 'mp4';
-  const ext = `.${rawExt}`;
-  return {
-    provider: 'Imgur',
-    hash,
-    ext,
-    filename: `${hash}${ext}`,
-    url: `https://i.imgur.com/${hash}${ext}`
-  };
+  const directMatch = url.match(IMGUR_DIRECT_RE);
+  if (directMatch) {
+    const hash = directMatch[1];
+    let rawExt = directMatch[2].toLowerCase();
+    if (rawExt === 'gifv') rawExt = 'mp4';
+    const ext = `.${rawExt}`;
+    return {
+      provider: 'Imgur',
+      hash,
+      ext,
+      filename: `${hash}${ext}`,
+      url: `https://i.imgur.com/${hash}${ext}`
+    };
+  }
+  const singleMatch = url.match(IMGUR_SINGLE_RE);
+  if (singleMatch) {
+    const hash = singleMatch[1];
+    return {
+      provider: 'Imgur',
+      hash,
+      ext: '.png',
+      filename: `${hash}.png`,
+      url: `https://i.imgur.com/${hash}.png`
+    };
+  }
+  return null;
 }
 
 export function isDirectUrl(url) {
-  return IMGUR_DIRECT_RE.test(url);
+  return IMGUR_DIRECT_RE.test(url) || IMGUR_SINGLE_RE.test(url);
 }
 
 export function match(url) {

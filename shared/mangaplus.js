@@ -51,6 +51,7 @@ const F_LAST_CHAPTERS = 4;
 const F_CH_ID = 2;
 const F_CH_NAME = 3;
 const F_CH_SUBTITLE = 4;
+const F_CH_THUMBNAIL = 5;
 // TitleDetailView: field 7 = viewing_period_description,
 // field 8 = non_appearance_info, field 31 = genre_list.
 // TagName: field 1 = name, field 2 = slug.
@@ -77,7 +78,7 @@ function hexToBase64(hex) {
   return btoa(String.fromCharCode(...bytes));
 }
 
-function padIndex(index, total) {
+export function padIndex(index, total) {
   const width = Math.max(1, Math.ceil(Math.log10(Math.max(2, total + 1))));
   return String(index + 1).padStart(width, '0');
 }
@@ -246,7 +247,8 @@ export async function fetchMangaTitleDetail(titleId, context = {}) {
         chapters.push({
           chapterId: cid?.wire === 0 ? cid.value : 0,
           name: readString(cFields, F_CH_NAME),
-          subTitle: readString(cFields, F_CH_SUBTITLE) || null
+          subTitle: readString(cFields, F_CH_SUBTITLE) || null,
+          thumbnailUrl: readString(cFields, F_CH_THUMBNAIL) || null
         });
       }
     }
