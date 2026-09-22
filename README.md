@@ -16,11 +16,11 @@ manifest.json          Registry: id, patterns, version, source path
 imgur.js               Imgur albums, galleries, direct CDN images
 mangadex.js            MangaDex chapters, titles, covers, @home network images
 mangaplus.js           MANGA Plus viewer chapters, title series, signed CDN images
-kmanga.js              K-Manga episodes, title series, signed CDN images
+kmanga.js              K MANGA episodes, title series, signed CDN images
 shared/
   sanitize.js          Path segment sanitization
   mangaplus.js         MANGA Plus protobuf viewer client (shared by mangadex.js and mangaplus.js)
-  kmanga.js            K-Manga viewer client, auth hash, tile order (shared by mangadex.js and kmanga.js)
+  kmanga.js            K MANGA viewer client, auth hash, tile order (shared by mangadex.js and kmanga.js)
   proto.js             Minimal protobuf varint/length-delimited decoder
 README.md              This contract
 ```
@@ -74,10 +74,10 @@ Reference URLs for manual testing. Each row covers a distinct URL route or extra
 | MANGA Plus | [SPY x FAMILY (Chapters)](https://mangaplus.shueisha.co.jp/titles/100056) | Title series | `MangaPlus/SPY x FAMILY (English)/{Chapter}/` | Series `titles/{id}` route via `title_detailV3`, language root, cover, lazy chapter stubs |
 | MANGA Plus | [SPY x FAMILY Ch. 1](https://mangaplus.shueisha.co.jp/viewer/1001834) | Single chapter | `MangaPlus/SPY x FAMILY - Ch. 1 (English)/` | Chapter `viewer/{id}` via `manga_viewer_v3`, XOR decrypt, `Plus-Vw-Token` headers |
 | MANGA Plus | [SPY x FAMILY thumbnail](https://jumpg-assets.tokyo-cdn.com/secure/title/100056/title_thumbnail_portrait_list/313744.jpg?hash=ktoQqLjO4TO9hZz8kWFCvQ&expires=2145884400) | Direct media | `MangaPlus/SPY x FAMILY - 313744 (English).jpg` | Signed CDN URL preserved, friendly filename via title detail with hashed fallback |
-| K-Manga | [K-Manga episode](https://kmanga.kodansha.com/title/10072/episode/311334) | Single episode (74 JPGs) | `KManga/Attack on Titan - Episode 01/` | Episode `title/{id}/episode/{id}` route, tile-grid descramble, auth hash, viewer API |
-| K-Manga | [K-Manga title](https://kmanga.kodansha.com/title/10072) | Title series | `KManga/Attack on Titan/{Episode}/` | Series `title/{id}` route, HTML metadata, lazy episode stubs |
-| K-Manga | [K-Manga CDN image](https://cdn.kmanga.kodansha.com/path/to/image.jpg?token=abc) | Direct media | `KManga/kmanga-image.jpg` | Signed CDN URL preserved, hashed fallback filename |
-| MangaDex | [Series with K-Manga externals](https://mangadex.org/title/{id}?tab=chapters) | Series with K-Manga externals | `MangaDex/{Title}/{Language}/{Volume}/{Chapter} (K-Manga)/` | K-Manga stubs with ` (K-Manga)` suffix, lazy resolution through kmanga.js |
+| K MANGA | [K MANGA episode](https://kmanga.kodansha.com/title/10072/episode/311334) | Single episode (74 JPGs) | `KManga/Attack on Titan - Episode 01/` | Episode `title/{id}/episode/{id}` route, tile-grid descramble, auth hash, viewer API |
+| K MANGA | [K MANGA title](https://kmanga.kodansha.com/title/10072) | Title series | `KManga/Attack on Titan/{Episode}/` | Series `title/{id}` route, HTML metadata, lazy episode stubs |
+| K MANGA | [K MANGA CDN image](https://cdn.kmanga.kodansha.com/path/to/image.jpg?token=abc) | Direct media | `KManga/kmanga-image.jpg` | Signed CDN URL preserved, hashed fallback filename |
+| MangaDex | [Series with K MANGA externals](https://mangadex.org/title/{id}?tab=chapters) | Series with K MANGA externals | `MangaDex/{Title}/{Language}/{Volume}/{Chapter} (K MANGA)/` | K MANGA stubs with ` (K MANGA)` suffix, lazy resolution through kmanga.js |
 
 ## Module contract
 
