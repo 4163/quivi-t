@@ -115,6 +115,16 @@ function _validateImage(image, index) {
       throw new Error(`Extractor returned invalid descramble descriptor at index ${index}`);
     }
   }
+  if (image.supersedes !== undefined && image.supersedes !== null) {
+    if (!Array.isArray(image.supersedes)) {
+      throw new Error(`Extractor returned invalid supersedes at index ${index}: must be an array`);
+    }
+    for (let i = 0; i < image.supersedes.length; i++) {
+      if (typeof image.supersedes[i] !== 'string' || !image.supersedes[i].trim()) {
+        throw new Error(`Extractor returned invalid supersedes entry at index ${index}[${i}]`);
+      }
+    }
+  }
 
   const filename = _validateWindowsName(image.filename, `filename at index ${index}`);
   const extension = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
@@ -880,6 +890,9 @@ export function validateExtractorResult(result, entry) {
           _validateWindowsName(chapter.metadata.filename, `chapter metadata filename at index ${i}`);
         }
       }
+      if (chapter.cover) {
+        _validateImage(chapter.cover, `chapter ${i} cover`);
+      }
     }
     return result;
   }
@@ -1112,6 +1125,15 @@ export async function cleanupMatchingRawFiles(providerPath, images) {
 
     const matchStems = new Set();
     const matchFilenames = new Set();
+    const matchUrls = new Set();
+
+    const addSuperseded = (entry) => {
+      if (typeof entry !== 'string' || !entry.trim()) return;
+      const trimmed = entry.trim();
+      matchUrls.add(normalizeUrl(trimmed).toLowerCase());
+      const stem = extractUrlStem(trimmed);
+      if (stem) matchStems.add(stem);
+    };
 
     for (const img of images) {
       if (!img) continue;
@@ -1119,13 +1141,42 @@ export async function cleanupMatchingRawFiles(providerPath, images) {
       if (img.rawFileName) matchFilenames.add(img.rawFileName.toLowerCase());
       if (img.hash) matchStems.add(img.hash.toLowerCase());
       if (img.stem) matchStems.add(img.stem.toLowerCase());
-      const src = img.sourceUrl || img.url || '';
-      if (src) {
-        const stem = extractUrlStem(src);
+      for (const key of ['sourceUrl', 'url']) {
+        const value = img[key];
+        if (typeof value !== 'string' || !value) continue;
+        matchUrls.add(normalizeUrl(value).toLowerCase());
+        const stem = extractUrlStem(value);
         if (stem) matchStems.add(stem);
+      }
+      if (Array.isArray(img.supersedes)) {
+        for (const entry of img.supersedes) addSuperseded(entry);
       }
     }
 
+    // Link root sidecar records by URL equality first: a standalone whose
+    // recorded address matches a gallery image is the same file even when
+    // the gallery renamed it (e.g. thumbnail imports later as 00.png).
+    try {
+      const sidecarText = await window.__TAURI__.core.invoke('read_text_file', {
+        path: `${providerPath}\\gallery.json`
+      });
+      const sidecar = JSON.parse(sidecarText);
+      if (sidecar && Array.isArray(sidecar.images)) {
+        for (const record of sidecar.images) {
+          if (!record) continue;
+          const recordUrls = [record.sourceUrl, record.url]
+            .filter((value) => typeof value === 'string' && value)
+            .map((value) => normalizeUrl(value).toLowerCase());
+          if (!recordUrls.some((value) => matchUrls.has(value))) continue;
+          if (record.filename) matchFilenames.add(record.filename.toLowerCase());
+          if (record.rawFileName) matchFilenames.add(record.rawFileName.toLowerCase());
+        }
+      }
+    } catch {
+      // No root sidecar or unreadable; stem and filename matching still applies.
+    }
+
+    const deletedNames = new Set();
     for (const entry of dirResult.files) {
       if (entry.is_dir) continue;
       const lowerName = entry.name.toLowerCase();
@@ -1135,10 +1186,33 @@ export async function cleanupMatchingRawFiles(providerPath, images) {
       if (matchStems.has(fileBase) || matchFilenames.has(lowerName)) {
         try {
           await window.__TAURI__.core.invoke('remove_file', { path: entry.path });
+          deletedNames.add(lowerName);
         } catch {
           // Ignore individual file deletion errors.
         }
       }
+    }
+
+    // Prune the records of deleted files so later jumps stop finding ghosts.
+    if (deletedNames.size === 0) return;
+    try {
+      const sidecarPath = `${providerPath}\\gallery.json`;
+      const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+      const sidecar = JSON.parse(sidecarText);
+      if (!sidecar || !Array.isArray(sidecar.images)) return;
+      const remaining = sidecar.images.filter((record) => !deletedNames.has((record?.filename || '').toLowerCase()));
+      if (remaining.length === sidecar.images.length) return;
+      if (remaining.length > 0) {
+        sidecar.images = remaining;
+        await window.__TAURI__.core.invoke('write_text_file', {
+          path: sidecarPath,
+          content: JSON.stringify(sidecar, null, 2)
+        });
+      } else {
+        await window.__TAURI__.core.invoke('remove_file', { path: sidecarPath });
+      }
+    } catch {
+      // Non-fatal sidecar prune failure; files are already deleted.
     }
   } catch {
     // Provider directory does not exist or read failed.

@@ -370,6 +370,77 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       }), /unsafe library path/);
     });
 
+    it('accepts valid supersedes on images and rejects invalid shapes', () => {
+      const valid = validateExtractorResult({
+        provider: 'Example',
+        gallery: { id: 'series-42', relativePath: ['Series'] },
+        images: [{
+          url: 'https://cdn.example.test/001.png',
+          filename: '001.png',
+          supersedes: ['https://cdn.example.test/old.png', 'old_stem']
+        }]
+      }, manifestEntry);
+      assert.deepEqual(valid.images[0].supersedes, ['https://cdn.example.test/old.png', 'old_stem']);
+
+      assert.throws(() => validateExtractorResult({
+        provider: 'Example',
+        gallery: { id: 'series-42', relativePath: ['Series'] },
+        images: [{
+          url: 'https://cdn.example.test/001.png',
+          filename: '001.png',
+          supersedes: 'not-an-array'
+        }]
+      }, manifestEntry), /supersedes.*must be an array/);
+
+      assert.throws(() => validateExtractorResult({
+        provider: 'Example',
+        gallery: { id: 'series-42', relativePath: ['Series'] },
+        images: [{
+          url: 'https://cdn.example.test/001.png',
+          filename: '001.png',
+          supersedes: [123]
+        }]
+      }, manifestEntry), /supersedes entry/);
+
+      assert.throws(() => validateExtractorResult({
+        provider: 'Example',
+        gallery: { id: 'series-42', relativePath: ['Series'] },
+        images: [{
+          url: 'https://cdn.example.test/001.png',
+          filename: '001.png',
+          supersedes: ['']
+        }]
+      }, manifestEntry), /supersedes entry/);
+    });
+
+    it('accepts valid chapter cover and rejects invalid chapter cover', () => {
+      const seriesResult = validateExtractorResult({
+        provider: 'Example',
+        isSeries: true,
+        rootRelativePath: ['Series'],
+        cover: { url: 'https://cdn.example.test/cover.jpg', filename: 'Cover.jpg' },
+        chapters: [{
+          id: 'ch-1',
+          sourceUrl: 'https://example.test/ch/1',
+          relativePath: ['Series', 'Ch. 1'],
+          cover: { url: 'https://cdn.example.test/ch1-thumb.png', filename: 'Ch. 1 Cover.png' }
+        }]
+      }, manifestEntry);
+      assert.equal(seriesResult.chapters[0].cover.filename, 'Ch. 1 Cover.png');
+
+      assert.throws(() => validateExtractorResult({
+        provider: 'Example',
+        isSeries: true,
+        rootRelativePath: ['Series'],
+        chapters: [{
+          id: 'ch-1',
+          sourceUrl: 'https://example.test/ch/1',
+          relativePath: ['Series', 'Ch. 1'],
+          cover: { url: 123, filename: 'bad.png' }
+        }]
+      }, manifestEntry), /invalid image URL/);
+    });
+
     it('changes the module cache key when a remote extractor changes', () => {
       assert.notEqual(
         getExtractorCacheKey({ id: 'example', version: 1, source: 'example.js' }),
@@ -841,6 +912,100 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       await cleanupMatchingRawFiles('C:\\library\\Example', galleryImages);
       assert.equal(deleted.length, 1);
       assert.equal(deleted[0], 'C:\\library\\Example\\sample_clip.mp4');
+    });
+
+    it('removes a renamed standalone via root sidecar URL equality and prunes its record', async () => {
+      const thumbUrl = 'https://cdn.example.test/thumb/ep311334.png';
+      const rootSidecar = {
+        provider: 'Example',
+        isRoot: true,
+        images: [
+          { filename: 'kmanga-ep311334.png', rawFileName: 'ep311334.png', hash: 'kmanga-ep311334', sourceUrl: thumbUrl, url: thumbUrl },
+          { filename: 'unrelated.png', rawFileName: 'unrelated.png', hash: 'unrelated', sourceUrl: 'https://example.test/other.png', url: 'https://example.test/other.png' }
+        ]
+      };
+      const deleted = [];
+      let written = null;
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') {
+              return {
+                files: [
+                  { name: 'kmanga-ep311334.png', path: 'C:\\library\\Example\\kmanga-ep311334.png', is_dir: false },
+                  { name: 'unrelated.png', path: 'C:\\library\\Example\\unrelated.png', is_dir: false }
+                ]
+              };
+            }
+            if (cmd === 'read_text_file') {
+              return JSON.stringify(rootSidecar);
+            }
+            if (cmd === 'remove_file') {
+              deleted.push(args.path);
+              return;
+            }
+            if (cmd === 'write_text_file') {
+              written = JSON.parse(args.content);
+              return;
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      await cleanupMatchingRawFiles('C:\\library\\Example', [
+        { filename: '00.png', url: thumbUrl, sourceUrl: thumbUrl }
+      ]);
+
+      assert.deepEqual(deleted, ['C:\\library\\Example\\kmanga-ep311334.png']);
+      assert.ok(written);
+      assert.deepEqual(written.images.map((img) => img.filename), ['unrelated.png']);
+    });
+
+    it('bridges token-variant URLs through supersedes entries', async () => {
+      const oldUrl = 'https://cdn.example.test/legacy/cover.png?token=OLD';
+      const newUrl = 'https://cdn.example.test/legacy/cover.png?token=NEW';
+      const rootSidecar = {
+        provider: 'Example',
+        isRoot: true,
+        images: [
+          { filename: 'kmanga-cover.png', rawFileName: 'cover.png', hash: 'kmanga-cover', sourceUrl: oldUrl, url: oldUrl }
+        ]
+      };
+      const deleted = [];
+      let written = null;
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') {
+              return {
+                files: [
+                  { name: 'kmanga-cover.png', path: 'C:\\library\\Example\\kmanga-cover.png', is_dir: false }
+                ]
+              };
+            }
+            if (cmd === 'read_text_file') {
+              return JSON.stringify(rootSidecar);
+            }
+            if (cmd === 'remove_file') {
+              deleted.push(args.path);
+              return;
+            }
+            if (cmd === 'write_text_file') {
+              written = JSON.parse(args.content);
+              return;
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      await cleanupMatchingRawFiles('C:\\library\\Example', [
+        { filename: '00.png', url: newUrl, sourceUrl: newUrl, supersedes: [oldUrl] }
+      ]);
+
+      assert.deepEqual(deleted, ['C:\\library\\Example\\kmanga-cover.png', 'C:\\library\\Example\\gallery.json']);
+      assert.equal(written, null);
     });
   });
 
