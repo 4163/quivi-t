@@ -960,33 +960,18 @@ export function isDirectMediaUrl(url) {
   return false;
 }
 
-function _getGalleryMatchPriority(galleryPath, sidecar, img, isProviderRoot = false) {
+// Contract jump tiers, highest wins. Exact address beats fuzzy match
+// inside every tier: gallery content outranks a loose root file, which
+// outranks a series cover. The top tier returns immediately as a scan
+// fast path, which is behavior-neutral since nothing outranks it.
+const RANK_GALLERY_CONTENT = 30;
+const RANK_ROOT_LOOSE = 20;
+const RANK_SERIES_COVER = 10;
+
+function _rankGalleryMatch(img, exact, isProviderRoot) {
   const isSeriesCover = img.description === 'Series Cover' || img.isSeriesCover === true;
-  const pathNorm = (galleryPath || '').toLowerCase();
-  const sidecarTitle = (sidecar?.title || '').toLowerCase();
-  const galleryId = (sidecar?.gallery?.id || '').toLowerCase();
-
-  const isCoversGallery = pathNorm.includes('(covers)')
-    || pathNorm.includes('\\covers')
-    || pathNorm.includes('/covers')
-    || sidecarTitle.includes('(covers)')
-    || sidecarTitle.includes('covers')
-    || galleryId.includes('-covers');
-
-  if (!isSeriesCover) {
-    // 1. Concrete content image inside a covers gallery/chapter (e.g. Covers\Japanese\Vol. 16.jpg)
-    if (isCoversGallery) return 100;
-    // Concrete content image inside a gallery beats the same image saved
-    // loose at the provider root (e.g. chapter 00.png beats its standalone).
-    if (isProviderRoot) return 70;
-    return 80;
-  }
-
-  // 2. Series cover in a dedicated covers collection (e.g. Akebi-chan no Sailor Fuku (Covers)\Cover.jpg)
-  if (isCoversGallery) return 50;
-
-  // 3. Series cover in a standard series (e.g. Akebi-chan no Sailor Fuku\Cover.jpg)
-  return 10;
+  const tier = isSeriesCover ? RANK_SERIES_COVER : (isProviderRoot ? RANK_ROOT_LOOSE : RANK_GALLERY_CONTENT);
+  return tier + (exact ? 1 : 0);
 }
 
 export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
@@ -1011,34 +996,34 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
             const imgFilename = img.filename || '';
             const imgHash = (img.hash ? img.hash.toLowerCase() : '');
 
-            let isMatch = false;
+            let exact = false;
+            let fuzzy = false;
             if (imgSource && normalizedDirectUrl && imgSource.toLowerCase() === normalizedDirectUrl.toLowerCase()) {
-              isMatch = true;
+              exact = true;
             } else if (targetStem) {
               const sourceStem = extractUrlStem(imgSource);
               if (sourceStem && sourceStem === targetStem) {
-                isMatch = true;
+                fuzzy = true;
               } else if (imgHash && imgHash === targetStem) {
-                isMatch = true;
+                fuzzy = true;
               } else if (imgFilename.toLowerCase().includes(targetStem)) {
-                isMatch = true;
+                fuzzy = true;
               }
             }
 
-            if (isMatch) {
-              const score = _getGalleryMatchPriority(current.path, sidecar, img, current.depth === 0);
-              const matchResult = {
-                galleryPath: current.path,
-                targetName: img.filename,
-                image: img
-              };
-              if (score >= 100) {
-                return matchResult;
-              }
-              if (score > bestScore) {
-                bestScore = score;
-                bestMatch = matchResult;
-              }
+            if (!exact && !fuzzy) continue;
+            const score = _rankGalleryMatch(img, exact, current.depth === 0);
+            const matchResult = {
+              galleryPath: current.path,
+              targetName: img.filename,
+              image: img
+            };
+            if (score > RANK_GALLERY_CONTENT) {
+              return matchResult;
+            }
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatch = matchResult;
             }
           }
         }
@@ -1052,6 +1037,7 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
         showHidden: false
       });
       const subdirs = (dirResult?.files || []).filter((entry) => entry.is_dir);
+      // Visit order only: collections first keeps same-tier ties deterministic.
       subdirs.sort((a, b) => {
         const aCovers = (a.path || '').toLowerCase().includes('covers') ? 1 : 0;
         const bCovers = (b.path || '').toLowerCase().includes('covers') ? 1 : 0;
@@ -2713,8 +2699,6 @@ export const UrlLoader = {
   getCachedLibraryDir,
   remapLibraryPath,
   isLibraryLocationError,
-  reloadLibraryDir,
-  getCachedLibraryDir,
   handleLibraryRelocation,
   fetchManifest,
   getExtractorCacheKey,
