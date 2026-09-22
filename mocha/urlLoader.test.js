@@ -2494,16 +2494,16 @@ describe('K-Manga extractor', () => {
       assert.equal(KMangaExtractor.match(null), false);
     });
 
-    it('identifies and parses direct CDN image URLs', () => {
+    it('identifies and parses direct CDN image URLs', async () => {
       assert.equal(KMangaExtractor.isDirectUrl('https://cdn.kmanga.kodansha.com/path/to/image.jpg?token=abc'), true);
       assert.equal(KMangaExtractor.isDirectUrl('https://kmanga.kodansha.com/title/10072'), false);
 
-      const parsed = KMangaExtractor.parseDirectUrl('https://cdn.kmanga.kodansha.com/path/to/image.jpg?token=abc');
-      assert.equal(parsed.provider, 'K-Manga');
+      const parsed = await KMangaExtractor.parseDirectUrl('https://cdn.kmanga.kodansha.com/path/to/image.jpg?token=abc');
+      assert.equal(parsed.provider, 'K MANGA');
       assert.ok(parsed.filename.endsWith('.jpg'));
       assert.equal(parsed.url, 'https://cdn.kmanga.kodansha.com/path/to/image.jpg?token=abc');
 
-      assert.equal(KMangaExtractor.parseDirectUrl('https://example.com/image.jpg'), null);
+      assert.equal(await KMangaExtractor.parseDirectUrl('https://example.com/image.jpg'), null);
     });
   });
 
@@ -2564,7 +2564,7 @@ describe('K-Manga extractor', () => {
 
   describe('episode extraction', () => {
     it('extracts episode with descramble descriptors and metadata', async () => {
-      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Attack on Titan","episode_id_list":[311334,311335],"author_text":"Hajime Isayama","synopsis":"A story about titans.","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg"},{"episode_id":311334,"episode_name":"Episode 01"}]</script></html>';
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Attack on Titan","episode_id_list":[311334,311335],"author_text":"Hajime Isayama","synopsis":"A story about titans.","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg"},{"episode_id":311334,"episode_name":"01","thumbnail_image_url":"https://cdn.kmanga.kodansha.com/thumb/ep311334.png"}]</script></html>';
       const viewerResponse = {
         data: {
           viewer_pages: {
@@ -2586,17 +2586,22 @@ describe('K-Manga extractor', () => {
         }
       );
 
-      assert.equal(result.provider, 'K-Manga');
-      assert.equal(result.title, 'Attack on Titan - Episode 01');
+      assert.equal(result.provider, 'K MANGA');
+      assert.equal(result.title, 'Attack on Titan - Ch. 01');
       assert.equal(result.gallery.id, 'kmanga-311334');
-      assert.equal(result.images.length, 2);
-      assert.equal(result.images[0].descramble.algorithm, 'tile-grid');
-      assert.equal(result.images[0].descramble.cols, 4);
-      assert.equal(result.images[0].descramble.rows, 4);
-      assert.equal(result.images[0].descramble.order.length, 16);
+      // 2 pages + 1 cover thumbnail = 3 images
+      assert.equal(result.images.length, 3);
+      // First image is the cover thumbnail (no descramble)
+      assert.equal(result.images[0].filename, '00.png');
+      assert.equal(result.images[0].descramble, undefined);
+      // Remaining images have descramble
+      assert.equal(result.images[1].descramble.algorithm, 'tile-grid');
+      assert.equal(result.images[1].descramble.cols, 4);
+      assert.equal(result.images[1].descramble.rows, 4);
+      assert.equal(result.images[1].descramble.order.length, 16);
       assert.equal(result.metadata.ComicInfo.Series, 'Attack on Titan');
       assert.equal(result.metadata.ComicInfo.Writer, 'Hajime Isayama');
-      assert.equal(result.metadata.ComicInfo.PageCount, 2);
+      assert.equal(result.metadata.ComicInfo.PageCount, 3);
       assert.equal(result.metadata.ComicInfo.Manga, 'YesAndRightToLeft');
     });
 
@@ -2617,15 +2622,25 @@ describe('K-Manga extractor', () => {
 
   describe('title/series extraction', () => {
     it('extracts series with chapter stubs from HTML', async () => {
-      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Blue Lock","episode_id_list":[100,200,300],"author_text":"Muneyuki Kaneshiro","synopsis":"Soccer manga.","title_grid_wide":"https://cdn.kmanga.kodansha.com/bluelock-cover.jpg"}]</script></html>';
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Blue Lock","episode_id_list":[100,200,300],"free_episode_count":3,"author_text":"Muneyuki Kaneshiro","synopsis":"Soccer manga.","title_grid_wide":"https://cdn.kmanga.kodansha.com/bluelock-cover.jpg"}]</script></html>';
 
       const result = await KMangaExtractor.extract(
         html,
         'https://kmanga.kodansha.com/title/5678',
-        {}
+        {
+          fetchText: async (url) => {
+            if (url.includes('/web/episode?episode_id=')) {
+              const epId = new URL(url).searchParams.get('episode_id');
+              return JSON.stringify({
+                episode: { episode_id: Number(epId), episode_name: `Ch ${epId}`, point: 0, is_page_visible: 1 }
+              });
+            }
+            return '{}';
+          }
+        }
       );
 
-      assert.equal(result.provider, 'K-Manga');
+      assert.equal(result.provider, 'K MANGA');
       assert.equal(result.isSeries, true);
       assert.equal(result.title, 'Blue Lock');
       assert.deepEqual(result.rootRelativePath, ['Blue Lock']);
@@ -2635,8 +2650,65 @@ describe('K-Manga extractor', () => {
       assert.equal(result.chapters[0].id, 'kmanga-100');
       assert.equal(result.chapters[0].sourceUrl, 'https://kmanga.kodansha.com/title/5678/episode/100');
       assert.ok(result.chapters[0].relativePath[0] === 'Blue Lock');
+      assert.ok(result.chapters[0].relativePath[1].startsWith('Ch.'));
       assert.equal(result.metadata.ComicInfo.Series, 'Blue Lock');
       assert.equal(result.metadata.ComicInfo.Writer, 'Muneyuki Kaneshiro');
+    });
+
+    it('filters out non-free episodes from title extraction', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Test Series","episode_id_list":[10,20,30,40,50],"free_episode_count":5,"author_text":"Author","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg"}]</script></html>';
+
+      let queriedIds = [];
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/9999',
+        {
+          fetchText: async (url) => {
+            if (url.includes('/web/episode?episode_id=')) {
+              const epId = Number(new URL(url).searchParams.get('episode_id'));
+              queriedIds.push(epId);
+              // First 2 are free, third is login-free (point > 0)
+              const point = epId <= 20 ? 0 : 69;
+              return JSON.stringify({
+                episode: { episode_id: epId, episode_name: `Ep ${epId}`, point, is_page_visible: point === 0 ? 1 : 0 }
+              });
+            }
+            return '{}';
+          }
+        }
+      );
+
+      assert.equal(result.chapters.length, 2);
+      assert.equal(result.chapters[0].id, 'kmanga-10');
+      assert.equal(result.chapters[1].id, 'kmanga-20');
+      // Should stop querying after hitting the first non-free episode
+      assert.equal(queriedIds.length, 3);
+    });
+
+    it('falls back to free_episode_count when episode detail API is unavailable', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Imperfect Girl","episode_id_list":[100,200,300,400],"free_episode_count":3,"author_text":"Author","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.png"},{"episode_id":100,"episode_name":"1","thumbnail_image_url":"https://cdn.kmanga.kodansha.com/thumb1.png","point":0,"is_page_visible":1}]</script></html>';
+
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/10207',
+        {
+          fetchText: async (url) => {
+            if (url.includes('/web/episode?episode_id=')) throw new Error('API unavailable');
+            return '{}';
+          }
+        }
+      );
+
+      assert.equal(result.isSeries, true);
+      assert.equal(result.chapters.length, 3);
+      assert.equal(result.chapters[0].id, 'kmanga-100');
+      assert.equal(result.chapters[1].id, 'kmanga-200');
+      assert.equal(result.chapters[2].id, 'kmanga-300');
+      // First chapter gets name and thumbnail from Nuxt data
+      assert.ok(result.chapters[0].title.includes('Ch. 1'));
+      assert.ok(result.chapters[0].cover);
+      // Subsequent chapters use sequential numbering
+      assert.ok(result.chapters[1].title.includes('Ch. 2'));
     });
 
     it('returns error when no title metadata found in HTML', async () => {
