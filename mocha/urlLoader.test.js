@@ -17,7 +17,8 @@ import {
   isDirectMediaUrl,
   findExtractor,
   recordRootMediaDownload,
-  writeGalleryMetadata
+  writeGalleryMetadata,
+  buildStubCoverRecord
 } from '../src/js/urlLoader.js';
 import * as ImgurExtractor from '../extractors/imgur.js';
 import * as MangaDexExtractor from '../extractors/mangadex.js';
@@ -440,6 +441,29 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         }]
       }, manifestEntry), /invalid image URL/);
     });
+
+  describe('buildStubCoverRecord', () => {
+    it('maps a valid cover to a Series Cover record', () => {
+      assert.deepEqual(buildStubCoverRecord({
+        url: 'https://cdn.example.test/thumb1.png',
+        filename: 'Ch. 1 Cover.png'
+      }), {
+        filename: 'Ch. 1 Cover.png',
+        displayName: 'Ch. 1 Cover.png',
+        description: 'Series Cover',
+        sourceUrl: 'https://cdn.example.test/thumb1.png'
+      });
+    });
+
+    it('returns null for missing or invalid covers', () => {
+      assert.equal(buildStubCoverRecord(null), null);
+      assert.equal(buildStubCoverRecord(undefined), null);
+      assert.equal(buildStubCoverRecord({}), null);
+      assert.equal(buildStubCoverRecord({ url: '', filename: 'Cover.png' }), null);
+      assert.equal(buildStubCoverRecord({ url: 'https://cdn.example.test/cover.png', filename: '' }), null);
+      assert.equal(buildStubCoverRecord({ url: 123, filename: 'Cover.png' }), null);
+    });
+  });
 
     it('changes the module cache key when a remote extractor changes', () => {
       assert.notEqual(

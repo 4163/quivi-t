@@ -1316,6 +1316,19 @@ export async function writeGalleryMetadata(targetDir, metadata) {
   }
 }
 
+// Chapter stub cover record. Appended last so it never becomes the open
+// target, and marked Series Cover so matching ranks it below content.
+export function buildStubCoverRecord(cover) {
+  if (!cover || typeof cover.url !== 'string' || !cover.url
+    || typeof cover.filename !== 'string' || !cover.filename) return null;
+  return {
+    filename: cover.filename,
+    displayName: cover.filename,
+    description: 'Series Cover',
+    sourceUrl: cover.url
+  };
+}
+
 // The Library tree lists only direct provider children carrying gallery.json.
 // For gallery paths deeper than one tier, the intermediate folders would stay
 // invisible, so each gets a minimal marker sidecar. Markers carry no url,
@@ -1797,6 +1810,18 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
               descramble: img.descramble || undefined
             })) : [];
 
+            // Stub covers download next to the stub and record last so they
+            // never become the open target. One bad thumbnail must not block
+            // the series import, so failures only warn.
+            const stubCover = buildStubCoverRecord(chapter.cover);
+            if (stubCover) {
+              try {
+                await downloadFile(chapter.cover.url, `${chapterPath}\\${stubCover.filename}`);
+              } catch (err) {
+                console.warn('[UrlLoader] Failed to download chapter stub cover:', err);
+              }
+            }
+
             const stubSidecar = {
               url: chapter.sourceUrl,
               provider: result.provider,
@@ -1810,7 +1835,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
               },
               unresolved: chapterImages.length === 0,
               sourceUrl: chapter.sourceUrl,
-              images: chapterImages
+              images: stubCover ? [...chapterImages, stubCover] : chapterImages
             };
             await window.__TAURI__.core.invoke('write_text_file', {
               path: `${chapterPath}\\gallery.json`,
