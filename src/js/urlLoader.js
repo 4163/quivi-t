@@ -960,7 +960,7 @@ export function isDirectMediaUrl(url) {
   return false;
 }
 
-function _getGalleryMatchPriority(galleryPath, sidecar, img) {
+function _getGalleryMatchPriority(galleryPath, sidecar, img, isProviderRoot = false) {
   const isSeriesCover = img.description === 'Series Cover' || img.isSeriesCover === true;
   const pathNorm = (galleryPath || '').toLowerCase();
   const sidecarTitle = (sidecar?.title || '').toLowerCase();
@@ -976,7 +976,9 @@ function _getGalleryMatchPriority(galleryPath, sidecar, img) {
   if (!isSeriesCover) {
     // 1. Concrete content image inside a covers gallery/chapter (e.g. Covers\Japanese\Vol. 16.jpg)
     if (isCoversGallery) return 100;
-    // Concrete content image in another gallery
+    // Concrete content image inside a gallery beats the same image saved
+    // loose at the provider root (e.g. chapter 00.png beats its standalone).
+    if (isProviderRoot) return 70;
     return 80;
   }
 
@@ -1024,7 +1026,7 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
             }
 
             if (isMatch) {
-              const score = _getGalleryMatchPriority(current.path, sidecar, img);
+              const score = _getGalleryMatchPriority(current.path, sidecar, img, current.depth === 0);
               const matchResult = {
                 galleryPath: current.path,
                 targetName: img.filename,
@@ -2113,7 +2115,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   const targetName = targetItem
     ? targetItem.filename
-    : (result.images[0]?.filename || null);
+    : (openFirstImage ? (result.images[0]?.filename || null) : null);
   return { galleryPath, result, targetName };
 }
 

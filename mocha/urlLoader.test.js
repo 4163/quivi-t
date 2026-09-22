@@ -584,6 +584,59 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.equal(noMatch, null);
     });
 
+    it('prefers the gallery copy over a root standalone sharing one source URL', async () => {
+      const thumbUrl = 'https://cdn.example.test/thumb/ep311334.png';
+      const mockDirs = {
+        'C:\\library\\Example': {
+          files: [
+            { name: 'Series - Ch. 01', path: 'C:\\library\\Example\\Series - Ch. 01', is_dir: true }
+          ]
+        },
+        'C:\\library\\Example\\Series - Ch. 01': { files: [] }
+      };
+
+      const mockFiles = {
+        'C:\\library\\Example\\gallery.json': JSON.stringify({
+          provider: 'Example',
+          isRoot: true,
+          images: [
+            { filename: 'kmanga-ep311334.png', sourceUrl: thumbUrl, url: thumbUrl }
+          ]
+        }),
+        'C:\\library\\Example\\Series - Ch. 01\\gallery.json': JSON.stringify({
+          url: 'https://example.test/title/1/episode/1',
+          provider: 'Example',
+          gallery: { id: 'example-1', relativePath: ['Series - Ch. 01'] },
+          images: [
+            { filename: '00.png', sourceUrl: thumbUrl, url: thumbUrl }
+          ]
+        })
+      };
+
+      globalThis.window.__TAURI__ = {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'read_directory') return mockDirs[args.path] || { files: [] };
+            if (cmd === 'read_text_file') {
+              if (mockFiles[args.path]) return mockFiles[args.path];
+              throw new Error('File not found');
+            }
+            throw new Error(`Unknown cmd ${cmd}`);
+          }
+        }
+      };
+
+      const match = await findMatchingGalleryImage(
+        'C:\\library\\Example',
+        thumbUrl,
+        'ep311334'
+      );
+
+      assert.ok(match);
+      assert.equal(match.galleryPath, 'C:\\library\\Example\\Series - Ch. 01');
+      assert.equal(match.targetName, '00.png');
+    });
+
     it('finds matching video entry for non-Imgur provider using generic stem', async () => {
       const mockDirs = {
         'C:\\library\\Example': {

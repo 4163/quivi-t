@@ -70,7 +70,7 @@ Images gain optional `supersedes`, an array of URLs or stems naming the prior st
 
 ### Jumping, generic default plus explicit override
 
-Default selection is gallery beats root beats series cover, with exact address beating stem. No depth counting. When an extractor provides a jump target, that target overrides the generic jump-selection logic. The explicit jump-target field name and shape are not locked here; the jump slice locks them only if tiebreak plus `targetFilename` prove insufficient. True ties between two galleries remain extractor-defined, otherwise core keeps its deterministic existing order so behavior never depends on timestamps. Placeholder eager fill stays on every jump path, and `open_first_image` keeps its current role: the cover opens the viewer only when that setting is on or the extractor target names it.
+Default selection is gallery beats root beats series cover, with exact address beating stem. No depth counting. When an extractor provides a jump target, that target overrides the generic jump-selection logic. The explicit jump-target field was deferred to the jump slice and resolved there: no new field. Tiebreak plus `targetFilename` cover every contract case. True ties between two galleries remain extractor-defined, otherwise core keeps its deterministic existing order so behavior never depends on timestamps. Placeholder eager fill stays on every jump path, and `open_first_image` keeps its current role: the cover opens the viewer only when that setting is on or the extractor target names it.
 
 ### Feed and cross-provider rules, extractor-local
 
@@ -84,7 +84,7 @@ The extractors branch README lists every accepted field and what core does with 
 
 - [x] Accept and validate `images[i].supersedes` and `chapters[i].cover`, nothing else. Both validation-only, zero behavior change. The explicit jump-target field shape is deferred to the jump slice, which decides whether a new field is needed at all.
 - [x] Feed the absorbed list into the existing cleanup match set and root prune. Done, manual checklist passed.
-- [ ] Prefer gallery over root on score ties, honor the explicit jump target, keep placeholder fill and `open_first_image` behavior.
+- [x] Prefer gallery over root on score ties, honor the explicit jump target, keep placeholder fill and `open_first_image` behavior. Done, manual checklist passed. No new jump-target field needed; tiebreak plus `targetFilename` cover it. Also fixed the new-gallery return forcing the first image when the setting is off.
 - [ ] Download chapter stub covers during series import.
 - [ ] Adopt in K MANGA first (thumbnail absorbed list, deepest-gallery jump), then MangaDex art duplicates. Leave Imgur and MANGA Plus alone.
 - [ ] Update the extractors README contract and bump touched manifest versions together.
