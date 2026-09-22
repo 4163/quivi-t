@@ -430,9 +430,9 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         'Repeat.png'
       ]);
       assert.deepEqual(gallery.images.map((image) => image.filename), [
-        '1_First.png',
-        '2_Keep.jpg.png',
-        '3_Repeat.png.png'
+        '1 - First.png',
+        '2 - Keep.jpg.png',
+        '3 - Repeat.png.png'
       ]);
       assert.deepEqual(gallery.gallery, {
         id: 'imgur-formattest',

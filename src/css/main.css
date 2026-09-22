@@ -307,6 +307,10 @@ body.resizing-col { cursor: col-resize !important; }
   background: var(--surface);
 }
 
+#file-panel:has(#file-panel-favorites.is-empty) #file-panel-header-top {
+  border-bottom: unset;
+}
+
 #file-panel-header-top #file-panel-breadcrumb {
   flex: 1;
   min-width: 0;
