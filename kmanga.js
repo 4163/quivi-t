@@ -180,7 +180,7 @@ async function extractEpisode(titleId, episodeId, html, url, context) {
   if (thumbUrl) {
     const thumbExt = (thumbUrl.match(/\.(\w+)(?:\?|$)/)?.[1] || 'png').toLowerCase();
     const padWidth = Math.max(2, Math.ceil(Math.log10(Math.max(2, viewer.pages.length + 1))));
-    images.unshift({ url: thumbUrl, filename: `${'0'.padStart(padWidth, '0')}.${thumbExt}` });
+    images.unshift({ url: thumbUrl, filename: `${'0'.padStart(padWidth, '0')}.${thumbExt}`, supersedes: [thumbUrl] });
   }
 
   const fullTitle = `${seriesName} - ${chapterLabel}`;
