@@ -979,6 +979,7 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
   try {
     const normalizedDirectUrl = normalizeUrl(directUrl);
     const targetStem = (hash ? hash.toLowerCase() : '') || extractUrlStem(directUrl);
+    const matchKeys = { urls: new Set([normalizedDirectUrl]), stems: new Set(targetStem ? [targetStem] : []) };
     const directories = [{ path: providerPath, depth: 0 }];
     let bestMatch = null;
     let bestScore = -1;
@@ -992,24 +993,11 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
         sidecar = JSON.parse(sidecarText);
         if (Array.isArray(sidecar.images)) {
           for (const img of sidecar.images) {
-            const imgSource = normalizeUrl(img.sourceUrl || '');
-            const imgFilename = img.filename || '';
-            const imgHash = (img.hash ? img.hash.toLowerCase() : '');
-
-            let exact = false;
-            let fuzzy = false;
-            if (imgSource && normalizedDirectUrl && imgSource.toLowerCase() === normalizedDirectUrl.toLowerCase()) {
-              exact = true;
-            } else if (targetStem) {
-              const sourceStem = extractUrlStem(imgSource);
-              if (sourceStem && sourceStem === targetStem) {
-                fuzzy = true;
-              } else if (imgHash && imgHash === targetStem) {
-                fuzzy = true;
-              } else if (imgFilename.toLowerCase().includes(targetStem)) {
-                fuzzy = true;
-              }
-            }
+            const verdict = matchSidecarRecord(img, matchKeys);
+            const imgFilename = img?.filename || '';
+            const exact = verdict === 'exact';
+            const fuzzy = verdict === 'fuzzy'
+              || (!exact && !!targetStem && imgFilename.toLowerCase().includes(targetStem));
 
             if (!exact && !fuzzy) continue;
             const score = _rankGalleryMatch(img, exact, current.depth === 0);
@@ -1171,6 +1159,32 @@ export function addCoverIdentifiers(sets, coverList, seriesTitle, policy = {}) {
   return sets;
 }
 
+// One record matcher for jump selection and cleanup linking. Exact means
+// a normalized address hit, fuzzy means a shared stem. Returns 'exact',
+// 'fuzzy', or 'none'. Filename substring matching stays jump-only and
+// lives with its caller.
+export function matchSidecarRecord(record, keys) {
+  if (!record) return 'none';
+  const recordUrls = [record.sourceUrl, record.url]
+    .filter((value) => typeof value === 'string' && value)
+    .map((value) => normalizeUrl(value).toLowerCase());
+  if (recordUrls.some((value) => keys.urls.has(value))) return 'exact';
+  const recordStems = new Set();
+  for (const value of [record.sourceUrl, record.url]) {
+    if (typeof value !== 'string' || !value) continue;
+    const stem = extractUrlStem(value);
+    if (stem) recordStems.add(stem);
+  }
+  for (const value of [record.hash, record.rawFileName]) {
+    if (typeof value !== 'string' || !value) continue;
+    recordStems.add(value.toLowerCase());
+    const stem = extractUrlStem(value);
+    if (stem) recordStems.add(stem);
+  }
+  if ([...recordStems].some((stem) => keys.stems.has(stem))) return 'fuzzy';
+  return 'none';
+}
+
 // A standalone whose recorded address matches is the same file even when
 // the gallery renamed it, and host variants of one address share a stem
 // even when the full URLs differ.
@@ -1180,31 +1194,13 @@ async function linkRootSidecarRecords(providerPath, sets) {
       path: `${providerPath}\\gallery.json`
     });
     const sidecar = JSON.parse(sidecarText);
-    if (sidecar && Array.isArray(sidecar.images)) {
-      for (const record of sidecar.images) {
-        if (!record) continue;
-        const recordUrls = [record.sourceUrl, record.url]
-          .filter((value) => typeof value === 'string' && value)
-          .map((value) => normalizeUrl(value).toLowerCase());
-        const recordStems = new Set();
-        for (const value of [record.sourceUrl, record.url]) {
-          if (typeof value !== 'string' || !value) continue;
-          const stem = extractUrlStem(value);
-          if (stem) recordStems.add(stem);
+      if (sidecar && Array.isArray(sidecar.images)) {
+        for (const record of sidecar.images) {
+          if (matchSidecarRecord(record, sets) === 'none') continue;
+          if (record.filename) sets.filenames.add(record.filename.toLowerCase());
+          if (record.rawFileName) sets.filenames.add(record.rawFileName.toLowerCase());
         }
-        for (const value of [record.hash, record.rawFileName]) {
-          if (typeof value !== 'string' || !value) continue;
-          recordStems.add(value.toLowerCase());
-          const stem = extractUrlStem(value);
-          if (stem) recordStems.add(stem);
-        }
-        const linked = recordUrls.some((value) => sets.urls.has(value))
-          || [...recordStems].some((stem) => sets.stems.has(stem));
-        if (!linked) continue;
-        if (record.filename) sets.filenames.add(record.filename.toLowerCase());
-        if (record.rawFileName) sets.filenames.add(record.rawFileName.toLowerCase());
       }
-    }
   } catch {
     // No root sidecar or unreadable; stem and filename matching still applies.
   }
@@ -2711,6 +2707,7 @@ export const UrlLoader = {
   findMatchingGalleryBySourceUrl,
   buildMatchSets,
   addCoverIdentifiers,
+  matchSidecarRecord,
   cleanupMatchingRawFiles,
   cleanupMatchingProviderEntries,
   PREFETCH_START_THRESHOLD_PERCENT,
