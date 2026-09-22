@@ -1,7 +1,6 @@
 # QuiviT Implementation Plan
 
 - `.agents/architecture-state.md`: current module map and verification checklist.
-- `.agents/implemented.md`: shipped, verified work. Port completed slices there when they leave this plan.
 
 ## Work Plan
 

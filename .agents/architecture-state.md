@@ -12,7 +12,7 @@ Edit it only when a change does one of these:
 - changes a cross-module contract (state machine vs UI, IPC shape, config-file roles, window-sizing source of truth)
 
 Do **not** add:
-- features, bug fixes, or UX polish. Put those in `implemented.md` and, if user-facing, `README.md`
+- features, bug fixes, or UX polish. If user-facing, put those in `README.md`
 - implementation details (timers, cache sizes, function names, hot-path tricks) unless the detail *is* the contract
 - line counts, commit hashes, slice history, or "we now..." narratives
 - planned or target architecture. That stays in the work plan

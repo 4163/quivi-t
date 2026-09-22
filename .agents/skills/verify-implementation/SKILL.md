@@ -58,15 +58,6 @@ Each checklist item must be human-readable and self-contained so a tester with n
 
 ### 4. Report and await user signoff
 
-Do not automatically port entries to `.agents/implemented.md` or declare the slice finished.
+Do not declare the slice finished.
 
 Stop here. Present the results of the static checks and the manual runtime checklist to the user. Wait for the user to explicitly confirm that the checks passed and that the slice is approved for finalization.
-
-### 5. Documentation porting (Only after explicit approval)
-
-Execute this step **only** when the user explicitly instructs you to finalize, port, or mark the work as done.
-
-- Check `.agents/additions.md` for items completed in this slice. Port each completed item to `.agents/implemented.md`, preserving its description and any implementation notes worth keeping.
-- For work not tracked in `additions.md` (ad-hoc fixes, refactors, user-requested changes), add a corresponding entry to `.agents/implemented.md` so the record stays complete.
-
-Skip this step only when the slice is purely internal (skill edits, agent config, documentation-only changes with no app behavior).
