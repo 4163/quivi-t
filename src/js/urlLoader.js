@@ -20,14 +20,11 @@
  * - Coordinates page fetching, pagination, gallery sidecars, and direct media.
  *
  * Download lifecycle:
- * - Queue items track a galleryIndex so the viewport filter can decide
- *   which downloads are visible + buffer.
- * - On navigation jump, cancel_download aborts every in-flight HTTP
- *   stream and starts the new active image in a fresh generation.
- * - On directory exit, the queue is cancelled and the active download
- *   is aborted.
- * - Image bridging: isPlaceholderFile() lets Core hold the previous
- *   viewer image until the target download completes.
+ * - Downloads are viewport-aware: only visible images plus a buffer are
+ *   scheduled. Navigation cancels in-flight work and restarts from the
+ *   new position. Directory exit cancels everything.
+ * - The viewer holds the previous image until the target download
+ *   completes, so the screen is never blank during a jump.
  */
 
 import { BoundedMap } from './services/cache.js';
@@ -1159,8 +1156,7 @@ export function addCoverIdentifiers(sets, coverList, seriesTitle, policy = {}) {
 
 // One record matcher for jump selection and cleanup linking. Exact means
 // a normalized address hit, fuzzy means a shared stem. Returns 'exact',
-// 'fuzzy', or 'none'. Filename substring matching stays jump-only and
-// lives with its caller.
+// 'fuzzy', or 'none'.
 export function matchSidecarRecord(record, keys) {
   if (!record) return 'none';
   const recordUrls = [record.sourceUrl, record.url]
