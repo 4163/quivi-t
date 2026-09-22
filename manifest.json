@@ -16,7 +16,7 @@
       "id": "mangadex",
       "name": "MangaDex",
       "libraryPath": "MangaDex",
-      "version": 5,
+      "version": 6,
       "patterns": [
         "^https?://(www\\.)?mangadex\\.(org|cc)/(chapter|title)/[0-9a-fA-F-]{36}",
         "^blob:https?://(www\\.)?mangadex\\.(org|cc)/",

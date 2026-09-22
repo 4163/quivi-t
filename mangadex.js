@@ -272,7 +272,10 @@ export async function parseDirectUrl(url, context = {}) {
   const coverMatch = url.match(MANGADEX_COVER_RE);
   if (coverMatch) {
     const mangaId = coverMatch[1];
-    const rawFilename = coverMatch[2];
+    // Resized variants carry a size suffix (file.jpg.512.jpg). Normalize to
+    // the canonical file so direct imports link their gallery copies.
+    const sizedMatch = coverMatch[2].match(/^(.+\.(?:jpg|jpeg|png|gif|webp|avif|bmp))\.\d+\.(?:jpg|jpeg|png|gif|webp|avif|bmp)$/i);
+    const rawFilename = sizedMatch ? sizedMatch[1] : coverMatch[2];
     const dotIdx = rawFilename.lastIndexOf('.');
     const ext = dotIdx > 0 ? rawFilename.slice(dotIdx).toLowerCase() : '.jpg';
     const hash = dotIdx > 0 ? rawFilename.slice(0, dotIdx) : rawFilename;
