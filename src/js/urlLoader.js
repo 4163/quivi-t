@@ -998,10 +998,8 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
         if (Array.isArray(sidecar.images)) {
           for (const img of sidecar.images) {
             const verdict = matchSidecarRecord(img, matchKeys);
-            const imgFilename = img?.filename || '';
             const exact = verdict === 'exact';
-            const fuzzy = verdict === 'fuzzy'
-              || (!exact && !!targetStem && imgFilename.toLowerCase().includes(targetStem));
+            const fuzzy = verdict === 'fuzzy';
 
             if (!exact && !fuzzy) continue;
             const score = _rankGalleryMatch(img, exact, current.depth === 0);
@@ -1029,12 +1027,8 @@ export async function findMatchingGalleryImage(providerPath, directUrl, hash) {
         showHidden: false
       });
       const subdirs = (dirResult?.files || []).filter((entry) => entry.is_dir);
-      // Visit order only: collections first keeps same-tier ties deterministic.
-      subdirs.sort((a, b) => {
-        const aCovers = (a.path || '').toLowerCase().includes('covers') ? 1 : 0;
-        const bCovers = (b.path || '').toLowerCase().includes('covers') ? 1 : 0;
-        return bCovers - aCovers;
-      });
+      // Visit order only: plain path order keeps same-tier ties deterministic.
+      subdirs.sort((a, b) => String(a.path || '').localeCompare(String(b.path || '')));
       for (const entry of subdirs) {
         directories.push({ path: entry.path, depth: current.depth + 1 });
       }

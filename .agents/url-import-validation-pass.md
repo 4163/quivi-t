@@ -28,12 +28,12 @@ Verdict: three live candidates, one already resolved.
 
 ## Checklist
 
-- [ ] Decide the header question: extend L3-8 with the ownership split or formally accept the README as entry point.
-- [ ] Bless or remove the filename-substring jump rule. If blessed, add one README line. If removed, prove the suite plus a manual direct-link pass.
-- [ ] Bless or remove the covers-first visit order, same proof either way.
-- [ ] Route `recordRootMediaDownload` dedup through `buildMatchSets`. Proof: full mocha green, no manual pass needed (behavior-preserving by construction).
+- [x] Decide the header question: extend L3-8 with the ownership split or formally accept the README as entry point. Done: header extended, manual pass confirmed.
+- [x] Bless or remove the filename-substring jump rule. Removed: records that cannot match by address or stem are poorly recorded, per Extractors Define. Suite green, one stale expectation updated openly.
+- [x] Bless or remove the covers-first visit order. Removed name sniffing; ties break by plain path order, documented as stability only. Same proof as above.
+- [x] Route `recordRootMediaDownload` dedup through `buildMatchSets`. Done: suite green at 145, manual pass confirmed.
 - [ ] Decide root-sidecar growth: records accumulate per distinct URL with dedup on re-download and removal only when emptied. Cap it, TTL it, or record acceptance of unbounded growth.
 - [ ] Decide orchestrator coverage: mocked-Tauri mocha for the import and resolve paths, or written acceptance of the manual-plus-blocked-e2e posture.
-- [ ] Hygiene sweep: delete `e2e-url.log` and `e2e-url2.log`, decide the fate of each Temp throwaway proof (`mdx-probe`, `rederive-kmanga`, `rederive-art`, `sized-variant`), and confirm scratch binaries (`kmanga-page1.jpg`, descrambled variant) stay or go.
-- [ ] Confirm the three docs agree after this pass and restate which one wins on conflict. Agreement verified: contract, checklist, and README state the same jump tiers, clearing rule, and field names. On conflict the extractors README wins, since every doc already names it the sole contract.
+- [ ] Hygiene sweep: Temp logs and session throwaways deleted. Open: scratch binaries (`kmanga-page1.jpg`, descrambled variant) stay or go, your call.
+- [x] Confirm the three docs agree after this pass and restate which one wins on conflict. Agreement verified: contract, checklist, and README state the same jump tiers, clearing rule, and field names. On conflict the extractors README wins, since every doc already names it the sole contract.
 - [ ] Enforce version-with-script pairing on the next extractor commit. Nothing outstanding today.

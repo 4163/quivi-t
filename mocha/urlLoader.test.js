@@ -675,7 +675,7 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.equal(match.targetName, 'Cover.jpg');
     });
 
-    it('adheres to 3-tier priority order: content cover > covers root cover > series root cover', async () => {
+    it('prefers content over covers and breaks cover ties by path order', async () => {
       const mockDirs = {
         'C:\\library\\MangaDex': {
           files: [
@@ -754,7 +754,7 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       assert.equal(match1.galleryPath, 'C:\\library\\MangaDex\\Akebi (Covers)\\Japanese');
       assert.equal(match1.targetName, 'Vol. 16.jpg');
 
-      // 2. Remove child gallery Vol. 16.jpg: Priority 2 wins (Akebi (Covers)/Cover.jpg over Akebi/Cover.jpg)
+      // 2. Remove child gallery Vol. 16.jpg: cover tie breaks by path order (Akebi/Cover.jpg sorts before Akebi (Covers)/Cover.jpg)
       delete mockFiles['C:\\library\\MangaDex\\Akebi (Covers)\\Japanese\\gallery.json'];
       const match2 = await findMatchingGalleryImage(
         'C:\\library\\MangaDex',
@@ -762,7 +762,7 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         'hash16'
       );
       assert.ok(match2);
-      assert.equal(match2.galleryPath, 'C:\\library\\MangaDex\\Akebi (Covers)');
+      assert.equal(match2.galleryPath, 'C:\\library\\MangaDex\\Akebi');
       assert.equal(match2.targetName, 'Cover.jpg');
 
       // 3. Remove covers collection: Priority 3 wins (Akebi/Cover.jpg)
