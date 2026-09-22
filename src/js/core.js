@@ -221,8 +221,10 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
 
     // Image bridging: if the target file is a 0-byte placeholder awaiting
     // download, keep the previous viewer image until the download completes.
-    if (_placeholderCheck && _placeholderCheck(file.path)) {
-      newSrc = _state.src;
+    const isPlaceholder = (file.size === 0) || (_placeholderCheck && _placeholderCheck(file.path));
+    if (isPlaceholder) {
+      const sameDir = _state.directory && file.path && file.path.toLowerCase().startsWith(_state.directory.toLowerCase());
+      newSrc = (sameDir && _state.src) ? _state.src : '';
     }
   }
 

@@ -17,7 +17,8 @@ import {
   hasLibraryEntries,
   deleteLibraryEntry,
   getProviderCollapsed,
-  saveProviderCollapsed
+  saveProviderCollapsed,
+  orderProviders
 } from './libraryStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
@@ -25,6 +26,8 @@ import { BoundedMap, BoundedSet } from '../services/cache.js';
 import {
   setVisibleRange as setDownloadVisibleRange,
   cancelGalleryDownloads,
+  forgetDeletedLibraryEntry,
+  fetchManifest,
   getGalleryDownloadStatus,
   retryGalleryDownload,
   reloadLibraryDir,
@@ -1091,6 +1094,9 @@ function buildLibraryEntry(item, depth = 0) {
           if (remapped === item.path) throw err;
           await deleteLibraryEntry(remapped);
         });
+        if (typeof forgetDeletedLibraryEntry === 'function') {
+          await forgetDeletedLibraryEntry(item.path).catch(() => {});
+        }
         await renderLibrary();
 
         const parentOfTarget = targetDir.includes('/') ? targetDir.substring(0, targetDir.lastIndexOf('/')) : '';
@@ -1153,8 +1159,19 @@ function buildLibraryEntry(item, depth = 0) {
 
 export async function renderLibrary() {
   if (!libraryPanelEl) return;
-  const tree = await fetchLibraryTree();
+  const tree = orderProviders(await fetchLibraryTree());
   const hasAny = hasLibraryEntries(tree);
+
+  // Display names come from the manifest registry (libraryPath -> name),
+  // so renaming a provider never needs core changes. Directory names stay
+  // the keys for collapse state, element ids, and dataset attributes.
+  let displayNames = null;
+  try {
+    const manifest = await fetchManifest();
+    displayNames = new Map((manifest?.extractors || []).map((e) => [e.libraryPath, e.name]));
+  } catch {
+    displayNames = null;
+  }
 
   libraryPanelEl.classList.toggle('is-empty', !hasAny);
   libraryPanelEl.innerHTML = '';
@@ -1171,6 +1188,8 @@ export async function renderLibrary() {
     const isProvCollapsed = getProviderCollapsed(provider.name);
     if (!isProvCollapsed) allCollapsed = false;
 
+    const displayName = (displayNames && displayNames.get(provider.name)) || provider.name;
+
     const provHeader = document.createElement('div');
     provHeader.className = 'library-provider-header';
     provHeader.tabIndex = 0;
@@ -1178,14 +1197,19 @@ export async function renderLibrary() {
     provHeader.setAttribute('aria-expanded', isProvCollapsed ? 'false' : 'true');
     provHeader.setAttribute('aria-controls', `library-list-${provider.name}`);
     provHeader.dataset.provider = provider.name;
-    provHeader.innerHTML = `<span>${provider.name}</span><span class="toggle-icon">${isProvCollapsed ? '▼' : '▲'}</span>`;
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = displayName;
+    const toggleSpan = document.createElement('span');
+    toggleSpan.className = 'toggle-icon';
+    toggleSpan.textContent = isProvCollapsed ? '▼' : '▲';
+    provHeader.append(labelSpan, toggleSpan);
 
     const listUl = document.createElement('ul');
     listUl.id = `library-list-${provider.name}`;
     listUl.className = 'library-provider-list';
     if (isProvCollapsed) listUl.classList.add('collapsed');
     listUl.setAttribute('role', 'listbox');
-    listUl.setAttribute('aria-label', `${provider.name} library`);
+    listUl.setAttribute('aria-label', `${displayName} library`);
 
     const toggleProv = () => {
       const nowCollapsed = !listUl.classList.contains('collapsed');
@@ -1207,14 +1231,9 @@ export async function renderLibrary() {
       }
     });
 
-    const appendNodes = (nodes, depth) => {
-      for (const node of nodes) {
-        if (!node.is_dir && depth > 0) continue;
-        listUl.appendChild(buildLibraryEntry(node, depth));
-        if (node.children?.length) appendNodes(node.children, depth + 1);
-      }
-    };
-    appendNodes(provider.nodes, 0);
+    for (const node of provider.nodes) {
+      listUl.appendChild(buildLibraryEntry(node, 0));
+    }
 
     libraryPanelEl.appendChild(provHeader);
     libraryPanelEl.appendChild(listUl);
@@ -1237,12 +1256,26 @@ function updateLibrarySelection(state) {
   if (!items.length) return;
 
   const containerPath = state.mode === 'archive' ? state.archivePath : state.directory;
-  const isContainerInLibrary = containerPath && items.some(li => _pathsEqual(li.dataset.path, containerPath));
+  const containerNorm = containerPath ? containerPath.replace(/\\/g, '/').toLowerCase() : '';
 
+  // Find the deepest library item that is either the current directory or an
+  // ancestor of it. This keeps provider entries highlighted while browsing
+  // subdirectories (e.g. chapters inside a manga folder).
   let activePath = '';
-  if (isContainerInLibrary) {
-    activePath = containerPath;
-  } else {
+  if (containerNorm) {
+    let bestLen = 0;
+    for (const li of items) {
+      const itemNorm = (li.dataset.path || '').replace(/\\/g, '/').toLowerCase();
+      if (!itemNorm) continue;
+      if (containerNorm === itemNorm || containerNorm.startsWith(itemNorm + '/')) {
+        if (itemNorm.length > bestLen) {
+          bestLen = itemNorm.length;
+          activePath = li.dataset.path;
+        }
+      }
+    }
+  }
+  if (!activePath) {
     const entry = state.list?.[state.index];
     if (entry && !entry.is_parent) {
       activePath = entry.path;
@@ -2159,6 +2192,15 @@ export function initFilePanel(deps) {
   }, { passive: true });
 
   Core.onStateChange(() => renderFilePanel(Core.getState()));
+
+  // Deferred video support lists mp4 only in Library/gallery dirs, so icon:mp4
+  // never warms through normal browsing. Prime it here through the shared
+  // per-ext path so the first gallery open paints sync like every other ext.
+  try {
+    if (window.__TAURI__ && !iconCache.has('mp4') && localStorage.getItem('icon:mp4') === null) {
+      fetchNativeIcon('', 'mp4', 'small');
+    }
+  } catch (e) {}
 
   // When focus leaves the file panel entirely (e.g. user clicks the viewport),
   // surrender keyboard ownership so arrow keys revert to the viewer.

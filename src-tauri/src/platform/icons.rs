@@ -108,6 +108,10 @@ pub fn warmup() {
                     let _ = DestroyIcon(shfi.hIcon);
                 }
             }
+            // Deferred video support lists mp4 only in Library/gallery dirs,
+            // so its per-ext icon never warms through normal browsing. Prime
+            // it here through the shared dummy path (no filesystem access).
+            let _ = get_cached_native_icon_png_with_size("", "mp4", IconSize::Small);
         });
     }
 }

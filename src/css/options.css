@@ -17,7 +17,7 @@ body > * {
   border-bottom: 1px solid var(--border);
   position: relative;
   z-index: 30;
-  box-shadow: 0 8px 0 var(--surface);
+  box-shadow: -16px 8px 0 var(--surface);
 }
 
 .tab-btn {

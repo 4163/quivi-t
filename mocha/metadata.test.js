@@ -13,10 +13,56 @@ if (typeof window === 'undefined') {
   };
 }
 
+if (typeof DOMParser === 'undefined') {
+  globalThis.DOMParser = class DOMParser {
+    parseFromString(text) {
+      return {
+        getElementsByTagNameNS: (_ns, tag) => {
+          const match = text.match(new RegExp(`<(?:dc:)?${tag}[^>]*>([^<]+)<\\/(?:dc:)?${tag}>`, 'i'));
+          return match ? [{ textContent: match[1] }] : [];
+        },
+        querySelector: (sel) => {
+          if (sel === 'parsererror') {
+            if (text.startsWith('<unclosed')) return {};
+            return null;
+          }
+          if (sel.startsWith('meta[')) {
+            const m = sel.match(/name="([^"]+)"/);
+            if (m) {
+              const metaRegex = new RegExp(`<meta[^>]*name=["']${m[1]}["'][^>]*content=["']([^"']+)["']`, 'i');
+              const match = text.match(metaRegex);
+              if (match) {
+                return {
+                  textContent: match[1],
+                  getAttribute: (attr) => (attr === 'content' ? match[1] : '')
+                };
+              }
+            }
+            return null;
+          }
+          const tags = sel.split(',').map(s => s.trim().replace(/^dc\\:/i, ''));
+          for (const t of tags) {
+            const match = text.match(new RegExp(`<(?:dc:)?${t}[^>]*>([^<]+)<\\/(?:dc:)?${t}>`, 'i'));
+            if (match) {
+              return {
+                textContent: match[1],
+                getAttribute: () => ''
+              };
+            }
+          }
+          return null;
+        }
+      };
+    }
+  };
+}
+
 const {
   findMetadataEntry,
   parseComicInfoJson,
-  parseGalleryMetaJson
+  parseGalleryMetaJson,
+  parseMetadataText,
+  fetchDirectoryMetadata
 } = await import('../src/js/metadata.js');
 const { isMetadataEntryName } = await import('../src/js/services/metadataFiles.js');
 
@@ -201,5 +247,110 @@ describe('Metadata extraction and parsing', () => {
       assert.equal(parseGalleryMetaJson(undefined), null);
       assert.equal(parseGalleryMetaJson('not-json'), null);
     });
+
+    it('incorporates Demographic into Tags without duplicating existing tag', () => {
+      const withDemo = parseComicInfoJson({
+        Title: 'Test Manga',
+        Demographic: 'Seinen',
+        Tags: 'Action, Slice of Life'
+      });
+      assert.equal(withDemo.tags, 'Seinen, Action, Slice of Life');
+
+      const alreadyHasDemo = parseComicInfoJson({
+        Title: 'Test Manga',
+        Demographic: 'Shounen',
+        Tags: 'Shounen, Comedy, School'
+      });
+      assert.equal(alreadyHasDemo.tags, 'Shounen, Comedy, School');
+
+      const onlyDemo = parseComicInfoJson({
+        Title: 'Test Manga',
+        Demographic: 'Josei'
+      });
+      assert.equal(onlyDemo.tags, 'Josei');
+    });
+  });
+
+  describe('parseMetadataText', () => {
+    it('parses comicinfo.json and meta.json text formats', () => {
+      const comicJson = JSON.stringify({
+        ComicInfo: {
+          Title: 'Story Arc',
+          Writer: 'Author Name',
+          Genre: 'Sci-Fi'
+        }
+      });
+      const meta = parseMetadataText(comicJson, 'comicinfo.json');
+      assert.equal(meta.title, 'Story Arc');
+      assert.equal(meta.writer, 'Author Name');
+      assert.equal(meta.genre, 'Sci-Fi');
+
+      const metaJson = JSON.stringify({
+        title: 'Gallery Title',
+        tags: [{ type: 'artist', name: 'Illustrator' }]
+      });
+      const galleryMeta = parseMetadataText(metaJson, 'meta.json');
+      assert.equal(galleryMeta.title, 'Gallery Title');
+      assert.equal(galleryMeta.writer, 'Illustrator');
+    });
+
+    it('parses ComicInfo.xml and metadata.opf text formats', () => {
+      const xml = '<?xml version="1.0"?><ComicInfo><Title>XML Title</Title><Writer>XML Author</Writer></ComicInfo>';
+      const meta = parseMetadataText(xml, 'ComicInfo.xml');
+      assert.equal(meta.title, 'XML Title');
+      assert.equal(meta.writer, 'XML Author');
+
+      const opf = '<package><metadata><dc:title>OPF Title</dc:title><dc:creator>OPF Creator</dc:creator></metadata></package>';
+      const opfMeta = parseMetadataText(opf, 'metadata.opf');
+      assert.equal(opfMeta.title, 'OPF Title');
+      assert.equal(opfMeta.writer, 'OPF Creator');
+    });
+
+    it('returns null on invalid or empty text inputs', () => {
+      assert.equal(parseMetadataText('', 'comicinfo.json'), null);
+      assert.equal(parseMetadataText(null, 'comicinfo.json'), null);
+      assert.equal(parseMetadataText('invalid json', 'comicinfo.json'), null);
+      assert.equal(parseMetadataText('<unclosed', 'comicinfo.xml'), null);
+      assert.equal(parseMetadataText('hello', 'unknown.ext'), null);
+    });
+  });
+
+  describe('fetchDirectoryMetadata', () => {
+    it('returns null when directory is null, empty or invoke returns null', async () => {
+      assert.equal(await fetchDirectoryMetadata(null), null);
+      assert.equal(await fetchDirectoryMetadata(''), null);
+      assert.equal(await fetchDirectoryMetadata('C:\\some\\dir'), null);
+    });
+
+    it('fetches and parses directory metadata via Tauri invoke', async () => {
+      const origInvoke = window.__TAURI__.core.invoke;
+      window.__TAURI__.core.invoke = async (cmd, args) => {
+        if (cmd === 'find_directory_metadata') {
+          return {
+            meta_path: 'C:\\Library\\MangaDex\\Series\\comicinfo.json',
+            dir_path: 'C:\\Library\\MangaDex\\Series',
+            content: JSON.stringify({
+              ComicInfo: {
+                Title: 'Series Title',
+                Writer: 'Author'
+              }
+            })
+          };
+        }
+        return origInvoke(cmd, args);
+      };
+
+      try {
+        const result = await fetchDirectoryMetadata('C:\\Library\\MangaDex\\Series');
+        assert.notEqual(result, null);
+        assert.equal(result.meta.title, 'Series Title');
+        assert.equal(result.meta.writer, 'Author');
+        assert.equal(result.metaPath, 'C:\\Library\\MangaDex\\Series\\comicinfo.json');
+        assert.equal(result.dirPath, 'C:\\Library\\MangaDex\\Series');
+      } finally {
+        window.__TAURI__.core.invoke = origInvoke;
+      }
+    });
   });
 });
+
