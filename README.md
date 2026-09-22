@@ -146,6 +146,14 @@ Extractors declare dependencies and capabilities in their first two lines:
 }
 ```
 
+An image may name prior standalone files it absorbs:
+
+```js
+{ url: 'https://cdn.example.com/00.png', filename: '00.png', supersedes: ['https://cdn.example.com/thumb.png'] }
+```
+
+When the gallery imports, each absorbed standalone is deleted, file plus its Library records. Use this when the gallery renames a previously imported direct URL, such as a thumbnail arriving as page zero. List addresses or stems; matching tries exact address first, then stems.
+
 `metadata` serialization: an object writes `comicinfo.json`. A string starting with `<` writes `comicinfo.xml`. An object with `{ filename, content }` writes a custom file.
 
 ### Series
@@ -169,6 +177,7 @@ Series results index multi-chapter manga. Chapters are stubs resolved lazily whe
       title: 'Ch. 1 - Intro',
       sourceUrl: 'https://example.com/chapter/1',  // resolved via extract() when opened
       relativePath: ['Series Title', 'English', 'Vol. 01', 'Ch. 01 - Intro'],
+      cover: { url: '...', filename: 'Ch. 1 Cover.png' },  // optional, downloaded next to the stub
       metadata: { ComicInfo: { ... } }    // optional, written to the chapter folder
     }
   ]
@@ -179,9 +188,17 @@ Opening an unresolved chapter calls `extract()` on its `sourceUrl` and refreshes
 
 ### Cross-provider chapters
 
-A chapter stub can point at another provider's URL. The app resolves it through whichever manifest entry matches that URL. The stub author never reimplements the other site's extractor. MangaDex uses this for MANGA Plus pointers (suffixed ` (MANGA Plus)`) and K-Manga pointers (suffixed ` (K-Manga)`). Stubs pointing at unmatched hosts are skipped.
+A chapter stub can point at another provider's URL. The app resolves it through whichever manifest entry matches that URL. The stub author never reimplements the other site's extractor. MangaDex uses this for MANGA Plus pointers (suffixed ` (MANGA Plus)`) and K MANGA pointers (suffixed ` (K MANGA)`). Stubs pointing at unmatched hosts are skipped.
 
 When a site exposes hosted and external chapters through separate feeds, merge them and dedupe by chapter id. MangaDex needs this because its hosted feed and external-link feed return disjoint sets.
+
+### Clearing and jumping
+
+These rules are the same for every site. The extractor declares facts, the app decides.
+
+Clearing means deleted: the file plus its Library records. A series import removes standalone chapter folders it absorbs. A gallery import removes absorbed standalone files named in `supersedes`. Finished chapters and covers are never touched by a re-import. There is no file relocation.
+
+Jumping picks where an import lands. A gallery copy beats a loose standalone, which beats a series cover. An exact address match beats a stem match. `targetFilename` names the open target and wins over everything. Otherwise the open-first-image setting governs.
 
 ## Folder metadata model
 
