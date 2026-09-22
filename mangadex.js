@@ -408,7 +408,7 @@ export async function extract(html, url, context = {}) {
     const plusId = parseViewerId(extUrl);
     const kmangaId = parseKmangaEpisodeId(extUrl);
     if (plusId || kmangaId) {
-      const providerName = plusId ? 'MANGA Plus' : 'K-Manga';
+      const providerName = plusId ? 'MANGA Plus' : 'K MANGA';
       return { error: `This chapter is hosted on ${providerName}. Import it as part of the full series to create a stub that resolves on open.` };
     }
     throw new Error('This chapter is hosted on an external service and cannot be downloaded directly from MangaDex');
@@ -635,7 +635,7 @@ export async function extractTitle(mangaId, url, context = {}) {
       if (seenExternalUrls.has(externalUrl)) continue;
       seenExternalUrls.add(externalUrl);
     }
-    const externalProvider = isExternalPlus ? 'MANGA Plus' : isExternalKmanga ? 'K-Manga' : null;
+    const externalProvider = isExternalPlus ? 'MANGA Plus' : isExternalKmanga ? 'K MANGA' : null;
 
     const langCode = entry.attributes?.translatedLanguage || 'other';
     const langName = resolveLanguageName(langCode);

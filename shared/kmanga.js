@@ -1,8 +1,8 @@
 /**
- * shared/kmanga.js: K-Manga viewer client shared by extractors.
+ * shared/kmanga.js: K MANGA viewer client shared by extractors.
  *
  * Pure functions of (episodeId, context). No match/extract exports,
- * never a manifest entry. Consumed by the K-Manga entry shell and
+ * never a manifest entry. Consumed by the K MANGA entry shell and
  * by mangadex.js for externalUrl chapters.
  */
 
@@ -82,7 +82,7 @@ export async function fetchViewerPages(episodeId, context = {}) {
   const fetchText = context?.fetchText;
   const fetchBytes = context?.fetchBytes;
   if (typeof fetchText !== 'function' && typeof fetchBytes !== 'function') {
-    throw new Error('K-Manga requires network proxy for API requests.');
+    throw new Error('K MANGA requires network proxy for API requests.');
   }
 
   const params = { episode_id: String(episodeId) };
@@ -102,19 +102,19 @@ export async function fetchViewerPages(episodeId, context = {}) {
       text = new TextDecoder().decode(bytes);
     }
   } catch (err) {
-    throw new Error(`K-Manga viewer request failed: ${err?.message || err}`);
+    throw new Error(`K MANGA viewer request failed: ${err?.message || err}`);
   }
 
   let data;
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error('Failed to parse K-Manga viewer response');
+    throw new Error('Failed to parse K MANGA viewer response');
   }
 
   if (data?.response_code !== undefined && data.response_code !== 0 && (data?.error_code || data?.error_message)) {
     const msg = data.error_message || `Error code: ${data.error_code || data.response_code}`;
-    throw new Error(`K-Manga: ${msg}`);
+    throw new Error(`K MANGA: ${msg}`);
   }
 
   const result = data?.data?.viewer_pages || data?.viewer_pages || data;
@@ -133,12 +133,62 @@ export async function fetchViewerPages(episodeId, context = {}) {
   }
 
   if (pages.length === 0) {
-    throw new Error('K-Manga viewer returned no page data - the episode may require a rental or subscription.');
+    throw new Error('K MANGA viewer returned no page data - the episode may require a rental or subscription.');
   }
 
   const nextEpisode = result?.next_episode?.episode_id || data?.next_episode?.episode_id || null;
 
   return { scrambleSeed, pages, nextEpisode };
+}
+
+// -- Episode detail API (lightweight, no auth required) --
+
+export async function fetchEpisodeDetail(episodeId, context = {}) {
+  const fetchText = context?.fetchText;
+  const fetchBytes = context?.fetchBytes;
+  if (typeof fetchText !== 'function' && typeof fetchBytes !== 'function') {
+    throw new Error('K MANGA requires network proxy for API requests.');
+  }
+
+  const params = { episode_id: String(episodeId) };
+  const hash = await buildKmangaHash(params);
+  const headers = buildKmangaHeaders(hash);
+
+  await new Promise((r) => setTimeout(r, RATE_LIMIT_MS));
+
+  const apiUrl = `${SE_API_BASE}/web/episode?episode_id=${episodeId}`;
+
+  let text;
+  try {
+    if (typeof fetchText === 'function') {
+      text = await fetchText(apiUrl, headers);
+    } else {
+      const bytes = await fetchBytes(apiUrl, headers);
+      text = new TextDecoder().decode(bytes);
+    }
+  } catch (err) {
+    throw new Error(`K MANGA episode detail request failed: ${err?.message || err}`);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('Failed to parse K MANGA episode detail response');
+  }
+
+  const ep = data?.episode;
+  if (!ep) return null;
+
+  return {
+    episodeId: ep.episode_id,
+    episodeName: ep.episode_name || '',
+    point: ep.point ?? -1,
+    isPageVisible: ep.is_page_visible ?? 0,
+    ticketRentalEnabled: ep.ticket_rental_enabled ?? 0,
+    thumbnailUrl: ep.thumbnail_image_url || '',
+    pageCount: ep.page_count ?? 0
+  };
 }
 
 // -- Tile descramble order --
