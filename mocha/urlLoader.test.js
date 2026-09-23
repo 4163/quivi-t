@@ -2477,6 +2477,7 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
 
 
 import * as KMangaExtractor from '../extractors/kmanga.js';
+import * as DirectExtractor from '../extractors/direct.js';
 import {
   buildKmangaHash,
   buildTileOrder,
@@ -2839,6 +2840,67 @@ describe('K-Manga extractor', () => {
       );
       assert.ok(result.error);
     });
+  });
+});
+
+describe('direct image extractor', () => {
+  it('matches any-host raster URLs and rejects other shapes', () => {
+    assert.equal(DirectExtractor.match('https://example.com/assets/shot.png'), true);
+    assert.equal(DirectExtractor.match('https://example.com/assets/photo.JPG?token=abc'), true);
+    assert.equal(DirectExtractor.match('https://example.com/a/b/c.webp#frag'), true);
+    assert.equal(DirectExtractor.match('https://example.com/a.gif'), true);
+    assert.equal(DirectExtractor.match('https://example.com/gallery'), false);
+    assert.equal(DirectExtractor.match('https://example.com/clip.mp4'), false);
+    assert.equal(DirectExtractor.match('https://example.com/vector.svg'), false);
+    assert.equal(DirectExtractor.match('blob:https://example.com/abc'), false);
+    assert.equal(DirectExtractor.match(''), false);
+    assert.equal(DirectExtractor.match(null), false);
+  });
+
+  it('flags raster URLs as direct', () => {
+    assert.equal(DirectExtractor.isDirectUrl('https://example.com/a.png'), true);
+    assert.equal(DirectExtractor.isDirectUrl('https://example.com/a.jpg'), true);
+    assert.equal(DirectExtractor.isDirectUrl('https://example.com/a.html'), false);
+  });
+
+  it('resolves friendly filenames with host-scoped hashes', async () => {
+    const parsed = await DirectExtractor.parseDirectUrl('https://example.com/assets/screenshot.png?token=abc');
+    assert.equal(parsed.provider, 'Misc');
+    assert.equal(parsed.filename, 'screenshot.png');
+    assert.equal(parsed.url, 'https://example.com/assets/screenshot.png?token=abc');
+    assert.ok(parsed.hash.startsWith('direct-example-com-screenshot-png'));
+
+    const upper = await DirectExtractor.parseDirectUrl('https://example.com/A.JPG');
+    assert.equal(upper.filename, 'A.jpg');
+
+    assert.equal(await DirectExtractor.parseDirectUrl('https://example.com/a.mp4'), null);
+    assert.equal(await DirectExtractor.parseDirectUrl('not a url'), null);
+  });
+
+  it('loses site CDN URLs to earlier manifest entries', () => {
+    const manifest = {
+      version: 1,
+      extractors: [
+        {
+          id: 'kmanga', name: 'K MANGA', libraryPath: 'KManga', version: 4,
+          source: 'kmanga.js',
+          patterns: ['^https?://cdn\\.kmanga\\.kodansha\\.com/.+\\.(jpg|jpeg|png|webp)(\\?.*)?$']
+        },
+        {
+          id: 'direct', name: 'Misc', libraryPath: 'Misc', version: 1,
+          source: 'direct.js',
+          patterns: ['^https?://[^?#]+\\.([jJ][pP][gG]|[jJ][pP][eE][gG]|[pP][nN][gG]|[gG][iI][fF]|[wW][eE][bB][pP]|[aA][vV][iI][fF]|[aA][pP][nN][gG]|[bB][mM][pP])([?#].*)?$']
+        }
+      ]
+    };
+    assert.equal(
+      findExtractor('https://cdn.kmanga.kodansha.com/static/titles/10207/cover.png?x=1', manifest).id,
+      'kmanga'
+    );
+    assert.equal(
+      findExtractor('https://example.com/assets/shot.png', manifest).id,
+      'direct'
+    );
   });
 });
 
