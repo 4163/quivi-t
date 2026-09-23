@@ -90,6 +90,98 @@ export async function parseDirectUrl(url, context = {}) {
 
 // -- HTML metadata extraction --
 
+// Roles observed in K MANGA author_text: "Manga", "Story",
+// "Character Design". Story-side roles map to Writer, art-side roles map
+// to Penciller. ComicInfo has no character-design field and CoverArtist
+// means cover art specifically, so designers sit with the artist credit.
+// Names keep every character (e.g. "Oh!Great"); only the role words are
+// matched, longest first, on word boundaries.
+const KMANGA_WRITER_ROLES = new Set(['story', 'original story', 'original', 'scenario', 'writer', 'script']);
+
+const KMANGA_ROLE_RE = /\b(character design|original story|story|manga|original|illustration|scenario|writer|script|art|design)\s+by\s+/gi;
+
+export function parseKmangaAuthors(authorText) {
+  if (!authorText || typeof authorText !== 'string') return { writer: '', penciller: '' };
+  const text = authorText.replace(/^[\s,]+|[\s,]+$/g, '').replace(/\s+/g, ' ');
+  if (!text) return { writer: '', penciller: '' };
+
+  const bounds = [];
+  KMANGA_ROLE_RE.lastIndex = 0;
+  let m;
+  while ((m = KMANGA_ROLE_RE.exec(text)) !== null) {
+    bounds.push({ role: m[1].toLowerCase(), roleStart: m.index, nameStart: m.index + m[0].length });
+  }
+
+  // Bare name with no role markers: solo creator does both jobs.
+  if (bounds.length === 0) return { writer: text, penciller: text };
+
+  const writers = [];
+  const artists = [];
+  const leading = text.slice(0, bounds[0].roleStart).replace(/^[\s,]+|[\s,]+$/g, '');
+  if (leading) {
+    writers.push(leading);
+    artists.push(leading);
+  }
+  for (let i = 0; i < bounds.length; i++) {
+    const nameEnd = i + 1 < bounds.length ? bounds[i + 1].roleStart : text.length;
+    const name = text.slice(bounds[i].nameStart, nameEnd).replace(/^[\s,]+|[\s,]+$/g, '');
+    if (!name) continue;
+    if (KMANGA_WRITER_ROLES.has(bounds[i].role)) writers.push(name);
+    else artists.push(name);
+  }
+
+  const dedupe = (list) => [...new Set(list)];
+  return { writer: dedupe(writers).join(', '), penciller: dedupe(artists).join(', ') };
+}
+
+// genre_id_list on the title object resolves against the page's genre_list
+// catalog. Each catalog name (e.g. "Horror･Mystery･Suspense") is one genre
+// and is never split on ･.
+function findKmangaGenreMap(unflattened) {
+  let best = null;
+  const seen = new Set();
+  const walk = (node) => {
+    if (!node || typeof node !== 'object' || seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (Array.isArray(node.genre_list) && node.genre_list.length > 0) {
+      if (!best || node.genre_list.length > best.length) best = node.genre_list;
+    }
+    for (const v of Object.values(node)) walk(v);
+  };
+  walk(unflattened.root);
+  if (!best) for (const entry of unflattened.all || []) walk(entry);
+  if (!best) return null;
+  const map = new Map();
+  for (const g of best) {
+    if (g && typeof g === 'object' && g.genre_id != null
+      && typeof g.genre_name === 'string' && g.genre_name.trim()) {
+      map.set(Number(g.genre_id), g.genre_name.trim());
+    }
+  }
+  return map;
+}
+
+// Fallback when the Nuxt catalog is absent: genre links under the summary
+// carry the same names in title order.
+function extractKmangaGenresFromLinks(html) {
+  const names = [];
+  const seen = new Set();
+  const re = /\/search\/genre\/(\d+)[^>]*>([^<]+)</g;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const name = (m[2] || '').trim();
+    if (name && !seen.has(name)) {
+      seen.add(name);
+      names.push(name);
+    }
+  }
+  return names;
+}
+
 function findInUnflattened(root, predicate) {
   const seen = new Set();
   function walk(node) {
@@ -126,9 +218,25 @@ function extractTitleFromHtml(html) {
   );
   if (!titleObj) return null;
 
+  const credits = parseKmangaAuthors(titleObj.author_text || '');
+  let genres = [];
+  const genreIds = Array.isArray(titleObj.genre_id_list) ? titleObj.genre_id_list : [];
+  if (genreIds.length > 0) {
+    const catalog = findKmangaGenreMap(unflattened);
+    if (catalog) {
+      genres = genreIds.map((id) => catalog.get(Number(id))).filter(Boolean);
+    }
+  }
+  if (genres.length === 0) {
+    genres = extractKmangaGenresFromLinks(html);
+  }
+
   return {
     titleName: titleObj.title_name || '',
     authorText: titleObj.author_text || '',
+    writer: credits.writer,
+    penciller: credits.penciller,
+    genres,
     synopsis: titleObj.introduction_text || titleObj.synopsis || '',
     coverUrl: titleObj.thumbnail_rect_image_url || titleObj.banner_image_url || titleObj.title_grid_wide || '',
     episodeIds: titleObj.episode_id_list || [],
@@ -190,7 +298,9 @@ async function extractEpisode(titleId, episodeId, html, url, context) {
     ComicInfo: {
       Series: seriesName,
       Title: chapterLabel,
-      Writer: titleMeta?.authorText || undefined,
+      Writer: titleMeta?.writer || undefined,
+      Penciller: titleMeta?.penciller || undefined,
+      Genre: titleMeta?.genres?.join(', ') || undefined,
       Summary: titleMeta?.synopsis || undefined,
       PageCount: images.length,
       Manga: 'YesAndRightToLeft',
@@ -293,7 +403,10 @@ async function extractTitle(titleId, html, url, context) {
         ComicInfo: {
           Series: seriesName,
           Title: chLabel,
-          Writer: titleMeta.authorText || undefined,
+          Writer: titleMeta.writer || undefined,
+          Penciller: titleMeta.penciller || undefined,
+          Genre: titleMeta.genres.join(', ') || undefined,
+          Summary: titleMeta.synopsis || undefined,
           Manga: 'YesAndRightToLeft',
           Web: sourceUrl
         }
@@ -304,7 +417,9 @@ async function extractTitle(titleId, html, url, context) {
   const metadata = {
     ComicInfo: {
       Series: seriesName,
-      Writer: titleMeta.authorText || undefined,
+      Writer: titleMeta.writer || undefined,
+      Penciller: titleMeta.penciller || undefined,
+      Genre: titleMeta.genres.join(', ') || undefined,
       Summary: titleMeta.synopsis || undefined,
       Manga: 'YesAndRightToLeft',
       Web: url
