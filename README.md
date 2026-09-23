@@ -54,7 +54,7 @@ Each entry in `manifest.json` registers one extractor. The file itself is the so
 | `source` | Relative `.js` filename. Path traversal rejected. |
 | `patterns` | Regex strings tested against user URLs. First match wins across all entries. |
 
-## Verified test galleries
+## Supported provider layers
 
 Reference URLs for manual testing. Each row covers a distinct URL route or extraction behavior.
 
