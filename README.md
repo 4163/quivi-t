@@ -20,7 +20,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Formats**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
 - **Archives**: Read compressed files directly as folders, including password-protected archives and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
-- **Web Import**: Save and read manga/galleries directly from supported sites for offline reading.
+- **Web Import**: Save and read manga/galleries directly from supported sites for offline reading (see [Supported sites](#supported-sites)).
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Mod`+wheel. Cursor auto-hides after inactivity over the viewport.
 - **Manga Spread Mode**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
 - **Scaling**: Choose from Pixelated, Bilinear, and Lanczos scaling.
@@ -34,7 +34,19 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **File Panel**: Switchable list and thumbnail view modes with virtualized card grid layout, Favorites, and provider-organized URL Library galleries.
 - **Performance**: Fast O(1) virtualized rendering handles folders and archives with thousands of items instantly. Caching native shell icons and thumbnails eliminates UI pop-in.
 
-> QuiviT is strictly a comic and manga reader for the time being. Zero-flicker navigation, WebGL shader filtering (including Lanczos) are already implemented and optimized for video formats, but general local video playback is intentionally deferred. Video playback is currently only enabled for galleries from provider-specific sites.
+> QuiviT is strictly an image/manga reader for the time being. Zero-flicker navigation, WebGL shader filtering (including Lanczos) are already implemented and optimized for video formats, but general local video playback is intentionally deferred. Video playback is currently only enabled for galleries from provider-specific sites.
+
+## Supported sites
+
+Import via **File → Open URL**.
+
+- **Direct images.** Any direct image links.
+- **Imgur.** Supports MP4 videos, galleries, direct image/video links.
+- **MangaDex.** Series, chapters, art, direct cover links.
+- **MANGA Plus.** Series, chapters, direct cover/thumbnail links.
+- **K MANGA.** Series, chapters, direct thumbnail links.
+
+[Contribute](#web-import) a new site.
 
 ## Shortcuts & Controls
 
@@ -328,7 +340,6 @@ AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/sk
 | **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG/AVIF playback under filters and Lanczos |
 | **Video Playback** | HTML5 `<video>` / `<audio>` | MP4 playback with WebGL shader filtering, zero-flicker bridging, and native ISOBMFF sound track detection |
 | **Lanczos Scaling** | `pica` | Off-thread still-image Lanczos resize |
-| **SVG Sanitization** | DOMPurify | Remote SVG imports saved as sanitized text, never raw bytes |
 | **WebGL Filters** | WebGL2 | Anime4K, CRT, Phosphor, Scanlines, and per-frame Lanczos on animated images |
 | **Archives (ZIP/CBZ)** | `zip` | Fast on-demand extraction and password decryption |
 | **Archives (RAR/CBR)** | `unrar` | Legacy archive support and password decryption |
@@ -336,6 +347,7 @@ AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/sk
 | **Archives (TAR/CBT)** | `tar` | Uncompressed archive reading |
 | **Character Encoding** | `chardetng` / `encoding_rs` | Statistical detection and decoding for legacy CJK encodings (Shift-JIS, GBK, EUC-KR, Big5) in ZIP and TAR archives |
 | **ICO Extraction** | `image` | Multi-frame ICO spritesheet generation |
+| **SVG Sanitization** | DOMPurify | Remote SVG imports saved as sanitized text, never raw bytes |
 | **Windows APIs** | `windows` / `winreg` | Native icons, shell thumbnails (`IShellItemImageFactory`), UI Automation and window enumeration (temp archive origin resolution), file attributes, shell notifications, and per-user file associations |
 | **Sorting** | `natord` | Natural alphanumeric sorting |
 | **File Watching** | `notify` | Directory watcher for auto-refresh |
