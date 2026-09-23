@@ -17,6 +17,7 @@ imgur.js               Imgur albums, galleries, direct CDN images
 mangadex.js            MangaDex chapters, titles, covers, @home network images
 mangaplus.js           MANGA Plus viewer chapters, title series, signed CDN images
 kmanga.js              K MANGA episodes, title series, signed CDN images
+direct.js              Host-agnostic direct raster images (catch-all, matched last)
 shared/
   sanitize.js          Path segment sanitization
   mangaplus.js         MANGA Plus protobuf viewer client (shared by mangadex.js and mangaplus.js)
@@ -60,6 +61,7 @@ Reference URLs for manual testing. Each row covers a distinct URL route or extra
 
 | Provider | Test target | Import type | Library destination | Verified behavior |
 |:---|:---|:---|:---|:---|
+| Misc | [BAKEMONOGATARI c013 p002](https://raw.githubusercontent.com/4163/quivi-t/refs/heads/refactor/backend-cl-prep/test-files/BAKEMONOGATARI%20-%20c013%20(v03)%20-%20p002%20%5BKodansha%20Comics%5D%20%5BDigital%5D%20%5B1r0n%5D%20%7BHQ%7D.jpg) | Direct media | `Misc/BAKEMONOGATARI - c013 (v03) - p002 [Kodansha Comics] [Digital] [1r0n] {HQ}.jpg` | Host-agnostic raster catch-all (jpg, png, gif, webp, avif, apng, bmp), matched last so site extractors keep their CDN URLs, root sidecar recording |
 | Imgur | [Azuma - Seihantai](https://imgur.com/a/azuma-seihantai-17vF37d) | Album (41 PNGs) | `Imgur/Azuma - Seihantai/` | Album `/a/` route, multi-image manga set, description sanitization |
 | Imgur | [Anime Reaction Gifs](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) | Gallery (50 GIFs) | `Imgur/Anime Reaction Gifs/` | Large animation batch, download concurrency, prefetch threshold |
 | Imgur | [Witch Watch OP clips](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) | Gallery (8 MP4s) | `Imgur/Just some Witch Watch OP clips/` | Video extraction, audio stream detection, hashtag route (`#/t/anime`) |
