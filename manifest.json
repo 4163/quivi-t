@@ -41,7 +41,7 @@
       "id": "kmanga",
       "name": "K MANGA",
       "libraryPath": "KManga",
-      "version": 3,
+      "version": 4,
       "patterns": [
         "^https?://kmanga\\.kodansha\\.com/title/\\d+/episode/\\d+",
         "^https?://kmanga\\.kodansha\\.com/title/\\d+",

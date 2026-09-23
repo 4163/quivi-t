@@ -231,13 +231,27 @@ function extractTitleFromHtml(html) {
     genres = extractKmangaGenresFromLinks(html);
   }
 
+  // Western-edition credits ride at the end of the synopsis behind a stray
+  // quote: `... story text ..." Translation by X, Lettering by Y, ...`.
+  // The story can end in its own quote, so only the full marker splits.
+  // The block moves verbatim to Notes; single and ` | `-joined shapes alike.
+  const rawSynopsis = titleObj.introduction_text || titleObj.synopsis || '';
+  let synopsis = rawSynopsis;
+  let notes = '';
+  const mark = rawSynopsis.search(/"\s*Translation by\s/);
+  if (mark !== -1) {
+    synopsis = rawSynopsis.slice(0, mark).trim();
+    notes = rawSynopsis.slice(mark + 1).trim();
+  }
+
   return {
     titleName: titleObj.title_name || '',
     authorText: titleObj.author_text || '',
     writer: credits.writer,
     penciller: credits.penciller,
     genres,
-    synopsis: titleObj.introduction_text || titleObj.synopsis || '',
+    synopsis,
+    notes,
     coverUrl: titleObj.thumbnail_rect_image_url || titleObj.banner_image_url || titleObj.title_grid_wide || '',
     episodeIds: titleObj.episode_id_list || [],
     freeEpisodeCount: titleObj.free_episode_count ?? 0
@@ -302,6 +316,7 @@ async function extractEpisode(titleId, episodeId, html, url, context) {
       Penciller: titleMeta?.penciller || undefined,
       Genre: titleMeta?.genres?.join(', ') || undefined,
       Summary: titleMeta?.synopsis || undefined,
+      Notes: titleMeta?.notes || undefined,
       PageCount: images.length,
       Manga: 'YesAndRightToLeft',
       Web: url
@@ -407,6 +422,7 @@ async function extractTitle(titleId, html, url, context) {
           Penciller: titleMeta.penciller || undefined,
           Genre: titleMeta.genres.join(', ') || undefined,
           Summary: titleMeta.synopsis || undefined,
+          Notes: titleMeta.notes || undefined,
           Manga: 'YesAndRightToLeft',
           Web: sourceUrl
         }
@@ -421,6 +437,7 @@ async function extractTitle(titleId, html, url, context) {
       Penciller: titleMeta.penciller || undefined,
       Genre: titleMeta.genres.join(', ') || undefined,
       Summary: titleMeta.synopsis || undefined,
+      Notes: titleMeta.notes || undefined,
       Manga: 'YesAndRightToLeft',
       Web: url
     }
