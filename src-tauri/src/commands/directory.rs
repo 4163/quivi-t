@@ -458,7 +458,16 @@ fn move_to_recycle_bin(path: &Path) -> std::io::Result<()> {
 }
 
 #[tauri::command(async)]
-pub fn remove_directory(path: String) -> Result<(), String> {
+pub async fn remove_directory(path: String) -> Result<(), String> {
+    // Recycle plus the retry-sleep fallback below block the calling thread,
+    // so run them on the blocking pool like move_library instead of holding
+    // a Tauri async worker for the whole operation.
+    tauri::async_runtime::spawn_blocking(move || remove_directory_impl(path))
+        .await
+        .map_err(|err| format!("Library removal worker failed: {err}"))?
+}
+
+fn remove_directory_impl(path: String) -> Result<(), String> {
     let p = Path::new(&path);
     crate::commands::library::ensure_library_write_allowed(p)?;
     if !p.exists() {
@@ -654,11 +663,15 @@ mod tests {
     fn test_remove_directory_safety() {
         let non_existent =
             std::env::temp_dir().join(format!("quivit_non_existent_{}", std::process::id()));
-        let res = remove_directory(non_existent.to_string_lossy().into_owned());
+        let res = tauri::async_runtime::block_on(remove_directory(
+            non_existent.to_string_lossy().into_owned(),
+        ));
         assert!(res.is_ok());
 
         let outside_dir = std::env::temp_dir();
-        let res_outside = remove_directory(outside_dir.to_string_lossy().into_owned());
+        let res_outside = tauri::async_runtime::block_on(remove_directory(
+            outside_dir.to_string_lossy().into_owned(),
+        ));
         assert!(res_outside.is_err());
     }
 }
