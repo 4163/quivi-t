@@ -249,6 +249,17 @@ document.getElementById('btn-browse-library').addEventListener('click', async ()
   }
 });
 
+document.getElementById('link-supported-sites')?.addEventListener('click', async (e) => {
+  e.preventDefault();
+  const url = e.currentTarget.href;
+  try {
+    if (tauri.opener?.openUrl) await tauri.opener.openUrl(url);
+    else window.open(url, '_blank', 'noopener,noreferrer');
+  } catch (err) {
+    console.error('Failed to open supported sites link:', err);
+  }
+});
+
 document.getElementById('btn-open-config-dir').addEventListener('click', async () => {
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
