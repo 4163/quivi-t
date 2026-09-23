@@ -25,8 +25,11 @@ let statusScrollZoom;
 let statusSpread;
 let spreadIndicator;
 const MIN_REFRESH_DURATION_MS = 200;
+const FLASH_MESSAGE_DURATION_MS = 3000;
 let _refreshTimer = null;
 let _refreshStartTime = 0;
+let _flashText = '';
+let _flashTimer = null;
 
 export const Statusbar = {
   init() {
@@ -66,6 +69,19 @@ export const Statusbar = {
         _refreshTimer = setTimeout(() => {
           statusbar?.classList.remove('refreshing');
         }, remaining);
+      });
+
+      // Transient one-line notices (e.g. failed Library delete). Painted
+      // over the filename slot by update(); never owned by other modules.
+      window.addEventListener('quivit-status-flash', (e) => {
+        _flashText = e?.detail?.message || '';
+        clearTimeout(_flashTimer);
+        if (!_flashText) return;
+        _flashTimer = setTimeout(() => {
+          _flashText = '';
+          this.update(Core.getState());
+        }, FLASH_MESSAGE_DURATION_MS);
+        this.update(Core.getState());
       });
     }
   },
@@ -152,6 +168,11 @@ export const Statusbar = {
     } else if (statusName && state.filename && statusName.textContent !== state.filename) {
       statusName.textContent = state.filename;
       statusName.title = state.filename;
+    }
+
+    if (_flashText && statusName) {
+      statusName.textContent = _flashText;
+      statusName.title = _flashText;
     }
   },
 

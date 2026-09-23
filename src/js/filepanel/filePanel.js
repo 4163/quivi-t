@@ -1053,7 +1053,7 @@ function buildLibraryEntry(item, depth = 0) {
   }
 
   if (canDelete) {
-    removeBtn.addEventListener('click', async (e) => {
+    removeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!removeBtn.classList.contains('is-confirming')) {
         arm();
@@ -1061,39 +1061,99 @@ function buildLibraryEntry(item, depth = 0) {
       }
 
       disarm();
-      try {
-        if (typeof cancelGalleryDownloads === 'function') {
-          cancelGalleryDownloads(item.path);
+      if (typeof cancelGalleryDownloads === 'function') {
+        cancelGalleryDownloads(item.path);
+      }
+
+      const state = Core?.getState?.();
+      const curDir = (state?.directory || '').replace(/\\/g, '/').toLowerCase();
+      const targetDir = (item.path || '').replace(/\\/g, '/').toLowerCase();
+      const isInside = curDir === targetDir || (targetDir && curDir.startsWith(targetDir + '/'));
+
+      // Provider root for the boot-out navigation below: first segment under
+      // the Library root for galleries, immediate parent for provider-level
+      // files. Falls back to '' (then openParent) when unresolvable.
+      const libRootRaw = (typeof getCachedLibraryDir === 'function' ? getCachedLibraryDir() : '').replace(/\\/g, '/').replace(/\/+$/, '');
+      const itemFwd = (item.path || '').replace(/\\/g, '/');
+      let providerRoot = '';
+      if (libRootRaw && itemFwd.toLowerCase().startsWith(libRootRaw.toLowerCase() + '/')) {
+        const rel = itemFwd.slice(libRootRaw.length + 1);
+        const firstSeg = rel.split('/')[0];
+        if (item.is_dir && firstSeg) {
+          providerRoot = `${libRootRaw}/${firstSeg}`;
+        } else {
+          const slashAt = itemFwd.lastIndexOf('/');
+          if (slashAt > libRootRaw.length) providerRoot = itemFwd.slice(0, slashAt);
         }
+      }
 
-        const state = Core?.getState?.();
-        const curDir = (state?.directory || '').replace(/\\/g, '/').toLowerCase();
-        const targetDir = (item.path || '').replace(/\\/g, '/').toLowerCase();
-        const isInside = curDir === targetDir || (targetDir && curDir.startsWith(targetDir + '/'));
-
-        if (isInside && FsUtils?.openParent) {
-          await FsUtils.openParent();
+      // Optimistic paint: detach the row in this frame. When it was the last
+      // row of its provider section, detach the header plus list too so the
+      // dropdown disappears with the deletion instead of waiting for the
+      // backend. renderLibrary() reconciles once the recycle resolves.
+      const parentUl = li.parentNode;
+      const nextSibling = li.nextSibling;
+      li.remove();
+      const sectionAnchor = parentUl ? parentUl.nextSibling : null;
+      let detachedHeader = null;
+      if (parentUl && !parentUl.querySelector('li')) {
+        const maybeHeader = parentUl.previousElementSibling;
+        if (maybeHeader && maybeHeader.classList && maybeHeader.classList.contains('library-provider-header')) {
+          detachedHeader = maybeHeader;
+          detachedHeader.remove();
         }
+        parentUl.remove();
+      }
+      const hadEmptyClass = libraryPanelEl.classList.contains('is-empty');
+      if (!libraryPanelEl.querySelector('.library-provider-list li')) {
+        libraryPanelEl.classList.add('is-empty');
+      }
 
-        if (targetDir) {
-          for (const key of Array.from(thumbnailCache.keys())) {
-            const k = String(key).replace(/\\/g, '/').toLowerCase();
-            if (k.includes(targetDir)) {
-              thumbnailCache.delete(key);
-            }
+      if (targetDir) {
+        for (const key of Array.from(thumbnailCache.keys())) {
+          const k = String(key).replace(/\\/g, '/').toLowerCase();
+          if (k.includes(targetDir)) {
+            thumbnailCache.delete(key);
           }
         }
+      }
 
-        await deleteLibraryEntry(item.path).catch(async (err) => {
-          if (!isLibraryLocationError(err)) throw err;
-          // The entry was rendered from a stale Library root (the location
-          // moved in another window). Remap it onto the live root and retry.
-          const staleRoot = typeof getCachedLibraryDir === 'function' ? getCachedLibraryDir() : '';
-          const liveRoot = typeof reloadLibraryDir === 'function' ? await reloadLibraryDir() : '';
-          const remapped = remapLibraryPath(item.path, staleRoot, liveRoot);
-          if (remapped === item.path) throw err;
-          await deleteLibraryEntry(remapped);
-        });
+      // The delete fires first; navigation below runs concurrently instead
+      // of holding the row through openParent plus the recycle.
+      const deletion = (async () => {
+        try {
+          await deleteLibraryEntry(item.path).catch(async (err) => {
+            if (!isLibraryLocationError(err)) throw err;
+            // The entry was rendered from a stale Library root (the location
+            // moved in another window). Remap it onto the live root and retry.
+            const staleRoot = typeof getCachedLibraryDir === 'function' ? getCachedLibraryDir() : '';
+            const liveRoot = typeof reloadLibraryDir === 'function' ? await reloadLibraryDir() : '';
+            const remapped = remapLibraryPath(item.path, staleRoot, liveRoot);
+            if (remapped === item.path) throw err;
+            await deleteLibraryEntry(remapped);
+          });
+        } catch (err) {
+          // Surgical restore when nothing else touched the panel: row back
+          // in place, or whole section (header plus list plus row) when it
+          // was pruned. Otherwise a concurrent rebuild already shows truth.
+          const liRefOk = !nextSibling || nextSibling.parentNode === parentUl;
+          const anchorOk = !sectionAnchor || sectionAnchor.parentNode === libraryPanelEl;
+          if (parentUl && parentUl.isConnected && liRefOk) {
+            parentUl.insertBefore(li, nextSibling);
+          } else if (parentUl && !parentUl.isConnected && detachedHeader && !detachedHeader.isConnected && anchorOk) {
+            libraryPanelEl.insertBefore(detachedHeader, sectionAnchor);
+            libraryPanelEl.insertBefore(parentUl, sectionAnchor);
+            parentUl.insertBefore(li, liRefOk ? nextSibling : null);
+          } else {
+            await renderLibrary();
+          }
+          if (!hadEmptyClass) libraryPanelEl.classList.remove('is-empty');
+          window.dispatchEvent(new CustomEvent('quivit-status-flash', {
+            detail: { message: 'Delete failed. The item was restored.' }
+          }));
+          console.error('[FilePanel] Delete failed:', err);
+          return;
+        }
         if (typeof forgetDeletedLibraryEntry === 'function') {
           await forgetDeletedLibraryEntry(item.path).catch(() => {});
         }
@@ -1103,8 +1163,22 @@ function buildLibraryEntry(item, depth = 0) {
         if (FsUtils?.refresh && (isInside || curDir === targetDir || curDir === parentOfTarget)) {
           await FsUtils.refresh();
         }
-      } catch (err) {
-        console.error('[FilePanel] Delete failed:', err);
+      })();
+      // Reconcile failures self-report; only the delete itself restores.
+      deletion.catch((err) => console.error('[FilePanel] Delete reconcile failed:', err));
+
+      if (isInside) {
+        // Boot out to the provider root (e.g. Library/Imgur) instead of the
+        // immediate parent, so nested galleries do not strand the viewer a
+        // level above a deleted folder. Falls back to openParent when the
+        // provider root cannot be resolved.
+        if (providerRoot && FsUtils?.loadFile) {
+          FsUtils.loadFile(providerRoot).catch(() => {
+            if (FsUtils?.openParent) FsUtils.openParent().catch(() => {});
+          });
+        } else if (FsUtils?.openParent) {
+          FsUtils.openParent().catch(() => {});
+        }
       }
     });
   }
