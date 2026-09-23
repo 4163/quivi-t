@@ -2593,8 +2593,7 @@ describe('K-Manga extractor', () => {
       assert.deepEqual(KMangaExtractor.parseKmangaAuthors(null), { writer: '', penciller: '' });
     });
 
-    it('maps genre ids to catalog names kept intact on every tier', async () => {
-      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Exiled Heavy Knight","episode_id_list":[100],"free_episode_count":3,"author_text":"Story by Nekoko Manga by BroccoLee Character Design by Jaian","synopsis":"Isekai story.","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg","genre_id_list":[9,15]},{"genre_list":[{"genre_id":9,"genre_name":"Isekai･Super Powers"},{"genre_id":15,"genre_name":"Anime"}]}]</script></html>';
+    it('maps genre ids to catalog names kept intact on every tier', async () => {      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Exiled Heavy Knight","episode_id_list":[100],"free_episode_count":3,"author_text":"Story by Nekoko Manga by BroccoLee Character Design by Jaian","synopsis":"Isekai story.","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg","genre_id_list":[9,15]},{"genre_list":[{"genre_id":9,"genre_name":"Isekai･Super Powers"},{"genre_id":15,"genre_name":"Anime"}]}]</script></html>';
 
       const result = await KMangaExtractor.extract(
         html,
@@ -2613,6 +2612,73 @@ describe('K-Manga extractor', () => {
       assert.equal(result.chapters[0].metadata.ComicInfo.Penciller, 'BroccoLee, Jaian');
       assert.equal(result.chapters[0].metadata.ComicInfo.Genre, 'Isekai･Super Powers, Anime');
       assert.equal(result.chapters[0].metadata.ComicInfo.Summary, 'Isekai story.');
+    });
+
+    it('moves trailing edition credits from synopsis to notes', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Imperfect Girl","episode_id_list":[100],"free_episode_count":3,"author_text":"Manga by Mitsuru Hattori Story by NISIOISIN","introduction_text":"Thank that girl ...\\" \\" Translation by Ko Ransom, Lettering by Grace Lu/Anthony Quintessenza, Kodansha USA Publishing, LLC","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg"}]</script></html>';
+
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/10207',
+        {
+          fetchText: async () => JSON.stringify({
+            episode: { episode_id: 100, episode_name: '1', point: 0 }
+          })
+        }
+      );
+
+      assert.equal(result.metadata.ComicInfo.Summary, 'Thank that girl ..."');
+      assert.equal(
+        result.metadata.ComicInfo.Notes,
+        'Translation by Ko Ransom, Lettering by Grace Lu/Anthony Quintessenza, Kodansha USA Publishing, LLC'
+      );
+      assert.equal(result.chapters[0].metadata.ComicInfo.Summary, 'Thank that girl ..."');
+      assert.equal(
+        result.chapters[0].metadata.ComicInfo.Notes,
+        'Translation by Ko Ransom, Lettering by Grace Lu/Anthony Quintessenza, Kodansha USA Publishing, LLC'
+      );
+    });
+
+    it('keeps pipe-joined dual edition credits intact in notes', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"BAKEMONOGATARI","episode_id_list":[100],"free_episode_count":3,"author_text":"Manga by Oh!Great Story by NISIOISIN","introduction_text":"Everywhere. \\" Translation by Ko Ransom, Kodansha USA Publishing, LLC | Translation by Ella Donaldson, YKS Services LLC/SKY JAPAN, Inc.","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg"}]</script></html>';
+
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/10072',
+        {
+          fetchText: async () => JSON.stringify({
+            episode: { episode_id: 100, episode_name: '1', point: 0 }
+          })
+        }
+      );
+
+      assert.equal(result.metadata.ComicInfo.Summary, 'Everywhere.');
+      assert.equal(
+        result.metadata.ComicInfo.Notes,
+        'Translation by Ko Ransom, Kodansha USA Publishing, LLC | Translation by Ella Donaldson, YKS Services LLC/SKY JAPAN, Inc.'
+      );
+      assert.equal(
+        result.chapters[0].metadata.ComicInfo.Notes,
+        'Translation by Ko Ransom, Kodansha USA Publishing, LLC | Translation by Ella Donaldson, YKS Services LLC/SKY JAPAN, Inc.'
+      );
+    });
+
+    it('leaves synopses without a credit block untouched', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Sakura","episode_id_list":[100],"free_episode_count":3,"author_text":"Fuyu Yukimiya","introduction_text":"Honest dedication?\\"","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg"}]</script></html>';
+
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/10454',
+        {
+          fetchText: async () => JSON.stringify({
+            episode: { episode_id: 100, episode_name: '1', point: 0 }
+          })
+        }
+      );
+
+      assert.equal(result.metadata.ComicInfo.Summary, 'Honest dedication?"');
+      assert.equal(result.metadata.ComicInfo.Notes, undefined);
+      assert.equal(result.chapters[0].metadata.ComicInfo.Notes, undefined);
     });
   });
 
