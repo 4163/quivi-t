@@ -464,7 +464,8 @@ QuiviT/
 
 ## Attributions
 
-- UI Icons: [Feather](https://feathericons.com) / [Lucide](https://lucide.dev)
+- UI Icons: [Lucide](https://lucide.dev)
+- Metadata Icons: [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT)
 - Format Icons Font: [andrew-paglinawan/QuicksandFamily](https://github.com/andrew-paglinawan/QuicksandFamily)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
 - WebGL Shaders: [Bloc97/Anime4K](https://github.com/bloc97/Anime4K) / [stefanlegg/crt-fx](https://github.com/stefanlegg/crt-fx) / [TheMarco/RetroZone](https://github.com/TheMarco/RetroZone) (Custom phosphor WebGL implementation) / [cgwg CRT-Geom](https://github.com/libretro/common-shaders) (Geom-inspired beam, custom WebGL implementation)
