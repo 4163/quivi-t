@@ -428,6 +428,49 @@ pub fn cancel_download(app: tauri::AppHandle) {
         .fetch_add(1, Ordering::SeqCst);
 }
 
+/// First-byte check that a downloaded file matches its extension, so document
+/// pages saved under image names never reach the Library. Unknown extensions
+/// pass through; short or mismatched files fail so the caller retries or
+/// reports instead of keeping corrupt bytes.
+#[tauri::command(async)]
+pub fn verify_image_magic(path: String, expected_ext: String) -> Result<(), String> {
+    if !check_image_magic_head(&read_head(&path)?, &expected_ext) {
+        return Err(format!(
+            "Downloaded file is not a valid {expected_ext} image: {path}"
+        ));
+    }
+    Ok(())
+}
+
+fn read_head(path: &str) -> Result<Vec<u8>, String> {
+    let mut f = File::open(path).map_err(|e| format!("Failed to open downloaded file: {e}"))?;
+    let mut head = vec![0u8; 16];
+    let mut n = 0;
+    while n < head.len() {
+        match f.read(&mut head[n..]) {
+            Ok(0) => break,
+            Ok(read) => n += read,
+            Err(e) => return Err(format!("Failed to read downloaded file: {e}")),
+        }
+    }
+    head.truncate(n);
+    Ok(head)
+}
+
+fn check_image_magic_head(head: &[u8], expected_ext: &str) -> bool {
+    let ext = expected_ext.trim_start_matches('.').to_ascii_lowercase();
+    let enough = |n: usize| head.len() >= n;
+    match ext.as_str() {
+        "png" | "apng" => enough(8) && head[..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
+        "jpg" | "jpeg" => enough(2) && head[..2] == [0xFF, 0xD8],
+        "gif" => enough(6) && (head[..6] == *b"GIF87a" || head[..6] == *b"GIF89a"),
+        "bmp" => enough(2) && head[..2] == *b"BM",
+        "webp" => enough(12) && head[..4] == *b"RIFF" && head[8..12] == *b"WEBP",
+        "avif" => enough(12) && head[4..8] == *b"ftyp",
+        _ => true,
+    }
+}
+
 fn apply_tile_descramble(path: &std::path::Path, desc: &TileDescramble) -> Result<(), String> {
     let total = (desc.cols as usize) * (desc.rows as usize);
     if desc.cols == 0 || desc.rows == 0 {
@@ -567,6 +610,29 @@ mod tests {
     fn download_threshold_rounds_up_to_the_first_written_byte() {
         let threshold = 101_u64.saturating_mul(50).saturating_add(99) / 100;
         assert_eq!(threshold, 51);
+    }
+
+    #[test]
+    fn image_magic_accepts_matching_signatures() {
+        assert!(check_image_magic_head(
+            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00],
+            "png"
+        ));
+        assert!(check_image_magic_head(&[0xFF, 0xD8, 0xFF, 0xE0], "jpg"));
+        assert!(check_image_magic_head(b"GIF89aXXXX", "gif"));
+        assert!(check_image_magic_head(b"BMXXXX", "bmp"));
+        assert!(check_image_magic_head(b"RIFF....WEBP", "webp"));
+        assert!(check_image_magic_head(b"....ftypavif", "avif"));
+        assert!(check_image_magic_head(b"whatever", "mp4"));
+        assert!(check_image_magic_head(b"whatever", "unknown-ext"));
+    }
+
+    #[test]
+    fn image_magic_rejects_documents_and_short_reads() {
+        assert!(!check_image_magic_head(b"<!DOCTYPE html><html>", "png"));
+        assert!(!check_image_magic_head(b"<html><body>", "jpg"));
+        assert!(!check_image_magic_head(&[0x89, 0x50], "png"));
+        assert!(!check_image_magic_head(&[], "jpg"));
     }
 
     #[test]
