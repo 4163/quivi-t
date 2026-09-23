@@ -919,7 +919,6 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
 
       images.push({
         url: `https://uploads.mangadex.org/covers/${mangaId}/${rawFileName}`,
-        fallbackUrl: `https://uploads.mangadex.org/covers/${mangaId}/${rawFileName}`,
         filename,
         rawFileName,
         hash,
