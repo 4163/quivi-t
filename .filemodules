@@ -1,8 +1,0 @@
-# Vendored remote files, refreshed by the commit pipeline on every push.
-# Format: <url> = <dest>.
-#
-# DOMPurify stays pinned, not auto-refreshed: the SVG import path is tuned
-# around its exact behavior, so upstream drift lands by hand, not by push.
-
-# pica.js stays out: its vendored build has no verified upstream byte match,
-# and it processes local bitmaps with no security surface worth the drift.
