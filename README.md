@@ -38,7 +38,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 
 ## Supported sites
 
-Import via **File → Open URL**.
+Import a URL via **File → Open URL...**.
 
 - **Direct images.** Any direct image links.
 - **Imgur.** Supports MP4 videos, galleries, direct image/video links.
@@ -46,7 +46,7 @@ Import via **File → Open URL**.
 - **MANGA Plus.** Series, chapters, direct cover/thumbnail links.
 - **K MANGA.** Series, chapters, direct thumbnail links.
 
-[Contribute](#web-import) a new site.
+[Contribute](#web-imports) to add support for other sites.
 
 ## Shortcuts & Controls
 
@@ -251,9 +251,9 @@ Testing spans three focused layers:
 
 > **Design Principle:** New DOM belongs in the module that already owns that surface. New domain logic belongs in `core.js` or `services/`. Do not grow `main.js` back into a god file.
 
-### Web Import
+### Web Imports
 
-**File → Open URL...** imports galleries and images from supported websites directly into the local Library.
+Imports galleries and images from supported websites directly into the local Library.
 
 QuiviT checks the [`extractors`](https://github.com/4163/quivi-t/tree/extractors) branch for website support at runtime, caching modules under `%LOCALAPPDATA%\QuiviT\extractor-cache` for offline use. That registry lists supported sites and authoring documentation.
 
