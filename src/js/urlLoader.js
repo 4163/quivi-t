@@ -213,6 +213,9 @@ export async function downloadFile(url, destPath, options = {}) {
   if (!window.__TAURI__) {
     throw new Error('Backend network proxy unavailable in browser environment');
   }
+  if (/\.svg$/i.test(destPath || '')) {
+    return downloadSanitizedSvg(url, destPath, options.headers);
+  }
   const args = { url, destPath };
   if (options.requestId) args.requestId = options.requestId;
   if (Number.isInteger(options.queueGeneration)) args.queueGeneration = options.queueGeneration;
@@ -220,7 +223,92 @@ export async function downloadFile(url, destPath, options = {}) {
   if (options.headers) args.headers = options.headers;
   if (options.xorKey) args.xorKey = options.xorKey;
   if (options.descramble) args.descramble = options.descramble;
-  return await window.__TAURI__.core.invoke('download_to_file', args);
+  await window.__TAURI__.core.invoke('download_to_file', args);
+  const leaf = String(destPath || '').split('\\').pop() || '';
+  const dot = leaf.lastIndexOf('.');
+  try {
+    await window.__TAURI__.core.invoke('verify_image_magic', {
+      path: destPath,
+      expectedExt: dot > 0 ? leaf.slice(dot + 1) : ''
+    });
+  } catch (err) {
+    await window.__TAURI__.core.invoke('remove_file', { path: destPath }).catch(() => {});
+    throw err;
+  }
+}
+
+// Remote SVGs never touch disk as raw bytes. DOMPurify keeps vector
+// rendering intact while stripping scripts, handlers, and foreignObject.
+export function sanitizeSvgText(text) {
+  const purify = globalThis.window?.DOMPurify;
+  if (!purify || typeof purify.sanitize !== 'function') {
+    throw new Error('SVG sanitizer unavailable');
+  }
+  return purify.sanitize(expandSvgEntities(text), { USE_PROFILES: { svg: true } });
+}
+
+// Illustrator-style internal entities (`<!ENTITY st12 "fill:url(#g);">`,
+// referenced as `&st12;`) die with the DOCTYPE block under sanitization,
+// taking every gradient fill with them. A single non-recursive expansion
+// pass restores them: references expand once and replacement text is never
+// rescanned, so billion-laughs amplification is impossible by construction, and anything beyond plain quoted literals
+// (parameter, external, or oversized entities) refuses the import outright.
+const SVG_ENTITY_MAX_COUNT = 500;
+const SVG_ENTITY_MAX_LITERAL = 4096;
+const SVG_MAX_BYTES = 10 * 1024 * 1024;
+
+export function expandSvgEntities(text) {
+  if (typeof text !== 'string' || !text.includes('<!ENTITY')) return text;
+  const doctype = text.match(/<!DOCTYPE[^[\]]*\[([\s\S]*?)\]>/);
+  if (!doctype) return text;
+  const subset = doctype[1];
+  if (subset.includes('%') || subset.includes('SYSTEM') || subset.includes('PUBLIC')) {
+    throw new Error('SVG entity block rejected');
+  }
+  const declared = (subset.match(/<!ENTITY/g) || []).length;
+  const table = new Map();
+  const simple = /<!ENTITY\s+([A-Za-z_][\w.-]*)\s+"([^"<>]*)"\s*>/g;
+  let m;
+  let simpleCount = 0;
+  while ((m = simple.exec(subset)) !== null) {
+    simpleCount++;
+    if (table.size >= SVG_ENTITY_MAX_COUNT || m[2].length > SVG_ENTITY_MAX_LITERAL) {
+      throw new Error('SVG entity block rejected');
+    }
+    if (!table.has(m[1])) table.set(m[1], m[2]);
+  }
+  if (simpleCount !== declared) {
+    throw new Error('SVG entity block rejected');
+  }
+  let out = text.replace(doctype[0], '');
+  if (table.size > 0) {
+    const names = [...table.keys()].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    out = out.replace(new RegExp(`&(${names.join('|')});`, 'g'), (hit, name) => table.get(name));
+  }
+  if (out.length > SVG_MAX_BYTES) {
+    throw new Error('SVG entity block rejected');
+  }
+  return out;
+}
+
+export async function downloadSanitizedSvg(url, destPath, headers) {
+  const text = await fetchRemoteText(url, headers);
+  // Full-text gate: the ranged sniff can fail open, but these bytes are
+  // already in hand, so a document here refuses the import outright.
+  // Mirrors the first-tag rule in the Misc extractor.
+  const stripped = text
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\?[\s\S]*?\?>/g, '')
+    .replace(/<!doctype(?:[^[\]>]|\[[^\]]*\])*>/gi, '');
+  const first = stripped.match(/<\s*([a-zA-Z][\w.-]*)/);
+  if (!first || first[1].toLowerCase() !== 'svg') {
+    throw new Error(`URL serves a document page, not an image file: ${url}`);
+  }
+  const clean = sanitizeSvgText(text);
+  if (!clean || !clean.trim()) {
+    throw new Error('SVG sanitizer emptied the document');
+  }
+  return await window.__TAURI__.core.invoke('write_text_file', { path: destPath, content: clean });
 }
 
 export async function cancelDownload() {
