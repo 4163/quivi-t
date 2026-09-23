@@ -27,6 +27,7 @@ import {
   setVisibleRange as setDownloadVisibleRange,
   cancelGalleryDownloads,
   forgetDeletedLibraryEntry,
+  isGalleryDownloading,
   fetchManifest,
   getGalleryDownloadStatus,
   retryGalleryDownload,
@@ -1154,13 +1155,23 @@ function buildLibraryEntry(item, depth = 0) {
           console.error('[FilePanel] Delete failed:', err);
           return;
         }
-        if (typeof forgetDeletedLibraryEntry === 'function') {
-          await forgetDeletedLibraryEntry(item.path).catch(() => {});
+        // Directories need no sidecar prune: it goes down with the folder.
+        // Files prune fire-and-forget; the tree reconcile below does not
+        // depend on the pruned write.
+        if (!item.is_dir && typeof forgetDeletedLibraryEntry === 'function') {
+          forgetDeletedLibraryEntry(item.path).catch(() => {});
         }
         await renderLibrary();
 
+        // The boot-out navigation above already re-read the provider root,
+        // and the directory watcher echoes the recycle into a refresh, so an
+        // explicit refresh here would double the work. Keep it only when no
+        // navigation happened (viewing the parent) or when the boot target
+        // is actively downloading (watcher echo skips downloading dirs).
         const parentOfTarget = targetDir.includes('/') ? targetDir.substring(0, targetDir.lastIndexOf('/')) : '';
-        if (FsUtils?.refresh && (isInside || curDir === targetDir || curDir === parentOfTarget)) {
+        const bootTargetBusy = isInside && providerRoot && typeof isGalleryDownloading === 'function'
+          && isGalleryDownloading(providerRoot);
+        if (FsUtils?.refresh && ((isInside && (!providerRoot || bootTargetBusy)) || (!isInside && curDir === parentOfTarget))) {
           await FsUtils.refresh();
         }
       })();
@@ -1233,19 +1244,21 @@ function buildLibraryEntry(item, depth = 0) {
 
 export async function renderLibrary() {
   if (!libraryPanelEl) return;
-  const tree = orderProviders(await fetchLibraryTree());
+  // The tree and the display-name registry are independent; fetch together
+  // instead of paying two serial IPC round trips per render.
+  const [treeRaw, manifest] = await Promise.all([
+    fetchLibraryTree(),
+    fetchManifest().catch(() => null)
+  ]);
+  const tree = orderProviders(treeRaw);
   const hasAny = hasLibraryEntries(tree);
 
   // Display names come from the manifest registry (libraryPath -> name),
   // so renaming a provider never needs core changes. Directory names stay
   // the keys for collapse state, element ids, and dataset attributes.
-  let displayNames = null;
-  try {
-    const manifest = await fetchManifest();
-    displayNames = new Map((manifest?.extractors || []).map((e) => [e.libraryPath, e.name]));
-  } catch {
-    displayNames = null;
-  }
+  const displayNames = manifest
+    ? new Map((manifest.extractors || []).map((e) => [e.libraryPath, e.name]))
+    : null;
 
   libraryPanelEl.classList.toggle('is-empty', !hasAny);
   libraryPanelEl.innerHTML = '';
