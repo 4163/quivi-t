@@ -2230,7 +2230,15 @@ export async function resolveUnresolvedGallery(galleryPath) {
     }
     if (!entry) return false;
     const mod = await loadExtractorModule(entry);
-    const fullResult = await extractGallery(mod, '', data.sourceUrl, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
+    // The stub carries identity only; the extractor needs the live page for
+    // names, credits, and summaries. An empty fetch keeps prior behavior.
+    let pageHtml = '';
+    try {
+      pageHtml = await fetchRemoteText(data.sourceUrl);
+    } catch {
+      pageHtml = '';
+    }
+    const fullResult = await extractGallery(mod, pageHtml, data.sourceUrl, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
     if (!fullResult?.images || fullResult.images.length === 0) return false;
 
     const updatedSidecar = {
