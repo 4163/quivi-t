@@ -2566,6 +2566,56 @@ describe('K-Manga extractor', () => {
     });
   });
 
+  describe('kmanga author and genre metadata', () => {
+    it('splits Manga/Story roles into penciller and writer', () => {
+      assert.deepEqual(
+        KMangaExtractor.parseKmangaAuthors('Manga by Mitsuru Hattori Story by NISIOISIN'),
+        { writer: 'NISIOISIN', penciller: 'Mitsuru Hattori' }
+      );
+    });
+
+    it('folds character design into the penciller credit', () => {
+      assert.deepEqual(
+        KMangaExtractor.parseKmangaAuthors('Story by Nekoko Manga by BroccoLee Character Design by Jaian'),
+        { writer: 'Nekoko', penciller: 'BroccoLee, Jaian' }
+      );
+    });
+
+    it('fills both credits for a bare creator name', () => {
+      assert.deepEqual(
+        KMangaExtractor.parseKmangaAuthors('Kamome Shirahama'),
+        { writer: 'Kamome Shirahama', penciller: 'Kamome Shirahama' }
+      );
+    });
+
+    it('returns empty credits for missing author text', () => {
+      assert.deepEqual(KMangaExtractor.parseKmangaAuthors(''), { writer: '', penciller: '' });
+      assert.deepEqual(KMangaExtractor.parseKmangaAuthors(null), { writer: '', penciller: '' });
+    });
+
+    it('maps genre ids to catalog names kept intact on every tier', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Exiled Heavy Knight","episode_id_list":[100],"free_episode_count":3,"author_text":"Story by Nekoko Manga by BroccoLee Character Design by Jaian","synopsis":"Isekai story.","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg","genre_id_list":[9,15]},{"genre_list":[{"genre_id":9,"genre_name":"Isekai･Super Powers"},{"genre_id":15,"genre_name":"Anime"}]}]</script></html>';
+
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/10577',
+        {
+          fetchText: async () => JSON.stringify({
+            episode: { episode_id: 100, episode_name: '156', point: 0 }
+          })
+        }
+      );
+
+      assert.equal(result.metadata.ComicInfo.Writer, 'Nekoko');
+      assert.equal(result.metadata.ComicInfo.Penciller, 'BroccoLee, Jaian');
+      assert.equal(result.metadata.ComicInfo.Genre, 'Isekai･Super Powers, Anime');
+      assert.equal(result.chapters[0].metadata.ComicInfo.Writer, 'Nekoko');
+      assert.equal(result.chapters[0].metadata.ComicInfo.Penciller, 'BroccoLee, Jaian');
+      assert.equal(result.chapters[0].metadata.ComicInfo.Genre, 'Isekai･Super Powers, Anime');
+      assert.equal(result.chapters[0].metadata.ComicInfo.Summary, 'Isekai story.');
+    });
+  });
+
   describe('episode extraction', () => {
     it('extracts episode with descramble descriptors and metadata', async () => {
       const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Attack on Titan","episode_id_list":[311334,311335],"author_text":"Hajime Isayama","synopsis":"A story about titans.","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg"},{"episode_id":311334,"episode_name":"01","thumbnail_image_url":"https://cdn.kmanga.kodansha.com/thumb/ep311334.png"}]</script></html>';
