@@ -57,30 +57,52 @@ Each entry in `manifest.json` registers one extractor. The file itself is the so
 
 ## Supported provider layers
 
-Reference URLs for manual testing. Each row covers a distinct URL route or extraction behavior.
+Reference URLs for manual testing. Each entry covers a distinct URL route or extraction behavior, with its verified behavior on the row beneath.
 
-| Provider | Test target | Import type | Library destination | Verified behavior |
-|:---|:---|:---|:---|:---|
-| Misc | [BAKEMONOGATARI c013 p002](https://raw.githubusercontent.com/4163/quivi-t/refs/heads/refactor/backend-cl-prep/test-files/BAKEMONOGATARI%20-%20c013%20(v03)%20-%20p002%20%5BKodansha%20Comics%5D%20%5BDigital%5D%20%5B1r0n%5D%20%7BHQ%7D.jpg) | Direct media | `Misc/BAKEMONOGATARI - c013 (v03) - p002 [Kodansha Comics] [Digital] [1r0n] {HQ}.jpg` | Host-agnostic raster catch-all (jpg, png, gif, webp, avif, apng, bmp), matched last so site extractors keep their CDN URLs, root sidecar recording |
-| Imgur | [Azuma - Seihantai](https://imgur.com/a/azuma-seihantai-17vF37d) | Album (41 PNGs) | `Imgur/Azuma - Seihantai/` | Album `/a/` route, multi-image manga set, description sanitization |
-| Imgur | [Anime Reaction Gifs](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) | Gallery (50 GIFs) | `Imgur/Anime Reaction Gifs/` | Large animation batch, download concurrency, prefetch threshold |
-| Imgur | [Witch Watch OP clips](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) | Gallery (8 MP4s) | `Imgur/Just some Witch Watch OP clips/` | Video extraction, audio stream detection, hashtag route (`#/t/anime`) |
-| Imgur | [Direct image sample](https://i.imgur.com/4Q6rSDi.png) | Direct media | `Imgur/4Q6rSDi.png` | Direct CDN URL (`i.imgur.com`), gallery match lookup, root sidecar recording |
-| MangaDex | [Akebi-chan no Sailor Fuku (Chapters)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=chapters) | Multi-chapter series | `MangaDex/Akebi-chan no Sailor Fuku/{Language}/{Volume}/{Chapter}/` | Series `/title/{id}` route with `?tab=chapters`, feed pagination, volume hierarchy, 5-tier folder metadata |
-| MangaDex | [Oshi no Ko (Chapters)](https://mangadex.org/title/296cbc31-af1a-4b5b-a34b-fee2b4cad542/-oshi-no-ko?tab=chapters) | Series with MANGA Plus externals | `MangaDex/【Oshi no Ko】/{Language}/{Volume}/{Chapter}/` | Hosted + external feed merge, MANGA Plus stubs with ` (MANGA Plus)` suffix, lazy resolution |
-| MangaDex | [Bakemonogatari (Chapters)](https://mangadex.org/title/4265c437-7d57-4d31-9b1d-0e574a07b7b7/bakemonogatari?tab=chapters) | Series with K MANGA externals | `MangaDex/{Title}/{Language}/{Volume}/{Chapter} (K MANGA)/` | K MANGA stubs with ` (K MANGA)` suffix, lazy resolution through kmanga.js |
-| MangaDex | [Akebi-chan Ch. 1](https://mangadex.org/chapter/0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d) | Single chapter (33 JPGs) | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 1 Ch. 1/` | Chapter `/chapter/{id}` route, `@home` delivery, ComicInfo sidecar |
-| MangaDex | [Akebi-chan (Covers)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=art) | Art collection | `MangaDex/Akebi-chan no Sailor Fuku (Covers)/` | Art `/title/{id}?tab=art`, multi-locale pagination, root cover, volume filenames |
-| MangaDex | [Akebi-chan Vol. 16 Cover](https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg) | Direct media | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg` | Direct cover URL `/covers/{id}/{file}`, API title resolution, root `gallery.json` dedup |
-| MangaDex | [Reader blob:https:// URL](blob:https://mangadex.org/a357d5db-d810-4566-b0aa-cba411aa9460) | Unsupported | *Rejected* | Blob URL detection, descriptive rejection guiding user to chapter link |
-| MANGA Plus | [SPY x FAMILY (Chapters)](https://mangaplus.shueisha.co.jp/titles/100056) | Title series | `MangaPlus/SPY x FAMILY (English)/{Chapter}/` | Series `titles/{id}` route via `title_detailV3`, language root, cover, lazy chapter stubs |
-| MANGA Plus | [SPY x FAMILY Ch. 1](https://mangaplus.shueisha.co.jp/viewer/1001834) | Single chapter | `MangaPlus/SPY x FAMILY - Ch. 1 (English)/` | Chapter `viewer/{id}` via `manga_viewer_v3`, XOR decrypt, `Plus-Vw-Token` headers |
-| MANGA Plus | [SPY x FAMILY cover](https://jumpg-assets.tokyo-cdn.com/secure/title/100056/title_thumbnail_portrait_list/313744.jpg?hash=ktoQqLjO4TO9hZz8kWFCvQ&expires=2145884400) | Direct media | `MangaPlus/SPY x FAMILY - Cover (English).jpg` | Signed CDN URL preserved, friendly filename via title detail with hashed fallback |
-| MANGA Plus | [SPY x FAMILY Ch. 1 thumbnail](https://jumpg-assets.tokyo-cdn.com/secure/title/100056/chapter/1001834/chapter_thumbnail/19585.jpg?hash=gVDGhzX3CkbecAwAwCx-HQ&expires=1790074800) | Direct media | `MangaPlus/SPY x FAMILY - Ch. 1 Thumbnail (English).jpg` | Chapter thumbnail CDN URL, chapter number from title detail, friendly filename |
-| K MANGA | [Imperfect Girl (Chapters)](https://kmanga.kodansha.com/title/10207/) | Title series | `KManga/Imperfect Girl/{Chapter}/` | Series `title/{id}` route, Nuxt HTML metadata, free episode detection, lazy stubs |
-| K MANGA | [Imperfect Girl Ch. 1](https://kmanga.kodansha.com/title/10207/episode/306448) | Single episode | `KManga/Imperfect Girl - Ch. 1/` | Episode `title/{id}/episode/{id}` route, tile-grid descramble, auth hash, thumbnail prepend |
-| K MANGA | [Imperfect Girl cover](https://cdn.kmanga.kodansha.com/static/titles/10207/title_grid_wide_20230411154524221380412b91d393067ceef5bb2a4252.png) | Direct media | `KManga/Imperfect Girl Cover.png` | Title-level CDN URL, HTML title resolution, hashed fallback |
-| K MANGA | [Imperfect Girl Ch. 1 thumbnail](https://cdn.kmanga.kodansha.com/static/titles/10207/episodes/306448/thumbnail_2023041414075269dd38c43f51fecfcf08eeb452f74b09.png) | Direct media | `KManga/Imperfect Girl - Ch. 1 Thumbnail.png` | Episode thumbnail CDN URL, chapter number from HTML metadata |
+| Provider | Test target | Import type | Library destination |
+|:---|:---|:---|:---|
+| Misc | [BAKEMONOGATARI c013 p002](https://raw.githubusercontent.com/4163/quivi-t/refs/heads/refactor/backend-cl-prep/test-files/BAKEMONOGATARI%20-%20c013%20(v03)%20-%20p002%20%5BKodansha%20Comics%5D%20%5BDigital%5D%20%5B1r0n%5D%20%7BHQ%7D.jpg) | Direct media | `Misc/BAKEMONOGATARI - c013 (v03) - p002 [Kodansha Comics] [Digital] [1r0n] {HQ}.jpg` |
+| | Host-agnostic raster + sanitized SVG catch-all, matched last, document pages rejected, root sidecar recording |||
+| Misc | [koi.svg](https://x9000.6te.net/secret/koi.svg) | Direct media (SVG) | `Misc/koi.svg` |
+| | Illustrator export with entity prolog, sanitized text path |||
+| Imgur | [Azuma - Seihantai](https://imgur.com/a/azuma-seihantai-17vF37d) | Album (41 PNGs) | `Imgur/Azuma - Seihantai/` |
+| | Album `/a/` route, multi-image manga set, description sanitization |||
+| Imgur | [Anime Reaction Gifs](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) | Gallery (50 GIFs) | `Imgur/Anime Reaction Gifs/` |
+| | Large animation batch, download concurrency, prefetch threshold |||
+| Imgur | [Witch Watch OP clips](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) | Gallery (8 MP4s) | `Imgur/Just some Witch Watch OP clips/` |
+| | Video extraction, audio stream detection, hashtag route (`#/t/anime`) |||
+| Imgur | [Direct image sample](https://i.imgur.com/4Q6rSDi.png) | Direct media | `Imgur/4Q6rSDi.png` |
+| | Direct CDN URL (`i.imgur.com`), gallery match lookup, root sidecar recording |||
+| MangaDex | [Akebi-chan no Sailor Fuku (Chapters)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=chapters) | Multi-chapter series | `MangaDex/Akebi-chan no Sailor Fuku/{Language}/{Volume}/{Chapter}/` |
+| | Series `/title/{id}` route with `?tab=chapters`, feed pagination, volume hierarchy, 5-tier folder metadata |||
+| MangaDex | [Oshi no Ko (Chapters)](https://mangadex.org/title/296cbc31-af1a-4b5b-a34b-fee2b4cad542/-oshi-no-ko?tab=chapters) | Series with MANGA Plus externals | `MangaDex/【Oshi no Ko】/{Language}/{Volume}/{Chapter}/` |
+| | Hosted + external feed merge, MANGA Plus stubs with ` (MANGA Plus)` suffix, lazy resolution |||
+| MangaDex | [Bakemonogatari (Chapters)](https://mangadex.org/title/4265c437-7d57-4d31-9b1d-0e574a07b7b7/bakemonogatari?tab=chapters) | Series with K MANGA externals | `MangaDex/{Title}/{Language}/{Volume}/{Chapter} (K MANGA)/` |
+| | K MANGA stubs with ` (K MANGA)` suffix, lazy resolution through kmanga.js |||
+| MangaDex | [Akebi-chan Ch. 1](https://mangadex.org/chapter/0c4369d6-f0e6-49d7-acb5-99a8d1ea8f8d) | Single chapter (33 JPGs) | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 1 Ch. 1/` |
+| | Chapter `/chapter/{id}` route, `@home` delivery, ComicInfo sidecar |||
+| MangaDex | [Akebi-chan (Covers)](https://mangadex.org/title/770c61b9-0ef2-460b-8c25-c10ab23349ce/akebi-chan-no-sailor-fuku?tab=art) | Art collection | `MangaDex/Akebi-chan no Sailor Fuku (Covers)/` |
+| | Art `/title/{id}?tab=art`, multi-locale pagination, root cover, volume filenames |||
+| MangaDex | [Akebi-chan Vol. 16 Cover](https://mangadex.org/covers/770c61b9-0ef2-460b-8c25-c10ab23349ce/47df7fb5-dc37-492f-98bc-affe54b74960.jpg) | Direct media | `MangaDex/Akebi-chan no Sailor Fuku - Vol. 16 Cover.jpg` |
+| | Direct cover URL `/covers/{id}/{file}`, API title resolution, root `gallery.json` dedup |||
+| MangaDex | [Reader blob:https:// URL](blob:https://mangadex.org/a357d5db-d810-4566-b0aa-cba411aa9460) | Unsupported | *Rejected* |
+| | Blob URL detection, descriptive rejection guiding user to chapter link |||
+| MANGA Plus | [SPY x FAMILY (Chapters)](https://mangaplus.shueisha.co.jp/titles/100056) | Title series | `MangaPlus/SPY x FAMILY (English)/{Chapter}/` |
+| | Series `titles/{id}` route via `title_detailV3`, language root, cover, lazy chapter stubs |||
+| MANGA Plus | [SPY x FAMILY Ch. 1](https://mangaplus.shueisha.co.jp/viewer/1001834) | Single chapter | `MangaPlus/SPY x FAMILY - Ch. 1 (English)/` |
+| | Chapter `viewer/{id}` via `manga_viewer_v3`, XOR decrypt, `Plus-Vw-Token` headers |||
+| MANGA Plus | [SPY x FAMILY cover](https://jumpg-assets.tokyo-cdn.com/secure/title/100056/title_thumbnail_portrait_list/313744.jpg?hash=ktoQqLjO4TO9hZz8kWFCvQ&expires=2145884400) | Direct media | `MangaPlus/SPY x FAMILY - Cover (English).jpg` |
+| | Signed CDN URL preserved, friendly filename via title detail with hashed fallback |||
+| MANGA Plus | [SPY x FAMILY Ch. 1 thumbnail](https://jumpg-assets.tokyo-cdn.com/secure/title/100056/chapter/1001834/chapter_thumbnail/19585.jpg?hash=gVDGhzX3CkbecAwAwCx-HQ&expires=1790074800) | Direct media | `MangaPlus/SPY x FAMILY - Ch. 1 Thumbnail (English).jpg` |
+| | Chapter thumbnail CDN URL, chapter number from title detail, friendly filename |||
+| K MANGA | [Imperfect Girl (Chapters)](https://kmanga.kodansha.com/title/10207/) | Title series | `KManga/Imperfect Girl/{Chapter}/` |
+| | Series `title/{id}` route, Nuxt HTML metadata, free episode detection, lazy stubs |||
+| K MANGA | [Imperfect Girl Ch. 1](https://kmanga.kodansha.com/title/10207/episode/306448) | Single episode | `KManga/Imperfect Girl - Ch. 1/` |
+| | Episode `title/{id}/episode/{id}` route, tile-grid descramble, auth hash, thumbnail prepend |||
+| K MANGA | [Imperfect Girl cover](https://cdn.kmanga.kodansha.com/static/titles/10207/title_grid_wide_20230411154524221380412b91d393067ceef5bb2a4252.png) | Direct media | `KManga/Imperfect Girl Cover.png` |
+| | Title-level CDN URL, HTML title resolution, hashed fallback |||
+| K MANGA | [Imperfect Girl Ch. 1 thumbnail](https://cdn.kmanga.kodansha.com/static/titles/10207/episodes/306448/thumbnail_2023041414075269dd38c43f51fecfcf08eeb452f74b09.png) | Direct media | `KManga/Imperfect Girl - Ch. 1 Thumbnail.png` |
+| | Episode thumbnail CDN URL, chapter number from HTML metadata |||
 
 ## Module contract
 
@@ -95,7 +117,7 @@ An extractor is an ES module. Two exports are required, two are optional.
 | `isDirectUrl` | no | `(url) => bool` | Returns `true` for direct media URLs (CDN images, covers). The app skips the HTML fetch and routes through `parseDirectUrl`. |
 | `parseDirectUrl` | no | `(url, context) => { provider, hash, filename, url } \| null` | Resolves a direct media URL. `hash` deduplicates against Library sidecars. Returning `null` falls through to `extract`. Resized variants (such as MangaDex `file.jpg.512.jpg` covers) normalize to the canonical file so they link their gallery copies, while the download still uses the pasted address. |
 
-`context` provides `fetchText(url)`, and when declared, `fetchBytes(url)` and `requestHeaders`.
+`context` provides `fetchText(url)`, and when declared, `fetchBytes(url)` (resolves to a `Uint8Array`) and `requestHeaders`.
 
 ### Header directives
 

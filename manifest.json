@@ -55,7 +55,7 @@
       "libraryPath": "Misc",
       "version": 1,
       "patterns": [
-        "^https?://[^?#]+\\.([jJ][pP][gG]|[jJ][pP][eE][gG]|[pP][nN][gG]|[gG][iI][fF]|[wW][eE][bB][pP]|[aA][vV][iI][fF]|[aA][pP][nN][gG]|[bB][mM][pP])([?#].*)?$"
+        "^https?://[^?#]+\\.([jJ][pP][gG]|[jJ][pP][eE][gG]|[pP][nN][gG]|[gG][iI][fF]|[wW][eE][bB][pP]|[aA][vV][iI][fF]|[aA][pP][nN][gG]|[bB][mM][pP]|[sS][vV][gG])([?#].*)?$"
       ],
       "source": "direct.js"
     }
