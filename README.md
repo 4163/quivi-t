@@ -368,9 +368,6 @@ QuiviT/
 │  ├─ urlLoader.test.js           # URL registry, extractor, and download queue rules
 │  └─ viewerMath.test.js          # Viewport scaling, transforms, and spread geometry
 ├─ extractors/ (orphan branch)    # Remote registry for runtime site extractors
-│  ├─ README.md                   # Authoring contract and contribution guidelines
-│  ├─ manifest.json               # Versioned registry for remote extractors
-│  └─ imgur.js                    # Imgur extractor
 ├─ src/
 │  ├─ index.html                  # Main viewer window
 │  ├─ options.html                # Options window
