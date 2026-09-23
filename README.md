@@ -328,6 +328,7 @@ AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/sk
 | **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG/AVIF playback under filters and Lanczos |
 | **Video Playback** | HTML5 `<video>` / `<audio>` | MP4 playback with WebGL shader filtering, zero-flicker bridging, and native ISOBMFF sound track detection |
 | **Lanczos Scaling** | `pica` | Off-thread still-image Lanczos resize |
+| **SVG Sanitization** | DOMPurify | Remote SVG imports saved as sanitized text, never raw bytes |
 | **WebGL Filters** | WebGL2 | Anime4K, CRT, Phosphor, Scanlines, and per-frame Lanczos on animated images |
 | **Archives (ZIP/CBZ)** | `zip` | Fast on-demand extraction and password decryption |
 | **Archives (RAR/CBR)** | `unrar` | Legacy archive support and password decryption |

@@ -21,7 +21,11 @@ import {
   buildMatchSets,
   addCoverIdentifiers,
   matchSidecarRecord,
-  buildStubCoverRecord
+  buildStubCoverRecord,
+  sanitizeSvgText,
+  expandSvgEntities,
+  downloadSanitizedSvg,
+  downloadFile
 } from '../src/js/urlLoader.js';
 import * as ImgurExtractor from '../extractors/imgur.js';
 import * as MangaDexExtractor from '../extractors/mangadex.js';
@@ -2849,9 +2853,10 @@ describe('direct image extractor', () => {
     assert.equal(DirectExtractor.match('https://example.com/assets/photo.JPG?token=abc'), true);
     assert.equal(DirectExtractor.match('https://example.com/a/b/c.webp#frag'), true);
     assert.equal(DirectExtractor.match('https://example.com/a.gif'), true);
+    assert.equal(DirectExtractor.match('https://example.com/a.svg'), true);
     assert.equal(DirectExtractor.match('https://example.com/gallery'), false);
     assert.equal(DirectExtractor.match('https://example.com/clip.mp4'), false);
-    assert.equal(DirectExtractor.match('https://example.com/vector.svg'), false);
+    assert.equal(DirectExtractor.match('https://example.com/icon.ico'), false);
     assert.equal(DirectExtractor.match('blob:https://example.com/abc'), false);
     assert.equal(DirectExtractor.match(''), false);
     assert.equal(DirectExtractor.match(null), false);
@@ -2877,8 +2882,7 @@ describe('direct image extractor', () => {
     assert.equal(await DirectExtractor.parseDirectUrl('not a url'), null);
   });
 
-  it('loses site CDN URLs to earlier manifest entries', () => {
-    const manifest = {
+  it('loses site CDN URLs to earlier manifest entries', () => {    const manifest = {
       version: 1,
       extractors: [
         {
@@ -2889,7 +2893,7 @@ describe('direct image extractor', () => {
         {
           id: 'direct', name: 'Misc', libraryPath: 'Misc', version: 1,
           source: 'direct.js',
-          patterns: ['^https?://[^?#]+\\.([jJ][pP][gG]|[jJ][pP][eE][gG]|[pP][nN][gG]|[gG][iI][fF]|[wW][eE][bB][pP]|[aA][vV][iI][fF]|[aA][pP][nN][gG]|[bB][mM][pP])([?#].*)?$']
+          patterns: ['^https?://[^?#]+\\.([jJ][pP][gG]|[jJ][pP][eE][gG]|[pP][nN][gG]|[gG][iI][fF]|[wW][eE][bB][pP]|[aA][vV][iI][fF]|[aA][pP][nN][gG]|[bB][mM][pP]|[sS][vV][gG])([?#].*)?$']
         }
       ]
     };
@@ -2901,6 +2905,236 @@ describe('direct image extractor', () => {
       findExtractor('https://example.com/assets/shot.png', manifest).id,
       'direct'
     );
+    assert.equal(
+      findExtractor('https://example.com/assets/logo.svg', manifest).id,
+      'direct'
+    );
+  });
+
+  it('resolves SVG targets through the sanitized path', async () => {
+    const parsed = await DirectExtractor.parseDirectUrl('https://example.com/assets/logo.SVG');
+    assert.equal(parsed.provider, 'Misc');
+    assert.equal(parsed.filename, 'logo.svg');
+  });
+});
+
+describe('direct document rejection', () => {
+  const toBytes = (payload) => (Array.isArray(payload) ? Uint8Array.from(payload) : Uint8Array.from(Buffer.from(payload)));
+  const stubBytes = (payload) => {
+    let seenHeaders;
+    const fetchBytes = async (url, headers) => {
+      seenHeaders = headers;
+      return toBytes(payload);
+    };
+    return { fetchBytes, seenHeaders: () => seenHeaders };
+  };
+
+  it('accepts matching magic bytes', async () => {
+    const png = stubBytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00]);
+    const parsed = await DirectExtractor.parseDirectUrl('https://example.com/a.png', png);
+    assert.equal(parsed.filename, 'a.png');
+    assert.deepEqual(png.seenHeaders(), { Range: 'bytes=0-1023' });
+
+    const jpg = stubBytes([0xFF, 0xD8, 0xFF, 0xE0]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.jpg', jpg)).filename, 'a.jpg');
+
+    const svg = stubBytes([...Buffer.from('<svg xmlns="http://www.w3.org/2000/svg">')]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.svg', svg)).filename, 'a.svg');
+  });
+
+  it('rejects document pages wearing image extensions', async () => {
+    const page = stubBytes([...Buffer.from('<!DOCTYPE html><html><head><title>blob</title>')]);
+    await assert.rejects(
+      DirectExtractor.parseDirectUrl('https://example.com/blob/main/gfl-spinner.svg', page),
+      /document page/
+    );
+    await assert.rejects(
+      DirectExtractor.parseDirectUrl('https://example.com/photo.png', page),
+      /document page/
+    );
+  });
+
+  it('rejects mismatched magic bytes', async () => {
+    const html = stubBytes([...Buffer.from('<html><body>nope</body>')]);
+    await assert.rejects(
+      DirectExtractor.parseDirectUrl('https://example.com/a.png', html),
+      /document page/
+    );
+  });
+
+  it('rejects page chrome starting with non-svg tags', async () => {
+    const frag = stubBytes([...Buffer.from('\n\n  <a href="#start-of-content"><svg data-component="Octicon"></svg></a>')]);
+    await assert.rejects(
+      DirectExtractor.parseDirectUrl('https://example.com/file.svg', frag),
+      /document page/
+    );
+  });
+
+  it('accepts prolog-led SVG documents', async () => {
+    const koi = stubBytes([...Buffer.from('<?xml version="1.0"?><!-- Generator: Illustrator --><!DOCTYPE svg [<!ENTITY st "x">]><svg><path/></svg>')]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/koi.svg', koi)).filename, 'koi.svg');
+  });
+
+  it('passes through when the window holds prolog only', async () => {
+    const prolog = stubBytes([...Buffer.from('<?xml version="1.0"?><!-- Generator: Illustrator --><!DOCTYPE svg [<!ENTITY a "x"><!ENTITY b "y">')]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/koi.svg', prolog)).filename, 'koi.svg');
+  });
+
+  it('passes through on inconclusive answers', async () => {
+    const tiny = stubBytes([0x89]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.png', tiny)).filename, 'a.png');
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.png', {})).filename, 'a.png');
+    const failing = { fetchBytes: async () => { throw new Error('nope'); } };
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.png', failing)).filename, 'a.png');
+  });
+
+  it('tolerates base64 byte containers', async () => {
+    const b64 = { fetchBytes: async () => Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]).toString('base64') };
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.png', b64)).filename, 'a.png');
+  });
+});
+
+describe('sanitized SVG downloads', () => {
+  let prevWindow;
+  let calls;
+
+  beforeEach(() => {
+    prevWindow = globalThis.window;
+    calls = [];
+    globalThis.window = {
+      DOMPurify: {
+        sanitize: (text, config) => {
+          calls.push(config);
+          return `clean:${text}`;
+        }
+      },
+      __TAURI__: {
+        core: {
+          invoke: async (cmd, args) => {
+            calls.push({ cmd, args });
+            if (cmd === 'fetch_text') return '<svg>raw</svg>';
+            return null;
+          }
+        }
+      }
+    };
+  });
+
+  afterEach(() => {
+    globalThis.window = prevWindow;
+  });
+
+  it('sanitizes with the SVG profile', () => {
+    assert.equal(sanitizeSvgText('<svg>raw</svg>'), 'clean:<svg>raw</svg>');
+    assert.deepEqual(calls[0], { USE_PROFILES: { svg: true } });
+  });
+
+  it('throws without a sanitizer', () => {
+    delete globalThis.window.DOMPurify;
+    assert.throws(() => sanitizeSvgText('<svg/>'), /sanitizer unavailable/);
+  });
+
+  it('routes .svg downloads through fetch plus text write', async () => {
+    await downloadFile('https://example.com/a.svg', 'C:\\Lib\\a.svg');
+    const cmds = calls.filter((c) => c.cmd).map((c) => c.cmd);
+    assert.deepEqual(cmds, ['fetch_text', 'write_text_file']);
+    const write = calls.find((c) => c.cmd === 'write_text_file');
+    assert.equal(write.args.path, 'C:\\Lib\\a.svg');
+    assert.equal(write.args.content, 'clean:<svg>raw</svg>');
+  });
+
+  it('keeps raster downloads on the binary path', async () => {
+    await downloadFile('https://example.com/a.png', 'C:\\Lib\\a.png');
+    assert.deepEqual(
+      calls.filter((c) => c.cmd).map((c) => c.cmd),
+      ['download_to_file', 'verify_image_magic']
+    );
+    const verify = calls.find((c) => c.cmd === 'verify_image_magic');
+    assert.equal(verify.args.path, 'C:\\Lib\\a.png');
+    assert.equal(verify.args.expectedExt, 'png');
+  });
+
+  it('deletes corrupt downloads and reports', async () => {
+    const cmds = [];
+    globalThis.window.__TAURI__.core.invoke = async (cmd, args) => {
+      cmds.push(cmd);
+      if (cmd === 'verify_image_magic') throw new Error('Downloaded file is not a valid png image');
+      return null;
+    };
+    await assert.rejects(
+      downloadFile('https://example.com/a.png', 'C:\\Lib\\a.png'),
+      /not a valid png image/
+    );
+    assert.ok(cmds.includes('remove_file'));
+  });
+
+  it('refuses emptied documents', async () => {
+    globalThis.window.DOMPurify.sanitize = () => '   ';
+    await assert.rejects(
+      downloadSanitizedSvg('https://example.com/a.svg', 'C:\\Lib\\a.svg'),
+      /emptied/
+    );
+  });
+
+  it('refuses document text at the sanitized gate', async () => {
+    globalThis.window.__TAURI__.core.invoke = async (cmd) => {
+      if (cmd === 'fetch_text') return '\n\n  <a href="#x"><svg data-component="Octicon"></svg></a>';
+      return null;
+    };
+    await assert.rejects(
+      downloadSanitizedSvg('https://example.com/blob/f.svg', 'C:\\Lib\\f.svg'),
+      /document page/
+    );
+  });
+
+  it('passes prolog-led SVG text through the gate', async () => {
+    globalThis.window.__TAURI__.core.invoke = async (cmd) => {
+      if (cmd === 'fetch_text') return '<?xml version="1.0"?><!DOCTYPE svg [<!ENTITY s "x">]><svg><path/></svg>';
+      if (cmd === 'write_text_file') {
+        calls.push({ cmd });
+        return null;
+      }
+      return null;
+    };
+    await downloadSanitizedSvg('https://example.com/koi.svg', 'C:\\Lib\\koi.svg');
+    assert.ok(calls.some((c) => c.cmd === 'write_text_file'));
+  });
+});
+
+describe('SVG entity pre-expansion', () => {
+  it('expands Illustrator-style entities and drops the doctype', () => {
+    const input = '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [<!ENTITY st12 "fill:url(#SVGID_1_);"><!ENTITY ns_ai "http://ns.adobe.com/AdobeIllustrator/10.0/">]><svg><path style="&st12;"/></svg>';
+    assert.equal(
+      expandSvgEntities(input),
+      '<svg><path style="fill:url(#SVGID_1_);"/></svg>'
+    );
+  });
+
+  it('leaves entity-free documents untouched', () => {
+    assert.equal(expandSvgEntities('<svg><circle/></svg>'), '<svg><circle/></svg>');
+  });
+
+  it('expands nested literals exactly once without amplifying', () => {
+    assert.equal(
+      expandSvgEntities('<!DOCTYPE svg [<!ENTITY lol "a&b;">]><svg>&lol;</svg>'),
+      '<svg>a&b;</svg>'
+    );
+    let attack = '<!DOCTYPE svg [';
+    for (let i = 0; i < 9; i++) attack += `<!ENTITY lol${i} "&lol;">`;
+    attack += ']><svg>&lol8;</svg>';
+    const out = expandSvgEntities(attack);
+    assert.ok(!out.includes('<!ENTITY'));
+    assert.ok(out.length < 1000);
+  });
+
+  it('rejects external entities', () => {
+    const input = '<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><svg>&xxe;</svg>';
+    assert.throws(() => expandSvgEntities(input), /entity block rejected/);
+  });
+
+  it('rejects parameter entities', () => {
+    const input = '<!DOCTYPE svg [<!ENTITY % pe "x">]><svg></svg>';
+    assert.throws(() => expandSvgEntities(input), /entity block rejected/);
   });
 });
 
