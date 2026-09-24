@@ -2347,10 +2347,12 @@ async function _readFileSizes(galleryPath) {
 
 function _startGalleryQueue(galleryPath, items, options = {}) {
   const viewedDir = _Core?.getState?.()?.directory;
-  if (viewedDir && !_pathsEqual(viewedDir, galleryPath)) {
-    // Not on screen (user left mid-import): sidecar + placeholders are
-    // already on disk, so entering the gallery resumes via onStateChange.
-    // Never drain a hidden gallery in the background.
+  if (!_pathsEqual(viewedDir || '', galleryPath)) {
+    // Navigate-first: sidecar + placeholders are already on disk, so
+    // entering the gallery resumes via onStateChange with the live sorted
+    // list. Starting before navigation runs the first picks in gallery
+    // fallback order (01, 02 under a descending sort) instead of display
+    // order. Never drain a hidden gallery in the background.
     return;
   }
 
@@ -2422,6 +2424,19 @@ function _startGalleryQueue(galleryPath, items, options = {}) {
   if (seededState?.directory && _pathsEqual(seededState.directory, galleryPath) && Array.isArray(seededState.list)) {
     setDisplayOrder(seededState.directory, seededState.list.map((entry) => entry?.name));
   }
+  // Fallback to the sort prefs when the live list is absent or stale
+  // (reimport with new files the old list does not cover): keeps the first
+  // picks in display order instead of gallery fallback order. Reads the
+  // queue's own items: the caller's array may lack derived filenames.
+  if (!_activeQueue._ranksCoverAll) {
+    try {
+      const pref = _sortPrefForDir(galleryPath);
+      const ordered = orderItemsBySort(_activeQueue._items, pref);
+      if (Array.isArray(ordered) && ordered.length > 0) {
+        setDisplayOrder(galleryPath, ordered.map((it) => it?.filename));
+      }
+    } catch {}
+  }
 
   const state = _Core?.getState?.();
   let prioritizedTarget = null;
@@ -2438,7 +2453,21 @@ function _startGalleryQueue(galleryPath, items, options = {}) {
   if (prioritizedTarget) {
     _activeQueue.prioritize(prioritizedTarget);
   } else {
-    const firstPending = items.find(i => i.status === 'pending');
+    // Display-first pending, not gallery-first: the live ranks seeded above
+    // already reflect the sorted list, so the active slot matches first
+    // paint instead of jumping to 01/02 under a descending sort. Sort the
+    // queue's own items: the caller's array may lack derived filenames,
+    // which would blank every rank and silently restore gallery order.
+    const queueItems = _activeQueue._items;
+    const byDisplay = [...queueItems].sort((a, b) => {
+      const rankA = _activeQueue._displayRankOf(a);
+      const rankB = _activeQueue._displayRankOf(b);
+      if (rankA !== undefined && rankB !== undefined) return rankA - rankB;
+      if (rankA !== undefined) return -1;
+      if (rankB !== undefined) return 1;
+      return (a.galleryIndex ?? 0) - (b.galleryIndex ?? 0);
+    });
+    const firstPending = byDisplay.find(i => i.status === 'pending');
     if (firstPending) {
       _activeQueue.prioritize(firstPending.destPath);
     }
@@ -2818,7 +2847,15 @@ export async function prepareGalleryDirectory(galleryPath, options = {}) {
     targetImg = data.images.find((img) => (img.filename || '').toLowerCase() === cleanTarget);
   }
   if (!targetImg) {
-    targetImg = data.images[0];
+    // Display-first, not gallery-first: first paint shows the top of the
+    // sorted list, so its bytes come first (36, not 01, under a descending
+    // sort). Falls back to gallery order when prefs are unavailable.
+    try {
+      const ordered = orderItemsBySort(data.images, _sortPrefForDir(galleryPath));
+      targetImg = (Array.isArray(ordered) && ordered.length > 0 ? ordered[0] : null) || data.images[0];
+    } catch {
+      targetImg = data.images[0];
+    }
   }
   if (!targetImg || (!targetImg.sourceUrl && !targetImg.url)) return false;
 
