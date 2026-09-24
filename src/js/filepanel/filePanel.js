@@ -28,7 +28,7 @@ import {
   setDisplayOrder as setDownloadDisplayOrder,
   cancelGalleryDownloads,
   forgetDeletedLibraryEntry,
-  isGalleryDownloading,
+  isGalleryDownloadingWithin,
   fetchManifest,
   getGalleryDownloadStatus,
   retryGalleryDownload,
@@ -1171,8 +1171,8 @@ function buildLibraryEntry(item, depth = 0) {
         // navigation happened (viewing the parent) or when the boot target
         // is actively downloading (watcher echo skips downloading dirs).
         const parentOfTarget = targetDir.includes('/') ? targetDir.substring(0, targetDir.lastIndexOf('/')) : '';
-        const bootTargetBusy = isInside && providerRoot && typeof isGalleryDownloading === 'function'
-          && isGalleryDownloading(providerRoot);
+        const bootTargetBusy = isInside && providerRoot && typeof isGalleryDownloadingWithin === 'function'
+          && isGalleryDownloadingWithin(providerRoot);
         if (FsUtils?.refresh && ((isInside && (!providerRoot || bootTargetBusy)) || (!isInside && curDir === parentOfTarget))) {
           await FsUtils.refresh();
         }

@@ -44,6 +44,7 @@ const SUPPORTED_IMAGE_EXTENSIONS = new Set([
 ]);
 export const MAX_GALLERY_PATH_DEPTH = 8;
 const GALLERY_WRITE_CHUNK_SIZE = 25;
+const GENERIC_COVER_FILENAMES = new Set(['cover.jpg', 'cover.png']);
 
 let _urlOverlay = null;
 let _Core = null;
@@ -1392,7 +1393,9 @@ async function pruneRootSidecarRecords(providerPath, deletedNames) {
 
 async function cleanupRootFiles(providerPath, dirFiles, sets) {
   await linkRootSidecarRecords(providerPath, sets);
-  const deletedNames = new Set();
+  // Collect matches first, then remove in capped parallel: serial per-file
+  // IPC made large providers crawl.
+  const doomed = [];
   for (const entry of dirFiles || []) {
     if (entry.is_dir) continue;
     const lowerName = (entry.name || '').toLowerCase();
@@ -1400,13 +1403,20 @@ async function cleanupRootFiles(providerPath, dirFiles, sets) {
     const dotIndex = lowerName.lastIndexOf('.');
     const fileBase = (dotIndex > 0 ? lowerName.slice(0, dotIndex) : lowerName).toLowerCase();
     if (sets.stems.has(fileBase) || sets.filenames.has(lowerName)) {
+      doomed.push(entry);
+    }
+  }
+  const deletedNames = new Set();
+  for (let i = 0; i < doomed.length; i += GALLERY_WRITE_CHUNK_SIZE) {
+    const chunk = doomed.slice(i, i + GALLERY_WRITE_CHUNK_SIZE);
+    await Promise.all(chunk.map(async (entry) => {
       try {
         await window.__TAURI__.core.invoke('remove_file', { path: entry.path });
-        deletedNames.add(lowerName);
+        deletedNames.add((entry.name || '').toLowerCase());
       } catch (err) {
         console.warn('[UrlLoader] Failed to remove matching root file:', entry.path, err);
       }
-    }
+    }));
   }
   await pruneRootSidecarRecords(providerPath, deletedNames);
 }
@@ -1612,37 +1622,43 @@ export async function cleanupMatchingProviderEntries(providerPath, result) {
     // Cover.jpg and Cover.png names stay out so one series cannot clear
     // another's root cover.
     const coverList = Array.isArray(result.covers) ? result.covers : (result.cover ? [result.cover] : []);
-    const GENERIC_COVER_FILENAMES = new Set(['cover.jpg', 'cover.png']);
 
-    for (const entry of dirResult.files) {
-      if (!entry.is_dir) continue;
-      const lowerName = (entry.name || '').toLowerCase();
-      if (!shouldRemoveChapters || lowerName === seriesRootName) continue;
-
-      const sidecarPath = `${entry.path}\\gallery.json`;
-      let isMatch = false;
-      try {
-        const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
-        const sidecar = JSON.parse(sidecarText);
-        const sidecarId = sidecar?.gallery?.id?.toLowerCase();
-        const sidecarUrl = normalizeUrl(sidecar?.sourceUrl || sidecar?.url || '').toLowerCase();
-
-        if (sidecarId && chapterIds.has(sidecarId)) {
-          isMatch = true;
-        } else if (sidecarUrl && chapterUrls.has(sidecarUrl)) {
-          isMatch = true;
+    // Sidecar reads and directory removals run in capped parallel: serial
+    // per-directory IPC made large series imports crawl.
+    const chapterDirs = (dirResult.files || []).filter((entry) => {
+      if (!entry.is_dir) return false;
+      return shouldRemoveChapters && (entry.name || '').toLowerCase() !== seriesRootName;
+    });
+    const matchedDirs = [];
+    for (let i = 0; i < chapterDirs.length; i += GALLERY_WRITE_CHUNK_SIZE) {
+      const chunk = chapterDirs.slice(i, i + GALLERY_WRITE_CHUNK_SIZE);
+      const matches = await Promise.all(chunk.map(async (entry) => {
+        const sidecarPath = `${entry.path}\\gallery.json`;
+        try {
+          const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+          const sidecar = JSON.parse(sidecarText);
+          const sidecarId = sidecar?.gallery?.id?.toLowerCase();
+          const sidecarUrl = normalizeUrl(sidecar?.sourceUrl || sidecar?.url || '').toLowerCase();
+          if (sidecarId && chapterIds.has(sidecarId)) return entry;
+          if (sidecarUrl && chapterUrls.has(sidecarUrl)) return entry;
+        } catch {
+          // Not a valid gallery sidecar, skip
         }
-      } catch {
-        // Not a valid gallery sidecar, skip
+        return null;
+      }));
+      for (const entry of matches) {
+        if (entry) matchedDirs.push(entry);
       }
-
-      if (isMatch) {
+    }
+    for (let i = 0; i < matchedDirs.length; i += GALLERY_WRITE_CHUNK_SIZE) {
+      const chunk = matchedDirs.slice(i, i + GALLERY_WRITE_CHUNK_SIZE);
+      await Promise.all(chunk.map(async (entry) => {
         try {
           await window.__TAURI__.core.invoke('remove_directory', { path: entry.path });
         } catch (err) {
           console.warn('[UrlLoader] Failed to remove matching standalone chapter directory:', entry.path, err);
         }
-      }
+      }));
     }
 
     if (shouldRemoveCovers && coverList.length > 0) {
@@ -2680,11 +2696,23 @@ export function isGalleryDownloading(dirPath) {
   return _pathsEqual(dirPath, _activeGalleryPath);
 }
 
-export function cancelGalleryDownloads(galleryPath) {
-  if (!galleryPath) return;
-  if (_activeGalleryPath && _pathsEqual(_activeGalleryPath, galleryPath)) {
+export function cancelGalleryDownloads(deletedPath) {
+  if (!deletedPath) return;
+  if (_galleryPathOverlapsActive(deletedPath)) {
     _teardownActiveQueue();
   }
+}
+
+// True when the active gallery is the path itself or lives under it: a
+// deleted parent takes its downloading descendants with it.
+function _galleryPathOverlapsActive(path) {
+  if (!_activeGalleryPath || !path) return false;
+  return _pathsEqual(_activeGalleryPath, path) || _isPathWithin(_activeGalleryPath, path);
+}
+
+export function isGalleryDownloadingWithin(dirPath) {
+  if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath) return false;
+  return _galleryPathOverlapsActive(dirPath);
 }
 
 function _teardownActiveQueue() {
@@ -2862,6 +2890,7 @@ export const UrlLoader = {
   normalizeUrl,
   isValidUrl,
   isGalleryDownloading,
+  isGalleryDownloadingWithin,
   cancelGalleryDownloads,
   isPlaceholderFile,
   getGalleryDownloadStatus,
