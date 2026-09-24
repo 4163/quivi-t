@@ -14,7 +14,7 @@ These items directly affect the viewer engine. They must be built into the CL or
 *   **[COMPLETED] Idle Cursor Auto-Hide:** Hiding the cursor over the canvas. The CL should handle its own interaction idle state.
 *   **Animated Frame Timeline:** A scrubber for WebCodecs/animated formats. The CL should either render this timeline or expose the exact frame state (`currentFrame`, `totalFrames`, `seek()`) so the host application can render it.
 *   **[COMPLETED] Options Save Resets Fit/Zoom (Bug):** The CL needs a clean configuration update path (e.g. `viewer.setConfig(...)`) that does not destroy current transform state unless explicitly requested.
-*   **Lanczos Memory & Instrumentation:** Reducing memory usage in the WebGL and Canvas pools, and measuring scaling delays. This is entirely internal to the CL.
+*   **[COMPLETED] Lanczos Memory & Instrumentation:** Reducing memory usage in the WebGL and Canvas pools, and measuring scaling delays. This is entirely internal to the CL.
 
 ## 2. Host Application (Desktop / UI / Routing)
 
@@ -32,7 +32,7 @@ These items belong to the consumer application. The CL does not know or care abo
 These items modify the Rust backend or the OS integration. They do not affect the portfolio web app, but they are critical for QuiviT Desktop.
 
 ### Priority 1: High-Impact / Core Reliability
-*   **Instrumentation System (Test Harness):** Writing `cargo test` coverage for archive parsing, caching, and config schemas. This is the safety net required before major backend refactoring.
+*   **[COMPLETED] Instrumentation System (Test Harness):** Writing `cargo test` coverage for archive parsing, caching, and config schemas. This is the safety net required before major backend refactoring.
 *   **[COMPLETED] .ico Spritesheet & Windows Icon Resolution (Slice 4.4):** Reworking how the backend fetches `SHGFI_LARGEICON` and how it passes those buffers to the frontend. The CL will just receive an array of URLs or a spritesheet image; the backend must do the heavy lifting of extracting and packing them.
 *   **[COMPLETED] Archive Loading Bottlenecks:** Fixed seek costs and backward scans in corrupted archives (O(1) entry map, trailing EOCD scan, microsecond header and boundary validation across ZIP, RAR, 7Z, and TAR) and eliminated condition variable / mutex lock contention during extraction.
 

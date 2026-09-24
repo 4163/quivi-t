@@ -20,7 +20,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Formats**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
 - **Archives**: Read compressed files directly as folders, including password-protected archives and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
-- **Web Import**: Save and read manga/galleries directly from supported sites for offline reading (see [Supported sites](#supported-sites)).
+- **Web Import**: Import manga and galleries from supported sites for offline reading (see [Supported sites](#supported-sites)).
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Mod`+wheel. Cursor auto-hides after inactivity over the viewport.
 - **Manga Spread Mode**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
 - **Scaling**: Choose from Pixelated, Bilinear, and Lanczos scaling.
@@ -167,7 +167,7 @@ The following system defaults are used:
 - **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge shows whether scroll zoom is latched or which bound modifier keys are currently held.
 - **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in **Options → General → Panning**.
 - **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
-- **Secondary Windows:** Options and Archive Info windows size to their content and open centered over the main window.
+- **Secondary Windows:** Options and Archive Info windows size to their content and open centered over the main window. Subsequent resizes keep the window in place.
 - **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
 - **History Trail:** Menu bar **Folder → Back / Forward** (`Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only: opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
 - **Library Location:** Defaults to `%LOCALAPPDATA%\QuiviT\library`. Configurable in **Options → General → Library location**, which relocates existing imported folders to the new folder and updates the active configuration.
@@ -198,6 +198,7 @@ Data is split across five files:
 - `options-active-tab`: Session-only; cleared on each app start
 - `quivit-metadata-current`: Short-lived metadata-window payload
 - `quivit_library_providers_collapsed`: Provider-collapse presentation state for the Library sidebar
+- `quivit_library_provider_order`: Provider sort order for the Library sidebar
 - `icon:*`: Cached native file-icon data
 
 **In-memory state**: session-only; reset on app exit:
@@ -226,7 +227,7 @@ The frontend is split into a state machine, pure services, and single-owner UI m
 - `main/`: Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge, password overlay, and the URL overlay.
 - `options/`: Options window, keybind capture UI, file-association UI.
 - `fsUtils.js`: Filesystem and archive navigation (no DOM).
-- `urlLoader.js`: Non-DOM URL import coordinator for remote extractors and progressive gallery downloads.
+- `urlLoader.js`: Non-DOM URL import coordinator for remote extractors, display-ordered gallery downloads, and SVG sanitization.
 - `shortcuts.js` / `keybinds.js`: Input dispatch and config merge. Action ids come from `ACTION_REGISTRY`.
 
 CSS follows the same split: `global.css` holds tokens and shared rules; `main.css`, `options.css`, and `metadata.css` are page-only.
@@ -246,7 +247,7 @@ The Rust backend is split into domain-specific modules:
 
 Testing spans three focused layers:
 - `src-tauri/src/tests/`: In-tree Rust unit tests for archive engines, config parsing, protocol URLs, and temp archive extraction matching (`cargo test`).
-- `mocha/`: Flat pure frontend unit tests for viewer math, state transitions, action registry, metadata parsing, sorting, and bounded cache (`npm test`).
+- `mocha/`: Flat pure frontend unit tests for viewer math, state transitions, action registry, metadata parsing, sorting, bounded cache, and URL loader flows (`npm test`).
 - `e2e/`: WebdriverIO end-to-end test suite (`e2e/specs/`) verifying startup chrome, navigation, viewer transforms, archive formats, and OS integrations against the live debug binary under portable mode isolation (`npm run test:e2e`).
 
 > **Design Principle:** New DOM belongs in the module that already owns that surface. New domain logic belongs in `core.js` or `services/`. Do not grow `main.js` back into a god file.
@@ -346,12 +347,12 @@ AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/sk
 | **Archives (7Z/CB7)** | `sevenz-rust2` | Solid LZMA archive support and password decryption |
 | **Archives (TAR/CBT)** | `tar` | Uncompressed archive reading |
 | **Character Encoding** | `chardetng` / `encoding_rs` | Statistical detection and decoding for legacy CJK encodings (Shift-JIS, GBK, EUC-KR, Big5) in ZIP and TAR archives |
-| **ICO Extraction** | `image` | Multi-frame ICO spritesheet generation |
-| **SVG Sanitization** | DOMPurify | Remote SVG imports saved as sanitized text, never raw bytes |
+| **Image Processing** | `image` | Multi-frame ICO spritesheet generation and tile descramble for provider-protected images |
+| **SVG Sanitization** | DOMPurify | Remote SVG imports saved as sanitized text with entity expansion, never raw bytes |
 | **Windows APIs** | `windows` / `winreg` | Native icons, shell thumbnails (`IShellItemImageFactory`), UI Automation and window enumeration (temp archive origin resolution), file attributes, shell notifications, and per-user file associations |
 | **Sorting** | `natord` | Natural alphanumeric sorting |
 | **File Watching** | `notify` | Directory watcher for auto-refresh |
-| **Network** | `ureq` | Blocking HTTP client for remote extractors and streamed image downloads |
+| **Network** | `ureq` | Blocking HTTP client for remote extractors, streamed image downloads, and raw byte fetches with header forwarding |
 | **Config** | `serde` / `serde_json` | Configuration serialization |
 | **Hashing** | `md5` | Deterministic temp directory naming |
 | **Data URIs** | `base64` | Base64 encoding for generated image payloads |
@@ -379,13 +380,14 @@ QuiviT/
 │  ├─ metadata.test.js            # ComicInfo and GalleryMeta JSON parsing
 │  ├─ sorting.test.js             # Archive natural sort order
 │  ├─ urlLoader.test.js           # URL registry, extractor, and download queue rules
+│  ├─ urlLoaderFlows.test.js      # URL import flow integration tests
 │  └─ viewerMath.test.js          # Viewport scaling, transforms, and spread geometry
 ├─ extractors/ (orphan branch)    # Remote registry for runtime site extractors
 ├─ src/
 │  ├─ index.html                  # Main viewer window
 │  ├─ options.html                # Options window
 │  ├─ metadata.html               # Archive metadata window
-│  ├─ assets/                     # Format icons and language flags
+│  ├─ assets/                     # Format icons, language flags, and metadata role icons
 │  ├─ css/
 │  │  ├─ global.css               # Tokens, resets, rules shared by every page
 │  │  ├─ main.css                 # Viewer / file-panel layout
@@ -443,7 +445,8 @@ QuiviT/
 │     │  ├─ configPreview.js      # Live preview + emergency CSS reset
 │     │  └─ windowFit.js          # Options / metadata content fit
 │     ├─ vendors/
-│     │  └─ pica.js               # High quality image resizing
+│     │  ├─ pica.js               # High quality image resizing
+│     │  └─ purify.min.js         # DOMPurify for SVG sanitization
 │     └─ viewer/
 │        ├─ viewer.js             # Facade
 │        ├─ viewerRender.js       # Image and video pools + transforms
