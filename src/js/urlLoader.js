@@ -43,6 +43,7 @@ const SUPPORTED_IMAGE_EXTENSIONS = new Set([
   'apng', 'avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'mp4', 'png', 'svg', 'webp'
 ]);
 export const MAX_GALLERY_PATH_DEPTH = 8;
+const GALLERY_WRITE_CHUNK_SIZE = 25;
 
 let _urlOverlay = null;
 let _Core = null;
@@ -1774,22 +1775,8 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     // 1. If direct URL is already recorded in root gallery.json or a chapter gallery, jump directly to that file
     const existingMatch = await findMatchingGalleryImage(providerPath, url, rawStem);
     if (existingMatch) {
-      // If the matched file is a 0-byte placeholder, download it eagerly before jumping
-      const matchSize = (await _readFileSizes(existingMatch.galleryPath)).get(existingMatch.targetName.toLowerCase());
-      if (matchSize !== undefined && matchSize === 0 && existingMatch.image?.sourceUrl) {
-        const destPath = `${existingMatch.galleryPath}\\${existingMatch.targetName}`;
-        const dlOpts = {};
-        if (existingMatch.image.headers) dlOpts.headers = existingMatch.image.headers;
-        if (existingMatch.image.decryption?.key) dlOpts.xorKey = existingMatch.image.decryption.key;
-        if (existingMatch.image.descramble) dlOpts.descramble = existingMatch.image.descramble;
-        try {
-          await downloadFile(existingMatch.image.sourceUrl, destPath, dlOpts);
-        } catch (err) {
-          if (existingMatch.image.fallbackUrl && existingMatch.image.fallbackUrl !== existingMatch.image.sourceUrl) {
-            await downloadFile(existingMatch.image.fallbackUrl, destPath, dlOpts).catch(() => {});
-          }
-        }
-      }
+      // Return-first: the queue downloads the placeholder after navigation
+      // lands on it, and the swap-on-arrival paints it. No eager fetch here.
       return {
         galleryPath: existingMatch.galleryPath,
         targetName: existingMatch.targetName,
@@ -1810,21 +1797,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     if (hash && hash !== rawStem) {
       const secondMatch = await findMatchingGalleryImage(providerPath, downloadUrl, hash);
       if (secondMatch) {
-        const secondSize = (await _readFileSizes(secondMatch.galleryPath)).get(secondMatch.targetName.toLowerCase());
-        if (secondSize !== undefined && secondSize === 0 && secondMatch.image?.sourceUrl) {
-          const destPath = `${secondMatch.galleryPath}\\${secondMatch.targetName}`;
-          const dlOpts = {};
-          if (secondMatch.image.headers) dlOpts.headers = secondMatch.image.headers;
-          if (secondMatch.image.decryption?.key) dlOpts.xorKey = secondMatch.image.decryption.key;
-          if (secondMatch.image.descramble) dlOpts.descramble = secondMatch.image.descramble;
-          try {
-            await downloadFile(secondMatch.image.sourceUrl, destPath, dlOpts);
-          } catch (err) {
-            if (secondMatch.image.fallbackUrl && secondMatch.image.fallbackUrl !== secondMatch.image.sourceUrl) {
-              await downloadFile(secondMatch.image.fallbackUrl, destPath, dlOpts).catch(() => {});
-            }
-          }
-        }
+        // Return-first: same as the first match above, no eager fetch.
         return {
           galleryPath: secondMatch.galleryPath,
           targetName: secondMatch.targetName,
@@ -1833,21 +1806,40 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       }
     }
 
-    // 2. Download raw under the provider root (e.g. Provider/image.png)
+    // 2. Download raw under the provider root (e.g. Provider/image.png).
+    // Placeholder first so navigation never waits for bytes. The background
+    // fetch records the sidecar on success and swaps the viewer on arrival.
     const destPath = `${providerPath}\\${targetFilename}`;
     if (window.__TAURI__) {
-      await downloadFile(downloadUrl, destPath);
+      await window.__TAURI__.core.invoke('create_placeholder_files', {
+        dir: providerPath,
+        filenames: [targetFilename]
+      }).catch(() => {});
+      window.dispatchEvent(new CustomEvent('quivit-library-updated'));
 
-      // Save metadata to root gallery.json
-      await recordRootMediaDownload(providerPath, directInfo?.provider || entry.displayName || entry.id, {
+      const rootInfo = {
         filename: targetFilename,
         rawFileName: rawFilename,
         hash,
         sourceUrl: url,
         url: downloadUrl
-      });
-
-      window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+      };
+      const rootProvider = directInfo?.provider || entry.displayName || entry.id;
+      (async () => {
+        try {
+          await downloadFile(downloadUrl, destPath);
+          await recordRootMediaDownload(providerPath, rootProvider, rootInfo);
+          window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+          window.dispatchEvent(new CustomEvent('quivit-download-complete', {
+            detail: { destPath, size: 1 }
+          }));
+        } catch (err) {
+          window.dispatchEvent(new CustomEvent('quivit-status-flash', {
+            detail: { message: `Download failed: ${targetFilename}` }
+          }));
+          console.warn('[UrlLoader] Background raw download failed:', err);
+        }
+      })();
     }
 
     return {
@@ -1866,14 +1858,6 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
     if (result.cover?.url && result.cover?.filename) {
       coverFilename = result.cover.filename;
-      const coverDestPath = `${seriesPath}\\${coverFilename}`;
-      if (window.__TAURI__) {
-        try {
-          await downloadFile(result.cover.url, coverDestPath);
-        } catch (err) {
-          console.warn('[UrlLoader] Failed to download series cover:', err);
-        }
-      }
     }
 
     if (window.__TAURI__) {
@@ -1905,14 +1889,22 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
         console.warn('[UrlLoader] Failed to write series gallery.json:', err);
       }
 
+      // Placeholder so the per-directory queue owns the cover bytes on
+      // visit. No background fetch, so two writers never race on one file.
+      if (coverFilename) {
+        await window.__TAURI__.core.invoke('create_placeholder_files', {
+          dir: seriesPath,
+          filenames: [coverFilename]
+        }).catch(() => {});
+      }
+
       if (result.metadata) {
         await writeGalleryMetadata(seriesPath, result.metadata);
       }
 
       if (Array.isArray(result.folders)) {
-        const FOLDER_CHUNK_SIZE = 25;
-        for (let i = 0; i < result.folders.length; i += FOLDER_CHUNK_SIZE) {
-          const chunk = result.folders.slice(i, i + FOLDER_CHUNK_SIZE);
+        for (let i = 0; i < result.folders.length; i += GALLERY_WRITE_CHUNK_SIZE) {
+          const chunk = result.folders.slice(i, i + GALLERY_WRITE_CHUNK_SIZE);
           await Promise.all(chunk.map((folder) => {
             if (!folder?.metadata || !Array.isArray(folder.relativePath)) return Promise.resolve();
             const folderPath = [libraryDir, providerDir, ...folder.relativePath].join('\\');
@@ -1923,9 +1915,8 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     }
 
     if (window.__TAURI__ && Array.isArray(result.chapters)) {
-      const CHUNK_SIZE = 25;
-      for (let i = 0; i < result.chapters.length; i += CHUNK_SIZE) {
-        const chunk = result.chapters.slice(i, i + CHUNK_SIZE);
+      for (let i = 0; i < result.chapters.length; i += GALLERY_WRITE_CHUNK_SIZE) {
+        const chunk = result.chapters.slice(i, i + GALLERY_WRITE_CHUNK_SIZE);
         await Promise.all(chunk.map(async (chapter) => {
           const chapterPath = [libraryDir, providerDir, ...chapter.relativePath].join('\\');
 
@@ -1957,17 +1948,9 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
               descramble: img.descramble || undefined
             })) : [];
 
-            // Stub covers download next to the stub and record last so they
-            // never become the open target. One bad thumbnail must not block
-            // the series import, so failures only warn.
+            // Stub covers record last so they never become the open target.
+            // Their bytes stay queue-owned on visit, like the series cover.
             const stubCover = buildStubCoverRecord(chapter.cover);
-            if (stubCover) {
-              try {
-                await downloadFile(chapter.cover.url, `${chapterPath}\\${stubCover.filename}`);
-              } catch (err) {
-                console.warn('[UrlLoader] Failed to download chapter stub cover:', err);
-              }
-            }
 
             const stubSidecar = {
               url: chapter.sourceUrl,
@@ -1988,10 +1971,12 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
               path: `${chapterPath}\\gallery.json`,
               content: JSON.stringify(stubSidecar, null, 2)
             });
-            if (chapterImages.length > 0) {
+            if (chapterImages.length > 0 || stubCover) {
+              const placeholderNames = chapterImages.map((img) => img.filename);
+              if (stubCover) placeholderNames.push(stubCover.filename);
               await window.__TAURI__.core.invoke('create_placeholder_files', {
                 dir: chapterPath,
-                filenames: chapterImages.map((img) => img.filename)
+                filenames: placeholderNames
               }).catch(() => {});
             }
           }
@@ -2005,8 +1990,20 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       window.dispatchEvent(new CustomEvent('quivit-library-updated'));
     }
 
-    // Shape-based cleanup for series: clear matching standalone chapter dirs and loose covers from provider root
-    await cleanupMatchingProviderEntries(providerPath, result);
+    // Shape cleanup runs behind the return; a prune failure must not fail
+    // the series import. Cover bytes stay queue-owned on visit, so two
+    // writers never race on one file.
+    const bgProviderPath = providerPath;
+    const bgResult = result;
+    (async () => {
+      if (!window.__TAURI__) return;
+      try {
+        await cleanupMatchingProviderEntries(bgProviderPath, bgResult);
+      } catch (err) {
+        console.warn('[UrlLoader] Background provider cleanup failed:', err);
+      }
+      window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+    })();
 
     const state = _Core?.getState?.();
     const openFirstImage = state?.config?.frontend_data?.open_first_image === true;
@@ -2118,42 +2115,11 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       ? downloadItems.find((item) => (item.filename || '').toLowerCase() === result.targetFilename.toLowerCase())
       : null;
 
-    const _eagerDownloadExisting = async (item) => {
-      const dlOpts = {};
-      if (item.headers) dlOpts.headers = item.headers;
-      if (item.decryption?.key) dlOpts.xorKey = item.decryption.key;
-      if (item.descramble) dlOpts.descramble = item.descramble;
-      try {
-        await downloadFile(item.url, item.destPath, dlOpts);
-        item.status = 'completed';
-      } catch (err) {
-        const fallback = item.fallbackUrl || null;
-        if (fallback && fallback !== item.url) {
-          try {
-            await downloadFile(fallback, item.destPath, dlOpts);
-            item.status = 'completed';
-            return;
-          } catch (fallbackErr) {
-            console.warn('[UrlLoader] Eager download failed with fallback:', fallbackErr);
-          }
-        }
-        console.warn('[UrlLoader] Eager download failed:', err);
-      }
-    };
-
-    // Capture the target before the eager attempt flips its status: a
-    // completed target must stay the prefetch pivot, not fall through to
-    // gallery start.
+    // The queue's active slot fetches first paint, so the update returns
+    // without awaiting bytes. Placeholders bridge until the
+    // swap-on-arrival paints them.
     const targetDestPath = targetItem ? targetItem.destPath : null;
-    // Without an explicit target the viewer opens the top of the sorted
-    // list, so eager-fetch the display-first pending item, not gallery-first.
     const displayItems = _displayOrderedItems(downloadItems, existingPath);
-    if (targetItem && targetItem.status === 'pending') {
-      await _eagerDownloadExisting(targetItem);
-    } else if (!targetItem) {
-      const firstPending = displayItems.find((i) => i.status === 'pending');
-      if (firstPending) await _eagerDownloadExisting(firstPending);
-    }
 
     const hasPending = downloadItems.some((i) => i.status === 'pending');
     if (hasPending) {
@@ -2162,8 +2128,13 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       _startGalleryQueue(existingPath, downloadItems, { initialTarget });
     }
 
-    await cleanupMatchingProviderEntries(providerPath, result);
     window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+
+    // Shape cleanup runs behind the return; a prune failure must not fail
+    // the update.
+    cleanupMatchingProviderEntries(providerPath, result).catch((err) => {
+      console.warn('[UrlLoader] Background provider cleanup failed:', err);
+    });
 
     return {
       galleryPath: existingPath,
@@ -2247,48 +2218,10 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     ? downloadItems.find((item) => (item.filename || '').toLowerCase() === result.targetFilename.toLowerCase())
     : null;
 
-  const _eagerDownload = async (item) => {
-    const dlOpts = {};
-    if (item.headers) dlOpts.headers = item.headers;
-    if (item.decryption?.key) dlOpts.xorKey = item.decryption.key;
-    if (item.descramble) dlOpts.descramble = item.descramble;
-    try {
-      await downloadFile(item.url, item.destPath, dlOpts);
-      item.status = 'completed';
-    } catch (err) {
-      const fallback = item.fallbackUrl || null;
-      if (fallback && fallback !== item.url) {
-        try {
-          await downloadFile(fallback, item.destPath, dlOpts);
-          item.status = 'completed';
-          return;
-        } catch (fallbackErr) {
-          console.warn('[UrlLoader] Eager download failed with fallback:', fallbackErr);
-        }
-      }
-      console.warn('[UrlLoader] Eager download failed:', err);
-    }
-  };
-
-  // Without an explicit target the viewer opens the top of the sorted
-  // list (unless open-first-image pins gallery-first), so eager-fetch the
-  // same file the viewer will show first.
+  // The queue's active slot fetches first paint, so the import returns
+  // without awaiting bytes. Placeholders bridge until the swap-on-arrival
+  // paints them.
   const displayItems = _displayOrderedItems(downloadItems, galleryPath);
-  if (targetItem) {
-    await _eagerDownload(targetItem);
-  } else if (displayItems.length > 0) {
-    const paintFirst = openFirstImage ? downloadItems[0] : displayItems[0];
-    if (paintFirst && paintFirst.status === 'pending') await _eagerDownload(paintFirst);
-  }
-
-  // Shape-based cleanup for standard gallery: prune matching standalone raw files under provider root
-  await cleanupMatchingProviderEntries(providerPath, result);
-
-  // Background queue for remaining images. A still-pending target keeps
-  // the active slot (its eager fetch just failed); a completed target
-  // yields to the first pending item and unlocks prefetch behind it.
-  // Without a target the queue starts at the display-second item: the
-  // display-first one is already eager-downloading above.
   if (downloadItems.length > 0) {
     const initialTarget = targetItem
       ? (targetItem.status === 'pending' ? targetItem.destPath : (downloadItems.find((i) => i.status === 'pending')?.destPath || null))
@@ -2301,9 +2234,17 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   window.dispatchEvent(new CustomEvent('quivit-library-updated'));
 
+  // Shape cleanup runs behind the return; a prune failure must not fail
+  // the import.
+  cleanupMatchingProviderEntries(providerPath, result).catch((err) => {
+    console.warn('[UrlLoader] Background provider cleanup failed:', err);
+  });
+
+  // Open-first-image follows the active sort like normal navigation: the
+  // top of the file list, not gallery position zero.
   const targetName = targetItem
     ? targetItem.filename
-    : (openFirstImage ? (result.images[0]?.filename || null) : null);
+    : (openFirstImage ? (displayItems[0]?.filename || null) : null);
   return { galleryPath, result, targetName };
 }
 
@@ -2561,31 +2502,8 @@ export async function resolveUnresolvedGallery(galleryPath) {
       filenames
     });
 
-    const eagerImg = fullResult.targetFilename
-      ? fullResult.images.find((img) => img.filename.toLowerCase() === fullResult.targetFilename.toLowerCase())
-      : (fullResult.images[0] || null);
-
-    if (eagerImg) {
-      const dlOpts = {};
-      if (eagerImg.headers) dlOpts.headers = eagerImg.headers;
-      if (eagerImg.decryption?.key) dlOpts.xorKey = eagerImg.decryption.key;
-      if (eagerImg.descramble) dlOpts.descramble = eagerImg.descramble;
-      try {
-        await downloadFile(eagerImg.url, `${galleryPath}\\${eagerImg.filename}`, dlOpts);
-      } catch (err) {
-        const fallback = eagerImg.fallbackUrl || null;
-        if (fallback && fallback !== eagerImg.url) {
-          try {
-            await downloadFile(fallback, `${galleryPath}\\${eagerImg.filename}`, dlOpts);
-          } catch (fallbackErr) {
-            console.warn('[UrlLoader] Failed to eagerly download first image with fallback:', fallbackErr);
-          }
-        } else {
-          console.warn('[UrlLoader] Failed to eagerly download first image:', err);
-        }
-      }
-    }
-
+    // Return-first: the queue fetches first paint after the caller refreshes
+    // and navigation lands. No eager download here.
     return true;
   } finally {
     _resolvingGalleries.delete(galleryPath);
@@ -2830,61 +2748,14 @@ export async function prepareGalleryDirectory(galleryPath, options = {}) {
   }
 
   if (data?.unresolved && data?.sourceUrl) {
-    await resolveUnresolvedGallery(galleryPath);
-    try {
-      content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
-      data = JSON.parse(content);
-    } catch {
-      return false;
-    }
+    // The stub resolves behind the return; the refresh paints the gallery.
+    // The queue fetches first paint after navigation lands.
+    resolveUnresolvedGallery(galleryPath).then((ok) => {
+      if (ok) _FsUtils?.refresh?.();
+    }).catch(() => {});
   }
 
   if (!Array.isArray(data?.images) || data.images.length === 0) return false;
-
-  let targetImg = null;
-  if (options?.targetName) {
-    const cleanTarget = options.targetName.toLowerCase();
-    targetImg = data.images.find((img) => (img.filename || '').toLowerCase() === cleanTarget);
-  }
-  if (!targetImg) {
-    // Display-first, not gallery-first: first paint shows the top of the
-    // sorted list, so its bytes come first (36, not 01, under a descending
-    // sort). Falls back to gallery order when prefs are unavailable.
-    try {
-      const ordered = orderItemsBySort(data.images, _sortPrefForDir(galleryPath));
-      targetImg = (Array.isArray(ordered) && ordered.length > 0 ? ordered[0] : null) || data.images[0];
-    } catch {
-      targetImg = data.images[0];
-    }
-  }
-  if (!targetImg || (!targetImg.sourceUrl && !targetImg.url)) return false;
-
-  const sizeMap = await _readFileSizes(galleryPath);
-  const targetSize = sizeMap.get((targetImg.filename || '').toLowerCase());
-
-  if (targetSize === undefined || targetSize === 0) {
-    const destPath = `${galleryPath}\\${targetImg.filename}`;
-    const dlOpts = {};
-    if (targetImg.headers) dlOpts.headers = targetImg.headers;
-    if (targetImg.decryption?.key) dlOpts.xorKey = targetImg.decryption.key;
-    if (targetImg.descramble) dlOpts.descramble = targetImg.descramble;
-    const downloadUrl = targetImg.sourceUrl || targetImg.url;
-
-    try {
-      await downloadFile(downloadUrl, destPath, dlOpts);
-    } catch (err) {
-      const fallback = targetImg.fallbackUrl || null;
-      if (fallback && fallback !== downloadUrl) {
-        try {
-          await downloadFile(fallback, destPath, dlOpts);
-        } catch (fallbackErr) {
-          console.warn('[UrlLoader] prepareGalleryDirectory fallback failed:', fallbackErr);
-        }
-      } else {
-        console.warn('[UrlLoader] prepareGalleryDirectory download failed:', err);
-      }
-    }
-  }
 
   return true;
 }
@@ -2913,9 +2784,9 @@ export const UrlLoader = {
       _Core.setPlaceholderCheck((path) => isPlaceholderFile(path));
     }
 
-    // Register directory preparation hook so fsUtils can resolve chapter stubs
-    // and eagerly download target/first image before reading directory,
-    // eliminating empty file list flashes and 404s.
+    // Register directory preparation hook: fast sidecar check so
+    // navigation never waits for bytes. An unresolved stub resolves in the
+    // background and refreshes; the queue fetches first paint on arrival.
     if (_FsUtils && typeof _FsUtils.setDirectoryPreparationHook === 'function') {
       _FsUtils.setDirectoryPreparationHook((path, options) => prepareGalleryDirectory(path, options));
     }

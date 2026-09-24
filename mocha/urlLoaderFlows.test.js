@@ -57,7 +57,7 @@ function gallerySidecar(images) {
 
 describe('url loader flows', () => {
   describe('prepareGalleryDirectory', () => {
-    it('downloads a missing target before opening', async () => {
+    it('returns ready without downloading; the queue fetches first paint', async () => {
       const dir = 'C:\\library\\North\\Prep';
       const state = mockTauri({
         files: {
@@ -73,7 +73,7 @@ describe('url loader flows', () => {
       });
       const ready = await prepareGalleryDirectory(dir, { targetName: '01.png' });
       assert.equal(ready, true);
-      assert.deepEqual(state.downloaded, ['https://cdn.north.test/01.png']);
+      assert.deepEqual(state.downloaded, []);
     });
 
     it('skips the download when the target is already on disk', async () => {
@@ -91,7 +91,7 @@ describe('url loader flows', () => {
       assert.deepEqual(state.downloaded, []);
     });
 
-    it('falls back to the first image without a target name', async () => {
+    it('returns ready without a target name and leaves bytes to the queue', async () => {
       const dir = 'C:\\library\\North\\Fallback';
       const state = mockTauri({
         files: {
@@ -103,10 +103,10 @@ describe('url loader flows', () => {
       });
       const ready = await prepareGalleryDirectory(dir, {});
       assert.equal(ready, true);
-      assert.deepEqual(state.downloaded, ['https://cdn.north.test/01.png']);
+      assert.deepEqual(state.downloaded, []);
     });
 
-    it('uses the fallback address when the primary download fails', async () => {
+    it('leaves fallback addresses to the queue instead of fetching eager', async () => {
       const dir = 'C:\\library\\North\\FallbackUrl';
       const state = mockTauri({
         files: {
@@ -119,7 +119,7 @@ describe('url loader flows', () => {
       });
       const ready = await prepareGalleryDirectory(dir, { targetName: '01.png' });
       assert.equal(ready, true);
-      assert.deepEqual(state.downloaded, ['https://static.north.test/01.png']);
+      assert.deepEqual(state.downloaded, []);
     });
 
     it('returns false without a readable sidecar', async () => {
