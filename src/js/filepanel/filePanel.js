@@ -1121,8 +1121,24 @@ function buildLibraryEntry(item, depth = 0) {
         }
       }
 
+      if (FsUtils?.registerPendingDeletion) {
+        FsUtils.registerPendingDeletion(item.path);
+      }
+
+      // Optimistic file list pruning: if already viewing the parent directory,
+      // prune the deleted item from state.list in this frame so both panels stay in sync.
+      if (!isInside && _pathsEqual(curDir, parentOfTarget) && Array.isArray(state?.list)) {
+        const remaining = state.list.filter(f => !_pathsEqual(f.path, item.path));
+        if (remaining.length !== state.list.length) {
+          let newIndex = state.index;
+          if (newIndex >= remaining.length) newIndex = Math.max(0, remaining.length - 1);
+          Core.setState({ list: remaining, index: newIndex });
+        }
+      }
+
       // The delete fires first; navigation below runs concurrently instead
       // of holding the row through openParent plus the recycle.
+      let remappedPath = '';
       const deletion = (async () => {
         try {
           await deleteLibraryEntry(item.path).catch(async (err) => {
@@ -1133,9 +1149,20 @@ function buildLibraryEntry(item, depth = 0) {
             const liveRoot = typeof reloadLibraryDir === 'function' ? await reloadLibraryDir() : '';
             const remapped = remapLibraryPath(item.path, staleRoot, liveRoot);
             if (remapped === item.path) throw err;
+            remappedPath = remapped;
+            if (FsUtils?.registerPendingDeletion) {
+              FsUtils.registerPendingDeletion(remapped);
+            }
             await deleteLibraryEntry(remapped);
           });
         } catch (err) {
+          if (FsUtils?.unregisterPendingDeletion) {
+            FsUtils.unregisterPendingDeletion(item.path);
+            if (remappedPath) FsUtils.unregisterPendingDeletion(remappedPath);
+          }
+          if (FsUtils?.refresh && ((isInside && providerRoot) || (!isInside && _pathsEqual(curDir, parentOfTarget)))) {
+            FsUtils.refresh().catch(() => {});
+          }
           // Surgical restore when nothing else touched the panel: row back
           // in place, or whole section (header plus list plus row) when it
           // was pruned. Otherwise a concurrent rebuild already shows truth.
@@ -1156,6 +1183,11 @@ function buildLibraryEntry(item, depth = 0) {
           }));
           console.error('[FilePanel] Delete failed:', err);
           return;
+        } finally {
+          if (FsUtils?.unregisterPendingDeletion) {
+            FsUtils.unregisterPendingDeletion(item.path);
+            if (remappedPath) FsUtils.unregisterPendingDeletion(remappedPath);
+          }
         }
         // Directories need no sidecar prune: it goes down with the folder.
         // Files prune fire-and-forget; the tree reconcile below does not

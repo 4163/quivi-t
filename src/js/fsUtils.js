@@ -28,6 +28,33 @@ const _unlockedArchivePasswords = new BoundedMap(50);
 const _archiveEncryptionCache = new BoundedMap(100);
 let _directoryPreparationHook = null;
 
+const _pendingDeletions = new Set();
+
+function _normalizeDeletionPath(path) {
+  if (!path || typeof path !== 'string') return '';
+  return path.replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
+}
+
+export function registerPendingDeletion(path) {
+  const norm = _normalizeDeletionPath(path);
+  if (norm) _pendingDeletions.add(norm);
+}
+
+export function unregisterPendingDeletion(path) {
+  const norm = _normalizeDeletionPath(path);
+  if (norm) _pendingDeletions.delete(norm);
+}
+
+export function isPendingDeletion(path) {
+  if (!path || _pendingDeletions.size === 0) return false;
+  const norm = _normalizeDeletionPath(path);
+  if (!norm) return false;
+  for (const pending of _pendingDeletions) {
+    if (norm === pending || norm.startsWith(pending + '/')) return true;
+  }
+  return false;
+}
+
 function _nextNavigationGeneration() {
   _navigationGeneration += 1;
   return _navigationGeneration;
@@ -115,6 +142,12 @@ function findNearestSurvivingIndex(oldList, oldIndex, newFiles) {
 
 export const FsUtils = {
   basename,
+  registerPendingDeletion,
+  unregisterPendingDeletion,
+  isPendingDeletion,
+  hasPendingDeletions() {
+    return _pendingDeletions.size > 0;
+  },
   setDirectoryPreparationHook(hook) {
     _directoryPreparationHook = typeof hook === 'function' ? hook : null;
   },
@@ -405,6 +438,9 @@ export const FsUtils = {
     if (!_isCurrentGeneration(options.generation)) return;
 
     let files = this.buildDirectoryList(result);
+    if (_pendingDeletions.size > 0) {
+      files = files.filter(f => !this.isPendingDeletion(f.path));
+    }
 
     if (result.directory) {
       try {
