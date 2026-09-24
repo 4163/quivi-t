@@ -5,12 +5,25 @@
  * Pure functions of (viewerId, context). No match/extract exports,
  * never a manifest entry. Consumed by the MANGA Plus entry shell and
  * by mangadex.js for externalUrl chapters.
+ *
+ * Rate limiting uses adaptive timestamp throttling so the initial request fires
+ * immediately without artificial sleep delay.
  */
 
 import { ProtoReader, readFields } from './proto.js';
 
 const API_BASE = 'https://jumpg-webapi.tokyo-cdn.com';
 const RATE_LIMIT_MS = 500;
+let lastMangaPlusRequestTime = 0;
+
+async function throttleMangaPlusRequest() {
+  const now = Date.now();
+  const elapsed = now - lastMangaPlusRequestTime;
+  if (elapsed < RATE_LIMIT_MS) {
+    await new Promise((r) => setTimeout(r, RATE_LIMIT_MS - elapsed));
+  }
+  lastMangaPlusRequestTime = Date.now();
+}
 
 const MANGAPLUS_VIEWER_RE = /^https?:\/\/mangaplus\.shueisha\.co\.jp\/viewer\/(\d+)/i;
 
@@ -163,7 +176,7 @@ export async function fetchMangaPlusChapter(viewerId, context = {}) {
   const headers = { 'SESSION-TOKEN': sessionToken };
   const apiUrl = `${API_BASE}/api/manga_viewer_v3?chapter_id=${viewerId}&split=no&img_quality=super_high&clang=eng`;
 
-  await new Promise((r) => setTimeout(r, RATE_LIMIT_MS));
+  await throttleMangaPlusRequest();
 
   const bytes = await fetchBytes(apiUrl, headers);
   return parseMangaViewer(bytes);
@@ -191,7 +204,7 @@ export async function fetchMangaTitleDetail(titleId, context = {}) {
   const headers = { 'SESSION-TOKEN': generateSessionToken() };
   const apiUrl = `${API_BASE}/api/title_detailV3?title_id=${titleId}&clang=eng`;
 
-  await new Promise((r) => setTimeout(r, RATE_LIMIT_MS));
+  await throttleMangaPlusRequest();
 
   const bytes = await fetchBytes(apiUrl, headers);
   const response = readFields(new ProtoReader(bytes));

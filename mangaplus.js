@@ -5,6 +5,10 @@
  *
  * Thin entry shell over the shared viewer client. Matches direct
  * viewer and title URLs; series feeds resolve through mangadex.js stubs.
+ *
+ * Optimization notes:
+ * - Exports needsHtml: false to skip fetching the HTML page.
+ * - Relies on shared/mangaplus.js adaptive timestamp throttling without pre-sleep.
  */
 
 import { parseViewerId, fetchMangaPlusChapter, fetchMangaTitleDetail, buildMangaPlusImages, resolveMangaPlusStatus } from './shared/mangaplus.js';
@@ -39,6 +43,8 @@ const LANGUAGE_ISO = {
   7: 'de',
   9: 'vi'
 };
+
+export const needsHtml = false;
 
 export function match(url) {
   return MANGAPLUS_CHAPTER_RE.test(url) || MANGAPLUS_TITLE_RE.test(url) || MANGAPLUS_CDN_RE.test(url);
