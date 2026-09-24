@@ -85,7 +85,7 @@ Reference URLs for manual testing. Each entry covers a distinct URL route or ext
 
 ## Module contract
 
-An extractor is an ES module. Two exports are required, two are optional.
+An extractor is an ES module. Two exports are required, three are optional.
 
 ### Exports
 
@@ -93,6 +93,7 @@ An extractor is an ES module. Two exports are required, two are optional.
 |---|---|---|---|
 | `match` | yes | `(url) => bool` | Returns `true` if this extractor handles the URL. |
 | `extract` | yes | `(html, url, context) => result` | Parses a page and returns a gallery or series result. |
+| `needsHtml` | no | `boolean \| (url) => bool` | When `false`, the loader skips fetching the remote HTML page and passes `''` to `extract`. Defaults to `true`. |
 | `isDirectUrl` | no | `(url) => bool` | Returns `true` for direct media URLs (CDN images, covers). The app skips the HTML fetch and routes through `parseDirectUrl`. |
 | `parseDirectUrl` | no | `(url, context) => { provider, hash, filename, url } \| null` | Resolves a direct media URL. `hash` deduplicates against Library sidecars. Returning `null` falls through to `extract`. Resized variants (such as MangaDex `file.jpg.512.jpg` covers) normalize to the canonical file so they link their gallery copies, while the download still uses the pasted address. |
 
@@ -125,6 +126,15 @@ Extractors declare dependencies and capabilities in their first two lines:
 - File extensions must be supported formats: `jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`, `mp4`.
 - Duplicate filenames within one gallery are rejected.
 - Shared files must not export `match` or `extract`, and are never added to the manifest.
+
+### Optimization guidelines
+
+Apply these patterns to keep URL imports fast and responsive:
+
+- **HTML fetch opt-out (`needsHtml`)**: Export `needsHtml: false` when an extractor relies entirely on remote APIs (such as REST JSON or Protobuf) and never inspects the page HTML. This instructs the loader to skip the remote HTML GET request on import and during chapter stub resolution.
+- **Adaptive rate limiting over static pre-sleeps**: Space requests using timestamp delta (`Date.now() - lastRequestTime`) rather than unconditional `setTimeout` calls before every request. The initial user action fires immediately with zero delay, and subsequent requests only pause the remaining delta if called within the rate limit window.
+- **Concurrent API requests**: Dispatch independent API queries concurrently with `Promise.all`. When multiple endpoints depend only on the initial URL ID (such as chapter metadata and image server tokens, or series details and chapter feeds), fetch them in parallel rather than chaining them serially.
+- **Early-break candidate checks**: When scanning candidate chapters for free access, break the loop on the first non-free or locked episode to avoid probing inaccessible items.
 
 ## Return shapes
 
