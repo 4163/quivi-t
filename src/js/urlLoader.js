@@ -28,6 +28,7 @@
  */
 
 import { BoundedMap } from './services/cache.js';
+import { applySort } from './services/sorting.js';
 
 const EXTRACTOR_MODULE_CACHE_CAPACITY = 20;
 export const EXTRACTOR_MANIFEST_VERSION = 1;
@@ -384,8 +385,16 @@ export class DownloadQueue {
     this._retryDelayMs = options.retryDelayMs ?? 0;
     this._cancelled = false;
     this._activeDestPath = null;
+    // Walk anchor (destPath): written only by genuine user navigation.
+    // Landings, sorts, and queue starts never set it.
+    this._userAnchorDest = null;
     this._visibleStart = options.visibleStart ?? 0;
     this._visibleEnd = options.visibleEnd ?? 0;
+    // Display-domain ranks (filename -> row index in the sorted file panel).
+    // Admission and walk read them; gallery order is the fallback when they
+    // are absent or do not cover every item.
+    this._displayRanks = null;
+    this._ranksCoverAll = false;
     this._inFlightItems = new Map();
     this._generation = 0;
     this._requestSequence = 0;
@@ -429,6 +438,31 @@ export class DownloadQueue {
     this._admitPendingPrefetch();
   }
 
+  // Accepts the file panel's row order for this queue's gallery only. Any
+  // other directory clears the map so admission falls back to gallery order
+  // instead of mixing domains.
+  setDisplayOrder(dirPath, filenames) {
+    this._displayRanks = null;
+    this._ranksCoverAll = false;
+    if (!dirPath || !Array.isArray(filenames) || this._items.length === 0) return;
+    if (!_pathsEqual(this._galleryRoot() || '', dirPath)) return;
+    const ranks = new Map();
+    for (let i = 0; i < filenames.length; i++) {
+      const key = String(filenames[i] ?? '').toLowerCase();
+      if (key && !ranks.has(key)) ranks.set(key, i);
+    }
+    this._displayRanks = ranks;
+    this._ranksCoverAll = this._items.every((it) => ranks.has((it.filename || '').toLowerCase()));
+  }
+
+  _galleryRoot() {
+    const first = this._items.length > 0 ? this._items[0].destPath : '';
+    if (!first) return null;
+    const clean = String(first).replace(/\\/g, '/');
+    const slashAt = clean.lastIndexOf('/');
+    return slashAt > 0 ? clean.slice(0, slashAt) : null;
+  }
+
   prioritize(destPath) {
     const target = this._findItem(destPath);
     if (!target) return;
@@ -463,11 +497,30 @@ export class DownloadQueue {
     this._cancelDownload().catch(() => {});
   }
 
-  _isInViewport(item) {
+  _displayRankOf(item) {
+    if (!this._displayRanks) return undefined;
+    return this._displayRanks.get((item.filename || '').toLowerCase());
+  }
+
+  // activeItem and activeRank resolve once per admission pass and are
+  // handed in: this filter runs per pending item on scroll-driven admission.
+  _isInViewport(item, activeItem, activeRank) {
+    // Display rows first, so sorting changes which items are admitted. The
+    // active image bypasses the window through prioritize(). Gallery order
+    // is the fallback when no map is set or the item is not listed.
+    const rank = this._displayRanks ? this._displayRanks.get((item.filename || '').toLowerCase()) : undefined;
+    if (rank !== undefined) {
+      if (this._visibleEnd > this._visibleStart && rank >= this._visibleStart && rank < this._visibleEnd) {
+        return true;
+      }
+      if (activeRank !== undefined && Math.abs(rank - activeRank) <= 1) {
+        return true;
+      }
+      return false;
+    }
     if (this._visibleEnd > this._visibleStart && item.galleryIndex >= this._visibleStart && item.galleryIndex < this._visibleEnd) {
       return true;
     }
-    const activeItem = this._findItem(this._activeDestPath);
     if (activeItem && Math.abs(item.galleryIndex - activeItem.galleryIndex) <= 1) {
       return true;
     }
@@ -475,27 +528,51 @@ export class DownloadQueue {
   }
 
   _getNextPrefetchItem() {
+    // Display top-to-bottom in list order, starting at the active image when
+    // it is inside the window (or above it), otherwise at the window top:
+    // reaching the bottom comes back up through the rest, and nothing ever
+    // starts from the bottom. Gallery order is the fallback when ranks don't
+    // cover every item. The active image itself always downloads through
+    // prioritize(), independent of this walk.
     const pending = this._items.filter((item) => item.status === 'pending' && !this._inFlightItems.has(item));
     if (pending.length === 0) return null;
 
-    let pivotGi = Math.max(0, this._visibleStart);
-    const activeItem = this._findItem(this._activeDestPath);
-    if (activeItem) pivotGi = activeItem.galleryIndex;
+    const useDisplay = !!(this._ranksCoverAll && this._displayRanks);
+    const rankOf = useDisplay
+      ? (item) => this._displayRanks.get((item.filename || '').toLowerCase())
+      : (item) => item.galleryIndex;
 
-    const visiblePending = pending.filter((item) => this._isInViewport(item));
     const hasVisibleRange = this._visibleEnd > this._visibleStart;
+    // Walk anchor: existence only. It is set by genuine user navigation and
+    // cleared by sorts, so a stale (finished) anchor still orders the rest
+    // around where the user is instead of restarting at the top. Landings,
+    // sorts, and queue starts never set it, so sorting can never drag the
+    // order with it.
+    const anchorItem = this._userAnchorDest ? this._findItem(this._userAnchorDest) : null;
+    let pivot = 0;
+    if (anchorItem) {
+      const pivotRank = rankOf(anchorItem) ?? 0;
+      // Anchor below the window would pivot the walk to the window bottom;
+      // clamp to the window top instead so it still runs top-down.
+      pivot = (hasVisibleRange && pivotRank >= this._visibleEnd) ? this._visibleStart : pivotRank;
+    } else if (useDisplay) {
+      pivot = Math.max(0, this._visibleStart);
+    }
+
+    const activeItem = this._findItem(this._activeDestPath);
+    const activeRank = activeItem ? this._displayRankOf(activeItem) : undefined;
+    const visiblePending = pending.filter((item) => this._isInViewport(item, activeItem, activeRank));
     const candidates = hasVisibleRange ? visiblePending : pending;
     if (candidates.length === 0) return null;
 
     const forward = candidates
-      .filter((item) => item.galleryIndex >= pivotGi)
-      .sort((a, b) => a.galleryIndex - b.galleryIndex);
-    if (forward.length > 0) return forward[0];
-
+      .filter((item) => rankOf(item) >= pivot)
+      .sort((a, b) => rankOf(a) - rankOf(b));
     const backward = candidates
-      .filter((item) => item.galleryIndex < pivotGi)
-      .sort((a, b) => b.galleryIndex - a.galleryIndex);
-    return backward[0] || null;
+      .filter((item) => rankOf(item) < pivot)
+      .sort((a, b) => rankOf(b) - rankOf(a));
+    const next = forward.length > 0 ? forward[0] : (backward[0] || null);
+    return next;
   }
 
   async start() {
@@ -1631,6 +1708,59 @@ export function remapLibraryPath(path, oldRoot, newRoot) {
   return _rebasePath(path, oldRoot, newRoot);
 }
 
+// Orders download items the way the file panel will show them, so the first
+// bytes match the active sort instead of extractor order. Falls back to the
+// given order when prefs are missing or the column is unknown.
+export function orderItemsBySort(items, sortPref) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const col = ['name', 'ext', 'date'].includes(sortPref?.col) ? sortPref.col : 'name';
+  const desc = sortPref?.desc === true;
+  const entries = items.map((item) => {
+    const name = item?.filename || '';
+    const dot = name.lastIndexOf('.');
+    return {
+      item,
+      name,
+      ext: dot > 0 ? name.slice(dot + 1).toLowerCase() : '',
+      rawDate: 0,
+      is_dir: false,
+      is_parent: false,
+    };
+  });
+  return applySort(entries, col, desc).map((entry) => entry.item);
+}
+
+function _sortPrefForDir(galleryPath) {
+  const fallback = { col: 'name', desc: false };
+  let frontendData = null;
+  try {
+    frontendData = _Core?.getState?.()?.config?.frontend_data || null;
+  } catch {
+    frontendData = null;
+  }
+  if (!frontendData) return fallback;
+  if (galleryPath) {
+    const normTarget = String(galleryPath).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    const table = frontendData.directory_sort || {};
+    for (const [key, pref] of Object.entries(table)) {
+      if (String(key).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() === normTarget) {
+        return { col: pref?.col || 'name', desc: pref?.desc === true };
+      }
+    }
+  }
+  const def = frontendData.default_sort || {};
+  return { col: def.col || 'name', desc: def.desc === true };
+}
+
+function _displayOrderedItems(downloadItems, galleryPath) {
+  if (!Array.isArray(downloadItems) || downloadItems.length === 0) return [];
+  try {
+    return orderItemsBySort(downloadItems, _sortPrefForDir(galleryPath));
+  } catch {
+    return downloadItems;
+  }
+}
+
 async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   const providerDir = entry.libraryPath;
   const providerPath = `${libraryDir}\\${providerDir}`;
@@ -2011,17 +2141,24 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       }
     };
 
+    // Capture the target before the eager attempt flips its status: a
+    // completed target must stay the prefetch pivot, not fall through to
+    // gallery start.
+    const targetDestPath = targetItem ? targetItem.destPath : null;
+    // Without an explicit target the viewer opens the top of the sorted
+    // list, so eager-fetch the display-first pending item, not gallery-first.
+    const displayItems = _displayOrderedItems(downloadItems, existingPath);
     if (targetItem && targetItem.status === 'pending') {
       await _eagerDownloadExisting(targetItem);
-    } else if (!targetItem && downloadItems.length > 0 && downloadItems[0].status === 'pending') {
-      await _eagerDownloadExisting(downloadItems[0]);
+    } else if (!targetItem) {
+      const firstPending = displayItems.find((i) => i.status === 'pending');
+      if (firstPending) await _eagerDownloadExisting(firstPending);
     }
 
     const hasPending = downloadItems.some((i) => i.status === 'pending');
     if (hasPending) {
-      const initialTarget = (targetItem && targetItem.status === 'pending')
-        ? targetItem.destPath
-        : (downloadItems.find((i) => i.status === 'pending')?.destPath || null);
+      const initialTarget = targetDestPath
+        || (displayItems.find((i) => i.status === 'pending')?.destPath || null);
       _startGalleryQueue(existingPath, downloadItems, { initialTarget });
     }
 
@@ -2133,20 +2270,29 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     }
   };
 
+  // Without an explicit target the viewer opens the top of the sorted
+  // list (unless open-first-image pins gallery-first), so eager-fetch the
+  // same file the viewer will show first.
+  const displayItems = _displayOrderedItems(downloadItems, galleryPath);
   if (targetItem) {
     await _eagerDownload(targetItem);
-  } else if (downloadItems.length > 0) {
-    await _eagerDownload(downloadItems[0]);
+  } else if (displayItems.length > 0) {
+    const paintFirst = openFirstImage ? downloadItems[0] : displayItems[0];
+    if (paintFirst && paintFirst.status === 'pending') await _eagerDownload(paintFirst);
   }
 
   // Shape-based cleanup for standard gallery: prune matching standalone raw files under provider root
   await cleanupMatchingProviderEntries(providerPath, result);
 
-  // Background queue for remaining images
+  // Background queue for remaining images. A still-pending target keeps
+  // the active slot (its eager fetch just failed); a completed target
+  // yields to the first pending item and unlocks prefetch behind it.
+  // Without a target the queue starts at the display-second item: the
+  // display-first one is already eager-downloading above.
   if (downloadItems.length > 0) {
     const initialTarget = targetItem
-      ? (downloadItems.find((i) => i.status === 'pending')?.destPath || null)
-      : (downloadItems[1]?.destPath || downloadItems[0].destPath);
+      ? (targetItem.status === 'pending' ? targetItem.destPath : (downloadItems.find((i) => i.status === 'pending')?.destPath || null))
+      : (displayItems[1]?.destPath || displayItems[0]?.destPath);
     _startGalleryQueue(galleryPath, downloadItems, { initialTarget });
   } else {
     _activeGalleryPath = galleryPath;
@@ -2200,6 +2346,14 @@ async function _readFileSizes(galleryPath) {
 // -- Gallery queue management and auto-resumption --
 
 function _startGalleryQueue(galleryPath, items, options = {}) {
+  const viewedDir = _Core?.getState?.()?.directory;
+  if (viewedDir && !_pathsEqual(viewedDir, galleryPath)) {
+    // Not on screen (user left mid-import): sidecar + placeholders are
+    // already on disk, so entering the gallery resumes via onStateChange.
+    // Never drain a hidden gallery in the background.
+    return;
+  }
+
   if (_activeQueue) {
     _activeQueue.cancel();
     _activeQueue = null;
@@ -2259,6 +2413,15 @@ function _startGalleryQueue(galleryPath, items, options = {}) {
   window.dispatchEvent(new CustomEvent('quivit-download-status', {
     detail: { galleryPath, status: 'queue_started' }
   }));
+
+  // Seed the display order when already viewing this gallery (reimport or
+  // resume with unchanged list identity): the panel only pushes on identity
+  // change, so without this the first picks would run in gallery fallback
+  // order despite the list being sorted.
+  const seededState = _Core?.getState?.();
+  if (seededState?.directory && _pathsEqual(seededState.directory, galleryPath) && Array.isArray(seededState.list)) {
+    setDisplayOrder(seededState.directory, seededState.list.map((entry) => entry?.name));
+  }
 
   const state = _Core?.getState?.();
   let prioritizedTarget = null;
@@ -2550,6 +2713,12 @@ export function setVisibleRange(start, end) {
   }
 }
 
+export function setDisplayOrder(dirPath, filenames) {
+  if (_activeQueue) {
+    _activeQueue.setDisplayOrder(dirPath, filenames);
+  }
+}
+
 // -- UI integration --
 
 export function openPrompt() {
@@ -2716,6 +2885,7 @@ export const UrlLoader = {
 
     if (_Core && typeof _Core.onStateChange === 'function' && !_coreStateUnsubscribe) {
       let _lastSyncDirectory = null;
+      let _lastSyncList = null;
 
       _coreStateUnsubscribe = _Core.onStateChange((state) => {
         const dir = state.directory;
@@ -2723,6 +2893,7 @@ export const UrlLoader = {
         // Directory transition: leaving old gallery, entering new
         if (!_pathsEqual(dir, _lastSyncDirectory)) {
           _lastSyncDirectory = dir;
+          _lastSyncList = state.list || null;
 
           if (_activeQueue && _activeQueue.isActive && _activeGalleryPath && !_pathsEqual(dir, _activeGalleryPath)) {
             _teardownActiveQueue();
@@ -2736,10 +2907,20 @@ export const UrlLoader = {
 
         // Check if queue is missing or not active for this gallery
         if (!_activeQueue || !_activeQueue.isActive || !_pathsEqual(dir, _activeGalleryPath)) {
+          _lastSyncList = state.list || null;
           if (dir && !_resumingGalleries.has(dir)) {
             resumeGalleryDownloads(dir, state.list).catch(() => {});
           }
           return;
+        }
+
+        // Same directory: a changed list means sort/reload (never anchor —
+        // the walk must restart at the window top), while an unchanged list
+        // with a moved index is genuine user navigation (anchor the walk).
+        const listChanged = state.list !== _lastSyncList;
+        _lastSyncList = state.list || null;
+        if (listChanged && _activeQueue) {
+          _activeQueue._userAnchorDest = null;
         }
 
         if (!state.list || state.index < 0 || state.index >= state.list.length) return;
@@ -2750,6 +2931,9 @@ export const UrlLoader = {
         const targetPath = currentEntry.path || (currentEntry.name ? `${_activeGalleryPath}\\${currentEntry.name}` : null);
         if (targetPath) {
           _activeQueue.prioritize(targetPath);
+          if (!listChanged) {
+            _activeQueue._userAnchorDest = targetPath;
+          }
         }
 
         if (!state.fileListVisible) {
@@ -2775,6 +2959,7 @@ export const UrlLoader = {
   getGalleryDownloadStatus,
   retryGalleryDownload,
   setVisibleRange,
+  setDisplayOrder,
   fetchRemoteText,
   fetchExtractorText,
   downloadFile,
