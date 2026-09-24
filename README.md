@@ -62,7 +62,7 @@ Reference URLs for manual testing. Each entry covers a distinct URL route or ext
 | Provider | Test target | Import type | Library destination (braces not code accurate) | Verified behaviour |
 |:---|:---|:---|:---|:---|
 | Misc | [BAKEMONOGATARI c013 p002.jpg](https://raw.githubusercontent.com/4163/quivi-t/refs/heads/refactor/backend-cl-prep/test-files/BAKEMONOGATARI%20-%20c013%20(v03)%20-%20p002%20%5BKodansha%20Comics%5D%20%5BDigital%5D%20%5B1r0n%5D%20%7BHQ%7D.jpg) | Direct media | `Misc/{filename}.jpg` | Host-agnostic raster catch-all, matched last, document pages rejected, root sidecar recording |
-| Misc | [koi.svg](https://x9000.6te.net/secret/koi.svg) | Direct media | `Misc/{filename}.svg` | Illustrator export with entity prolog, sanitized text path. Art by [stresseR](https://www.pixiv.net/en/artworks/119373929) |
+| Misc | [koi.svg](https://raw.githubusercontent.com/4163/quivi-t/c004b6946204e44a265fee67c75fde9ef42e75af/test-files/koi.svg) | Direct media | `Misc/{filename}.svg` | Illustrator export with entity prolog, sanitized text path. Art by [stresseR](https://www.pixiv.net/en/artworks/119373929) |
 | Imgur | [Azuma - Seihantai](https://imgur.com/a/azuma-seihantai-17vF37d) | Gallery | `Imgur/{Title}/` | Album `/a/` route (41 PNGs), multi-image manga set, description sanitization |
 | Imgur | [Anime Reaction Gifs](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) | Gallery | `Imgur/{Title}/` | Large animation batch (50 GIFs), download concurrency, prefetch threshold |
 | Imgur | [Just some Witch Watch OP clips](https://imgur.com/gallery/just-some-witch-watch-op-clips-2Bi48Dm#/t/anime) | Gallery | `Imgur/{Title}/` | Video extraction (8 MP4s), audio stream detection, hashtag route (`#/t/anime`) |
