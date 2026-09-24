@@ -7,6 +7,7 @@ import {
   getExtractorCacheKey,
   isLibraryLocationError,
   remapLibraryPath,
+  orderItemsBySort,
   validateManifest,
   validateExtractorResult,
   findMatchingGalleryImage,
@@ -56,8 +57,6 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
         { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 }
       ], {
-        visibleStart: 0,
-        visibleEnd: 3,
         downloadFile: (_url, destPath, options) => {
           const deferred = createDeferred();
           downloads.push({ destPath, options, deferred });
@@ -100,8 +99,6 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
         { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 }
       ], {
-        visibleStart: 0,
-        visibleEnd: 3,
         cancelDownload: async () => { cancelCount++; },
         downloadFile: (_url, destPath, options) => {
           const deferred = createDeferred();
@@ -136,8 +133,6 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       const queue = new DownloadQueue([
         { url: 'https://example.test/broken.jpg', destPath: 'C:\\gallery\\broken.jpg', galleryIndex: 0 }
       ], {
-        visibleStart: 0,
-        visibleEnd: 1,
         downloadFile: async () => {
           attempts++;
           throw new Error('Network request failed');
@@ -170,8 +165,6 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
           galleryIndex: 0
         }
       ], {
-        visibleStart: 0,
-        visibleEnd: 1,
         downloadFile: async (url) => {
           urlsAttempted.push(url);
           if (url.includes('cdn')) {
@@ -192,15 +185,13 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       queue.cancel();
     });
 
-    it('continues prefetching backlog items when visible range is empty or unset', async () => {
+    it('drains the backlog in gallery order from the active item', async () => {
       const downloaded = [];
       const queue = new DownloadQueue([
         { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
         { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
         { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 }
       ], {
-        visibleStart: 0,
-        visibleEnd: 0,
         downloadFile: async (_url, destPath) => {
           downloaded.push(destPath);
         }
@@ -218,7 +209,7 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       queue.cancel();
     });
 
-    it('restricts downloads strictly to the visible range and stops without draining backlog', async () => {
+    it('admits only display-viewport items in display order under a reversed sort', async () => {
       const downloaded = [];
       const queue = new DownloadQueue([
         { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
@@ -227,34 +218,184 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         { url: 'https://example.test/004.jpg', destPath: 'C:\\gallery\\004.jpg', galleryIndex: 3 },
         { url: 'https://example.test/005.jpg', destPath: 'C:\\gallery\\005.jpg', galleryIndex: 4 }
       ], {
-        visibleStart: 0,
-        visibleEnd: 2,
         downloadFile: async (_url, destPath) => {
           downloaded.push(destPath);
         }
       });
 
-      queue.prioritize('C:\\gallery\\001.jpg');
-      await flushQueue();
-
-      // Only items within visible range [0, 2) should download
-      assert.deepEqual(downloaded, [
-        'C:\\gallery\\001.jpg',
-        'C:\\gallery\\002.jpg'
-      ]);
-
-      // Scrolling down to [2, 4) admits the next slice without downloading offscreen item 4
-      queue.setVisibleRange(2, 4);
-      await flushQueue();
+      // Reversed panel order: display rows 0-1 are gallery images 005, 004.
+      // Window [0, 2) admits exactly those two, top-down in display order.
+      queue.setDisplayOrder('C:\\gallery', ['005.jpg', '004.jpg', '003.jpg', '002.jpg', '001.jpg']);
+      queue.setVisibleRange(0, 2);
+      queue.prioritize('C:\\gallery\\005.jpg');
+      for (let i = 0; i < 20 && downloaded.length < 2; i++) await flushQueue();
 
       assert.deepEqual(downloaded, [
-        'C:\\gallery\\001.jpg',
-        'C:\\gallery\\002.jpg',
-        'C:\\gallery\\003.jpg',
+        'C:\\gallery\\005.jpg',
         'C:\\gallery\\004.jpg'
       ]);
 
       queue.cancel();
+    });
+
+    it('still downloads an off-viewport active image first, then viewport top-down', async () => {
+      const downloaded = [];
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 },
+        { url: 'https://example.test/004.jpg', destPath: 'C:\\gallery\\004.jpg', galleryIndex: 3 },
+        { url: 'https://example.test/005.jpg', destPath: 'C:\\gallery\\005.jpg', galleryIndex: 4 }
+      ], {
+        downloadFile: async (_url, destPath) => {
+          downloaded.push(destPath);
+        }
+      });
+
+      // Same reversed panel, but the active image sits below the window: it
+      // jumps the line alone, then prefetch runs the viewport top-down
+      // (never from the bottom). 002 joins last as the active image's +-1
+      // adjacency preload; 003 is neither in-viewport nor adjacent.
+      queue.setDisplayOrder('C:\\gallery', ['005.jpg', '004.jpg', '003.jpg', '002.jpg', '001.jpg']);
+      queue.setVisibleRange(0, 2);
+      queue.prioritize('C:\\gallery\\001.jpg');
+      for (let i = 0; i < 20 && downloaded.length < 4; i++) await flushQueue();
+
+      assert.deepEqual(downloaded, [
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\005.jpg',
+        'C:\\gallery\\004.jpg',
+        'C:\\gallery\\002.jpg'
+      ]);
+
+      queue.cancel();
+    });
+
+    it('keeps walking around a finished anchor instead of restarting at the top', () => {
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 },
+        { url: 'https://example.test/004.jpg', destPath: 'C:\\gallery\\004.jpg', galleryIndex: 3 },
+        { url: 'https://example.test/005.jpg', destPath: 'C:\\gallery\\005.jpg', galleryIndex: 4 }
+      ], {
+        downloadFile: async () => {},
+      });
+
+      // Same reversed panel. The anchor survives its own completion: even
+      // after 003 finishes, the walk continues from it (002, 001) instead
+      // of restarting at the window top (005).
+      queue.setDisplayOrder('C:\\gallery', ['005.jpg', '004.jpg', '003.jpg', '002.jpg', '001.jpg']);
+      queue.setVisibleRange(0, 5);
+      queue._userAnchorDest = 'C:\\gallery\\003.jpg';
+
+      const order = [];
+      for (let i = 0; i < 5; i++) {
+        const next = queue._getNextPrefetchItem();
+        assert.ok(next, 'expected a pick');
+        order.push(next.filename);
+        next.status = 'completed';
+      }
+      assert.deepEqual(order, ['003.jpg', '002.jpg', '001.jpg', '004.jpg', '005.jpg']);
+
+      queue.cancel();
+    });
+
+    it('walks a reversed viewport top-down from the active image, then back up', async () => {
+      const downloaded = [];
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 },
+        { url: 'https://example.test/004.jpg', destPath: 'C:\\gallery\\004.jpg', galleryIndex: 3 },
+        { url: 'https://example.test/005.jpg', destPath: 'C:\\gallery\\005.jpg', galleryIndex: 4 }
+      ], {
+        downloadFile: async (_url, destPath) => {
+          downloaded.push(destPath);
+        }
+      });
+
+      // Display order is fully reversed: row 0 shows 005. The user
+      // navigated to 003 mid-viewport, so the walk goes down the visible
+      // rows first (003, 002, 001), then back up (004, 005). Gallery order
+      // would walk 003, 004, 005 instead.
+      queue.setDisplayOrder('C:\\gallery', ['005.jpg', '004.jpg', '003.jpg', '002.jpg', '001.jpg']);
+      queue.setVisibleRange(0, 5);
+      queue.prioritize('C:\\gallery\\003.jpg');
+      queue._userAnchorDest = 'C:\\gallery\\003.jpg';
+      for (let i = 0; i < 20 && downloaded.length < 5; i++) await flushQueue();
+
+      assert.deepEqual(downloaded, [
+        'C:\\gallery\\003.jpg',
+        'C:\\gallery\\002.jpg',
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\004.jpg',
+        'C:\\gallery\\005.jpg'
+      ]);
+
+      queue.cancel();
+    });
+
+    it('returns to gallery top once the mid-gallery active item finishes', async () => {
+      const downloaded = [];
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 },
+        { url: 'https://example.test/004.jpg', destPath: 'C:\\gallery\\004.jpg', galleryIndex: 3 },
+        { url: 'https://example.test/005.jpg', destPath: 'C:\\gallery\\005.jpg', galleryIndex: 4 }
+      ], {
+        downloadFile: async (_url, destPath) => {
+          downloaded.push(destPath);
+        }
+      });
+
+      // Pinning the middle image downloads it first; once it finishes, the
+      // walk no longer anchors on it and restarts at gallery top instead of
+      // continuing backward from its position.
+      queue.prioritize('C:\\gallery\\003.jpg');
+      for (let i = 0; i < 20 && downloaded.length < 5; i++) await flushQueue();
+
+      assert.deepEqual(downloaded, [
+        'C:\\gallery\\003.jpg',
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\002.jpg',
+        'C:\\gallery\\004.jpg',
+        'C:\\gallery\\005.jpg'
+      ]);
+
+      queue.cancel();
+    });
+  });
+
+  describe('display-ordered eager selection', () => {
+    const items = [
+      { url: 'https://example.test/01.png', filename: '01.png' },
+      { url: 'https://example.test/02.png', filename: '02.png' },
+      { url: 'https://example.test/10.png', filename: '10.png' },
+    ];
+
+    it('keeps extractor order under the default ascending sort', () => {
+      assert.deepEqual(
+        orderItemsBySort(items, { col: 'name', desc: false }).map((i) => i.filename),
+        ['01.png', '02.png', '10.png']
+      );
+    });
+
+    it('reverses to display order under a descending sort', () => {
+      assert.deepEqual(
+        orderItemsBySort(items, { col: 'name', desc: true }).map((i) => i.filename),
+        ['10.png', '02.png', '01.png']
+      );
+    });
+
+    it('sanitizes unknown columns to name sort and tolerates empty input', () => {
+      assert.deepEqual(
+        orderItemsBySort(items, { col: 'nope', desc: true }).map((i) => i.filename),
+        ['10.png', '02.png', '01.png']
+      );
+      assert.deepEqual(orderItemsBySort([], { col: 'name', desc: true }), []);
+      assert.deepEqual(orderItemsBySort(null, { col: 'name', desc: true }), []);
     });
   });
 

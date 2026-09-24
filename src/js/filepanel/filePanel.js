@@ -25,6 +25,7 @@ import { FsUtils } from '../fsUtils.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
 import {
   setVisibleRange as setDownloadVisibleRange,
+  setDisplayOrder as setDownloadDisplayOrder,
   cancelGalleryDownloads,
   forgetDeletedLibraryEntry,
   isGalleryDownloading,
@@ -219,6 +220,7 @@ let startWidth = 0;
 let columnResizeMoved = false;
 
 let lastRenderedList = null;
+let lastDownloadOrderList = null;
 let lastScrolledIndex = -1;
 let lastClickTime = 0;
 let lastClickIndex = -1;
@@ -1848,6 +1850,14 @@ function renderVisibleSlice() {
   const list = state.list;
   if (!list) return;
   const total = list.length;
+
+  // Download order follows the sorting state: push the row order whenever
+  // the list identity changes (directory load, sort), never per scroll
+  // frame. The queue ignores it unless the listed directory is its gallery.
+  if (list !== lastDownloadOrderList) {
+    lastDownloadOrderList = list;
+    setDownloadDisplayOrder(state.directory, list.map((entry) => entry?.name));
+  }
 
   if (!ROW_HEIGHT) measureRowHeight();
 
