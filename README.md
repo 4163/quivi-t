@@ -6,7 +6,7 @@
   <img src="icons/quivi-t_moe-2.svg" alt="QuiviT mascot" width="25%" />
 </p>
 
-A lightweight standalone (performance-first*) port of Quivi, built with Tauri and Vanilla HTML/CSS/JS. View static images and animated formats like WebP, APNG, AVIF, and GIF, including direct support for archive files (ZIP/CBZ, RAR/CBR, etc.).
+A lightweight standalone (performance-first*) port of Quivi, built with Tauri using vanilla web technologies. View raster images, vectors, and animated formats, including direct support for archive files.
 
 ## Quivi
 
@@ -17,7 +17,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 
 ## Features
 
-- **Formats**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
+- **Formats**: Open raster, vector, and animated images, as well as common archive formats.
 - **Archives**: Read compressed files directly as folders, including password-protected archives and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
 - **Web Import**: Import manga and galleries from supported sites for offline reading (see [Supported sites](#supported-sites)).
@@ -52,7 +52,7 @@ Import a URL via **File → Open URL...**.
 
 The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`), native mouse inputs (`MouseMiddle`, `MouseForward`), double-click gestures (`DoubleClick`), and scroll-wheel capture with modifiers (`Ctrl+ScrollUp`). All keybinds can be configured dynamically in the Options menu with built-in conflict highlighting.
 
-> Table lists only mapped defaults. You can assign keybinds to unmapped actions in **Options**.
+> Table lists only mapped defaults. You can assign keybinds to unmapped actions in **Options → Keys**.
 
 | Action | Default Shortcut(s) |
 |---|---|
@@ -142,9 +142,9 @@ html {
 ̶}̶
 ```
 
-**Developer Tools:** Inspect Element is intentionally left enabled to help users create and debug custom CSS.
+Developer Tools (inspect element) is intentionally left enabled to help users create and debug custom CSS.
 
-**Example themes:** Try the included `matcha-latte.css` and `sage-mint.css` themes under [`themes/`](themes/). Import them from **Options → Customization** to restyle the app.
+Try the included `matcha-latte.css` and `sage-mint.css` themes under [`themes/`](themes/). Import them from **Options → Customization** to restyle the app.
 
 > If a broken CSS rule makes the user interface unusable, press `Ctrl+Shift+Alt+C` in any QuiviT window. This emergency reset instantly removes the custom CSS and reloads the interface safely.
 
@@ -156,101 +156,52 @@ See the [Releases](../../releases) page for version history and release notes.
 
 ### System Defaults
 
-The following system defaults are used:
+What QuiviT ships with. The id in backticks is the value stored in config.
 
-- **Fit Mode:** `height-if-larger`. All fit modes align tall pages to the top rather than the center while keeping smaller images centered, depending on the mode/image size. This makes page-to-page navigation more intuitive.
-- **Scaling Mode:** `bilinear`
-- **Spread View:** Defaults to `off`. When enabled, reading direction defaults to `rtl`.
-- **Filters:** Defaults to none active, only one filter can be active at a time. SVGs are rasterized at a capped resolution (2048px static, 512px animated); Anime4K and Lanczos fall back to Bilinear for SVGs.
-- **Filter: Anime4K** Defaults to `fast` (upstream Mode A Fast). Configurable in **Options → General → Filters**.
-- **Idle Cursor Auto-Hide:** Defaults to 2 seconds of inactivity over the viewport before hiding the pointer (0 to disable). Configurable in **Options → General → Viewport**.
-- **Scroll-wheel Modifier:** Defaults to `hold` (hold `Ctrl` while scrolling to zoom). Can be switched to `toggle` (sticky `Ctrl`). A status-bar badge shows whether scroll zoom is latched or which bound modifier keys are currently held.
-- **Pan Steps:** Keyboard panning defaults to 72px per step, and wheel panning defaults to 120px per step. Both are configurable in **Options → General → Panning**.
-- **Window Title:** The OS title bar shows the current image: `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages and `filename.ext (current/total) ◦ QuiviT` for folder pages. Page count is image-only and natural-ascending, independent of the active sort.
-- **Secondary Windows:** Options and Archive Info windows size to their content and open centered over the main window. Subsequent resizes keep the window in place.
-- **Shell Background:** The native window background mirrors the page's `--surface` color, so overriding it in custom CSS also updates the shell behind the webview.
-- **History Trail:** Menu bar **Folder → Back / Forward** (`Alt`+arrow / `Alt+A/W` / `Alt+D/S`, plus `MouseBack` / `MouseForward`) tracks container-level navigation only: opening folders, archives, and drives. Selecting images or pages *within* a container and refreshing never create entries. The trail is session-only and capped at 100 entries.
-- **Library Location:** Defaults to `%LOCALAPPDATA%\QuiviT\library`. Configurable in **Options → General → Library location**, which relocates existing imported folders to the new folder and updates the active configuration.
-- **Library Deletion:** Deleting folders or images from the Library in the file panel sends them to the Windows Recycle Bin rather than permanently deleting them, and cancels any active background downloads for that folder.
-- **Missing Path Recovery:** When the last-opened path no longer exists at startup, or the active folder/archive is deleted or moved while browsing, QuiviT falls back to the nearest existing ancestor, or the Drives view at the root.
-- **Single Instance:** Enabled by default. External file opens are handed off to the active session. Toggling this setting on or off requires an app restart to take effect.
-- **Default Sort:** `name` ascending. Per-directory preferences are cached for up to 100 directories, with the oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort` (`col`: `name`, `ext`, or `date`; `desc`: `false` = ascending, `true` = descending). Directories without a saved preference in `quivit_directory_sort.json` fall back to it.
-- **Video Audio:** Videos with audio tracks default to muted at 50% volume and must be unmuted manually for each file. Volume adjustments and unmuted state persist per file across the current session only.
-- **Thumbnail Loading:** In thumbnail view, shell thumbnails (JPG, PNG, BMP, GIF) load concurrently from the OS cache at 96x96. Archive images and non-shell file thumbnails (WebP, AVIF, SVG, fallback images) have no pre-scaled cache and decode full-size 1:1 images, so they load one at a time in scroll direction order with only visible rows plus one buffer row active. This carries a higher per-image performance cost than shell thumbnails, especially for large or animated images.
-- **Image Swap Buffer:** The DOM viewer keeps a decoded previous image visible while the next target image loads, then waits for a short 45ms settled-navigation window before committing the swap. This is an intentional WebView2/HTML `<img>` tradeoff: it slightly delays final activation during rapid navigation, but prevents visible blank-frame flicker that can occur when very large images are decoded, uploaded, or repainted by the browser.
+- **Fit mode.** `height-if-larger`. Portrait pages always starts at the top of the viewport, to preserve top-down manga reading. Smaller images stays centered.
+- **Scaling.** `bilinear`. Scaling is ignored for vector images. `Lanczos` uses the `pica` vendor for still images, and WebGL for videos and animated images.
+- **Filters.** `Off`. Filters are also ignored for vector images. Vectors (SVG) are drawn as a bitmap, static ones capped at 2048px, while animated ones are capped at 512px.
+- **Anime4K.** `fast` (upstream Mode A Fast). The visual difference between Mode A and HQ is insignificant, but can still be configured. **Options → General → Filters**.
+- **Scroll-wheel modifier.** `hold`. Hold `Ctrl` and scroll to zoom. `toggle` latches `Ctrl`. The status bar shows the latch, or which modifier keys are held.
+- **Pan steps.** Keyboard `72px` per step, wheel `120px` per step. **Options → General → Panning**.
+- **Cursor auto-hide.** `2` seconds with no movement over the viewport. `0` disables auto-hide. **Options → General → Viewport**.
+- **Window title.** `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages. While folder pages omit the container. The count is images only, natural ascending, and ignores the active file list sort.
+- **Secondary windows.** Options and Archive Info size to their content and open centered on the main window.
+- **Shell background.** The native window shell background copies CSS var `--surface`.
+- **History.** **Folder → Back / Forward** (`Alt+arrow`, `Alt+A`, `Alt+W`, `Alt+D`, `Alt+S`, `MouseBack`, `MouseForward`) navigation tracks folders, archives, or drives. Session only, capped at 100.
+- **Library location.** `%LOCALAPPDATA%\QuiviT\library`. **Options → General → Library location** dynamically moves the imported folders in session.
+- **Library deletion.** Deleting a Library folder or image from the file panel sends it to the Recycle Bin rather than permanently deleting them.
+- **Missing path.** A  missing path, folder or archive, or deleted directories while the app is open, falls the user back to the nearest existing ancestor, or the Drives view at the root.
+- **Single instance.** `Enabled`. Files opened are handed to the active window session. Requires an app restart for changes to take effect.
+- **Default sort.** `name`, ascending. Per-directory sort is kept for 100 folders, oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort`.
+- **Video audio.** A video with audio starts muted at 50% volume. Volume and unmute states are session only.
+- **Thumbnails.** <abbr title="JPG, JPEG, PNG, BMP, ICO, MP4, static GIF">`SHELL_THUMBNAIL_EXTS`</abbr> files load together from the 96x96 OS thumbnail cache. While archive thumbnails, and non-shell images decode at full-size, one at a time for the visible rows, plus one buffer row. The file list performance drops significantly for such cases, so maybe don't use Thumbnail View if the performance hinders navigation.
+- **Image swap.** The previous image stays up while the next loads, then the swap waits `45ms` after navigation settles. That avoids a blank frame when WebView2 decodes a large `<img>`. The delay is a Tauri and WebView2 tradeoff, for the time being it stays but hopefully it can be cut down further in the future.
 
 ### Configuration & Persistence
 
-QuiviT manages data across three distinct tiers depending on lifecycle and scope:
+QuiviT keeps its own data in three places. Imported galleries sit in a fourth folder, under local app data.
 
-**Roaming files (source of truth)**: stored in Tauri's app config directory:
-`C:\Users\<user>\AppData\Roaming\com.x4163.quivit`
+**Config files.** By default these live in `C:\Users\<user>\AppData\Roaming\com.x4163.quivit`:
 
-Data is split across five files:
-- `quivit_config.json`: User preferences (theme, keybinds, fit/scaling, scroll-wheel modifier, default sort, hide_cursor_delay_sec, file_list_view_mode, spread_enabled, spread_direction, spread_mode, Library location, options)
-- `quivit_state.json`: Runtime state (`last_opened_path`, `last_active_image`, `scroll_zoom_latched`)
-- `quivit_directory_sort.json`: Per-directory sort column/direction
-- `quivit_favorites.json`: Favorited folders/files and collapsed state
-- `custom_css.css`: Custom CSS source text
+- `quivit_config.json`: preferences. theme, keybinds, fit and scaling, sort, spread, library location, and the rest of options.
+- `quivit_state.json`: last opened path, last image, and whether scroll-zoom is latched.
+- `quivit_directory_sort.json`: sort column and direction for each folder.
+- `quivit_favorites.json`: favorites.
+- `custom_css.css`: custom CSS.
 
-**WebView2 localStorage**: not the source of app configuration or Library content. It holds presentation state, cross-window payloads, and caches:
-- `quivit-theme` / `quivit-custom-css`: Pre-paint mirrors so the theme and custom CSS apply before first render (prevents flicker)
-- `options-active-tab`: Session-only; cleared on each app start
-- `quivit-metadata-current`: Short-lived metadata-window payload
-- `quivit_library_providers_collapsed`: Provider-collapse presentation state for the Library sidebar
-- `quivit_library_provider_order`: Provider sort order for the Library sidebar
-- `icon:*`: Cached native file-icon data
+**Options → Save config data locally** turns on portable mode. QuiviT writes one `quivit_config.json` beside the exe, which moves the current roaming settings into it. In the portable file, the `hidden` flag hides the file using the Windows hidden attribute: `true`. QuiviT applies that attribute on every launch, so it should only be edited while the app is not running.
 
-**In-memory state**: session-only; reset on app exit:
-- `navigationHistory`: Container-level Back/Forward history trail (capped at 100 entries)
-- `ArchiveCache`: Two-archive sliding buffer retaining the active archive and the immediately preceding archive. ZIP/CBZ entries use a byte-budgeted in-memory image cache (default 512 MB) and background prefetch queue; RAR/CBR, 7Z/CB7, and TAR/CBT archives keep temporary extraction state.
-- `#viewer-img-wrapper` image bridge: Four reusable DOM images (current target, decoded previous image, and adjacent preloads); nearby pages warm through off-DOM preloaders after navigation settles behind the 45ms image swap buffer
-- `thumbnailCache`: 250-item bounded cache for rendered file panel thumbnails (`filePanel.js`)
-- `fsUtils.js` archive caches: unlocked password cache (50 items) and encryption status cache (100 items)
-- `urlLoader.js`: Active gallery queue plus manifest and extractor module caches
-- `previewTheme` / `previewCss`: Options window live theme and custom CSS previews (persisting across config reloads until Apply or Close)
+**WebView2 localStorage.** A mirror of the theme and custom CSS, so the first paint can use them before the config files load to prevent LCP issues. It also holds Library collapse and provider order, cached file icons, the active Options tab, and the short-lived Archive Info handoff. The Options tab (and similar none persistent items) should be cleared on each launch.
 
-**Portable Mode** can be enabled via **Options → Save config data locally**. QuiviT uses one config shape at a time: roaming mode uses the four JSON files plus custom CSS above, while portable mode folds those values into a single self-contained `quivit_config.json` next to the executable. Switching modes migrates the active values into the destination shape so stale files are not treated as competing sources of truth. In portable mode, the top-level `hidden` flag controls the Windows hidden attribute on that local `quivit_config.json`: `true` hides it, and `false` leaves it visible. The attribute is synced on every app launch and on each config save; edits made to the JSON while QuiviT is running are overwritten by the in-memory state on the next save.
+**In memory, until quit.** The Back/Forward list, unlocked archive passwords, per-file mute and volume, and the archive pages currently held open. A theme or CSS preview in Options stays on screen until you **Apply**.
 
-`frontend_data.library_path` is an optional absolute path for the shared URL Library. Without it, QuiviT uses `%LOCALAPPDATA%\\QuiviT\\library`. Changing the location copies the existing Library into an empty, writable folder, switches the shared configuration, and rebinds each running process to the new root.
+**Imports.** **File → Open URL** saves galleries under `%LOCALAPPDATA%\QuiviT\library`. **Options → General → Library location** moves that folder. Pick an empty writable folder and QuiviT copies the current library into it.
 
 ### Architecture
 
-The frontend is split into a state machine, pure services, and single-owner UI modules that talk through `Core.onStateChange` instead of writing each other's DOM:
-
-- `core.js`: App state and configuration. No DOM.
-- `services/`: Pure domain: `actions.js` (`ACTION_REGISTRY` / `dispatch`), `cache.js` (`BoundedMap`, `BoundedSet`), `metadataFiles.js`, key combos, keybind rules, sorting, viewer math. Filter logic lives in `filters/`, scaling in `scaling/`, and the WebGL runtime/catalog in `pipelines/`.
-- `shared/`: Cross-window theme/CSS apply, pre-paint injector, config preview / emergency reset, window fit.
-- `viewer/`: Facade plus render pool (`viewerRender.js` for images and video), overlay canvas owner (`viewerPipelines.js`), audio controls (`viewerAudio.js`), and pan gestures. Zoom/pan/fit math lives in `services/viewerMath.js`.
-- `filepanel/`: File list (virtualized) with list and thumbnail view modes. Columns, breadcrumb, resize, Favorites persistence, and the recursive Library tree. `libraryStore.js` is the Library data layer.
-- `menubar/`: Chrome visibility and the sole `#statusbar` writer with dual spread indicator routing. `menubar.js` owns dropdown interaction.
-- `main/`: Thin bootstrap (`main.js`) plus fullscreen, dropzone, lifecycle, metadata badge, password overlay, and the URL overlay.
-- `options/`: Options window, keybind capture UI, file-association UI.
-- `fsUtils.js`: Filesystem and archive navigation (no DOM).
-- `urlLoader.js`: Non-DOM URL import coordinator for remote extractors, display-ordered gallery downloads, and SVG sanitization.
-- `shortcuts.js` / `keybinds.js`: Input dispatch and config merge. Action ids come from `ACTION_REGISTRY`.
-
-CSS follows the same split: `global.css` holds tokens and shared rules; `main.css`, `options.css`, and `metadata.css` are page-only.
-
-The Rust backend is split into domain-specific modules:
-
-- `lib.rs` & `main.rs`: Bootstrap, config watcher, and main-window build.
-- `config.rs`: `AppConfig`, persistence, portable mode, and pending promotion.
-- `commands/`: Tauri command surface for directory, archive, animation, Library, network, watcher, association, and shell operations.
-- `archives/` & `formats.rs`: Archive readers, `ArchiveCache`, and format registry.
-- `platform/` & `windows.rs`: OS-level integrations, native shell thumbnails (`IShellItemImageFactory`), external archiver temp origin resolution, dialogs, and window lifecycle.
-- `tests/`: In-tree testing for archives, config, formats, protocol, and temp archive origin.
-- `protocol.rs`: `quivit://` handler (archive entries, shell thumbnails, shell icons). `asset://` for direct file access.
-- `ico.rs`: ICO spritesheets.
-- `models.rs`: IPC structs and data models.
-- `utils.rs`: Base64 and encoding helpers.
-
-Testing spans three focused layers:
-- `src-tauri/src/tests/`: In-tree Rust unit tests for archive engines, config parsing, protocol URLs, and temp archive extraction matching (`cargo test`).
-- `mocha/`: Flat pure frontend unit tests for viewer math, state transitions, action registry, metadata parsing, sorting, bounded cache, and URL loader flows (`npm test`).
-- `e2e/`: WebdriverIO end-to-end test suite (`e2e/specs/`) verifying startup chrome, navigation, viewer transforms, archive formats, and OS integrations against the live debug binary under portable mode isolation (`npm run test:e2e`).
-
-> **Design Principle:** New DOM belongs in the module that already owns that surface. New domain logic belongs in `core.js` or `services/`. Do not grow `main.js` back into a god file.
+Module map: [`.agents/architecture-state.md`](.agents/architecture-state.md).
+Development guidelines: [`.agents/AGENTS.md`](.agents/AGENTS.md).
 
 ### Web Imports
 
@@ -260,11 +211,9 @@ QuiviT checks the [`extractors`](https://github.com/4163/quivi-t/tree/extractors
 
 ### File Associations (Windows)
 
-**Options → File Types** registers image and archive formats with QuiviT. Registration is per-user (no admin rights required): it writes `HKCU\Software\Classes` ProgIDs, dumps format icons to the roaming config directory, and registers QuiviT as an app in **Windows Settings → Default Apps**. The "Open Windows Default Apps Settings" button deep-links straight to QuiviT's entry.
+**Options → File Types** lists the image and archive formats QuiviT can open. Check the ones you want and apply.
 
-Checkboxes reflect whether QuiviT is the active default handler for each format, reading the `UserChoice` registry key first and falling back to the `Classes` registration.
-
-> **Note on Windows 10/11 defaults:** A format's active default handler lives in the `UserChoice` registry key, which is hash-protected and cannot be written programmatically. A format with no existing `UserChoice` becomes QuiviT's once registered: double-click opens it directly. For formats already claimed by another program, registering only adds QuiviT as an *available* handler; Windows surfaces it automatically via the "How do you want to open this file?" picker when such a file is opened, OR the default can be changed permanently there, via "Open with", or in Windows Settings.
+Clicking **Apply** registers QuiviT for the formats you selected. If changes does not reflect on Windows, right-click the specific file and choose **Open with**, and pick QuiviT. Or use the **Windows Defaults Settings** button, and choose specific file formats via **Choose default apps by file type**.
 
 ### Command-Line Interface
 
@@ -276,206 +225,199 @@ quivit.exe "C:\Path\To\Archive.cbz"
 
 ## Development & Installation
 
-**Prerequisites:**
-- [Node.js](https://nodejs.org/) (for `npm`)
-- [Rust](https://www.rust-lang.org/) (Cargo)
+**Prerequisites:** [Node.js](https://nodejs.org/) and [Rust](https://www.rust-lang.org/) (Cargo).
 
-Install dependencies and run the Tauri development build:
 ```bash
 npm install
 npm run tauri dev
 ```
 
-Run backend and frontend tests and syntax checks:
+Tests and syntax checks:
+
 ```bash
-npm test                                         # Run fast Mocha frontend unit tests (< 100ms)
-npm run test:e2e                                 # Run WebdriverIO E2E test suite
-cargo test --manifest-path src-tauri/Cargo.toml  # Run Rust backend unit tests
-cd src-tauri && cargo check                      # Validate backend compilation
-node --check src/js/main/main.js                 # Syntax check JS files
-# etc.
+npm test                                         # Frontend unit tests
+npm run test:e2e                                 # Desktop end-to-end tests
+cargo test --manifest-path src-tauri/Cargo.toml  # Rust tests
+cd src-tauri && cargo check                      # Rust compile check
+node --check src/js/main/main.js                 # Syntax-check a JS file
 ```
 
 ### Action recorder and replay diagnostics
 
-Record a reproduction scenario:
-```bash
-# Record with default name last-recording.json
-npm run record
+Record a session. With no name, the file is `e2e/scenarios/last-recording.json`.
 
-# Record with custom scenario name and starting path
+```bash
+npm run record
 npm run record -- --scenario flicker-bmp --path test-files/webp
 ```
-QuiviT launches with a floating recording badge. Click **Start** to begin capturing actions, reproduce the issue, then click **Stop**, press `Escape`, or close the app to finalize. The trace is saved to `e2e/scenarios/<scenario>.json`.
 
-Replay and diagnose:
+QuiviT opens with a recording badge. Click **Start**, reproduce the issue, then click **Stop**, press `Escape`, or close the window. The trace is saved to `e2e/scenarios/<scenario>.json`.
+
+Replay that trace. `--pause` waits that many milliseconds between steps. `--inspect` prints the latest report and does not open the window.
+
 ```bash
-# Run diagnostics on the default scenario
 npm run diagnose
-
-# Run diagnostics on a specific scenario with optional pause delay
 npm run diagnose -- flicker-bmp --pause 300
-
-# Inspect the latest generated report without launching the window
 npm run diagnose -- --inspect
 ```
-The runner replays recorded actions step by step with in-browser telemetry probes, detecting blank blackout frames, image pool retirement races, WebGL readiness, and IPC latency. Detailed JSON reports are saved to `e2e/replay-diagnostics/reports/`.
 
-Record and diagnose share one persistent profile in `e2e/.profile/`, so prefs set before recording (scaling, filters, spread, keybinds) are still active at replay. "Continue from last opened" carries over between runs; "remember last image" is always forced off so replay starts at the recorded index, and portable mode is always forced on so suite runs never touch roaming data. The main `test:e2e` suite still starts factory fresh. Reset the profile with `E2E_FRESH=1 npm run record` or `npm run record -- --fresh`.
+The runner steps through the recording and checks for blank frames, image-pool races, WebGL readiness, and IPC latency. Reports are written to `e2e/replay-diagnostics/reports/`.
 
-AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/skills/replay-debugging/SKILL.md) to run an automated investigation loop on recorded traces: generating a temporary `investigation.js` workspace copy, injecting granular microtask and frame assertions, isolating the root cause, delivering a structured diagnosis report.
+Record and diagnose share `e2e/.profile`, so scaling, filters, spread, and keybinds from the recording session are still on at replay. "Continue from last opened" carries over. "Remember last image" stays off, so replay starts at the recorded page. Portable mode stays on, so these runs leave roaming config alone. `npm run test:e2e` still starts from a clean profile. Reset the shared profile with `E2E_FRESH=1 npm run record` or `npm run record -- --fresh`.
+
+To investigate a trace, use [`.agents/skills/replay-debugging/SKILL.md`](.agents/skills/replay-debugging/SKILL.md). It writes a temporary `investigation.js`, adds frame and microtask checks, and reports the cause.
 
 ## Stack
 
 | Component | Technology | Purpose |
 |---|---|---|
-| **Runtime** | Tauri 2 | Desktop application framework |
-| **Backend** | Rust | Core logic and filesystem operations |
-| **Frontend** | Vanilla HTML/CSS/JS | ES modules-based user interface |
-| **Desktop Webview** | WebView2 | Native Windows web rendering |
-| **Frontend Tauri API** | `@tauri-apps/api` / `@tauri-apps/plugin-dialog` | Browser-side IPC, asset URLs, and native file dialogs |
-| **Tauri Plugins** | `opener`, `dialog`, `single-instance` | System integration (explorer, pickers, handoff) |
-| **Unit Testing** | `mocha` | Fast standalone frontend unit testing |
-| **E2E Testing** | WebdriverIO (`@wdio/tauri-service`) | End-to-end desktop testing via `tauri-driver` and `msedgedriver` |
-| **Replay Diagnostics** | WebdriverIO / In-Browser Probes | Deterministic scenario replay, frame blackout detection, and pipeline telemetry |
-| **Animated Decode** | WebCodecs `ImageDecoder` | Frame-accurate GIF/WebP/APNG/AVIF playback under filters and Lanczos |
-| **Video Playback** | HTML5 `<video>` / `<audio>` | MP4 playback with WebGL shader filtering, zero-flicker bridging, and native ISOBMFF sound track detection |
-| **Lanczos Scaling** | `pica` | Off-thread still-image Lanczos resize |
-| **WebGL Filters** | WebGL2 | Anime4K, CRT, Phosphor, Scanlines, and per-frame Lanczos on animated images |
-| **Archives (ZIP/CBZ)** | `zip` | Fast on-demand extraction and password decryption |
-| **Archives (RAR/CBR)** | `unrar` | Legacy archive support and password decryption |
-| **Archives (7Z/CB7)** | `sevenz-rust2` | Solid LZMA archive support and password decryption |
-| **Archives (TAR/CBT)** | `tar` | Uncompressed archive reading |
-| **Character Encoding** | `chardetng` / `encoding_rs` | Statistical detection and decoding for legacy CJK encodings (Shift-JIS, GBK, EUC-KR, Big5) in ZIP and TAR archives |
-| **Image Processing** | `image` | Multi-frame ICO spritesheet generation and tile descramble for provider-protected images |
-| **SVG Sanitization** | DOMPurify | Remote SVG imports saved as sanitized text with entity expansion, never raw bytes |
-| **Windows APIs** | `windows` / `winreg` | Native icons, shell thumbnails (`IShellItemImageFactory`), UI Automation and window enumeration (temp archive origin resolution), file attributes, shell notifications, and per-user file associations |
-| **Sorting** | `natord` | Natural alphanumeric sorting |
-| **File Watching** | `notify` | Directory watcher for auto-refresh |
-| **Network** | `ureq` | Blocking HTTP client for remote extractors, streamed image downloads, and raw byte fetches with header forwarding |
-| **Config** | `serde` / `serde_json` | Configuration serialization |
-| **Hashing** | `md5` | Deterministic temp directory naming |
-| **Data URIs** | `base64` | Base64 encoding for generated image payloads |
+| **Runtime** | [Tauri 2](https://tauri.app) | Desktop app shell |
+| **Backend** | [Rust](https://www.rust-lang.org) | Files, archives, and settings |
+| **Frontend** | Vanilla HTML/CSS/JS | The windows |
+| **Desktop Webview** | [WebView2](https://learn.microsoft.com/en-us/microsoft-edge/webview2/) | Renders those windows on Windows |
+| **Frontend Tauri API** | [`@tauri-apps/api`](https://www.npmjs.com/package/@tauri-apps/api) / [`@tauri-apps/plugin-dialog`](https://www.npmjs.com/package/@tauri-apps/plugin-dialog) | Calls into Rust, file URLs, and the native open dialog |
+| **Tauri Plugins** | [`opener`](https://crates.io/crates/tauri-plugin-opener), [`dialog`](https://crates.io/crates/tauri-plugin-dialog), [`single-instance`](https://crates.io/crates/tauri-plugin-single-instance) | Explorer, folder pickers, and single-instance handoff |
+| **Unit Testing** | [`mocha`](https://mochajs.org) | Frontend unit tests |
+| **E2E Testing** | [WebdriverIO](https://webdriver.io) ([`@wdio/tauri-service`](https://www.npmjs.com/package/@wdio/tauri-service)) | Tests against the running app |
+| **Replay Diagnostics** | [WebdriverIO](https://webdriver.io) / In-Browser Probes | Replays a recording and checks frames, WebGL, and IPC timing |
+| **Animated Decode** | WebCodecs [`ImageDecoder`](https://developer.mozilla.org/en-US/docs/Web/API/ImageDecoder) | GIF, WebP, APNG, and AVIF playback under filters |
+| **Video Playback** | HTML5 [`<video>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video) / [`<audio>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/audio) | MP4 playback, filters, and soundtrack detection |
+| **Lanczos Scaling** | [`pica`](https://www.npmjs.com/package/pica) | Lanczos resize for still images, off the UI thread |
+| **WebGL Filters** | [WebGL2](https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext) | Anime4K, CRT, Phosphor, Scanlines, and animated Lanczos |
+| **Archives (ZIP/CBZ)** | [`zip`](https://crates.io/crates/zip) | Read ZIP entries, including passwords |
+| **Archives (RAR/CBR)** | [`unrar`](https://crates.io/crates/unrar) | Read RAR entries, including passwords |
+| **Archives (7Z/CB7)** | [`sevenz-rust2`](https://crates.io/crates/sevenz-rust2) | Read 7Z entries, including passwords |
+| **Archives (TAR/CBT)** | [`tar`](https://crates.io/crates/tar) | Read TAR archives |
+| **Character Encoding** | [`chardetng`](https://crates.io/crates/chardetng) / [`encoding_rs`](https://crates.io/crates/encoding_rs) | Shift-JIS, GBK, EUC-KR, and Big5 names in ZIP and TAR |
+| **Image Processing** | [`image`](https://crates.io/crates/image) | ICO spritesheets, and descrambling for protected gallery images |
+| **SVG Sanitization** | [DOMPurify](https://github.com/cure53/DOMPurify) | Cleans an imported SVG before saving it |
+| **Windows APIs** | [`windows`](https://crates.io/crates/windows) / [`winreg`](https://crates.io/crates/winreg) | Icons, thumbnails, file attributes, associations, and matching a temp extract back to its archive |
+| **Sorting** | [`natord`](https://crates.io/crates/natord) | Natural sort, so 2 comes before 10 |
+| **File Watching** | [`notify`](https://crates.io/crates/notify) | Refresh when a folder changes |
+| **Network** | [`ureq`](https://crates.io/crates/ureq) | Gallery downloads and extractor fetches |
+| **Config** | [`serde`](https://serde.rs) / [`serde_json`](https://crates.io/crates/serde_json) | Reads and writes the config files |
+| **Hashing** | [`md5`](https://crates.io/crates/md5) | Stable names for temporary extract folders |
+| **Data URIs** | [`base64`](https://crates.io/crates/base64) | Encodes generated images for the UI |
 
 ## Project Structure
 
 ```text
 QuiviT/
-├─ e2e/                           # WebdriverIO test suite & replay diagnostics
-│  ├─ helpers/                    # Test fixtures, recorder shim, and diagnostics router
-│  ├─ pageobjects/                # Page objects for viewer, file panel, options, etc.
-│  ├─ replay-diagnostics/         # In-browser diagnostic engine, CLI, runner, and probes
-│  │  ├─ base.js                  # In-browser diagnostic engine template
-│  │  ├─ cli.js                   # Diagnostic CLI runner (npm run diagnose)
-│  │  ├─ runner.e2e.js            # Replay scenario execution spec
-│  │  ├─ probes/                  # Modular telemetry probes (Core, Viewer, IPC)
-│  │  └─ reports/                 # Output diagnostic timeline and anomaly reports
-│  ├─ scenarios/                  # Recorded action scenarios (*.json)
-│  └─ specs/                      # E2E test specs, including URL loading, record, and replay
-├─ mocha/                         # Standalone Mocha frontend unit tests (outside src/)
-│  ├─ actions.test.js             # Action registry integrity and key combo dispatch
-│  ├─ cache.test.js               # BoundedMap LRU cache eviction and callbacks
-│  ├─ core.test.js                # State machine transitions and subscriptions
-│  ├─ diagnosticsContract.test.js # Action registry, scenario, and probe DOM contract checks
-│  ├─ metadata.test.js            # ComicInfo and GalleryMeta JSON parsing
-│  ├─ sorting.test.js             # Archive natural sort order
-│  ├─ urlLoader.test.js           # URL registry, extractor, and download queue rules
-│  ├─ urlLoaderFlows.test.js      # URL import flow integration tests
-│  └─ viewerMath.test.js          # Viewport scaling, transforms, and spread geometry
-├─ extractors/ (orphan branch)    # Remote registry for runtime site extractors
+├─ e2e/                           # Desktop tests and recorded replays
+│  ├─ helpers/                    # Shared test setup
+│  ├─ pageobjects/                # How a test finds each window
+│  ├─ replay-diagnostics/         # Replay a recording and time it
+│  │  ├─ base.js                  # Checks that run inside the window
+│  │  ├─ cli.js                   # npm run diagnose
+│  │  ├─ runner.e2e.js            # Plays one scenario
+│  │  ├─ probes/                  # Frame, viewer, and IPC checks
+│  │  └─ reports/                 # Diagnose output
+│  ├─ scenarios/                  # Saved recordings
+│  └─ specs/                      # End-to-end test scripts
+├─ mocha/                         # Frontend unit tests, outside src/
+│  ├─ actions.test.js             # Shortcuts and commands
+│  ├─ cache.test.js               # Size-capped caches
+│  ├─ core.test.js                # App state changes
+│  ├─ diagnosticsContract.test.js # Recording and probe contracts
+│  ├─ metadata.test.js            # Comic and gallery metadata
+│  ├─ sorting.test.js             # Archive sort order
+│  ├─ urlLoader.test.js           # URL import rules
+│  ├─ urlLoaderFlows.test.js      # URL import flows
+│  └─ viewerMath.test.js          # Zoom, pan, fit, and spread
+├─ extractors/ (orphan branch)    # Site support, fetched while the app runs
 ├─ src/
-│  ├─ index.html                  # Main viewer window
-│  ├─ options.html                # Options window
-│  ├─ metadata.html               # Archive metadata window
-│  ├─ assets/                     # Format icons, language flags, and metadata role icons
+│  ├─ index.html                  # Main window
+│  ├─ options.html                # Options
+│  ├─ metadata.html               # Archive Info
+│  ├─ assets/                     # Format icons, flags, metadata icons
 │  ├─ css/
-│  │  ├─ global.css               # Tokens, resets, rules shared by every page
-│  │  ├─ main.css                 # Viewer / file-panel layout
-│  │  ├─ options.css              # Options window layout
-│  │  └─ metadata.css             # Metadata window layout
+│  │  ├─ global.css               # Shared colors and type
+│  │  ├─ main.css                 # Main window layout
+│  │  ├─ options.css              # Options layout
+│  │  └─ metadata.css             # Archive Info layout
 │  └─ js/
-│     ├─ core.js                  # State machine (no DOM)
-│     ├─ directoryPrefs.js        # Per-directory sort prefs
-│     ├─ fsUtils.js               # Filesystem / archive navigation
-│     ├─ keybinds.js              # Config merge + pan/zoom defaults
-│     ├─ keyboardNav.js           # List / tab keyboard navigation
-│     ├─ menubar.js               # Menu bar dropdown interaction
-│     ├─ metadata.js              # ComicInfo (XML/JSON), CoMet, OPF, and gallery meta.json parsing
-│     ├─ metadata-window.js       # Metadata window controller
-│     ├─ navigationHistory.js     # Session-only Back/Forward
-│     ├─ shellBackground.js       # Mirrors --surface into the native window
-│     ├─ shortcuts.js             # Keyboard / mouse / wheel dispatch
-│     ├─ urlLoader.js             # Remote extractor and gallery download coordinator
+│     ├─ core.js                  # App state
+│     ├─ directoryPrefs.js        # Per-folder sort
+│     ├─ fsUtils.js               # Folders and archives
+│     ├─ keybinds.js              # Default shortcuts and saved config
+│     ├─ keyboardNav.js           # List and tab keys
+│     ├─ menubar.js               # Menu open and close
+│     ├─ metadata.js              # ComicInfo and gallery metadata
+│     ├─ metadata-window.js       # Archive Info window
+│     ├─ navigationHistory.js     # Back and Forward
+│     ├─ shellBackground.js       # Window background follows the theme
+│     ├─ shortcuts.js             # Key, mouse, and wheel input
+│     ├─ urlLoader.js             # Download an imported gallery
 │     ├─ filepanel/
-│     │  ├─ filePanel.js          # File list, columns, breadcrumb, resize
-│     │  ├─ favoritesStore.js     # Favorites persistence (no DOM)
-│     │  └─ libraryStore.js       # Library tree data and collapsed-state persistence
+│     │  ├─ filePanel.js          # File list and thumbnails
+│     │  ├─ favoritesStore.js     # Favorites
+│     │  └─ libraryStore.js       # Imported library
 │     ├─ main/
-│     │  ├─ main.js               # Bootstrap + slim state fan-out
-│     │  ├─ fullscreen.js         # Fullscreen UX
-│     │  ├─ dropzone.js           # Drag-and-drop
-│     │  ├─ lifecycle.js          # Title, flush-on-close, single-instance
-│     │  ├─ metadataBadge.js      # Archive-info badge
+│     │  ├─ main.js               # Startup
+│     │  ├─ fullscreen.js         # Fullscreen
+│     │  ├─ dropzone.js           # Drag and drop
+│     │  ├─ lifecycle.js          # Title bar and single-instance handoff
+│     │  ├─ metadataBadge.js      # Archive Info button
 │     │  ├─ passwordOverlay.js    # Archive password prompt
-│     │  └─ urlOverlay.js         # URL import prompt
+│     │  └─ urlOverlay.js         # Open URL prompt
 │     ├─ menubar/
-│     │  ├─ chrome.js             # Menu / status visibility
-│     │  └─ statusbar.js          # Sole #statusbar writer
+│     │  ├─ chrome.js             # Show or hide the menu and status bar
+│     │  └─ statusbar.js          # Status bar text
 │     ├─ options/
-│     │  ├─ options.js            # Options window orchestration
-│     │  ├─ keybindUi.js          # Keybind capture / conflicts
-│     │  └─ associationsUi.js     # File-type association UI
+│     │  ├─ options.js            # Options window
+│     │  ├─ keybindUi.js          # Shortcut capture
+│     │  └─ associationsUi.js     # File type checkboxes
 │     ├─ services/
-│     │  ├─ actions.js            # ACTION_REGISTRY + dispatch
-│     │  ├─ cache.js              # BoundedMap / BoundedSet
-│     │  ├─ filterModules.js      # Filter module resolution
-│     │  ├─ keyCombo.js           # Locked binds, conflicts, categories
-│     │  ├─ keybindDomain.js      # Keybind safety, conflicts, validation
-│     │  ├─ metadataFiles.js      # Metadata file priority + basename matching
-│     │  ├─ registry.js           # Filter and scaling definitions
-│     │  ├─ sorting.js            # naturalCompare / applySort
-│     │  ├─ viewerMath.js         # Zoom / pan / fit / spread math
-│     │  ├─ filters/              # Filter definitions and shader chains
-│     │  ├─ pipelines/            # WebGL filter runtime
-│     │  └─ scaling/              # Lanczos scaling
+│     │  ├─ actions.js            # Named commands
+│     │  ├─ cache.js              # Size-capped maps
+│     │  ├─ filterModules.js      # Loads a filter
+│     │  ├─ keyCombo.js           # Shortcut parsing
+│     │  ├─ keybindDomain.js      # Shortcut conflicts
+│     │  ├─ metadataFiles.js      # Which metadata file wins
+│     │  ├─ registry.js           # Filter and scaling choices
+│     │  ├─ sorting.js            # Sort comparison
+│     │  ├─ viewerMath.js         # Zoom, pan, and fit math
+│     │  ├─ filters/              # Filter definitions
+│     │  ├─ pipelines/            # WebGL
+│     │  └─ scaling/              # Lanczos
 │     ├─ shared/
-│     │  ├─ theme.js              # applyTheme / applyCustomCss
-│     │  ├─ themePrePaint.js      # Synchronous pre-paint injector
-│     │  ├─ blobImage.js          # Shared ImageBitmap cache for origins
-│     │  ├─ configPreview.js      # Live preview + emergency CSS reset
-│     │  └─ windowFit.js          # Options / metadata content fit
+│     │  ├─ theme.js              # Apply theme and custom CSS
+│     │  ├─ themePrePaint.js      # Theme before the first paint
+│     │  ├─ blobImage.js          # Shared decoded images
+│     │  ├─ configPreview.js      # Options preview and the CSS emergency reset
+│     │  └─ windowFit.js          # Size Options and Archive Info to their content
 │     ├─ vendors/
-│     │  ├─ pica.js               # High quality image resizing
-│     │  └─ purify.min.js         # DOMPurify for SVG sanitization
+│     │  ├─ pica.js               # Lanczos resizer
+│     │  └─ purify.min.js         # SVG cleanup
 │     └─ viewer/
-│        ├─ viewer.js             # Facade
-│        ├─ viewerRender.js       # Image and video pools + transforms
-│        ├─ viewerPipelines.js    # Overlay canvas and WebGL owner
-│        ├─ viewerGestures.js     # Pan input
-│        └─ viewerAudio.js        # Viewport audio controls, mute toggle, and volume slider
+│        ├─ viewer.js             # Viewer entry
+│        ├─ viewerRender.js       # Image and video elements
+│        ├─ viewerPipelines.js    # Filters on the viewer
+│        ├─ viewerGestures.js     # Pan drag
+│        └─ viewerAudio.js        # Mute and volume
 ├─ src-tauri/
 │  ├─ capabilities/
-│  │  └─ default.json             # Tauri permissions for main/options/metadata windows
-│  ├─ icons/                      # Application icons
+│  │  └─ default.json             # What each window is allowed to do
+│  ├─ icons/                      # App icon
 │  ├─ src/
-│  │  ├─ archives/                # Archive readers, caching, and extraction
-│  │  ├─ commands/                # Tauri IPC: directory, archives, Library, network, shell, watchers
-│  │  ├─ platform/                # Shell thumbnails, external archiver temp origin, icons, dialogs
-│  │  ├─ tests/                   # In-tree tests
-│  │  ├─ config.rs                # Configuration state, persistence, and portable mode
-│  │  ├─ formats.rs               # Supported format registry
-│  │  ├─ ico.rs                   # ICO frame extraction and spritesheet
-│  │  ├─ lib.rs                   # Bootstrap, config watcher, and main-window build
-│  │  ├─ main.rs                  # Native executable entry point
-│  │  ├─ models.rs                # IPC structs and data models
-│  │  ├─ protocol.rs              # quivit:// and asset:// handler logic
-│  │  ├─ utils.rs                 # Base64 and encoding helpers
-│  │  └─ windows.rs               # Window lifecycle and size constants
+│  │  ├─ archives/                # Archive reading and the open-archive cache
+│  │  ├─ commands/                # Calls the UI can make into Rust
+│  │  ├─ platform/                # Shell icons, thumbnails, dialogs, file attributes
+│  │  ├─ tests/                   # Rust tests
+│  │  ├─ config.rs                # Load and save settings
+│  │  ├─ formats.rs               # Which extensions open
+│  │  ├─ ico.rs                   # ICO spritesheets
+│  │  ├─ lib.rs                   # App startup
+│  │  ├─ main.rs                  # Executable entry
+│  │  ├─ models.rs                # Data passed across to the UI
+│  │  ├─ protocol.rs              # quivit:// pages, thumbnails, and icons
+│  │  ├─ utils.rs                 # Encoding helpers
+│  │  └─ windows.rs               # Window sizes
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json
-├─ themes/                        # Example themes (bundled with the release)
+├─ themes/                        # Example themes shipped with the app
 ├─ package.json
-└─ README.md                      # Project overview & architecture documentation
+└─ README.md
 ```
 
 ## Attributions

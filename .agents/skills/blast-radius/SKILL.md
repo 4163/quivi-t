@@ -6,9 +6,9 @@ argument-hint: "<shared surface or file changed>"
 
 # Blast radius
 
-Find what a change breaks somewhere else, before it ships. Use for "blast radius of X", "what could this break", or reviewing a small diff you don't trust yet.
+Find what a change breaks somewhere else, before it ships. Use it for "blast radius of X", "what could this break", or a small diff in shared behavior that should be checked before it lands.
 
-Listing callers is not the job. The agent can grep those in a second. The job is the breakage grep won't show you: downstream consumers that interpret a return value differently, config shapes that changed under existing persisted files, IPC contracts that shifted, protocol URLs that moved, or cross-window state that one side writes and another reads.
+Read the diff first. Then read `.agents/architecture-state.md` for the modules next to that change. Look for a consumer the diff never names: a caller that treats a return value differently, a config file already on disk, an IPC payload the other side still sends, a protocol URL that moved, or one window writing state that another window reads. Grep will list the direct callers. The miss is usually one step past them.
 
 ## Don't trust your own writeup
 
@@ -26,65 +26,27 @@ For each fact the change's safety depends on, get it as far down this list as is
 
 Any safety fact you can't get to step 4, say so out loud. Don't write it up as settled.
 
-## QuiviT surfaces to check
+## What to trace
 
-These are the repo's common blast-radius zones. Not every change touches all of them. Scope your analysis to what the diff actually reaches.
+Start from the diff. For each changed function, type, command, key, token, or URL, find who else interprets it. Typical places:
 
-- **IPC commands** (`src-tauri/src/commands/`): changed return types, renamed commands, or shifted payloads break the JS caller. Key contracts: `list_archive` accepts `password: Option<String>`; `resolve_archive_temp_origin` returns `TempArchiveOrigin`; `drop_all_archives_cache` clears the sliding buffer; `move_library` returns old/new display paths plus cleanup or watcher warnings; `check_media_audio` returns `bool` for ISOBMFF audio tracks; `find_directory_metadata` returns `Option<DirectoryMetadataResult>`; and `network.rs` exposes `fetch_text`, `fetch_bytes`, `fetch_extractor_text`, `download_to_file`, `cancel_download`, and `verify_image_magic` to `urlLoader.js`. `FileEntry.size: u64`, `ArchiveEncryptionStatus`, `DirectoryMetadataResult`, and recursive `LibraryProviderEntry` nodes are consumed by the frontend state machine and file panel.
-- **Config schema** (`src-tauri/src/config.rs`): changed keys, types, or defaults break existing user config files and portable-mode paths. `frontend_data.library_path` is optional and falls back to `%LOCALAPPDATA%\\QuiviT\\library`.
-- **Archive & format readers** (`src-tauri/src/archives/`, `src-tauri/src/formats.rs`): changed entry shapes, sort orders, or cache keys break virtual directory traversal and viewer navigation.
-- **Protocol URLs** (`src-tauri/src/protocol.rs` handling `asset://`, `quivit://`): changed routes or response headers break image loading and cross-window preview. Active routes: `quivit://thumb/<base64_path>` (shell thumbnails), `quivit://icon/...&size=large` (32x32 shell icons), `quivit://archive/<base64_path>/<entry>` (`Cache-Control: no-store`).
-- **Platform & Windowing** (`src-tauri/src/platform/`, `src-tauri/src/windows.rs`): changed native integrations, file associations, or window spawning logic break OS-level behaviors. Includes `platform/thumbnails.rs` (shell thumbnail extraction) and `platform/temp_archive.rs` (external archiver temp origin resolution).
-- **Cross-window state** (`localStorage`, theme, metadata preview payload, configured Library location): changed shapes or keys break secondary windows that read what the primary writes. A Library move must rebind each process watcher, refresh the cached root in `urlLoader.js`, and remap active history paths. `quivit_library_providers_collapsed` and `quivit_library_provider_order` are file-panel presentation state, not config.
-- **CSS tokens** (`global.css` `:root`): changed or removed custom properties break downstream page sheets and theme application. Includes `--fs-169` (font-size based max-width for submenu items).
-- **Action registry** (JS service modules): changed action ids, labels, or handler signatures break menus, shortcuts, context menus, and serialized replay scenarios in `e2e/scenarios/`. Categories include "Spread View" (`cmd-spread-off`, `cmd-spread-direction-rtl`, `cmd-spread-direction-ltr`) and "File Operations" (`cmd-toggle-file-list-view-mode`, `cmd-open-file`, `cmd-open-dir`, `cmd-use-url`, `cmd-refresh`). Other registered actions: `cmd-toggle-cursor-autohide`, `cmd-filter-off`, `cmd-toggle-audio`.
-- **Viewer DOM & rendering pool** (`src/js/viewer/viewerRender.js`, `viewerPipelines.js`, `viewerAudio.js`, `src/js/pipelines/`): changed element IDs (`viewer-img-wrapper`, `viewer-video-wrapper`, `viewer-bridge-layer`, `viewer-audio`, `btn-audio-toggle`, `audio-volume-slider`), active or bridge image/video pool classes, frozen `--bridge-*` transform props, or canvas render-ready attributes break viewport display and telemetry probes in `e2e/replay-diagnostics/probes/viewerPipelineProbe.js`.
-- **State machine** (JS core): changed state shapes or callback contracts break every UI subscriber. Properties include `spreadEnabled`, `spreadDirection`, `spreadStep`, `fileListViewMode`, and `archiveEncryption`.
-- **Test harnesses & diagnostics** (`src-tauri/src/tests/`, `mocha/`, `e2e/`): test suites, action recorder shims, and replay diagnostic probes act as living contracts. Changes to IPC commands, config schemas, action IDs, viewer math, or rendering pipelines must keep frontend unit tests (`npm test`), E2E specs (`npm run test:e2e`), action recording (`npm run record`), and replay diagnostics (`npm run diagnose`) functional and green.
+- A caller that reads a return value or payload differently from the writer
+- A config file or other saved file that already exists on disk
+- An IPC name or JSON field the other side still sends
+- A URL, header, or storage key another window or page still requests
+- A CSS token, class, or element id a stylesheet or probe still matches
+- An action id a menu, shortcut, or saved scenario still dispatches
 
-### Surface to targeted test matrix
+Stay inside what the diff reaches.
 
-Match touched files to their targeted test command to prove safety in 1 to 2 seconds instead of running the full test suite:
+## Pick a test
 
-| Touched surface | Targeted test command | Typical runtime |
-|---|---|---|
-| `src-tauri/src/config.rs` | `cargo test --manifest-path src-tauri/Cargo.toml config::tests` | ~1.2s |
-| `src-tauri/src/commands/library.rs`, `commands/watchers.rs` | `cargo check --tests --manifest-path src-tauri/Cargo.toml` plus a manual live relocation | ~3.0s |
-| `src-tauri/src/commands/directory.rs`, `src/js/filepanel/libraryStore.js` | `cargo test --manifest-path src-tauri/Cargo.toml commands::directory::tests` | ~1.2s |
-| `src-tauri/src/commands/network.rs`, `src/js/urlLoader.js`, `extractors/` | `cargo test --manifest-path src-tauri/Cargo.toml network` and `npx mocha mocha/urlLoader.test.js mocha/urlLoaderFlows.test.js` | ~1.5s |
-| `src-tauri/src/formats.rs`, `commands/animation.rs` | `cargo test --manifest-path src-tauri/Cargo.toml format_tests` | ~1.3s |
-| `src-tauri/src/protocol.rs` | `cargo test --manifest-path src-tauri/Cargo.toml protocol::tests` | ~1.2s |
-| `src-tauri/src/archives/zip.rs` | `cargo test --manifest-path src-tauri/Cargo.toml zip_` | ~1.2s |
-| `src-tauri/src/archives/rar.rs` | `cargo test --manifest-path src-tauri/Cargo.toml rar_` | ~1.5s |
-| `src-tauri/src/archives/sevenz.rs` | `cargo test --manifest-path src-tauri/Cargo.toml sevenz_` | ~2.0s |
-| `src-tauri/src/archives/tar.rs` | `cargo test --manifest-path src-tauri/Cargo.toml tar_` | ~2.0s |
-| `src-tauri/src/archives/cache.rs` | `cargo test --manifest-path src-tauri/Cargo.toml archive_cache_` | ~1.5s |
-| Invalid archive validation (all formats) | `cargo test --manifest-path src-tauri/Cargo.toml invalid_archive_` | ~1.2s |
-| `src-tauri/src/platform/thumbnails.rs` | `npx wdio run wdio.conf.js --spec e2e/specs/02-navigation.e2e.js` | ~8.0s |
-| `src-tauri/src/platform/temp_archive.rs` | `cargo test --manifest-path src-tauri/Cargo.toml temp_archive_` | ~1.2s |
-| `src-tauri/src/platform/attributes.rs` | `cargo test --manifest-path src-tauri/Cargo.toml test_is_hidden_path` | ~1.0s |
-| `src/js/services/viewerMath.js` | `npx mocha mocha/viewerMath.test.js` | ~0.05s |
-| `src/js/core.js` | `npx mocha mocha/core.test.js` | ~0.05s |
-| `src/js/services/actions.js`, `keyCombo.js` | `npx mocha mocha/actions.test.js` | ~0.05s |
-| `src/js/services/metadataFiles.js`, `src/js/metadata.js` | `npx mocha mocha/metadata.test.js` | ~0.05s |
-| `src/js/services/cache.js` | `npx mocha mocha/cache.test.js` | ~0.05s |
-| `src/js/services/sorting.js` | `npx mocha mocha/sorting.test.js` | ~0.05s |
-| Diagnostics contracts & scenario schema | `npx mocha mocha/diagnosticsContract.test.js` | ~0.05s |
-| Viewer rendering & image pool (`src/js/viewer/`) | `npm run diagnose -- sample-navigation` | ~2.5s |
-| WebGL filters & shaders (`src/js/pipelines/`) | `npm run diagnose -- filter-navigation` | ~2.5s |
-| Options window & live theme save | `npx wdio run wdio.conf.js --spec e2e/specs/06-configuration.e2e.js` | ~5.0s |
-| File panel view modes & favorites persistence | `npx wdio run wdio.conf.js --spec e2e/specs/05-persistence.e2e.js` | ~10.0s |
-| Archive extraction & password flow | `npx wdio run wdio.conf.js --spec e2e/specs/04-archives.e2e.js` | ~9.0s |
-| OS integration & temp extraction | `npx wdio run wdio.conf.js --spec e2e/specs/07-os-integration.e2e.js` | ~6.0s |
-| Replay diagnostics engine & probes | `npm run diagnose -- sample-navigation` | ~2.5s |
-| Action recorder shim | `node --check e2e/helpers/recorder-shim.js` | ~0.1s |
-| Fast compile & borrow check (iteration) | `cargo check --tests --manifest-path src-tauri/Cargo.toml` | ~3.0s |
-| Any modified JS module | `node --check <file>` | ~0.1s |
+Run the smallest existing test that calls the real code and fails if you are wrong. Search the test directories for the name you changed. A `cargo test` filter, one mocha file, or one e2e spec is the usual fit. `cargo check --tests` is enough while types are still moving. Save the full suite for a change that crosses several of the zones above, or for final signoff.
 
 ## Steps
 
 1. Read the change.
-2. For each modified function, struct, command, token, or contract: trace who consumes it. Go beyond direct callers to indirect readers (config files on disk, other windows, the protocol handler, CSS selectors that match on a class you renamed).
-3. For each consumer, determine the failure mode if the change is wrong.
-4. Climb the confidence ladder. Prove safety with code where cheap. Use the surface-to-test matrix above to select and run the targeted test suite matching the diff. For compile validation during iteration, use `cargo check --tests`. Flag anything stuck at steps 1 and 2.
-5. Act on the findings. Fix any broken downstream consumers in the same slice. If you cannot reach confidence step 4 for a critical safety fact, explicitly warn the user and explain what needs manual validation before considering the task done.
+2. Trace who consumes each modified function, type, command, token, or contract. Go past direct callers to indirect readers: files on disk, other windows, the protocol handler, CSS that matches a class you renamed.
+3. For each consumer, name the failure if the change is wrong.
+4. Climb the confidence ladder. Prove safety with code where that is cheap. Use the test picked above. Flag anything stuck at steps 1 and 2.
+5. Fix broken downstream consumers in the same slice. If you cannot reach confidence step 4 for a critical safety fact, tell the user what still needs a manual check.

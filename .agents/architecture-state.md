@@ -1,39 +1,38 @@
 # Architecture state
 
-Current module map.
+Who owns each module, which file holds a config key, and what an IPC call returns.
 
 ### What belongs here
 
-This section is a **structural map**, not a changelog and not a feature list.
-
-Edit it only when a change does one of these:
+Edit this file when a change does one of these:
 - adds, deletes, moves, or repurposes a module, HTML page, or CSS sheet
 - changes who owns a surface, a persistence tier, or a config key family
-- changes a cross-module contract (state machine vs UI, IPC shape, config-file roles, window-sizing source of truth)
+- changes a contract between modules: state machine versus UI, an IPC shape, which file a config key lives in, or where window sizes are defined
 
-Do **not** add:
-- features, bug fixes, or UX polish. If user-facing, put those in `README.md`
-- implementation details (timers, cache sizes, function names, hot-path tricks) unless the detail *is* the contract
-- line counts, commit hashes, slice history, or "we now..." narratives
-- planned or target architecture. That stays in the work plan
+Leave these out:
+- Features, bug fixes, and UX polish. If a person using the app would notice it, it belongs in `README.md`.
+- Timers, cache sizes, function names, and hot-path tricks, unless that detail is the contract another module has to honor.
+- Line counts, commit hashes, slice history, and "we now..." notes.
+- Planned architecture. That stays in the work plan.
 
 If the tree looks the same and ownership did not change, leave this file alone.
 
 ### How to write an entry
 
-- Present tense. Current fact only.
-- One short line: `path: role. Boundary if it is not obvious.`
-- Group by layer. Do not narrate how a feature works.
-- Prefer deleting a stale line over adding a clarifying paragraph.
+- Present tense. The current fact only.
+- One or two sentences. Lead with the path, then what it owns, then the boundary when that boundary is easy to miss.
+- Keep command names, keys, types, and routes. Put ordinary words next to them so the line can be read on its own.
+- Group by layer. Skip a tour of how the feature behaves.
+- Replace a stale line. A second paragraph usually means the first line was unclear.
 
 ---
 
 **Config & Persistence:**
-- Roaming/portable files are the source of truth for durable app configuration. `localStorage` holds the pre-paint theme/CSS cache, native-icon cache (`icon:*`), metadata window payload, provider-collapse UI state, provider sort order (`quivit_library_provider_order`), and session-only `options-active-tab`.
-- Roaming split: `quivit_config.json` (preferences), `quivit_state.json` (last-known runtime), `quivit_directory_sort.json`, `quivit_favorites.json`. Portable mode folds those into one `quivit_config.json` beside the exe.
+- Roaming/portable files are the source of truth for durable app configuration. `localStorage` holds the pre-paint theme/CSS cache, native-icon cache (`icon:*`), metadata window payload, Library section collapse (`quivit_library_collapsed`), provider-collapse UI state, provider sort order (`quivit_library_provider_order`), and session-only `options-active-tab`.
+- Roaming split: `quivit_config.json` (preferences), `quivit_state.json` (last-known runtime), `quivit_directory_sort.json`, `quivit_favorites.json`, `custom_css.css` (custom CSS text). Portable mode folds those values into one `quivit_config.json` beside the exe.
 - `AppConfig` uses `#[serde(default)]`; `frontend_data` is untyped JSON so unknown keys round-trip. `mergeConfig()` fills missing keys from defaults.
 - User-chosen prefs → `quivit_config.json`. Last-known runtime → `quivit_state.json`. Restart-gated settings are staged as `pending_<key>` and promoted at startup.
-- `default_sort` is config-file-only; the UI writes only per-directory sort prefs. Archive cache budget is config-file-only, no UI.
+- `default_sort` is config-file-only; the UI writes only per-directory sort prefs. `archive_cache_mb` is the top-level ZIP image cache budget in megabytes, config-file-only, no UI. When absent it is 128.
 - Filter preference is stored as `active_filter` (id) and `filter_options` (bag), replacing individual booleans.
 - Additional `frontend_data` preferences: `hide_cursor_delay_sec`, `file_list_view_mode`, `spread_enabled`, `spread_direction`, `spread_mode` (derived from enabled + direction).
 - `frontend_data.library_path` is an optional absolute shared URL Library location. When absent, the Library is `%LOCALAPPDATA%\\QuiviT\\library`. `retired_library_paths` blocks writes to a prior root, never to the active one.
@@ -54,7 +53,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `keybinds.js`: `mergeConfig` + pan/zoom defaults. `DEFAULT_KEYBINDS` is derived from `ACTION_REGISTRY`.
 - `shortcuts.js`: keyboard / mouse / wheel dispatch. Does not write the statusbar.
 - `viewer/`: `viewer.js` facade; `viewerRender.js` owns image and video pools and parks retiring bridge elements in `#viewer-bridge-layer` with pre-navigation transforms frozen in `--bridge-*` props; `viewerPipelines.js` owns overlay canvases and streams image and video frames through WebGL; `viewerAudio.js` owns `#viewer-audio`, per-file volume/mute state, and viewport audio controls; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
-- `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. List and thumbnail view modes with card grid virtualization. Renders the flat library tree from `libraryStore.js`; only gallery roots and raw images are removable. Exports `focusFileList()` and `isFileListFocused()`. `favoritesStore.js` and `libraryStore.js` are data-only (no DOM). `libraryStore.js` also owns provider sort order persistence.
+- `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. List and thumbnail view modes with card grid virtualization. Renders the flat library tree from `libraryStore.js`; only gallery roots and raw images are removable. `favoritesStore.js` and `libraryStore.js` are data-only (no DOM). `libraryStore.js` also owns provider sort order persistence.
 - `fsUtils.js`: filesystem / archive navigation. No DOM.
 - `directoryPrefs.js`: per-directory sort prefs. Sort math is in `services/sorting.js`.
 - `navigationHistory.js`: session-only container Back/Forward.
@@ -81,7 +80,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `commands/network.rs`: remote text (`fetch_text`), raw bytes with header forwarding (`fetch_bytes`), extractor caching from the extractors branch, streamed download, cancellation, image magic-byte validation (`verify_image_magic`), and tile descramble with XOR decryption for provider-specific image protection. `commands/directory.rs`: flat `gallery.json`-backed Library tree (single-level, no recursive depth) and `find_directory_metadata` for Library directory metadata lookup.
 - `commands/animation.rs`: `check_is_animated` and `check_media_audio` (ISOBMFF sound track detection).
 - `commands/archives.rs`: `list_archive` accepts `password: Option<String>`; archive lifecycle commands are `drop_all_archives_cache` and `resolve_archive_temp_origin`.
-- `archives/` & `formats.rs`: archive readers + `ArchiveCache` (two-archive sliding buffer, `MAX_OPEN_ARCHIVES = 2`), format/animation registry, and ISOBMFF box parser for MP4 audio detection.
+- `archives/` & `formats.rs`: archive readers + `ArchiveCache` (two-archive sliding buffer), format/animation registry, and ISOBMFF box parser for MP4 audio detection.
 - `protocol.rs`: `quivit://` handler. Routes: `/archive/` (entry data, `no-store`), `/thumb/` (96×96 shell thumbnails), `/icon/` (shell icons, `?size=large` for 32×32). `asset://` for direct file access.
 - `platform/`: `icons.rs` (shell icons), `thumbnails.rs` (96×96 `IShellItemImageFactory`), `temp_archive.rs` (external archiver temp origin resolution), `attributes.rs` (dotfile visibility), `dialog.rs` (native folder picker with Library virtual folder resolution). `windows.rs`: window lifecycle and size constants.
 - `ico.rs`: ICO spritesheets.
@@ -89,9 +88,9 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `utils.rs`: Base64 and URL encoding helpers.
 
 **Testing & Diagnostics:**
-- Three-tier testing architecture matching execution speed and runtime dependencies.
-- `mocha/`: standalone pure frontend unit tests (`actions`, `cache`, `core`, `diagnosticsContract`, `metadata`, `sorting`, `urlLoader`, `urlLoaderFlows`, `viewerMath`) outside `src/` to prevent bundling into `frontendDist: "../src"`. Runs via `npm test` in < 100ms.
+- Three test layers.
+- `mocha/`: standalone pure frontend unit tests (`actions`, `cache`, `core`, `diagnosticsContract`, `metadata`, `sorting`, `urlLoader`, `urlLoaderFlows`, `viewerMath`) outside `src/` to prevent bundling into `frontendDist: "../src"`. Runs via `npm test`.
 - `e2e/`: WebdriverIO end-to-end suite (`specs/`, `pageobjects/`, `helpers/`) running against the live debug binary via `tauri-driver` and `msedgedriver` under portable mode isolation. Runs via `npm run test:e2e`.
 - `e2e/replay-diagnostics/`: in-browser pipeline identity diagnostic engine (`base.js`), modular probes (`probes/`), CLI harness (`cli.js`), and scenario runner (`runner.e2e.js`). Evaluates blackout frames, image pool retirement races, WebGL readiness, and IPC latency. Supports `investigation.js` overrides for the automated self-diagnostic loop. Runs via `npm run diagnose` and `npm run replay`.
 - `e2e/helpers/recorder-shim.js`: in-browser action recorder with floating control badge (`[Start/Pause]`, `[Stop]`, `[Reset]`), continuous Node trace buffering, and auto-finalization on window exit. Saves traces to `e2e/scenarios/<scenario>.json`. Runs via `npm run record`.
-- `src-tauri/src/tests/`: in-tree Rust backend unit tests for archives, config parsing, format sniffing, protocol URLs, and temp archive origin matching. Runs via `cargo test` in < 1s.
+- `src-tauri/src/tests/`: in-tree Rust backend unit tests for archives, config parsing, format sniffing, protocol URLs, and temp archive origin matching. Runs via `cargo test`.

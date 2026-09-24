@@ -1,7 +1,7 @@
 [package]
 name = "tauri-app"
 version = "1.0.0"
-description = "A lightweight standalone port of Quivi, built with Tauri and Vanilla HTML/CSS/JS."
+description = "A lightweight standalone port of Quivi, built with Tauri using vanilla web."
 authors = ["QuiviT Contributors"]
 edition = "2021"
 license = "MIT"

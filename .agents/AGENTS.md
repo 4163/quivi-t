@@ -1,7 +1,9 @@
-# Custom agent rules
-Read every rule and referenced skill before starting work. Confirm adherence to the user.
+# Guidelines
+
+Coding standards, architecture rules, and agent workflow for QuiviT.
 
 ## Agent behavior
+- Read every rule and referenced skill before starting work. Confirm adherence to the user.
 - Keep responses concise and focused on the task.
 - Follow existing code style and formatting for each directory and its associated files.
 - Avoid using browser automation/browser subagent, use mocha when possible, or use e2e for any complex frontend problems that requires debugging.
@@ -14,11 +16,11 @@ Read every rule and referenced skill before starting work. Confirm adherence to 
 - **Performance first.** Avoid dynamic evaluations and allocations in hot paths. Cache aggressively.
   *Practical Examples for Agents:*
   1. **Hot Path Optimization:** Pre-parse config values into `O(1)` lookup structures (e.g. JS `Set` or `Map`) on configuration load instead of dynamically mapping strings inside `requestAnimationFrame`, `mousemove`, or `scroll` handlers.
-  2. **Zero-Flicker Lifecycle:** Inject tiny Base64-encoded cover thumbnails directly into `localStorage` cross-window state to eliminate IPC and protocol (`asset://`) fetch latency during window instantiation.
+  2. **Cached shell icons:** Native file icons are stored in `localStorage` under `icon:` so the file panel can paint them on the next open without another shell lookup.
   3. **Thread Concurrency:** Offload heavy CPU bound tasks (e.g., LZMA2/7Z extraction via `sevenz-rust`) strictly to non-blocking background threads (`tokio::spawn` or `std::thread`), leaving the primary Tauri IPC and JS UI threads exclusively for layout and rendering.
   4. **Aggressive I/O Caching:** Use header-only file reads and maintain in-memory LRU caches (`lru` crate) for fast virtual archive directory traversal.
-  5. **DOM & Asset Virtualization:** Recycle a bounded row pool on scroll for list views. NEVER decode original full-size image assets to create thumbnail views. Use system/shell thumbnails (`SHGetFileInfoW`) or pre-scaled caches where applicable.
-  6. **Explicit Named Cache Limits:** Define all cache capacities, buffer limits, and memory thresholds as explicit named constants (e.g. `THUMB_CACHE_CAPACITY`, `VIEWER_IMAGE_CACHE_CAPACITY`) at module scope rather than inline magic numbers. Size each cache by multiplying max item count by worst-case uncompressed byte footprint to protect memory budgets.
+  5. **DOM & Asset Virtualization:** Recycle a bounded row pool on scroll for list views. Shell formats use the 96x96 shell thumbnail. WebP, AVIF, SVG, and archive images have no pre-scaled cache, so thumbnail view decodes those one at a time in scroll order.
+  6. **Explicit Named Cache Limits:** Define cache capacities, buffer limits, and memory thresholds as named constants at module scope, such as `THUMB_CACHE_CAPACITY` in `filePanel.js`. Size each cache from the max item count times the worst-case uncompressed byte size.
 - **Measure twice, cut once.** Prefer small, deliberate changes over broad refactors. Before writing new logic, search the codebase for an existing helper that already does the job. Prefer intuitive shared helpers over inlining repeated lines of code for identical operations. If a change duplicates logic across callsites, extract it into a shared helper instead.
 - **Work in logical slices.** Prioritize small, precise code changes rather than big blocks to prevent tooling and scope failures, especially during large refactors. Be surgical!
 - **YAGNI.** Do not add abstractions, features, or complexity without a clear need.
@@ -67,13 +69,13 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 - The state machine owns app state and has no DOM. UI modules subscribe to it and render themselves.
 - Domain logic lives in pure service modules (no `document`). Action ids, labels, defaults, and handlers have one registry; other files derive from it. Filter and scaler methods live under `services/filters` and `services/scaling`; the GL runtime does not know their names; overlay canvases have one UI owner.
 - Each UI feature owns its DOM and self-subscribes. Bootstrap stays thin: init + a slim state fan-out. It does not render another module's surface.
-- `urlLoader.js` owns remote extractor validation, URL import, display-ordered gallery download coordination, and SVG sanitization without owning DOM. `main/urlOverlay.js` owns `#url-overlay`; `filepanel/libraryStore.js` owns Library tree data, provider sort order, and persistence while `filePanel.js` owns its rendering; `viewerAudio.js` owns `#viewer-audio`, per-file volume and mute state, and viewport audio controls; `viewerPipelines.js` owns overlay canvases and GL texture streaming for images and video.
+- A coordinator such as `urlLoader.js` owns its domain and has no DOM. The file that paints a surface, such as `filePanel.js`, is the only writer for that surface. The file-by-file map is `.agents/architecture-state.md`.
 - Shared cross-window helpers (theme, preview, window fit) stay out of the state machine and out of feature UI files.
 - New frontend work extends this layering. Do not dump new DOM into bootstrap or new domain logic into a UI file. Frontend unit tests live in `mocha/`, while E2E tests, action recorder shims, and replay diagnostic probes live in `e2e/`, strictly outside `src/` to prevent embedding test or diagnostic machinery into the release bundle via `frontendDist: "../src"`.
 
 ### Rust module ownership
 - The crate root is bootstrap: plugin wiring, command registration, main-window construction, config-watcher start. It does not grow archive, protocol, command, or test bodies.
 - Domain logic lives in `archives/` (readers + `ArchiveCache` facade), `formats.rs`, and `ico.rs`. Callers use facade methods, not another module's internals.
-- `commands/` is the Tauri IPC surface. Each command file owns one family (directory, archives, animation, library, network, watchers, associations, shell) and adapts domain modules. It does not grow archive, window, or config internals.
-- Protocol, windows, platform, and config stay out of bootstrap and out of each other: `protocol.rs` owns `quivit://`, `windows.rs` owns window lifecycle and size constants, `platform/` owns OS integrations, `config.rs` is persistence only. `models.rs` is the IPC contract. Tests live under `tests/` via `#[path]`; do not widen visibility for tests.
-- New backend work extends this layering. Do not dump new domain into `lib.rs`, new window code into `config.rs`, or a second copy of a helper that already exists. Keep IPC command names, JSON shapes, and `quivit://` URLs stable unless the change is a practical function or performance win.
+- `commands/` is the Tauri IPC surface. Each command file owns one family and adapts domain modules. It does not grow archive, window, or config internals.
+- Protocol, windows, platform, and config stay out of bootstrap and out of each other. `models.rs` is the IPC contract. Tests live under `tests/` via `#[path]`; do not widen visibility for tests.
+- New backend work extends this layering. The file-by-file map is `.agents/architecture-state.md`. Do not dump new domain into `lib.rs`, new window code into `config.rs`, or a second copy of a helper that already exists. Keep IPC command names, JSON shapes, and `quivit://` URLs stable unless the change is a practical function or performance win.
