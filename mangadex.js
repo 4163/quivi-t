@@ -6,6 +6,12 @@
  * Fetches chapter metadata and MangaDex@Home image delivery coordinates
  * through the public MangaDex REST API. Supports page-targeted chapter links,
  * direct cover/CDN media, and flat chapter folder naming.
+ *
+ * Optimization notes:
+ * - Exports needsHtml: false to skip fetching the HTML page.
+ * - Chapter extraction queries chapter metadata and @home server concurrently.
+ * - Series extraction queries manga detail and both chapter feeds concurrently.
+ * - Art extraction queries manga detail and the first covers page concurrently.
  */
 
 import { sanitizePathSegment } from './shared/sanitize.js';
@@ -342,6 +348,8 @@ export async function parseDirectUrl(url, context = {}) {
   return null;
 }
 
+export const needsHtml = false;
+
 export function match(url) {
   if (!url || typeof url !== 'string') return false;
   return MANGADEX_CHAPTER_RE.test(url)
@@ -388,6 +396,8 @@ export async function extract(html, url, context = {}) {
 
   const chapterId = parsed.chapterId;
   const chapterApiUrl = `https://api.mangadex.org/chapter/${chapterId}?includes%5B%5D=manga&includes%5B%5D=scanlation_group`;
+  const atHomeUrl = `https://api.mangadex.org/at-home/server/${chapterId}`;
+  const atHomePromise = context.fetchText(atHomeUrl).catch((err) => ({ _fetchError: err }));
   const chapterText = await context.fetchText(chapterApiUrl);
   let chapterPayload;
   try {
@@ -452,8 +462,11 @@ export async function extract(html, url, context = {}) {
   const fullTitle = `${rawMangaTitle} - ${chapterLabel}`;
   const flatFolderName = sanitizePathSegment(fullTitle);
 
-  const atHomeUrl = `https://api.mangadex.org/at-home/server/${chapterId}`;
-  const atHomeText = await context.fetchText(atHomeUrl);
+  const atHomeRes = await atHomePromise;
+  if (atHomeRes && atHomeRes._fetchError) {
+    throw atHomeRes._fetchError;
+  }
+  const atHomeText = atHomeRes;
   let atHomePayload;
   try {
     atHomePayload = JSON.parse(atHomeText);
@@ -538,7 +551,38 @@ export async function extractTitle(mangaId, url, context = {}) {
   }
 
   const mangaUrl = `https://api.mangadex.org/manga/${mangaId}?includes%5B%5D=cover_art&includes%5B%5D=author&includes%5B%5D=artist`;
-  const mangaText = await context.fetchText(mangaUrl);
+  const mangaPromise = context.fetchText(mangaUrl);
+
+  async function pullFeedPages(extraParams) {
+    const collected = [];
+    let pageOffset = 0;
+    while (true) {
+      const feedUrl = `https://api.mangadex.org/manga/${mangaId}/feed?limit=500&offset=${pageOffset}${extraParams}&includes%5B%5D=scanlation_group&order%5Bvolume%5D=asc&order%5Bchapter%5D=asc`;
+      const feedText = await context.fetchText(feedUrl);
+      let feedPayload;
+      try {
+        feedPayload = JSON.parse(feedText);
+      } catch (err) {
+        throw new Error(`Failed to parse MangaDex chapter feed: ${err.message}`);
+      }
+
+      const entries = Array.isArray(feedPayload?.data) ? feedPayload.data : [];
+      collected.push(...entries);
+
+      const total = feedPayload?.total || 0;
+      if (entries.length === 0 || collected.length >= total) {
+        break;
+      }
+      pageOffset += entries.length;
+    }
+    return collected;
+  }
+
+  const [mangaText, [hostedEntries, externalEntries]] = await Promise.all([
+    mangaPromise,
+    Promise.all([pullFeedPages(''), pullFeedPages('&includeExternalUrl=1')])
+  ]);
+
   let mangaPayload;
   try {
     mangaPayload = JSON.parse(mangaText);
@@ -578,42 +622,20 @@ export async function extractTitle(mangaId, url, context = {}) {
     };
   }
 
-  async function pullFeedPages(extraParams) {
-    const collected = [];
-    let pageOffset = 0;
-    while (true) {
-      const feedUrl = `https://api.mangadex.org/manga/${mangaId}/feed?limit=500&offset=${pageOffset}${extraParams}&includes%5B%5D=scanlation_group&order%5Bvolume%5D=asc&order%5Bchapter%5D=asc`;
-      const feedText = await context.fetchText(feedUrl);
-      let feedPayload;
-      try {
-        feedPayload = JSON.parse(feedText);
-      } catch (err) {
-        throw new Error(`Failed to parse MangaDex chapter feed: ${err.message}`);
-      }
-
-      const entries = Array.isArray(feedPayload?.data) ? feedPayload.data : [];
-      collected.push(...entries);
-
-      const total = feedPayload?.total || 0;
-      if (entries.length === 0 || collected.length >= total) {
-        break;
-      }
-      pageOffset += entries.length;
-    }
-    return collected;
-  }
-
   // The two feed passes are disjoint: the plain feed returns hosted chapters
   // only, while includeExternalUrl=1 returns link-only chapters but drops the
   // hosted ones. Merge both with hosted entries winning duplicate ids.
   const allFeedEntries = [];
   const seenFeedIds = new Set();
-  for (const extraParams of ['', '&includeExternalUrl=1']) {
-    for (const entry of await pullFeedPages(extraParams)) {
-      if (!entry || typeof entry.id !== 'string' || seenFeedIds.has(entry.id)) continue;
-      seenFeedIds.add(entry.id);
-      allFeedEntries.push(entry);
-    }
+  for (const entry of hostedEntries) {
+    if (!entry || typeof entry.id !== 'string' || seenFeedIds.has(entry.id)) continue;
+    seenFeedIds.add(entry.id);
+    allFeedEntries.push(entry);
+  }
+  for (const entry of externalEntries) {
+    if (!entry || typeof entry.id !== 'string' || seenFeedIds.has(entry.id)) continue;
+    seenFeedIds.add(entry.id);
+    allFeedEntries.push(entry);
   }
 
   const seenPaths = new Set();
@@ -750,7 +772,12 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
   }
 
   const mangaUrl = `https://api.mangadex.org/manga/${mangaId}?includes%5B%5D=cover_art&includes%5B%5D=author&includes%5B%5D=artist`;
-  const mangaText = await context.fetchText(mangaUrl);
+  const firstCoversUrl = `https://api.mangadex.org/cover?manga%5B%5D=${mangaId}&limit=100&offset=0&order%5Bvolume%5D=asc`;
+  const [mangaText, firstCoversText] = await Promise.all([
+    context.fetchText(mangaUrl),
+    context.fetchText(firstCoversUrl)
+  ]);
+
   let mangaPayload;
   try {
     mangaPayload = JSON.parse(mangaText);
@@ -778,9 +805,19 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
     Web: url
   });
 
-  let offset = 0;
   const allCovers = [];
-  while (true) {
+  let firstPayload;
+  try {
+    firstPayload = JSON.parse(firstCoversText);
+  } catch (err) {
+    throw new Error(`Failed to parse MangaDex covers response: ${err.message}`);
+  }
+  const firstEntries = Array.isArray(firstPayload?.data) ? firstPayload.data : [];
+  allCovers.push(...firstEntries);
+  const total = firstPayload?.total || 0;
+
+  let offset = firstEntries.length;
+  while (offset < total && firstEntries.length > 0) {
     const coversApiUrl = `https://api.mangadex.org/cover?manga%5B%5D=${mangaId}&limit=100&offset=${offset}&order%5Bvolume%5D=asc`;
     const coversText = await context.fetchText(coversApiUrl);
     let coversPayload;
@@ -793,7 +830,6 @@ export async function extractArt(mangaId, url, context = {}, localeFilter = null
     const entries = Array.isArray(coversPayload?.data) ? coversPayload.data : [];
     allCovers.push(...entries);
 
-    const total = coversPayload?.total || 0;
     if (entries.length === 0 || allCovers.length >= total) {
       break;
     }

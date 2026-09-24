@@ -4,11 +4,24 @@
  * Pure functions of (episodeId, context). No match/extract exports,
  * never a manifest entry. Consumed by the K MANGA entry shell and
  * by mangadex.js for externalUrl chapters.
+ *
+ * Rate limiting uses adaptive timestamp throttling so the initial request fires
+ * immediately without artificial sleep delay.
  */
 
 const KMANGA_EPISODE_RE = /^https?:\/\/kmanga\.kodansha\.com\/title\/(\d+)\/episode\/(\d+)/i;
 const SE_API_BASE = 'https://se-api.kmanga.kodansha.com';
 const RATE_LIMIT_MS = 300;
+let lastKmangaRequestTime = 0;
+
+async function throttleKmangaRequest() {
+  const now = Date.now();
+  const elapsed = now - lastKmangaRequestTime;
+  if (elapsed < RATE_LIMIT_MS) {
+    await new Promise((r) => setTimeout(r, RATE_LIMIT_MS - elapsed));
+  }
+  lastKmangaRequestTime = Date.now();
+}
 const CHARSET_EVEN = 'we7ru3ty8i';
 const CHARSET_ODD = 'h4xm9bqz1p';
 
@@ -89,7 +102,7 @@ export async function fetchViewerPages(episodeId, context = {}) {
   const hash = await buildKmangaHash(params);
   const headers = buildKmangaHeaders(hash);
 
-  await new Promise((r) => setTimeout(r, RATE_LIMIT_MS));
+  await throttleKmangaRequest();
 
   const apiUrl = `${SE_API_BASE}/web/episode/viewer?episode_id=${episodeId}`;
 
@@ -154,7 +167,7 @@ export async function fetchEpisodeDetail(episodeId, context = {}) {
   const hash = await buildKmangaHash(params);
   const headers = buildKmangaHeaders(hash);
 
-  await new Promise((r) => setTimeout(r, RATE_LIMIT_MS));
+  await throttleKmangaRequest();
 
   const apiUrl = `${SE_API_BASE}/web/episode?episode_id=${episodeId}`;
 
