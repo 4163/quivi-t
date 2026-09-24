@@ -131,7 +131,8 @@ pub fn run() {
         remove_file,
         remove_directory,
         read_library_tree,
-        cancel_download
+        cancel_download,
+        verify_image_magic
     ]);
 
     crate::protocol::register_quivit_protocol(builder)

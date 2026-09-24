@@ -20,7 +20,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Formats**: Open images (`jpg`, `jpeg`, `png`, `gif`, `webp`, `apng`, `avif`, `svg`, `bmp`, `ico`) and archives (`zip`, `cbz`, `rar`, `cbr`, `7z`, `cb7`, `cbt`, `tar`).
 - **Archives**: Read compressed files directly as folders, including password-protected archives and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
-- **Web Import**: Save and read manga/galleries directly from supported sites for offline reading.
+- **Web Import**: Save and read manga/galleries directly from supported sites for offline reading (see [Supported sites](#supported-sites)).
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Mod`+wheel. Cursor auto-hides after inactivity over the viewport.
 - **Manga Spread Mode**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
 - **Scaling**: Choose from Pixelated, Bilinear, and Lanczos scaling.
@@ -34,7 +34,19 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **File Panel**: Switchable list and thumbnail view modes with virtualized card grid layout, Favorites, and provider-organized URL Library galleries.
 - **Performance**: Fast O(1) virtualized rendering handles folders and archives with thousands of items instantly. Caching native shell icons and thumbnails eliminates UI pop-in.
 
-> QuiviT is strictly a comic and manga reader for the time being. Zero-flicker navigation, WebGL shader filtering (including Lanczos) are already implemented and optimized for video formats, but general local video playback is intentionally deferred. Video playback is currently only enabled for galleries from provider-specific sites.
+> QuiviT is strictly an image/manga reader for the time being. Zero-flicker navigation, WebGL shader filtering (including Lanczos) are already implemented and optimized for video formats, but general local video playback is intentionally deferred. Video playback is currently only enabled for galleries from provider-specific sites.
+
+## Supported sites
+
+Import a URL via **File → Open URL...**.
+
+- **Direct images.** Any direct image links.
+- **Imgur.** Supports MP4 videos, galleries, direct image/video links.
+- **MangaDex.** Series, chapters, art, direct cover links.
+- **MANGA Plus.** Series, chapters, direct cover/thumbnail links.
+- **K MANGA.** Series, chapters, direct thumbnail links.
+
+[Contribute](#web-imports) to add support for other sites.
 
 ## Shortcuts & Controls
 
@@ -239,9 +251,9 @@ Testing spans three focused layers:
 
 > **Design Principle:** New DOM belongs in the module that already owns that surface. New domain logic belongs in `core.js` or `services/`. Do not grow `main.js` back into a god file.
 
-### Web Import
+### Web Imports
 
-**File → Open URL...** imports galleries and images from supported websites directly into the local Library.
+Imports galleries and images from supported websites directly into the local Library.
 
 QuiviT checks the [`extractors`](https://github.com/4163/quivi-t/tree/extractors) branch for website support at runtime, caching modules under `%LOCALAPPDATA%\QuiviT\extractor-cache` for offline use. That registry lists supported sites and authoring documentation.
 
@@ -335,6 +347,7 @@ AI coding assistants use [`.agents/skills/replay-debugging/SKILL.md`](.agents/sk
 | **Archives (TAR/CBT)** | `tar` | Uncompressed archive reading |
 | **Character Encoding** | `chardetng` / `encoding_rs` | Statistical detection and decoding for legacy CJK encodings (Shift-JIS, GBK, EUC-KR, Big5) in ZIP and TAR archives |
 | **ICO Extraction** | `image` | Multi-frame ICO spritesheet generation |
+| **SVG Sanitization** | DOMPurify | Remote SVG imports saved as sanitized text, never raw bytes |
 | **Windows APIs** | `windows` / `winreg` | Native icons, shell thumbnails (`IShellItemImageFactory`), UI Automation and window enumeration (temp archive origin resolution), file attributes, shell notifications, and per-user file associations |
 | **Sorting** | `natord` | Natural alphanumeric sorting |
 | **File Watching** | `notify` | Directory watcher for auto-refresh |
@@ -368,9 +381,6 @@ QuiviT/
 │  ├─ urlLoader.test.js           # URL registry, extractor, and download queue rules
 │  └─ viewerMath.test.js          # Viewport scaling, transforms, and spread geometry
 ├─ extractors/ (orphan branch)    # Remote registry for runtime site extractors
-│  ├─ README.md                   # Authoring contract and contribution guidelines
-│  ├─ manifest.json               # Versioned registry for remote extractors
-│  └─ imgur.js                    # Imgur extractor
 ├─ src/
 │  ├─ index.html                  # Main viewer window
 │  ├─ options.html                # Options window
@@ -467,7 +477,8 @@ QuiviT/
 
 ## Attributions
 
-- UI Icons: [Feather](https://feathericons.com) / [Lucide](https://lucide.dev)
+- UI Icons: [Lucide](https://lucide.dev)
+- Metadata Icons: [Fluent Emoji](https://github.com/microsoft/fluentui-emoji)
 - Format Icons Font: [andrew-paglinawan/QuicksandFamily](https://github.com/andrew-paglinawan/QuicksandFamily)
 - Language Flags: [jdecked/Twemoji](https://github.com/jdecked/twemoji)
 - WebGL Shaders: [Bloc97/Anime4K](https://github.com/bloc97/Anime4K) / [stefanlegg/crt-fx](https://github.com/stefanlegg/crt-fx) / [TheMarco/RetroZone](https://github.com/TheMarco/RetroZone) (Custom phosphor WebGL implementation) / [cgwg CRT-Geom](https://github.com/libretro/common-shaders) (Geom-inspired beam, custom WebGL implementation)

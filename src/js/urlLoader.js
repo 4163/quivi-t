@@ -28,6 +28,7 @@
  */
 
 import { BoundedMap } from './services/cache.js';
+import { applySort } from './services/sorting.js';
 
 const EXTRACTOR_MODULE_CACHE_CAPACITY = 20;
 export const EXTRACTOR_MANIFEST_VERSION = 1;
@@ -42,6 +43,8 @@ const SUPPORTED_IMAGE_EXTENSIONS = new Set([
   'apng', 'avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'mp4', 'png', 'svg', 'webp'
 ]);
 export const MAX_GALLERY_PATH_DEPTH = 8;
+const GALLERY_WRITE_CHUNK_SIZE = 25;
+const GENERIC_COVER_FILENAMES = new Set(['cover.jpg', 'cover.png']);
 
 let _urlOverlay = null;
 let _Core = null;
@@ -213,6 +216,9 @@ export async function downloadFile(url, destPath, options = {}) {
   if (!window.__TAURI__) {
     throw new Error('Backend network proxy unavailable in browser environment');
   }
+  if (/\.svg$/i.test(destPath || '')) {
+    return downloadSanitizedSvg(url, destPath, options.headers);
+  }
   const args = { url, destPath };
   if (options.requestId) args.requestId = options.requestId;
   if (Number.isInteger(options.queueGeneration)) args.queueGeneration = options.queueGeneration;
@@ -220,7 +226,92 @@ export async function downloadFile(url, destPath, options = {}) {
   if (options.headers) args.headers = options.headers;
   if (options.xorKey) args.xorKey = options.xorKey;
   if (options.descramble) args.descramble = options.descramble;
-  return await window.__TAURI__.core.invoke('download_to_file', args);
+  await window.__TAURI__.core.invoke('download_to_file', args);
+  const leaf = String(destPath || '').split('\\').pop() || '';
+  const dot = leaf.lastIndexOf('.');
+  try {
+    await window.__TAURI__.core.invoke('verify_image_magic', {
+      path: destPath,
+      expectedExt: dot > 0 ? leaf.slice(dot + 1) : ''
+    });
+  } catch (err) {
+    await window.__TAURI__.core.invoke('remove_file', { path: destPath }).catch(() => {});
+    throw err;
+  }
+}
+
+// Remote SVGs never touch disk as raw bytes. DOMPurify keeps vector
+// rendering intact while stripping scripts, handlers, and foreignObject.
+export function sanitizeSvgText(text) {
+  const purify = globalThis.window?.DOMPurify;
+  if (!purify || typeof purify.sanitize !== 'function') {
+    throw new Error('SVG sanitizer unavailable');
+  }
+  return purify.sanitize(expandSvgEntities(text), { USE_PROFILES: { svg: true } });
+}
+
+// Illustrator-style internal entities (`<!ENTITY st12 "fill:url(#g);">`,
+// referenced as `&st12;`) die with the DOCTYPE block under sanitization,
+// taking every gradient fill with them. A single non-recursive expansion
+// pass restores them: references expand once and replacement text is never
+// rescanned, so billion-laughs amplification is impossible by construction, and anything beyond plain quoted literals
+// (parameter, external, or oversized entities) refuses the import outright.
+const SVG_ENTITY_MAX_COUNT = 500;
+const SVG_ENTITY_MAX_LITERAL = 4096;
+const SVG_MAX_BYTES = 10 * 1024 * 1024;
+
+export function expandSvgEntities(text) {
+  if (typeof text !== 'string' || !text.includes('<!ENTITY')) return text;
+  const doctype = text.match(/<!DOCTYPE[^[\]]*\[([\s\S]*?)\]>/);
+  if (!doctype) return text;
+  const subset = doctype[1];
+  if (subset.includes('%') || subset.includes('SYSTEM') || subset.includes('PUBLIC')) {
+    throw new Error('SVG entity block rejected');
+  }
+  const declared = (subset.match(/<!ENTITY/g) || []).length;
+  const table = new Map();
+  const simple = /<!ENTITY\s+([A-Za-z_][\w.-]*)\s+"([^"<>]*)"\s*>/g;
+  let m;
+  let simpleCount = 0;
+  while ((m = simple.exec(subset)) !== null) {
+    simpleCount++;
+    if (table.size >= SVG_ENTITY_MAX_COUNT || m[2].length > SVG_ENTITY_MAX_LITERAL) {
+      throw new Error('SVG entity block rejected');
+    }
+    if (!table.has(m[1])) table.set(m[1], m[2]);
+  }
+  if (simpleCount !== declared) {
+    throw new Error('SVG entity block rejected');
+  }
+  let out = text.replace(doctype[0], '');
+  if (table.size > 0) {
+    const names = [...table.keys()].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    out = out.replace(new RegExp(`&(${names.join('|')});`, 'g'), (hit, name) => table.get(name));
+  }
+  if (out.length > SVG_MAX_BYTES) {
+    throw new Error('SVG entity block rejected');
+  }
+  return out;
+}
+
+export async function downloadSanitizedSvg(url, destPath, headers) {
+  const text = await fetchRemoteText(url, headers);
+  // Full-text gate: the ranged sniff can fail open, but these bytes are
+  // already in hand, so a document here refuses the import outright.
+  // Mirrors the first-tag rule in the Misc extractor.
+  const stripped = text
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\?[\s\S]*?\?>/g, '')
+    .replace(/<!doctype(?:[^[\]>]|\[[^\]]*\])*>/gi, '');
+  const first = stripped.match(/<\s*([a-zA-Z][\w.-]*)/);
+  if (!first || first[1].toLowerCase() !== 'svg') {
+    throw new Error(`URL serves a document page, not an image file: ${url}`);
+  }
+  const clean = sanitizeSvgText(text);
+  if (!clean || !clean.trim()) {
+    throw new Error('SVG sanitizer emptied the document');
+  }
+  return await window.__TAURI__.core.invoke('write_text_file', { path: destPath, content: clean });
 }
 
 export async function cancelDownload() {
@@ -296,8 +387,16 @@ export class DownloadQueue {
     this._retryDelayMs = options.retryDelayMs ?? 0;
     this._cancelled = false;
     this._activeDestPath = null;
+    // Walk anchor (destPath): written only by genuine user navigation.
+    // Landings, sorts, and queue starts never set it.
+    this._userAnchorDest = null;
     this._visibleStart = options.visibleStart ?? 0;
     this._visibleEnd = options.visibleEnd ?? 0;
+    // Display-domain ranks (filename -> row index in the sorted file panel).
+    // Admission and walk read them; gallery order is the fallback when they
+    // are absent or do not cover every item.
+    this._displayRanks = null;
+    this._ranksCoverAll = false;
     this._inFlightItems = new Map();
     this._generation = 0;
     this._requestSequence = 0;
@@ -341,6 +440,31 @@ export class DownloadQueue {
     this._admitPendingPrefetch();
   }
 
+  // Accepts the file panel's row order for this queue's gallery only. Any
+  // other directory clears the map so admission falls back to gallery order
+  // instead of mixing domains.
+  setDisplayOrder(dirPath, filenames) {
+    this._displayRanks = null;
+    this._ranksCoverAll = false;
+    if (!dirPath || !Array.isArray(filenames) || this._items.length === 0) return;
+    if (!_pathsEqual(this._galleryRoot() || '', dirPath)) return;
+    const ranks = new Map();
+    for (let i = 0; i < filenames.length; i++) {
+      const key = String(filenames[i] ?? '').toLowerCase();
+      if (key && !ranks.has(key)) ranks.set(key, i);
+    }
+    this._displayRanks = ranks;
+    this._ranksCoverAll = this._items.every((it) => ranks.has((it.filename || '').toLowerCase()));
+  }
+
+  _galleryRoot() {
+    const first = this._items.length > 0 ? this._items[0].destPath : '';
+    if (!first) return null;
+    const clean = String(first).replace(/\\/g, '/');
+    const slashAt = clean.lastIndexOf('/');
+    return slashAt > 0 ? clean.slice(0, slashAt) : null;
+  }
+
   prioritize(destPath) {
     const target = this._findItem(destPath);
     if (!target) return;
@@ -375,11 +499,30 @@ export class DownloadQueue {
     this._cancelDownload().catch(() => {});
   }
 
-  _isInViewport(item) {
+  _displayRankOf(item) {
+    if (!this._displayRanks) return undefined;
+    return this._displayRanks.get((item.filename || '').toLowerCase());
+  }
+
+  // activeItem and activeRank resolve once per admission pass and are
+  // handed in: this filter runs per pending item on scroll-driven admission.
+  _isInViewport(item, activeItem, activeRank) {
+    // Display rows first, so sorting changes which items are admitted. The
+    // active image bypasses the window through prioritize(). Gallery order
+    // is the fallback when no map is set or the item is not listed.
+    const rank = this._displayRanks ? this._displayRanks.get((item.filename || '').toLowerCase()) : undefined;
+    if (rank !== undefined) {
+      if (this._visibleEnd > this._visibleStart && rank >= this._visibleStart && rank < this._visibleEnd) {
+        return true;
+      }
+      if (activeRank !== undefined && Math.abs(rank - activeRank) <= 1) {
+        return true;
+      }
+      return false;
+    }
     if (this._visibleEnd > this._visibleStart && item.galleryIndex >= this._visibleStart && item.galleryIndex < this._visibleEnd) {
       return true;
     }
-    const activeItem = this._findItem(this._activeDestPath);
     if (activeItem && Math.abs(item.galleryIndex - activeItem.galleryIndex) <= 1) {
       return true;
     }
@@ -387,27 +530,51 @@ export class DownloadQueue {
   }
 
   _getNextPrefetchItem() {
+    // Display top-to-bottom in list order, starting at the active image when
+    // it is inside the window (or above it), otherwise at the window top:
+    // reaching the bottom comes back up through the rest, and nothing ever
+    // starts from the bottom. Gallery order is the fallback when ranks don't
+    // cover every item. The active image itself always downloads through
+    // prioritize(), independent of this walk.
     const pending = this._items.filter((item) => item.status === 'pending' && !this._inFlightItems.has(item));
     if (pending.length === 0) return null;
 
-    let pivotGi = Math.max(0, this._visibleStart);
-    const activeItem = this._findItem(this._activeDestPath);
-    if (activeItem) pivotGi = activeItem.galleryIndex;
+    const useDisplay = !!(this._ranksCoverAll && this._displayRanks);
+    const rankOf = useDisplay
+      ? (item) => this._displayRanks.get((item.filename || '').toLowerCase())
+      : (item) => item.galleryIndex;
 
-    const visiblePending = pending.filter((item) => this._isInViewport(item));
     const hasVisibleRange = this._visibleEnd > this._visibleStart;
+    // Walk anchor: existence only. It is set by genuine user navigation and
+    // cleared by sorts, so a stale (finished) anchor still orders the rest
+    // around where the user is instead of restarting at the top. Landings,
+    // sorts, and queue starts never set it, so sorting can never drag the
+    // order with it.
+    const anchorItem = this._userAnchorDest ? this._findItem(this._userAnchorDest) : null;
+    let pivot = 0;
+    if (anchorItem) {
+      const pivotRank = rankOf(anchorItem) ?? 0;
+      // Anchor below the window would pivot the walk to the window bottom;
+      // clamp to the window top instead so it still runs top-down.
+      pivot = (hasVisibleRange && pivotRank >= this._visibleEnd) ? this._visibleStart : pivotRank;
+    } else if (useDisplay) {
+      pivot = Math.max(0, this._visibleStart);
+    }
+
+    const activeItem = this._findItem(this._activeDestPath);
+    const activeRank = activeItem ? this._displayRankOf(activeItem) : undefined;
+    const visiblePending = pending.filter((item) => this._isInViewport(item, activeItem, activeRank));
     const candidates = hasVisibleRange ? visiblePending : pending;
     if (candidates.length === 0) return null;
 
     const forward = candidates
-      .filter((item) => item.galleryIndex >= pivotGi)
-      .sort((a, b) => a.galleryIndex - b.galleryIndex);
-    if (forward.length > 0) return forward[0];
-
+      .filter((item) => rankOf(item) >= pivot)
+      .sort((a, b) => rankOf(a) - rankOf(b));
     const backward = candidates
-      .filter((item) => item.galleryIndex < pivotGi)
-      .sort((a, b) => b.galleryIndex - a.galleryIndex);
-    return backward[0] || null;
+      .filter((item) => rankOf(item) < pivot)
+      .sort((a, b) => rankOf(b) - rankOf(a));
+    const next = forward.length > 0 ? forward[0] : (backward[0] || null);
+    return next;
   }
 
   async start() {
@@ -926,6 +1093,17 @@ export function extractGallery(extractor, html, url, context = {}, entry = null)
   return done(result);
 }
 
+export function extractorNeedsHtml(mod, targetUrl) {
+  if (!mod) return true;
+  if (typeof mod.needsHtml === 'function') {
+    return mod.needsHtml(targetUrl) !== false;
+  }
+  if (mod.needsHtml === false) {
+    return false;
+  }
+  return true;
+}
+
 // -- Gallery Matching & Standalone Raw Cleanup --
 
 export function extractUrlStem(urlOrFilename) {
@@ -1226,7 +1404,9 @@ async function pruneRootSidecarRecords(providerPath, deletedNames) {
 
 async function cleanupRootFiles(providerPath, dirFiles, sets) {
   await linkRootSidecarRecords(providerPath, sets);
-  const deletedNames = new Set();
+  // Collect matches first, then remove in capped parallel: serial per-file
+  // IPC made large providers crawl.
+  const doomed = [];
   for (const entry of dirFiles || []) {
     if (entry.is_dir) continue;
     const lowerName = (entry.name || '').toLowerCase();
@@ -1234,13 +1414,20 @@ async function cleanupRootFiles(providerPath, dirFiles, sets) {
     const dotIndex = lowerName.lastIndexOf('.');
     const fileBase = (dotIndex > 0 ? lowerName.slice(0, dotIndex) : lowerName).toLowerCase();
     if (sets.stems.has(fileBase) || sets.filenames.has(lowerName)) {
+      doomed.push(entry);
+    }
+  }
+  const deletedNames = new Set();
+  for (let i = 0; i < doomed.length; i += GALLERY_WRITE_CHUNK_SIZE) {
+    const chunk = doomed.slice(i, i + GALLERY_WRITE_CHUNK_SIZE);
+    await Promise.all(chunk.map(async (entry) => {
       try {
         await window.__TAURI__.core.invoke('remove_file', { path: entry.path });
-        deletedNames.add(lowerName);
+        deletedNames.add((entry.name || '').toLowerCase());
       } catch (err) {
         console.warn('[UrlLoader] Failed to remove matching root file:', entry.path, err);
       }
-    }
+    }));
   }
   await pruneRootSidecarRecords(providerPath, deletedNames);
 }
@@ -1446,37 +1633,43 @@ export async function cleanupMatchingProviderEntries(providerPath, result) {
     // Cover.jpg and Cover.png names stay out so one series cannot clear
     // another's root cover.
     const coverList = Array.isArray(result.covers) ? result.covers : (result.cover ? [result.cover] : []);
-    const GENERIC_COVER_FILENAMES = new Set(['cover.jpg', 'cover.png']);
 
-    for (const entry of dirResult.files) {
-      if (!entry.is_dir) continue;
-      const lowerName = (entry.name || '').toLowerCase();
-      if (!shouldRemoveChapters || lowerName === seriesRootName) continue;
-
-      const sidecarPath = `${entry.path}\\gallery.json`;
-      let isMatch = false;
-      try {
-        const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
-        const sidecar = JSON.parse(sidecarText);
-        const sidecarId = sidecar?.gallery?.id?.toLowerCase();
-        const sidecarUrl = normalizeUrl(sidecar?.sourceUrl || sidecar?.url || '').toLowerCase();
-
-        if (sidecarId && chapterIds.has(sidecarId)) {
-          isMatch = true;
-        } else if (sidecarUrl && chapterUrls.has(sidecarUrl)) {
-          isMatch = true;
+    // Sidecar reads and directory removals run in capped parallel: serial
+    // per-directory IPC made large series imports crawl.
+    const chapterDirs = (dirResult.files || []).filter((entry) => {
+      if (!entry.is_dir) return false;
+      return shouldRemoveChapters && (entry.name || '').toLowerCase() !== seriesRootName;
+    });
+    const matchedDirs = [];
+    for (let i = 0; i < chapterDirs.length; i += GALLERY_WRITE_CHUNK_SIZE) {
+      const chunk = chapterDirs.slice(i, i + GALLERY_WRITE_CHUNK_SIZE);
+      const matches = await Promise.all(chunk.map(async (entry) => {
+        const sidecarPath = `${entry.path}\\gallery.json`;
+        try {
+          const sidecarText = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
+          const sidecar = JSON.parse(sidecarText);
+          const sidecarId = sidecar?.gallery?.id?.toLowerCase();
+          const sidecarUrl = normalizeUrl(sidecar?.sourceUrl || sidecar?.url || '').toLowerCase();
+          if (sidecarId && chapterIds.has(sidecarId)) return entry;
+          if (sidecarUrl && chapterUrls.has(sidecarUrl)) return entry;
+        } catch {
+          // Not a valid gallery sidecar, skip
         }
-      } catch {
-        // Not a valid gallery sidecar, skip
+        return null;
+      }));
+      for (const entry of matches) {
+        if (entry) matchedDirs.push(entry);
       }
-
-      if (isMatch) {
+    }
+    for (let i = 0; i < matchedDirs.length; i += GALLERY_WRITE_CHUNK_SIZE) {
+      const chunk = matchedDirs.slice(i, i + GALLERY_WRITE_CHUNK_SIZE);
+      await Promise.all(chunk.map(async (entry) => {
         try {
           await window.__TAURI__.core.invoke('remove_directory', { path: entry.path });
         } catch (err) {
           console.warn('[UrlLoader] Failed to remove matching standalone chapter directory:', entry.path, err);
         }
-      }
+      }));
     }
 
     if (shouldRemoveCovers && coverList.length > 0) {
@@ -1543,6 +1736,59 @@ export function remapLibraryPath(path, oldRoot, newRoot) {
   return _rebasePath(path, oldRoot, newRoot);
 }
 
+// Orders download items the way the file panel will show them, so the first
+// bytes match the active sort instead of extractor order. Falls back to the
+// given order when prefs are missing or the column is unknown.
+export function orderItemsBySort(items, sortPref) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const col = ['name', 'ext', 'date'].includes(sortPref?.col) ? sortPref.col : 'name';
+  const desc = sortPref?.desc === true;
+  const entries = items.map((item) => {
+    const name = item?.filename || '';
+    const dot = name.lastIndexOf('.');
+    return {
+      item,
+      name,
+      ext: dot > 0 ? name.slice(dot + 1).toLowerCase() : '',
+      rawDate: 0,
+      is_dir: false,
+      is_parent: false,
+    };
+  });
+  return applySort(entries, col, desc).map((entry) => entry.item);
+}
+
+function _sortPrefForDir(galleryPath) {
+  const fallback = { col: 'name', desc: false };
+  let frontendData = null;
+  try {
+    frontendData = _Core?.getState?.()?.config?.frontend_data || null;
+  } catch {
+    frontendData = null;
+  }
+  if (!frontendData) return fallback;
+  if (galleryPath) {
+    const normTarget = String(galleryPath).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    const table = frontendData.directory_sort || {};
+    for (const [key, pref] of Object.entries(table)) {
+      if (String(key).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() === normTarget) {
+        return { col: pref?.col || 'name', desc: pref?.desc === true };
+      }
+    }
+  }
+  const def = frontendData.default_sort || {};
+  return { col: def.col || 'name', desc: def.desc === true };
+}
+
+function _displayOrderedItems(downloadItems, galleryPath) {
+  if (!Array.isArray(downloadItems) || downloadItems.length === 0) return [];
+  try {
+    return orderItemsBySort(downloadItems, _sortPrefForDir(galleryPath));
+  } catch {
+    return downloadItems;
+  }
+}
+
 async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   const providerDir = entry.libraryPath;
   const providerPath = `${libraryDir}\\${providerDir}`;
@@ -1556,22 +1802,8 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     // 1. If direct URL is already recorded in root gallery.json or a chapter gallery, jump directly to that file
     const existingMatch = await findMatchingGalleryImage(providerPath, url, rawStem);
     if (existingMatch) {
-      // If the matched file is a 0-byte placeholder, download it eagerly before jumping
-      const matchSize = (await _readFileSizes(existingMatch.galleryPath)).get(existingMatch.targetName.toLowerCase());
-      if (matchSize !== undefined && matchSize === 0 && existingMatch.image?.sourceUrl) {
-        const destPath = `${existingMatch.galleryPath}\\${existingMatch.targetName}`;
-        const dlOpts = {};
-        if (existingMatch.image.headers) dlOpts.headers = existingMatch.image.headers;
-        if (existingMatch.image.decryption?.key) dlOpts.xorKey = existingMatch.image.decryption.key;
-        if (existingMatch.image.descramble) dlOpts.descramble = existingMatch.image.descramble;
-        try {
-          await downloadFile(existingMatch.image.sourceUrl, destPath, dlOpts);
-        } catch (err) {
-          if (existingMatch.image.fallbackUrl && existingMatch.image.fallbackUrl !== existingMatch.image.sourceUrl) {
-            await downloadFile(existingMatch.image.fallbackUrl, destPath, dlOpts).catch(() => {});
-          }
-        }
-      }
+      // Return-first: the queue downloads the placeholder after navigation
+      // lands on it, and the swap-on-arrival paints it. No eager fetch here.
       return {
         galleryPath: existingMatch.galleryPath,
         targetName: existingMatch.targetName,
@@ -1592,21 +1824,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     if (hash && hash !== rawStem) {
       const secondMatch = await findMatchingGalleryImage(providerPath, downloadUrl, hash);
       if (secondMatch) {
-        const secondSize = (await _readFileSizes(secondMatch.galleryPath)).get(secondMatch.targetName.toLowerCase());
-        if (secondSize !== undefined && secondSize === 0 && secondMatch.image?.sourceUrl) {
-          const destPath = `${secondMatch.galleryPath}\\${secondMatch.targetName}`;
-          const dlOpts = {};
-          if (secondMatch.image.headers) dlOpts.headers = secondMatch.image.headers;
-          if (secondMatch.image.decryption?.key) dlOpts.xorKey = secondMatch.image.decryption.key;
-          if (secondMatch.image.descramble) dlOpts.descramble = secondMatch.image.descramble;
-          try {
-            await downloadFile(secondMatch.image.sourceUrl, destPath, dlOpts);
-          } catch (err) {
-            if (secondMatch.image.fallbackUrl && secondMatch.image.fallbackUrl !== secondMatch.image.sourceUrl) {
-              await downloadFile(secondMatch.image.fallbackUrl, destPath, dlOpts).catch(() => {});
-            }
-          }
-        }
+        // Return-first: same as the first match above, no eager fetch.
         return {
           galleryPath: secondMatch.galleryPath,
           targetName: secondMatch.targetName,
@@ -1615,21 +1833,40 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       }
     }
 
-    // 2. Download raw under the provider root (e.g. Provider/image.png)
+    // 2. Download raw under the provider root (e.g. Provider/image.png).
+    // Placeholder first so navigation never waits for bytes. The background
+    // fetch records the sidecar on success and swaps the viewer on arrival.
     const destPath = `${providerPath}\\${targetFilename}`;
     if (window.__TAURI__) {
-      await downloadFile(downloadUrl, destPath);
+      await window.__TAURI__.core.invoke('create_placeholder_files', {
+        dir: providerPath,
+        filenames: [targetFilename]
+      }).catch(() => {});
+      window.dispatchEvent(new CustomEvent('quivit-library-updated'));
 
-      // Save metadata to root gallery.json
-      await recordRootMediaDownload(providerPath, directInfo?.provider || entry.displayName || entry.id, {
+      const rootInfo = {
         filename: targetFilename,
         rawFileName: rawFilename,
         hash,
         sourceUrl: url,
         url: downloadUrl
-      });
-
-      window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+      };
+      const rootProvider = directInfo?.provider || entry.displayName || entry.id;
+      (async () => {
+        try {
+          await downloadFile(downloadUrl, destPath);
+          await recordRootMediaDownload(providerPath, rootProvider, rootInfo);
+          window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+          window.dispatchEvent(new CustomEvent('quivit-download-complete', {
+            detail: { destPath, size: 1 }
+          }));
+        } catch (err) {
+          window.dispatchEvent(new CustomEvent('quivit-status-flash', {
+            detail: { message: `Download failed: ${targetFilename}` }
+          }));
+          console.warn('[UrlLoader] Background raw download failed:', err);
+        }
+      })();
     }
 
     return {
@@ -1639,7 +1876,9 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     };
   }
 
-  const html = url.startsWith('blob:') ? '' : await fetchRemoteText(url);
+  const html = (!url.startsWith('blob:') && extractorNeedsHtml(mod, url))
+    ? await fetchRemoteText(url)
+    : '';
   const result = await extractGallery(mod, html, url, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
 
   if (result.isSeries) {
@@ -1648,14 +1887,6 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
     if (result.cover?.url && result.cover?.filename) {
       coverFilename = result.cover.filename;
-      const coverDestPath = `${seriesPath}\\${coverFilename}`;
-      if (window.__TAURI__) {
-        try {
-          await downloadFile(result.cover.url, coverDestPath);
-        } catch (err) {
-          console.warn('[UrlLoader] Failed to download series cover:', err);
-        }
-      }
     }
 
     if (window.__TAURI__) {
@@ -1687,14 +1918,22 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
         console.warn('[UrlLoader] Failed to write series gallery.json:', err);
       }
 
+      // Placeholder so the per-directory queue owns the cover bytes on
+      // visit. No background fetch, so two writers never race on one file.
+      if (coverFilename) {
+        await window.__TAURI__.core.invoke('create_placeholder_files', {
+          dir: seriesPath,
+          filenames: [coverFilename]
+        }).catch(() => {});
+      }
+
       if (result.metadata) {
         await writeGalleryMetadata(seriesPath, result.metadata);
       }
 
       if (Array.isArray(result.folders)) {
-        const FOLDER_CHUNK_SIZE = 25;
-        for (let i = 0; i < result.folders.length; i += FOLDER_CHUNK_SIZE) {
-          const chunk = result.folders.slice(i, i + FOLDER_CHUNK_SIZE);
+        for (let i = 0; i < result.folders.length; i += GALLERY_WRITE_CHUNK_SIZE) {
+          const chunk = result.folders.slice(i, i + GALLERY_WRITE_CHUNK_SIZE);
           await Promise.all(chunk.map((folder) => {
             if (!folder?.metadata || !Array.isArray(folder.relativePath)) return Promise.resolve();
             const folderPath = [libraryDir, providerDir, ...folder.relativePath].join('\\');
@@ -1705,9 +1944,8 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     }
 
     if (window.__TAURI__ && Array.isArray(result.chapters)) {
-      const CHUNK_SIZE = 25;
-      for (let i = 0; i < result.chapters.length; i += CHUNK_SIZE) {
-        const chunk = result.chapters.slice(i, i + CHUNK_SIZE);
+      for (let i = 0; i < result.chapters.length; i += GALLERY_WRITE_CHUNK_SIZE) {
+        const chunk = result.chapters.slice(i, i + GALLERY_WRITE_CHUNK_SIZE);
         await Promise.all(chunk.map(async (chapter) => {
           const chapterPath = [libraryDir, providerDir, ...chapter.relativePath].join('\\');
 
@@ -1739,17 +1977,9 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
               descramble: img.descramble || undefined
             })) : [];
 
-            // Stub covers download next to the stub and record last so they
-            // never become the open target. One bad thumbnail must not block
-            // the series import, so failures only warn.
+            // Stub covers record last so they never become the open target.
+            // Their bytes stay queue-owned on visit, like the series cover.
             const stubCover = buildStubCoverRecord(chapter.cover);
-            if (stubCover) {
-              try {
-                await downloadFile(chapter.cover.url, `${chapterPath}\\${stubCover.filename}`);
-              } catch (err) {
-                console.warn('[UrlLoader] Failed to download chapter stub cover:', err);
-              }
-            }
 
             const stubSidecar = {
               url: chapter.sourceUrl,
@@ -1770,10 +2000,12 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
               path: `${chapterPath}\\gallery.json`,
               content: JSON.stringify(stubSidecar, null, 2)
             });
-            if (chapterImages.length > 0) {
+            if (chapterImages.length > 0 || stubCover) {
+              const placeholderNames = chapterImages.map((img) => img.filename);
+              if (stubCover) placeholderNames.push(stubCover.filename);
               await window.__TAURI__.core.invoke('create_placeholder_files', {
                 dir: chapterPath,
-                filenames: chapterImages.map((img) => img.filename)
+                filenames: placeholderNames
               }).catch(() => {});
             }
           }
@@ -1787,8 +2019,20 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       window.dispatchEvent(new CustomEvent('quivit-library-updated'));
     }
 
-    // Shape-based cleanup for series: clear matching standalone chapter dirs and loose covers from provider root
-    await cleanupMatchingProviderEntries(providerPath, result);
+    // Shape cleanup runs behind the return; a prune failure must not fail
+    // the series import. Cover bytes stay queue-owned on visit, so two
+    // writers never race on one file.
+    const bgProviderPath = providerPath;
+    const bgResult = result;
+    (async () => {
+      if (!window.__TAURI__) return;
+      try {
+        await cleanupMatchingProviderEntries(bgProviderPath, bgResult);
+      } catch (err) {
+        console.warn('[UrlLoader] Background provider cleanup failed:', err);
+      }
+      window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+    })();
 
     const state = _Core?.getState?.();
     const openFirstImage = state?.config?.frontend_data?.open_first_image === true;
@@ -1801,7 +2045,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   let pages = 0;
   let nextUrl = result.nextPageUrl;
   while (nextUrl && pages < MAX_PAGINATION_PAGES) {
-    const pageHtml = await fetchRemoteText(nextUrl);
+    const pageHtml = extractorNeedsHtml(mod, nextUrl) ? await fetchRemoteText(nextUrl) : '';
     const pageResult = await extractGallery(mod, pageHtml, nextUrl, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
     if (!_galleryMatches(result.gallery, pageResult.gallery)) {
       throw new Error('Extractor pagination returned a different gallery');
@@ -1900,45 +2144,26 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       ? downloadItems.find((item) => (item.filename || '').toLowerCase() === result.targetFilename.toLowerCase())
       : null;
 
-    const _eagerDownloadExisting = async (item) => {
-      const dlOpts = {};
-      if (item.headers) dlOpts.headers = item.headers;
-      if (item.decryption?.key) dlOpts.xorKey = item.decryption.key;
-      if (item.descramble) dlOpts.descramble = item.descramble;
-      try {
-        await downloadFile(item.url, item.destPath, dlOpts);
-        item.status = 'completed';
-      } catch (err) {
-        const fallback = item.fallbackUrl || null;
-        if (fallback && fallback !== item.url) {
-          try {
-            await downloadFile(fallback, item.destPath, dlOpts);
-            item.status = 'completed';
-            return;
-          } catch (fallbackErr) {
-            console.warn('[UrlLoader] Eager download failed with fallback:', fallbackErr);
-          }
-        }
-        console.warn('[UrlLoader] Eager download failed:', err);
-      }
-    };
-
-    if (targetItem && targetItem.status === 'pending') {
-      await _eagerDownloadExisting(targetItem);
-    } else if (!targetItem && downloadItems.length > 0 && downloadItems[0].status === 'pending') {
-      await _eagerDownloadExisting(downloadItems[0]);
-    }
+    // The queue's active slot fetches first paint, so the update returns
+    // without awaiting bytes. Placeholders bridge until the
+    // swap-on-arrival paints them.
+    const targetDestPath = targetItem ? targetItem.destPath : null;
+    const displayItems = _displayOrderedItems(downloadItems, existingPath);
 
     const hasPending = downloadItems.some((i) => i.status === 'pending');
     if (hasPending) {
-      const initialTarget = (targetItem && targetItem.status === 'pending')
-        ? targetItem.destPath
-        : (downloadItems.find((i) => i.status === 'pending')?.destPath || null);
+      const initialTarget = targetDestPath
+        || (displayItems.find((i) => i.status === 'pending')?.destPath || null);
       _startGalleryQueue(existingPath, downloadItems, { initialTarget });
     }
 
-    await cleanupMatchingProviderEntries(providerPath, result);
     window.dispatchEvent(new CustomEvent('quivit-library-updated'));
+
+    // Shape cleanup runs behind the return; a prune failure must not fail
+    // the update.
+    cleanupMatchingProviderEntries(providerPath, result).catch((err) => {
+      console.warn('[UrlLoader] Background provider cleanup failed:', err);
+    });
 
     return {
       galleryPath: existingPath,
@@ -2022,43 +2247,14 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     ? downloadItems.find((item) => (item.filename || '').toLowerCase() === result.targetFilename.toLowerCase())
     : null;
 
-  const _eagerDownload = async (item) => {
-    const dlOpts = {};
-    if (item.headers) dlOpts.headers = item.headers;
-    if (item.decryption?.key) dlOpts.xorKey = item.decryption.key;
-    if (item.descramble) dlOpts.descramble = item.descramble;
-    try {
-      await downloadFile(item.url, item.destPath, dlOpts);
-      item.status = 'completed';
-    } catch (err) {
-      const fallback = item.fallbackUrl || null;
-      if (fallback && fallback !== item.url) {
-        try {
-          await downloadFile(fallback, item.destPath, dlOpts);
-          item.status = 'completed';
-          return;
-        } catch (fallbackErr) {
-          console.warn('[UrlLoader] Eager download failed with fallback:', fallbackErr);
-        }
-      }
-      console.warn('[UrlLoader] Eager download failed:', err);
-    }
-  };
-
-  if (targetItem) {
-    await _eagerDownload(targetItem);
-  } else if (downloadItems.length > 0) {
-    await _eagerDownload(downloadItems[0]);
-  }
-
-  // Shape-based cleanup for standard gallery: prune matching standalone raw files under provider root
-  await cleanupMatchingProviderEntries(providerPath, result);
-
-  // Background queue for remaining images
+  // The queue's active slot fetches first paint, so the import returns
+  // without awaiting bytes. Placeholders bridge until the swap-on-arrival
+  // paints them.
+  const displayItems = _displayOrderedItems(downloadItems, galleryPath);
   if (downloadItems.length > 0) {
     const initialTarget = targetItem
-      ? (downloadItems.find((i) => i.status === 'pending')?.destPath || null)
-      : (downloadItems[1]?.destPath || downloadItems[0].destPath);
+      ? (targetItem.status === 'pending' ? targetItem.destPath : (downloadItems.find((i) => i.status === 'pending')?.destPath || null))
+      : (displayItems[1]?.destPath || displayItems[0]?.destPath);
     _startGalleryQueue(galleryPath, downloadItems, { initialTarget });
   } else {
     _activeGalleryPath = galleryPath;
@@ -2067,9 +2263,17 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   window.dispatchEvent(new CustomEvent('quivit-library-updated'));
 
+  // Shape cleanup runs behind the return; a prune failure must not fail
+  // the import.
+  cleanupMatchingProviderEntries(providerPath, result).catch((err) => {
+    console.warn('[UrlLoader] Background provider cleanup failed:', err);
+  });
+
+  // Open-first-image follows the active sort like normal navigation: the
+  // top of the file list, not gallery position zero.
   const targetName = targetItem
     ? targetItem.filename
-    : (openFirstImage ? (result.images[0]?.filename || null) : null);
+    : (openFirstImage ? (displayItems[0]?.filename || null) : null);
   return { galleryPath, result, targetName };
 }
 
@@ -2112,6 +2316,16 @@ async function _readFileSizes(galleryPath) {
 // -- Gallery queue management and auto-resumption --
 
 function _startGalleryQueue(galleryPath, items, options = {}) {
+  const viewedDir = _Core?.getState?.()?.directory;
+  if (!_pathsEqual(viewedDir || '', galleryPath)) {
+    // Navigate-first: sidecar + placeholders are already on disk, so
+    // entering the gallery resumes via onStateChange with the live sorted
+    // list. Starting before navigation runs the first picks in gallery
+    // fallback order (01, 02 under a descending sort) instead of display
+    // order. Never drain a hidden gallery in the background.
+    return;
+  }
+
   if (_activeQueue) {
     _activeQueue.cancel();
     _activeQueue = null;
@@ -2172,6 +2386,28 @@ function _startGalleryQueue(galleryPath, items, options = {}) {
     detail: { galleryPath, status: 'queue_started' }
   }));
 
+  // Seed the display order when already viewing this gallery (reimport or
+  // resume with unchanged list identity): the panel only pushes on identity
+  // change, so without this the first picks would run in gallery fallback
+  // order despite the list being sorted.
+  const seededState = _Core?.getState?.();
+  if (seededState?.directory && _pathsEqual(seededState.directory, galleryPath) && Array.isArray(seededState.list)) {
+    setDisplayOrder(seededState.directory, seededState.list.map((entry) => entry?.name));
+  }
+  // Fallback to the sort prefs when the live list is absent or stale
+  // (reimport with new files the old list does not cover): keeps the first
+  // picks in display order instead of gallery fallback order. Reads the
+  // queue's own items: the caller's array may lack derived filenames.
+  if (!_activeQueue._ranksCoverAll) {
+    try {
+      const pref = _sortPrefForDir(galleryPath);
+      const ordered = orderItemsBySort(_activeQueue._items, pref);
+      if (Array.isArray(ordered) && ordered.length > 0) {
+        setDisplayOrder(galleryPath, ordered.map((it) => it?.filename));
+      }
+    } catch {}
+  }
+
   const state = _Core?.getState?.();
   let prioritizedTarget = null;
   if (options.initialTarget) {
@@ -2187,7 +2423,21 @@ function _startGalleryQueue(galleryPath, items, options = {}) {
   if (prioritizedTarget) {
     _activeQueue.prioritize(prioritizedTarget);
   } else {
-    const firstPending = items.find(i => i.status === 'pending');
+    // Display-first pending, not gallery-first: the live ranks seeded above
+    // already reflect the sorted list, so the active slot matches first
+    // paint instead of jumping to 01/02 under a descending sort. Sort the
+    // queue's own items: the caller's array may lack derived filenames,
+    // which would blank every rank and silently restore gallery order.
+    const queueItems = _activeQueue._items;
+    const byDisplay = [...queueItems].sort((a, b) => {
+      const rankA = _activeQueue._displayRankOf(a);
+      const rankB = _activeQueue._displayRankOf(b);
+      if (rankA !== undefined && rankB !== undefined) return rankA - rankB;
+      if (rankA !== undefined) return -1;
+      if (rankB !== undefined) return 1;
+      return (a.galleryIndex ?? 0) - (b.galleryIndex ?? 0);
+    });
+    const firstPending = byDisplay.find(i => i.status === 'pending');
     if (firstPending) {
       _activeQueue.prioritize(firstPending.destPath);
     }
@@ -2230,7 +2480,17 @@ export async function resolveUnresolvedGallery(galleryPath) {
     }
     if (!entry) return false;
     const mod = await loadExtractorModule(entry);
-    const fullResult = await extractGallery(mod, '', data.sourceUrl, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
+    // The stub carries identity only; the extractor needs the live page for
+    // names, credits, and summaries. An empty fetch keeps prior behavior.
+    let pageHtml = '';
+    if (extractorNeedsHtml(mod, data.sourceUrl)) {
+      try {
+        pageHtml = await fetchRemoteText(data.sourceUrl);
+      } catch {
+        pageHtml = '';
+      }
+    }
+    const fullResult = await extractGallery(mod, pageHtml, data.sourceUrl, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
     if (!fullResult?.images || fullResult.images.length === 0) return false;
 
     const updatedSidecar = {
@@ -2273,31 +2533,8 @@ export async function resolveUnresolvedGallery(galleryPath) {
       filenames
     });
 
-    const eagerImg = fullResult.targetFilename
-      ? fullResult.images.find((img) => img.filename.toLowerCase() === fullResult.targetFilename.toLowerCase())
-      : (fullResult.images[0] || null);
-
-    if (eagerImg) {
-      const dlOpts = {};
-      if (eagerImg.headers) dlOpts.headers = eagerImg.headers;
-      if (eagerImg.decryption?.key) dlOpts.xorKey = eagerImg.decryption.key;
-      if (eagerImg.descramble) dlOpts.descramble = eagerImg.descramble;
-      try {
-        await downloadFile(eagerImg.url, `${galleryPath}\\${eagerImg.filename}`, dlOpts);
-      } catch (err) {
-        const fallback = eagerImg.fallbackUrl || null;
-        if (fallback && fallback !== eagerImg.url) {
-          try {
-            await downloadFile(fallback, `${galleryPath}\\${eagerImg.filename}`, dlOpts);
-          } catch (fallbackErr) {
-            console.warn('[UrlLoader] Failed to eagerly download first image with fallback:', fallbackErr);
-          }
-        } else {
-          console.warn('[UrlLoader] Failed to eagerly download first image:', err);
-        }
-      }
-    }
-
+    // Return-first: the queue fetches first paint after the caller refreshes
+    // and navigation lands. No eager download here.
     return true;
   } finally {
     _resolvingGalleries.delete(galleryPath);
@@ -2454,6 +2691,12 @@ export function setVisibleRange(start, end) {
   }
 }
 
+export function setDisplayOrder(dirPath, filenames) {
+  if (_activeQueue) {
+    _activeQueue.setDisplayOrder(dirPath, filenames);
+  }
+}
+
 // -- UI integration --
 
 export function openPrompt() {
@@ -2468,11 +2711,23 @@ export function isGalleryDownloading(dirPath) {
   return _pathsEqual(dirPath, _activeGalleryPath);
 }
 
-export function cancelGalleryDownloads(galleryPath) {
-  if (!galleryPath) return;
-  if (_activeGalleryPath && _pathsEqual(_activeGalleryPath, galleryPath)) {
+export function cancelGalleryDownloads(deletedPath) {
+  if (!deletedPath) return;
+  if (_galleryPathOverlapsActive(deletedPath)) {
     _teardownActiveQueue();
   }
+}
+
+// True when the active gallery is the path itself or lives under it: a
+// deleted parent takes its downloading descendants with it.
+function _galleryPathOverlapsActive(path) {
+  if (!_activeGalleryPath || !path) return false;
+  return _pathsEqual(_activeGalleryPath, path) || _isPathWithin(_activeGalleryPath, path);
+}
+
+export function isGalleryDownloadingWithin(dirPath) {
+  if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath) return false;
+  return _galleryPathOverlapsActive(dirPath);
 }
 
 function _teardownActiveQueue() {
@@ -2536,53 +2791,14 @@ export async function prepareGalleryDirectory(galleryPath, options = {}) {
   }
 
   if (data?.unresolved && data?.sourceUrl) {
-    await resolveUnresolvedGallery(galleryPath);
-    try {
-      content = await window.__TAURI__.core.invoke('read_text_file', { path: sidecarPath });
-      data = JSON.parse(content);
-    } catch {
-      return false;
-    }
+    // The stub resolves behind the return; the refresh paints the gallery.
+    // The queue fetches first paint after navigation lands.
+    resolveUnresolvedGallery(galleryPath).then((ok) => {
+      if (ok) _FsUtils?.refresh?.();
+    }).catch(() => {});
   }
 
   if (!Array.isArray(data?.images) || data.images.length === 0) return false;
-
-  let targetImg = null;
-  if (options?.targetName) {
-    const cleanTarget = options.targetName.toLowerCase();
-    targetImg = data.images.find((img) => (img.filename || '').toLowerCase() === cleanTarget);
-  }
-  if (!targetImg) {
-    targetImg = data.images[0];
-  }
-  if (!targetImg || (!targetImg.sourceUrl && !targetImg.url)) return false;
-
-  const sizeMap = await _readFileSizes(galleryPath);
-  const targetSize = sizeMap.get((targetImg.filename || '').toLowerCase());
-
-  if (targetSize === undefined || targetSize === 0) {
-    const destPath = `${galleryPath}\\${targetImg.filename}`;
-    const dlOpts = {};
-    if (targetImg.headers) dlOpts.headers = targetImg.headers;
-    if (targetImg.decryption?.key) dlOpts.xorKey = targetImg.decryption.key;
-    if (targetImg.descramble) dlOpts.descramble = targetImg.descramble;
-    const downloadUrl = targetImg.sourceUrl || targetImg.url;
-
-    try {
-      await downloadFile(downloadUrl, destPath, dlOpts);
-    } catch (err) {
-      const fallback = targetImg.fallbackUrl || null;
-      if (fallback && fallback !== downloadUrl) {
-        try {
-          await downloadFile(fallback, destPath, dlOpts);
-        } catch (fallbackErr) {
-          console.warn('[UrlLoader] prepareGalleryDirectory fallback failed:', fallbackErr);
-        }
-      } else {
-        console.warn('[UrlLoader] prepareGalleryDirectory download failed:', err);
-      }
-    }
-  }
 
   return true;
 }
@@ -2611,15 +2827,16 @@ export const UrlLoader = {
       _Core.setPlaceholderCheck((path) => isPlaceholderFile(path));
     }
 
-    // Register directory preparation hook so fsUtils can resolve chapter stubs
-    // and eagerly download target/first image before reading directory,
-    // eliminating empty file list flashes and 404s.
+    // Register directory preparation hook: fast sidecar check so
+    // navigation never waits for bytes. An unresolved stub resolves in the
+    // background and refreshes; the queue fetches first paint on arrival.
     if (_FsUtils && typeof _FsUtils.setDirectoryPreparationHook === 'function') {
       _FsUtils.setDirectoryPreparationHook((path, options) => prepareGalleryDirectory(path, options));
     }
 
     if (_Core && typeof _Core.onStateChange === 'function' && !_coreStateUnsubscribe) {
       let _lastSyncDirectory = null;
+      let _lastSyncList = null;
 
       _coreStateUnsubscribe = _Core.onStateChange((state) => {
         const dir = state.directory;
@@ -2627,6 +2844,7 @@ export const UrlLoader = {
         // Directory transition: leaving old gallery, entering new
         if (!_pathsEqual(dir, _lastSyncDirectory)) {
           _lastSyncDirectory = dir;
+          _lastSyncList = state.list || null;
 
           if (_activeQueue && _activeQueue.isActive && _activeGalleryPath && !_pathsEqual(dir, _activeGalleryPath)) {
             _teardownActiveQueue();
@@ -2640,10 +2858,20 @@ export const UrlLoader = {
 
         // Check if queue is missing or not active for this gallery
         if (!_activeQueue || !_activeQueue.isActive || !_pathsEqual(dir, _activeGalleryPath)) {
+          _lastSyncList = state.list || null;
           if (dir && !_resumingGalleries.has(dir)) {
             resumeGalleryDownloads(dir, state.list).catch(() => {});
           }
           return;
+        }
+
+        // Same directory: a changed list means sort/reload (never anchor —
+        // the walk must restart at the window top), while an unchanged list
+        // with a moved index is genuine user navigation (anchor the walk).
+        const listChanged = state.list !== _lastSyncList;
+        _lastSyncList = state.list || null;
+        if (listChanged && _activeQueue) {
+          _activeQueue._userAnchorDest = null;
         }
 
         if (!state.list || state.index < 0 || state.index >= state.list.length) return;
@@ -2654,6 +2882,9 @@ export const UrlLoader = {
         const targetPath = currentEntry.path || (currentEntry.name ? `${_activeGalleryPath}\\${currentEntry.name}` : null);
         if (targetPath) {
           _activeQueue.prioritize(targetPath);
+          if (!listChanged) {
+            _activeQueue._userAnchorDest = targetPath;
+          }
         }
 
         if (!state.fileListVisible) {
@@ -2674,11 +2905,13 @@ export const UrlLoader = {
   normalizeUrl,
   isValidUrl,
   isGalleryDownloading,
+  isGalleryDownloadingWithin,
   cancelGalleryDownloads,
   isPlaceholderFile,
   getGalleryDownloadStatus,
   retryGalleryDownload,
   setVisibleRange,
+  setDisplayOrder,
   fetchRemoteText,
   fetchExtractorText,
   downloadFile,
@@ -2695,6 +2928,7 @@ export const UrlLoader = {
   findExtractor,
   loadExtractorModule,
   extractGallery,
+  extractorNeedsHtml,
   validateExtractorResult,
   findMatchingGalleryImage,
   findMatchingGalleryBySourceUrl,

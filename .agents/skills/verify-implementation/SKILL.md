@@ -6,7 +6,7 @@ argument-hint: "<slice or change description>"
 
 # Verify implementation
 
-Prove a finished slice works before recording it as done. Run static checks, hand the user a manual runtime checklist, and only then update the books.
+Prove a finished slice works before recording it as done. Run static checks, hand the user a manual runtime checklist ('runtime list'), and only then update the books.
 
 Read and follow `.agents/AGENTS.md` guidelines for all code and test output.
 
@@ -60,4 +60,4 @@ Each checklist item must be human-readable and self-contained so a tester with n
 
 Do not declare the slice finished.
 
-Stop here. Present the results of the static checks and the manual runtime checklist to the user. Wait for the user to explicitly confirm that the checks passed and that the slice is approved for finalization.
+Stop here. Present the results of the static checks and the runtime list to the user. Wait for the user to explicitly confirm that the checks passed and that the slice is approved for finalization.

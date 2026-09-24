@@ -7,6 +7,7 @@ import {
   getExtractorCacheKey,
   isLibraryLocationError,
   remapLibraryPath,
+  orderItemsBySort,
   validateManifest,
   validateExtractorResult,
   findMatchingGalleryImage,
@@ -21,7 +22,12 @@ import {
   buildMatchSets,
   addCoverIdentifiers,
   matchSidecarRecord,
-  buildStubCoverRecord
+  buildStubCoverRecord,
+  sanitizeSvgText,
+  expandSvgEntities,
+  downloadSanitizedSvg,
+  downloadFile,
+  extractorNeedsHtml
 } from '../src/js/urlLoader.js';
 import * as ImgurExtractor from '../extractors/imgur.js';
 import * as MangaDexExtractor from '../extractors/mangadex.js';
@@ -52,8 +58,6 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
         { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 }
       ], {
-        visibleStart: 0,
-        visibleEnd: 3,
         downloadFile: (_url, destPath, options) => {
           const deferred = createDeferred();
           downloads.push({ destPath, options, deferred });
@@ -96,8 +100,6 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
         { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 }
       ], {
-        visibleStart: 0,
-        visibleEnd: 3,
         cancelDownload: async () => { cancelCount++; },
         downloadFile: (_url, destPath, options) => {
           const deferred = createDeferred();
@@ -132,8 +134,6 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       const queue = new DownloadQueue([
         { url: 'https://example.test/broken.jpg', destPath: 'C:\\gallery\\broken.jpg', galleryIndex: 0 }
       ], {
-        visibleStart: 0,
-        visibleEnd: 1,
         downloadFile: async () => {
           attempts++;
           throw new Error('Network request failed');
@@ -166,8 +166,6 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
           galleryIndex: 0
         }
       ], {
-        visibleStart: 0,
-        visibleEnd: 1,
         downloadFile: async (url) => {
           urlsAttempted.push(url);
           if (url.includes('cdn')) {
@@ -188,15 +186,13 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       queue.cancel();
     });
 
-    it('continues prefetching backlog items when visible range is empty or unset', async () => {
+    it('drains the backlog in gallery order from the active item', async () => {
       const downloaded = [];
       const queue = new DownloadQueue([
         { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
         { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
         { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 }
       ], {
-        visibleStart: 0,
-        visibleEnd: 0,
         downloadFile: async (_url, destPath) => {
           downloaded.push(destPath);
         }
@@ -214,7 +210,7 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
       queue.cancel();
     });
 
-    it('restricts downloads strictly to the visible range and stops without draining backlog', async () => {
+    it('admits only display-viewport items in display order under a reversed sort', async () => {
       const downloaded = [];
       const queue = new DownloadQueue([
         { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
@@ -223,34 +219,184 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
         { url: 'https://example.test/004.jpg', destPath: 'C:\\gallery\\004.jpg', galleryIndex: 3 },
         { url: 'https://example.test/005.jpg', destPath: 'C:\\gallery\\005.jpg', galleryIndex: 4 }
       ], {
-        visibleStart: 0,
-        visibleEnd: 2,
         downloadFile: async (_url, destPath) => {
           downloaded.push(destPath);
         }
       });
 
-      queue.prioritize('C:\\gallery\\001.jpg');
-      await flushQueue();
-
-      // Only items within visible range [0, 2) should download
-      assert.deepEqual(downloaded, [
-        'C:\\gallery\\001.jpg',
-        'C:\\gallery\\002.jpg'
-      ]);
-
-      // Scrolling down to [2, 4) admits the next slice without downloading offscreen item 4
-      queue.setVisibleRange(2, 4);
-      await flushQueue();
+      // Reversed panel order: display rows 0-1 are gallery images 005, 004.
+      // Window [0, 2) admits exactly those two, top-down in display order.
+      queue.setDisplayOrder('C:\\gallery', ['005.jpg', '004.jpg', '003.jpg', '002.jpg', '001.jpg']);
+      queue.setVisibleRange(0, 2);
+      queue.prioritize('C:\\gallery\\005.jpg');
+      for (let i = 0; i < 20 && downloaded.length < 2; i++) await flushQueue();
 
       assert.deepEqual(downloaded, [
-        'C:\\gallery\\001.jpg',
-        'C:\\gallery\\002.jpg',
-        'C:\\gallery\\003.jpg',
+        'C:\\gallery\\005.jpg',
         'C:\\gallery\\004.jpg'
       ]);
 
       queue.cancel();
+    });
+
+    it('still downloads an off-viewport active image first, then viewport top-down', async () => {
+      const downloaded = [];
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 },
+        { url: 'https://example.test/004.jpg', destPath: 'C:\\gallery\\004.jpg', galleryIndex: 3 },
+        { url: 'https://example.test/005.jpg', destPath: 'C:\\gallery\\005.jpg', galleryIndex: 4 }
+      ], {
+        downloadFile: async (_url, destPath) => {
+          downloaded.push(destPath);
+        }
+      });
+
+      // Same reversed panel, but the active image sits below the window: it
+      // jumps the line alone, then prefetch runs the viewport top-down
+      // (never from the bottom). 002 joins last as the active image's +-1
+      // adjacency preload; 003 is neither in-viewport nor adjacent.
+      queue.setDisplayOrder('C:\\gallery', ['005.jpg', '004.jpg', '003.jpg', '002.jpg', '001.jpg']);
+      queue.setVisibleRange(0, 2);
+      queue.prioritize('C:\\gallery\\001.jpg');
+      for (let i = 0; i < 20 && downloaded.length < 4; i++) await flushQueue();
+
+      assert.deepEqual(downloaded, [
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\005.jpg',
+        'C:\\gallery\\004.jpg',
+        'C:\\gallery\\002.jpg'
+      ]);
+
+      queue.cancel();
+    });
+
+    it('keeps walking around a finished anchor instead of restarting at the top', () => {
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 },
+        { url: 'https://example.test/004.jpg', destPath: 'C:\\gallery\\004.jpg', galleryIndex: 3 },
+        { url: 'https://example.test/005.jpg', destPath: 'C:\\gallery\\005.jpg', galleryIndex: 4 }
+      ], {
+        downloadFile: async () => {},
+      });
+
+      // Same reversed panel. The anchor survives its own completion: even
+      // after 003 finishes, the walk continues from it (002, 001) instead
+      // of restarting at the window top (005).
+      queue.setDisplayOrder('C:\\gallery', ['005.jpg', '004.jpg', '003.jpg', '002.jpg', '001.jpg']);
+      queue.setVisibleRange(0, 5);
+      queue._userAnchorDest = 'C:\\gallery\\003.jpg';
+
+      const order = [];
+      for (let i = 0; i < 5; i++) {
+        const next = queue._getNextPrefetchItem();
+        assert.ok(next, 'expected a pick');
+        order.push(next.filename);
+        next.status = 'completed';
+      }
+      assert.deepEqual(order, ['003.jpg', '002.jpg', '001.jpg', '004.jpg', '005.jpg']);
+
+      queue.cancel();
+    });
+
+    it('walks a reversed viewport top-down from the active image, then back up', async () => {
+      const downloaded = [];
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 },
+        { url: 'https://example.test/004.jpg', destPath: 'C:\\gallery\\004.jpg', galleryIndex: 3 },
+        { url: 'https://example.test/005.jpg', destPath: 'C:\\gallery\\005.jpg', galleryIndex: 4 }
+      ], {
+        downloadFile: async (_url, destPath) => {
+          downloaded.push(destPath);
+        }
+      });
+
+      // Display order is fully reversed: row 0 shows 005. The user
+      // navigated to 003 mid-viewport, so the walk goes down the visible
+      // rows first (003, 002, 001), then back up (004, 005). Gallery order
+      // would walk 003, 004, 005 instead.
+      queue.setDisplayOrder('C:\\gallery', ['005.jpg', '004.jpg', '003.jpg', '002.jpg', '001.jpg']);
+      queue.setVisibleRange(0, 5);
+      queue.prioritize('C:\\gallery\\003.jpg');
+      queue._userAnchorDest = 'C:\\gallery\\003.jpg';
+      for (let i = 0; i < 20 && downloaded.length < 5; i++) await flushQueue();
+
+      assert.deepEqual(downloaded, [
+        'C:\\gallery\\003.jpg',
+        'C:\\gallery\\002.jpg',
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\004.jpg',
+        'C:\\gallery\\005.jpg'
+      ]);
+
+      queue.cancel();
+    });
+
+    it('returns to gallery top once the mid-gallery active item finishes', async () => {
+      const downloaded = [];
+      const queue = new DownloadQueue([
+        { url: 'https://example.test/001.jpg', destPath: 'C:\\gallery\\001.jpg', galleryIndex: 0 },
+        { url: 'https://example.test/002.jpg', destPath: 'C:\\gallery\\002.jpg', galleryIndex: 1 },
+        { url: 'https://example.test/003.jpg', destPath: 'C:\\gallery\\003.jpg', galleryIndex: 2 },
+        { url: 'https://example.test/004.jpg', destPath: 'C:\\gallery\\004.jpg', galleryIndex: 3 },
+        { url: 'https://example.test/005.jpg', destPath: 'C:\\gallery\\005.jpg', galleryIndex: 4 }
+      ], {
+        downloadFile: async (_url, destPath) => {
+          downloaded.push(destPath);
+        }
+      });
+
+      // Pinning the middle image downloads it first; once it finishes, the
+      // walk no longer anchors on it and restarts at gallery top instead of
+      // continuing backward from its position.
+      queue.prioritize('C:\\gallery\\003.jpg');
+      for (let i = 0; i < 20 && downloaded.length < 5; i++) await flushQueue();
+
+      assert.deepEqual(downloaded, [
+        'C:\\gallery\\003.jpg',
+        'C:\\gallery\\001.jpg',
+        'C:\\gallery\\002.jpg',
+        'C:\\gallery\\004.jpg',
+        'C:\\gallery\\005.jpg'
+      ]);
+
+      queue.cancel();
+    });
+  });
+
+  describe('display-ordered eager selection', () => {
+    const items = [
+      { url: 'https://example.test/01.png', filename: '01.png' },
+      { url: 'https://example.test/02.png', filename: '02.png' },
+      { url: 'https://example.test/10.png', filename: '10.png' },
+    ];
+
+    it('keeps extractor order under the default ascending sort', () => {
+      assert.deepEqual(
+        orderItemsBySort(items, { col: 'name', desc: false }).map((i) => i.filename),
+        ['01.png', '02.png', '10.png']
+      );
+    });
+
+    it('reverses to display order under a descending sort', () => {
+      assert.deepEqual(
+        orderItemsBySort(items, { col: 'name', desc: true }).map((i) => i.filename),
+        ['10.png', '02.png', '01.png']
+      );
+    });
+
+    it('sanitizes unknown columns to name sort and tolerates empty input', () => {
+      assert.deepEqual(
+        orderItemsBySort(items, { col: 'nope', desc: true }).map((i) => i.filename),
+        ['10.png', '02.png', '01.png']
+      );
+      assert.deepEqual(orderItemsBySort([], { col: 'name', desc: true }), []);
+      assert.deepEqual(orderItemsBySort(null, { col: 'name', desc: true }), []);
     });
   });
 
@@ -2477,6 +2623,7 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
 
 
 import * as KMangaExtractor from '../extractors/kmanga.js';
+import * as DirectExtractor from '../extractors/direct.js';
 import {
   buildKmangaHash,
   buildTileOrder,
@@ -2563,6 +2710,122 @@ describe('K-Manga extractor', () => {
       const data = parseNuxtData(html);
       assert.ok(Array.isArray(data));
       assert.equal(data[0].title_name, 'Test Manga');
+    });
+  });
+
+  describe('kmanga author and genre metadata', () => {
+    it('splits Manga/Story roles into penciller and writer', () => {
+      assert.deepEqual(
+        KMangaExtractor.parseKmangaAuthors('Manga by Mitsuru Hattori Story by NISIOISIN'),
+        { writer: 'NISIOISIN', penciller: 'Mitsuru Hattori' }
+      );
+    });
+
+    it('folds character design into the penciller credit', () => {
+      assert.deepEqual(
+        KMangaExtractor.parseKmangaAuthors('Story by Nekoko Manga by BroccoLee Character Design by Jaian'),
+        { writer: 'Nekoko', penciller: 'BroccoLee, Jaian' }
+      );
+    });
+
+    it('fills both credits for a bare creator name', () => {
+      assert.deepEqual(
+        KMangaExtractor.parseKmangaAuthors('Kamome Shirahama'),
+        { writer: 'Kamome Shirahama', penciller: 'Kamome Shirahama' }
+      );
+    });
+
+    it('returns empty credits for missing author text', () => {
+      assert.deepEqual(KMangaExtractor.parseKmangaAuthors(''), { writer: '', penciller: '' });
+      assert.deepEqual(KMangaExtractor.parseKmangaAuthors(null), { writer: '', penciller: '' });
+    });
+
+    it('maps genre ids to catalog names kept intact on every tier', async () => {      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Exiled Heavy Knight","episode_id_list":[100],"free_episode_count":3,"author_text":"Story by Nekoko Manga by BroccoLee Character Design by Jaian","synopsis":"Isekai story.","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg","genre_id_list":[9,15]},{"genre_list":[{"genre_id":9,"genre_name":"Isekai･Super Powers"},{"genre_id":15,"genre_name":"Anime"}]}]</script></html>';
+
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/10577',
+        {
+          fetchText: async () => JSON.stringify({
+            episode: { episode_id: 100, episode_name: '156', point: 0 }
+          })
+        }
+      );
+
+      assert.equal(result.metadata.ComicInfo.Writer, 'Nekoko');
+      assert.equal(result.metadata.ComicInfo.Penciller, 'BroccoLee, Jaian');
+      assert.equal(result.metadata.ComicInfo.Genre, 'Isekai･Super Powers, Anime');
+      assert.equal(result.chapters[0].metadata.ComicInfo.Writer, 'Nekoko');
+      assert.equal(result.chapters[0].metadata.ComicInfo.Penciller, 'BroccoLee, Jaian');
+      assert.equal(result.chapters[0].metadata.ComicInfo.Genre, 'Isekai･Super Powers, Anime');
+      assert.equal(result.chapters[0].metadata.ComicInfo.Summary, 'Isekai story.');
+    });
+
+    it('moves trailing edition credits from synopsis to notes', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Imperfect Girl","episode_id_list":[100],"free_episode_count":3,"author_text":"Manga by Mitsuru Hattori Story by NISIOISIN","introduction_text":"Thank that girl ...\\" \\" Translation by Ko Ransom, Lettering by Grace Lu/Anthony Quintessenza, Kodansha USA Publishing, LLC","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg"}]</script></html>';
+
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/10207',
+        {
+          fetchText: async () => JSON.stringify({
+            episode: { episode_id: 100, episode_name: '1', point: 0 }
+          })
+        }
+      );
+
+      assert.equal(result.metadata.ComicInfo.Summary, 'Thank that girl ..."');
+      assert.equal(
+        result.metadata.ComicInfo.Notes,
+        'Translation by Ko Ransom, Lettering by Grace Lu/Anthony Quintessenza, Kodansha USA Publishing, LLC'
+      );
+      assert.equal(result.chapters[0].metadata.ComicInfo.Summary, 'Thank that girl ..."');
+      assert.equal(
+        result.chapters[0].metadata.ComicInfo.Notes,
+        'Translation by Ko Ransom, Lettering by Grace Lu/Anthony Quintessenza, Kodansha USA Publishing, LLC'
+      );
+    });
+
+    it('keeps pipe-joined dual edition credits intact in notes', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"BAKEMONOGATARI","episode_id_list":[100],"free_episode_count":3,"author_text":"Manga by Oh!Great Story by NISIOISIN","introduction_text":"Everywhere. \\" Translation by Ko Ransom, Kodansha USA Publishing, LLC | Translation by Ella Donaldson, YKS Services LLC/SKY JAPAN, Inc.","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg"}]</script></html>';
+
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/10072',
+        {
+          fetchText: async () => JSON.stringify({
+            episode: { episode_id: 100, episode_name: '1', point: 0 }
+          })
+        }
+      );
+
+      assert.equal(result.metadata.ComicInfo.Summary, 'Everywhere.');
+      assert.equal(
+        result.metadata.ComicInfo.Notes,
+        'Translation by Ko Ransom, Kodansha USA Publishing, LLC | Translation by Ella Donaldson, YKS Services LLC/SKY JAPAN, Inc.'
+      );
+      assert.equal(
+        result.chapters[0].metadata.ComicInfo.Notes,
+        'Translation by Ko Ransom, Kodansha USA Publishing, LLC | Translation by Ella Donaldson, YKS Services LLC/SKY JAPAN, Inc.'
+      );
+    });
+
+    it('leaves synopses without a credit block untouched', async () => {
+      const html = '<html><script id="__NUXT_DATA__">[{"title_name":"Sakura","episode_id_list":[100],"free_episode_count":3,"author_text":"Fuyu Yukimiya","introduction_text":"Honest dedication?\\"","title_grid_wide":"https://cdn.kmanga.kodansha.com/cover.jpg"}]</script></html>';
+
+      const result = await KMangaExtractor.extract(
+        html,
+        'https://kmanga.kodansha.com/title/10454',
+        {
+          fetchText: async () => JSON.stringify({
+            episode: { episode_id: 100, episode_name: '1', point: 0 }
+          })
+        }
+      );
+
+      assert.equal(result.metadata.ComicInfo.Summary, 'Honest dedication?"');
+      assert.equal(result.metadata.ComicInfo.Notes, undefined);
+      assert.equal(result.chapters[0].metadata.ComicInfo.Notes, undefined);
     });
   });
 
@@ -2723,6 +2986,297 @@ describe('K-Manga extractor', () => {
       );
       assert.ok(result.error);
     });
+  });
+});
+
+describe('direct image extractor', () => {
+  it('matches any-host raster URLs and rejects other shapes', () => {
+    assert.equal(DirectExtractor.match('https://example.com/assets/shot.png'), true);
+    assert.equal(DirectExtractor.match('https://example.com/assets/photo.JPG?token=abc'), true);
+    assert.equal(DirectExtractor.match('https://example.com/a/b/c.webp#frag'), true);
+    assert.equal(DirectExtractor.match('https://example.com/a.gif'), true);
+    assert.equal(DirectExtractor.match('https://example.com/a.svg'), true);
+    assert.equal(DirectExtractor.match('https://example.com/gallery'), false);
+    assert.equal(DirectExtractor.match('https://example.com/clip.mp4'), false);
+    assert.equal(DirectExtractor.match('https://example.com/icon.ico'), false);
+    assert.equal(DirectExtractor.match('blob:https://example.com/abc'), false);
+    assert.equal(DirectExtractor.match(''), false);
+    assert.equal(DirectExtractor.match(null), false);
+  });
+
+  it('flags raster URLs as direct', () => {
+    assert.equal(DirectExtractor.isDirectUrl('https://example.com/a.png'), true);
+    assert.equal(DirectExtractor.isDirectUrl('https://example.com/a.jpg'), true);
+    assert.equal(DirectExtractor.isDirectUrl('https://example.com/a.html'), false);
+  });
+
+  it('resolves friendly filenames with host-scoped hashes', async () => {
+    const parsed = await DirectExtractor.parseDirectUrl('https://example.com/assets/screenshot.png?token=abc');
+    assert.equal(parsed.provider, 'Misc');
+    assert.equal(parsed.filename, 'screenshot.png');
+    assert.equal(parsed.url, 'https://example.com/assets/screenshot.png?token=abc');
+    assert.ok(parsed.hash.startsWith('direct-example-com-screenshot-png'));
+
+    const upper = await DirectExtractor.parseDirectUrl('https://example.com/A.JPG');
+    assert.equal(upper.filename, 'A.jpg');
+
+    assert.equal(await DirectExtractor.parseDirectUrl('https://example.com/a.mp4'), null);
+    assert.equal(await DirectExtractor.parseDirectUrl('not a url'), null);
+  });
+
+  it('loses site CDN URLs to earlier manifest entries', () => {    const manifest = {
+      version: 1,
+      extractors: [
+        {
+          id: 'kmanga', name: 'K MANGA', libraryPath: 'KManga', version: 4,
+          source: 'kmanga.js',
+          patterns: ['^https?://cdn\\.kmanga\\.kodansha\\.com/.+\\.(jpg|jpeg|png|webp)(\\?.*)?$']
+        },
+        {
+          id: 'direct', name: 'Misc', libraryPath: 'Misc', version: 1,
+          source: 'direct.js',
+          patterns: ['^https?://[^?#]+\\.([jJ][pP][gG]|[jJ][pP][eE][gG]|[pP][nN][gG]|[gG][iI][fF]|[wW][eE][bB][pP]|[aA][vV][iI][fF]|[aA][pP][nN][gG]|[bB][mM][pP]|[sS][vV][gG])([?#].*)?$']
+        }
+      ]
+    };
+    assert.equal(
+      findExtractor('https://cdn.kmanga.kodansha.com/static/titles/10207/cover.png?x=1', manifest).id,
+      'kmanga'
+    );
+    assert.equal(
+      findExtractor('https://example.com/assets/shot.png', manifest).id,
+      'direct'
+    );
+    assert.equal(
+      findExtractor('https://example.com/assets/logo.svg', manifest).id,
+      'direct'
+    );
+  });
+
+  it('resolves SVG targets through the sanitized path', async () => {
+    const parsed = await DirectExtractor.parseDirectUrl('https://example.com/assets/logo.SVG');
+    assert.equal(parsed.provider, 'Misc');
+    assert.equal(parsed.filename, 'logo.svg');
+  });
+});
+
+describe('direct document rejection', () => {
+  const toBytes = (payload) => (Array.isArray(payload) ? Uint8Array.from(payload) : Uint8Array.from(Buffer.from(payload)));
+  const stubBytes = (payload) => {
+    let seenHeaders;
+    const fetchBytes = async (url, headers) => {
+      seenHeaders = headers;
+      return toBytes(payload);
+    };
+    return { fetchBytes, seenHeaders: () => seenHeaders };
+  };
+
+  it('accepts matching magic bytes', async () => {
+    const png = stubBytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00]);
+    const parsed = await DirectExtractor.parseDirectUrl('https://example.com/a.png', png);
+    assert.equal(parsed.filename, 'a.png');
+    assert.deepEqual(png.seenHeaders(), { Range: 'bytes=0-1023' });
+
+    const jpg = stubBytes([0xFF, 0xD8, 0xFF, 0xE0]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.jpg', jpg)).filename, 'a.jpg');
+
+    const svg = stubBytes([...Buffer.from('<svg xmlns="http://www.w3.org/2000/svg">')]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.svg', svg)).filename, 'a.svg');
+  });
+
+  it('rejects document pages wearing image extensions', async () => {
+    const page = stubBytes([...Buffer.from('<!DOCTYPE html><html><head><title>blob</title>')]);
+    await assert.rejects(
+      DirectExtractor.parseDirectUrl('https://example.com/blob/main/gfl-spinner.svg', page),
+      /document page/
+    );
+    await assert.rejects(
+      DirectExtractor.parseDirectUrl('https://example.com/photo.png', page),
+      /document page/
+    );
+  });
+
+  it('rejects mismatched magic bytes', async () => {
+    const html = stubBytes([...Buffer.from('<html><body>nope</body>')]);
+    await assert.rejects(
+      DirectExtractor.parseDirectUrl('https://example.com/a.png', html),
+      /document page/
+    );
+  });
+
+  it('rejects page chrome starting with non-svg tags', async () => {
+    const frag = stubBytes([...Buffer.from('\n\n  <a href="#start-of-content"><svg data-component="Octicon"></svg></a>')]);
+    await assert.rejects(
+      DirectExtractor.parseDirectUrl('https://example.com/file.svg', frag),
+      /document page/
+    );
+  });
+
+  it('accepts prolog-led SVG documents', async () => {
+    const koi = stubBytes([...Buffer.from('<?xml version="1.0"?><!-- Generator: Illustrator --><!DOCTYPE svg [<!ENTITY st "x">]><svg><path/></svg>')]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/koi.svg', koi)).filename, 'koi.svg');
+  });
+
+  it('passes through when the window holds prolog only', async () => {
+    const prolog = stubBytes([...Buffer.from('<?xml version="1.0"?><!-- Generator: Illustrator --><!DOCTYPE svg [<!ENTITY a "x"><!ENTITY b "y">')]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/koi.svg', prolog)).filename, 'koi.svg');
+  });
+
+  it('passes through on inconclusive answers', async () => {
+    const tiny = stubBytes([0x89]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.png', tiny)).filename, 'a.png');
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.png', {})).filename, 'a.png');
+    const failing = { fetchBytes: async () => { throw new Error('nope'); } };
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.png', failing)).filename, 'a.png');
+  });
+
+  it('tolerates base64 byte containers', async () => {
+    const b64 = { fetchBytes: async () => Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]).toString('base64') };
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.png', b64)).filename, 'a.png');
+  });
+});
+
+describe('sanitized SVG downloads', () => {
+  let prevWindow;
+  let calls;
+
+  beforeEach(() => {
+    prevWindow = globalThis.window;
+    calls = [];
+    globalThis.window = {
+      DOMPurify: {
+        sanitize: (text, config) => {
+          calls.push(config);
+          return `clean:${text}`;
+        }
+      },
+      __TAURI__: {
+        core: {
+          invoke: async (cmd, args) => {
+            calls.push({ cmd, args });
+            if (cmd === 'fetch_text') return '<svg>raw</svg>';
+            return null;
+          }
+        }
+      }
+    };
+  });
+
+  afterEach(() => {
+    globalThis.window = prevWindow;
+  });
+
+  it('sanitizes with the SVG profile', () => {
+    assert.equal(sanitizeSvgText('<svg>raw</svg>'), 'clean:<svg>raw</svg>');
+    assert.deepEqual(calls[0], { USE_PROFILES: { svg: true } });
+  });
+
+  it('throws without a sanitizer', () => {
+    delete globalThis.window.DOMPurify;
+    assert.throws(() => sanitizeSvgText('<svg/>'), /sanitizer unavailable/);
+  });
+
+  it('routes .svg downloads through fetch plus text write', async () => {
+    await downloadFile('https://example.com/a.svg', 'C:\\Lib\\a.svg');
+    const cmds = calls.filter((c) => c.cmd).map((c) => c.cmd);
+    assert.deepEqual(cmds, ['fetch_text', 'write_text_file']);
+    const write = calls.find((c) => c.cmd === 'write_text_file');
+    assert.equal(write.args.path, 'C:\\Lib\\a.svg');
+    assert.equal(write.args.content, 'clean:<svg>raw</svg>');
+  });
+
+  it('keeps raster downloads on the binary path', async () => {
+    await downloadFile('https://example.com/a.png', 'C:\\Lib\\a.png');
+    assert.deepEqual(
+      calls.filter((c) => c.cmd).map((c) => c.cmd),
+      ['download_to_file', 'verify_image_magic']
+    );
+    const verify = calls.find((c) => c.cmd === 'verify_image_magic');
+    assert.equal(verify.args.path, 'C:\\Lib\\a.png');
+    assert.equal(verify.args.expectedExt, 'png');
+  });
+
+  it('deletes corrupt downloads and reports', async () => {
+    const cmds = [];
+    globalThis.window.__TAURI__.core.invoke = async (cmd, args) => {
+      cmds.push(cmd);
+      if (cmd === 'verify_image_magic') throw new Error('Downloaded file is not a valid png image');
+      return null;
+    };
+    await assert.rejects(
+      downloadFile('https://example.com/a.png', 'C:\\Lib\\a.png'),
+      /not a valid png image/
+    );
+    assert.ok(cmds.includes('remove_file'));
+  });
+
+  it('refuses emptied documents', async () => {
+    globalThis.window.DOMPurify.sanitize = () => '   ';
+    await assert.rejects(
+      downloadSanitizedSvg('https://example.com/a.svg', 'C:\\Lib\\a.svg'),
+      /emptied/
+    );
+  });
+
+  it('refuses document text at the sanitized gate', async () => {
+    globalThis.window.__TAURI__.core.invoke = async (cmd) => {
+      if (cmd === 'fetch_text') return '\n\n  <a href="#x"><svg data-component="Octicon"></svg></a>';
+      return null;
+    };
+    await assert.rejects(
+      downloadSanitizedSvg('https://example.com/blob/f.svg', 'C:\\Lib\\f.svg'),
+      /document page/
+    );
+  });
+
+  it('passes prolog-led SVG text through the gate', async () => {
+    globalThis.window.__TAURI__.core.invoke = async (cmd) => {
+      if (cmd === 'fetch_text') return '<?xml version="1.0"?><!DOCTYPE svg [<!ENTITY s "x">]><svg><path/></svg>';
+      if (cmd === 'write_text_file') {
+        calls.push({ cmd });
+        return null;
+      }
+      return null;
+    };
+    await downloadSanitizedSvg('https://example.com/koi.svg', 'C:\\Lib\\koi.svg');
+    assert.ok(calls.some((c) => c.cmd === 'write_text_file'));
+  });
+});
+
+describe('SVG entity pre-expansion', () => {
+  it('expands Illustrator-style entities and drops the doctype', () => {
+    const input = '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [<!ENTITY st12 "fill:url(#SVGID_1_);"><!ENTITY ns_ai "http://ns.adobe.com/AdobeIllustrator/10.0/">]><svg><path style="&st12;"/></svg>';
+    assert.equal(
+      expandSvgEntities(input),
+      '<svg><path style="fill:url(#SVGID_1_);"/></svg>'
+    );
+  });
+
+  it('leaves entity-free documents untouched', () => {
+    assert.equal(expandSvgEntities('<svg><circle/></svg>'), '<svg><circle/></svg>');
+  });
+
+  it('expands nested literals exactly once without amplifying', () => {
+    assert.equal(
+      expandSvgEntities('<!DOCTYPE svg [<!ENTITY lol "a&b;">]><svg>&lol;</svg>'),
+      '<svg>a&b;</svg>'
+    );
+    let attack = '<!DOCTYPE svg [';
+    for (let i = 0; i < 9; i++) attack += `<!ENTITY lol${i} "&lol;">`;
+    attack += ']><svg>&lol8;</svg>';
+    const out = expandSvgEntities(attack);
+    assert.ok(!out.includes('<!ENTITY'));
+    assert.ok(out.length < 1000);
+  });
+
+  it('rejects external entities', () => {
+    const input = '<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><svg>&xxe;</svg>';
+    assert.throws(() => expandSvgEntities(input), /entity block rejected/);
+  });
+
+  it('rejects parameter entities', () => {
+    const input = '<!DOCTYPE svg [<!ENTITY % pe "x">]><svg></svg>';
+    assert.throws(() => expandSvgEntities(input), /entity block rejected/);
   });
 });
 
@@ -2966,7 +3520,24 @@ describe('url layer contract', () => {
       assert.ok(verdict === 'exact' || verdict === 'fuzzy');
     });
   });
+
+  describe('extractor HTML opt-out', () => {
+    it('defaults to requiring HTML when needsHtml is absent', () => {
+      assert.equal(extractorNeedsHtml({ match: () => true }), true);
+      assert.equal(extractorNeedsHtml(null), true);
+    });
+
+    it('honors boolean needsHtml flag', () => {
+      assert.equal(extractorNeedsHtml({ needsHtml: false }), false);
+      assert.equal(extractorNeedsHtml({ needsHtml: true }), true);
+    });
+
+    it('honors functional needsHtml predicate', () => {
+      const mod = {
+        needsHtml: (url) => url.includes('need-html')
+      };
+      assert.equal(extractorNeedsHtml(mod, 'https://example.com/need-html'), true);
+      assert.equal(extractorNeedsHtml(mod, 'https://example.com/api-only'), false);
+    });
+  });
 });
-
-
-

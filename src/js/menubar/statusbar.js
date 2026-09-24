@@ -25,8 +25,11 @@ let statusScrollZoom;
 let statusSpread;
 let spreadIndicator;
 const MIN_REFRESH_DURATION_MS = 200;
+const FLASH_MESSAGE_DURATION_MS = 3000;
 let _refreshTimer = null;
 let _refreshStartTime = 0;
+let _flashText = '';
+let _flashTimer = null;
 
 export const Statusbar = {
   init() {
@@ -50,6 +53,10 @@ export const Statusbar = {
         this.update(Core.getState());
       });
 
+      window.addEventListener('quivit-import-status', () => {
+        this.update(Core.getState());
+      });
+
       window.addEventListener('quivit-refresh-start', () => {
         if (!statusbar) return;
         clearTimeout(_refreshTimer);
@@ -66,6 +73,19 @@ export const Statusbar = {
         _refreshTimer = setTimeout(() => {
           statusbar?.classList.remove('refreshing');
         }, remaining);
+      });
+
+      // Transient one-line notices (e.g. failed Library delete). Painted
+      // over the filename slot by update(); never owned by other modules.
+      window.addEventListener('quivit-status-flash', (e) => {
+        _flashText = e?.detail?.message || '';
+        clearTimeout(_flashTimer);
+        if (!_flashText) return;
+        _flashTimer = setTimeout(() => {
+          _flashText = '';
+          this.update(Core.getState());
+        }, FLASH_MESSAGE_DURATION_MS);
+        this.update(Core.getState());
       });
     }
   },
@@ -125,6 +145,18 @@ export const Statusbar = {
       if (statusIndex.textContent !== text) statusIndex.textContent = text;
     }
 
+    // Importing state shows 'Importing...' in status-filename and N/A dims/zoom.
+    const isImporting = typeof document !== 'undefined' && document.body?.classList?.contains('is-importing-url');
+    if (isImporting) {
+      if (statusDims) statusDims.textContent = 'N/A';
+      if (statusZoom) statusZoom.textContent = 'N/A';
+      if (statusName) {
+        statusName.textContent = 'Importing...';
+        statusName.title = 'Importing...';
+      }
+      return;
+    }
+
     // Downloading entries show 'Downloading...' in status-filename and N/A dims/zoom.
     const isDownloading = this.isCurrentEntryDownloading(state);
     if (isDownloading) {
@@ -153,12 +185,17 @@ export const Statusbar = {
       statusName.textContent = state.filename;
       statusName.title = state.filename;
     }
+
+    if (_flashText && statusName) {
+      statusName.textContent = _flashText;
+      statusName.title = _flashText;
+    }
   },
 
   // Called by viewer.js to report image lifecycle events. Writes filename,
   // dims, and zoom at the exact moment they become valid.
   setImage({ filename, dims, zoom, isError, isLoading }) {
-    if (this.isCurrentEntryDownloading()) {
+    if (this.isCurrentEntryDownloading() || (typeof document !== 'undefined' && document.body?.classList?.contains('is-importing-url'))) {
       return;
     }
     if (isLoading) {

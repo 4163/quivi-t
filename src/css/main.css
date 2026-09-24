@@ -1506,6 +1506,25 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   pointer-events: none;
 }
 
+body.is-importing-url :is(#menubar, #file-panel) {
+  opacity: 0.6;
+  cursor: not-allowed;
+  cursor: disabled;
+}
+
+body.is-importing-url :is(#menubar, #file-panel) * {
+  cursor: not-allowed;
+  cursor: disabled;
+}
+
+body.is-importing-url .menu-trigger:hover,
+body.is-importing-url #file-panel-favorites-header:hover,
+body.is-importing-url .library-provider-header:hover,
+body.is-importing-url .header-cell:hover {
+  cursor: not-allowed;
+  cursor: disabled;
+}
+
 
 
 /* Spread indicator when the status bar is hidden. */

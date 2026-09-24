@@ -211,6 +211,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   });
 
   function dispatchMouseButton(button, e) {
+    if (document.body?.classList?.contains('is-importing-url')) return false;
     const combo = formatKeysCombo(activeKeys, new Set([button]));
     const actionId = findAction(Core.getState().config, combo);
     if (!actionId) return false;
@@ -262,6 +263,9 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   };
 
   window.addEventListener('keydown', (e) => {
+    if (document.body?.classList?.contains('is-importing-url')) {
+      return;
+    }
     if (isInteractiveKeyTarget(e)) {
       return;
     }
@@ -367,6 +371,13 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   });
 
   window.addEventListener('mousedown', (e) => {
+    if (document.body?.classList?.contains('is-importing-url')) {
+      if (e.target.closest?.('#menubar, #file-panel')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      return;
+    }
     if (document.querySelector('#menubar .menu-item.open')) return;
     if (handleSideButtonPress(e)) return;
 
@@ -387,6 +398,13 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   window.addEventListener('auxclick', (e) => {
     // Windows fires auxclick for side buttons on release; navigation is press-only.
     suppressSideButtonRelease(e);
+  }, { capture: true });
+
+  window.addEventListener('click', (e) => {
+    if (document.body?.classList?.contains('is-importing-url') && e.target.closest?.('#menubar, #file-panel')) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   }, { capture: true });
 
   // Buttons 0 (left) and 2 (right) wait out a short window before dispatching
@@ -445,7 +463,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   // Route wheel events through the keybind table so scroll bindings stay
   // remappable. Hold mode uses held modifiers. Toggle mode uses the latch.
   window.addEventListener('wheel', (e) => {
-    if (isWheelOverUI(e)) return;
+    if (document.body?.classList?.contains('is-importing-url') || isWheelOverUI(e)) return;
 
     const config = Core.getState().config;
     const toggleMode = isToggleModifier(config);

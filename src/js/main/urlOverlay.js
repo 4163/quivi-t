@@ -46,6 +46,10 @@ function _hide(opts = {}) {
   const submitBtn = _overlay.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = false;
   _overlay.classList.remove('active', 'error', 'loading');
+  if (document.body?.classList?.contains('is-importing-url')) {
+    document.body.classList.remove('is-importing-url');
+    window.dispatchEvent?.(new CustomEvent('quivit-import-status', { detail: { importing: false } }));
+  }
   _input.blur();
 
   if (opts.restoreFocus !== false && _focusFileList) {
@@ -82,6 +86,8 @@ async function _handleSubmit() {
   _input.disabled = true;
   if (submitBtn) submitBtn.disabled = true;
   _overlay.classList.add('loading');
+  document.body?.classList?.add('is-importing-url');
+  window.dispatchEvent?.(new CustomEvent('quivit-import-status', { detail: { importing: true } }));
 
   try {
     if (_onSubmit) await _onSubmit(url);
@@ -92,6 +98,10 @@ async function _handleSubmit() {
     _input.disabled = false;
     if (submitBtn) submitBtn.disabled = false;
     _overlay.classList.remove('loading');
+    if (document.body?.classList?.contains('is-importing-url')) {
+      document.body.classList.remove('is-importing-url');
+      window.dispatchEvent?.(new CustomEvent('quivit-import-status', { detail: { importing: false } }));
+    }
   }
 }
 
@@ -128,6 +138,7 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
 
   // Clicking overlay backdrop outside prompt dismisses the overlay.
   overlay.addEventListener('pointerdown', (e) => {
+    if (_overlay?.classList.contains('loading')) return;
     if (e.target === overlay) {
       _hide({ restoreFocus: false }, 'backdrop_pointerdown');
     }
@@ -144,6 +155,7 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
 
   overlay.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      if (_overlay?.classList.contains('loading')) return;
       e.preventDefault();
       _hide({ restoreFocus: true }, 'escape_key');
     }
@@ -176,6 +188,7 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
   // Transition out when clicking an entry in the file list.
   if (_filePanel) {
     _filePanel.addEventListener('pointerdown', (e) => {
+      if (_overlay?.classList.contains('loading')) return;
       if (_isExcludedInteraction(e)) return;
       const isFileListTarget = e.target?.closest?.('#file-list, #favorites-list li, .library-provider-list li');
       if (isFileListTarget && _overlay?.classList.contains('active')) {
@@ -187,7 +200,7 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
   // Dismiss if user navigates images or directories while overlay is open.
   if (_Core) {
     _Core.onStateChange((state) => {
-      if (!_overlay?.classList.contains('active')) return;
+      if (!_overlay?.classList.contains('active') || _overlay?.classList.contains('loading')) return;
       const currentDir = state.directory || state.archivePath || '';
       if (state.src !== _lastObservedSrc || currentDir !== _lastObservedDirectory) {
         const oldSrc = _lastObservedSrc;

@@ -25,8 +25,10 @@ import { FsUtils } from '../fsUtils.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
 import {
   setVisibleRange as setDownloadVisibleRange,
+  setDisplayOrder as setDownloadDisplayOrder,
   cancelGalleryDownloads,
   forgetDeletedLibraryEntry,
+  isGalleryDownloadingWithin,
   fetchManifest,
   getGalleryDownloadStatus,
   retryGalleryDownload,
@@ -218,6 +220,7 @@ let startWidth = 0;
 let columnResizeMoved = false;
 
 let lastRenderedList = null;
+let lastDownloadOrderList = null;
 let lastScrolledIndex = -1;
 let lastClickTime = 0;
 let lastClickIndex = -1;
@@ -1053,7 +1056,7 @@ function buildLibraryEntry(item, depth = 0) {
   }
 
   if (canDelete) {
-    removeBtn.addEventListener('click', async (e) => {
+    removeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (!removeBtn.classList.contains('is-confirming')) {
         arm();
@@ -1061,50 +1064,166 @@ function buildLibraryEntry(item, depth = 0) {
       }
 
       disarm();
-      try {
-        if (typeof cancelGalleryDownloads === 'function') {
-          cancelGalleryDownloads(item.path);
+      if (typeof cancelGalleryDownloads === 'function') {
+        cancelGalleryDownloads(item.path);
+      }
+
+      const state = Core?.getState?.();
+      const curDir = (state?.directory || '').replace(/\\/g, '/').toLowerCase();
+      const targetDir = (item.path || '').replace(/\\/g, '/').toLowerCase();
+      const isInside = curDir === targetDir || (targetDir && curDir.startsWith(targetDir + '/'));
+
+      // Provider root for the boot-out navigation below: first segment under
+      // the Library root for galleries, immediate parent for provider-level
+      // files. Falls back to '' (then openParent) when unresolvable.
+      const libRootRaw = (typeof getCachedLibraryDir === 'function' ? getCachedLibraryDir() : '').replace(/\\/g, '/').replace(/\/+$/, '');
+      const itemFwd = (item.path || '').replace(/\\/g, '/');
+      let providerRoot = '';
+      if (libRootRaw && itemFwd.toLowerCase().startsWith(libRootRaw.toLowerCase() + '/')) {
+        const rel = itemFwd.slice(libRootRaw.length + 1);
+        const firstSeg = rel.split('/')[0];
+        if (item.is_dir && firstSeg) {
+          providerRoot = `${libRootRaw}/${firstSeg}`;
+        } else {
+          const slashAt = itemFwd.lastIndexOf('/');
+          if (slashAt > libRootRaw.length) providerRoot = itemFwd.slice(0, slashAt);
         }
+      }
 
-        const state = Core?.getState?.();
-        const curDir = (state?.directory || '').replace(/\\/g, '/').toLowerCase();
-        const targetDir = (item.path || '').replace(/\\/g, '/').toLowerCase();
-        const isInside = curDir === targetDir || (targetDir && curDir.startsWith(targetDir + '/'));
-
-        if (isInside && FsUtils?.openParent) {
-          await FsUtils.openParent();
+      // Optimistic paint: detach the row in this frame. When it was the last
+      // row of its provider section, detach the header plus list too so the
+      // dropdown disappears with the deletion instead of waiting for the
+      // backend. renderLibrary() reconciles once the recycle resolves.
+      const parentUl = li.parentNode;
+      const nextSibling = li.nextSibling;
+      li.remove();
+      const sectionAnchor = parentUl ? parentUl.nextSibling : null;
+      let detachedHeader = null;
+      if (parentUl && !parentUl.querySelector('li')) {
+        const maybeHeader = parentUl.previousElementSibling;
+        if (maybeHeader && maybeHeader.classList && maybeHeader.classList.contains('library-provider-header')) {
+          detachedHeader = maybeHeader;
+          detachedHeader.remove();
         }
+        parentUl.remove();
+      }
+      const hadEmptyClass = libraryPanelEl.classList.contains('is-empty');
+      if (!libraryPanelEl.querySelector('.library-provider-list li')) {
+        libraryPanelEl.classList.add('is-empty');
+      }
 
-        if (targetDir) {
-          for (const key of Array.from(thumbnailCache.keys())) {
-            const k = String(key).replace(/\\/g, '/').toLowerCase();
-            if (k.includes(targetDir)) {
-              thumbnailCache.delete(key);
-            }
+      if (targetDir) {
+        for (const key of Array.from(thumbnailCache.keys())) {
+          const k = String(key).replace(/\\/g, '/').toLowerCase();
+          if (k.includes(targetDir)) {
+            thumbnailCache.delete(key);
           }
         }
+      }
 
-        await deleteLibraryEntry(item.path).catch(async (err) => {
-          if (!isLibraryLocationError(err)) throw err;
-          // The entry was rendered from a stale Library root (the location
-          // moved in another window). Remap it onto the live root and retry.
-          const staleRoot = typeof getCachedLibraryDir === 'function' ? getCachedLibraryDir() : '';
-          const liveRoot = typeof reloadLibraryDir === 'function' ? await reloadLibraryDir() : '';
-          const remapped = remapLibraryPath(item.path, staleRoot, liveRoot);
-          if (remapped === item.path) throw err;
-          await deleteLibraryEntry(remapped);
-        });
-        if (typeof forgetDeletedLibraryEntry === 'function') {
-          await forgetDeletedLibraryEntry(item.path).catch(() => {});
+      if (FsUtils?.registerPendingDeletion) {
+        FsUtils.registerPendingDeletion(item.path);
+      }
+
+      // Optimistic file list pruning: if already viewing the parent directory,
+      // prune the deleted item from state.list in this frame so both panels stay in sync.
+      if (!isInside && _pathsEqual(curDir, parentOfTarget) && Array.isArray(state?.list)) {
+        const remaining = state.list.filter(f => !_pathsEqual(f.path, item.path));
+        if (remaining.length !== state.list.length) {
+          let newIndex = state.index;
+          if (newIndex >= remaining.length) newIndex = Math.max(0, remaining.length - 1);
+          Core.setState({ list: remaining, index: newIndex });
+        }
+      }
+
+      // The delete fires first; navigation below runs concurrently instead
+      // of holding the row through openParent plus the recycle.
+      let remappedPath = '';
+      const deletion = (async () => {
+        try {
+          await deleteLibraryEntry(item.path).catch(async (err) => {
+            if (!isLibraryLocationError(err)) throw err;
+            // The entry was rendered from a stale Library root (the location
+            // moved in another window). Remap it onto the live root and retry.
+            const staleRoot = typeof getCachedLibraryDir === 'function' ? getCachedLibraryDir() : '';
+            const liveRoot = typeof reloadLibraryDir === 'function' ? await reloadLibraryDir() : '';
+            const remapped = remapLibraryPath(item.path, staleRoot, liveRoot);
+            if (remapped === item.path) throw err;
+            remappedPath = remapped;
+            if (FsUtils?.registerPendingDeletion) {
+              FsUtils.registerPendingDeletion(remapped);
+            }
+            await deleteLibraryEntry(remapped);
+          });
+        } catch (err) {
+          if (FsUtils?.unregisterPendingDeletion) {
+            FsUtils.unregisterPendingDeletion(item.path);
+            if (remappedPath) FsUtils.unregisterPendingDeletion(remappedPath);
+          }
+          if (FsUtils?.refresh && ((isInside && providerRoot) || (!isInside && _pathsEqual(curDir, parentOfTarget)))) {
+            FsUtils.refresh().catch(() => {});
+          }
+          // Surgical restore when nothing else touched the panel: row back
+          // in place, or whole section (header plus list plus row) when it
+          // was pruned. Otherwise a concurrent rebuild already shows truth.
+          const liRefOk = !nextSibling || nextSibling.parentNode === parentUl;
+          const anchorOk = !sectionAnchor || sectionAnchor.parentNode === libraryPanelEl;
+          if (parentUl && parentUl.isConnected && liRefOk) {
+            parentUl.insertBefore(li, nextSibling);
+          } else if (parentUl && !parentUl.isConnected && detachedHeader && !detachedHeader.isConnected && anchorOk) {
+            libraryPanelEl.insertBefore(detachedHeader, sectionAnchor);
+            libraryPanelEl.insertBefore(parentUl, sectionAnchor);
+            parentUl.insertBefore(li, liRefOk ? nextSibling : null);
+          } else {
+            await renderLibrary();
+          }
+          if (!hadEmptyClass) libraryPanelEl.classList.remove('is-empty');
+          window.dispatchEvent(new CustomEvent('quivit-status-flash', {
+            detail: { message: 'Delete failed. The item was restored.' }
+          }));
+          console.error('[FilePanel] Delete failed:', err);
+          return;
+        } finally {
+          if (FsUtils?.unregisterPendingDeletion) {
+            FsUtils.unregisterPendingDeletion(item.path);
+            if (remappedPath) FsUtils.unregisterPendingDeletion(remappedPath);
+          }
+        }
+        // Directories need no sidecar prune: it goes down with the folder.
+        // Files prune fire-and-forget; the tree reconcile below does not
+        // depend on the pruned write.
+        if (!item.is_dir && typeof forgetDeletedLibraryEntry === 'function') {
+          forgetDeletedLibraryEntry(item.path).catch(() => {});
         }
         await renderLibrary();
 
+        // The boot-out navigation above already re-read the provider root,
+        // and the directory watcher echoes the recycle into a refresh, so an
+        // explicit refresh here would double the work. Keep it only when no
+        // navigation happened (viewing the parent) or when the boot target
+        // is actively downloading (watcher echo skips downloading dirs).
         const parentOfTarget = targetDir.includes('/') ? targetDir.substring(0, targetDir.lastIndexOf('/')) : '';
-        if (FsUtils?.refresh && (isInside || curDir === targetDir || curDir === parentOfTarget)) {
+        const bootTargetBusy = isInside && providerRoot && typeof isGalleryDownloadingWithin === 'function'
+          && isGalleryDownloadingWithin(providerRoot);
+        if (FsUtils?.refresh && ((isInside && (!providerRoot || bootTargetBusy)) || (!isInside && curDir === parentOfTarget))) {
           await FsUtils.refresh();
         }
-      } catch (err) {
-        console.error('[FilePanel] Delete failed:', err);
+      })();
+      // Reconcile failures self-report; only the delete itself restores.
+      deletion.catch((err) => console.error('[FilePanel] Delete reconcile failed:', err));
+
+      if (isInside) {
+        // Boot out to the provider root (e.g. Library/Imgur) instead of the
+        // immediate parent, so nested galleries do not strand the viewer a
+        // level above a deleted folder. Falls back to openParent when the
+        // provider root cannot be resolved.
+        if (providerRoot && FsUtils?.loadFile) {
+          FsUtils.loadFile(providerRoot).catch(() => {
+            if (FsUtils?.openParent) FsUtils.openParent().catch(() => {});
+          });
+        } else if (FsUtils?.openParent) {
+          FsUtils.openParent().catch(() => {});
+        }
       }
     });
   }
@@ -1159,19 +1278,31 @@ function buildLibraryEntry(item, depth = 0) {
 
 export async function renderLibrary() {
   if (!libraryPanelEl) return;
-  const tree = orderProviders(await fetchLibraryTree());
+  // The tree and the display-name registry are independent; fetch together
+  // instead of paying two serial IPC round trips per render.
+  const [treeRaw, manifest] = await Promise.all([
+    fetchLibraryTree(),
+    fetchManifest().catch(() => null)
+  ]);
+  const tree = orderProviders(treeRaw);
+
+  // Exclude tombstoned paths so watcher-triggered rebuilds during an
+  // in-flight recycle don't flash deleted items back into the sidebar.
+  if (FsUtils.hasPendingDeletions()) {
+    for (const provider of tree) {
+      if (!provider.nodes) continue;
+      provider.nodes = provider.nodes.filter(n => !FsUtils.isPendingDeletion(n.path));
+    }
+  }
+
   const hasAny = hasLibraryEntries(tree);
 
   // Display names come from the manifest registry (libraryPath -> name),
   // so renaming a provider never needs core changes. Directory names stay
   // the keys for collapse state, element ids, and dataset attributes.
-  let displayNames = null;
-  try {
-    const manifest = await fetchManifest();
-    displayNames = new Map((manifest?.extractors || []).map((e) => [e.libraryPath, e.name]));
-  } catch {
-    displayNames = null;
-  }
+  const displayNames = manifest
+    ? new Map((manifest.extractors || []).map((e) => [e.libraryPath, e.name]))
+    : null;
 
   libraryPanelEl.classList.toggle('is-empty', !hasAny);
   libraryPanelEl.innerHTML = '';
@@ -1761,6 +1892,14 @@ function renderVisibleSlice() {
   const list = state.list;
   if (!list) return;
   const total = list.length;
+
+  // Download order follows the sorting state: push the row order whenever
+  // the list identity changes (directory load, sort), never per scroll
+  // frame. The queue ignores it unless the listed directory is its gallery.
+  if (list !== lastDownloadOrderList) {
+    lastDownloadOrderList = list;
+    setDownloadDisplayOrder(state.directory, list.map((entry) => entry?.name));
+  }
 
   if (!ROW_HEIGHT) measureRowHeight();
 
