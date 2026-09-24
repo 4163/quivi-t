@@ -1285,6 +1285,16 @@ export async function renderLibrary() {
     fetchManifest().catch(() => null)
   ]);
   const tree = orderProviders(treeRaw);
+
+  // Exclude tombstoned paths so watcher-triggered rebuilds during an
+  // in-flight recycle don't flash deleted items back into the sidebar.
+  if (FsUtils.hasPendingDeletions()) {
+    for (const provider of tree) {
+      if (!provider.nodes) continue;
+      provider.nodes = provider.nodes.filter(n => !FsUtils.isPendingDeletion(n.path));
+    }
+  }
+
   const hasAny = hasLibraryEntries(tree);
 
   // Display names come from the manifest registry (libraryPath -> name),

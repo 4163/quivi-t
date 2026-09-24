@@ -1525,23 +1525,6 @@ body.is-importing-url .header-cell:hover {
   cursor: disabled;
 }
 
-body.is-importing-url .menu-trigger:hover,
-body.is-importing-url .menu-trigger:focus-visible {
-  background: transparent;
-  color: var(--text);
-}
-
-body.is-importing-url #file-panel-favorites-header:hover,
-body.is-importing-url .library-provider-header:hover {
-  background: var(--surface-alt);
-  color: var(--text-muted);
-}
-
-body.is-importing-url .header-cell:hover {
-  background: transparent;
-  color: inherit;
-}
-
 
 
 /* Spread indicator when the status bar is hidden. */
