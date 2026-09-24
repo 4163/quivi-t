@@ -26,7 +26,8 @@ import {
   sanitizeSvgText,
   expandSvgEntities,
   downloadSanitizedSvg,
-  downloadFile
+  downloadFile,
+  extractorNeedsHtml
 } from '../src/js/urlLoader.js';
 import * as ImgurExtractor from '../extractors/imgur.js';
 import * as MangaDexExtractor from '../extractors/mangadex.js';
@@ -3519,7 +3520,24 @@ describe('url layer contract', () => {
       assert.ok(verdict === 'exact' || verdict === 'fuzzy');
     });
   });
+
+  describe('extractor HTML opt-out', () => {
+    it('defaults to requiring HTML when needsHtml is absent', () => {
+      assert.equal(extractorNeedsHtml({ match: () => true }), true);
+      assert.equal(extractorNeedsHtml(null), true);
+    });
+
+    it('honors boolean needsHtml flag', () => {
+      assert.equal(extractorNeedsHtml({ needsHtml: false }), false);
+      assert.equal(extractorNeedsHtml({ needsHtml: true }), true);
+    });
+
+    it('honors functional needsHtml predicate', () => {
+      const mod = {
+        needsHtml: (url) => url.includes('need-html')
+      };
+      assert.equal(extractorNeedsHtml(mod, 'https://example.com/need-html'), true);
+      assert.equal(extractorNeedsHtml(mod, 'https://example.com/api-only'), false);
+    });
+  });
 });
-
-
-

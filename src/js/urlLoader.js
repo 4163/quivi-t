@@ -1093,6 +1093,17 @@ export function extractGallery(extractor, html, url, context = {}, entry = null)
   return done(result);
 }
 
+export function extractorNeedsHtml(mod, targetUrl) {
+  if (!mod) return true;
+  if (typeof mod.needsHtml === 'function') {
+    return mod.needsHtml(targetUrl) !== false;
+  }
+  if (mod.needsHtml === false) {
+    return false;
+  }
+  return true;
+}
+
 // -- Gallery Matching & Standalone Raw Cleanup --
 
 export function extractUrlStem(urlOrFilename) {
@@ -1865,7 +1876,9 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     };
   }
 
-  const html = url.startsWith('blob:') ? '' : await fetchRemoteText(url);
+  const html = (!url.startsWith('blob:') && extractorNeedsHtml(mod, url))
+    ? await fetchRemoteText(url)
+    : '';
   const result = await extractGallery(mod, html, url, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
 
   if (result.isSeries) {
@@ -2032,7 +2045,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   let pages = 0;
   let nextUrl = result.nextPageUrl;
   while (nextUrl && pages < MAX_PAGINATION_PAGES) {
-    const pageHtml = await fetchRemoteText(nextUrl);
+    const pageHtml = extractorNeedsHtml(mod, nextUrl) ? await fetchRemoteText(nextUrl) : '';
     const pageResult = await extractGallery(mod, pageHtml, nextUrl, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
     if (!_galleryMatches(result.gallery, pageResult.gallery)) {
       throw new Error('Extractor pagination returned a different gallery');
@@ -2470,10 +2483,12 @@ export async function resolveUnresolvedGallery(galleryPath) {
     // The stub carries identity only; the extractor needs the live page for
     // names, credits, and summaries. An empty fetch keeps prior behavior.
     let pageHtml = '';
-    try {
-      pageHtml = await fetchRemoteText(data.sourceUrl);
-    } catch {
-      pageHtml = '';
+    if (extractorNeedsHtml(mod, data.sourceUrl)) {
+      try {
+        pageHtml = await fetchRemoteText(data.sourceUrl);
+      } catch {
+        pageHtml = '';
+      }
     }
     const fullResult = await extractGallery(mod, pageHtml, data.sourceUrl, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes }, entry);
     if (!fullResult?.images || fullResult.images.length === 0) return false;
@@ -2913,6 +2928,7 @@ export const UrlLoader = {
   findExtractor,
   loadExtractorModule,
   extractGallery,
+  extractorNeedsHtml,
   validateExtractorResult,
   findMatchingGalleryImage,
   findMatchingGalleryBySourceUrl,
