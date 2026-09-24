@@ -19,7 +19,7 @@ Read every rule and referenced skill before starting work. Confirm adherence to 
   4. **Aggressive I/O Caching:** Use header-only file reads and maintain in-memory LRU caches (`lru` crate) for fast virtual archive directory traversal.
   5. **DOM & Asset Virtualization:** Recycle a bounded row pool on scroll for list views. NEVER decode original full-size image assets to create thumbnail views. Use system/shell thumbnails (`SHGetFileInfoW`) or pre-scaled caches where applicable.
   6. **Explicit Named Cache Limits:** Define all cache capacities, buffer limits, and memory thresholds as explicit named constants (e.g. `THUMB_CACHE_CAPACITY`, `VIEWER_IMAGE_CACHE_CAPACITY`) at module scope rather than inline magic numbers. Size each cache by multiplying max item count by worst-case uncompressed byte footprint to protect memory budgets.
-- **Measure twice, cut once.** Prefer small, deliberate changes over broad refactors. Before writing a new function, search the existing codebase for one that already does the job. Reuse it or extend it rather than creating a duplicate. If a change would duplicate logic, extract it into a shared helper instead.
+- **Measure twice, cut once.** Prefer small, deliberate changes over broad refactors. Before writing new logic, search the codebase for an existing helper that already does the job. Prefer intuitive shared helpers over inlining repeated lines of code for identical operations. If a change duplicates logic across callsites, extract it into a shared helper instead.
 - **Work in logical slices.** Prioritize small, precise code changes rather than big blocks to prevent tooling and scope failures, especially during large refactors. Be surgical!
 - **YAGNI.** Do not add abstractions, features, or complexity without a clear need.
 
@@ -39,7 +39,7 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 
 ### Shared
 - **One owner per concern.** Each surface or responsibility has exactly one writer (a status readout, chrome visibility, a panel, an image pool, theme apply, an action id).
-- **Folders are a byproduct of splitting.** A file moves into a feature folder only when a slice creates a sibling. No pure reorganization commits.
+- **Folders are a byproduct of splitting.** A file moves into a feature folder only when a slice creates a sibling. No pure reorganization changes.
 - **Pure modules first.** State machines and domain/services have zero DOM / UI imports. UI modules import them; never the reverse.
 - **Communicate across files via state callbacks, not reach-in.** Module A updates shared state (or a dedicated owner API). Module B paints what it owns. A module may mutate its own DOM or view-local state (scroll, drag, hover) without going through the state machine.
 - **Do not split a single owner** into sibling files that all touch the same surface. That relocates coupling without removing it.

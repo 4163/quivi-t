@@ -21,15 +21,19 @@ Use this skill to run a strict compliance check of code changes against the repo
 
 2. **Review Against `.agents/AGENTS.md`:**
     Read and cross-reference the changes specifically against the guidelines in `.agents/AGENTS.md`. Pay special attention to:
-    - **Code Guidelines:** Are we using flat control flow and early returns? Are hot paths caching aggressively? Are there any dynamic evaluations where O(1) lookups could be used? Are background threads used correctly for blocking tasks? Are commits grouped in logical slices?
+    - **Code Guidelines:** Are we using flat control flow and early returns? Are hot paths caching aggressively? Are there any dynamic evaluations where O(1) lookups could be used? Are background threads used correctly for blocking tasks?
     - **HTML-First Rendering:** Are we relying on static markup? Are we toggling visibility via CSS classes instead of `createElement` / `innerHTML`? Are nodes being recycled?
     - **CSS Source of Truth:** Is JS setting intrinsic visual values inline (e.g., `width`, `color`, `display`) instead of relying on CSS custom properties or classes?
     - **JS Module Ownership:** Do UI modules only subscribe to pure state modules (not the reverse)? Are modules using state callbacks instead of cross-module reach-in?
     - **Rust Encapsulation:** Are facade methods used instead of public field reach-in? Is there exactly one concern per module? Is test visibility restricted correctly using `#[path]`?
     - **Diagnostics & Telemetry Integrity:** Did changes alter viewer DOM classes or elements queried by probes in `e2e/replay-diagnostics/probes/viewerPipelineProbe.js`? Did action ID updates preserve scenario contracts in `e2e/scenarios/`? If `investigation.js` is present, is its override intentional across sessions?
+    - **Redundant code and shared helpers:** Did the diff inline repeated lines of code for identical operations across callsites instead of using or extracting an intuitive shared helper? Did it miss an existing helper that already does the job?
     - **Stale code and references:** Are there unused imports, dead functions, orphaned files, outdated comments, or stale paths that point to moved or renamed modules? Does the diff leave behind code that is no longer reachable? Use grep for old names, check imports, and verify every moved file has its callers updated.
 
-    For every finding, mark impact. Use `[Observable change]` if it changes externally observable behaviour and `[No observable change]` if it is dead code, unused import, comment, formatting, or docs only. Observable means any external contract: UI, IPC return shape, config or persistence schema, protocol, cross-window state, or performance, not just UX.
+    For every finding, mark severity:
+    - `[Blocking]`: Direct rule breaks, broken module boundaries (such as DOM reach-in or IPC contract drift), or regression risks.
+    - `[Warning]`: Architectural drift, premature abstractions, duplicated logic, or hot-path allocations.
+    - `[Nit]`: Dead code, unused imports, stale comments, or minor hygiene issues.
 
 3. **Synthesize the Verdict:**
    Output your findings in a structured Markdown format for the user:
@@ -41,14 +45,18 @@ Use this skill to run a strict compliance check of code changes against the repo
     **Summary:** (A high-level 1-2 sentence description of what the diff accomplishes)
     
     ### AGENTS.md Violations
-    (List any specific blocking issues, architectural drift, code smells, or rule violations found during the review. If none, explicitly state "None".)
-    - [File:Line] [Observable change or No observable change] Describe the violation and which AGENTS.md rule it breaks.
+    (List blocking issues, architectural drift, or rule violations found during the review. If none, explicitly state "None".)
+    - [File:Line] [Blocking|Warning|Nit] Describe the violation and which AGENTS.md rule it breaks.
     
+    ### Redundant code and shared helpers
+    (List inlined repetitive code, duplicated logic across callsites, or missed opportunities to reuse or extract intuitive shared helpers. If none, explicitly state "None".)
+    - [File:Line] [Blocking|Warning|Nit] Describe the duplicated logic and the recommended shared helper.
+
     ### Stale code and references
     (List unused imports, dead functions, orphaned files, outdated comments, or stale paths that point to moved or renamed modules. If none, explicitly state "None".)
-    - [File:Line] [Observable change or No observable change] Describe the stale reference and why it is no longer needed.
+    - [File:Line] [Blocking|Warning|Nit] Describe the stale reference and why it is no longer needed.
     
     ### Verdict
-    (Pass / Nits / Fail / Pass with Warnings)
+    (Pass / Pass with warnings / Fail)
     (Provide recommendations on how the user should remediate the violations, if any.)
     ```
