@@ -17,7 +17,7 @@ imgur.js               Imgur albums, galleries, direct CDN images
 mangadex.js            MangaDex chapters, titles, covers, @home network images
 mangaplus.js           MANGA Plus viewer chapters, title series, signed CDN images
 kmanga.js              K MANGA episodes, title series, signed CDN images
-direct.js              Host-agnostic direct raster images (catch-all, matched last)
+direct.js              Host-agnostic direct images (catch-all, matched last)
 shared/
   sanitize.js          Path segment sanitization
   mangaplus.js         MANGA Plus protobuf viewer client (shared by mangadex.js and mangaplus.js)
@@ -61,7 +61,7 @@ Reference URLs for manual testing. Each entry covers a distinct URL route or ext
 
 | Provider | Test target | Import type | Library destination (braces not code accurate) | Verified behaviour |
 |:---|:---|:---|:---|:---|
-| Misc | [BAKEMONOGATARI c013 p002.jpg](https://raw.githubusercontent.com/4163/quivi-t/refs/heads/refactor/backend-cl-prep/test-files/BAKEMONOGATARI%20-%20c013%20(v03)%20-%20p002%20%5BKodansha%20Comics%5D%20%5BDigital%5D%20%5B1r0n%5D%20%7BHQ%7D.jpg) | Direct media | `Misc/{filename}.jpg` | Host-agnostic raster catch-all, matched last, document pages rejected, root sidecar recording |
+| Misc | [BAKEMONOGATARI c013 p002.jpg](https://raw.githubusercontent.com/4163/quivi-t/af13fe47647a8a3803c9ba46d5bcedf447806df3/test-files/BAKEMONOGATARI%20-%20c013%20(v03)%20-%20p002%20%5BKodansha%20Comics%5D%20%5BDigital%5D%20%5B1r0n%5D%20%7BHQ%7D.jpg) | Direct media | `Misc/{filename}.jpg` | Host-agnostic raster catch-all, matched last, document pages rejected, root sidecar recording |
 | Misc | [koi.svg](https://raw.githubusercontent.com/4163/quivi-t/c004b6946204e44a265fee67c75fde9ef42e75af/test-files/koi.svg) | Direct media | `Misc/{filename}.svg` | Illustrator export with entity prolog, sanitized text path. Art by [stresseR](https://www.pixiv.net/en/artworks/119373929) |
 | Imgur | [Azuma - Seihantai](https://imgur.com/a/azuma-seihantai-17vF37d) | Gallery | `Imgur/{Title}/` | Album `/a/` route (41 PNGs), multi-image manga set, description sanitization |
 | Imgur | [Anime Reaction Gifs](https://imgur.com/gallery/anime-reaction-gifs-ADdqF) | Gallery | `Imgur/{Title}/` | Large animation batch (50 GIFs), download concurrency, prefetch threshold |
@@ -156,7 +156,7 @@ Apply these patterns to keep URL imports fast and responsive:
   metadata: {                  // optional, written as comicinfo.json
     ComicInfo: { Series: 'Name', Title: 'Gallery Title', Summary: '...' }
   },
-  targetFilename: '005.jpg',   // optional: eager-download this image, open viewer on it
+  targetFilename: '005.jpg',   // optional: open viewer on this image, prioritized by download queue
   nextPageUrl: null             // next page URL or null; consecutive pages share gallery.id and relativePath
 }
 ```
