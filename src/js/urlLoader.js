@@ -29,6 +29,7 @@
 
 import { BoundedMap } from './services/cache.js';
 import { applySort } from './services/sorting.js';
+import { DirectoryPrefs } from './directoryPrefs.js';
 
 const EXTRACTOR_MODULE_CACHE_CAPACITY = 20;
 export const EXTRACTOR_MANIFEST_VERSION = 1;
@@ -1666,6 +1667,7 @@ export async function cleanupMatchingProviderEntries(providerPath, result) {
       await Promise.all(chunk.map(async (entry) => {
         try {
           await window.__TAURI__.core.invoke('remove_directory', { path: entry.path });
+          DirectoryPrefs.removeSortPrefs(entry.path);
         } catch (err) {
           console.warn('[UrlLoader] Failed to remove matching standalone chapter directory:', entry.path, err);
         }
@@ -1759,25 +1761,11 @@ export function orderItemsBySort(items, sortPref) {
 }
 
 function _sortPrefForDir(galleryPath) {
-  const fallback = { col: 'name', desc: false };
-  let frontendData = null;
   try {
-    frontendData = _Core?.getState?.()?.config?.frontend_data || null;
+    return DirectoryPrefs.getSortPrefs(galleryPath);
   } catch {
-    frontendData = null;
+    return { col: 'name', desc: false };
   }
-  if (!frontendData) return fallback;
-  if (galleryPath) {
-    const normTarget = String(galleryPath).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-    const table = frontendData.directory_sort || {};
-    for (const [key, pref] of Object.entries(table)) {
-      if (String(key).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() === normTarget) {
-        return { col: pref?.col || 'name', desc: pref?.desc === true };
-      }
-    }
-  }
-  const def = frontendData.default_sort || {};
-  return { col: def.col || 'name', desc: def.desc === true };
 }
 
 function _displayOrderedItems(downloadItems, galleryPath) {

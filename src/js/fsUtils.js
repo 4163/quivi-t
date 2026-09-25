@@ -598,6 +598,9 @@ export const FsUtils = {
   },
 
   async loadFallbackAncestor(path, options = {}) {
+    if (path) {
+      DirectoryPrefs.removeSortPrefs(path, { immediate: true });
+    }
     let current = path;
     while (true) {
       const parent = parentOf(current);
@@ -906,6 +909,7 @@ export const FsUtils = {
         this.persistLastOpened(result.directory);
       } catch (err) {
         console.error('[Core] openParent archive error, falling back:', err);
+        DirectoryPrefs.removeSortPrefs(state.archivePath, { immediate: true });
         await this.loadFallbackAncestor(state.archivePath, { generation, previousEntry });
       }
       return;
@@ -928,6 +932,7 @@ export const FsUtils = {
         await this.loadFile('__DRIVES__', { generation, previousEntry });
       } else {
         console.error('[Core] openParent error, falling back:', err);
+        DirectoryPrefs.removeSortPrefs(state.directory, { immediate: true });
         await this.loadFallbackAncestor(state.directory, { generation, previousEntry });
       }
     }
@@ -1064,6 +1069,10 @@ export const FsUtils = {
       }
     } catch (err) {
       console.error('[Core] refresh error, navigating to parent:', err);
+      const failedPath = state.mode === 'archive' ? state.archivePath : state.directory;
+      if (failedPath) {
+        DirectoryPrefs.removeSortPrefs(failedPath, { immediate: true });
+      }
       this.openParent();
     } finally {
       window.dispatchEvent(new CustomEvent('quivit-refresh-end'));

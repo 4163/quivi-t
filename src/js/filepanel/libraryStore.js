@@ -5,6 +5,8 @@
  * Persists collapsed states to localStorage. Zero DOM dependencies.
  */
 
+import { DirectoryPrefs } from '../directoryPrefs.js';
+
 let _libraryTreeCache = [];
 
 export async function fetchLibraryTree() {
@@ -38,6 +40,7 @@ export async function deleteLibraryEntry(path) {
   if (!window.__TAURI__ || !path) return false;
   try {
     await window.__TAURI__.core.invoke('remove_directory', { path });
+    DirectoryPrefs.removeSortPrefs(path, { immediate: true });
     return true;
   } catch (err) {
     console.error('[LibraryStore] Failed to remove gallery:', err);

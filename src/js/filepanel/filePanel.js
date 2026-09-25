@@ -596,7 +596,7 @@ function openBookmark(bm) {
   if (FsUtils) {
     FsUtils.loadFile(bm.path).catch(err => {
       console.error(err);
-      refreshBookmarksAfterFilesystemChange();
+      refreshFilesystemState();
     });
   }
 }
@@ -806,11 +806,11 @@ function renderBookmarks() {
   if (Core) updateBookmarksSelection(Core.getState());
 }
 
-let bookmarksRefreshTimer = null;
+let filesystemRefreshTimer = null;
 
-function refreshBookmarksAfterFilesystemChange() {
-  clearTimeout(bookmarksRefreshTimer);
-  bookmarksRefreshTimer = setTimeout(async () => {
+function refreshFilesystemState() {
+  clearTimeout(filesystemRefreshTimer);
+  filesystemRefreshTimer = setTimeout(async () => {
     const movingLibrary = await window.__TAURI__?.core
       ?.invoke('library_move_in_progress')
       .catch(() => false);
@@ -823,6 +823,13 @@ function refreshBookmarksAfterFilesystemChange() {
       updateBookmarkBtn(state.list?.[state.index]?.path || '');
     }).catch(err => {
       console.error('[FilePanel] Failed to reconcile Bookmarks after a filesystem change:', err);
+    });
+
+    DirectoryPrefs.reconcileDirectorySort().then(changed => {
+      if (!changed) return;
+      updateSortIcons();
+    }).catch(err => {
+      console.error('[FilePanel] Failed to reconcile directory sort after a filesystem change:', err);
     });
   }, 250);
 }
@@ -2440,20 +2447,20 @@ export function initFilePanel(deps) {
       renderLibrary().catch(err => {
         console.error('[FilePanel] Failed to refresh Library after a filesystem change:', err);
       });
-      refreshBookmarksAfterFilesystemChange();
+      refreshFilesystemState();
     }).catch(console.error);
 
     window.__TAURI__.event.listen('directory-changed', () => {
-      refreshBookmarksAfterFilesystemChange();
+      refreshFilesystemState();
     }).catch(console.error);
   }
 
-  window.addEventListener('focus', refreshBookmarksAfterFilesystemChange);
+  window.addEventListener('focus', refreshFilesystemState);
 
   window.addEventListener('quivit-config-loaded', () => {
     bookmarksExpanded = !getBookmarksCollapsed();
     renderBookmarks();
-    refreshBookmarksAfterFilesystemChange();
+    refreshFilesystemState();
     // Re-measure rows so custom CSS font sizes apply.
     const oldHeight = ROW_HEIGHT;
     measureRowHeight();
