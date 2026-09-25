@@ -8,8 +8,26 @@ import statusbarPage from '../pageobjects/statusbar.page.js';
 import { fixtures } from '../helpers/fixtures.js';
 
 describe('05 - Persistence & User Preferences', () => {
-  const targetDir = path.resolve('src-tauri/target/debug');
+  const targetDir = process.env.QUIVIT_CONFIG_DIR
+    ? path.resolve(process.env.QUIVIT_CONFIG_DIR)
+    : path.resolve('src-tauri/target/debug');
   const configPath = path.join(targetDir, 'quivit_config.json');
+  // Split runs keep favorites in their own file, portable runs fold them
+  // into the main file. Preferences stay in the main file either way.
+  const useSplitLayout = !process.env.QUIVIT_PORTABLE;
+  const favoritesPath = useSplitLayout
+    ? path.join(targetDir, 'quivit_favorites.json')
+    : configPath;
+
+  function readFavoritesCount() {
+    try {
+      const stored = JSON.parse(fs.readFileSync(favoritesPath, 'utf8'));
+      const list = useSplitLayout ? stored.favorites : stored.frontend_data?.favorites;
+      return Array.isArray(list) ? list.length : 0;
+    } catch {
+      return -1;
+    }
+  }
 
   before(async () => {
     await menubarPage.ensureMainWindow();
@@ -104,15 +122,7 @@ describe('05 - Persistence & User Preferences', () => {
 
     // Verify persistence to disk
     await browser.waitUntil(
-      () => {
-        if (!fs.existsSync(configPath)) return false;
-        try {
-          const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-          return (cfg.frontend_data?.favorites?.length || 0) > 0;
-        } catch {
-          return false;
-        }
-      },
+      () => readFavoritesCount() > 0,
       { timeout: 6000, timeoutMsg: 'Favorites were not persisted to config file' }
     );
   });
@@ -136,15 +146,7 @@ describe('05 - Persistence & User Preferences', () => {
 
     // Verify removal persisted to disk
     await browser.waitUntil(
-      () => {
-        if (!fs.existsSync(configPath)) return false;
-        try {
-          const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-          return (cfg.frontend_data?.favorites?.length || 0) === 0;
-        } catch {
-          return false;
-        }
-      },
+      () => readFavoritesCount() === 0,
       { timeout: 6000, timeoutMsg: 'Cleared favorites were not persisted to config file' }
     );
   });

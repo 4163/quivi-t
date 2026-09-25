@@ -142,18 +142,18 @@ request → parse_archive_url (400 on Err)
 
 | Site | Condition | Response |
 |---|---|---|
-| `:21-31` | `parse_icon_url` Err (not `/icon/`, missing part, bad b64 path/ext) | `400` + message (`"Invalid quivit icon URL: …"`, `"Missing icon path or extension key"`, `"Invalid base64 …"`) |
+| `:21-31` | `parse_icon_url` Err (not `/icon/`, missing part, bad b64 path/ext) | `400` + message (`"Invalid quivit icon URL: ..."`, `"Missing icon path or extension key"`, `"Invalid base64 ..."`) |
 | `:49-59` | `parse_thumb_url` Err | `400` + message |
-| `:75-85` | `parse_archive_url` Err (not `/archive/`, missing part, bad b64) | `400` + `"Invalid quivit URL: …"` / `"Missing archive path or entry name"` / `"Invalid base64 archive path"` |
+| `:75-85` | `parse_archive_url` Err (not `/archive/`, missing part, bad b64) | `400` + `"Invalid quivit URL: ..."` / `"Missing archive path or entry name"` / `"Invalid base64 archive path"` |
 | `:37-41` | `get_cached_native_icon_png_with_size` → `Err` or `Ok(None)` (non-Windows always `None`) | `404 "Icon not found"` |
 | `:64-68` | `get_shell_thumbnail_png` → `Err` or `Ok(None)` (unsupported ext, missing file, animated GIF, no OS thumb) | `404 "Thumbnail not found"` |
 | `:107-115` | `read_entry_bytes` Err or `wait_for_data` Err (missing entry, password-gated, unsafe path, 30 s timeout, temp read fail) | `404 "Entry not found or failed to extract"` (timeout and not-found are indistinguishable here) |
 
 ### IPC `Err(String)` payloads (surfaced as JS rejection → UI banners)
 
-- `"Path does not exist"` (`directory.rs:15`); fs errors verbatim (`read_text_file`, `write_text_file`, `watch_directory: "Failed to create/watch …"`).
-- Archives: `"Unsupported archive format: {ext}"` (`mod.rs:48`); `"Archive is password-protected: …"` (all `read_*` gates); `"Cannot find ZIP entry: {name}"`; `"Cannot read extracted archive entry {name}: {e}"`; `"Archive entry {name} not available or extraction finished"` (timeout); `"Unsafe archive entry path"`; `"Archive is not prepared for temporary extraction"`; `"Cannot read ICO file: {e}"`.
-- Animation: `"Cannot open file: …"` (disk).
+- `"Path does not exist"` (`directory.rs:15`); fs errors verbatim (`read_text_file`, `write_text_file`, `watch_directory: "Failed to create/watch ..."`).
+- Archives: `"Unsupported archive format: {ext}"` (`mod.rs:48`); `"Archive is password-protected: ..."` (all `read_*` gates); `"Cannot find ZIP entry: {name}"`; `"Cannot read extracted archive entry {name}: {e}"`; `"Archive entry {name} not available or extraction finished"` (timeout); `"Unsafe archive entry path"`; `"Archive is not prepared for temporary extraction"`; `"Cannot read ICO file: {e}"`.
+- Animation: `"Cannot open file: ..."` (disk).
 - Frontend mapping (`fsUtils.js`): `loadArchive:523-547` password-gated → lock label (`Password required:` / `Password incorrect!`) with empty `src`; `:638-648` other errors → `Failed to open archive: <basename>` (startup → `loadFallbackAncestor` walk-up to `__DRIVES__`); `cleanEntryName:67-70` strips those prefixes for index matching. `openSibling:851-861` retries with `suppressErrorState:true`, skipping broken siblings silently.
 
 ---

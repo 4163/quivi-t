@@ -18,6 +18,8 @@ describe('Diagnostics system contract integrity', () => {
       const files = fs.readdirSync(scenariosDir).filter(f => f.endsWith('.json'));
       assert.ok(files.length > 0, 'Must have at least one recorded scenario');
 
+      // Trace steps the replay runner handles itself, next to registry ids.
+      const TRACE_STEPS = new Set(['select-index', 'jump-to-index', 'open-favorite']);
       for (const file of files) {
         const filePath = path.join(scenariosDir, file);
         const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
@@ -27,7 +29,7 @@ describe('Diagnostics system contract integrity', () => {
           const item = content.actions[i];
           const actionId = typeof item === 'string' ? item : item?.action;
           assert.ok(
-            actionId && ACTION_MAP.has(actionId),
+            actionId && (ACTION_MAP.has(actionId) || TRACE_STEPS.has(actionId)),
             `Scenario ${file} action at index ${i} ('${actionId}') does not exist in ACTION_REGISTRY`
           );
         }

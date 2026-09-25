@@ -139,3 +139,11 @@ pub struct LibraryProviderEntry {
     pub path: String,
     pub nodes: Vec<LibraryNode>,
 }
+
+/// Effective settings folder and how it is laid out. Shown in Options so the
+/// readout always names the folder this run actually uses.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ActiveConfigInfo {
+    pub dir: String,
+    pub mode: String,
+}

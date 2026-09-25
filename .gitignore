@@ -1,16 +1,4 @@
-# Logs
-logs
-*.log
-
-# Python bytecode
-__pycache__/
-*.py[cod]
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
+# Build outputs
 node_modules
 dist
 dist-ssr
@@ -27,36 +15,53 @@ dist-ssr
 *.sln
 *.sw?
 
-# Note: session-index.md and other .agents/ files are strictly local and intentionally ignored
-.agents/session-index.md
-.agents/user-notes
-.agents/scratch
-
+# Runtime and isolated local config folders
 # Runtime/portable user config; may contain personal paths
 quivit_config.json
+# Isolated config folders for dev, E2E suite, and replay runs (see scripts/dev.js)
+.dev-config/
+.e2e-config/
+# Persistent debug config shared by record/replay runs (local prefs state)
+e2e/.debug-config/
 
 # Registry-debug scratch file produced during file-association development
 DEBUG_REG
 
-# Too large to host on GitHub (>100 MB), kept local only
-test-files/export_1785548648565.apng
-
-# Animated format test files duplicated into one directory for manual testing
-test-files/animated/
-
-# WebdriverIO test logs
+# Logs and test transcripts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+logs
+*.log
 test-logs/
+# Local run transcripts (suite output redirected to files while debugging)
+outputlog*.txt
 
+# E2E recorded scenarios and replay diagnostics
 # E2E recorded scenarios (runtime traces, overwritten on each record)
 e2e/scenarios/*.json
 !e2e/scenarios/sample-navigation.json
-
-# Persistent E2E profile shared by record/replay runs (local prefs state)
-e2e/.profile/
-
 # Replay diagnostic reports (generated on each diagnose, contain local absolute paths)
 # Note: e2e/replay-diagnostics/investigation.js is intentionally tracked to support multi-session investigations across commits
 e2e/replay-diagnostics/reports/
+
+# Test files kept local only
+# Too large to host on GitHub (>100 MB), kept local only
+test-files/export_1785548648565.apng
+# Animated format test files duplicated into one directory for manual testing
+test-files/animated/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Local agent files
+# Note: session-index.md and other .agents/ files are strictly local and intentionally ignored
+.agents/session-index.md
+.agents/user-notes
+.agents/scratch
 
 # Remote website extractors live in the dedicated orphan 'extractors' deployment branch.
 # Local extractors/ checkouts are ignored here so maintainers can test modules locally without tracking them in application branches.

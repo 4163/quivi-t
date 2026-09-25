@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
-    "test": "mocha 'mocha/*.test.js'",
-    "test:unit": "mocha 'mocha/*.test.js'",
-    "test:e2e": "wdio run wdio.conf.js",
-    "test:record": "wdio run wdio.conf.js --spec e2e/specs/record.e2e.js",
-    "test:replay": "wdio run wdio.conf.js --spec e2e/specs/replay.e2e.js",
+    "dev": "node scripts/dev.js",
+    "dev:portable": "node scripts/dev.js --portable",
+    "mocha": "mocha 'mocha/*.test.js'",
+    "e2e": "node scripts/e2e.js --layout portable",
+    "e2e:split": "node scripts/e2e.js --layout split",
     "record": "wdio run wdio.conf.js --spec e2e/specs/record.e2e.js",
     "replay": "node e2e/replay-diagnostics/cli.js",
     "diagnose": "node e2e/replay-diagnostics/cli.js"

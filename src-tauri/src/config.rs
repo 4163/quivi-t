@@ -71,6 +71,52 @@ pub fn is_portable() -> bool {
     is_portable_dir(&get_exe_dir())
 }
 
+/// Explicit runner folder. When `QUIVIT_CONFIG_DIR` names an absolute path,
+/// every config decision uses it and all marker and exe-folder guessing is
+/// skipped. One runner owns one folder, so dev, suite, and diagnose never
+/// share files.
+pub fn override_config_dir() -> Option<PathBuf> {
+    let trimmed = std::env::var("QUIVIT_CONFIG_DIR").ok()?;
+    let trimmed = trimmed.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let path = PathBuf::from(trimmed);
+    if path.is_absolute() {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+/// One-line startup note naming the config folder and layout, so the active
+/// run mode is never a mystery.
+pub fn describe_config_source() -> String {
+    if let Some(dir) = override_config_dir() {
+        let layout = if override_single_file() {
+            "single file"
+        } else {
+            "split files"
+        };
+        return format!("override {} ({layout})", dir.display());
+    }
+    if is_portable() {
+        return format!("portable {}", get_exe_dir().display());
+    }
+    format!("roaming {}", get_config_path().display())
+}
+
+/// One-file layout inside the override folder. Split files are the default.
+fn override_single_file() -> bool {
+    matches!(
+        std::env::var("QUIVIT_PORTABLE")
+            .ok()
+            .as_deref()
+            .map(str::trim),
+        Some("1") | Some("true")
+    )
+}
+
 /// Old-location cleanup runs only on a real mode switch, never on a normal
 /// save. Every-save deletion wiped roaming user data whenever the app ran
 /// portable with a factory-empty config (E2E runs share the debug exe dir).
@@ -103,6 +149,9 @@ pub fn remove_roaming_files(dir: &Path) {
 }
 
 pub fn get_config_path() -> PathBuf {
+    if let Some(dir) = override_config_dir() {
+        return dir.join("quivit_config.json");
+    }
     let exe_dir = get_exe_dir();
     let is_port = is_portable_dir(&exe_dir);
 
@@ -347,16 +396,14 @@ pub fn is_e2e_suite() -> bool {
     std::env::var("QUIVIT_E2E_SUITE").is_ok() || std::env::args().any(|a| a == "--e2e-suite")
 }
 
-#[tauri::command]
-pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
-    let mut config = if is_portable() {
-        read_json_file(&get_exe_dir().join("quivit_config.json")).unwrap_or_default()
-    } else {
-        let dir = roaming_dir(&app_handle);
-        let mut cfg: AppConfig =
-            read_json_file(&dir.join("quivit_config.json")).unwrap_or_default();
+/// Read one config folder. Split files merge unless single-file layout wins
+/// (caller-forced or the stored portable flag). Legacy single files that hold
+/// everything load unchanged.
+fn load_from_dir(dir: &Path, force_single: bool) -> AppConfig {
+    let mut cfg: AppConfig =
+        read_json_file(&dir.join("quivit_config.json")).unwrap_or_default();
+    if !(force_single || cfg.portable_mode) {
         // New layout: state, directory-sort, and favorites live in their own files.
-        // Legacy layout (everything in quivit_config.json) loads unchanged.
         merge_file_into(&dir.join("quivit_state.json"), &mut cfg.frontend_data);
         merge_file_into(
             &dir.join("quivit_directory_sort.json"),
@@ -364,13 +411,24 @@ pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
         );
         merge_file_into(&dir.join("quivit_favorites.json"), &mut cfg.frontend_data);
 
-        // Roaming mode stores custom CSS in its own file.
+        // Split mode stores custom CSS in its own file.
         let css_path = dir.join("custom_css.css");
         if let Ok(custom_css) = fs::read_to_string(&css_path) {
             cfg.frontend_data["custom_css"] = serde_json::json!(custom_css);
         }
+    }
+    cfg
+}
 
-        cfg
+#[tauri::command]
+pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
+    let mut config = if let Some(dir) = override_config_dir() {
+        fs::create_dir_all(&dir).ok();
+        load_from_dir(&dir, override_single_file())
+    } else if is_portable() {
+        read_json_file(&get_exe_dir().join("quivit_config.json")).unwrap_or_default()
+    } else {
+        load_from_dir(&roaming_dir(&app_handle), false)
     };
 
     normalize_library_location_paths(&mut config);
@@ -384,14 +442,55 @@ pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
     config
 }
 
-// Static pointers shown in Options. The global config folder always points at
-// the roaming location (%APPDATA%\com.x4163.quivit); the local folder always
-// points beside the executable (the portable location). They do not track the
-// "Save config data locally" state.
+// Options folder rows. They name the roaming and exe-dir spots, except an
+// override run repoints both at its own folder since that is where the files
+// actually live. They do not track the "Save config data locally" state.
 
 #[tauri::command]
 pub fn get_config_dir(app_handle: tauri::AppHandle) -> String {
     roaming_dir(&app_handle).to_string_lossy().into_owned()
+}
+
+#[tauri::command]
+pub fn open_active_config_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let dir = if let Some(dir) = override_config_dir() {
+        dir
+    } else if is_portable() {
+        get_exe_dir()
+    } else {
+        roaming_dir(&app_handle)
+    };
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create config directory: {e}"))?;
+    app_handle
+        .opener()
+        .open_path(dir.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|e| format!("Failed to open config directory: {e}"))
+}
+
+/// Folder and layout this run actually uses. Options renders it as the
+/// primary row; the secondary row names the inactive fixed spot.
+#[tauri::command]
+pub fn get_active_config_info() -> crate::models::ActiveConfigInfo {
+    if let Some(dir) = override_config_dir() {
+        let layout = if override_single_file() {
+            "single file"
+        } else {
+            "split files"
+        };
+        return crate::models::ActiveConfigInfo {
+            dir: dir.to_string_lossy().into_owned(),
+            mode: format!("override ({layout})"),
+        };
+    }
+    let mode = if is_portable() { "portable" } else { "roaming" };
+    let dir = get_config_path()
+        .parent()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    crate::models::ActiveConfigInfo {
+        dir,
+        mode: mode.to_string(),
+    }
 }
 
 #[tauri::command]
@@ -418,6 +517,65 @@ pub fn open_local_data_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| format!("Failed to open local data directory: {e}"))
 }
 
+/// Write the split layout into one folder. Shared by roaming and override saves.
+fn write_split_config(dir: &Path, config: &mut AppConfig) -> Result<(), String> {
+    let mut fd = std::mem::take(&mut config.frontend_data);
+    let state = extract_keys(&mut fd, STATE_KEYS);
+    let sort = extract_keys(&mut fd, SORT_KEYS);
+    let favorites = extract_keys(&mut fd, FAVORITES_KEYS);
+
+    // Store custom CSS separately.
+    let custom_css = fd
+        .get("custom_css")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    fd.as_object_mut().map(|obj| obj.remove("custom_css"));
+
+    config.frontend_data = fd;
+
+    let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    atomic_write(&dir.join("quivit_config.json"), data).map_err(|e| e.to_string())?;
+    atomic_write(
+        &dir.join("quivit_state.json"),
+        serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    atomic_write(
+        &dir.join("quivit_directory_sort.json"),
+        serde_json::to_string_pretty(&sort).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    atomic_write(
+        &dir.join("quivit_favorites.json"),
+        serde_json::to_string_pretty(&favorites).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    atomic_write(&dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())
+}
+
+/// Save into the override folder only. One layout per folder: a single-file
+/// save drops split leftovers so stale files can never come back.
+fn save_override(dir: &Path, mut config: AppConfig) -> Result<(), String> {
+    fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    if override_single_file() || config.portable_mode {
+        let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+        atomic_write(&dir.join("quivit_config.json"), data).map_err(|e| e.to_string())?;
+        for name in [
+            "quivit_state.json",
+            "quivit_directory_sort.json",
+            "quivit_favorites.json",
+            "custom_css.css",
+        ] {
+            let _ = fs::remove_file(dir.join(name));
+        }
+    } else {
+        write_split_config(dir, &mut config)?;
+    }
+    Ok(())
+}
+
 pub fn save_config_unchecked(
     app_handle: tauri::AppHandle,
     mut config: AppConfig,
@@ -425,6 +583,9 @@ pub fn save_config_unchecked(
     normalize_library_location_paths(&mut config);
     if let Some(obj) = config.frontend_data.as_object_mut() {
         obj.remove("e2e_suite");
+    }
+    if let Some(dir) = override_config_dir() {
+        return save_override(&dir, config);
     }
     let exe_dir = get_exe_dir();
     let will_be_portable = config.portable_mode;
@@ -449,41 +610,8 @@ pub fn save_config_unchecked(
     } else {
         // Roaming: write the split files first, then remove portable leftovers so
         // a failed write never loses the config.
-        let mut fd = std::mem::take(&mut config.frontend_data);
-        let state = extract_keys(&mut fd, STATE_KEYS);
-        let sort = extract_keys(&mut fd, SORT_KEYS);
-        let favorites = extract_keys(&mut fd, FAVORITES_KEYS);
-
-        // Store custom CSS separately.
-        let custom_css = fd
-            .get("custom_css")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        fd.as_object_mut().map(|obj| obj.remove("custom_css"));
-
-        config.frontend_data = fd;
-
         let dir = roaming_dir(&app_handle);
-        let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-        atomic_write(&dir.join("quivit_config.json"), data).map_err(|e| e.to_string())?;
-        atomic_write(
-            &dir.join("quivit_state.json"),
-            serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-        atomic_write(
-            &dir.join("quivit_directory_sort.json"),
-            serde_json::to_string_pretty(&sort).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-        atomic_write(
-            &dir.join("quivit_favorites.json"),
-            serde_json::to_string_pretty(&favorites).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-
-        atomic_write(&dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())?;
+        write_split_config(&dir, &mut config)?;
 
         // Migration only: leaving a stray exe-dir config behind would trap
         // the next launch back into portable mode via is_portable_dir.

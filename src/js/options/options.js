@@ -101,6 +101,27 @@ function lockSuiteToggle(id, reason) {
   input.title = reason;
 }
 
+let globalOpenCommand = 'open_config_dir';
+let localOpenCommand = 'open_local_data_dir';
+
+async function refreshActiveConfigHint() {
+  if (!invoke) return;
+  try {
+    const info = await invoke('get_active_config_info');
+    if (info.mode !== 'roaming' && info.mode !== 'portable') {
+      if (configDirLabel) configDirLabel.textContent = info.dir;
+      if (localDataDirLabel) localDataDirLabel.textContent = info.dir;
+      globalOpenCommand = 'open_active_config_dir';
+      localOpenCommand = 'open_active_config_dir';
+    } else {
+      globalOpenCommand = 'open_config_dir';
+      localOpenCommand = 'open_local_data_dir';
+    }
+  } catch (err) {
+    console.error('Failed to refresh active config hint:', err);
+  }
+}
+
 async function refreshLiveConfigState() {
   if (!invoke) return;
   const latest = mergeConfig(await invoke('load_config'));
@@ -118,6 +139,7 @@ async function refreshLiveConfigState() {
 
   if (configDirLabel) configDirLabel.textContent = await invoke('get_config_dir');
   if (localDataDirLabel) localDataDirLabel.textContent = await invoke('get_local_data_dir');
+  await refreshActiveConfigHint();
 }
 
 async function init() {
@@ -133,6 +155,7 @@ async function init() {
     config = mergeConfig(await invoke('load_config'));
     if (configDirLabel) configDirLabel.textContent = await invoke('get_config_dir');
     if (localDataDirLabel) localDataDirLabel.textContent = await invoke('get_local_data_dir');
+    await refreshActiveConfigHint();
     
     // Bind config to inputs.
     document.getElementById('opt-portable-mode').checked = config.portable_mode;
@@ -263,7 +286,7 @@ document.getElementById('link-supported-sites')?.addEventListener('click', async
 document.getElementById('btn-open-config-dir').addEventListener('click', async () => {
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
-    await invoke('open_config_dir');
+    await invoke(globalOpenCommand);
   } catch (err) {
     console.error('Failed to open config directory:', err);
     showStatus('Could not open the settings folder.');
@@ -273,7 +296,7 @@ document.getElementById('btn-open-config-dir').addEventListener('click', async (
 document.getElementById('btn-open-local-data-dir').addEventListener('click', async () => {
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
-    await invoke('open_local_data_dir');
+    await invoke(localOpenCommand);
   } catch (err) {
     console.error('Failed to open local data directory:', err);
     showStatus('Could not open the app data folder.');
@@ -453,6 +476,15 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   try { localStorage.setItem('quivit-custom-css', formConfig.frontend_data.custom_css); } catch(e) {}
   
   const merged = mergeConfig(formConfig);
+  // Options never edits favorites; carry the live disk values so saving
+  // settings does not wipe a favorite added in the main window (stale copy).
+  try {
+    if (invoke && !libraryPathChanged) {
+      const live = mergeConfig(await invoke('load_config'));
+      if (live.frontend_data?.favorites !== undefined) merged.frontend_data.favorites = live.frontend_data.favorites;
+      if (live.frontend_data?.favorites_collapsed !== undefined) merged.frontend_data.favorites_collapsed = live.frontend_data.favorites_collapsed;
+    }
+  } catch { /* fall back to form values */ }
   Object.assign(config, merged);
   
   try {

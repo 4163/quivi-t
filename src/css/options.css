@@ -130,7 +130,12 @@ body > * {
   cursor: pointer;
 }
 
-.link-button:hover {
+#link-supported-sites {
+  color: var(--accent);
+}
+
+.link-button:hover,
+#link-supported-sites {
   background: transparent;
   color: var(--accent-hover);
 }

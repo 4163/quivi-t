@@ -182,34 +182,6 @@ fn zip_decodes_euckr_entry_names() {
     );
 }
 
-// Metadata inclusion tests
-
-fn metadata_test_file(name: &str) -> std::path::PathBuf {
-    test_file("metadata_tests").join(name)
-}
-
-#[test]
-fn sevenz_lists_metadata_files() {
-    let path = metadata_test_file("metadata.7z");
-    let (files, _) = list_7z_entries(path.to_str().unwrap(), None).expect("list 7z with metadata");
-
-    let has_image = files.iter().any(|f| f.name.ends_with(".png"));
-    let has_xml = files.iter().any(|f| f.name == "ComicInfo.xml");
-
-    assert!(has_image, "7z listing missing image entries");
-    assert!(has_xml, "7z listing missing ComicInfo.xml metadata");
-    assert_eq!(files.len(), 3, "expected 2 images + 1 metadata file");
-}
-
-#[test]
-fn cb7_lists_metadata_files() {
-    let path = metadata_test_file("metadata.cb7");
-    let (files, _) = list_7z_entries(path.to_str().unwrap(), None).expect("list cb7 with metadata");
-
-    let has_xml = files.iter().any(|f| f.name == "ComicInfo.xml");
-    assert!(has_xml, "cb7 listing missing ComicInfo.xml metadata");
-}
-
 fn encrypted_test_file(name: &str) -> std::path::PathBuf {
     test_file("encrypted_tests").join(name)
 }

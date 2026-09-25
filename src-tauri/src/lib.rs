@@ -32,6 +32,7 @@ pub fn run() {
             .unwrap_or(true)
     };
     let cache_mb = config.archive_cache_mb.unwrap_or(128);
+    eprintln!("[QuiviT] config: {}", crate::config::describe_config_source());
 
     let mut builder = tauri::Builder::default();
 
@@ -90,6 +91,8 @@ pub fn run() {
         prefetch_archive_entries,
         load_config,
         get_config_dir,
+        get_active_config_info,
+        open_active_config_dir,
         open_config_dir,
         get_local_data_dir,
         open_local_data_dir,

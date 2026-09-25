@@ -89,8 +89,8 @@ If the tree looks the same and ownership did not change, leave this file alone.
 
 **Testing & Diagnostics:**
 - Three test layers.
-- `mocha/`: standalone pure frontend unit tests (`actions`, `cache`, `core`, `diagnosticsContract`, `metadata`, `sorting`, `urlLoader`, `urlLoaderFlows`, `viewerMath`) outside `src/` to prevent bundling into `frontendDist: "../src"`. Runs via `npm test`.
-- `e2e/`: WebdriverIO end-to-end suite (`specs/`, `pageobjects/`, `helpers/`) running against the live debug binary via `tauri-driver` and `msedgedriver` under portable mode isolation. Runs via `npm run test:e2e`.
+- `mocha/`: standalone pure frontend unit tests (`actions`, `cache`, `core`, `diagnosticsContract`, `metadata`, `sorting`, `urlLoader`, `urlLoaderFlows`, `viewerMath`) outside `src/` to prevent bundling into `frontendDist: "../src"`. Runs via `npm run mocha`.
+- `e2e/`: WebdriverIO end-to-end suite (`specs/`, `pageobjects/`, `helpers/`) running against the live debug binary via `tauri-driver` and `msedgedriver` in an isolated repo folder. Runs via `npm run e2e` (one-file layout) and `npm run e2e:split` (split files).
 - `e2e/replay-diagnostics/`: in-browser pipeline identity diagnostic engine (`base.js`), modular probes (`probes/`), CLI harness (`cli.js`), and scenario runner (`runner.e2e.js`). Evaluates blackout frames, image pool retirement races, WebGL readiness, and IPC latency. Supports `investigation.js` overrides for the automated self-diagnostic loop. Runs via `npm run diagnose` and `npm run replay`.
 - `e2e/helpers/recorder-shim.js`: in-browser action recorder with floating control badge (`[Start/Pause]`, `[Stop]`, `[Reset]`), continuous Node trace buffering, and auto-finalization on window exit. Saves traces to `e2e/scenarios/<scenario>.json`. Runs via `npm run record`.
 - `src-tauri/src/tests/`: in-tree Rust backend unit tests for archives, config parsing, format sniffing, protocol URLs, and temp archive origin matching. Runs via `cargo test`.

@@ -46,7 +46,7 @@ const desiredSrcs = new Set([state.src]);
 if (_isVisibleImage(img)) desiredSrcs.add(img.src);
 ```
 
-`img.src` is the browser-resolved URL, including `?_reset=…`. It is never equal to the map key.
+`img.src` is the browser-resolved URL, including `?_reset=...`. It is never equal to the map key.
 
 Then:
 

@@ -19,7 +19,9 @@ export function getFavorites() {
 
 export function saveFavorites(favs) {
   Core.getState().config.frontend_data.favorites = favs;
-  if (configLoaded) Core.persistConfig();
+  // Favorites are rare explicit gestures; persist now so a config reload
+  // never discards them inside the preference debounce window.
+  if (configLoaded) Core.persistConfig({ immediate: true });
 }
 
 function getFavoriteTargetPath(favorite) {
@@ -80,8 +82,11 @@ export function getFavoritesCollapsed() {
 }
 
 export function saveFavoritesCollapsed(collapsed) {
-  Core.getState().config.frontend_data.favorites_collapsed = collapsed;
-  if (configLoaded) Core.persistConfig();
+  const fd = Core.getState().config.frontend_data;
+  const next = collapsed === true;
+  if (fd.favorites_collapsed === next) return;
+  fd.favorites_collapsed = next;
+  if (configLoaded) Core.persistConfig({ immediate: true });
 }
 
 export function isFavorite(path) {
