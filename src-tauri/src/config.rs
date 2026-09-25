@@ -138,7 +138,7 @@ pub const ROAMING_FILES: &[&str] = &[
     "quivit_config.json",
     "quivit_state.json",
     "quivit_directory_sort.json",
-    "quivit_favorites.json",
+    "quivit_bookmarks.json",
     "custom_css.css",
 ];
 
@@ -239,7 +239,7 @@ fn clean_saved_path(path: &str) -> String {
 
 /// Older live moves wrote Windows canonical paths into frontend state. Clean
 /// those values as they cross the configuration boundary so session restore,
-/// Favorites, and breadcrumbs never expose a `\\?\` prefix.
+/// Bookmarks, and breadcrumbs never expose a `\\?\` prefix.
 fn normalize_library_location_paths(config: &mut AppConfig) {
     let Some(data) = config.frontend_data.as_object_mut() else {
         return;
@@ -262,15 +262,15 @@ fn normalize_library_location_paths(config: &mut AppConfig) {
         }
     }
 
-    if let Some(favorites) = data
-        .get_mut("favorites")
+    if let Some(bookmarks) = data
+        .get_mut("bookmarks")
         .and_then(|value| value.as_array_mut())
     {
-        for favorite in favorites {
-            let Some(favorite) = favorite.as_object_mut() else {
+        for bookmark in bookmarks {
+            let Some(bookmark) = bookmark.as_object_mut() else {
                 continue;
             };
-            let Some(path) = favorite.get("path").and_then(|value| value.as_str()) else {
+            let Some(path) = bookmark.get("path").and_then(|value| value.as_str()) else {
                 continue;
             };
             let (filesystem_path, archive_entry) = path.split_once('|').unwrap_or((path, ""));
@@ -280,7 +280,7 @@ fn normalize_library_location_paths(config: &mut AppConfig) {
             } else {
                 format!("{normalized}|{archive_entry}")
             };
-            favorite.insert("path".to_string(), serde_json::json!(value));
+            bookmark.insert("path".to_string(), serde_json::json!(value));
         }
     }
 
@@ -349,7 +349,7 @@ pub fn apply_pending_config_to_disk() {
     }
 }
 
-// Runtime state, directory sort prefs, and favorites live in their own roaming
+// Runtime state, directory sort prefs, and bookmarks live in their own roaming
 // files so quivit_config.json only holds preferences. Portable mode keeps one
 // self-contained file.
 
@@ -359,7 +359,7 @@ pub const STATE_KEYS: &[&str] = &[
     "scroll_zoom_latched",
 ];
 pub const SORT_KEYS: &[&str] = &["directory_sort"];
-pub const FAVORITES_KEYS: &[&str] = &["favorites", "favorites_collapsed"];
+pub const BOOKMARKS_KEYS: &[&str] = &["bookmarks", "bookmarks_collapsed"];
 
 pub fn extract_keys(src: &mut JsonValue, keys: &[&str]) -> JsonValue {
     let mut out = serde_json::Map::new();
@@ -403,13 +403,13 @@ fn load_from_dir(dir: &Path, force_single: bool) -> AppConfig {
     let mut cfg: AppConfig =
         read_json_file(&dir.join("quivit_config.json")).unwrap_or_default();
     if !(force_single || cfg.portable_mode) {
-        // New layout: state, directory-sort, and favorites live in their own files.
+        // New layout: state, directory-sort, and bookmarks live in their own files.
         merge_file_into(&dir.join("quivit_state.json"), &mut cfg.frontend_data);
         merge_file_into(
             &dir.join("quivit_directory_sort.json"),
             &mut cfg.frontend_data,
         );
-        merge_file_into(&dir.join("quivit_favorites.json"), &mut cfg.frontend_data);
+        merge_file_into(&dir.join("quivit_bookmarks.json"), &mut cfg.frontend_data);
 
         // Split mode stores custom CSS in its own file.
         let css_path = dir.join("custom_css.css");
@@ -522,7 +522,7 @@ fn write_split_config(dir: &Path, config: &mut AppConfig) -> Result<(), String> 
     let mut fd = std::mem::take(&mut config.frontend_data);
     let state = extract_keys(&mut fd, STATE_KEYS);
     let sort = extract_keys(&mut fd, SORT_KEYS);
-    let favorites = extract_keys(&mut fd, FAVORITES_KEYS);
+    let bookmarks = extract_keys(&mut fd, BOOKMARKS_KEYS);
 
     // Store custom CSS separately.
     let custom_css = fd
@@ -547,8 +547,8 @@ fn write_split_config(dir: &Path, config: &mut AppConfig) -> Result<(), String> 
     )
     .map_err(|e| e.to_string())?;
     atomic_write(
-        &dir.join("quivit_favorites.json"),
-        serde_json::to_string_pretty(&favorites).map_err(|e| e.to_string())?,
+        &dir.join("quivit_bookmarks.json"),
+        serde_json::to_string_pretty(&bookmarks).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
 
@@ -565,7 +565,7 @@ fn save_override(dir: &Path, mut config: AppConfig) -> Result<(), String> {
         for name in [
             "quivit_state.json",
             "quivit_directory_sort.json",
-            "quivit_favorites.json",
+            "quivit_bookmarks.json",
             "custom_css.css",
         ] {
             let _ = fs::remove_file(dir.join(name));

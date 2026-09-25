@@ -399,14 +399,14 @@ export function initRecorderShim(options = {}) {
     }, true);
   }
 
-  // Track favorites list clicks
-  const favList = document.getElementById('favorites-list');
-  if (favList) {
-    favList.addEventListener('click', (e) => {
+  // Track bookmarks list clicks
+  const bookmarkList = document.getElementById('bookmarks-list');
+  if (bookmarkList) {
+    bookmarkList.addEventListener('click', (e) => {
       if (isDone || !isRecording) return;
       const li = e.target.closest('li');
       if (li && li.dataset.path) {
-        recordStep('open-favorite', 'click', { path: li.dataset.path });
+        recordStep('open-bookmark', 'click', { path: li.dataset.path });
       }
     }, true);
   }

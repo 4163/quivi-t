@@ -165,14 +165,14 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
     '#panel-resize-handle',
     '.col-resizer',
     '.file-panel-actions',
-    '#file-panel-favorites-header',
-    '.file-panel-favorites-header',
+    '#file-panel-bookmarks-header',
+    '.file-panel-bookmarks-header',
     '#file-panel-header-top',
     '.file-panel-header-top',
     '#file-panel-header',
     '.file-panel-header',
     '.header-cell',
-    '.fav-remove',
+    '.bookmark-remove',
     '#file-panel-library-header',
     '.library-provider-header',
     '.lib-remove'
@@ -190,7 +190,7 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
     _filePanel.addEventListener('pointerdown', (e) => {
       if (_overlay?.classList.contains('loading')) return;
       if (_isExcludedInteraction(e)) return;
-      const isFileListTarget = e.target?.closest?.('#file-list, #favorites-list li, .library-provider-list li');
+      const isFileListTarget = e.target?.closest?.('#file-list, #bookmarks-list li, .library-provider-list li');
       if (isFileListTarget && _overlay?.classList.contains('active')) {
         _hide({ restoreFocus: false }, 'filepanel_pointerdown');
       }

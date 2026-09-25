@@ -398,12 +398,12 @@ fn remap_library_paths(config: &mut AppConfig, source: &Path, destination: &Path
         }
     }
 
-    if let Some(favorites) = data
-        .get_mut("favorites")
+    if let Some(bookmarks) = data
+        .get_mut("bookmarks")
         .and_then(|value| value.as_array_mut())
     {
-        for favorite in favorites {
-            let Some(path) = favorite.get("path").and_then(|value| value.as_str()) else {
+        for bookmark in bookmarks {
+            let Some(path) = bookmark.get("path").and_then(|value| value.as_str()) else {
                 continue;
             };
             let (filesystem_path, archive_entry) = path.split_once('|').unwrap_or((path, ""));
@@ -413,8 +413,8 @@ fn remap_library_paths(config: &mut AppConfig, source: &Path, destination: &Path
                 } else {
                     format!("{remapped}|{archive_entry}")
                 };
-                if let Some(favorite) = favorite.as_object_mut() {
-                    favorite.insert("path".to_string(), serde_json::json!(path));
+                if let Some(bookmark) = bookmark.as_object_mut() {
+                    bookmark.insert("path".to_string(), serde_json::json!(path));
                 }
             }
         }
@@ -449,13 +449,13 @@ fn carry_live_library_state(config: &mut AppConfig, current: &AppConfig) {
 
     // Options owns preferences, but these values can change in another window
     // while the Options dialog is open. Start from the persisted state so a
-    // relocation preserves the current session's resume point, Favorites, and
+    // relocation preserves the current session's resume point, Bookmarks, and
     // per-folder sort choices before their paths are rewritten below.
     for key in [
         "last_opened_path",
         "last_active_image",
-        "favorites",
-        "favorites_collapsed",
+        "bookmarks",
+        "bookmarks_collapsed",
         "directory_sort",
     ] {
         match source.get(key) {

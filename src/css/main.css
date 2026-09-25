@@ -307,7 +307,7 @@ body.resizing-col { cursor: col-resize !important; }
   background: var(--surface);
 }
 
-#file-panel:has(#file-panel-favorites.is-empty) #file-panel-header-top {
+#file-panel:has(#file-panel-bookmarks.is-empty) #file-panel-header-top {
   border-bottom: unset;
 }
 
@@ -316,35 +316,35 @@ body.resizing-col { cursor: col-resize !important; }
   min-width: 0;
 }
 
-#btn-favorite-current {
+#btn-bookmark-current {
   flex-shrink: 0;
   color: var(--text-muted);
 }
 
-#btn-favorite-current.active {
+#btn-bookmark-current.active {
   color: #f5c518;
 }
 
-#btn-favorite-current:disabled {
+#btn-bookmark-current:disabled {
   opacity: 0.3;
   cursor: not-allowed;
 }
 
-/* Favorites */
-#file-panel-favorites {
+/* Bookmarks */
+#file-panel-bookmarks {
   background: var(--surface);
   flex-shrink: 0;
 }
 
-#file-panel-favorites.is-empty {
+#file-panel-bookmarks.is-empty {
   display: none
 }
 
-#file-panel-favorites.collapsed #favorites-list {
+#file-panel-bookmarks.collapsed #bookmarks-list {
   display: none;
 }
 
-#file-panel-favorites-header {
+#file-panel-bookmarks-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -359,21 +359,21 @@ body.resizing-col { cursor: col-resize !important; }
   text-transform: uppercase;
 }
 
-#file-panel-favorites.collapsed #file-panel-favorites-header {
+#file-panel-bookmarks.collapsed #file-panel-bookmarks-header {
   border-bottom: unset;
 }
 
-#file-panel-favorites-header:hover {
+#file-panel-bookmarks-header:hover {
   color: var(--text);
   background: var(--hover-bg);
 }
 
-#file-panel-favorites-header .toggle-icon {
+#file-panel-bookmarks-header .toggle-icon {
   font-size: var(--fs-9);
   opacity: 0.6;
 }
 
-#favorites-list {
+#bookmarks-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -381,12 +381,12 @@ body.resizing-col { cursor: col-resize !important; }
 }
 
 /* The list owns the focus ring. */
-#favorites-list:focus-visible {
+#bookmarks-list:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-.fav-remove {
+.bookmark-remove {
   background: transparent;
   border: none;
   color: #999;
@@ -398,27 +398,27 @@ body.resizing-col { cursor: col-resize !important; }
   flex-shrink: 0;
 }
 
-.fav-remove svg {
+.bookmark-remove svg {
   width: var(--fs-12);
   height: var(--fs-12);
 }
 
-li:hover > .fav-remove,
-#favorites-list li:focus > .fav-remove,
-#favorites-list li:focus-within > .fav-remove {
+li:hover > .bookmark-remove,
+#bookmarks-list li:focus > .bookmark-remove,
+#bookmarks-list li:focus-within > .bookmark-remove {
   opacity: 1;
 }
 
-#favorites-list li.selected > .fav-remove {
+#bookmarks-list li.selected > .bookmark-remove {
   opacity: 1;
 }
 
-.fav-remove:hover,
-.fav-remove:focus {
+.bookmark-remove:hover,
+.bookmark-remove:focus {
   color: var(--danger);
 }
 
-.fav-empty {
+.bookmark-empty {
   padding: 6px 12px;
   font-size: var(--fs-11);
   color: var(--text-muted);
@@ -851,7 +851,7 @@ li:hover > .fav-remove,
 }
 
 #file-list li,
-#favorites-list li,
+#bookmarks-list li,
 .library-provider-list li {
   display: grid;
   grid-template-columns: var(--col-name-w) var(--col-ext-w) var(--col-date-w);
@@ -871,12 +871,12 @@ li:hover > .fav-remove,
   box-sizing: border-box;
 }
 
-#favorites-list li,
+#bookmarks-list li,
 .library-provider-list li {
   grid-template-columns: minmax(calc(8px + var(--fs-14)), 1fr) auto auto;
 }
 
-#favorites-list li .item-date,
+#bookmarks-list li .item-date,
 .library-provider-list li .item-date {
   display: none;
 }
@@ -915,9 +915,9 @@ li:hover > .fav-remove,
 }
 
 #file-panel.refreshing #file-list,
-#file-panel.refreshing #favorites-list,
+#file-panel.refreshing #bookmarks-list,
 #file-list.refreshing,
-#favorites-list.refreshing {
+#bookmarks-list.refreshing {
   animation: refresh-list-pulse 0.2s cubic-bezier(0.2, 0, 0, 1);
 }
 
@@ -953,13 +953,13 @@ li:hover > .fav-remove,
 }
 
 #file-list li:hover,
-#favorites-list li:hover,
+#bookmarks-list li:hover,
 .library-provider-list li:hover {
   background: var(--hover-bg);
 }
 
 #file-list li.selected,
-#favorites-list li.selected,
+#bookmarks-list li.selected,
 .library-provider-list li.selected {
   background: var(--selected-bg);
   color: var(--selected-text);
@@ -967,28 +967,28 @@ li:hover > .fav-remove,
 
 /* The list owns keyboard focus. */
 #file-list li,
-#favorites-list li,
+#bookmarks-list li,
 .library-provider-list li { outline: none; }
 
-#file-list .item-name, #favorites-list .item-name, .library-provider-list .item-name { min-width: 0; overflow: hidden; padding-left: 8px; display: flex; align-items: center; gap: 4px; }
+#file-list .item-name, #bookmarks-list .item-name, .library-provider-list .item-name { min-width: 0; overflow: hidden; padding-left: 8px; display: flex; align-items: center; gap: 4px; }
 .library-provider-list .item-name { padding-left: calc(8px + var(--library-indent, 0px)); }
-#file-list .item-name > svg, #favorites-list .item-name > svg, .library-provider-list .item-name > svg,
-#file-list .item-name > img, #favorites-list .item-name > img, .library-provider-list .item-name > img,
+#file-list .item-name > svg, #bookmarks-list .item-name > svg, .library-provider-list .item-name > svg,
+#file-list .item-name > img, #bookmarks-list .item-name > img, .library-provider-list .item-name > img,
 #file-list .item-icon-svg, #file-list .item-icon-svg > svg { width: var(--fs-14); height: var(--fs-14); flex: 0 0 var(--fs-14); object-fit: contain; }
 #file-list .is-hidden-entry .item-name > svg,
-#favorites-list .is-hidden-entry .item-name > svg,
+#bookmarks-list .is-hidden-entry .item-name > svg,
 .library-provider-list .is-hidden-entry .item-name > svg,
 #file-list .is-hidden-entry .item-name > img,
-#favorites-list .is-hidden-entry .item-name > img,
+#bookmarks-list .is-hidden-entry .item-name > img,
 .library-provider-list .is-hidden-entry .item-name > img,
 #file-list .is-hidden-entry .item-icon-svg { opacity: 0.65; }
 #file-list .is-pending-download { opacity: 0.65; }
 #file-list .is-download-error { color: var(--danger); }
 #file-list .is-download-error .item-ext,
 #file-list .is-download-error .item-thumbnail-meta { color: var(--danger); }
-#file-list .item-label, #favorites-list .item-label, .library-provider-list .item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#file-list .item-ext, #favorites-list .item-ext, .library-provider-list .item-ext  { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); padding-left: 8px; }
-#file-list .item-date, #favorites-list .item-date, .library-provider-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-10); color: var(--text-dim); padding-left: 8px; }
+#file-list .item-label, #bookmarks-list .item-label, .library-provider-list .item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#file-list .item-ext, #bookmarks-list .item-ext, .library-provider-list .item-ext  { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); padding-left: 8px; }
+#file-list .item-date, #bookmarks-list .item-date, .library-provider-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-10); color: var(--text-dim); padding-left: 8px; }
 
 /* Thumbnail view */
 #file-panel.view-mode-thumbnail {
@@ -999,15 +999,15 @@ li:hover > .fav-remove,
 
 #file-list li .item-thumbnail-wrapper,
 #file-list li .item-thumbnail-info,
-#favorites-list li .item-thumbnail-wrapper,
-#favorites-list li .item-thumbnail-info,
+#bookmarks-list li .item-thumbnail-wrapper,
+#bookmarks-list li .item-thumbnail-info,
 .library-provider-list li .item-thumbnail-wrapper,
 .library-provider-list li .item-thumbnail-info {
   display: none;
 }
 
 #file-panel.view-mode-thumbnail #file-list li,
-#file-panel.view-mode-thumbnail #favorites-list li,
+#file-panel.view-mode-thumbnail #bookmarks-list li,
 #file-panel.view-mode-thumbnail .library-provider-list li {
   display: flex;
   align-items: center;
@@ -1020,17 +1020,17 @@ li:hover > .fav-remove,
 #file-panel.view-mode-thumbnail #file-list li .item-name,
 #file-panel.view-mode-thumbnail #file-list li .item-ext,
 #file-panel.view-mode-thumbnail #file-list li .item-date,
-#file-panel.view-mode-thumbnail #favorites-list li .item-name,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-name,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-name,
-#file-panel.view-mode-thumbnail #favorites-list li .item-ext,
-#file-panel.view-mode-thumbnail #favorites-list li .item-date,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-ext,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-date,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-ext,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-date {
   display: none;
 }
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-wrapper,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-wrapper,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-wrapper,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-wrapper {
   position: relative;
   display: flex;
@@ -1043,7 +1043,7 @@ li:hover > .fav-remove,
 }
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-placeholder,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-placeholder {
   position: absolute;
   top: 50%;
@@ -1060,7 +1060,7 @@ li:hover > .fav-remove,
 }
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder .placeholder-icon,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder .placeholder-icon,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-placeholder .placeholder-icon,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-placeholder .placeholder-icon {
   display: none;
   width: var(--fs-24);
@@ -1074,12 +1074,12 @@ li:hover > .fav-remove,
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="folder"] .icon-folder,
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="archive"] .icon-archive,
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-placeholder[data-type="file"] .icon-file,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder:not([data-type]) .icon-image,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="image"] .icon-image,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="video"] .icon-video,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="folder"] .icon-folder,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="archive"] .icon-archive,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-placeholder[data-type="file"] .icon-file,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-placeholder:not([data-type]) .icon-image,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-placeholder[data-type="image"] .icon-image,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-placeholder[data-type="video"] .icon-video,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-placeholder[data-type="folder"] .icon-folder,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-placeholder[data-type="archive"] .icon-archive,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-placeholder[data-type="file"] .icon-file,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-placeholder:not([data-type]) .icon-image,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-placeholder[data-type="image"] .icon-image,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-placeholder[data-type="video"] .icon-video,
@@ -1090,7 +1090,7 @@ li:hover > .fav-remove,
 }
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-img.is-loaded + .item-thumbnail-placeholder,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-img.is-loaded + .item-thumbnail-placeholder,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-img.is-loaded + .item-thumbnail-placeholder,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-img.is-loaded + .item-thumbnail-placeholder {
   display: none !important;
 }
@@ -1113,7 +1113,7 @@ li:hover > .fav-remove,
 }
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-info,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-info,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-info,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-info {
   display: flex;
   flex-direction: column;
@@ -1125,7 +1125,7 @@ li:hover > .fav-remove,
 }
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-title,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-title,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-title,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-title {
   min-width: 0;
   overflow: hidden;
@@ -1137,7 +1137,7 @@ li:hover > .fav-remove,
 }
 
 #file-panel.view-mode-thumbnail #file-list li .item-thumbnail-meta,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-meta,
+#file-panel.view-mode-thumbnail #bookmarks-list li .item-thumbnail-meta,
 #file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-meta {
   min-width: 0;
   overflow: hidden;
@@ -1149,7 +1149,7 @@ li:hover > .fav-remove,
 }
 
 #file-panel.view-mode-thumbnail #file-list .is-hidden-entry .item-thumbnail-wrapper,
-#file-panel.view-mode-thumbnail #favorites-list .is-hidden-entry .item-thumbnail-wrapper {
+#file-panel.view-mode-thumbnail #bookmarks-list .is-hidden-entry .item-thumbnail-wrapper {
   opacity: 0.65;
 }
 
@@ -1518,7 +1518,7 @@ body.is-importing-url :is(#menubar, #file-panel) * {
 }
 
 body.is-importing-url .menu-trigger:hover,
-body.is-importing-url #file-panel-favorites-header:hover,
+body.is-importing-url #file-panel-bookmarks-header:hover,
 body.is-importing-url .library-provider-header:hover,
 body.is-importing-url .header-cell:hover {
   cursor: not-allowed;

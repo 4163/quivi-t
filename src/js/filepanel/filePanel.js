@@ -4,14 +4,14 @@
 import { DirectoryPrefs } from '../directoryPrefs.js';
 import { makeListNavigable, makeContainerNavigable } from '../keyboardNav.js';
 import {
-  getFavorites,
-  getFavoritesCollapsed,
-  saveFavoritesCollapsed,
-  isFavorite,
-  toggleFavorite,
-  saveFavorites,
-  reconcileFavorites
-} from './favoritesStore.js';
+  getBookmarks,
+  getBookmarksCollapsed,
+  saveBookmarksCollapsed,
+  isBookmark,
+  toggleBookmark,
+  saveBookmarks,
+  reconcileBookmarks
+} from './bookmarksStore.js';
 import {
   fetchLibraryTree,
   hasLibraryEntries,
@@ -159,12 +159,12 @@ export function ensureArchiveBlob(src) {
   return p;
 }
 
-export const FAVORITES_CACHE_CAPACITY = 250;
-export const favoritesThumbnailCache = new BoundedMap(FAVORITES_CACHE_CAPACITY, _revokeBlobEntry);
+export const BOOKMARKS_CACHE_CAPACITY = 250;
+export const bookmarksThumbnailCache = new BoundedMap(BOOKMARKS_CACHE_CAPACITY, _revokeBlobEntry);
 
 export function clearLibraryPathCaches() {
   thumbnailCache.clear();
-  favoritesThumbnailCache.clear();
+  bookmarksThumbnailCache.clear();
 }
 
 // Canonical large format/folder icons (~20 entries).
@@ -302,15 +302,15 @@ let lastRenderedViewMode = null;
 let lastRenderedVisible = null;
 let lastRenderedDirectory = null;
 
-// Favorites
-let favoritesExpanded = false;
-let favoritesBtnEl = null;
-let favoritesListUl = null;
-let favoritesHeaderEl = null;
+// Bookmarks
+let bookmarksExpanded = false;
+let bookmarksBtnEl = null;
+let bookmarksListUl = null;
+let bookmarksHeaderEl = null;
 
-let favLastClickPath = '';
-let favLastClickTime = 0;
-let highlightedFavoritePath = '';
+let bookmarkLastClickPath = '';
+let bookmarkLastClickTime = 0;
+let highlightedBookmarkPath = '';
 
 // Library
 let libraryPanelEl = null;
@@ -364,9 +364,9 @@ let columnsInitialized = false;
 // Prevents the viewport's image-load cycle from stealing focus away.
 let panelKeyboardActive = false;
 
-// After opening a favorite, move focus to the main file list. Most users open a
-// favorite and then navigate nearby entries with arrow keys; keyboard users
-// should not need to tab out of Favorites first.
+// After opening a bookmark, move focus to the main file list. Most users open a
+// bookmark and then navigate nearby entries with arrow keys; keyboard users
+// should not need to tab out of Bookmarks first.
 let focusMainListOnNextRender = false;
 
 function setColumnWidth(col, width) {
@@ -458,31 +458,31 @@ function renderBreadcrumb(state) {
   breadcrumbEl.title = path || '';
 }
 
-// Favorites rendering.
+// Bookmarks rendering.
 
-function updateFavoriteBtn(path) {
-  if (!favoritesBtnEl) return;
-  const starred = isFavorite(path);
-  const svg = favoritesBtnEl.querySelector('svg');
+function updateBookmarkBtn(path) {
+  if (!bookmarksBtnEl) return;
+  const starred = isBookmark(path);
+  const svg = bookmarksBtnEl.querySelector('svg');
   if (svg) svg.setAttribute('fill', starred ? 'currentColor' : 'none');
-  favoritesBtnEl.title = starred ? 'Remove from Favorites' : 'Add to Favorites';
-  favoritesBtnEl.classList.toggle('active', starred);
+  bookmarksBtnEl.title = starred ? 'Remove from Bookmarks' : 'Add to Bookmarks';
+  bookmarksBtnEl.classList.toggle('active', starred);
 }
 
-export function toggleFavoriteCurrent() {
-  if (!Core || !favoritesBtnEl) return;
+export function toggleBookmarkCurrent() {
+  if (!Core || !bookmarksBtnEl) return;
   const state = Core.getState();
   const entry = state.list[state.index];
   if (!entry || entry.is_parent) return;
-  const wasFavorite = isFavorite(entry.path);
-  toggleFavorite(entry);
-  updateFavoriteBtn(entry.path);
-  // Reveal newly added favorites.
-  if (!wasFavorite) {
-    favoritesExpanded = true;
-    saveFavoritesCollapsed(false);
+  const wasBookmark = isBookmark(entry.path);
+  toggleBookmark(entry);
+  updateBookmarkBtn(entry.path);
+  // Reveal newly added bookmarks.
+  if (!wasBookmark) {
+    bookmarksExpanded = true;
+    saveBookmarksCollapsed(false);
   }
-  renderFavorites();
+  renderBookmarks();
 }
 
 const iconCache = new Map();
@@ -591,43 +591,43 @@ function _pathsEqual(a, b) {
 const EMPTY_BOX_HTML = '<span class="lib-remove-box"></span>';
 const CLOSE_X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
 
-function openFavorite(fav) {
+function openBookmark(bm) {
   focusMainListOnNextRender = true;
   if (FsUtils) {
-    FsUtils.loadFile(fav.path).catch(err => {
+    FsUtils.loadFile(bm.path).catch(err => {
       console.error(err);
-      refreshFavoritesAfterFilesystemChange();
+      refreshBookmarksAfterFilesystemChange();
     });
   }
 }
 
-function buildFavoriteEntry(fav) {
+function buildBookmarkEntry(bm) {
   const li = document.createElement('li');
   // Full system path as tooltip. For archive entries ("archive|inner/path.png")
   // put the inner entry on its own line, keeping its native "/" separators.
-  li.title = fav.path.includes('|')
-    ? fav.path.replace('|', '\nEntry: ')
-    : fav.path;
-  li.dataset.path = fav.path;
+  li.title = bm.path.includes('|')
+    ? bm.path.replace('|', '\nEntry: ')
+    : bm.path;
+  li.dataset.path = bm.path;
   li.setAttribute('role', 'option');
   li.setAttribute('tabindex', '0');
   
-  li.classList.toggle('is-hidden-entry', !!fav.is_hidden);
+  li.classList.toggle('is-hidden-entry', !!bm.is_hidden);
 
 
   // List mode elements
   const itemName = document.createElement('span');
   itemName.className = 'item-name';
-  itemName.innerHTML = getIconHtml(fav);
+  itemName.innerHTML = getIconHtml(bm);
   
   const itemLabel = document.createElement('span');
   itemLabel.className = 'item-label';
-  itemLabel.textContent = fav.name;
+  itemLabel.textContent = bm.name;
   itemName.appendChild(itemLabel);
   
   const itemExt = document.createElement('span');
   itemExt.className = 'item-ext';
-  itemExt.textContent = fav.is_dir ? 'DIR' : (fav.ext || '');
+  itemExt.textContent = bm.is_dir ? 'DIR' : (bm.ext || '');
   
   const itemDate = document.createElement('span');
   itemDate.className = 'item-date';
@@ -648,7 +648,7 @@ function buildFavoriteEntry(fav) {
   const thumbPlaceholder = document.createElement('span');
   thumbPlaceholder.className = 'item-thumbnail-placeholder';
   thumbPlaceholder.setAttribute('aria-hidden', 'true');
-  thumbPlaceholder.dataset.type = getPlaceholderType(fav);
+  thumbPlaceholder.dataset.type = getPlaceholderType(bm);
   thumbPlaceholder.innerHTML = PLACEHOLDER_HTML;
   thumbWrapper.appendChild(thumbPlaceholder);
 
@@ -656,41 +656,41 @@ function buildFavoriteEntry(fav) {
   thumbInfo.className = 'item-thumbnail-info';
   const thumbTitle = document.createElement('span');
   thumbTitle.className = 'item-thumbnail-title';
-  thumbTitle.textContent = fav.name;
+  thumbTitle.textContent = bm.name;
   const thumbMeta = document.createElement('span');
   thumbMeta.className = 'item-thumbnail-meta';
 
-  if (fav.is_drive) {
+  if (bm.is_drive) {
     thumbMeta.textContent = 'Drive';
-  } else if (fav.is_dir) {
-    thumbMeta.textContent = fav.date ? `Folder • ${fav.date}` : 'Folder';
+  } else if (bm.is_dir) {
+    thumbMeta.textContent = bm.date ? `Folder • ${bm.date}` : 'Folder';
   } else {
-    const ext = (fav.ext || '').toUpperCase();
-    thumbMeta.textContent = ext ? (fav.date ? `${ext} • ${fav.date}` : ext) : (fav.date || '');
+    const ext = (bm.ext || '').toUpperCase();
+    thumbMeta.textContent = ext ? (bm.date ? `${ext} • ${bm.date}` : ext) : (bm.date || '');
   }
   thumbInfo.appendChild(thumbTitle);
   thumbInfo.appendChild(thumbMeta);
 
-  const ext = FsUtils.getIconExtKey(fav);
-  const targetSrc = FsUtils.buildThumbnailSrc(fav, null);
+  const ext = FsUtils.getIconExtKey(bm);
+  const targetSrc = FsUtils.buildThumbnailSrc(bm, null);
   thumbImg.onerror = () => {
     thumbImg.onerror = null;
     const currentSrc = thumbImg.getAttribute('src') || '';
-    if (currentSrc.includes('/thumb/') && !FsUtils.isVideo?.(fav.path || '')) {
+    if (currentSrc.includes('/thumb/') && !FsUtils.isVideo?.(bm.path || '')) {
       thumbImg.onerror = () => {
         thumbImg.onerror = null;
-        const iconPath = FsUtils._isPathSpecificIcon(ext) ? fav.path : '';
+        const iconPath = FsUtils._isPathSpecificIcon(ext) ? bm.path : '';
         const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
-        favoritesThumbnailCache.set(targetSrc, fallbackSrc);
+        bookmarksThumbnailCache.set(targetSrc, fallbackSrc);
         thumbImg.src = fallbackSrc;
       };
-      const directSrc = FsUtils.buildFileSrcSync(fav.path);
-      favoritesThumbnailCache.set(targetSrc, directSrc);
+      const directSrc = FsUtils.buildFileSrcSync(bm.path);
+      bookmarksThumbnailCache.set(targetSrc, directSrc);
       thumbImg.src = directSrc;
     } else {
-      const iconPath = FsUtils._isPathSpecificIcon(ext) ? fav.path : '';
+      const iconPath = FsUtils._isPathSpecificIcon(ext) ? bm.path : '';
       const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
-      favoritesThumbnailCache.set(targetSrc, fallbackSrc);
+      bookmarksThumbnailCache.set(targetSrc, fallbackSrc);
       thumbImg.src = fallbackSrc;
     }
   };
@@ -698,35 +698,35 @@ function buildFavoriteEntry(fav) {
     const src = thumbImg.getAttribute('src');
     if (src && !src.startsWith('data:image/svg+xml')) {
       thumbImg.classList.add('is-loaded');
-      if (!favoritesThumbnailCache.has(src)) {
-        favoritesThumbnailCache.set(src, true);
+      if (!bookmarksThumbnailCache.has(src)) {
+        bookmarksThumbnailCache.set(src, true);
       }
     }
   };
-  const cachedFav = favoritesThumbnailCache.get(targetSrc);
-  if (cachedFav !== undefined) {
+  const cachedBookmark = bookmarksThumbnailCache.get(targetSrc);
+  if (cachedBookmark !== undefined) {
     if (animatedSvgSrcs.has(targetSrc)) thumbImg.loading = 'eager';
-    thumbImg.src = typeof cachedFav === 'string' ? cachedFav : targetSrc;
+    thumbImg.src = typeof cachedBookmark === 'string' ? cachedBookmark : targetSrc;
     thumbImg.classList.add('is-loaded');
   } else {
     thumbImg.loading = 'lazy';
     thumbImg.src = targetSrc;
   }
-  if (isSvgSrc(targetSrc) && fav.path) {
-    markIfAnimatedSvg(targetSrc, fav.path);
+  if (isSvgSrc(targetSrc) && bm.path) {
+    markIfAnimatedSvg(targetSrc, bm.path);
   }
 
   const removeBtn = document.createElement('button');
-  removeBtn.className = 'fav-remove';
+  removeBtn.className = 'bookmark-remove';
   removeBtn.title = 'Remove';
   removeBtn.tabIndex = -1;
   removeBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
   removeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const favs = getFavorites().filter(f => f.path !== fav.path);
-    saveFavorites(favs);
-    renderFavorites();
-    updateFavoriteBtn(Core.getState().list?.[Core.getState().index]?.path || '');
+    const bms = getBookmarks().filter(b => b.path !== bm.path);
+    saveBookmarks(bms);
+    renderBookmarks();
+    updateBookmarkBtn(Core.getState().list?.[Core.getState().index]?.path || '');
   });
 
   li.appendChild(itemName);
@@ -737,10 +737,10 @@ function buildFavoriteEntry(fav) {
   li.appendChild(removeBtn);
 
   li.addEventListener('focus', () => {
-    highlightFavoriteByPath(fav.path);
-    if (favoritesListUl) {
-      for (const row of favoritesListUl.children) {
-        const btn = row.querySelector('.fav-remove');
+    highlightBookmarkByPath(bm.path);
+    if (bookmarksListUl) {
+      for (const row of bookmarksListUl.children) {
+        const btn = row.querySelector('.bookmark-remove');
         if (btn) btn.tabIndex = -1;
       }
     }
@@ -748,9 +748,9 @@ function buildFavoriteEntry(fav) {
   });
 
   removeBtn.addEventListener('focus', () => {
-    if (favoritesListUl) {
-      for (const row of favoritesListUl.children) {
-        const btn = row.querySelector('.fav-remove');
+    if (bookmarksListUl) {
+      for (const row of bookmarksListUl.children) {
+        const btn = row.querySelector('.bookmark-remove');
         if (btn) btn.tabIndex = -1;
       }
     }
@@ -758,92 +758,92 @@ function buildFavoriteEntry(fav) {
   });
 
   li.addEventListener('click', () => {
-    highlightFavoriteByPath(fav.path);
-    const isDirOrArchive = fav.is_dir || (fav.ext && FsUtils && FsUtils.isArchive(fav.name));
+    highlightBookmarkByPath(bm.path);
+    const isDirOrArchive = bm.is_dir || (bm.ext && FsUtils && FsUtils.isArchive(bm.name));
     if (isDirOrArchive) {
       const now = Date.now();
-      if (favLastClickPath === fav.path && (now - favLastClickTime < 400)) {
-        favLastClickPath = '';
-        favLastClickTime = 0;
-        openFavorite(fav);
+      if (bookmarkLastClickPath === bm.path && (now - bookmarkLastClickTime < 400)) {
+        bookmarkLastClickPath = '';
+        bookmarkLastClickTime = 0;
+        openBookmark(bm);
       } else {
-        favLastClickPath = fav.path;
-        favLastClickTime = now;
+        bookmarkLastClickPath = bm.path;
+        bookmarkLastClickTime = now;
       }
     } else {
-      openFavorite(fav);
+      openBookmark(bm);
     }
   });
 
   return li;
 }
 
-function renderFavorites() {
-  if (!favoritesListUl) return;
-  const favs = getFavorites();
-  if (!favs.some(favorite => favorite.path === highlightedFavoritePath)) {
-    highlightedFavoritePath = '';
+function renderBookmarks() {
+  if (!bookmarksListUl) return;
+  const bms = getBookmarks();
+  if (!bms.some(bookmark => bookmark.path === highlightedBookmarkPath)) {
+    highlightedBookmarkPath = '';
   }
   
-  if (favoritesHeaderEl) {
-    favoritesHeaderEl.classList.toggle('hidden', favs.length === 0);
+  if (bookmarksHeaderEl) {
+    bookmarksHeaderEl.classList.toggle('hidden', bms.length === 0);
   }
   
-  favoritesListUl.innerHTML = '';
-  const panel = document.getElementById('file-panel-favorites');
-  if (panel) panel.classList.toggle('is-empty', favs.length === 0);
-  if (favs.length === 0) {
-    favoritesExpanded = false;
-    saveFavoritesCollapsed(true);
+  bookmarksListUl.innerHTML = '';
+  const panel = document.getElementById('file-panel-bookmarks');
+  if (panel) panel.classList.toggle('is-empty', bms.length === 0);
+  if (bms.length === 0) {
+    bookmarksExpanded = false;
+    saveBookmarksCollapsed(true);
   } else {
-    favs.forEach(fav => favoritesListUl.appendChild(buildFavoriteEntry(fav)));
+    bms.forEach(bm => bookmarksListUl.appendChild(buildBookmarkEntry(bm)));
   }
   if (panel) {
-    panel.classList.toggle('collapsed', !favoritesExpanded);
-    const icon = favoritesHeaderEl?.querySelector('.toggle-icon');
-    if (icon) icon.textContent = favoritesExpanded ? '▲' : '▼';
+    panel.classList.toggle('collapsed', !bookmarksExpanded);
+    const icon = bookmarksHeaderEl?.querySelector('.toggle-icon');
+    if (icon) icon.textContent = bookmarksExpanded ? '▲' : '▼';
   }
-  if (Core) updateFavoritesSelection(Core.getState());
+  if (Core) updateBookmarksSelection(Core.getState());
 }
 
-let favoritesRefreshTimer = null;
+let bookmarksRefreshTimer = null;
 
-function refreshFavoritesAfterFilesystemChange() {
-  clearTimeout(favoritesRefreshTimer);
-  favoritesRefreshTimer = setTimeout(async () => {
+function refreshBookmarksAfterFilesystemChange() {
+  clearTimeout(bookmarksRefreshTimer);
+  bookmarksRefreshTimer = setTimeout(async () => {
     const movingLibrary = await window.__TAURI__?.core
       ?.invoke('library_move_in_progress')
       .catch(() => false);
     if (movingLibrary) return;
 
-    reconcileFavorites().then(changed => {
+    reconcileBookmarks().then(changed => {
       if (!changed) return;
-      renderFavorites();
+      renderBookmarks();
       const state = Core.getState();
-      updateFavoriteBtn(state.list?.[state.index]?.path || '');
+      updateBookmarkBtn(state.list?.[state.index]?.path || '');
     }).catch(err => {
-      console.error('[FilePanel] Failed to reconcile Favorites after a filesystem change:', err);
+      console.error('[FilePanel] Failed to reconcile Bookmarks after a filesystem change:', err);
     });
   }, 250);
 }
 
-function toggleFavoritesExpanded() {
-  favoritesExpanded = !favoritesExpanded;
-  saveFavoritesCollapsed(!favoritesExpanded);
-  const panel = document.getElementById('file-panel-favorites');
-  if (panel) panel.classList.toggle('collapsed', !favoritesExpanded);
-  const icon = favoritesHeaderEl?.querySelector('.toggle-icon');
-  if (icon) icon.textContent = favoritesExpanded ? '▲' : '▼';
-  if (favoritesExpanded) renderFavorites();
+function toggleBookmarksExpanded() {
+  bookmarksExpanded = !bookmarksExpanded;
+  saveBookmarksCollapsed(!bookmarksExpanded);
+  const panel = document.getElementById('file-panel-bookmarks');
+  if (panel) panel.classList.toggle('collapsed', !bookmarksExpanded);
+  const icon = bookmarksHeaderEl?.querySelector('.toggle-icon');
+  if (icon) icon.textContent = bookmarksExpanded ? '▲' : '▼';
+  if (bookmarksExpanded) renderBookmarks();
 }
 
-function updateFavoritesSelection(state) {
-  if (!favoritesListUl) return;
+function updateBookmarksSelection(state) {
+  if (!bookmarksListUl) return;
   // The current folder/archive takes priority over the selected entry, so a
-  // favorited location stays highlighted no matter which item is active.
+  // bookmarked location stays highlighted no matter which item is active.
   const containerPath = state.mode === 'archive' ? state.archivePath : state.directory;
   let activePath = '';
-  if (containerPath && isFavorite(containerPath)) {
+  if (containerPath && isBookmark(containerPath)) {
     activePath = containerPath;
   } else {
     const entry = state.list?.[state.index];
@@ -851,34 +851,34 @@ function updateFavoritesSelection(state) {
       activePath = entry.path;
     }
   }
-  for (const li of favoritesListUl.children) {
+  for (const li of bookmarksListUl.children) {
     li.classList.toggle('selected', li.dataset.path === activePath);
   }
 }
 
-function highlightFavoriteByPath(path) {
-  highlightedFavoritePath = path;
-  if (!favoritesListUl) return;
-  for (const li of favoritesListUl.children) {
+function highlightBookmarkByPath(path) {
+  highlightedBookmarkPath = path;
+  if (!bookmarksListUl) return;
+  for (const li of bookmarksListUl.children) {
     li.classList.toggle('selected', li.dataset.path === path);
   }
 }
 
-// Returns the favorite entry currently highlighted in the favorites list (via
+// Returns the bookmark entry currently highlighted in the bookmarks list (via
 // focus/click), else null so the file panel action buttons fall back to the
 // main file-list selection.
-export function getHighlightedFavorite() {
-  if (!highlightedFavoritePath) return null;
-  return getFavorites().find(f => f.path === highlightedFavoritePath) || null;
+export function getHighlightedBookmark() {
+  if (!highlightedBookmarkPath) return null;
+  return getBookmarks().find(b => b.path === highlightedBookmarkPath) || null;
 }
 
-// Move the highlighted favorite by delta (mirrors ArrowDown/ArrowUp). Moves the
+// Move the highlighted bookmark by delta (mirrors ArrowDown/ArrowUp). Moves the
 // row highlight only; opening still requires Enter/Space/click.
-export function navigateHighlightedFavorite(delta) {
-  if (!favoritesListUl) return;
-  const items = Array.from(favoritesListUl.children);
+export function navigateHighlightedBookmark(delta) {
+  if (!bookmarksListUl) return;
+  const items = Array.from(bookmarksListUl.children);
   if (!items.length) return;
-  const currentIndex = items.findIndex(li => li.dataset.path === highlightedFavoritePath);
+  const currentIndex = items.findIndex(li => li.dataset.path === highlightedBookmarkPath);
   let nextIndex;
   if (currentIndex === -1) {
     nextIndex = delta > 0 ? 0 : items.length - 1;
@@ -2110,7 +2110,7 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
 }
 
 function setRefreshingVisual(active) {
-  if (!filePanel && !fileListUl && !favoritesListUl) return;
+  if (!filePanel && !fileListUl && !bookmarksListUl) return;
   clearTimeout(refreshPulseTimer);
 
   if (active) {
@@ -2125,11 +2125,11 @@ function setRefreshingVisual(active) {
     refreshStartTime = performance.now();
     filePanel?.classList.remove('refreshing');
     fileListUl?.classList.remove('refreshing');
-    favoritesListUl?.classList.remove('refreshing');
+    bookmarksListUl?.classList.remove('refreshing');
     if (filePanel) void filePanel.offsetWidth;
     filePanel?.classList.add('refreshing');
     fileListUl?.classList.add('refreshing');
-    favoritesListUl?.classList.add('refreshing');
+    bookmarksListUl?.classList.add('refreshing');
     if (Core && Core.getState().fileListViewMode === 'thumbnail') {
       const list = Core.getState().list;
       if (list) {
@@ -2148,7 +2148,7 @@ function setRefreshingVisual(active) {
   refreshPulseTimer = setTimeout(() => {
     filePanel?.classList.remove('refreshing');
     fileListUl?.classList.remove('refreshing');
-    favoritesListUl?.classList.remove('refreshing');
+    bookmarksListUl?.classList.remove('refreshing');
   }, remaining);
 }
 
@@ -2193,7 +2193,7 @@ export function renderFilePanel(state) {
     measureRowHeight();
     lastRenderedList = null;
     initDomPool();
-    renderFavorites();
+    renderBookmarks();
   }
 
   if (!ROW_HEIGHT) {
@@ -2216,28 +2216,28 @@ export function renderFilePanel(state) {
 
   renderBreadcrumb(state);
 
-  // Update the favorite star for the current entry. Skip `..`.
+  // Update the bookmark button for the current entry. Skip `..`.
   {
     const entry = state.list?.[state.index];
     if (entry && !entry.is_parent) {
-      updateFavoriteBtn(entry.path);
-      if (favoritesBtnEl) {
-        favoritesBtnEl.disabled = false;
-        favoritesBtnEl.tabIndex = 0;
+      updateBookmarkBtn(entry.path);
+      if (bookmarksBtnEl) {
+        bookmarksBtnEl.disabled = false;
+        bookmarksBtnEl.tabIndex = 0;
       }
     } else {
-      if (favoritesBtnEl) {
-        favoritesBtnEl.disabled = true;
-        favoritesBtnEl.tabIndex = -1;
-        const svg = favoritesBtnEl.querySelector('svg');
+      if (bookmarksBtnEl) {
+        bookmarksBtnEl.disabled = true;
+        bookmarksBtnEl.tabIndex = -1;
+        const svg = bookmarksBtnEl.querySelector('svg');
         if (svg) svg.setAttribute('fill', 'none');
-        favoritesBtnEl.classList.remove('active');
+        bookmarksBtnEl.classList.remove('active');
       }
     }
   }
 
-  // Sync Favorites highlighting to the active file-panel item.
-  updateFavoritesSelection(state);
+  // Sync Bookmarks highlighting to the active file-panel item.
+  updateBookmarksSelection(state);
   updateLibrarySelection(state);
 
   if (currentDir !== currentPath) {
@@ -2349,15 +2349,15 @@ export function initFilePanel(deps) {
     }
   });
 
-  // Wire Favorites UI.
-  favoritesBtnEl = document.getElementById('btn-favorite-current');
-  favoritesListUl = document.getElementById('favorites-list');
-  favoritesHeaderEl = document.getElementById('file-panel-favorites-header');
+  // Wire Bookmarks UI.
+  bookmarksBtnEl = document.getElementById('btn-bookmark-current');
+  bookmarksListUl = document.getElementById('bookmarks-list');
+  bookmarksHeaderEl = document.getElementById('file-panel-bookmarks-header');
 
-  if (favoritesBtnEl) {
-    favoritesBtnEl.disabled = true;
-    favoritesBtnEl.tabIndex = -1;
-    favoritesBtnEl.addEventListener('click', toggleFavoriteCurrent);
+  if (bookmarksBtnEl) {
+    bookmarksBtnEl.disabled = true;
+    bookmarksBtnEl.tabIndex = -1;
+    bookmarksBtnEl.addEventListener('click', toggleBookmarkCurrent);
   }
 
   const actionButtons = filePanel.querySelectorAll('.file-panel-actions .icon-btn');
@@ -2372,27 +2372,27 @@ export function initFilePanel(deps) {
     });
   }
 
-  if (favoritesHeaderEl) {
-    favoritesHeaderEl.addEventListener('click', toggleFavoritesExpanded);
-    favoritesHeaderEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFavoritesExpanded(); }
+  if (bookmarksHeaderEl) {
+    bookmarksHeaderEl.addEventListener('click', toggleBookmarksExpanded);
+    bookmarksHeaderEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBookmarksExpanded(); }
     });
   }
 
   // Keyboard navigation mirrors the file list below.
-  if (favoritesListUl) {
-    makeContainerNavigable(favoritesListUl, 'li', {
+  if (bookmarksListUl) {
+    makeContainerNavigable(bookmarksListUl, 'li', {
       vertical: true,
       horizontal: false,
       loop: false,
       onAction: (index, item, e) => {
-        const fav = getFavorites().find(f => f.path === item.dataset.path);
-        if (fav) { panelKeyboardActive = true; openFavorite(fav); }
+        const bookmark = getBookmarks().find(f => f.path === item.dataset.path);
+        if (bookmark) { panelKeyboardActive = true; openBookmark(bookmark); }
       },
       onCancel: () => {
         panelKeyboardActive = false;
-        highlightFavoriteByPath('');
-        if (document.activeElement && favoritesListUl.contains(document.activeElement)) {
+        highlightBookmarkByPath('');
+        if (document.activeElement && bookmarksListUl.contains(document.activeElement)) {
           document.activeElement.blur();
         }
       }
@@ -2401,8 +2401,8 @@ export function initFilePanel(deps) {
 
   // Restore the persisted collapsed state, then initialize header visibility.
   // Config loads asynchronously after init, so re-render once it arrives.
-  favoritesExpanded = !getFavoritesCollapsed();
-  renderFavorites();
+  bookmarksExpanded = !getBookmarksCollapsed();
+  renderBookmarks();
 
   // Wire Library UI.
   libraryPanelEl = document.getElementById('file-panel-library');
@@ -2440,20 +2440,20 @@ export function initFilePanel(deps) {
       renderLibrary().catch(err => {
         console.error('[FilePanel] Failed to refresh Library after a filesystem change:', err);
       });
-      refreshFavoritesAfterFilesystemChange();
+      refreshBookmarksAfterFilesystemChange();
     }).catch(console.error);
 
     window.__TAURI__.event.listen('directory-changed', () => {
-      refreshFavoritesAfterFilesystemChange();
+      refreshBookmarksAfterFilesystemChange();
     }).catch(console.error);
   }
 
-  window.addEventListener('focus', refreshFavoritesAfterFilesystemChange);
+  window.addEventListener('focus', refreshBookmarksAfterFilesystemChange);
 
   window.addEventListener('quivit-config-loaded', () => {
-    favoritesExpanded = !getFavoritesCollapsed();
-    renderFavorites();
-    refreshFavoritesAfterFilesystemChange();
+    bookmarksExpanded = !getBookmarksCollapsed();
+    renderBookmarks();
+    refreshBookmarksAfterFilesystemChange();
     // Re-measure rows so custom CSS font sizes apply.
     const oldHeight = ROW_HEIGHT;
     measureRowHeight();
@@ -2494,10 +2494,10 @@ export function initFilePanel(deps) {
     }
   });
 
-  // Interacting with the main file list clears any highlighted favorite so the
+  // Interacting with the main file list clears any highlighted bookmark so the
   // action buttons target the list selection again.
   fileListUl.addEventListener('focusin', () => {
-    highlightedFavoritePath = '';
+    highlightedBookmarkPath = '';
   });
 
   // File-list keyboard navigation for virtualized list.

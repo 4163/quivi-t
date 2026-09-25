@@ -8,14 +8,14 @@ export const ACTION_REGISTRY = [
   // Navigation
   { id: 'cmd-next', label: 'Next Item', defaultBinds: ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'], category: 'Navigation',
     run: (ctx) => {
-      if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(1);
+      if (ctx.isBookmarksFocused?.()) ctx.navigateHighlightedBookmark(1);
       else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(1);
       else ctx.Core.navigate(1);
     }
   },
   { id: 'cmd-prev', label: 'Previous Item', defaultBinds: ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'], category: 'Navigation',
     run: (ctx) => {
-      if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(-1);
+      if (ctx.isBookmarksFocused?.()) ctx.navigateHighlightedBookmark(-1);
       else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(-1);
       else ctx.Core.navigate(-1);
     }
@@ -254,14 +254,14 @@ export const ACTION_REGISTRY = [
     run: async (ctx) => {
       const state = ctx.Core.getState();
       if (!window.__TAURI__) return;
-      const favorite = ctx.getHighlightedFavorite();
-      if (favorite) {
+      const bookmark = ctx.getHighlightedBookmark();
+      if (bookmark) {
         try {
-          if (favorite.is_drive) {
-            await window.__TAURI__.core.invoke('open_in_explorer', { path: favorite.path });
+          if (bookmark.is_drive) {
+            await window.__TAURI__.core.invoke('open_in_explorer', { path: bookmark.path });
           } else {
-            const sep = favorite.path.indexOf('|');
-            const realPath = sep === -1 ? favorite.path : favorite.path.slice(0, sep);
+            const sep = bookmark.path.indexOf('|');
+            const realPath = sep === -1 ? bookmark.path : bookmark.path.slice(0, sep);
             await window.__TAURI__.opener.revealItemInDir(realPath);
           }
         } catch (err) {
@@ -297,15 +297,15 @@ export const ACTION_REGISTRY = [
     run: async (ctx) => {
       const state = ctx.Core.getState();
       if (!window.__TAURI__) return;
-      const favorite = ctx.getHighlightedFavorite();
-      if (favorite) {
+      const bookmark = ctx.getHighlightedBookmark();
+      if (bookmark) {
         try {
           let targetPath;
-          if (favorite.is_dir || favorite.is_drive) {
-            targetPath = favorite.path;
+          if (bookmark.is_dir || bookmark.is_drive) {
+            targetPath = bookmark.path;
           } else {
-            const sep = favorite.path.indexOf('|');
-            const realPath = sep === -1 ? favorite.path : favorite.path.slice(0, sep);
+            const sep = bookmark.path.indexOf('|');
+            const realPath = sep === -1 ? bookmark.path : bookmark.path.slice(0, sep);
             targetPath = realPath.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '');
           }
           await window.__TAURI__.core.invoke('open_in_explorer', { path: targetPath });
@@ -335,8 +335,8 @@ export const ACTION_REGISTRY = [
       }
     }
   },
-  { id: 'cmd-toggle-favorite', label: 'Toggle Favorite', defaultBinds: [], category: 'File Operations',
-    run: (ctx) => ctx.toggleFavoriteCurrent()
+  { id: 'cmd-toggle-bookmark', label: 'Toggle Bookmark', defaultBinds: [], category: 'File Operations',
+    run: (ctx) => ctx.toggleBookmarkCurrent()
   },
   { id: 'cmd-open-metadata', label: 'Open Metadata', defaultBinds: [], category: 'File Operations',
     run: (ctx) => ctx.openMetadataWindow()

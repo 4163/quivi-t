@@ -832,7 +832,7 @@ export const FsUtils = {
     }
 
     // Composite archive-entry path: "<archive path>|<inner entry name>". Used by
-    // favorites saved for images inside archives.
+    // bookmarks saved for images inside archives.
     if (path.includes('|')) {
       const sep = path.indexOf('|');
       const archivePath = path.slice(0, sep);
