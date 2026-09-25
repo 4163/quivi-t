@@ -316,6 +316,7 @@ let lastRenderedDirectory = null;
 
 // Favorites
 let favoritesExpanded = false;
+let currentFavoriteLoadout = null;
 let favoritesBtnEl = null;
 let favoritesListUl = null;
 let favoritesHeaderEl = null;
@@ -870,18 +871,27 @@ function buildFavoriteEntry(fav) {
   });
 }
 
-function renderFavorites() {
+function renderFavorites(options = {}) {
   if (!favoritesListUl) return;
   const favs = getActiveFavorites();
+  const loadoutName = getActiveLoadoutName();
+  const favState = getFavoritesState();
+  const hasMultipleOrCustom = (favState.loadouts?.length || 0) > 1 || (loadoutName && loadoutName !== DEFAULT_LOADOUT_NAME);
+
+  if (options?.expandFavorites || (currentFavoriteLoadout !== null && currentFavoriteLoadout !== loadoutName)) {
+    favoritesExpanded = true;
+    saveFavoritesCollapsed(false);
+  }
+  currentFavoriteLoadout = loadoutName;
+
   if (!favs.some(favorite => favorite.path === highlightedFavoritePath)) {
     highlightedFavoritePath = '';
   }
 
+  const isEmpty = favs.length === 0;
+
   if (favoritesHeaderEl) {
-    favoritesHeaderEl.classList.toggle('hidden', favs.length === 0);
-    const loadoutName = getActiveLoadoutName();
-    const favState = getFavoritesState();
-    const hasMultipleOrCustom = (favState.loadouts?.length || 0) > 1 || (loadoutName && loadoutName !== DEFAULT_LOADOUT_NAME);
+    favoritesHeaderEl.classList.toggle('hidden', isEmpty);
     const titleText = (loadoutName && hasMultipleOrCustom)
       ? `Favorites (${loadoutName})`
       : 'Favorites';
@@ -903,13 +913,10 @@ function renderFavorites() {
 
   favoritesListUl.innerHTML = '';
   const panel = document.getElementById('file-panel-favorites');
-  if (panel) panel.classList.toggle('is-empty', favs.length === 0);
-  if (favs.length === 0) {
-    favoritesExpanded = false;
-    saveFavoritesCollapsed(true);
-  } else {
-    favs.forEach(fav => favoritesListUl.appendChild(buildFavoriteEntry(fav)));
-  }
+  if (panel) panel.classList.toggle('is-empty', isEmpty);
+
+  favs.forEach(fav => favoritesListUl.appendChild(buildFavoriteEntry(fav)));
+
   if (panel) {
     panel.classList.toggle('collapsed', !favoritesExpanded);
     const icon = favoritesHeaderEl?.querySelector('.toggle-icon');
@@ -1001,27 +1008,30 @@ function toggleFavoritesExpanded() {
 }
 
 function updateFavoritesSelection(state) {
-  if (!favoritesListUl) return;
+  if (!favoritesListUl || !state) return;
   const containerPath = state.mode === 'archive' ? state.archivePath : state.directory;
-  let activePath = '';
-  if (containerPath && isFavorite(containerPath)) {
-    activePath = containerPath;
-  } else {
-    const entry = state.list?.[state.index];
-    if (entry && !entry.is_parent) {
-      activePath = entry.path;
-    }
-  }
+  const entry = state.list?.[state.index];
+  const itemPath = (entry && !entry.is_parent) ? entry.path : '';
+
   for (const li of favoritesListUl.children) {
-    li.classList.toggle('selected', li.dataset.path === activePath);
+    const p = li.dataset.path;
+    const isSelected = !!(
+      (containerPath && _pathsEqual(p, containerPath)) ||
+      (itemPath && _pathsEqual(p, itemPath))
+    );
+    li.classList.toggle('selected', isSelected);
   }
 }
 
 function highlightFavoriteByPath(path) {
   highlightedFavoritePath = path;
   if (!favoritesListUl) return;
+  if (!path) {
+    if (Core) updateFavoritesSelection(Core.getState());
+    return;
+  }
   for (const li of favoritesListUl.children) {
-    li.classList.toggle('selected', li.dataset.path === path);
+    li.classList.toggle('selected', _pathsEqual(li.dataset.path, path));
   }
 }
 
@@ -1055,29 +1065,30 @@ function toggleBookmarksExpanded() {
 }
 
 function updateBookmarksSelection(state) {
-  if (!bookmarksListUl) return;
-  // The current folder/archive takes priority over the selected entry, so a
-  // bookmarked location stays highlighted no matter which item is active.
+  if (!bookmarksListUl || !state) return;
   const containerPath = state.mode === 'archive' ? state.archivePath : state.directory;
-  let activePath = '';
-  if (containerPath && isBookmark(containerPath)) {
-    activePath = containerPath;
-  } else {
-    const entry = state.list?.[state.index];
-    if (entry && !entry.is_parent) {
-      activePath = entry.path;
-    }
-  }
+  const entry = state.list?.[state.index];
+  const itemPath = (entry && !entry.is_parent) ? entry.path : '';
+
   for (const li of bookmarksListUl.children) {
-    li.classList.toggle('selected', li.dataset.path === activePath);
+    const p = li.dataset.path;
+    const isSelected = !!(
+      (containerPath && _pathsEqual(p, containerPath)) ||
+      (itemPath && _pathsEqual(p, itemPath))
+    );
+    li.classList.toggle('selected', isSelected);
   }
 }
 
 function highlightBookmarkByPath(path) {
   highlightedBookmarkPath = path;
   if (!bookmarksListUl) return;
+  if (!path) {
+    if (Core) updateBookmarksSelection(Core.getState());
+    return;
+  }
   for (const li of bookmarksListUl.children) {
-    li.classList.toggle('selected', li.dataset.path === path);
+    li.classList.toggle('selected', _pathsEqual(li.dataset.path, path));
   }
 }
 
@@ -2618,10 +2629,11 @@ export function initFilePanel(deps) {
   }
 
   favoritesExpanded = !getFavoritesCollapsed();
+  currentFavoriteLoadout = getActiveLoadoutName();
   renderFavorites();
 
-  window.addEventListener('quivit-favorites-changed', () => {
-    renderFavorites();
+  window.addEventListener('quivit-favorites-changed', (e) => {
+    renderFavorites(e?.detail);
     const state = Core.getState();
     updateFavoriteBtn(state?.list?.[state?.index]?.path || '');
   });
@@ -2729,6 +2741,7 @@ export function initFilePanel(deps) {
 
   window.addEventListener('quivit-config-loaded', () => {
     favoritesExpanded = !getFavoritesCollapsed();
+    currentFavoriteLoadout = getActiveLoadoutName();
     renderFavorites();
     bookmarksExpanded = !getBookmarksCollapsed();
     renderBookmarks();

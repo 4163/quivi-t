@@ -92,21 +92,22 @@ export function getActiveFavorites() {
   return getActiveLoadout().items;
 }
 
-export function saveFavorites(favState) {
+export function saveFavorites(favState, options = {}) {
   const state = normalizeFavorites(favState);
   const cfg = Core.getState().config;
   if (cfg?.frontend_data) {
     cfg.frontend_data.favorites = state;
   }
   if (configLoaded) Core.persistConfig({ immediate: true });
-  window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));
+  window.dispatchEvent(new CustomEvent('quivit-favorites-changed', { detail: options }));
 }
 
 export function setActiveLoadout(name) {
   const state = getFavoritesState();
   if (!state.loadouts.some(l => l.name === name)) return;
   state.active = name;
-  saveFavorites(state);
+  saveFavoritesCollapsed(false);
+  saveFavorites(state, { expandFavorites: true });
 }
 
 export function createLoadout(name) {
@@ -156,10 +157,13 @@ export function deleteLoadout(name) {
   if (idx === -1) return false;
 
   state.loadouts.splice(idx, 1);
+  let changedActive = false;
   if (state.active === name) {
     state.active = state.loadouts[0].name;
+    saveFavoritesCollapsed(false);
+    changedActive = true;
   }
-  saveFavorites(state);
+  saveFavorites(state, { expandFavorites: changedActive });
   return true;
 }
 

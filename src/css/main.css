@@ -419,7 +419,7 @@ body.resizing-col { cursor: col-resize !important; }
 }
 
 #file-panel:has(#file-panel-favorites.is-empty) #file-panel-header-top,
-#file-panel:has(#file-panel-bookmarks.is-empty) #file-panel-header-top {
+#file-panel:has(#file-panel-bookmarks.is-empty):has(#file-panel-favorites.is-empty) #file-panel-header-top {
   border-bottom: unset;
 }
 

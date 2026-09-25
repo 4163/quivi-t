@@ -513,7 +513,6 @@ function bindFavoritesDropdown() {
       if (row?.dataset?.loadoutName) {
         deleteLoadout(row.dataset.loadoutName);
         renderFavoritesMenu();
-        window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));
       }
       return;
     }
@@ -527,7 +526,6 @@ function bindFavoritesDropdown() {
       e.stopPropagation();
       setActiveLoadout(row.dataset.loadoutName);
       renderFavoritesMenu();
-      window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));
     }
   });
 
@@ -560,8 +558,11 @@ function bindFavoritesDropdown() {
       if (e.key === 'Enter') {
         e.preventDefault();
         const val = newInput.value.trim();
-        createLoadout(val);
+        const created = createLoadout(val);
         newInput.value = '';
+        if (created?.name) {
+          setActiveLoadout(created.name);
+        }
         renderFavoritesMenu();
         const createdInput = document.getElementById('input-new-loadout');
         if (createdInput) createdInput.focus();
@@ -580,7 +581,6 @@ function bindFavoritesDropdown() {
         const targetName = row.dataset.loadoutName;
         setActiveLoadout(targetName);
         renderFavoritesMenu();
-        window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));
         const activeItem = dropdown.querySelector(`li[data-loadout-name="${CSS.escape(targetName)}"]`);
         if (activeItem) activeItem.focus();
       }
