@@ -19,7 +19,7 @@ describe('Diagnostics system contract integrity', () => {
       assert.ok(files.length > 0, 'Must have at least one recorded scenario');
 
       // Trace steps the replay runner handles itself, next to registry ids.
-      const TRACE_STEPS = new Set(['select-index', 'jump-to-index', 'open-bookmark']);
+      const TRACE_STEPS = new Set(['select-index', 'jump-to-index', 'open-favorite']);
       for (const file of files) {
         const filePath = path.join(scenariosDir, file);
         const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));

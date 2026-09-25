@@ -16,15 +16,6 @@ import {
   DEFAULT_LOADOUT_NAME
 } from './favoritesStore.js';
 import {
-  getBookmarks,
-  getBookmarksCollapsed,
-  saveBookmarksCollapsed,
-  isBookmark,
-  toggleBookmark,
-  saveBookmarks,
-  reconcileBookmarks
-} from './bookmarksStore.js';
-import {
   fetchLibraryTree,
   hasLibraryEntries,
   deleteLibraryEntry,
@@ -171,12 +162,12 @@ export function ensureArchiveBlob(src) {
   return p;
 }
 
-export const BOOKMARKS_CACHE_CAPACITY = 250;
-export const bookmarksThumbnailCache = new BoundedMap(BOOKMARKS_CACHE_CAPACITY, _revokeBlobEntry);
+export const FAVORITES_CACHE_CAPACITY = 250;
+export const favoritesThumbnailCache = new BoundedMap(FAVORITES_CACHE_CAPACITY, _revokeBlobEntry);
 
 export function clearLibraryPathCaches() {
   thumbnailCache.clear();
-  bookmarksThumbnailCache.clear();
+  favoritesThumbnailCache.clear();
 }
 
 // Canonical large format/folder icons (~20 entries).
@@ -325,16 +316,6 @@ let favoriteLastClickPath = '';
 let favoriteLastClickTime = 0;
 let highlightedFavoritePath = '';
 
-// Bookmarks
-let bookmarksExpanded = false;
-let bookmarksBtnEl = null;
-let bookmarksListUl = null;
-let bookmarksHeaderEl = null;
-
-let bookmarkLastClickPath = '';
-let bookmarkLastClickTime = 0;
-let highlightedBookmarkPath = '';
-
 // Library
 let libraryPanelEl = null;
 let libLastClickPath = '';
@@ -387,9 +368,9 @@ let columnsInitialized = false;
 // Prevents the viewport's image-load cycle from stealing focus away.
 let panelKeyboardActive = false;
 
-// After opening a bookmark, move focus to the main file list. Most users open a
-// bookmark and then navigate nearby entries with arrow keys; keyboard users
-// should not need to tab out of Bookmarks first.
+// After opening a favorite, move focus to the main file list. Most users open a
+// favorite and then navigate nearby entries with arrow keys; keyboard users
+// should not need to tab out of Favorites first.
 let focusMainListOnNextRender = false;
 
 function setColumnWidth(col, width) {
@@ -481,7 +462,7 @@ function renderBreadcrumb(state) {
   breadcrumbEl.title = path || '';
 }
 
-// Favorites & Bookmarks rendering.
+// Favorites rendering.
 
 function updateFavoriteBtn(path) {
   if (!favoritesBtnEl) return;
@@ -506,31 +487,6 @@ export function toggleFavoriteCurrent() {
     saveFavoritesCollapsed(false);
   }
   renderFavorites();
-}
-
-function updateBookmarkBtn(path) {
-  if (!bookmarksBtnEl) return;
-  const starred = isBookmark(path);
-  const svg = bookmarksBtnEl.querySelector('svg');
-  if (svg) svg.setAttribute('fill', starred ? 'currentColor' : 'none');
-  bookmarksBtnEl.title = starred ? 'Remove from Bookmarks' : 'Add to Bookmarks';
-  bookmarksBtnEl.classList.toggle('active', starred);
-}
-
-export function toggleBookmarkCurrent() {
-  if (!Core || !bookmarksBtnEl) return;
-  const state = Core.getState();
-  const entry = state.list[state.index];
-  if (!entry || entry.is_parent) return;
-  const wasBookmark = isBookmark(entry.path);
-  toggleBookmark(entry);
-  updateBookmarkBtn(entry.path);
-  // Reveal newly added bookmarks.
-  if (!wasBookmark) {
-    bookmarksExpanded = true;
-    saveBookmarksCollapsed(false);
-  }
-  renderBookmarks();
 }
 
 const iconCache = new Map();
@@ -725,16 +681,16 @@ function buildSavedEntry(item, { onRemove, onOpen, onHighlight, listUl, removeCl
         thumbImg.onerror = null;
         const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
         const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
-        bookmarksThumbnailCache.set(targetSrc, fallbackSrc);
+        favoritesThumbnailCache.set(targetSrc, fallbackSrc);
         thumbImg.src = fallbackSrc;
       };
       const directSrc = FsUtils.buildFileSrcSync(item.path);
-      bookmarksThumbnailCache.set(targetSrc, directSrc);
+      favoritesThumbnailCache.set(targetSrc, directSrc);
       thumbImg.src = directSrc;
     } else {
       const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
       const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
-      bookmarksThumbnailCache.set(targetSrc, fallbackSrc);
+      favoritesThumbnailCache.set(targetSrc, fallbackSrc);
       thumbImg.src = fallbackSrc;
     }
   };
@@ -742,15 +698,15 @@ function buildSavedEntry(item, { onRemove, onOpen, onHighlight, listUl, removeCl
     const src = thumbImg.getAttribute('src');
     if (src && !src.startsWith('data:image/svg+xml')) {
       thumbImg.classList.add('is-loaded');
-      if (!bookmarksThumbnailCache.has(src)) {
-        bookmarksThumbnailCache.set(src, true);
+      if (!favoritesThumbnailCache.has(src)) {
+        favoritesThumbnailCache.set(src, true);
       }
     }
   };
-  const cachedBookmark = bookmarksThumbnailCache.get(targetSrc);
-  if (cachedBookmark !== undefined) {
+  const cachedFavorite = favoritesThumbnailCache.get(targetSrc);
+  if (cachedFavorite !== undefined) {
     if (animatedSvgSrcs.has(targetSrc)) thumbImg.loading = 'eager';
-    thumbImg.src = typeof cachedBookmark === 'string' ? cachedBookmark : targetSrc;
+    thumbImg.src = typeof cachedFavorite === 'string' ? cachedFavorite : targetSrc;
     thumbImg.classList.add('is-loaded');
   } else {
     thumbImg.loading = 'lazy';
@@ -804,37 +760,6 @@ function buildSavedEntry(item, { onRemove, onOpen, onHighlight, listUl, removeCl
   });
 
   return li;
-}
-
-function buildBookmarkEntry(bm) {
-  return buildSavedEntry(bm, {
-    removeClass: 'bookmark-remove',
-    removeTitle: 'Remove',
-    listUl: bookmarksListUl,
-    onHighlight: highlightBookmarkByPath,
-    onRemove: (item) => {
-      const bms = getBookmarks().filter(b => b.path !== item.path);
-      saveBookmarks(bms);
-      renderBookmarks();
-      updateBookmarkBtn(Core.getState().list?.[Core.getState().index]?.path || '');
-    },
-    onOpen: (item) => {
-      const isDirOrArchive = item.is_dir || (item.ext && FsUtils && FsUtils.isArchive(item.name));
-      if (isDirOrArchive) {
-        const now = Date.now();
-        if (bookmarkLastClickPath === item.path && (now - bookmarkLastClickTime < 400)) {
-          bookmarkLastClickPath = '';
-          bookmarkLastClickTime = 0;
-          openSavedPath(item.path);
-        } else {
-          bookmarkLastClickPath = item.path;
-          bookmarkLastClickTime = now;
-        }
-      } else {
-        openSavedPath(item.path);
-      }
-    }
-  });
 }
 
 function buildFavoriteEntry(fav) {
@@ -925,41 +850,6 @@ function renderFavorites(options = {}) {
   if (Core) updateFavoritesSelection(Core.getState());
 }
 
-function renderBookmarks() {
-  if (!bookmarksListUl) return;
-  const bms = getBookmarks();
-  if (!bms.some(bookmark => bookmark.path === highlightedBookmarkPath)) {
-    highlightedBookmarkPath = '';
-  }
-  
-  if (bookmarksHeaderEl) {
-    bookmarksHeaderEl.classList.toggle('hidden', bms.length === 0);
-    let titleSpan = bookmarksHeaderEl.querySelector('.panel-header-title');
-    if (!titleSpan) {
-      titleSpan = document.createElement('span');
-      titleSpan.className = 'panel-header-title';
-      bookmarksHeaderEl.prepend(titleSpan);
-    }
-    titleSpan.textContent = 'Bookmarks';
-  }
-  
-  bookmarksListUl.innerHTML = '';
-  const panel = document.getElementById('file-panel-bookmarks');
-  if (panel) panel.classList.toggle('is-empty', bms.length === 0);
-  if (bms.length === 0) {
-    bookmarksExpanded = false;
-    saveBookmarksCollapsed(true);
-  } else {
-    bms.forEach(bm => bookmarksListUl.appendChild(buildBookmarkEntry(bm)));
-  }
-  if (panel) {
-    panel.classList.toggle('collapsed', !bookmarksExpanded);
-    const icon = bookmarksHeaderEl?.querySelector('.toggle-icon');
-    if (icon) icon.textContent = bookmarksExpanded ? '▲' : '▼';
-  }
-  if (Core) updateBookmarksSelection(Core.getState());
-}
-
 let filesystemRefreshTimer = null;
 
 function refreshFilesystemState() {
@@ -977,15 +867,6 @@ function refreshFilesystemState() {
       updateFavoriteBtn(state.list?.[state.index]?.path || '');
     }).catch(err => {
       console.error('[FilePanel] Failed to reconcile Favorites after a filesystem change:', err);
-    });
-
-    reconcileBookmarks().then(changed => {
-      if (!changed) return;
-      renderBookmarks();
-      const state = Core.getState();
-      updateBookmarkBtn(state.list?.[state.index]?.path || '');
-    }).catch(err => {
-      console.error('[FilePanel] Failed to reconcile Bookmarks after a filesystem change:', err);
     });
 
     DirectoryPrefs.reconcileDirectorySort().then(changed => {
@@ -1045,68 +926,6 @@ export function navigateHighlightedFavorite(delta) {
   const items = Array.from(favoritesListUl.children);
   if (!items.length) return;
   const currentIndex = items.findIndex(li => li.dataset.path === highlightedFavoritePath);
-  let nextIndex;
-  if (currentIndex === -1) {
-    nextIndex = delta > 0 ? 0 : items.length - 1;
-  } else {
-    nextIndex = (currentIndex + delta + items.length) % items.length;
-  }
-  items[nextIndex].focus();
-}
-
-function toggleBookmarksExpanded() {
-  bookmarksExpanded = !bookmarksExpanded;
-  saveBookmarksCollapsed(!bookmarksExpanded);
-  const panel = document.getElementById('file-panel-bookmarks');
-  if (panel) panel.classList.toggle('collapsed', !bookmarksExpanded);
-  const icon = bookmarksHeaderEl?.querySelector('.toggle-icon');
-  if (icon) icon.textContent = bookmarksExpanded ? '▲' : '▼';
-  if (bookmarksExpanded) renderBookmarks();
-}
-
-function updateBookmarksSelection(state) {
-  if (!bookmarksListUl || !state) return;
-  const containerPath = state.mode === 'archive' ? state.archivePath : state.directory;
-  const entry = state.list?.[state.index];
-  const itemPath = (entry && !entry.is_parent) ? entry.path : '';
-
-  for (const li of bookmarksListUl.children) {
-    const p = li.dataset.path;
-    const isSelected = !!(
-      (containerPath && _pathsEqual(p, containerPath)) ||
-      (itemPath && _pathsEqual(p, itemPath))
-    );
-    li.classList.toggle('selected', isSelected);
-  }
-}
-
-function highlightBookmarkByPath(path) {
-  highlightedBookmarkPath = path;
-  if (!bookmarksListUl) return;
-  if (!path) {
-    if (Core) updateBookmarksSelection(Core.getState());
-    return;
-  }
-  for (const li of bookmarksListUl.children) {
-    li.classList.toggle('selected', _pathsEqual(li.dataset.path, path));
-  }
-}
-
-// Returns the bookmark entry currently highlighted in the bookmarks list (via
-// focus/click), else null so the file panel action buttons fall back to the
-// main file-list selection.
-export function getHighlightedBookmark() {
-  if (!highlightedBookmarkPath) return null;
-  return getBookmarks().find(b => b.path === highlightedBookmarkPath) || null;
-}
-
-// Move the highlighted bookmark by delta (mirrors ArrowDown/ArrowUp). Moves the
-// row highlight only; opening still requires Enter/Space/click.
-export function navigateHighlightedBookmark(delta) {
-  if (!bookmarksListUl) return;
-  const items = Array.from(bookmarksListUl.children);
-  if (!items.length) return;
-  const currentIndex = items.findIndex(li => li.dataset.path === highlightedBookmarkPath);
   let nextIndex;
   if (currentIndex === -1) {
     nextIndex = delta > 0 ? 0 : items.length - 1;
@@ -2339,7 +2158,7 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
 }
 
 function setRefreshingVisual(active) {
-  if (!filePanel && !fileListUl && !bookmarksListUl) return;
+  if (!filePanel && !fileListUl && !favoritesListUl) return;
   clearTimeout(refreshPulseTimer);
 
   if (active) {
@@ -2354,11 +2173,9 @@ function setRefreshingVisual(active) {
     refreshStartTime = performance.now();
     filePanel?.classList.remove('refreshing');
     fileListUl?.classList.remove('refreshing');
-    bookmarksListUl?.classList.remove('refreshing');
     if (filePanel) void filePanel.offsetWidth;
     filePanel?.classList.add('refreshing');
     fileListUl?.classList.add('refreshing');
-    bookmarksListUl?.classList.add('refreshing');
     if (Core && Core.getState().fileListViewMode === 'thumbnail') {
       const list = Core.getState().list;
       if (list) {
@@ -2377,7 +2194,6 @@ function setRefreshingVisual(active) {
   refreshPulseTimer = setTimeout(() => {
     filePanel?.classList.remove('refreshing');
     fileListUl?.classList.remove('refreshing');
-    bookmarksListUl?.classList.remove('refreshing');
   }, remaining);
 }
 
@@ -2422,7 +2238,6 @@ export function renderFilePanel(state) {
     measureRowHeight();
     lastRenderedList = null;
     initDomPool();
-    renderBookmarks();
   }
 
   if (!ROW_HEIGHT) {
@@ -2445,7 +2260,7 @@ export function renderFilePanel(state) {
 
   renderBreadcrumb(state);
 
-  // Update the favorites and bookmarks buttons for the current entry. Skip `..`.
+  // Update the favorites button for the current entry. Skip `..`.
   {
     const entry = state.list?.[state.index];
     if (entry && !entry.is_parent) {
@@ -2453,11 +2268,6 @@ export function renderFilePanel(state) {
       if (favoritesBtnEl) {
         favoritesBtnEl.disabled = false;
         favoritesBtnEl.tabIndex = 0;
-      }
-      updateBookmarkBtn(entry.path);
-      if (bookmarksBtnEl) {
-        bookmarksBtnEl.disabled = false;
-        bookmarksBtnEl.tabIndex = 0;
       }
     } else {
       if (favoritesBtnEl) {
@@ -2467,19 +2277,11 @@ export function renderFilePanel(state) {
         if (svg) svg.setAttribute('fill', 'none');
         favoritesBtnEl.classList.remove('active');
       }
-      if (bookmarksBtnEl) {
-        bookmarksBtnEl.disabled = true;
-        bookmarksBtnEl.tabIndex = -1;
-        const svg = bookmarksBtnEl.querySelector('svg');
-        if (svg) svg.setAttribute('fill', 'none');
-        bookmarksBtnEl.classList.remove('active');
-      }
     }
   }
 
-  // Sync Favorites, Bookmarks, and Library highlighting to the active file-panel item.
+  // Sync Favorites and Library highlighting to the active file-panel item.
   updateFavoritesSelection(state);
-  updateBookmarksSelection(state);
   updateLibrarySelection(state);
 
   if (currentDir !== currentPath) {
@@ -2638,17 +2440,6 @@ export function initFilePanel(deps) {
     updateFavoriteBtn(state?.list?.[state?.index]?.path || '');
   });
 
-  // Wire Bookmarks UI.
-  bookmarksBtnEl = document.getElementById('btn-bookmark-current');
-  bookmarksListUl = document.getElementById('bookmarks-list');
-  bookmarksHeaderEl = document.getElementById('file-panel-bookmarks-header');
-
-  if (bookmarksBtnEl) {
-    bookmarksBtnEl.disabled = true;
-    bookmarksBtnEl.tabIndex = -1;
-    bookmarksBtnEl.addEventListener('click', toggleBookmarkCurrent);
-  }
-
   const actionButtons = filePanel.querySelectorAll('.file-panel-actions .icon-btn');
   if (actionButtons.length) {
     makeListNavigable(actionButtons, { horizontal: true, vertical: false, loop: true });
@@ -2660,38 +2451,6 @@ export function initFilePanel(deps) {
       Core.toggleFileListViewMode({ persist: true });
     });
   }
-
-  if (bookmarksHeaderEl) {
-    bookmarksHeaderEl.addEventListener('click', toggleBookmarksExpanded);
-    bookmarksHeaderEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBookmarksExpanded(); }
-    });
-  }
-
-  // Keyboard navigation mirrors the file list below.
-  if (bookmarksListUl) {
-    makeContainerNavigable(bookmarksListUl, 'li', {
-      vertical: true,
-      horizontal: false,
-      loop: false,
-      onAction: (index, item, e) => {
-        const bookmark = getBookmarks().find(f => f.path === item.dataset.path);
-        if (bookmark) { panelKeyboardActive = true; openBookmark(bookmark); }
-      },
-      onCancel: () => {
-        panelKeyboardActive = false;
-        highlightBookmarkByPath('');
-        if (document.activeElement && bookmarksListUl.contains(document.activeElement)) {
-          document.activeElement.blur();
-        }
-      }
-    });
-  }
-
-  // Restore the persisted collapsed state, then initialize header visibility.
-  // Config loads asynchronously after init, so re-render once it arrives.
-  bookmarksExpanded = !getBookmarksCollapsed();
-  renderBookmarks();
 
   // Wire Library UI.
   libraryPanelEl = document.getElementById('file-panel-library');
@@ -2743,8 +2502,6 @@ export function initFilePanel(deps) {
     favoritesExpanded = !getFavoritesCollapsed();
     currentFavoriteLoadout = getActiveLoadoutName();
     renderFavorites();
-    bookmarksExpanded = !getBookmarksCollapsed();
-    renderBookmarks();
     refreshFilesystemState();
     // Re-measure rows so custom CSS font sizes apply.
     const oldHeight = ROW_HEIGHT;
@@ -2786,10 +2543,10 @@ export function initFilePanel(deps) {
     }
   });
 
-  // Interacting with the main file list clears any highlighted bookmark so the
+  // Interacting with the main file list clears any highlighted favorite so the
   // action buttons target the list selection again.
   fileListUl.addEventListener('focusin', () => {
-    highlightedBookmarkPath = '';
+    highlightedFavoritePath = '';
   });
 
   // File-list keyboard navigation for virtualized list.

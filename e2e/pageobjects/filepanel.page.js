@@ -10,24 +10,24 @@ class FilepanelPage extends Page {
   get btnToggleViewMode() { return $('#btn-toggle-view-mode'); }
   get btnOpenExplorer() { return $('#cmd-open-explorer'); }
   get btnOpenFolder() { return $('#cmd-open-folder'); }
-  get btnBookmark() { return $('#btn-bookmark-current'); }
+  get btnFavorite() { return $('#btn-favorite-current'); }
   get btnMetadataBadge() { return $('#status-metadata-badge'); }
-  get bookmarksList() { return $('#bookmarks-list'); }
-  get bookmarksHeader() { return $('#file-panel-bookmarks-header'); }
-  get bookmarkItems() { return $$('#bookmarks-list li'); }
+  get favoritesList() { return $('#favorites-list'); }
+  get favoritesHeader() { return $('#file-panel-favorites-header'); }
+  get favoriteItems() { return $$('#favorites-list li'); }
 
-  async isBookmarkActive() {
-    const classes = (await this.btnBookmark.getAttribute('class')) || '';
+  async isFavoriteActive() {
+    const classes = (await this.btnFavorite.getAttribute('class')) || '';
     return classes.includes('active');
   }
 
-  async getBookmarkCount() {
-    const items = await this.bookmarkItems;
+  async getFavoriteCount() {
+    const items = await this.favoriteItems;
     return items.length;
   }
 
-  async toggleBookmark() {
-    await this.btnBookmark.click();
+  async toggleFavorite() {
+    await this.btnFavorite.click();
   }
 
   async isThumbnailMode() {

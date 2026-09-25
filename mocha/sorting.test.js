@@ -124,7 +124,7 @@ describe('Sorting service', () => {
     });
   });
 
-  describe('Saved items grouping (favorites and bookmarks)', () => {
+  describe('Saved items grouping (favorites)', () => {
     it('classifies folders, archives, and images correctly', () => {
       assert.equal(getSavedItemKind({ path: 'C:\\Users\\manga', is_dir: true }), 'folder');
       assert.equal(getSavedItemKind({ path: 'D:', is_drive: true }), 'folder');

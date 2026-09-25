@@ -296,10 +296,10 @@ describe('Replay Diagnostics Runner', function () {
         await browser.execute(() => {
           document.getElementById('btn-toggle-view-mode')?.click();
         });
-      } else if (actionId === 'open-bookmark' && typeof stepItem === 'object' && stepItem.path) {
-        await browser.execute((bookmarkPath) => {
+      } else if (actionId === 'open-favorite' && typeof stepItem === 'object' && stepItem.path) {
+        await browser.execute((targetPath) => {
           if (window.__TAURI__?.event?.emit) {
-            window.__TAURI__.event.emit('single-instance-open', bookmarkPath);
+            window.__TAURI__.event.emit('single-instance-open', targetPath);
           }
         }, stepItem.path);
       } else {
