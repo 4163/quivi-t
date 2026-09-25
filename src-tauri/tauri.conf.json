@@ -17,8 +17,7 @@
     }
   },
   "bundle": {
-    "active": true,
-    "targets": "all",
+    "active": false,
     "publisher": "QuiviT Contributors",
     "category": "Photography",
     "shortDescription": "Lightweight comic and manga viewer for Windows",
