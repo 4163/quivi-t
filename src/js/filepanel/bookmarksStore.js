@@ -4,6 +4,7 @@
  */
 
 import { Core } from '../core.js';
+import { groupSavedItems } from '../services/sorting.js';
 
 let configLoaded = false;
 let reconciliationPromise = null;
@@ -14,11 +15,12 @@ window.addEventListener('quivit-config-loaded', () => {
 
 export function getBookmarks() {
   const bms = Core.getState().config?.frontend_data?.bookmarks;
-  return Array.isArray(bms) ? bms : [];
+  return Array.isArray(bms) ? groupSavedItems(bms) : [];
 }
 
 export function saveBookmarks(bms) {
-  Core.getState().config.frontend_data.bookmarks = bms;
+  const grouped = groupSavedItems(bms);
+  Core.getState().config.frontend_data.bookmarks = grouped;
   // Bookmarks are rare explicit gestures; persist now so a config reload
   // never discards them inside the preference debounce window.
   if (configLoaded) Core.persistConfig({ immediate: true });
@@ -98,6 +100,7 @@ export function toggleBookmark(entry) {
   const idx = bms.findIndex(b => b.path === entry.path);
   if (idx === -1) {
     bms.push({ path: entry.path, name: entry.name, is_dir: entry.is_dir, is_drive: entry.is_drive, ext: entry.ext, is_hidden: entry.is_hidden });
+    bms = groupSavedItems(bms);
   } else {
     bms.splice(idx, 1);
   }

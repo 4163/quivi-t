@@ -4,6 +4,7 @@
  */
 
 import { Core } from '../core.js';
+import { groupSavedItems } from '../services/sorting.js';
 
 let configLoaded = false;
 let reconciliationPromise = null;
@@ -39,7 +40,7 @@ function normalizeFavorites(raw) {
   if (Array.isArray(raw)) {
     return {
       active: DEFAULT_LOADOUT_NAME,
-      loadouts: [{ name: DEFAULT_LOADOUT_NAME, items: raw }]
+      loadouts: [{ name: DEFAULT_LOADOUT_NAME, items: groupSavedItems(raw) }]
     };
   }
 
@@ -60,7 +61,7 @@ function normalizeFavorites(raw) {
       seenNames.add(uniqueName.toLowerCase());
       return {
         name: uniqueName,
-        items: Array.isArray(l?.items) ? l.items : []
+        items: groupSavedItems(Array.isArray(l?.items) ? l.items : [])
       };
     });
   }
@@ -184,6 +185,7 @@ export function toggleFavorite(entry) {
       ext: entry.ext,
       is_hidden: entry.is_hidden
     });
+    activeLoadout.items = groupSavedItems(activeLoadout.items);
   } else {
     activeLoadout.items.splice(idx, 1);
   }
