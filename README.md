@@ -229,14 +229,15 @@ quivit.exe "C:\Path\To\Archive.cbz"
 
 ```bash
 npm install
-npm run tauri dev
+npm run dev
 ```
 
 Tests and syntax checks:
 
 ```bash
-npm test                                         # Frontend unit tests
-npm run test:e2e                                 # Desktop end-to-end tests
+npm run mocha                                    # Frontend unit tests
+npm run e2e                                      # Desktop end-to-end tests (portable layout)
+npm run e2e:split                                # Desktop end-to-end tests (split layout)
 cargo test --manifest-path src-tauri/Cargo.toml  # Rust tests
 cd src-tauri && cargo check                      # Rust compile check
 node --check src/js/main/main.js                 # Syntax-check a JS file
@@ -263,7 +264,7 @@ npm run diagnose -- --inspect
 
 The runner steps through the recording and checks for blank frames, image-pool races, WebGL readiness, and IPC latency. Reports are written to `e2e/replay-diagnostics/reports/`.
 
-Record and diagnose share `e2e/.profile`, so scaling, filters, spread, and keybinds from the recording session are still on at replay. "Continue from last opened" carries over. "Remember last image" stays off, so replay starts at the recorded page. Portable mode stays on, so these runs leave roaming config alone. `npm run test:e2e` still starts from a clean profile. Reset the shared profile with `E2E_FRESH=1 npm run record` or `npm run record -- --fresh`.
+Record and diagnose share `e2e/.debug-config`, so scaling, filters, spread, and keybinds from the recording session are still on at replay. "Continue from last opened" carries over. "Remember last image" stays off, so replay starts at the recorded page. Portable mode stays on, so these runs leave roaming config alone. `npm run e2e` still starts from a clean profile. Reset the shared config with `E2E_FRESH=1 npm run record` or `npm run record -- --fresh`.
 
 To investigate a trace, use [`.agents/skills/replay-debugging/SKILL.md`](.agents/skills/replay-debugging/SKILL.md). It writes a temporary `investigation.js`, adds frame and microtask checks, and reports the cause.
 
