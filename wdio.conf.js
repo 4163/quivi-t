@@ -97,9 +97,13 @@ export const config = {
     } else {
       resetRunDir(e2eRunDir);
       process.env.QUIVIT_CONFIG_DIR = e2eRunDir;
-      // Suite default is the one-file layout; slice 3 adds a split run.
-      // First load returns factory defaults, so no seed file is written.
-      process.env.QUIVIT_PORTABLE = '1';
+      // Layout per run: split is the default release shape, portable covers
+      // the one-file shape. First load returns factory defaults either way.
+      if (process.env.E2E_LAYOUT === 'split') {
+        delete process.env.QUIVIT_PORTABLE;
+      } else {
+        process.env.QUIVIT_PORTABLE = '1';
+      }
     }
 
     // Terminate leftover processes so the executable is not locked during test run or build
