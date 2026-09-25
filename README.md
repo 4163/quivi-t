@@ -20,13 +20,14 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Formats**: Open raster, vector, and animated images, as well as common archive formats.
 - **Archives**: Read compressed files directly as folders, including password-protected archives and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
+- **Favorites**: Save images, folders and archives into named favorite lists for future use.
 - **Web Import**: Import manga and galleries from supported sites for offline reading (see [Supported sites](#supported-sites)).
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Mod`+wheel. Cursor auto-hides after inactivity over the viewport.
 - **Manga Spread Mode**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
 - **Scaling**: Choose from Pixelated, Bilinear, and Lanczos scaling.
 - **Filters**: WebGL filters for Anime4K (Mode A Fast/HQ), CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or Scanlines.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
-- **Persistent State**: Persists favorites, URL Library content and location, single-instance handoff, optional auto-open behavior, and the last opened image.
+- **Persistent State**: Persists favorites lists, URL Library content and location, single-instance handoff, optional auto-open behavior, and the last opened image.
 - **Windows Integration**: Drag and drop supported files to open them. Register file associations per-user for Windows Default Apps. Native window dragging supports PowerToys FancyZones snapping.
 - **Configuration**: Choose roaming user config or portable config stored next to the executable, and move the shared URL Library to an existing empty folder.
 - **Custom Theming**: Inject and live-reload custom CSS rules, with native light/dark mode support.
@@ -172,10 +173,10 @@ What QuiviT ships with. The id in backticks is the value stored in config.
 - **Library location.** `%LOCALAPPDATA%\QuiviT\library`. **Options → General → Library location** dynamically moves the imported folders in session.
 - **Library deletion.** Deleting a Library folder or image from the file panel sends it to the Recycle Bin rather than permanently deleting them.
 - **Missing path.** A  missing path, folder or archive, or deleted directories while the app is open, falls the user back to the nearest existing ancestor, or the Drives view at the root.
-- **Single instance.** `Enabled`. Files opened are handed to the active window session. Requires an app restart for changes to take effect.
+- **Single instance.** `Enabled`. Paths passed via command line, Explorer, or archives open in the active window session. To launch separate windows instead, toggle **Options → General → Allow only one QuiviT instance** and restart the app.
 - **Default sort.** `name`, ascending. Per-directory sort is kept for 100 folders, oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort`.
 - **Video audio.** A video with audio starts muted at 50% volume. Volume and unmute states are session only.
-- **Thumbnails.** <abbr title="JPG, JPEG, PNG, BMP, ICO, MP4, static GIF">`SHELL_THUMBNAIL_EXTS`</abbr> files load together from the 96x96 OS thumbnail cache. While archive thumbnails, and non-shell images decode at full-size, one at a time for the visible rows, plus one buffer row. The file list performance drops significantly for such cases, so maybe don't use Thumbnail View if the performance hinders navigation.
+- **Thumbnails.** Static images load concurrently from the 96x96 OS thumbnail cache. While archive thumbnails, and animated images decode at full-size, one at a time for the visible rows. The file list performance drops significantly for such cases, so maybe don't use thumbnail view if the performance hinders navigation.
 - **Image swap.** The previous image stays up while the next loads, then the swap waits `45ms` after navigation settles. That avoids a blank frame when WebView2 decodes a large `<img>`. The delay is a Tauri and WebView2 tradeoff, for the time being it stays but hopefully it can be cut down further in the future.
 
 ### Configuration & Persistence
@@ -187,7 +188,7 @@ QuiviT keeps its own data in three places. Imported galleries sit in a fourth fo
 - `quivit_config.json`: preferences. theme, keybinds, fit and scaling, sort, spread, library location, and the rest of options.
 - `quivit_state.json`: last opened path, last image, and whether scroll-zoom is latched.
 - `quivit_directory_sort.json`: sort column and direction for each folder.
-- `quivit_favorites.json`: favorites.
+- `quivit_favorites.json`: favorites lists, items, and section collapse.
 - `custom_css.css`: custom CSS.
 
 **Options → Save config data locally** turns on portable mode. QuiviT writes one `quivit_config.json` beside the exe, which moves the current roaming settings into it. In the portable file, the `hidden` flag hides the file using the Windows hidden attribute: `true`. QuiviT applies that attribute on every launch, so it should only be edited while the app is not running.
@@ -215,13 +216,6 @@ QuiviT checks the [`extractors`](https://github.com/4163/quivi-t/tree/extractors
 
 Clicking **Apply** registers QuiviT for the formats you selected. If changes does not reflect on Windows, right-click the specific file and choose **Open with**, and pick QuiviT. Or use the **Windows Defaults Settings** button, and choose specific file formats via **Choose default apps by file type**.
 
-### Command-Line Interface
-
-QuiviT accepts paths passed via the command line. When single-instance mode is enabled (default), secondary launches hand off their arguments to the primary instance. Toggling single-instance in Options requires a restart to take effect.
-
-```bash
-quivit.exe "C:\Path\To\Archive.cbz"
-```
 
 ## Development & Installation
 
@@ -321,7 +315,7 @@ QuiviT/
 │  ├─ core.test.js                # App state changes
 │  ├─ diagnosticsContract.test.js # Recording and probe contracts
 │  ├─ metadata.test.js            # Comic and gallery metadata
-│  ├─ sorting.test.js             # Archive sort order
+│  ├─ sorting.test.js             # Sort order and saved items grouping
 │  ├─ urlLoader.test.js           # URL import rules
 │  ├─ urlLoaderFlows.test.js      # URL import flows
 │  └─ viewerMath.test.js          # Zoom, pan, fit, and spread
@@ -345,7 +339,7 @@ QuiviT/
 │     ├─ fsUtils.js               # Folders and archives
 │     ├─ keybinds.js              # Default shortcuts and saved config
 │     ├─ keyboardNav.js           # List and tab keys
-│     ├─ menubar.js               # Menu open and close
+│     ├─ menubar.js               # Menus and Favorites dropdown
 │     ├─ metadata.js              # ComicInfo and gallery metadata
 │     ├─ metadata-window.js       # Archive Info window
 │     ├─ navigationHistory.js     # Back and Forward
@@ -354,7 +348,7 @@ QuiviT/
 │     ├─ urlLoader.js             # Download an imported gallery
 │     ├─ filepanel/
 │     │  ├─ filePanel.js          # File list and thumbnails
-│     │  ├─ favoritesStore.js     # Favorites
+│     │  ├─ favoritesStore.js     # Favorites lists and items
 │     │  └─ libraryStore.js       # Imported library
 │     ├─ main/
 │     │  ├─ main.js               # Startup
@@ -379,7 +373,7 @@ QuiviT/
 │     │  ├─ keybindDomain.js      # Shortcut conflicts
 │     │  ├─ metadataFiles.js      # Which metadata file wins
 │     │  ├─ registry.js           # Filter and scaling choices
-│     │  ├─ sorting.js            # Sort comparison
+│     │  ├─ sorting.js            # Sort comparison and saved items grouping
 │     │  ├─ viewerMath.js         # Zoom, pan, and fit math
 │     │  ├─ filters/              # Filter definitions
 │     │  ├─ pipelines/            # WebGL
