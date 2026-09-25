@@ -20,7 +20,7 @@ These items directly affect the viewer engine. They must be built into the CL or
 
 These items belong to the consumer application. The CL does not know or care about them. For QuiviT Desktop, they stay in the frontend shell. For the portfolio, they are replaced by your custom gallery UI.
 
-*   **Favorites & Bookmarks System:** Sorting, saving, and displaying lists.
+*   **[COMPLETED] Favorites System:** Loadout management, sorting, saving, and displaying lists in the file panel and menubar dropdown. Legacy bookmarks stripped cleanly.
 *   **File List & Navigation (Partial / Slice 3 Shipped + Slice 4.3 + Slice 4.4):** Completed Windows dotfile `.filename` visibility documentation and attribute checking, virtualized list keyboard navigation, Space on files no-op, unselected Enter/Space no-op, Tab navigation order, viewport gating for arrow keys and space, and drop-overlay pan isolation. Slice 4.3 added thumbnail view and scroll debouncing, Slice 4.4 added archive thumbnail sharing and viewer priority. Remaining backlog: continuous scroll, middle-click selection, and search filters.
 *   **Layout & Styling:** Persistent column sizes, custom CSS persistence, and syntax highlighting.
 *   **Window Management:** Detaching image windows, emergency boss keys, and fullscreen focus loss. (Note: Detaching images relies on Tauri window management because DOM elements cannot escape WebView2 bounds).

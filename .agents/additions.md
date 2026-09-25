@@ -6,13 +6,6 @@
 
 *Easiest and least invasive first.*
 
-### Favorites & Bookmarks System (Medium Logic)
-- **From clipboard notes (2026-08-13):**
-  - Ordering: implement the advanced favorites next, but FIRST rename the current favorites names in JS/HTML/CSS (functions, classes, IDs) to "bookmark".
-  - README: document the favorites system under Features; afterwards place the bookmark (legacy favorites) system entry under it, described simply as a bookmark that works similarly to favorites.
-- **Improve favorites system:** add a Favorites dropdown under the menu bar to load/save favorites. Consider an input for titles, only if the styling/intuitiveness of the dropdown interaction is good.
-- **Separate bookmarks system (legacy favorites):** placed under the favorites section, acting like the old favorites. The JS names across both can be consolidated into the same thing: the only difference is saving/loading favorites as a favorites list.
-
 ### View, Rendering & Window Enhancements (Visuals/Features)
 - **Fullscreen Focus & Shortcut Loss Fix:** Fix bug where shortcut keys (including `Escape` / `F11`) occasionally stop functioning while in fullscreen mode (e.g., when switching focus to another monitor or Alt-Tabbing away and back).
   - **Investigation Needed:** The exact trigger and root cause are unconfirmed. Candidates to test during implementation include `activeKeys` remaining latched due to missed `keyup` events during window focus switches, WebView2 losing document focus to window chrome, or Tauri fullscreen event listeners.
