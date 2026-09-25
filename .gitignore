@@ -54,6 +54,10 @@ e2e/scenarios/*.json
 # Persistent E2E profile shared by record/replay runs (local prefs state)
 e2e/.profile/
 
+# Isolated local config folders for dev and suite runs (see scripts/dev.js)
+.dev-config/
+.e2e-config/
+
 # Replay diagnostic reports (generated on each diagnose, contain local absolute paths)
 # Note: e2e/replay-diagnostics/investigation.js is intentionally tracked to support multi-session investigations across commits
 e2e/replay-diagnostics/reports/

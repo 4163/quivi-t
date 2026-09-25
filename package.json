@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
+    "dev": "node scripts/dev.js",
+    "dev:portable": "node scripts/dev.js --portable",
     "test": "mocha 'mocha/*.test.js'",
     "test:unit": "mocha 'mocha/*.test.js'",
     "test:e2e": "wdio run wdio.conf.js",
