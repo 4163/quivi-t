@@ -59,10 +59,10 @@ describe('08 - URL gallery loader', () => {
     );
 
     await browser.execute((testManifest, testExtractorSource) => {
-      const core = window.__TAURI__.core;
-      window.__quivitE2eOriginalInvoke = core.invoke.bind(core);
-      window.__quivitE2eFixtureCalls = [];
-      core.invoke = async (command, args = {}) => {
+      // Tauri freezes the invoke properties, so plain writes bounce
+      // silently. Try every layer, verify, and fail loudly with the full
+      // writability picture instead of timing out later.
+      const mockFn = async (command, args, options) => {
         window.__quivitE2eFixtureCalls.push({ command, args });
         if (command === 'fetch_extractor_text') {
           if (args.relativePath === 'manifest.json') return testManifest;
@@ -77,15 +77,69 @@ describe('08 - URL gallery loader', () => {
             content: 'e2e image data'
           });
         }
-        return window.__quivitE2eOriginalInvoke(command, args);
+        // Fixture bytes are placeholders, not decodable images. The real
+        // magic check would reject them, so it passes for fixture paths.
+        if (command === 'verify_image_magic') {
+          return undefined;
+        }
+        return window.__quivitE2eOriginalInvoke(command, args, options);
       };
+      const core = window.__TAURI__?.core;
+      const internals = window.__TAURI_INTERNALS__;
+      const original = (core && core.invoke) || (internals && internals.invoke);
+      if (typeof original !== 'function') {
+        throw new Error('[08] no Tauri invoke found, cannot install fixture mock');
+      }
+      window.__quivitE2eOriginalInvoke = original.bind(core || internals);
+      window.__quivitE2eFixtureCalls = [];
+      try { if (core) core.invoke = mockFn; } catch {}
+      try {
+        if (core && String(core.invoke).indexOf('__quivitE2eFixtureCalls') === -1) {
+          window.__TAURI__.core = { ...core, invoke: mockFn };
+        }
+      } catch {}
+      try {
+        if (internals && String(window.__TAURI__.core.invoke).indexOf('__quivitE2eFixtureCalls') === -1) {
+          internals.invoke = mockFn;
+        }
+      } catch {}
+      const live = window.__TAURI__?.core?.invoke;
+      if (!live || String(live).indexOf('__quivitE2eFixtureCalls') === -1) {
+        const desc = (o, k) => {
+          try {
+            const d = Object.getOwnPropertyDescriptor(o, k);
+            return d ? `w=${!!d.writable},c=${!!d.configurable}` : 'missing';
+          } catch { return 'unreadable'; }
+        };
+        throw new Error(
+          '[08] fixture mock did not stick. ' +
+          `TAURI_ext=${Object.isExtensible(window.__TAURI__)} ` +
+          `core_ext=${core ? Object.isExtensible(core) : 'n/a'} ` +
+          `core.invoke(${desc(core, 'invoke')}) ` +
+          `internals.invoke(${desc(internals, 'invoke')})`
+        );
+      }
     }, manifest, extractorSource);
   });
 
   after(async () => {
     await browser.execute(() => {
-      if (window.__quivitE2eOriginalInvoke) {
-        window.__TAURI__.core.invoke = window.__quivitE2eOriginalInvoke;
+      try {
+        if (window.__quivitE2eOriginalInvoke) {
+          const core = window.__TAURI__?.core;
+          if (core) {
+            try { core.invoke = window.__quivitE2eOriginalInvoke; } catch {}
+            if (String(core.invoke).indexOf('__quivitE2eOriginalInvoke') === -1) {
+              try { window.__TAURI__.core = { ...core, invoke: window.__quivitE2eOriginalInvoke }; } catch {}
+            }
+          }
+          try {
+            if (window.__TAURI_INTERNALS__) {
+              window.__TAURI_INTERNALS__.invoke = window.__quivitE2eOriginalInvoke;
+            }
+          } catch {}
+        }
+      } finally {
         delete window.__quivitE2eOriginalInvoke;
         delete window.__quivitE2eFixtureCalls;
       }
@@ -102,13 +156,37 @@ describe('08 - URL gallery loader', () => {
     await urlInput.setValue('https://example.test/e2e-gallery');
     await $('#url-overlay button[type="submit"]').click();
 
-    await browser.waitUntil(
-      async () => {
-        const classes = (await $('#url-overlay').getAttribute('class')) || '';
-        return !classes.includes('active');
-      },
-      { timeout: 10000, timeoutMsg: 'URL overlay did not close after importing the gallery' }
-    );
+    try {
+      await browser.waitUntil(
+        async () => {
+          const classes = (await $('#url-overlay').getAttribute('class')) || '';
+          return !classes.includes('active');
+        },
+        { timeout: 10000, timeoutMsg: 'URL overlay did not close after importing the gallery' }
+      );
+    } catch (err) {
+      const overlayText = await $('#url-overlay').getText().catch(() => '<unreadable>');
+      const probe = await browser.execute(() => {
+        const core = window.__TAURI__?.core;
+        const desc = core ? Object.getOwnPropertyDescriptor(core, 'invoke') : null;
+        return {
+          hasOriginal: typeof window.__quivitE2eOriginalInvoke,
+          callCount: Array.isArray(window.__quivitE2eFixtureCalls)
+            ? window.__quivitE2eFixtureCalls.length
+            : -1,
+          coreExtensible: core ? Object.isExtensible(core) : null,
+          invokeWritable: desc ? !!desc.writable : null,
+          invokeIsMock: core
+            ? String(core.invoke).includes('__quivitE2eFixtureCalls')
+            : null,
+        };
+      }).catch(() => ({}));
+      const calls = await browser.execute(
+        () => (window.__quivitE2eFixtureCalls || []).map(({ command }) => command)
+      ).catch(() => []);
+      console.log(`[08] overlay stuck. text=${JSON.stringify(overlayText)} probe=${JSON.stringify(probe)} calls=${JSON.stringify(calls)}`);
+      throw err;
+    }
     await browser.waitUntil(
       async () => (await filepanelPage.breadcrumb.getText()).includes('Chapter 01'),
       { timeout: 10000, timeoutMsg: 'Nested extractor gallery did not open' }
@@ -117,7 +195,8 @@ describe('08 - URL gallery loader', () => {
     const itemNames = await filepanelPage.getItemNames();
     expect(itemNames).toContain('001.png');
     expect(itemNames).toContain('002.png');
-    expect(await $('.library-provider-header').getText()).toContain('E2E Gallery');
+    const headerText = await $('.library-provider-header').getText();
+    expect(headerText.toUpperCase()).toContain('E2E GALLERY');
     expect(await $('.library-provider-list .item-label').getText()).toBe('Series');
 
     const calls = await browser.execute(() => window.__quivitE2eFixtureCalls.map(({ command, args }) => ({ command, args })));

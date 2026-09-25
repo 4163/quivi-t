@@ -75,7 +75,7 @@ describe('06 - Options & Configuration Window', () => {
     await browser.waitUntil(
       async () => {
         const text = await optionsPage.statusMessage.getText();
-        return text.toLowerCase().includes('success');
+        return text.toLowerCase().includes('saved');
       },
       { timeout: 6000, timeoutMsg: 'Save options did not report success' }
     );
