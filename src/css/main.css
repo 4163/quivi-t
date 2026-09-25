@@ -1748,15 +1748,9 @@ body.is-importing-url .header-cell:hover {
 
 #statusbar.hidden { display: none; }
 
-.status-filename-container {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
 .status-filename {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
