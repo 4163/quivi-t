@@ -69,6 +69,7 @@ pub fn run() {
             .min_inner_size(MAIN_MIN_W, MAIN_MIN_H)
             .visible(false)
             .devtools(true)
+            .general_autofill_enabled(false)
             .build()
             .expect("failed to build main window");
 
