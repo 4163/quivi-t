@@ -138,6 +138,7 @@ pub const ROAMING_FILES: &[&str] = &[
     "quivit_config.json",
     "quivit_state.json",
     "quivit_directory_sort.json",
+    "quivit_favorites.json",
     "quivit_bookmarks.json",
     "custom_css.css",
 ];
@@ -359,6 +360,7 @@ pub const STATE_KEYS: &[&str] = &[
     "scroll_zoom_latched",
 ];
 pub const SORT_KEYS: &[&str] = &["directory_sort"];
+pub const FAVORITES_KEYS: &[&str] = &["favorites", "favorites_collapsed"];
 pub const BOOKMARKS_KEYS: &[&str] = &["bookmarks", "bookmarks_collapsed"];
 
 pub fn extract_keys(src: &mut JsonValue, keys: &[&str]) -> JsonValue {
@@ -409,6 +411,7 @@ fn load_from_dir(dir: &Path, force_single: bool) -> AppConfig {
             &dir.join("quivit_directory_sort.json"),
             &mut cfg.frontend_data,
         );
+        merge_file_into(&dir.join("quivit_favorites.json"), &mut cfg.frontend_data);
         merge_file_into(&dir.join("quivit_bookmarks.json"), &mut cfg.frontend_data);
 
         // Split mode stores custom CSS in its own file.
@@ -522,6 +525,7 @@ fn write_split_config(dir: &Path, config: &mut AppConfig) -> Result<(), String> 
     let mut fd = std::mem::take(&mut config.frontend_data);
     let state = extract_keys(&mut fd, STATE_KEYS);
     let sort = extract_keys(&mut fd, SORT_KEYS);
+    let favorites = extract_keys(&mut fd, FAVORITES_KEYS);
     let bookmarks = extract_keys(&mut fd, BOOKMARKS_KEYS);
 
     // Store custom CSS separately.
@@ -547,6 +551,11 @@ fn write_split_config(dir: &Path, config: &mut AppConfig) -> Result<(), String> 
     )
     .map_err(|e| e.to_string())?;
     atomic_write(
+        &dir.join("quivit_favorites.json"),
+        serde_json::to_string_pretty(&favorites).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    atomic_write(
         &dir.join("quivit_bookmarks.json"),
         serde_json::to_string_pretty(&bookmarks).map_err(|e| e.to_string())?,
     )
@@ -565,6 +574,7 @@ fn save_override(dir: &Path, mut config: AppConfig) -> Result<(), String> {
         for name in [
             "quivit_state.json",
             "quivit_directory_sort.json",
+            "quivit_favorites.json",
             "quivit_bookmarks.json",
             "custom_css.css",
         ] {
