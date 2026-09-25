@@ -206,6 +206,9 @@ let previewCss = null;
 
 async function reloadConfigAndSyncLibrary(relocation = null) {
   const cachedLibraryPath = relocation?.oldPath || UrlLoader.getCachedLibraryDir();
+  // Flush dirty prefs first so a watcher-triggered reload never wipes an
+  // unsaved change inside the debounce window (lost-update).
+  await Core.flushConfig().catch(() => {});
   await Core.loadConfig();
   // Another QuiviT process receives the config watcher event but not the
   // in-process relocation event, so it must replace its old root watcher too.
