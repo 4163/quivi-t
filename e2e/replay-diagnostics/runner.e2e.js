@@ -56,7 +56,7 @@ describe('Replay Diagnostics Runner', function () {
     }
 
     if (!fs.existsSync(targetFile)) {
-      throw new Error(`No scenario file found to replay. Expected: ${targetFile}. Record one first using 'npm run test:record'.`);
+      throw new Error(`No scenario file found to replay. Expected: ${targetFile}. Record one first using 'npm run record'.`);
     }
 
     const scenarioName = path.basename(targetFile, '.json');

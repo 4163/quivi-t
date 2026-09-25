@@ -22,7 +22,7 @@ function resetE2eLocalAppData() {
 // reads QUIVIT_CONFIG_DIR directly, so each runner owns its folder and
 // target/debug never holds settings files again.
 const e2eRunDir = path.resolve(__dirname, '.e2e-config');
-const e2eProfileDir = path.resolve(__dirname, 'e2e/.profile');
+const e2eProfileDir = path.resolve(__dirname, 'e2e/.debug-config');
 
 function resetRunDir(dir) {
   // __dirname carries a trailing separator, so resolve it off first.
@@ -131,7 +131,7 @@ export const config = {
     }
   },
   onComplete: () => {
-    const profileDir = path.resolve(__dirname, 'e2e/.profile');
+    const profileDir = path.resolve(__dirname, 'e2e/.debug-config');
     // Record/replay runs wrote straight into the profile folder, so only the
     // scrub runs here: last_opened_path is kept so "continue from last opened"
     // works; last-session image state is dropped and remember_last_image is
