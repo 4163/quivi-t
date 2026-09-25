@@ -190,7 +190,7 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
     _filePanel.addEventListener('pointerdown', (e) => {
       if (_overlay?.classList.contains('loading')) return;
       if (_isExcludedInteraction(e)) return;
-      const isFileListTarget = e.target?.closest?.('#file-list, #bookmarks-list li, .library-provider-list li');
+      const isFileListTarget = e.target?.closest?.('#file-list, #favorites-list li, #bookmarks-list li, .library-provider-list li');
       if (isFileListTarget && _overlay?.classList.contains('active')) {
         _hide({ restoreFocus: false }, 'filepanel_pointerdown');
       }

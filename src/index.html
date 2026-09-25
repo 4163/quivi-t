@@ -112,6 +112,11 @@
         </ul>
       </div>
 
+      <div class="menu-item" id="menu-favorites">
+        <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Favorites</button>
+        <ul class="menu-dropdown" role="menu" id="favorites-menu-dropdown"></ul>
+      </div>
+
       <div class="menubar-spacer" data-tauri-drag-region></div>
       <button id="cmd-github" class="menu-link" type="button" title="Open GitHub repository">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -129,9 +134,15 @@
         <div id="file-panel-header-top">
           <div id="file-panel-breadcrumb" aria-label="Current location" title=""></div>
         </div>
+        <div id="file-panel-favorites" class="collapsed is-empty">
+          <div id="file-panel-favorites-header" tabindex="0">
+            <span class="panel-header-title">Favorites</span><span class="toggle-icon">▼</span>
+          </div>
+          <ul id="favorites-list" role="listbox" aria-label="Favorites"></ul>
+        </div>
         <div id="file-panel-bookmarks" class="collapsed">
           <div id="file-panel-bookmarks-header" tabindex="0">
-            Bookmarks <span class="toggle-icon">▼</span>
+            <span class="panel-header-title">Bookmarks</span><span class="toggle-icon">▼</span>
           </div>
           <ul id="bookmarks-list" role="listbox" aria-label="Bookmarks"></ul>
         </div>
@@ -181,8 +192,11 @@
           <button id="cmd-open-folder" class="icon-btn" title="Open Folder">
             <svg id="cmd-folder" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
           </button>
-          <button id="btn-bookmark-current" class="icon-btn" title="Add to Bookmarks" aria-label="Toggle Bookmark" disabled tabindex="-1">
+          <button id="btn-favorite-current" class="icon-btn" title="Add to Favorites" aria-label="Toggle Favorite" disabled tabindex="-1">
             <svg id="star" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          </button>
+          <button id="btn-bookmark-current" class="icon-btn" title="Add to Bookmarks" aria-label="Toggle Bookmark" disabled tabindex="-1">
+            <svg id="bookmark" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
           </button>
           <button id="status-metadata-badge" class="icon-btn" title="Archive Info" aria-label="Show archive info">
             <svg id="i-icon" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -219,7 +233,7 @@
             </svg>
             <p>This archive is password-protected</p>
             <div class="password-field overlay-field">
-              <input type="password" id="password-input" placeholder="Enter password" spellcheck="false" size="1">
+              <input type="password" id="password-input" placeholder="Enter password" spellcheck="false" autocomplete="off" size="1">
               <button type="submit">Unlock</button>
             </div>
             <span class="password-error overlay-error"></span>
@@ -236,7 +250,7 @@
             </svg>
             <p>Enter URL</p>
             <div class="url-field overlay-field" data-placeholder="mangadex.org/title/*/bakemonogatari">
-              <input type="text" id="url-input" placeholder="mangadex.org/title/*/bakemonogatari" spellcheck="false" size="1">
+              <input type="text" id="url-input" placeholder="mangadex.org/title/*/bakemonogatari" spellcheck="false" autocomplete="off" size="1">
               <button type="submit">Import</button>
             </div>
             <span class="url-error overlay-error"></span>

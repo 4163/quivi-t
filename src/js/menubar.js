@@ -7,10 +7,18 @@ let activeMenu = null;
 
 import { FILTERS, SCALERS, activeFilterId } from './services/registry.js';
 import { getEffectiveScaling } from './services/viewerMath.js';
-
+import {
+  getFavoritesState,
+  setActiveLoadout,
+  createLoadout,
+  renameLoadout,
+  deleteLoadout
+} from './filepanel/favoritesStore.js';
 
 export function initMenuBar() {
   bindMenus();
+  bindFavoritesDropdown();
+  renderFavoritesMenu();
 }
 
 const AIM_DELAY = 120;
@@ -178,6 +186,7 @@ function bindMenus() {
         closeMenus();
       } else {
         closeMenus();
+        if (menu.id === 'menu-favorites') renderFavoritesMenu();
         menu.classList.add('open');
         activeMenu = menu;
       }
@@ -186,6 +195,7 @@ function bindMenus() {
     trigger.addEventListener('mouseenter', () => {
       if (!activeMenu || activeMenu === menu) return;
       closeMenus();
+      if (menu.id === 'menu-favorites') renderFavoritesMenu();
       menu.classList.add('open');
       activeMenu = menu;
     });
@@ -195,6 +205,7 @@ function bindMenus() {
         e.preventDefault();
         e.stopPropagation();
         closeMenus();
+        if (menu.id === 'menu-favorites') renderFavoritesMenu();
         menu.classList.add('open');
         activeMenu = menu;
         // Focus the first dropdown item.
@@ -408,6 +419,9 @@ function bindMenus() {
           }
           return;
         }
+        if (e.target.tagName === 'INPUT' || e.target.closest('input') || e.target.closest('button')) {
+          return;
+        }
         if (item.classList.contains('muted') || item.getAttribute('aria-disabled') === 'true') {
           e.stopPropagation();
           return;
@@ -416,6 +430,200 @@ function bindMenus() {
       });
     });
   });
+}
+
+export function renderFavoritesMenu() {
+  const dropdown = document.getElementById('favorites-menu-dropdown');
+  if (!dropdown) return;
+
+  const state = getFavoritesState();
+  const isSingle = state.loadouts.length <= 1;
+  dropdown.innerHTML = '';
+
+  state.loadouts.forEach(loadout => {
+    const li = document.createElement('li');
+    li.setAttribute('role', 'menuitem');
+    li.className = 'loadout-item' + (loadout.name === state.active ? ' checked' : '') + (isSingle ? ' single' : '');
+    li.tabIndex = 0;
+    li.dataset.loadoutName = loadout.name;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'loadout-name-input';
+    input.value = loadout.name;
+    input.size = Math.max(1, loadout.name.length);
+    input.autocomplete = 'off';
+    input.setAttribute('autocorrect', 'off');
+    input.setAttribute('autocapitalize', 'off');
+    input.spellcheck = false;
+    input.title = 'Click to rename';
+    li.appendChild(input);
+
+    if (state.loadouts.length > 1) {
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'loadout-remove-btn';
+      delBtn.title = 'Delete list';
+      delBtn.tabIndex = -1;
+      delBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+      li.appendChild(delBtn);
+    }
+
+    dropdown.appendChild(li);
+  });
+
+  const sep = document.createElement('li');
+  sep.className = 'separator';
+  dropdown.appendChild(sep);
+
+  const newLi = document.createElement('li');
+  newLi.className = 'loadout-new-container';
+  newLi.setAttribute('role', 'none');
+
+  const newInput = document.createElement('input');
+  newInput.type = 'text';
+  newInput.id = 'input-new-loadout';
+  newInput.className = 'loadout-new-input';
+  newInput.placeholder = 'New favorites list...';
+  newInput.autocomplete = 'off';
+  newInput.setAttribute('autocorrect', 'off');
+  newInput.setAttribute('autocapitalize', 'off');
+  newInput.spellcheck = false;
+  newLi.appendChild(newInput);
+
+  dropdown.appendChild(newLi);
+}
+
+function bindFavoritesDropdown() {
+  const dropdown = document.getElementById('favorites-menu-dropdown');
+  if (!dropdown) return;
+
+  dropdown.addEventListener('mousedown', (e) => {
+    if (e.target.matches('input, button') || e.target.closest('input, button')) {
+      e.stopPropagation();
+    }
+  });
+
+  dropdown.addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('.loadout-remove-btn');
+    if (removeBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      const row = removeBtn.closest('.loadout-item');
+      if (row?.dataset?.loadoutName) {
+        deleteLoadout(row.dataset.loadoutName);
+        renderFavoritesMenu();
+        window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));
+      }
+      return;
+    }
+
+    if (e.target.matches('input') || e.target.closest('input')) {
+      return;
+    }
+
+    const row = e.target.closest('.loadout-item');
+    if (row?.dataset?.loadoutName) {
+      e.stopPropagation();
+      setActiveLoadout(row.dataset.loadoutName);
+      renderFavoritesMenu();
+      window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));
+    }
+  });
+
+  dropdown.addEventListener('input', (e) => {
+    const nameInput = e.target.closest('.loadout-name-input');
+    if (nameInput) {
+      nameInput.size = Math.max(1, nameInput.value.length);
+    }
+  });
+
+  dropdown.addEventListener('keydown', (e) => {
+    const nameInput = e.target.closest('.loadout-name-input');
+    if (nameInput) {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        nameInput.blur();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        const row = nameInput.closest('.loadout-item');
+        if (row?.dataset?.loadoutName) nameInput.value = row.dataset.loadoutName;
+        nameInput.blur();
+      }
+      return;
+    }
+
+    const newInput = e.target.closest('.loadout-new-input');
+    if (newInput) {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const val = newInput.value.trim();
+        createLoadout(val);
+        newInput.value = '';
+        renderFavoritesMenu();
+        const createdInput = document.getElementById('input-new-loadout');
+        if (createdInput) createdInput.focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeMenus();
+      }
+      return;
+    }
+
+    if (e.key === 'Enter' || e.key === ' ') {
+      const row = e.target.closest('.loadout-item');
+      if (row?.dataset?.loadoutName) {
+        e.preventDefault();
+        e.stopPropagation();
+        const targetName = row.dataset.loadoutName;
+        setActiveLoadout(targetName);
+        renderFavoritesMenu();
+        window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));
+        const activeItem = dropdown.querySelector(`li[data-loadout-name="${CSS.escape(targetName)}"]`);
+        if (activeItem) activeItem.focus();
+      }
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const row = e.target.closest('li[role="menuitem"]');
+      if (row) {
+        const items = Array.from(dropdown.querySelectorAll('li[role="menuitem"]'));
+        const idx = items.indexOf(row);
+        if (idx !== -1) {
+          e.preventDefault();
+          e.stopPropagation();
+          const nextIdx = e.key === 'ArrowDown'
+            ? (idx + 1) % items.length
+            : (idx - 1 + items.length) % items.length;
+          items[nextIdx].focus();
+        }
+      }
+    }
+  });
+
+  dropdown.addEventListener('focusout', (e) => {
+    const nameInput = e.target.closest('.loadout-name-input');
+    if (!nameInput) return;
+    const row = nameInput.closest('.loadout-item');
+    if (!row?.dataset?.loadoutName) return;
+    const oldName = row.dataset.loadoutName;
+    const newName = nameInput.value.trim();
+    if (newName !== oldName) {
+      const ok = renameLoadout(oldName, newName);
+      if (ok) {
+        renderFavoritesMenu();
+      } else {
+        nameInput.value = oldName;
+        nameInput.size = Math.max(1, oldName.length);
+      }
+    } else {
+      nameInput.value = oldName;
+      nameInput.size = Math.max(1, oldName.length);
+    }
+  });
+
+  window.addEventListener('quivit-favorites-changed', renderFavoritesMenu);
+  window.addEventListener('quivit-config-loaded', renderFavoritesMenu);
 }
 
 const FIT_MODE_MAP = {

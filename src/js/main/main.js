@@ -6,7 +6,21 @@ import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { Viewer } from '../viewer/viewer.js';
 import * as NavigationHistory from '../navigationHistory.js';
-import { initFilePanel, toggleBookmarkCurrent, getHighlightedBookmark, navigateHighlightedBookmark, getHighlightedLibrary, navigateHighlightedLibrary, focusFileList, isFileListFocused, getFileListViewportRange, clearLibraryPathCaches } from '../filepanel/filePanel.js';
+import {
+  initFilePanel,
+  toggleFavoriteCurrent,
+  getHighlightedFavorite,
+  navigateHighlightedFavorite,
+  toggleBookmarkCurrent,
+  getHighlightedBookmark,
+  navigateHighlightedBookmark,
+  getHighlightedLibrary,
+  navigateHighlightedLibrary,
+  focusFileList,
+  isFileListFocused,
+  getFileListViewportRange,
+  clearLibraryPathCaches
+} from '../filepanel/filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from '../shortcuts.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from '../keybinds.js';
@@ -85,6 +99,9 @@ const actionCtx = {
   get Viewer() { return Viewer; },
   get NavigationHistory() { return NavigationHistory; },
   get Chrome() { return Chrome; },
+  get toggleFavoriteCurrent() { return toggleFavoriteCurrent; },
+  get getHighlightedFavorite() { return getHighlightedFavorite; },
+  get navigateHighlightedFavorite() { return navigateHighlightedFavorite; },
   get toggleBookmarkCurrent() { return toggleBookmarkCurrent; },
   get getHighlightedBookmark() { return getHighlightedBookmark; },
   get navigateHighlightedBookmark() { return navigateHighlightedBookmark; },
@@ -94,6 +111,7 @@ const actionCtx = {
   get toggleFullscreen() { return toggleFullscreen; },
   get UrlLoader() { return UrlLoader; },
   get ViewerAudio() { return ViewerAudio; },
+  isFavoritesFocused: () => !!document.activeElement?.closest('#favorites-list'),
   isBookmarksFocused: () => !!document.activeElement?.closest('#bookmarks-list'),
   isLibraryFocused: () => !!document.activeElement?.closest('#file-panel-library, .library-provider-list'),
   get keyboardPanStep() { return keyboardPanStep; },
