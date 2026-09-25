@@ -29,7 +29,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 
 **Config & Persistence:**
 - Roaming/portable files are the source of truth for durable app configuration. `localStorage` holds the pre-paint theme/CSS cache, native-icon cache (`icon:*`), metadata window payload, Library section collapse (`quivit_library_collapsed`), provider-collapse UI state, provider sort order (`quivit_library_provider_order`), and session-only `options-active-tab`.
-- Roaming split: `quivit_config.json` (preferences), `quivit_state.json` (last-known runtime), `quivit_directory_sort.json`, `quivit_favorites.json`, `custom_css.css` (custom CSS text). Portable mode folds those values into one `quivit_config.json` beside the exe.
+- Roaming split: `quivit_config.json` (preferences), `quivit_state.json` (last-known runtime), `quivit_directory_sort.json`, `quivit_favorites.json`, `custom_css.css` (custom CSS text). Portable mode folds those values into one `quivit_config.json` beside the exe. `QUIVIT_CONFIG_DIR` overrides the active folder for dev (`.dev-config`), suite (`.e2e-config`), and replay (`e2e/.debug-config`) runs; `QUIVIT_PORTABLE=1` selects the single-file layout.
 - `AppConfig` uses `#[serde(default)]`; `frontend_data` is untyped JSON so unknown keys round-trip. `mergeConfig()` fills missing keys from defaults.
 - User-chosen prefs → `quivit_config.json`. Last-known runtime → `quivit_state.json`. Restart-gated settings are staged as `pending_<key>` and promoted at startup.
 - `default_sort` is config-file-only; the UI writes only per-directory sort prefs. `archive_cache_mb` is the top-level ZIP image cache budget in megabytes, config-file-only, no UI. When absent it is 128.
@@ -53,7 +53,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `keybinds.js`: `mergeConfig` + pan/zoom defaults. `DEFAULT_KEYBINDS` is derived from `ACTION_REGISTRY`.
 - `shortcuts.js`: keyboard / mouse / wheel dispatch. Does not write the statusbar.
 - `viewer/`: `viewer.js` facade; `viewerRender.js` owns image and video pools and parks retiring bridge elements in `#viewer-bridge-layer` with pre-navigation transforms frozen in `--bridge-*` props; `viewerPipelines.js` owns overlay canvases and streams image and video frames through WebGL; `viewerAudio.js` owns `#viewer-audio`, per-file volume/mute state, and viewport audio controls; `viewerGestures.js` owns pan input; math is in `viewerMath.js`.
-- `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. List and thumbnail view modes with card grid virtualization. Renders the flat library tree from `libraryStore.js`; only gallery roots and raw images are removable. `favoritesStore.js` and `libraryStore.js` are data-only (no DOM). `libraryStore.js` also owns provider sort order persistence.
+- `filepanel/filePanel.js`: sole `#file-panel` owner. Self-subscribes. List and thumbnail view modes with card grid virtualization. Renders the flat library tree from `libraryStore.js`; only gallery roots and raw images are removable. `favoritesStore.js` and `libraryStore.js` are data-only (no DOM). `favoritesStore.js` persists immediate explicit updates. `libraryStore.js` also owns provider sort order persistence.
 - `fsUtils.js`: filesystem / archive navigation. No DOM.
 - `directoryPrefs.js`: per-directory sort prefs. Sort math is in `services/sorting.js`.
 - `navigationHistory.js`: session-only container Back/Forward.
@@ -64,7 +64,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `shellBackground.js`: mirrors `--surface` onto the native window.
 - `main/main.js`: thin bootstrap + init + slim state fan-out. Does not render the file panel or write the statusbar.
 - `main/fullscreen.js`, `dropzone.js`, `lifecycle.js`, `metadataBadge.js`, `passwordOverlay.js`, `urlOverlay.js`: those surfaces only. `urlOverlay.js` owns `#url-overlay`.
-- `options/options.js`: Options orchestration. `keybindUi.js`: capture UI. `associationsUi.js`: file-type associations.
+- `options/options.js`: Options orchestration. Reflects active override folders. `keybindUi.js`: capture UI. `associationsUi.js`: file-type associations.
 
 **Windows:**
 - Three HTML entry points: `index.html`, `options.html`, `metadata.html`.
@@ -74,7 +74,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 **Rust:**
 - `lib.rs` & `main.rs`: bootstrap, config watcher, and main-window build.
 - `tests/`: in-tree testing for archives, config, formats, protocol, and temp archive origin.
-- `config.rs`: `AppConfig` / persistence / portable / pending promotion.
+- `config.rs`: `AppConfig` / persistence / folder overrides (`QUIVIT_CONFIG_DIR`) / pending promotion. `get_active_config_info` and `open_active_config_dir` IPC commands.
 - `commands/`: Tauri IPC surface. Each command file owns one family.
 - `commands/library.rs`: live Library relocation and write guards. `commands/watchers.rs`: configured-Library watcher and `library-changed` events.
 - `commands/network.rs`: remote text (`fetch_text`), raw bytes with header forwarding (`fetch_bytes`), extractor caching from the extractors branch, streamed download, cancellation, image magic-byte validation (`verify_image_magic`), and tile descramble with XOR decryption for provider-specific image protection. `commands/directory.rs`: flat `gallery.json`-backed Library tree (single-level, no recursive depth) and `find_directory_metadata` for Library directory metadata lookup.
@@ -84,13 +84,13 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `protocol.rs`: `quivit://` handler. Routes: `/archive/` (entry data, `no-store`), `/thumb/` (96×96 shell thumbnails), `/icon/` (shell icons, `?size=large` for 32×32). `asset://` for direct file access.
 - `platform/`: `icons.rs` (shell icons), `thumbnails.rs` (96×96 `IShellItemImageFactory`), `temp_archive.rs` (external archiver temp origin resolution), `attributes.rs` (dotfile visibility), `dialog.rs` (native folder picker with Library virtual folder resolution). `windows.rs`: window lifecycle and size constants.
 - `ico.rs`: ICO spritesheets.
-- `models.rs`: IPC structs. `FileEntry.size: u64`, `ArchiveEncryptionStatus`, `ArchiveReadResult.encryption`, `TempArchiveOrigin`, `LibraryNode`, `LibraryProviderEntry`, and `DirectoryMetadataResult`.
+- `models.rs`: IPC structs. `FileEntry.size: u64`, `ArchiveEncryptionStatus`, `ArchiveReadResult.encryption`, `TempArchiveOrigin`, `LibraryNode`, `LibraryProviderEntry`, `DirectoryMetadataResult`, and `ActiveConfigInfo`.
 - `utils.rs`: Base64 and URL encoding helpers.
 
 **Testing & Diagnostics:**
 - Three test layers.
 - `mocha/`: standalone pure frontend unit tests (`actions`, `cache`, `core`, `diagnosticsContract`, `metadata`, `sorting`, `urlLoader`, `urlLoaderFlows`, `viewerMath`) outside `src/` to prevent bundling into `frontendDist: "../src"`. Runs via `npm run mocha`.
 - `e2e/`: WebdriverIO end-to-end suite (`specs/`, `pageobjects/`, `helpers/`) running against the live debug binary via `tauri-driver` and `msedgedriver` in an isolated repo folder. Runs via `npm run e2e` (one-file layout) and `npm run e2e:split` (split files).
-- `e2e/replay-diagnostics/`: in-browser pipeline identity diagnostic engine (`base.js`), modular probes (`probes/`), CLI harness (`cli.js`), and scenario runner (`runner.e2e.js`). Evaluates blackout frames, image pool retirement races, WebGL readiness, and IPC latency. Supports `investigation.js` overrides for the automated self-diagnostic loop. Runs via `npm run diagnose` and `npm run replay`.
+- `e2e/replay-diagnostics/`: in-browser pipeline identity diagnostic engine (`base.js`), modular probes (`probes/`), CLI harness (`cli.js`), and scenario runner (`runner.e2e.js`). Replay settings persist in `e2e/.debug-config/`. Evaluates blackout frames, image pool retirement races, WebGL readiness, and IPC latency. Supports `investigation.js` overrides for the automated self-diagnostic loop. Runs via `npm run diagnose` and `npm run replay`.
 - `e2e/helpers/recorder-shim.js`: in-browser action recorder with floating control badge (`[Start/Pause]`, `[Stop]`, `[Reset]`), continuous Node trace buffering, and auto-finalization on window exit. Saves traces to `e2e/scenarios/<scenario>.json`. Runs via `npm run record`.
 - `src-tauri/src/tests/`: in-tree Rust backend unit tests for archives, config parsing, format sniffing, protocol URLs, and temp archive origin matching. Runs via `cargo test`.

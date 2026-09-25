@@ -229,7 +229,9 @@ quivit.exe "C:\Path\To\Archive.cbz"
 
 ```bash
 npm install
-npm run dev
+npm run tauri dev     # Historical; bypasses isolation and touches roaming data
+npm run dev           # Launch with isolated settings (.dev-config)
+npm run dev:portable  # Forces portable mode (single-file layout) in .dev-config, regardless of frontend config state
 ```
 
 Tests and syntax checks:
@@ -245,16 +247,16 @@ node --check src/js/main/main.js                 # Syntax-check a JS file
 
 ### Action recorder and replay diagnostics
 
-Record a session. With no name, the file is `e2e/scenarios/last-recording.json`.
+Record a user interaction trace to `e2e/scenarios/<scenario>.json` (defaults to `last-recording.json`):
 
 ```bash
 npm run record
 npm run record -- --scenario flicker-bmp --path test-files/webp
 ```
 
-QuiviT opens with a recording badge. Click **Start**, reproduce the issue, then click **Stop**, press `Escape`, or close the window. The trace is saved to `e2e/scenarios/<scenario>.json`.
+Click **Start** on the floating badge, reproduce the behavior, then click **Stop**, press `Escape`, or close the window.
 
-Replay that trace. `--pause` waits that many milliseconds between steps. `--inspect` prints the latest report and does not open the window.
+Replay the trace to evaluate blank frames, image pool races, WebGL readiness, and IPC timing:
 
 ```bash
 npm run diagnose
@@ -262,11 +264,9 @@ npm run diagnose -- flicker-bmp --pause 300
 npm run diagnose -- --inspect
 ```
 
-The runner steps through the recording and checks for blank frames, image-pool races, WebGL readiness, and IPC latency. Reports are written to `e2e/replay-diagnostics/reports/`.
+`npm run replay` is an alias for `npm run diagnose`. Diagnostic reports are written to `e2e/replay-diagnostics/reports/`. Replay settings persist in `e2e/.debug-config` and can be reset with `npm run record -- --fresh`.
 
-Record and diagnose share `e2e/.debug-config`, so scaling, filters, spread, and keybinds from the recording session are still on at replay. "Continue from last opened" carries over. "Remember last image" stays off, so replay starts at the recorded page. Portable mode stays on, so these runs leave roaming config alone. `npm run e2e` still starts from a clean profile. Reset the shared config with `E2E_FRESH=1 npm run record` or `npm run record -- --fresh`.
-
-To investigate a trace, use [`.agents/skills/replay-debugging/SKILL.md`](.agents/skills/replay-debugging/SKILL.md). It writes a temporary `investigation.js`, adds frame and microtask checks, and reports the cause.
+For automated iterative probing, see [`.agents/skills/replay-debugging/SKILL.md`](.agents/skills/replay-debugging/SKILL.md).
 
 ## Stack
 
@@ -325,6 +325,9 @@ QuiviT/
 │  ├─ urlLoader.test.js           # URL import rules
 │  ├─ urlLoaderFlows.test.js      # URL import flows
 │  └─ viewerMath.test.js          # Zoom, pan, fit, and spread
+├─ scripts/                       # Dev and test runner scripts
+│  ├─ dev.js                      # npm run dev with isolated config
+│  └─ e2e.js                      # npm run e2e with layout selection
 ├─ extractors/ (orphan branch)    # Site support, fetched while the app runs
 ├─ src/
 │  ├─ index.html                  # Main window
