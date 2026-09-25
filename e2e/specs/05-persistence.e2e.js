@@ -8,7 +8,9 @@ import statusbarPage from '../pageobjects/statusbar.page.js';
 import { fixtures } from '../helpers/fixtures.js';
 
 describe('05 - Persistence & User Preferences', () => {
-  const targetDir = path.resolve('src-tauri/target/debug');
+  const targetDir = process.env.QUIVIT_CONFIG_DIR
+    ? path.resolve(process.env.QUIVIT_CONFIG_DIR)
+    : path.resolve('src-tauri/target/debug');
   const configPath = path.join(targetDir, 'quivit_config.json');
 
   before(async () => {
