@@ -12,18 +12,23 @@ describe('05 - Persistence & User Preferences', () => {
     ? path.resolve(process.env.QUIVIT_CONFIG_DIR)
     : path.resolve('src-tauri/target/debug');
   const configPath = path.join(targetDir, 'quivit_config.json');
-  // Split runs keep bookmarks in their own file, portable runs fold them
+  // Split runs keep favorites in their own file, portable runs fold them
   // into the main file. Preferences stay in the main file either way.
   const useSplitLayout = !process.env.QUIVIT_PORTABLE;
-  const bookmarksPath = useSplitLayout
-    ? path.join(targetDir, 'quivit_bookmarks.json')
+  const favoritesPath = useSplitLayout
+    ? path.join(targetDir, 'quivit_favorites.json')
     : configPath;
 
-  function readBookmarksCount() {
+  function readFavoritesCount() {
     try {
-      const stored = JSON.parse(fs.readFileSync(bookmarksPath, 'utf8'));
-      const list = useSplitLayout ? stored.bookmarks : stored.frontend_data?.bookmarks;
-      return Array.isArray(list) ? list.length : 0;
+      const stored = JSON.parse(fs.readFileSync(favoritesPath, 'utf8'));
+      const favData = useSplitLayout ? stored.favorites : stored.frontend_data?.favorites;
+      if (!favData) return 0;
+      if (Array.isArray(favData.loadouts)) {
+        const active = favData.loadouts.find((l) => l.name === favData.active) || favData.loadouts[0];
+        return Array.isArray(active?.items) ? active.items.length : 0;
+      }
+      return 0;
     } catch {
       return -1;
     }
@@ -76,7 +81,7 @@ describe('05 - Persistence & User Preferences', () => {
     );
   });
 
-  it('adds active entry to bookmarks and persists to store', async () => {
+  it('adds active entry to favorites and persists to store', async () => {
     // Open a test image to populate file panel
     await browser.execute((filePath) => {
       if (window.__TAURI__ && window.__TAURI__.event) {
@@ -97,57 +102,57 @@ describe('05 - Persistence & User Preferences', () => {
       { timeout: 5000, timeoutMsg: 'Statusbar did not show test image name' }
     );
 
-    // Bookmark button becomes enabled once an image entry is active
+    // Favorite button becomes enabled once an image entry is active
     await browser.waitUntil(
       async () => {
-        const disabled = await filepanelPage.btnBookmark.getAttribute('disabled');
+        const disabled = await filepanelPage.btnFavorite.getAttribute('disabled');
         return !disabled;
       },
-      { timeout: 5000, timeoutMsg: 'Bookmark button was not enabled' }
+      { timeout: 5000, timeoutMsg: 'Favorite button was not enabled' }
     );
 
-    // Toggle bookmark on
-    await filepanelPage.toggleBookmark();
+    // Toggle favorite on
+    await filepanelPage.toggleFavorite();
 
     await browser.waitUntil(
-      async () => await filepanelPage.isBookmarkActive(),
-      { timeout: 3000, timeoutMsg: 'Bookmark button did not become active' }
+      async () => await filepanelPage.isFavoriteActive(),
+      { timeout: 3000, timeoutMsg: 'Favorite button did not become active' }
     );
 
-    // Bookmarks list in UI should now display the item
+    // Favorites list in UI should now display the item
     await browser.waitUntil(
-      async () => (await filepanelPage.getBookmarkCount()) > 0,
-      { timeout: 5000, timeoutMsg: 'Bookmarks list did not render added item' }
+      async () => (await filepanelPage.getFavoriteCount()) > 0,
+      { timeout: 5000, timeoutMsg: 'Favorites list did not render added item' }
     );
 
     // Verify persistence to disk
     await browser.waitUntil(
-      () => readBookmarksCount() > 0,
-      { timeout: 6000, timeoutMsg: 'Bookmarks were not persisted to config file' }
+      () => readFavoritesCount() > 0,
+      { timeout: 6000, timeoutMsg: 'Favorites were not persisted to config file' }
     );
   });
 
-  it('removes bookmark on subsequent toggle and updates persisted store', async () => {
+  it('removes favorite on subsequent toggle and updates persisted store', async () => {
     // Allow config-changed watcher event from previous test to settle
     await browser.pause(1000);
 
-    // Toggle bookmark off for the currently selected item
-    await filepanelPage.toggleBookmark();
+    // Toggle favorite off for the currently selected item
+    await filepanelPage.toggleFavorite();
 
     await browser.waitUntil(
-      async () => !(await filepanelPage.isBookmarkActive()),
-      { timeout: 3000, timeoutMsg: 'Bookmark button did not become inactive' }
+      async () => !(await filepanelPage.isFavoriteActive()),
+      { timeout: 3000, timeoutMsg: 'Favorite button did not become inactive' }
     );
 
     await browser.waitUntil(
-      async () => (await filepanelPage.getBookmarkCount()) === 0,
-      { timeout: 5000, timeoutMsg: 'Bookmarks list did not clear after toggling off' }
+      async () => (await filepanelPage.getFavoriteCount()) === 0,
+      { timeout: 5000, timeoutMsg: 'Favorites list did not clear after toggling off' }
     );
 
     // Verify removal persisted to disk
     await browser.waitUntil(
-      () => readBookmarksCount() === 0,
-      { timeout: 6000, timeoutMsg: 'Cleared bookmarks were not persisted to config file' }
+      () => readFavoritesCount() === 0,
+      { timeout: 6000, timeoutMsg: 'Cleared favorites were not persisted to config file' }
     );
   });
 });

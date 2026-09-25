@@ -119,6 +119,7 @@ pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
     .maximizable(false)
     .visible(false)
     .devtools(true)
+    .general_autofill_enabled(false)
     .center();
 
     builder
@@ -155,6 +156,7 @@ pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
     .maximizable(true)
     .visible(false)
     .devtools(true)
+    .general_autofill_enabled(false)
     .center();
 
     builder

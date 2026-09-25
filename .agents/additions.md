@@ -6,14 +6,6 @@
 
 *Easiest and least invasive first.*
 
-### Favorites & Bookmarks System (Medium Logic)
-- **From clipboard notes (2026-08-13):**
-  - Middle-click removes a favorite directly: intentionally NOT mappable to a keybind; just document it in the README Features section where favorites is covered.
-  - Ordering: implement the advanced favorites next, but FIRST rename the current favorites names in JS/HTML/CSS (functions, classes, IDs) to "bookmark".
-  - README: document the favorites system under Features; afterwards place the bookmark (legacy favorites) system entry under it, described simply as a bookmark that works similarly to favorites.
-- **Improve favorites system:** add a Favorites dropdown under the menu bar to load/save favorites. Consider an input for titles, only if the styling/intuitiveness of the dropdown interaction is good.
-- **Separate bookmarks system (legacy favorites):** placed under the favorites section, acting like the old favorites. The JS names across both can be consolidated into the same thing: the only difference is saving/loading favorites as a favorites list.
-
 ### View, Rendering & Window Enhancements (Visuals/Features)
 - **Fullscreen Focus & Shortcut Loss Fix:** Fix bug where shortcut keys (including `Escape` / `F11`) occasionally stop functioning while in fullscreen mode (e.g., when switching focus to another monitor or Alt-Tabbing away and back).
   - **Investigation Needed:** The exact trigger and root cause are unconfirmed. Candidates to test during implementation include `activeKeys` remaining latched due to missed `keyup` events during window focus switches, WebView2 losing document focus to window chrome, or Tauri fullscreen event listeners.
@@ -26,7 +18,6 @@
 - **Syntax Highlighting:** Add syntax highlighting to the Custom CSS field in Customization using an available font (fonts that have syntax highlighting) or a small library.
 
 ### Supported Formats & Advanced Icons (Complex)
-- **File Association Prompt:** Add a prompt notification at the center of the screen pointing users to the File Associations tab (reminding them that they can and should set file associations). On-boarding experinece.
 - **Advanced .ico Processing:** Improve .ico processing (performance-first). Change the .ico processing and rendering spec:
   1. Add a 'ICO Spritesheet' to the view dropdown under 'opaque canvas' (make sure this is configurable in the keybinds option). Default: ON.
   2. OFF: .ico files should not be processed at all and should just act as a legacy image file. ON: .ico files should be processed.

@@ -13,7 +13,7 @@
  *   quivit_state.json             -> last-known RUNTIME STATE (last_opened_path,
  *                                   last_active_image, scroll_zoom_latched)
  *   quivit_directory_sort.json    -> per-directory sort prefs
- *   quivit_bookmarks.json         -> bookmarks + collapsed state
+ *   quivit_favorites.json         -> favorites + collapsed state
  * Portable mode folds all of these into one self-contained quivit_config.json
  * beside the executable; roaming mode keeps them as separate files.
  *

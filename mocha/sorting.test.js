@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { applySort } from '../src/js/services/sorting.js';
+import { applySort, getSavedItemKind, groupSavedItems } from '../src/js/services/sorting.js';
 
 describe('Sorting service', () => {
   it('keeps root files before nested files in archive default name order', () => {
@@ -121,6 +121,105 @@ describe('Sorting service', () => {
         DirectoryPrefs.getSortPrefs(deletedArchive),
         { col: 'name', desc: false }
       );
+    });
+  });
+
+  describe('Saved items grouping (favorites)', () => {
+    it('classifies folders, archives, and images correctly', () => {
+      assert.equal(getSavedItemKind({ path: 'C:\\Users\\manga', is_dir: true }), 'folder');
+      assert.equal(getSavedItemKind({ path: 'D:', is_drive: true }), 'folder');
+      assert.equal(getSavedItemKind({ path: 'E:\\' }), 'folder');
+      assert.equal(getSavedItemKind({ path: 'C:/docs/' }), 'folder');
+
+      assert.equal(getSavedItemKind({ path: 'C:\\manga\\v1.cbz', name: 'v1.cbz' }), 'archive');
+      assert.equal(getSavedItemKind({ path: 'C:\\manga\\v2.zip', name: 'v2.zip', ext: 'zip' }), 'archive');
+      assert.equal(getSavedItemKind({ path: 'C:\\manga\\v3.7z', name: 'v3.7z' }), 'archive');
+      assert.equal(getSavedItemKind({ path: 'C:\\manga\\v4.rar', name: 'v4.rar' }), 'archive');
+
+      // Archive entry images inside an archive are images, not archives
+      assert.equal(getSavedItemKind({ path: 'C:\\manga\\v1.cbz|001.jpg', name: '001.jpg', ext: 'jpg' }), 'image');
+      assert.equal(getSavedItemKind({ path: 'C:\\photos\\pic.png', name: 'pic.png', ext: 'png' }), 'image');
+      assert.equal(getSavedItemKind({ path: 'C:\\videos\\anim.mp4', name: 'anim.mp4', ext: 'mp4' }), 'image');
+      assert.equal(getSavedItemKind(null), 'image');
+    });
+
+    it('groups items as folders, then archives, then images while preserving insertion order', () => {
+      const items = [
+        { path: 'C:\\photos\\p1.jpg', name: 'p1.jpg', ext: 'jpg' },
+        { path: 'C:\\manga\\v1.cbz', name: 'v1.cbz', ext: 'cbz' },
+        { path: 'C:\\folder1', name: 'folder1', is_dir: true },
+        { path: 'C:\\photos\\p2.jpg', name: 'p2.jpg', ext: 'jpg' },
+        { path: 'C:\\folder2', name: 'folder2', is_dir: true },
+        { path: 'C:\\manga\\v2.zip', name: 'v2.zip', ext: 'zip' },
+      ];
+
+      const grouped = groupSavedItems(items);
+      assert.deepEqual(grouped.map(i => i.name), [
+        'folder1',
+        'folder2',
+        'v1.cbz',
+        'v2.zip',
+        'p1.jpg',
+        'p2.jpg',
+      ]);
+    });
+
+    it('appends new items to their respective group in proper hierarchy', () => {
+      let list = [];
+
+      // Add image 1
+      list.push({ path: 'C:\\photos\\p1.jpg', name: 'p1.jpg', ext: 'jpg' });
+      list = groupSavedItems(list);
+      assert.deepEqual(list.map(i => i.name), ['p1.jpg']);
+
+      // Add archive 1 -> should place archive above image 1
+      list.push({ path: 'C:\\manga\\v1.cbz', name: 'v1.cbz', ext: 'cbz' });
+      list = groupSavedItems(list);
+      assert.deepEqual(list.map(i => i.name), ['v1.cbz', 'p1.jpg']);
+
+      // Add folder 1 -> should place folder above archive and image
+      list.push({ path: 'C:\\folder1', name: 'folder1', is_dir: true });
+      list = groupSavedItems(list);
+      assert.deepEqual(list.map(i => i.name), ['folder1', 'v1.cbz', 'p1.jpg']);
+
+      // Add folder 2 -> should append to folders group
+      list.push({ path: 'C:\\folder2', name: 'folder2', is_dir: true });
+      list = groupSavedItems(list);
+      assert.deepEqual(list.map(i => i.name), ['folder1', 'folder2', 'v1.cbz', 'p1.jpg']);
+
+      // Add archive 2 -> should append to archives group
+      list.push({ path: 'C:\\manga\\v2.zip', name: 'v2.zip', ext: 'zip' });
+      list = groupSavedItems(list);
+      assert.deepEqual(list.map(i => i.name), ['folder1', 'folder2', 'v1.cbz', 'v2.zip', 'p1.jpg']);
+
+      // Add image 2 -> should append to images group
+      list.push({ path: 'C:\\photos\\p2.png', name: 'p2.png', ext: 'png' });
+      list = groupSavedItems(list);
+      assert.deepEqual(list.map(i => i.name), ['folder1', 'folder2', 'v1.cbz', 'v2.zip', 'p1.jpg', 'p2.png']);
+
+      // Add video -> should append to images group and treat as image
+      list.push({ path: 'C:\\videos\\clip.mp4', name: 'clip.mp4', ext: 'mp4' });
+      list = groupSavedItems(list);
+      assert.deepEqual(list.map(i => i.name), ['folder1', 'folder2', 'v1.cbz', 'v2.zip', 'p1.jpg', 'p2.png', 'clip.mp4']);
+    });
+
+    it('treats videos as images alongside other image files in the image group', () => {
+      const items = [
+        { path: 'C:\\videos\\intro.mp4', name: 'intro.mp4', ext: 'mp4' },
+        { path: 'C:\\docs\\manga', name: 'manga', is_dir: true },
+        { path: 'C:\\archives\\pack.zip', name: 'pack.zip', ext: 'zip' },
+        { path: 'C:\\photos\\cover.jpg', name: 'cover.jpg', ext: 'jpg' },
+        { path: 'C:\\videos\\trailer.webm', name: 'trailer.webm', ext: 'webm' },
+      ];
+
+      const grouped = groupSavedItems(items);
+      assert.deepEqual(grouped.map(i => i.name), [
+        'manga',
+        'pack.zip',
+        'intro.mp4',
+        'cover.jpg',
+        'trailer.webm',
+      ]);
     });
   });
 });

@@ -249,18 +249,18 @@ fn test_override_split_roundtrip() {
     let mut config = AppConfig::default();
     config.frontend_data = serde_json::json!({
         "theme": "dark",
-        "bookmarks": [{"path": "C:\\pics\\a.jpg", "name": "a.jpg"}],
-        "bookmarks_collapsed": false,
+        "favorites": {"active": "Favorites 1", "loadouts": [{"name": "Favorites 1", "items": [{"path": "C:\\pics\\a.jpg", "name": "a.jpg"}]}]},
+        "favorites_collapsed": false,
         "last_opened_path": "C:\\pics",
     });
     write_split_config(&dir, &mut config).unwrap();
     let main: serde_json::Value =
         read_json_file(&dir.join("quivit_config.json")).unwrap();
     assert_eq!(main["frontend_data"]["theme"], "dark");
-    assert!(main["frontend_data"].get("bookmarks").is_none());
+    assert!(main["frontend_data"].get("favorites").is_none());
     let loaded = load_from_dir(&dir, false);
     assert_eq!(
-        loaded.frontend_data["bookmarks"][0]["path"],
+        loaded.frontend_data["favorites"]["loadouts"][0]["items"][0]["path"],
         "C:\\pics\\a.jpg"
     );
     assert_eq!(loaded.frontend_data["last_opened_path"], "C:\\pics");
@@ -271,22 +271,22 @@ fn test_override_split_roundtrip() {
 fn test_override_single_file_layout() {
     let _lock = OVERRIDE_ENV_LOCK.lock().unwrap();
     let dir = temp_override_dir("single");
-    std::fs::write(dir.join("quivit_bookmarks.json"), r#"{"bookmarks":[]}"#).unwrap();
+    std::fs::write(dir.join("quivit_favorites.json"), r#"{"favorites":{}}"#).unwrap();
     let mut config = AppConfig::default();
     config.frontend_data =
-        serde_json::json!({"theme": "dark", "bookmarks": [{"path": "C:\\pics\\a.jpg"}]});
+        serde_json::json!({"theme": "dark", "favorites": {"loadouts": [{"items": [{"path": "C:\\pics\\a.jpg"}]}]}});
     let _guard = OverrideEnvGuard::set(&[("QUIVIT_PORTABLE", Some("1"))]);
     save_override(&dir, config).unwrap();
-    assert!(!dir.join("quivit_bookmarks.json").exists());
+    assert!(!dir.join("quivit_favorites.json").exists());
     let main: serde_json::Value =
         read_json_file(&dir.join("quivit_config.json")).unwrap();
     assert_eq!(
-        main["frontend_data"]["bookmarks"][0]["path"],
+        main["frontend_data"]["favorites"]["loadouts"][0]["items"][0]["path"],
         "C:\\pics\\a.jpg"
     );
     let loaded = load_from_dir(&dir, true);
     assert_eq!(
-        loaded.frontend_data["bookmarks"][0]["path"],
+        loaded.frontend_data["favorites"]["loadouts"][0]["items"][0]["path"],
         "C:\\pics\\a.jpg"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -316,13 +316,13 @@ fn test_override_in_file_flag_honored() {
     )
     .unwrap();
     std::fs::write(
-        dir.join("quivit_bookmarks.json"),
-        r#"{"bookmarks": [{"path": "STALE"}]}"#,
+        dir.join("quivit_favorites.json"),
+        r#"{"favorites": {"loadouts": [{"items": [{"path": "STALE"}]}]}}"#,
     )
     .unwrap();
     let _guard = OverrideEnvGuard::set(&[("QUIVIT_PORTABLE", None)]);
     let loaded = load_from_dir(&dir, false);
-    assert!(loaded.frontend_data.get("bookmarks").is_none());
+    assert!(loaded.frontend_data.get("favorites").is_none());
     assert_eq!(loaded.frontend_data["theme"], "dark");
     let _ = std::fs::remove_dir_all(&dir);
 }

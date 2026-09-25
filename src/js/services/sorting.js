@@ -77,3 +77,45 @@ export function applySort(list, col, desc) {
 
   return parents.concat(dirs).concat(files);
 }
+
+export const SAVED_ARCHIVE_EXTS = new Set([
+  'zip', 'cbz', 'rar', 'cbr', '7z', 'cb7', 'cbt', 'tar'
+]);
+
+export function getSavedItemKind(item) {
+  if (!item || typeof item !== 'object') return 'image';
+  if (item.is_dir || item.is_drive || item.is_parent) return 'folder';
+  const path = typeof item.path === 'string' ? item.path : '';
+  if (path.endsWith('/') || path.endsWith('\\') || /^[a-zA-Z]:[\\/]?$/.test(path)) {
+    return 'folder';
+  }
+  if (!path.includes('|')) {
+    const rawExt = typeof item.ext === 'string' && item.ext
+      ? item.ext
+      : (typeof item.name === 'string' && item.name.includes('.') ? item.name.split('.').pop() : path.split('.').pop() || '');
+    if (SAVED_ARCHIVE_EXTS.has(rawExt.toLowerCase())) return 'archive';
+  }
+  return 'image';
+}
+
+export function groupSavedItems(items) {
+  if (!Array.isArray(items) || items.length <= 1) {
+    return Array.isArray(items) ? items.slice() : [];
+  }
+  const folders = [];
+  const archives = [];
+  const images = [];
+
+  for (const item of items) {
+    const kind = getSavedItemKind(item);
+    if (kind === 'folder') {
+      folders.push(item);
+    } else if (kind === 'archive') {
+      archives.push(item);
+    } else {
+      images.push(item);
+    }
+  }
+
+  return folders.concat(archives, images);
+}

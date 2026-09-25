@@ -476,13 +476,13 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   try { localStorage.setItem('quivit-custom-css', formConfig.frontend_data.custom_css); } catch(e) {}
   
   const merged = mergeConfig(formConfig);
-  // Options never edits bookmarks; carry the live disk values so saving
-  // settings does not wipe a bookmark added in the main window (stale copy).
+  // Options never edits favorites; carry the live disk values so saving
+  // settings does not wipe a favorite added in the main window (stale copy).
   try {
     if (invoke && !libraryPathChanged) {
       const live = mergeConfig(await invoke('load_config'));
-      if (live.frontend_data?.bookmarks !== undefined) merged.frontend_data.bookmarks = live.frontend_data.bookmarks;
-      if (live.frontend_data?.bookmarks_collapsed !== undefined) merged.frontend_data.bookmarks_collapsed = live.frontend_data.bookmarks_collapsed;
+      if (live.frontend_data?.favorites !== undefined) merged.frontend_data.favorites = live.frontend_data.favorites;
+      if (live.frontend_data?.favorites_collapsed !== undefined) merged.frontend_data.favorites_collapsed = live.frontend_data.favorites_collapsed;
     }
   } catch { /* fall back to form values */ }
   Object.assign(config, merged);
