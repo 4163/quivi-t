@@ -47,10 +47,12 @@ Work in `src-tauri/src/config.rs`. Reused `extract_keys`, `merge_keys`, `read_js
 - [x] Startup log: `describe_config_source` (`config.rs`) printed once from `run` (`lib.rs:35`), naming folder and layout. `node --check` clean, `--print-dir` prints the dev folder, `cargo check --tests` clean, `cargo test --lib config::` 14 passed.
 - Accept for the user to confirm by launching: terminal shows the `[QuiviT] config:` line, settings land in `.dev-config` only, roaming untouched.
 
-## Slice 2b: harness surgery — deferred
+## Slice 2b: harness surgery — done, verified 2026-09-25
 
-- [ ] `wdio.conf.js`: set the dir to `<repo>/.e2e-config` for suite runs and keep `<repo>/e2e/.profile` for record and diagnose. Delete the marker writes (`wdio.conf.js:181-182,199`), the backup and restore block (`wdio.conf.js:97-139`), and the onComplete restore (`wdio.conf.js:235-279`). Keep the `LOCALAPPDATA` redirect (`wdio.conf.js:12`) so tests keep a throwaway library.
-- Accept: marker never reappears under `target/debug` after suite, record, and diagnose runs. Blast radius: config watcher path (`commands/watchers.rs:155`) still fires for the override dir. Verify with a full suite run.
+- [x] `wdio.conf.js` (295 down to 164 lines): suite runs rebuild `<repo>/.e2e-config` fresh with `QUIVIT_PORTABLE=1`; record and diagnose point `QUIVIT_CONFIG_DIR` straight at `e2e/.profile` with `QUIVIT_PORTABLE=1`. Marker writes, backup and restore block, exit listeners, and onComplete restore all deleted. `LOCALAPPDATA` redirect and driver kill blocks kept.
+- [x] `e2e/specs/05-persistence.e2e.js` follows `QUIVIT_CONFIG_DIR` with the old path as fallback. No other spec reads settings files (08 only touches the redirected library).
+- Accept met including the live run 2026-09-25: `05-persistence.e2e.js` 3 passing in 9.3s through the new wiring (view-mode persist, favorite add persist, favorite remove persist). App wrote only into `.e2e-config`, no marker in `target/debug`. Earlier session-creation failures were a stale driver on port 4444 plus an elevated terminal, not the harness. Blast radius note: app under test inherits env from the wdio process tree, the same mechanism the existing `LOCALAPPDATA` redirect already relies on.
+- Postscript 2026-09-25: slice 2b shipped with a broken guard. `__dirname` carries a trailing separator, so the `startsWith` prefix doubled it and `resetRunDir` threw on every run, failing setup before any spec. Fixed by resolving the prefix first. Proven by dry-running the real `onPrepare` with a stubbed instant `cargo`: it now completes, creates empty `.e2e-config`, and writes no marker. Lesson: path-prefix guards need a passing test, not just a read-through. The earlier WebDriver session failures in this environment are separate (no browser session possible here); the user runs the live suite on their desktop.
 
 ## Slice 3: test both layouts
 
