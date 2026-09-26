@@ -8,6 +8,7 @@ export const ACTION_REGISTRY = [
   // Navigation
   { id: 'cmd-next', label: 'Next Item', defaultBinds: ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'], category: 'Navigation',
     run: (ctx) => {
+      if (ctx.Core.getState().manhwaEnabled) { ctx.stepAnchor(1); return; }
       if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(1);
       else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(1);
       else ctx.Core.navigate(1);
@@ -15,6 +16,7 @@ export const ACTION_REGISTRY = [
   },
   { id: 'cmd-prev', label: 'Previous Item', defaultBinds: ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'], category: 'Navigation',
     run: (ctx) => {
+      if (ctx.Core.getState().manhwaEnabled) { ctx.stepAnchor(-1); return; }
       if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(-1);
       else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(-1);
       else ctx.Core.navigate(-1);
@@ -131,18 +133,20 @@ export const ACTION_REGISTRY = [
   // Zoom
   { id: 'cmd-zoom-in', label: 'Zoom In', defaultBinds: ['c', 'Ctrl+ScrollUp'], category: 'Zoom',
     run: (ctx, payload) => {
+      if (ctx.Core.getState().manhwaEnabled) return;
       if (payload?.wheel) ctx.Viewer.zoomAt(1, payload.clientX, payload.clientY);
       else ctx.Viewer.zoomCenter(1);
     }
   },
   { id: 'cmd-zoom-out', label: 'Zoom Out', defaultBinds: ['z', 'Ctrl+ScrollDown'], category: 'Zoom',
     run: (ctx, payload) => {
+      if (ctx.Core.getState().manhwaEnabled) return;
       if (payload?.wheel) ctx.Viewer.zoomAt(-1, payload.clientX, payload.clientY);
       else ctx.Viewer.zoomCenter(-1);
     }
   },
   { id: 'cmd-zoom-100', label: 'Zoom 100%', defaultBinds: 'x', category: 'Zoom',
-    run: (ctx) => ctx.Viewer.setZoom(1)
+    run: (ctx) => { if (!ctx.Core.getState().manhwaEnabled) ctx.Viewer.setZoom(1); }
   },
 
   // Pan
@@ -151,24 +155,28 @@ export const ACTION_REGISTRY = [
   },
   { id: 'cmd-pan-up', label: 'Pan Up', defaultBinds: ['w', 'ArrowUp', 'ScrollUp'], category: 'Pan',
     run: (ctx, payload) => {
+      if (ctx.Core.getState().manhwaEnabled) { ctx.stepAnchor(-1); return; }
       const step = payload?.wheel ? ctx.wheelPanStep : ctx.keyboardPanStep;
       ctx.Viewer.panBy(0, step);
     }
   },
   { id: 'cmd-pan-left', label: 'Pan Left', defaultBinds: ['a', 'ArrowLeft', 'Shift+ScrollUp'], category: 'Pan',
     run: (ctx, payload) => {
+      if (ctx.Core.getState().manhwaEnabled) return;
       const step = payload?.wheel ? ctx.wheelPanStep : ctx.keyboardPanStep;
       ctx.Viewer.panBy(step, 0);
     }
   },
   { id: 'cmd-pan-down', label: 'Pan Down', defaultBinds: ['s', 'ArrowDown', 'ScrollDown'], category: 'Pan',
     run: (ctx, payload) => {
+      if (ctx.Core.getState().manhwaEnabled) { ctx.stepAnchor(1); return; }
       const step = payload?.wheel ? ctx.wheelPanStep : ctx.keyboardPanStep;
       ctx.Viewer.panBy(0, -step);
     }
   },
   { id: 'cmd-pan-right', label: 'Pan Right', defaultBinds: ['d', 'ArrowRight', 'Shift+ScrollDown'], category: 'Pan',
     run: (ctx, payload) => {
+      if (ctx.Core.getState().manhwaEnabled) return;
       const step = payload?.wheel ? ctx.wheelPanStep : ctx.keyboardPanStep;
       ctx.Viewer.panBy(-step, 0);
     }
@@ -176,16 +184,16 @@ export const ACTION_REGISTRY = [
 
   // Rotation
   { id: 'cmd-rotate-ccw', label: 'Rotate Counterclockwise', defaultBinds: 'g', category: 'Rotation',
-    run: (ctx) => ctx.Viewer.rotate(-90)
+    run: (ctx) => { if (!ctx.Core.getState().manhwaEnabled) ctx.Viewer.rotate(-90); }
   },
   { id: 'cmd-rotate-cw', label: 'Rotate Clockwise', defaultBinds: 'h', category: 'Rotation',
-    run: (ctx) => ctx.Viewer.rotate(90)
+    run: (ctx) => { if (!ctx.Core.getState().manhwaEnabled) ctx.Viewer.rotate(90); }
   },
   { id: 'cmd-flip-horizontal', label: 'Flip Horizontal', defaultBinds: 'v', category: 'Rotation',
-    run: (ctx) => ctx.Viewer.flipHorizontal()
+    run: (ctx) => { if (!ctx.Core.getState().manhwaEnabled) ctx.Viewer.flipHorizontal(); }
   },
   { id: 'cmd-flip-vertical', label: 'Flip Vertical', defaultBinds: 'b', category: 'Rotation',
-    run: (ctx) => ctx.Viewer.flipVertical()
+    run: (ctx) => { if (!ctx.Core.getState().manhwaEnabled) ctx.Viewer.flipVertical(); }
   },
 
   // Window & UI

@@ -37,7 +37,7 @@ import { initPasswordOverlay } from './passwordOverlay.js';
 import { initUrlOverlay } from './urlOverlay.js';
 import { UrlLoader } from '../urlLoader.js';
 import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
-import { initManhwaStrip } from '../viewer/manhwaStrip.js';
+import { initManhwaStrip, stepAnchor, isManhwaStripActive, STRIP_PAGE_DELTA } from '../viewer/manhwaStrip.js';
 
 // Reset the options tab on startup so each session starts on General.
 localStorage.removeItem('options-active-tab');
@@ -47,6 +47,29 @@ window.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.shiftKey && e.altKey && e.key.toLowerCase() === 'c') {
     e.preventDefault();
     emergencyCssReset(Core.getState().config);
+  }
+
+  if (isManhwaStripActive() && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && !document.activeElement?.closest('#file-panel')) {
+    if (e.key === 'Home' && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      stepAnchor(-Infinity);
+      return;
+    }
+    if (e.key === 'End' && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      stepAnchor(Infinity);
+      return;
+    }
+    if (e.key === 'PageUp' && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      stepAnchor(-STRIP_PAGE_DELTA);
+      return;
+    }
+    if (e.key === 'PageDown' && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      stepAnchor(STRIP_PAGE_DELTA);
+      return;
+    }
   }
 
   // Home/End jumps across tabbable controls.
@@ -88,6 +111,12 @@ function updatePanSteps(config = Core.getState().config) {
 
 function dispatchKeyboardPan(dx, dy) {
   if (dx === 0 && dy === 0) return;
+  if (isManhwaStripActive()) {
+    // Vertical pan maps to anchor step; horizontal ignored in strip.
+    if (dy > 0) stepAnchor(-1);
+    else if (dy < 0) stepAnchor(1);
+    return;
+  }
   Viewer.panBy(dx * keyboardPanStep, dy * keyboardPanStep);
 }
 
@@ -109,7 +138,8 @@ const actionCtx = {
   isFavoritesFocused: () => !!document.activeElement?.closest('#favorites-list'),
   isLibraryFocused: () => !!document.activeElement?.closest('#file-panel-library, .library-provider-list'),
   get keyboardPanStep() { return keyboardPanStep; },
-  get wheelPanStep() { return wheelPanStep; }
+  get wheelPanStep() { return wheelPanStep; },
+  get stepAnchor() { return stepAnchor; }
 };
 
 function bindMenuCommands() {

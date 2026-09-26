@@ -87,5 +87,82 @@ describe('Actions registry and keybindings', () => {
         await dispatch('cmd-nonexistent-action-id', null, {});
       });
     });
+
+    it('routes navigation and pan actions to stepAnchor when manhwa is active', async () => {
+      let steppedDelta = 0;
+      let viewerCalled = false;
+      let coreNavigated = 0;
+
+      const fakeCtx = {
+        Core: {
+          getState: () => ({ manhwaEnabled: true }),
+          navigate: (d) => { coreNavigated += d; }
+        },
+        stepAnchor: (delta) => { steppedDelta += delta; },
+        Viewer: {
+          panBy: () => { viewerCalled = true; },
+          zoomAt: () => { viewerCalled = true; },
+          zoomCenter: () => { viewerCalled = true; },
+          setZoom: () => { viewerCalled = true; },
+          rotate: () => { viewerCalled = true; },
+          flipHorizontal: () => { viewerCalled = true; },
+          flipVertical: () => { viewerCalled = true; }
+        }
+      };
+
+      await dispatch('cmd-next', null, fakeCtx);
+      assert.equal(steppedDelta, 1);
+      assert.equal(coreNavigated, 0);
+
+      await dispatch('cmd-prev', null, fakeCtx);
+      assert.equal(steppedDelta, 0);
+      assert.equal(coreNavigated, 0);
+
+      await dispatch('cmd-pan-up', null, fakeCtx);
+      assert.equal(steppedDelta, -1);
+
+      await dispatch('cmd-pan-down', null, fakeCtx);
+      assert.equal(steppedDelta, 0);
+
+      // Pan left/right, zoom, rotation, flip are guarded in manhwa mode.
+      await dispatch('cmd-pan-left', null, fakeCtx);
+      await dispatch('cmd-pan-right', null, fakeCtx);
+      await dispatch('cmd-zoom-in', null, fakeCtx);
+      await dispatch('cmd-zoom-out', null, fakeCtx);
+      await dispatch('cmd-zoom-100', null, fakeCtx);
+      await dispatch('cmd-rotate-ccw', null, fakeCtx);
+      await dispatch('cmd-rotate-cw', null, fakeCtx);
+      await dispatch('cmd-flip-horizontal', null, fakeCtx);
+      await dispatch('cmd-flip-vertical', null, fakeCtx);
+      assert.equal(viewerCalled, false);
+    });
+
+    it('routes to standard handlers when manhwa is inactive', async () => {
+      let coreNavigated = 0;
+      let panByDeltas = [];
+
+      const fakeCtx = {
+        Core: {
+          getState: () => ({ manhwaEnabled: false }),
+          navigate: (d) => { coreNavigated += d; }
+        },
+        keyboardPanStep: 50,
+        Viewer: {
+          panBy: (dx, dy) => { panByDeltas.push({ dx, dy }); }
+        }
+      };
+
+      await dispatch('cmd-next', null, fakeCtx);
+      assert.equal(coreNavigated, 1);
+
+      await dispatch('cmd-prev', null, fakeCtx);
+      assert.equal(coreNavigated, 0);
+
+      await dispatch('cmd-pan-up', null, fakeCtx);
+      assert.deepEqual(panByDeltas.pop(), { dx: 0, dy: 50 });
+
+      await dispatch('cmd-pan-down', null, fakeCtx);
+      assert.deepEqual(panByDeltas.pop(), { dx: 0, dy: -50 });
+    });
   });
 });

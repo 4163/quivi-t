@@ -168,13 +168,23 @@ function _setAnchor(imgIdx) {
   _renderWindow();
 }
 
+export const STRIP_PAGE_DELTA = STRIP_WINDOW_HALF;
+
 /**
  * Navigate the anchor by delta images (positive = forward, negative = back).
+ * Supports finite deltas or ±Infinity to jump to first/last image.
  * Public API for Slice 5 (keyboard/wheel).
  */
 export function stepAnchor(delta) {
   if (!_active || _imageIndex.length === 0) return;
-  const next = Math.max(0, Math.min(_imageIndex.length - 1, _anchorImgIdx + delta));
+  let next;
+  if (delta === -Infinity) {
+    next = 0;
+  } else if (delta === Infinity) {
+    next = _imageIndex.length - 1;
+  } else {
+    next = Math.max(0, Math.min(_imageIndex.length - 1, _anchorImgIdx + delta));
+  }
   if (next !== _anchorImgIdx) _setAnchor(next);
 }
 

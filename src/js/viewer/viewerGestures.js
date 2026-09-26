@@ -149,6 +149,7 @@ export function createViewerGestures(viewportState) {
   }
 
   function _startPan(clientX, clientY) {
+    if (Core.getState().manhwaEnabled) return;
     _isPanning = true;
     _panStartX = clientX;
     _panStartY = clientY;
@@ -246,6 +247,7 @@ export function createViewerGestures(viewportState) {
   }
 
   function _onMouseDown(e) {
+    if (Core.getState().manhwaEnabled) return;
     if (document.querySelector('#menubar .menu-item.open')) return;
     if (!_isMouseOverViewportNow()) return;
     const isPanKey = _isMousePanKey(e) || (e.button === 0 && _keyPanHeld(null));
@@ -313,6 +315,7 @@ export function createViewerGestures(viewportState) {
   window.addEventListener('keydown', (e) => {
     if (e.repeat) return;
     setTimeout(() => {
+      if (Core.getState().manhwaEnabled) return;
       if (!_isMouseOverViewportNow()) return;
       if (!_isPanning && _panButtonsDown.size === 0 && _keyPanHeld(null)) {
         _startPan(_lastMouseX, _lastMouseY);
