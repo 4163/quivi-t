@@ -120,6 +120,10 @@ Goal: the mode survives restart and leaves no trace in diagnostics contracts.
 - [x] Run `node --check` on touched JS and `cargo check --tests --manifest-path src-tauri/Cargo.toml` if any Rust was touched. V1 expects no Rust touch. Accept: static checks clean before handoff.
 - [ ] Produce a short manual runtime list at handoff. Cover enter and exit, anchor stepping, zoom relayout, archive chapter, locked archive, video placeholder, panel click sync, and restart persistence. Accept: each item names where to go, what to do, and what to see.
 
+## Follow-up
+
+Runtime issues found after slices 1 through 7 now live in `.agents/manhwa-followup.md`. Slice 8 e2e and runtime list items above stay open until that pass lands.
+
 ## Validation note
 
 Compared this plan against `.agents/skills/validate-changes/SKILL.md`. No diff exists yet so the check was structural. Module ownership stays intact. State machine keeps DOM out. UI keeps subscribing instead of reaching in. New DOM was declared in HTML first. New CSS tokens were not invented. JS avoids inline visual writes. Rust surface stays stable with no IPC or protocol change. The one deliberate tension is filters and Lanczos staying off in V1, which the locked definitions call out so it reads as a scoped cut and not drift. Stale code risk sits in bridge and pipeline bypasses, so slices 2 and 6 hide rather than delete those paths. Column rewrite: index-step windowing and `stepAnchor` pan routing are superseded. The strip is one virtual image under `viewportState`. Slice 5 tree changes predate this rewrite and get reverted where the slices say so.
