@@ -36,7 +36,7 @@
  *   ephemeral within a session     -> in-memory state (or cleared localStorage)
  */
 
-import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_DIRECTION, DEFAULT_SPREAD_MODE, DEFAULT_FILE_LIST_VIEW_MODE, mergeConfig } from './keybinds.js';
+import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_DIRECTION, DEFAULT_SPREAD_MODE, DEFAULT_FILE_LIST_VIEW_MODE, DEFAULT_MANHWA_ENABLED, mergeConfig } from './keybinds.js';
 import { FsUtils } from './fsUtils.js';
 import { BoundedMap } from './services/cache.js';
 
@@ -112,6 +112,9 @@ const _state = {
   /** Current reading step on a 2-page spread: 1 or 2 */
   spreadStep: 1,
 
+  /** Manhwa (vertical strip) mode */
+  manhwaEnabled: DEFAULT_MANHWA_ENABLED,
+
   /** File list view mode: 'list' | 'thumbnail' */
   fileListViewMode: DEFAULT_FILE_LIST_VIEW_MODE,
   
@@ -126,6 +129,7 @@ const _state = {
       spread_enabled: DEFAULT_SPREAD_ENABLED,
       spread_direction: DEFAULT_SPREAD_DIRECTION,
       file_list_view_mode: DEFAULT_FILE_LIST_VIEW_MODE,
+      manhwa_enabled: DEFAULT_MANHWA_ENABLED,
       keybinds: { ...DEFAULT_KEYBINDS },
     }
   }
@@ -429,6 +433,12 @@ export const Core = {
     if (_state.config?.frontend_data) {
       _state.config.frontend_data.spread_enabled = _state.spreadEnabled;
     }
+    if (_state.spreadEnabled && _state.manhwaEnabled) {
+      _state.manhwaEnabled = false;
+      if (_state.config?.frontend_data) {
+        _state.config.frontend_data.manhwa_enabled = false;
+      }
+    }
     if (options.persist) {
       _scheduleConfigFlush(1500);
     }
@@ -470,6 +480,25 @@ export const Core = {
       this.setSpreadEnabled(true, options);
       this.setSpreadDirection(mode, options);
     }
+  },
+
+  setManhwaMode(enabled, options = {}) {
+    _state.manhwaEnabled = !!enabled;
+    if (_state.config?.frontend_data) {
+      _state.config.frontend_data.manhwa_enabled = _state.manhwaEnabled;
+    }
+    if (_state.manhwaEnabled) {
+      this.setSpreadEnabled(false, options);
+    }
+    if (options.persist) {
+      _scheduleConfigFlush(1500);
+    }
+    _notify();
+  },
+
+  toggleManhwaMode(options = {}) {
+    const current = _state.manhwaEnabled ?? _state.config?.frontend_data?.manhwa_enabled ?? DEFAULT_MANHWA_ENABLED;
+    this.setManhwaMode(!current, options);
   },
 
   setFileListViewMode(mode, options = {}) {
@@ -571,6 +600,7 @@ export const Core = {
       _state.spreadEnabled = _state.config.frontend_data.spread_enabled === true;
       _state.spreadDirection = _state.config.frontend_data.spread_direction || DEFAULT_SPREAD_DIRECTION;
       _state.fileListViewMode = _state.config.frontend_data.file_list_view_mode || DEFAULT_FILE_LIST_VIEW_MODE;
+      _state.manhwaEnabled = _state.config.frontend_data.manhwa_enabled === true;
       
 
       // Refresh when show_hidden changes.

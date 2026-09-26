@@ -692,6 +692,12 @@ export function syncViewMenu(state) {
     el.classList.toggle('checked', displayScaling === s.id);
   }
 
+  const manhwaEl = document.getElementById('cmd-toggle-manhwa');
+  if (manhwaEl) {
+    const manhwaOn = !!(state.manhwaEnabled ?? state.config?.frontend_data?.manhwa_enabled);
+    manhwaEl.classList.toggle('checked', manhwaOn);
+  }
+
   const spreadEnabled = !!(state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? (state.spreadMode && state.spreadMode !== 'off'));
   const spreadDirection = state.spreadDirection ?? state.config?.frontend_data?.spread_direction ?? 'rtl';
 

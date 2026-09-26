@@ -1,548 +1,586 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>QuiviT Options</title>
-    <link rel="stylesheet" href="/css/global.css" />
-    <link rel="stylesheet" href="/css/options.css" />
-    <!-- Apply theme and custom CSS after all stylesheets so the injected
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QuiviT Options</title>
+  <link rel="stylesheet" href="/css/global.css" />
+  <link rel="stylesheet" href="/css/options.css" />
+  <!-- Apply theme and custom CSS after all stylesheets so the injected
          #custom-css style lands last and wins the cascade (inline scripts
          block parsing, so this still runs before first paint). -->
-    <script src="/js/shared/themePrePaint.js"></script>
-    <style id="custom-css"></style>
-  </head>
-  <body>
-    <div class="tabs">
-      <button class="tab-btn active" data-target="tab-general">General</button>
-      <button class="tab-btn" data-target="tab-keys">Keys</button>
-      <button class="tab-btn" data-target="tab-associations">File Types</button>
-      <button class="tab-btn" data-target="tab-customization">Customization</button>
-      <button class="tab-btn" data-target="tab-language">Language</button>
-    </div>
+  <script src="/js/shared/themePrePaint.js"></script>
+  <style id="custom-css"></style>
+</head>
 
-    <div class="tab-content active" id="tab-general">
+<body>
+  <div class="tabs">
+    <button class="tab-btn active" data-target="tab-general">General</button>
+    <button class="tab-btn" data-target="tab-keys">Keys</button>
+    <button class="tab-btn" data-target="tab-associations">File Types</button>
+    <button class="tab-btn" data-target="tab-customization">Customization</button>
+    <button class="tab-btn" data-target="tab-language">Language</button>
+  </div>
 
-      <div class="options-section">
-        <h3>Startup</h3>
-        <label>
-          <input type="checkbox" id="opt-show-hidden" />
-          Show hidden folders and files
-        </label>
-        <div class="input-group">
-          <label for="opt-start-dir">Default start directory</label>
-          <div class="flex-row">
-            <input type="text" id="opt-start-dir" placeholder="Loading..." autocomplete="off" spellcheck="false" />
-            <button id="btn-browse-start">Browse...</button>
-          </div>
-        </div>
-        <label class="continue-last-label">
-          <input type="checkbox" id="opt-continue-last" />
-          Continue from last opened directory
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" id="opt-remember-last-image" />
-          Continue from last active image
-        </label>
-        <p class="hint">Only applies when "Continue from last opened directory" is enabled.</p>
-        <label class="checkbox-label">
-          <input type="checkbox" id="opt-single-instance" />
-          Allow only one QuiviT instance
-        </label>
-        <p class="hint">Takes effect after restarting QuiviT.</p>
-      </div>
+  <div class="tab-content active" id="tab-general">
 
-      <div class="options-section">
-        <h3>Interface</h3>
-        <label title="Hide menu bar and status bar when entering fullscreen">
-          <input type="checkbox" id="opt-hide-chrome-fullscreen" checked />
-          Auto-hide interface in fullscreen
-        </label>
-        <label class="checkbox-label" title="Open the first image in a directory">
-          <input type="checkbox" id="opt-open-first-image" />
-          Open first image
-        </label>
-      </div>
-
-      <div class="options-section">
-        <h3>Viewport</h3>
-        <div class="pan-step">
-          <div class="pan-step-row">
-            <div class="pan-step-col">
-              <label for="opt-keyboard-pan-step" title="Distance moved per keyboard pan (W/A/S/D, arrow keys)">Keyboard pan step</label>
-              <div class="pan-step-input-wrap">
-                <input type="number" id="opt-keyboard-pan-step" min="1" max="500" value="72" />
-                <span class="pan-step-unit">px</span>
-              </div>
-            </div>
-            <div class="pan-step-col">
-              <label for="opt-wheel-pan-step" title="Distance moved per scroll wheel notch when panning">Wheel pan step</label>
-              <div class="pan-step-input-wrap">
-                <input type="number" id="opt-wheel-pan-step" min="1" max="500" value="120" />
-                <span class="pan-step-unit">px</span>
-              </div>
-            </div>
-            <div class="pan-step-col">
-              <label for="opt-hide-cursor-delay" title="Seconds of inactivity before hiding cursor over viewport (0 to disable)">Hide cursor delay</label>
-              <div class="pan-step-input-wrap">
-                <input type="number" id="opt-hide-cursor-delay" min="0" max="60" step="0.5" value="2" />
-                <span class="pan-step-unit">sec</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="options-section">
-        <h3>Filters</h3>
-        <p class="hint">Anime4K quality</p>
-        <div class="segmented-control flex-row" id="anime4k-variant-controls" role="group" aria-label="Anime4K variant">
-          <button type="button" class="segmented-btn" data-anime4k-variant="normal" title="20 shader passes">Normal (CNN VL)</button>
-          <button type="button" class="segmented-btn" data-anime4k-variant="fast" title="11 shader passes">Fast (CNN M)</button>
-        </div>
-      </div>
-      <div class="options-section">
-        <h3>Library location</h3>
-        <div class="input-group">
-          <label for="opt-library-path">Imported URLs</label>
-          <div class="flex-row">
-            <input type="text" id="opt-library-path" placeholder="Loading..." autocomplete="off" spellcheck="false" />
-            <button id="btn-browse-library" type="button">Browse...</button>
-          </div>
-        </div>
-        <p class="hint">Leave blank to use the default folder. Library files and folders are moved to the new location dynamically. Supported websites are listed <a href="https://github.com/4163/quivi-t#supported-sites" title="GitHub" id="link-supported-sites"><i>~here</i></a>.</p>
-      </div>
-      <div class="options-section">
-        <h3>Configuration Persistence</h3>
-        <label>
-          <input type="checkbox" id="opt-portable-mode" />
-          Save config data locally
-        </label>
-        <p class="hint">By default, QuiviT stores settings in your user config folder under %APPDATA%. Enable this to store settings beside the app executable for portable use.<br>
-          <strong>Warning:</strong> Sharing the app folder or its config file(s) exposes your personal directory paths and file names.
-        </p>
-        <p class="hint">
-          Global config folder (Roaming):
-          <button id="btn-open-config-dir" class="link-button" type="button">
-            <span id="config-dir-label">Loading...</span>
-          </button>
-        </p>
-        <p class="hint">
-          Local config folder (portable):
-          <button id="btn-open-local-data-dir" class="link-button" type="button">
-            <span id="local-data-dir-label">Loading...</span>
-          </button>
-        </p>
-      </div>
-    </div>
-
-    <div class="tab-content" id="tab-keys">
-      <div class="options-section">
-        <h3>Keybindings</h3>
-        <div class="flex-row keybinds-header">
-          <p class="hint">Click a tag to rebind. Hold the keys you want, then release. Middle-click a tag to remove it (middle mouse is still bindable*). Matching colors indicate conflicts. Press Escape to cancel.</p>
-          <button id="btn-reset-keybinds" class="secondary">Reset to defaults</button>
-        </div>
-        <div class="keybinds-list" id="keybinds-container">
-          <h3 class="keybind-category-header">Navigation</h3>
-          <div class="keybind-item">
-            <span class="keybind-name">Next Item</span>
-            <div class="keybind-tags" data-action="cmd-next"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Previous Item</span>
-            <div class="keybind-tags" data-action="cmd-prev"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">History Back</span>
-            <div class="keybind-tags" data-action="cmd-history-back"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">History Forward</span>
-            <div class="keybind-tags" data-action="cmd-history-forward"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Open Parent Folder</span>
-            <div class="keybind-tags" data-action="cmd-parent"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Open Next Folder / Archive</span>
-            <div class="keybind-tags" data-action="cmd-open-next-container"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Open Previous Folder / Archive</span>
-            <div class="keybind-tags" data-action="cmd-open-prev-container"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Refresh</span>
-            <div class="keybind-tags" data-action="cmd-refresh"></div>
-          </div>
-          <h3 class="keybind-category-header">View</h3>
-          <div class="keybind-item">
-            <span class="keybind-name">Fit None</span>
-            <div class="keybind-tags" data-action="cmd-fit-none"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Fit Width</span>
-            <div class="keybind-tags" data-action="cmd-fit-width"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Fit Height</span>
-            <div class="keybind-tags" data-action="cmd-fit-height"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name" title="Scale to fit entirely within the viewport, stretching small images">Fit Window</span>
-            <div class="keybind-tags" data-action="cmd-fit-best"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Fit Width if Larger</span>
-            <div class="keybind-tags" data-action="cmd-fit-width-if-larger"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Fit Height if Larger</span>
-            <div class="keybind-tags" data-action="cmd-fit-height-if-larger"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name" title="Shrink to fit the viewport, but never enlarge small images">Fit Window if Larger</span>
-            <div class="keybind-tags" data-action="cmd-fit-window-if-larger"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Opaque Canvas</span>
-            <div class="keybind-tags" data-action="cmd-toggle-transparent"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Mute Viewer Audio</span>
-            <div class="keybind-tags" data-action="cmd-toggle-audio"></div>
-          </div>
-          <h3 class="keybind-category-header">Spread View</h3>
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Right to Left (RTL)</span>
-            <div class="keybind-tags" data-action="cmd-spread-direction-rtl"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Left to Right (LTR)</span>
-            <div class="keybind-tags" data-action="cmd-spread-direction-ltr"></div>
-          </div>
-          <h3 class="keybind-category-header">Scaling Method</h3>
-          <div class="keybind-item">
-            <span class="keybind-name">Scale: Previous</span>
-            <div class="keybind-tags" data-action="cmd-cycle-scaling-back"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Scale: Next</span>
-            <div class="keybind-tags" data-action="cmd-cycle-scaling"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Pixelated</span>
-            <div class="keybind-tags" data-action="cmd-scale-none"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Bilinear</span>
-            <div class="keybind-tags" data-action="cmd-scale-bilinear"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Lanczos</span>
-            <div class="keybind-tags" data-action="cmd-scale-lanczos"></div>
-          </div>
-          <h3 class="keybind-category-header">Filters</h3>
-
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Anime4K Filter</span>
-            <div class="keybind-tags" data-action="cmd-toggle-anime4k-filter"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Scanlines Filter</span>
-            <div class="keybind-tags" data-action="cmd-toggle-scanlines-filter"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Phosphor Filter</span>
-            <div class="keybind-tags" data-action="cmd-toggle-phosphor-filter"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Retro CRT Filter</span>
-            <div class="keybind-tags" data-action="cmd-toggle-crt-filter"></div>
-          </div>
-          <h3 class="keybind-category-header">Zoom</h3>
-          <div class="keybind-item">
-            <span class="keybind-name">Zoom In</span>
-            <div class="keybind-tags" data-action="cmd-zoom-in"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Zoom Out</span>
-            <div class="keybind-tags" data-action="cmd-zoom-out"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Zoom 100%</span>
-            <div class="keybind-tags" data-action="cmd-zoom-100"></div>
-          </div>
-          <h3 class="keybind-category-header">Pan</h3>
-          <div class="keybind-item">
-            <span class="keybind-name">Pan (Drag)</span>
-            <div class="keybind-tags" data-action="cmd-pan-drag"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Pan Up</span>
-            <div class="keybind-tags" data-action="cmd-pan-up"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Pan Left</span>
-            <div class="keybind-tags" data-action="cmd-pan-left"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Pan Down</span>
-            <div class="keybind-tags" data-action="cmd-pan-down"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Pan Right</span>
-            <div class="keybind-tags" data-action="cmd-pan-right"></div>
-          </div>
-          <h3 class="keybind-category-header">Wheel Behaviour</h3>
-          <div class="keybind-item scroll-mode-toggle" id="scroll-mode-toggle">
-            <span class="keybind-name">Zoom (Ctrl+Wheel) Modifier Mode</span>
-            <div class="scroll-mode-controls">
-              <button class="scroll-mode-btn" data-mode="hold" title="Hold Ctrl to zoom, release to pan.">Hold</button>
-              <button class="scroll-mode-btn" data-mode="toggle" title="Tap the zoom modifier to switch between zoom and pan.">Toggle</button>
-            </div>
-          </div>
-          <h3 class="keybind-category-header">Rotation</h3>
-          <div class="keybind-item">
-            <span class="keybind-name">Rotate Counterclockwise</span>
-            <div class="keybind-tags" data-action="cmd-rotate-ccw"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Rotate Clockwise</span>
-            <div class="keybind-tags" data-action="cmd-rotate-cw"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Flip Horizontal</span>
-            <div class="keybind-tags" data-action="cmd-flip-horizontal"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Flip Vertical</span>
-            <div class="keybind-tags" data-action="cmd-flip-vertical"></div>
-          </div>
-          <h3 class="keybind-category-header">Window & UI</h3>
-          <div class="keybind-item">
-            <span class="keybind-name">Open Options</span>
-            <div class="keybind-tags" data-action="cmd-options"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle File List</span>
-            <div class="keybind-tags" data-action="cmd-toggle-filelist"></div>
-          </div>
-
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Menu Bar</span>
-            <div class="keybind-tags" data-action="cmd-toggle-menubar"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Status Bar</span>
-            <div class="keybind-tags" data-action="cmd-toggle-statusbar"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Fullscreen</span>
-            <div class="keybind-tags" data-action="cmd-fullscreen"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Exit Fullscreen (Hold)</span>
-            <div class="keybind-tags" data-action="cmd-exit-fullscreen-hold"></div>
-          </div>
-          <h3 class="keybind-category-header">File Operations</h3>
-          <div class="keybind-item">
-            <span class="keybind-name">Open Directory</span>
-            <div class="keybind-tags" data-action="cmd-open-dir"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Open File / Archive</span>
-            <div class="keybind-tags" data-action="cmd-open-file"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Open URL</span>
-            <div class="keybind-tags" data-action="cmd-use-url"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Thumbnail / List View</span>
-            <div class="keybind-tags" data-action="cmd-toggle-file-list-view-mode"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name" title="Open containing folder in File Explorer">Show in Explorer</span>
-            <div class="keybind-tags" data-action="cmd-open-explorer"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Open Folder</span>
-            <div class="keybind-tags" data-action="cmd-open-folder"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Toggle Favorite</span>
-            <div class="keybind-tags" data-action="cmd-toggle-favorite"></div>
-          </div>
-          <div class="keybind-item">
-            <span class="keybind-name">Open Metadata</span>
-            <div class="keybind-tags" data-action="cmd-open-metadata"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="tab-content" id="tab-associations">
-      <div class="options-section">
-        <h3>Associated File Types</h3>
-        <p class="hint">Checking these boxes registers QuiviT as an available handler. You may still need to choose it in the file's `<i>Open with</i>` dialog or set it as the default app in Windows Settings.</p>
-        <div class="flex-row assoc-actions">
-          <button id="btn-assoc-recommended" class="secondary">Recommended</button>
-          <button id="btn-assoc-select-all" class="secondary">Select All</button>
-          <button id="btn-assoc-deselect-all" class="secondary">Deselect All</button>
-        </div>
-        <h4>Icon Preview</h4>
-        <div class="assoc-mascots-wrapper">
-          <div class="assoc-mascots" id="assoc-mascots">
-            <div class="assoc-mascot-box" data-group="mascot">
-              <img src="/assets/icons/_mascot-formats.svg" class="assoc-mascot-svg" alt="Standard formats">
-              <img class="assoc-format-icon" alt="">
-            </div>
-            <div class="assoc-mascot-box" data-group="moe1">
-              <img src="/assets/icons/_moe-1-formats.svg" class="assoc-mascot-svg" alt="Extended formats">
-              <img class="assoc-format-icon" alt="">
-            </div>
-            <div class="assoc-mascot-box" data-group="moe3">
-              <img src="/assets/icons/_moe-3-formats.svg" class="assoc-mascot-svg" alt="Comic archives">
-              <img class="assoc-format-icon" alt="">
-            </div>
-            <div class="assoc-mascot-box" data-group="stoic">
-              <img src="/assets/icons/_stoic-formats.svg" class="assoc-mascot-svg" alt="Plain archives">
-              <img class="assoc-format-icon" alt="">
-            </div>
-          </div>
-        </div>
-        <div class="associations-list" id="associations-container">
-          <h4 class="assoc-header">Image</h4>
-          <div class="assoc-grid">
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="jpg" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/jpg.png" alt="jpg" class="assoc-icon">
-              <span class="assoc-text">.jpg (JPEG Image)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="jpeg" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/jpeg.png" alt="jpeg" class="assoc-icon">
-              <span class="assoc-text">.jpeg (JPEG Image)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="png" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/png.png" alt="png" class="assoc-icon">
-              <span class="assoc-text">.png (PNG Image)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="gif" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/gif.png" alt="gif" class="assoc-icon">
-              <span class="assoc-text">.gif (GIF Image)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="webp" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/webp.png" alt="webp" class="assoc-icon">
-              <span class="assoc-text">.webp (WebP Image)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="apng" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/apng.png" alt="apng" class="assoc-icon">
-              <span class="assoc-text">.apng (APNG Image)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="svg" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/svg.png" alt="svg" class="assoc-icon">
-              <span class="assoc-text">.svg (SVG Image)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="bmp" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/bmp.png" alt="bmp" class="assoc-icon">
-              <span class="assoc-text">.bmp (BMP Image)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="ico" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/ico.png" alt="ico" class="assoc-icon">
-              <span class="assoc-text">.ico (Icon Image)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="avif" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/avif.png" alt="avif" class="assoc-icon">
-              <span class="assoc-text">.avif (AVIF Image)</span>
-            </label>
-          </div>
-          <h4 class="assoc-header">Archive</h4>
-          <div class="assoc-grid">
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="zip" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/zip.png" alt="zip" class="assoc-icon">
-              <span class="assoc-text">.zip (ZIP Archive)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="cbz" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/cbz.png" alt="cbz" class="assoc-icon">
-              <span class="assoc-text">.cbz (Comic Book ZIP)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="rar" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/rar.png" alt="rar" class="assoc-icon">
-              <span class="assoc-text">.rar (RAR Archive)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="cbr" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/cbr.png" alt="cbr" class="assoc-icon">
-              <span class="assoc-text">.cbr (Comic Book RAR)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="7z" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/7z.png" alt="7z" class="assoc-icon">
-              <span class="assoc-text">.7z (7z Archive)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="cb7" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/cb7.png" alt="cb7" class="assoc-icon">
-              <span class="assoc-text">.cb7 (Comic Book 7z)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="tar" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/tar.png" alt="tar" class="assoc-icon">
-              <span class="assoc-text">.tar (TAR Archive)</span>
-            </label>
-            <label class="checkbox-label assoc-label">
-              <input type="checkbox" class="assoc-checkbox" data-ext="cbt" title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
-              <img src="/assets/icons/cbt.png" alt="cbt" class="assoc-icon">
-              <span class="assoc-text">.cbt (Comic Book TAR)</span>
-            </label>
-          </div>
-        </div>
-      </div>
-      <div class="options-section">
-        <h3>System integration</h3>
-        <p class="hint">Open Windows Settings if your selection did not, or cannot, make QuiviT the default app.</p>
+    <div class="options-section">
+      <h3>Startup</h3>
+      <label>
+        <input type="checkbox" id="opt-show-hidden" />
+        Show hidden folders and files
+      </label>
+      <div class="input-group">
+        <label for="opt-start-dir">Default start directory</label>
         <div class="flex-row">
-          <button id="btn-assoc-settings" class="secondary">Windows Defaults Settings</button>
+          <input type="text" id="opt-start-dir" placeholder="Loading..." autocomplete="off" spellcheck="false" />
+          <button id="btn-browse-start">Browse...</button>
+        </div>
+      </div>
+      <label class="continue-last-label">
+        <input type="checkbox" id="opt-continue-last" />
+        Continue from last opened directory
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="opt-remember-last-image" />
+        Continue from last active image
+      </label>
+      <p class="hint">Only applies when "Continue from last opened directory" is enabled.</p>
+      <label class="checkbox-label">
+        <input type="checkbox" id="opt-single-instance" />
+        Allow only one QuiviT instance
+      </label>
+      <p class="hint">Takes effect after restarting QuiviT.</p>
+    </div>
+
+    <div class="options-section">
+      <h3>Interface</h3>
+      <label title="Hide menu bar and status bar when entering fullscreen">
+        <input type="checkbox" id="opt-hide-chrome-fullscreen" checked />
+        Auto-hide interface in fullscreen
+      </label>
+      <label class="checkbox-label" title="Open the first image in a directory">
+        <input type="checkbox" id="opt-open-first-image" />
+        Open first image
+      </label>
+    </div>
+
+    <div class="options-section">
+      <h3>Viewport</h3>
+      <div class="pan-step">
+        <div class="pan-step-row">
+          <div class="pan-step-col">
+            <label for="opt-keyboard-pan-step" title="Distance moved per keyboard pan (W/A/S/D, arrow keys)">Keyboard
+              pan step</label>
+            <div class="pan-step-input-wrap">
+              <input type="number" id="opt-keyboard-pan-step" min="1" max="500" value="72" />
+              <span class="pan-step-unit">px</span>
+            </div>
+          </div>
+          <div class="pan-step-col">
+            <label for="opt-wheel-pan-step" title="Distance moved per scroll wheel notch when panning">Wheel pan
+              step</label>
+            <div class="pan-step-input-wrap">
+              <input type="number" id="opt-wheel-pan-step" min="1" max="500" value="120" />
+              <span class="pan-step-unit">px</span>
+            </div>
+          </div>
+          <div class="pan-step-col">
+            <label for="opt-hide-cursor-delay"
+              title="Seconds of inactivity before hiding cursor over viewport (0 to disable)">Hide cursor delay</label>
+            <div class="pan-step-input-wrap">
+              <input type="number" id="opt-hide-cursor-delay" min="0" max="60" step="0.5" value="2" />
+              <span class="pan-step-unit">sec</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-
-    <div class="tab-content" id="tab-customization">
-      <div class="options-section">
-        <h3>Theme</h3>
-        <p class="hint">Choose an appearance.</p>
-        <div class="theme-group flex-row">
-          <button type="button" class="theme-btn secondary" data-theme="system">System</button>
-          <button type="button" class="theme-btn secondary" data-theme="light">Light</button>
-          <button type="button" class="theme-btn secondary" data-theme="dark">Dark</button>
+    <div class="options-section">
+      <h3>Filters</h3>
+      <p class="hint">Anime4K quality</p>
+      <div class="segmented-control flex-row" id="anime4k-variant-controls" role="group" aria-label="Anime4K variant">
+        <button type="button" class="segmented-btn" data-anime4k-variant="normal" title="20 shader passes">Normal (CNN
+          VL)</button>
+        <button type="button" class="segmented-btn" data-anime4k-variant="fast" title="11 shader passes">Fast (CNN
+          M)</button>
+      </div>
+    </div>
+    <div class="options-section">
+      <h3>Library location</h3>
+      <div class="input-group">
+        <label for="opt-library-path">Imported URLs</label>
+        <div class="flex-row">
+          <input type="text" id="opt-library-path" placeholder="Loading..." autocomplete="off" spellcheck="false" />
+          <button id="btn-browse-library" type="button">Browse...</button>
         </div>
       </div>
-      <div class="options-section">
-        <h3>Custom CSS</h3>
-        <p class="hint">Override QuiviT's default styles here. Leave empty to use defaults.<br>
-          Press <code>Ctrl+S</code> while editing to quickly apply changes.<br>
-          <strong>Emergency reset:</strong> Press `<i>Ctrl+Shift+Alt+C</i>` to clear custom CSS if CSS bricks the UI.
-        </p>
-        <div class="flex-row">
-          <button id="btn-import-css">Import .css</button>
-          <button id="btn-export-css">Export .css</button>
-          <button id="btn-save-apply-css">Apply</button>
+      <p class="hint">Leave blank to use the default folder. Library files and folders are moved to the new location
+        dynamically. Supported websites are listed <a href="https://github.com/4163/quivi-t#supported-sites"
+          title="GitHub" id="link-supported-sites"><i>~here</i></a>.</p>
+    </div>
+    <div class="options-section">
+      <h3>Configuration Persistence</h3>
+      <label>
+        <input type="checkbox" id="opt-portable-mode" />
+        Save config data locally
+      </label>
+      <p class="hint">By default, QuiviT stores settings in your user config folder under %APPDATA%. Enable this to
+        store settings beside the app executable for portable use.<br>
+        <strong>Warning:</strong> Sharing the app folder or its config file(s) exposes your personal directory paths and
+        file names.
+      </p>
+      <p class="hint">
+        Global config folder (Roaming):
+        <button id="btn-open-config-dir" class="link-button" type="button">
+          <span id="config-dir-label">Loading...</span>
+        </button>
+      </p>
+      <p class="hint">
+        Local config folder (portable):
+        <button id="btn-open-local-data-dir" class="link-button" type="button">
+          <span id="local-data-dir-label">Loading...</span>
+        </button>
+      </p>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-keys">
+    <div class="options-section">
+      <h3>Keybindings</h3>
+      <div class="flex-row keybinds-header">
+        <p class="hint">Click a tag to rebind. Hold the keys you want, then release. Middle-click a tag to remove it
+          (middle mouse is still bindable*). Matching colors indicate conflicts. Press Escape to cancel.</p>
+        <button id="btn-reset-keybinds" class="secondary">Reset to defaults</button>
+      </div>
+      <div class="keybinds-list" id="keybinds-container">
+        <h3 class="keybind-category-header">Navigation</h3>
+        <div class="keybind-item">
+          <span class="keybind-name">Next Item</span>
+          <div class="keybind-tags" data-action="cmd-next"></div>
         </div>
-<textarea id="opt-custom-css" rows="12" spellcheck="false" placeholder="/* Example custom theme */
+        <div class="keybind-item">
+          <span class="keybind-name">Previous Item</span>
+          <div class="keybind-tags" data-action="cmd-prev"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">History Back</span>
+          <div class="keybind-tags" data-action="cmd-history-back"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">History Forward</span>
+          <div class="keybind-tags" data-action="cmd-history-forward"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Open Parent Folder</span>
+          <div class="keybind-tags" data-action="cmd-parent"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Open Next Folder / Archive</span>
+          <div class="keybind-tags" data-action="cmd-open-next-container"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Open Previous Folder / Archive</span>
+          <div class="keybind-tags" data-action="cmd-open-prev-container"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Refresh</span>
+          <div class="keybind-tags" data-action="cmd-refresh"></div>
+        </div>
+        <h3 class="keybind-category-header">View</h3>
+        <div class="keybind-item">
+          <span class="keybind-name">Fit None</span>
+          <div class="keybind-tags" data-action="cmd-fit-none"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Fit Width</span>
+          <div class="keybind-tags" data-action="cmd-fit-width"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Fit Height</span>
+          <div class="keybind-tags" data-action="cmd-fit-height"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name" title="Scale to fit entirely within the viewport, stretching small images">Fit
+            Window</span>
+          <div class="keybind-tags" data-action="cmd-fit-best"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Fit Width if Larger</span>
+          <div class="keybind-tags" data-action="cmd-fit-width-if-larger"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Fit Height if Larger</span>
+          <div class="keybind-tags" data-action="cmd-fit-height-if-larger"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name" title="Shrink to fit the viewport, but never enlarge small images">Fit Window if
+            Larger</span>
+          <div class="keybind-tags" data-action="cmd-fit-window-if-larger"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Manhwa View</span>
+          <div class="keybind-tags" data-action="cmd-toggle-manhwa"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Opaque Canvas</span>
+          <div class="keybind-tags" data-action="cmd-toggle-transparent"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Mute Viewer Audio</span>
+          <div class="keybind-tags" data-action="cmd-toggle-audio"></div>
+        </div>
+        <h3 class="keybind-category-header">Spread View</h3>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Right to Left (RTL)</span>
+          <div class="keybind-tags" data-action="cmd-spread-direction-rtl"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Left to Right (LTR)</span>
+          <div class="keybind-tags" data-action="cmd-spread-direction-ltr"></div>
+        </div>
+        <h3 class="keybind-category-header">Scaling Method</h3>
+        <div class="keybind-item">
+          <span class="keybind-name">Scale: Previous</span>
+          <div class="keybind-tags" data-action="cmd-cycle-scaling-back"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Scale: Next</span>
+          <div class="keybind-tags" data-action="cmd-cycle-scaling"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Pixelated</span>
+          <div class="keybind-tags" data-action="cmd-scale-none"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Bilinear</span>
+          <div class="keybind-tags" data-action="cmd-scale-bilinear"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Lanczos</span>
+          <div class="keybind-tags" data-action="cmd-scale-lanczos"></div>
+        </div>
+        <h3 class="keybind-category-header">Filters</h3>
+
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Anime4K Filter</span>
+          <div class="keybind-tags" data-action="cmd-toggle-anime4k-filter"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Scanlines Filter</span>
+          <div class="keybind-tags" data-action="cmd-toggle-scanlines-filter"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Phosphor Filter</span>
+          <div class="keybind-tags" data-action="cmd-toggle-phosphor-filter"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Retro CRT Filter</span>
+          <div class="keybind-tags" data-action="cmd-toggle-crt-filter"></div>
+        </div>
+        <h3 class="keybind-category-header">Zoom</h3>
+        <div class="keybind-item">
+          <span class="keybind-name">Zoom In</span>
+          <div class="keybind-tags" data-action="cmd-zoom-in"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Zoom Out</span>
+          <div class="keybind-tags" data-action="cmd-zoom-out"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Zoom 100%</span>
+          <div class="keybind-tags" data-action="cmd-zoom-100"></div>
+        </div>
+        <h3 class="keybind-category-header">Pan</h3>
+        <div class="keybind-item">
+          <span class="keybind-name">Pan (Drag)</span>
+          <div class="keybind-tags" data-action="cmd-pan-drag"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Pan Up</span>
+          <div class="keybind-tags" data-action="cmd-pan-up"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Pan Left</span>
+          <div class="keybind-tags" data-action="cmd-pan-left"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Pan Down</span>
+          <div class="keybind-tags" data-action="cmd-pan-down"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Pan Right</span>
+          <div class="keybind-tags" data-action="cmd-pan-right"></div>
+        </div>
+        <h3 class="keybind-category-header">Wheel Behaviour</h3>
+        <div class="keybind-item scroll-mode-toggle" id="scroll-mode-toggle">
+          <span class="keybind-name">Zoom (Ctrl+Wheel) Modifier Mode</span>
+          <div class="scroll-mode-controls">
+            <button class="scroll-mode-btn" data-mode="hold" title="Hold Ctrl to zoom, release to pan.">Hold</button>
+            <button class="scroll-mode-btn" data-mode="toggle"
+              title="Tap the zoom modifier to switch between zoom and pan.">Toggle</button>
+          </div>
+        </div>
+        <h3 class="keybind-category-header">Rotation</h3>
+        <div class="keybind-item">
+          <span class="keybind-name">Rotate Counterclockwise</span>
+          <div class="keybind-tags" data-action="cmd-rotate-ccw"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Rotate Clockwise</span>
+          <div class="keybind-tags" data-action="cmd-rotate-cw"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Flip Horizontal</span>
+          <div class="keybind-tags" data-action="cmd-flip-horizontal"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Flip Vertical</span>
+          <div class="keybind-tags" data-action="cmd-flip-vertical"></div>
+        </div>
+        <h3 class="keybind-category-header">Window & UI</h3>
+        <div class="keybind-item">
+          <span class="keybind-name">Open Options</span>
+          <div class="keybind-tags" data-action="cmd-options"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle File List</span>
+          <div class="keybind-tags" data-action="cmd-toggle-filelist"></div>
+        </div>
+
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Menu Bar</span>
+          <div class="keybind-tags" data-action="cmd-toggle-menubar"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Status Bar</span>
+          <div class="keybind-tags" data-action="cmd-toggle-statusbar"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Fullscreen</span>
+          <div class="keybind-tags" data-action="cmd-fullscreen"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Exit Fullscreen (Hold)</span>
+          <div class="keybind-tags" data-action="cmd-exit-fullscreen-hold"></div>
+        </div>
+        <h3 class="keybind-category-header">File Operations</h3>
+        <div class="keybind-item">
+          <span class="keybind-name">Open Directory</span>
+          <div class="keybind-tags" data-action="cmd-open-dir"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Open File / Archive</span>
+          <div class="keybind-tags" data-action="cmd-open-file"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Open URL</span>
+          <div class="keybind-tags" data-action="cmd-use-url"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Thumbnail / List View</span>
+          <div class="keybind-tags" data-action="cmd-toggle-file-list-view-mode"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name" title="Open containing folder in File Explorer">Show in Explorer</span>
+          <div class="keybind-tags" data-action="cmd-open-explorer"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Open Folder</span>
+          <div class="keybind-tags" data-action="cmd-open-folder"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Toggle Favorite</span>
+          <div class="keybind-tags" data-action="cmd-toggle-favorite"></div>
+        </div>
+        <div class="keybind-item">
+          <span class="keybind-name">Open Metadata</span>
+          <div class="keybind-tags" data-action="cmd-open-metadata"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-associations">
+    <div class="options-section">
+      <h3>Associated File Types</h3>
+      <p class="hint">Checking these boxes registers QuiviT as an available handler. You may still need to choose it in
+        the file's `<i>Open with</i>` dialog or set it as the default app in Windows Settings.</p>
+      <div class="flex-row assoc-actions">
+        <button id="btn-assoc-recommended" class="secondary">Recommended</button>
+        <button id="btn-assoc-select-all" class="secondary">Select All</button>
+        <button id="btn-assoc-deselect-all" class="secondary">Deselect All</button>
+      </div>
+      <h4>Icon Preview</h4>
+      <div class="assoc-mascots-wrapper">
+        <div class="assoc-mascots" id="assoc-mascots">
+          <div class="assoc-mascot-box" data-group="mascot">
+            <img src="/assets/icons/_mascot-formats.svg" class="assoc-mascot-svg" alt="Standard formats">
+            <img class="assoc-format-icon" alt="">
+          </div>
+          <div class="assoc-mascot-box" data-group="moe1">
+            <img src="/assets/icons/_moe-1-formats.svg" class="assoc-mascot-svg" alt="Extended formats">
+            <img class="assoc-format-icon" alt="">
+          </div>
+          <div class="assoc-mascot-box" data-group="moe3">
+            <img src="/assets/icons/_moe-3-formats.svg" class="assoc-mascot-svg" alt="Comic archives">
+            <img class="assoc-format-icon" alt="">
+          </div>
+          <div class="assoc-mascot-box" data-group="stoic">
+            <img src="/assets/icons/_stoic-formats.svg" class="assoc-mascot-svg" alt="Plain archives">
+            <img class="assoc-format-icon" alt="">
+          </div>
+        </div>
+      </div>
+      <div class="associations-list" id="associations-container">
+        <h4 class="assoc-header">Image</h4>
+        <div class="assoc-grid">
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="jpg"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/jpg.png" alt="jpg" class="assoc-icon">
+            <span class="assoc-text">.jpg (JPEG Image)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="jpeg"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/jpeg.png" alt="jpeg" class="assoc-icon">
+            <span class="assoc-text">.jpeg (JPEG Image)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="png"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/png.png" alt="png" class="assoc-icon">
+            <span class="assoc-text">.png (PNG Image)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="gif"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/gif.png" alt="gif" class="assoc-icon">
+            <span class="assoc-text">.gif (GIF Image)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="webp"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/webp.png" alt="webp" class="assoc-icon">
+            <span class="assoc-text">.webp (WebP Image)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="apng"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/apng.png" alt="apng" class="assoc-icon">
+            <span class="assoc-text">.apng (APNG Image)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="svg"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/svg.png" alt="svg" class="assoc-icon">
+            <span class="assoc-text">.svg (SVG Image)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="bmp"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/bmp.png" alt="bmp" class="assoc-icon">
+            <span class="assoc-text">.bmp (BMP Image)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="ico"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/ico.png" alt="ico" class="assoc-icon">
+            <span class="assoc-text">.ico (Icon Image)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="avif"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/avif.png" alt="avif" class="assoc-icon">
+            <span class="assoc-text">.avif (AVIF Image)</span>
+          </label>
+        </div>
+        <h4 class="assoc-header">Archive</h4>
+        <div class="assoc-grid">
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="zip"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/zip.png" alt="zip" class="assoc-icon">
+            <span class="assoc-text">.zip (ZIP Archive)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="cbz"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/cbz.png" alt="cbz" class="assoc-icon">
+            <span class="assoc-text">.cbz (Comic Book ZIP)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="rar"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/rar.png" alt="rar" class="assoc-icon">
+            <span class="assoc-text">.rar (RAR Archive)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="cbr"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/cbr.png" alt="cbr" class="assoc-icon">
+            <span class="assoc-text">.cbr (Comic Book RAR)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="7z"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/7z.png" alt="7z" class="assoc-icon">
+            <span class="assoc-text">.7z (7z Archive)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="cb7"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/cb7.png" alt="cb7" class="assoc-icon">
+            <span class="assoc-text">.cb7 (Comic Book 7z)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="tar"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/tar.png" alt="tar" class="assoc-icon">
+            <span class="assoc-text">.tar (TAR Archive)</span>
+          </label>
+          <label class="checkbox-label assoc-label">
+            <input type="checkbox" class="assoc-checkbox" data-ext="cbt"
+              title="Registers or unregisters QuiviT for this file type. Windows Settings controls the active default app.">
+            <img src="/assets/icons/cbt.png" alt="cbt" class="assoc-icon">
+            <span class="assoc-text">.cbt (Comic Book TAR)</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="options-section">
+      <h3>System integration</h3>
+      <p class="hint">Open Windows Settings if your selection did not, or cannot, make QuiviT the default app.</p>
+      <div class="flex-row">
+        <button id="btn-assoc-settings" class="secondary">Windows Defaults Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-customization">
+    <div class="options-section">
+      <h3>Theme</h3>
+      <p class="hint">Choose an appearance.</p>
+      <div class="theme-group flex-row">
+        <button type="button" class="theme-btn secondary" data-theme="system">System</button>
+        <button type="button" class="theme-btn secondary" data-theme="light">Light</button>
+        <button type="button" class="theme-btn secondary" data-theme="dark">Dark</button>
+      </div>
+    </div>
+    <div class="options-section">
+      <h3>Custom CSS</h3>
+      <p class="hint">Override QuiviT's default styles here. Leave empty to use defaults.<br>
+        Press <code>Ctrl+S</code> while editing to quickly apply changes.<br>
+        <strong>Emergency reset:</strong> Press `<i>Ctrl+Shift+Alt+C</i>` to clear custom CSS if CSS bricks the UI.
+      </p>
+      <div class="flex-row">
+        <button id="btn-import-css">Import .css</button>
+        <button id="btn-export-css">Export .css</button>
+        <button id="btn-save-apply-css">Apply</button>
+      </div>
+      <textarea id="opt-custom-css" rows="12" spellcheck="false" placeholder="/* Example custom theme */
 html {
   font-size: 20px;
 }
@@ -580,28 +618,30 @@ html {
 ̶*̶ ̶{̶
 ̶ ̶ ̶d̶i̶s̶p̶l̶a̶y̶:̶ ̶n̶o̶n̶e̶ ̶!̶i̶m̶p̶o̶r̶t̶a̶n̶t̶;̶
 ̶}̶"></textarea>
-      </div>
     </div>
+  </div>
 
-    <div class="tab-content" id="tab-language">
-      <div class="options-section">
-        <h3>Language</h3>
-        <label>
-          <input type="radio" checked disabled />
-          <!-- Twemoji US flag. See: https://github.com/jdecked/twemoji -->
-          <span class="language-name"><img class="flag-icon" src="/assets/lang-flags/twemoji-us.svg" alt="US"> English</span>
-        </label>
-      </div>
+  <div class="tab-content" id="tab-language">
+    <div class="options-section">
+      <h3>Language</h3>
+      <label>
+        <input type="radio" checked disabled />
+        <!-- Twemoji US flag. See: https://github.com/jdecked/twemoji -->
+        <span class="language-name"><img class="flag-icon" src="/assets/lang-flags/twemoji-us.svg" alt="US">
+          English</span>
+      </label>
     </div>
+  </div>
 
-    <div class="dialog-footer">
-      <span id="options-status" role="status" aria-live="polite"></span>
-      <button id="btn-cancel">Close</button>
-      <button id="btn-save-options" class="primary">Save</button>
-    </div>
+  <div class="dialog-footer">
+    <span id="options-status" role="status" aria-live="polite"></span>
+    <button id="btn-cancel">Close</button>
+    <button id="btn-save-options" class="primary">Save</button>
+  </div>
 
-    <script type="module" src="/js/options/options.js"></script>
-    <div id="measure-probe" class="measure-probe" aria-hidden="true"></div>
-    <script type="module" src="/js/shellBackground.js"></script>
-  </body>
+  <script type="module" src="/js/options/options.js"></script>
+  <div id="measure-probe" class="measure-probe" aria-hidden="true"></div>
+  <script type="module" src="/js/shellBackground.js"></script>
+</body>
+
 </html>
