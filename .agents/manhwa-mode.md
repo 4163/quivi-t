@@ -40,12 +40,12 @@ Goal: user can turn the mode on and off from the View menu. Nothing visual yet b
 
 Goal: a scrollable strip coexists with the single image path. Single image behavior stays untouched when the mode is off.
 
-- [ ] Add `#manhwa-strip` inside `#viewport` in `src/index.html:201-306`. Declare it as static markup, hidden by default with a class on `#viewport`. Accept: markup exists before any JS runs, no runtime `createElement` for the container.
-- [ ] Add layout rules in `src/css/main.css` near `#viewport` at `src/css/main.css:1315-1331`. Strip gets `overflow-y: auto`, items stack top down, each item width follows the strip width rule. Accept: with test markup the strip scrolls natively and the old wrapper stays hidden when the mode class is set.
-- [ ] Keep visual tokens in `src/css/global.css`. No new color or spacing tokens in the page sheet. Accept: page sheet consumes tokens only.
-- [ ] Define the width rule in a pure helper, likely `src/js/services/viewerMath.js:8-308`. All fit modes map to a strip width. Width based modes fill viewport width. Window and height modes fall back to width behavior in the strip and zoom scales from there. Accept: helper has mocha coverage for each fit mode plus zoom factors.
-- [ ] Hide `#viewer-img-wrapper`, `#viewer-bridge-layer`, `#viewer-lanczos-canvas`, and `#viewer-filter-canvas` in `src/index.html:253-270` while the strip is active. Use classes only. Accept: no inline style writes from JS.
-- [ ] Hide the audio pill owned by `src/js/viewer/viewerAudio.js:212-276` while the strip is active. Accept: no audio controls visible even when the anchor is a video placeholder.
+- [x] Add `#manhwa-strip` inside `#viewport` in `src/index.html:201-306`. Declare it as static markup, hidden by default with a class on `#viewport`. Accept: markup exists before any JS runs, no runtime `createElement` for the container.
+- [x] Add layout rules in `src/css/main.css` near `#viewport` at `src/css/main.css:1315-1331`. Strip gets `overflow-y: auto`, items stack top down, each item width follows the strip width rule. Accept: with test markup the strip scrolls natively and the old wrapper stays hidden when the mode class is set.
+- [x] Keep visual tokens in `src/css/global.css`. No new color or spacing tokens in the page sheet. Accept: page sheet consumes tokens only.
+- [x] Define the width rule in a pure helper, likely `src/js/services/viewerMath.js:8-308`. All fit modes map to a strip width. Width based modes fill viewport width. Window and height modes fall back to width behavior in the strip and zoom scales from there. Accept: helper has mocha coverage for each fit mode plus zoom factors.
+- [x] Hide `#viewer-img-wrapper`, `#viewer-bridge-layer`, `#viewer-lanczos-canvas`, and `#viewer-filter-canvas` in `src/index.html:253-270` while the strip is active. Use classes only. Accept: no inline style writes from JS.
+- [x] Hide the audio pill owned by `src/js/viewer/viewerAudio.js:212-276` while the strip is active. Accept: no audio controls visible even when the anchor is a video placeholder.
 
 ## Slice 3. Windowed loader
 

@@ -5,6 +5,28 @@ export function checkIsSpread(w, h) {
   return (w / h) >= 1.2;
 }
 
+/**
+ * Map a fit mode to a CSS width for the manhwa strip.
+ * Width-based and window modes fill the viewport width.
+ * 'none' returns null (natural width, no CSS override).
+ * The zoom factor scales the result.
+ */
+export function computeStripWidth(fitMode, viewportWidth, zoom = 1) {
+  if (!viewportWidth || viewportWidth <= 0) return null;
+  switch (fitMode) {
+    case 'none':
+      return null;
+    case 'width':
+    case 'width-if-larger':
+    case 'height':
+    case 'height-if-larger':
+    case 'window':
+    case 'window-if-larger':
+    default:
+      return viewportWidth * zoom;
+  }
+}
+
 export function createViewportState({ getViewport = () => ({ clientWidth: 1000, clientHeight: 800, left: 0, top: 0 }) } = {}) {
   let _scale = 1;
   let _tx = 0;

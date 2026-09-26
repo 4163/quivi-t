@@ -3,7 +3,8 @@ import {
   createViewportState,
   getEffectiveScaling,
   invertViewport,
-  checkIsSpread
+  checkIsSpread,
+  computeStripWidth
 } from '../src/js/services/viewerMath.js';
 
 describe('viewerMath', () => {
@@ -233,6 +234,29 @@ describe('viewerMath', () => {
 
       state.resetGeometry();
       assert.equal(state.getGrillAngle(), '-45deg');
+    });
+  });
+
+  describe('computeStripWidth', () => {
+    it('returns viewport width for all layout fit modes at zoom 1', () => {
+      for (const mode of ['width', 'width-if-larger', 'height', 'height-if-larger', 'window', 'window-if-larger']) {
+        assert.equal(computeStripWidth(mode, 1200), 1200, mode);
+      }
+    });
+
+    it('returns null for none (natural width)', () => {
+      assert.equal(computeStripWidth('none', 1200), null);
+    });
+
+    it('scales by zoom factor', () => {
+      assert.equal(computeStripWidth('width', 1000, 1.5), 1500);
+      assert.equal(computeStripWidth('width', 1000, 0.5), 500);
+    });
+
+    it('returns null for zero or missing viewport', () => {
+      assert.equal(computeStripWidth('width', 0), null);
+      assert.equal(computeStripWidth('width', null), null);
+      assert.equal(computeStripWidth('width', undefined), null);
     });
   });
 });

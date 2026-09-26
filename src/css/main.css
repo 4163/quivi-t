@@ -1335,6 +1335,42 @@ li:hover > .favorite-remove,
   background: var(--bg);
 }
 
+/* Manhwa strip */
+#manhwa-strip {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#viewport.manhwa-active #manhwa-strip {
+  display: flex;
+}
+
+#manhwa-strip > img {
+  display: block;
+  width: var(--manhwa-strip-width, 100%);
+  height: auto;
+  flex-shrink: 0;
+}
+
+/* Hide single-image viewer elements while the strip is active */
+#viewport.manhwa-active #viewer-img-wrapper,
+#viewport.manhwa-active #viewer-bridge-layer,
+#viewport.manhwa-active #viewer-lanczos-canvas,
+#viewport.manhwa-active #viewer-filter-canvas,
+#viewport.manhwa-active #viewer-svg-pump,
+#viewport.manhwa-active #spread-indicator {
+  display: none;
+}
+
+#viewport.manhwa-active .audio-control-container {
+  display: none;
+}
+
 #viewport.cursor-hidden,
 #viewport.cursor-hidden * {
   cursor: none !important;
