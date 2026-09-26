@@ -51,13 +51,13 @@ Goal: a scrollable strip coexists with the single image path. Single image behav
 
 Goal: enough images stay loaded to fill the viewport plus a buffer in both directions. Anything far outside unloads.
 
-- [ ] Build the image index list from `Core.getState().list` in `src/js/core.js:318-320`, keeping only entries where `FsUtils.isImageEntry` passes in `src/js/fsUtils.js:158-160`. Keep original list indexes alongside so anchor sync stays aligned. Accept: `..`, dirs, and archives never create strip items.
-- [ ] Reuse `buildFileSrc`, `buildArchiveEntrySrc`, and the archive blob path in `src/js/fsUtils.js:260-292` for strip item URLs. Accept: disk and archive items load through the same builders, no duplicated URL logic.
-- [ ] Size the window from measured viewport height plus item heights, not from a fixed count. Keep one viewport of buffer above and below. Buffer size is a named constant at module scope. Accept: tall pages and short pages both fill without gaps during steady scroll.
-- [ ] Evict on both ends. Items leaving the window release their `img` source and return the node to a bounded free pool. Cap the pool with a named constant. Accept: scrolling a 500 image archive never grows node count past the cap plus window.
-- [ ] Gate decode work behind scroll settle with `requestAnimationFrame` throttle plus a short timer, same pattern as `TARGET_LOAD_DEBOUNCE_MS` in `src/js/viewer/viewerRender.js:8`. Fast flings load only the landing window. Accept: fling test shows no decode storm for skipped items.
-- [ ] Handle unknown heights. Reserve estimated height from cached natural dims when known, correct on `decode()` resolve without jumping the anchor. Accept: loading a tall chapter does not yank scroll position.
-- [ ] Reuse or mirror the thumbnail blob shortcut in `src/js/viewer/viewerRender.js:647-651` for archive items already thumbnailed. Accept: archive strip reuses cached blobs instead of refetching.
+- [x] Build the image index list from `Core.getState().list` in `src/js/core.js:318-320`, keeping only entries where `FsUtils.isImageEntry` passes in `src/js/fsUtils.js:158-160`. Keep original list indexes alongside so anchor sync stays aligned. Accept: `..`, dirs, and archives never create strip items.
+- [x] Reuse `buildFileSrc`, `buildArchiveEntrySrc`, and the archive blob path in `src/js/fsUtils.js:260-292` for strip item URLs. Accept: disk and archive items load through the same builders, no duplicated URL logic.
+- [x] Size the window from measured viewport height plus item heights, not from a fixed count. Keep one viewport of buffer above and below. Buffer size is a named constant at module scope. Accept: tall pages and short pages both fill without gaps during steady scroll.
+- [x] Evict on both ends. Items leaving the window release their `img` source and return the node to a bounded free pool. Cap the pool with a named constant. Accept: scrolling a 500 image archive never grows node count past the cap plus window.
+- [x] Gate decode work behind scroll settle with `requestAnimationFrame` throttle plus a short timer, same pattern as `TARGET_LOAD_DEBOUNCE_MS` in `src/js/viewer/viewerRender.js:8`. Fast flings load only the landing window. Accept: fling test shows no decode storm for skipped items.
+- [x] Handle unknown heights. Reserve estimated height from cached natural dims when known, correct on `decode()` resolve without jumping the anchor. Accept: loading a tall chapter does not yank scroll position.
+- [x] Reuse or mirror the thumbnail blob shortcut in `src/js/viewer/viewerRender.js:647-651` for archive items already thumbnailed. Accept: archive strip reuses cached blobs instead of refetching.
 
 ## Slice 4. Anchor sync
 

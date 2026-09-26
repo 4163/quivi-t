@@ -37,6 +37,7 @@ import { initPasswordOverlay } from './passwordOverlay.js';
 import { initUrlOverlay } from './urlOverlay.js';
 import { UrlLoader } from '../urlLoader.js';
 import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
+import { initManhwaStrip } from '../viewer/manhwaStrip.js';
 
 // Reset the options tab on startup so each session starts on General.
 localStorage.removeItem('options-active-tab');
@@ -193,6 +194,7 @@ window.addEventListener('quivit-history-changed', () => {
 Statusbar.init();
 initFullscreen();
 initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, FsUtils });
+initManhwaStrip();
 initMenuBar();
 bindMenuCommands();
 initDropZone({ dropOverlay, FsUtils });
