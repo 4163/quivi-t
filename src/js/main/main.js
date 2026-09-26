@@ -37,7 +37,7 @@ import { initPasswordOverlay } from './passwordOverlay.js';
 import { initUrlOverlay } from './urlOverlay.js';
 import { UrlLoader } from '../urlLoader.js';
 import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
-import { initManhwaStrip, stepAnchor, isManhwaStripActive, STRIP_PAGE_DELTA } from '../viewer/manhwaStrip.js';
+import { initManhwaStrip, isManhwaStripActive } from '../viewer/manhwaStrip.js';
 
 // Reset the options tab on startup so each session starts on General.
 localStorage.removeItem('options-active-tab');
@@ -50,24 +50,25 @@ window.addEventListener('keydown', (e) => {
   }
 
   if (isManhwaStripActive() && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && !document.activeElement?.closest('#file-panel')) {
+    const vpH = viewport?.clientHeight || 800;
     if (e.key === 'Home' && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
-      stepAnchor(-Infinity);
+      Viewer.panBy(0, 99999999);
       return;
     }
     if (e.key === 'End' && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
-      stepAnchor(Infinity);
+      Viewer.panBy(0, -99999999);
       return;
     }
     if (e.key === 'PageUp' && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
-      stepAnchor(-STRIP_PAGE_DELTA);
+      Viewer.panBy(0, vpH);
       return;
     }
     if (e.key === 'PageDown' && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
-      stepAnchor(STRIP_PAGE_DELTA);
+      Viewer.panBy(0, -vpH);
       return;
     }
   }
@@ -111,12 +112,6 @@ function updatePanSteps(config = Core.getState().config) {
 
 function dispatchKeyboardPan(dx, dy) {
   if (dx === 0 && dy === 0) return;
-  if (isManhwaStripActive()) {
-    // Vertical pan maps to anchor step; horizontal ignored in strip.
-    if (dy > 0) stepAnchor(-1);
-    else if (dy < 0) stepAnchor(1);
-    return;
-  }
   Viewer.panBy(dx * keyboardPanStep, dy * keyboardPanStep);
 }
 
@@ -200,10 +195,12 @@ Core.onStateChange((state) => {
     const isTransparent = !!state.config.frontend_data.transparent_bg;
     const grillEl = document.getElementById('img-grill');
     const grillBorderEl = document.getElementById('img-grill-border');
+    const stripEl = document.getElementById('manhwa-strip');
     const toggleEl = document.getElementById('cmd-toggle-transparent');
     
     if (grillEl) grillEl.classList.toggle('active', !isTransparent);
     if (grillBorderEl) grillBorderEl.classList.toggle('active', !isTransparent);
+    if (stripEl) stripEl.classList.toggle('grill-active', !isTransparent);
     if (toggleEl) {
       toggleEl.classList.toggle('checked', !isTransparent);
     }

@@ -52,6 +52,8 @@ e2e/replay-diagnostics/reports/
 test-files/export_1785548648565.apng
 # Animated format test files duplicated into one directory for manual testing
 test-files/animated/
+# Manhwa test chapter
+내 최애는 막차를 탄다 - ch. 75/
 
 # Python bytecode
 __pycache__/

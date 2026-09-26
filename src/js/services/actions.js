@@ -46,25 +46,25 @@ export const ACTION_REGISTRY = [
   
   // View
   { id: 'cmd-fit-none', label: 'Fit None', defaultBinds: ['r', 'DoubleClick'], category: 'View',
-    run: (ctx) => ctx.Core.setFitMode('none', { persist: true })
+    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('none', { persist: true }); }
   },
   { id: 'cmd-fit-width', label: 'Fit Width', defaultBinds: 'Shift+q', category: 'View',
-    run: (ctx) => ctx.Core.setFitMode('width', { persist: true })
+    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('width', { persist: true }); }
   },
   { id: 'cmd-fit-height', label: 'Fit Height', defaultBinds: 'Shift+e', category: 'View',
-    run: (ctx) => ctx.Core.setFitMode('height', { persist: true })
+    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('height', { persist: true }); }
   },
   { id: 'cmd-fit-best', label: 'Fit Window', description: 'Scale to fit entirely within the viewport, stretching small images', defaultBinds: 'Shift+f', category: 'View',
-    run: (ctx) => ctx.Core.setFitMode('window', { persist: true })
+    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('window', { persist: true }); }
   },
   { id: 'cmd-fit-width-if-larger', label: 'Fit Width if Larger', defaultBinds: 'q', category: 'View',
-    run: (ctx) => ctx.Core.setFitMode('width-if-larger', { persist: true })
+    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('width-if-larger', { persist: true }); }
   },
   { id: 'cmd-fit-height-if-larger', label: 'Fit Height if Larger', defaultBinds: 'e', category: 'View',
-    run: (ctx) => ctx.Core.setFitMode('height-if-larger', { persist: true })
+    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('height-if-larger', { persist: true }); }
   },
   { id: 'cmd-fit-window-if-larger', label: 'Fit Window if Larger', description: 'Shrink to fit the viewport, but never enlarge small images', defaultBinds: 'f', category: 'View',
-    run: (ctx) => ctx.Core.setFitMode('window-if-larger', { persist: true })
+    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('window-if-larger', { persist: true }); }
   },
   { id: 'cmd-scale-none', label: 'Pixelated', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.setScalingMode('none', { persist: true })
@@ -74,11 +74,13 @@ export const ACTION_REGISTRY = [
   },
   { id: 'cmd-scale-lanczos', label: 'Lanczos', defaultBinds: [], category: 'View',
     run: (ctx) => {
-      ctx.Core.setScalingMode('lanczos', { persist: true });
+      if (!ctx.Core.getState?.()?.manhwaEnabled) {
+        ctx.Core.setScalingMode('lanczos', { persist: true });
+      }
     }
   },
   { id: 'cmd-filter-off', label: 'Filter: Off', defaultBinds: [], category: 'View',
-    run: (ctx) => ctx.Core.setActiveFilter(null)
+    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setActiveFilter(null); }
   },
   ...FILTERS.map(f => ({
     id: f.actionId,
@@ -86,6 +88,7 @@ export const ACTION_REGISTRY = [
     defaultBinds: [],
     category: 'View',
     run: (ctx) => {
+      if (ctx.Core.getState?.()?.manhwaEnabled) return;
       const state = ctx.Core.getState();
       const current = activeFilterId(state.config?.frontend_data || {});
       ctx.Core.setActiveFilter(current === f.id ? null : f.id);
@@ -94,7 +97,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
-      const modes = ['none', 'bilinear', 'lanczos'];
+      const modes = state.manhwaEnabled ? ['none', 'bilinear'] : ['none', 'bilinear', 'lanczos'];
       const current = state.scalingMode;
       const idx = modes.indexOf(current);
       const next = idx > 0 ? modes[idx - 1] : modes[modes.length - 1];
@@ -104,7 +107,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-cycle-scaling', label: 'Scale: Next', defaultBinds: ']', category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
-      const modes = ['none', 'bilinear', 'lanczos'];
+      const modes = state.manhwaEnabled ? ['none', 'bilinear'] : ['none', 'bilinear', 'lanczos'];
       const current = state.scalingMode;
       const idx = modes.indexOf(current);
       const next = modes[(idx + 1) % modes.length];
@@ -133,20 +136,18 @@ export const ACTION_REGISTRY = [
   // Zoom
   { id: 'cmd-zoom-in', label: 'Zoom In', defaultBinds: ['c', 'Ctrl+ScrollUp'], category: 'Zoom',
     run: (ctx, payload) => {
-      if (ctx.Core.getState().manhwaEnabled) return;
       if (payload?.wheel) ctx.Viewer.zoomAt(1, payload.clientX, payload.clientY);
       else ctx.Viewer.zoomCenter(1);
     }
   },
   { id: 'cmd-zoom-out', label: 'Zoom Out', defaultBinds: ['z', 'Ctrl+ScrollDown'], category: 'Zoom',
     run: (ctx, payload) => {
-      if (ctx.Core.getState().manhwaEnabled) return;
       if (payload?.wheel) ctx.Viewer.zoomAt(-1, payload.clientX, payload.clientY);
       else ctx.Viewer.zoomCenter(-1);
     }
   },
   { id: 'cmd-zoom-100', label: 'Zoom 100%', defaultBinds: 'x', category: 'Zoom',
-    run: (ctx) => { if (!ctx.Core.getState().manhwaEnabled) ctx.Viewer.setZoom(1); }
+    run: (ctx) => ctx.Viewer.setZoom(1)
   },
 
   // Pan
@@ -155,28 +156,24 @@ export const ACTION_REGISTRY = [
   },
   { id: 'cmd-pan-up', label: 'Pan Up', defaultBinds: ['w', 'ArrowUp', 'ScrollUp'], category: 'Pan',
     run: (ctx, payload) => {
-      if (ctx.Core.getState().manhwaEnabled) { ctx.stepAnchor(-1); return; }
       const step = payload?.wheel ? ctx.wheelPanStep : ctx.keyboardPanStep;
       ctx.Viewer.panBy(0, step);
     }
   },
   { id: 'cmd-pan-left', label: 'Pan Left', defaultBinds: ['a', 'ArrowLeft', 'Shift+ScrollUp'], category: 'Pan',
     run: (ctx, payload) => {
-      if (ctx.Core.getState().manhwaEnabled) return;
       const step = payload?.wheel ? ctx.wheelPanStep : ctx.keyboardPanStep;
       ctx.Viewer.panBy(step, 0);
     }
   },
   { id: 'cmd-pan-down', label: 'Pan Down', defaultBinds: ['s', 'ArrowDown', 'ScrollDown'], category: 'Pan',
     run: (ctx, payload) => {
-      if (ctx.Core.getState().manhwaEnabled) { ctx.stepAnchor(1); return; }
       const step = payload?.wheel ? ctx.wheelPanStep : ctx.keyboardPanStep;
       ctx.Viewer.panBy(0, -step);
     }
   },
   { id: 'cmd-pan-right', label: 'Pan Right', defaultBinds: ['d', 'ArrowRight', 'Shift+ScrollDown'], category: 'Pan',
     run: (ctx, payload) => {
-      if (ctx.Core.getState().manhwaEnabled) return;
       const step = payload?.wheel ? ctx.wheelPanStep : ctx.keyboardPanStep;
       ctx.Viewer.panBy(-step, 0);
     }

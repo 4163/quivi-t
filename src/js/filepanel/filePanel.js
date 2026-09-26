@@ -25,6 +25,7 @@ import {
 } from './libraryStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
+import { getVisibleImageIndices, isManhwaStripActive, centerListItem } from '../viewer/manhwaStrip.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
 import {
   setVisibleRange as setDownloadVisibleRange,
@@ -1603,8 +1604,16 @@ function wireRowListeners(li) {
     if (failedItem?.path && retryGalleryDownload(failedItem.path)) {
       return;
     }
-    if (Core.getState().index !== index) {
-      Core.selectIndex(index);
+    if (Core.getState().manhwaEnabled && isManhwaStripActive()) {
+      if (!centerListItem(index)) {
+        if (Core.getState().index !== index) {
+          Core.selectIndex(index);
+        }
+      }
+    } else {
+      if (Core.getState().index !== index) {
+        Core.selectIndex(index);
+      }
     }
     const now = Date.now();
     if (lastClickIndex === index && (now - lastClickTime < 400)) {
@@ -2016,6 +2025,9 @@ function renderVisibleSlice() {
   }
 
   // Phase 2: Allocate or update only rows not already rendered
+  const isManhwa = state.manhwaEnabled && isManhwaStripActive();
+  const visibleIndices = isManhwa ? new Set(getVisibleImageIndices()) : null;
+
   for (let i = startIndex; i < endIndex; i++) {
     let li = activeRows.get(i);
     if (!li) {
@@ -2024,6 +2036,11 @@ function renderVisibleSlice() {
       activeRows.set(i, li);
     }
     li.classList.toggle('selected', i === state.index);
+    if (visibleIndices) {
+      li.classList.toggle('in-view', visibleIndices.has(i) && i !== state.index);
+    } else {
+      li.classList.remove('in-view');
+    }
   }
 }
 
@@ -2147,8 +2164,15 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
     renderVisibleSlice();
   } else {
     // Surgical update: directly update .selected on active elements without re-rendering
+    const isManhwa = Core.getState().manhwaEnabled && isManhwaStripActive();
+    const visibleIndices = isManhwa ? new Set(getVisibleImageIndices()) : null;
     for (const [idx, li] of activeRows) {
       li.classList.toggle('selected', idx === selectedIndex);
+      if (visibleIndices) {
+        li.classList.toggle('in-view', visibleIndices.has(idx) && idx !== selectedIndex);
+      } else {
+        li.classList.remove('in-view');
+      }
     }
   }
 
@@ -2724,6 +2748,12 @@ export function initFilePanel(deps) {
       resizingCol.querySelector('.col-resizer').classList.remove('dragging');
       resizingCol = null;
       document.body.classList.toggle('resizing-col', false);
+    }
+  });
+
+  window.addEventListener('quivit-manhwa-settle', () => {
+    if (Core.getState().fileListVisible && isManhwaStripActive()) {
+      updateSelection(Core.getState().index);
     }
   });
 }

@@ -671,7 +671,11 @@ export function createViewerPipelines(viewportState) {
 
   Core.onStateChange((state) => {
     // Strip owns its own images; skip filter/scaling pipeline when active.
-    if (state.manhwaEnabled) return;
+    if (state.manhwaEnabled) {
+      _cancelRender();
+      _stopLivePump();
+      return;
+    }
 
     const newFilter = _resolveActiveFilter(state);
     const isVideo = isVideoSource(_activeSource);
@@ -691,6 +695,7 @@ export function createViewerPipelines(viewportState) {
 
   // Pan path is render, not rebuild.
   viewportState.subscribe(() => {
+    if (Core.getState()?.manhwaEnabled) return;
     _cancelRender();
     _scheduleTransform();
     _triggerRender();
@@ -698,6 +703,7 @@ export function createViewerPipelines(viewportState) {
 
   return {
     setSource(img) {
+      if (Core.getState()?.manhwaEnabled) return;
       if (img && _activeSource === img) {
         _cancelRender();
         _applyScaling();
@@ -718,6 +724,7 @@ export function createViewerPipelines(viewportState) {
       _syncLivePump();
     },
     forceRender() {
+      if (Core.getState()?.manhwaEnabled) return;
       _cancelRender();
       if (pipeline && pipeline.type === 'webgl') {
         _applyTransform();

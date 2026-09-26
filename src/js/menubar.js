@@ -653,6 +653,24 @@ const FILTER_LABELS = {
   'crt': 'Retro CRT'
 };
 
+function _setMenuItemDisabled(id, disabled, note = '') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('muted', disabled);
+  el.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+  if (disabled) {
+    if (!el.dataset.origTitle && el.title) {
+      el.dataset.origTitle = el.title;
+    }
+    el.title = note;
+  } else {
+    if (el.dataset.origTitle !== undefined) {
+      el.title = el.dataset.origTitle;
+      delete el.dataset.origTitle;
+    }
+  }
+}
+
 export function syncViewMenu(state) {
   const isAnimated = !!state.isAnimated;
   // The renderer silently falls back to Bilinear for SVGs.
@@ -692,10 +710,29 @@ export function syncViewMenu(state) {
     el.classList.toggle('checked', displayScaling === s.id);
   }
 
+  const manhwaOn = !!(state.manhwaEnabled ?? state.config?.frontend_data?.manhwa_enabled);
   const manhwaEl = document.getElementById('cmd-toggle-manhwa');
   if (manhwaEl) {
-    const manhwaOn = !!(state.manhwaEnabled ?? state.config?.frontend_data?.manhwa_enabled);
     manhwaEl.classList.toggle('checked', manhwaOn);
+  }
+
+  const manhwaNote = 'Applies to single image view (Manhwa mode is 1:1 column)';
+  for (const id of Object.values(FIT_MODE_MAP)) {
+    _setMenuItemDisabled(id, manhwaOn, manhwaNote);
+  }
+  _setMenuItemDisabled('cmd-scale-lanczos', manhwaOn, manhwaNote);
+
+  _setMenuItemDisabled('cmd-filter-off', manhwaOn, manhwaNote);
+  for (const f of FILTERS) {
+    _setMenuItemDisabled(f.actionId, manhwaOn, manhwaNote);
+  }
+
+  for (const id of ['cmd-rotate-cw', 'cmd-rotate-ccw', 'cmd-flip-horizontal', 'cmd-flip-vertical']) {
+    _setMenuItemDisabled(id, manhwaOn, manhwaNote);
+  }
+
+  for (const id of ['cmd-spread-off', 'cmd-spread-direction-rtl', 'cmd-spread-direction-ltr']) {
+    _setMenuItemDisabled(id, manhwaOn, manhwaNote);
   }
 
   const spreadEnabled = !!(state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? (state.spreadMode && state.spreadMode !== 'off'));

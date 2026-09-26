@@ -4,7 +4,11 @@ import {
   getEffectiveScaling,
   invertViewport,
   checkIsSpread,
-  computeStripWidth
+  computeStripWidth,
+  computeColumnOffsets,
+  computeColumnLayout,
+  findAnchorIndex,
+  computeWindowRange
 } from '../src/js/services/viewerMath.js';
 
 describe('viewerMath', () => {
@@ -257,6 +261,150 @@ describe('viewerMath', () => {
       assert.equal(computeStripWidth('width', 0), null);
       assert.equal(computeStripWidth('width', null), null);
       assert.equal(computeStripWidth('width', undefined), null);
+    });
+  });
+
+  describe('computeColumnOffsets', () => {
+    const sampleItems = [
+      { width: 800, height: 1200 },
+      { width: 1000, height: 1500 },
+      { width: 900, height: 1100 }
+    ];
+
+    it('determines widest width and unscaled column width at zoom 1', () => {
+      const layout = computeColumnOffsets(sampleItems, 1);
+      assert.equal(layout.widestWidth, 1000);
+      assert.equal(layout.columnWidth, 1000);
+      assert.equal(layout.totalHeight, 3800);
+    });
+
+    it('derives per-item offsets from heights at that width', () => {
+      const layout = computeColumnOffsets(sampleItems, 1);
+      assert.equal(layout.offsets.length, 3);
+
+      assert.deepEqual(layout.offsets[0], { top: 0, height: 1200, bottom: 1200 });
+      assert.deepEqual(layout.offsets[1], { top: 1200, height: 1500, bottom: 2700 });
+      assert.deepEqual(layout.offsets[2], { top: 2700, height: 1100, bottom: 3800 });
+    });
+
+    it('scales column width, heights, and offsets by zoom factor', () => {
+      const layout15 = computeColumnOffsets(sampleItems, 1.5);
+      assert.equal(layout15.widestWidth, 1000);
+      assert.equal(layout15.columnWidth, 1500);
+      assert.equal(layout15.totalHeight, 5700);
+      assert.deepEqual(layout15.offsets[0], { top: 0, height: 1800, bottom: 1800 });
+      assert.deepEqual(layout15.offsets[1], { top: 1800, height: 2250, bottom: 4050 });
+      assert.deepEqual(layout15.offsets[2], { top: 4050, height: 1650, bottom: 5700 });
+
+      const layout05 = computeColumnOffsets(sampleItems, 0.5);
+      assert.equal(layout05.columnWidth, 500);
+      assert.equal(layout05.totalHeight, 1900);
+      assert.deepEqual(layout05.offsets[0], { top: 0, height: 600, bottom: 600 });
+      assert.deepEqual(layout05.offsets[1], { top: 600, height: 750, bottom: 1350 });
+      assert.deepEqual(layout05.offsets[2], { top: 1350, height: 550, bottom: 1900 });
+    });
+
+    it('supports naturalWidth and naturalHeight properties', () => {
+      const domItems = [
+        { naturalWidth: 1200, naturalHeight: 1800 },
+        { naturalWidth: 600, naturalHeight: 900 }
+      ];
+      const layout = computeColumnOffsets(domItems, 1);
+      assert.equal(layout.widestWidth, 1200);
+      assert.equal(layout.columnWidth, 1200);
+      assert.equal(layout.totalHeight, 2700);
+      assert.deepEqual(layout.offsets[0], { top: 0, height: 1800, bottom: 1800 });
+      assert.deepEqual(layout.offsets[1], { top: 1800, height: 900, bottom: 2700 });
+    });
+
+    it('handles empty and invalid input gracefully', () => {
+      const empty = computeColumnOffsets([]);
+      assert.equal(empty.widestWidth, 0);
+      assert.equal(empty.columnWidth, 0);
+      assert.equal(empty.totalHeight, 0);
+      assert.deepEqual(empty.offsets, []);
+
+      const nonArray = computeColumnOffsets(null);
+      assert.equal(nonArray.widestWidth, 0);
+      assert.equal(nonArray.columnWidth, 0);
+      assert.equal(nonArray.totalHeight, 0);
+      assert.deepEqual(nonArray.offsets, []);
+    });
+
+    it('aliases computeColumnLayout to computeColumnOffsets', () => {
+      assert.equal(computeColumnLayout, computeColumnOffsets);
+    });
+  });
+
+  describe('findAnchorIndex', () => {
+    const offsets = [
+      { top: 0, bottom: 1000, height: 1000 },
+      { top: 1000, bottom: 2500, height: 1500 },
+      { top: 2500, bottom: 3500, height: 1000 }
+    ];
+
+    it('identifies item containing center coordinate', () => {
+      assert.equal(findAnchorIndex(offsets, 500), 0);
+      assert.equal(findAnchorIndex(offsets, 1000), 1);
+      assert.equal(findAnchorIndex(offsets, 1800), 1);
+      assert.equal(findAnchorIndex(offsets, 2500), 2);
+      assert.equal(findAnchorIndex(offsets, 3000), 2);
+    });
+
+    it('clamps to first or last item when out of range', () => {
+      assert.equal(findAnchorIndex(offsets, -500), 0);
+      assert.equal(findAnchorIndex(offsets, 0), 0);
+      assert.equal(findAnchorIndex(offsets, 3500), 2);
+      assert.equal(findAnchorIndex(offsets, 9999), 2);
+    });
+
+    it('handles empty or invalid offsets', () => {
+      assert.equal(findAnchorIndex([], 500), -1);
+      assert.equal(findAnchorIndex(null, 500), -1);
+    });
+  });
+
+  describe('computeWindowRange', () => {
+    const offsets = [
+      { top: 0, bottom: 1000, height: 1000 },
+      { top: 1000, bottom: 2500, height: 1500 },
+      { top: 2500, bottom: 3500, height: 1000 },
+      { top: 3500, bottom: 5000, height: 1500 }
+    ];
+
+    it('computes start and end index for visible range plus buffer', () => {
+      // Overlaps item 1 and item 2
+      assert.deepEqual(computeWindowRange(offsets, 1200, 2800), { startIndex: 1, endIndex: 2 });
+      // Overlaps all items
+      assert.deepEqual(computeWindowRange(offsets, -500, 6000), { startIndex: 0, endIndex: 3 });
+      // Overlaps only item 0
+      assert.deepEqual(computeWindowRange(offsets, 100, 500), { startIndex: 0, endIndex: 0 });
+    });
+
+    it('returns -1 for ranges completely outside the column', () => {
+      assert.deepEqual(computeWindowRange(offsets, -1000, 0), { startIndex: -1, endIndex: -1 });
+      assert.deepEqual(computeWindowRange(offsets, 5000, 6000), { startIndex: -1, endIndex: -1 });
+      assert.deepEqual(computeWindowRange([], 0, 1000), { startIndex: -1, endIndex: -1 });
+    });
+  });
+
+  describe('setDimensions on viewportState', () => {
+    it('updates natural dimensions and clamps pan', () => {
+      const vp = { clientWidth: 1000, clientHeight: 800, left: 0, top: 0 };
+      const state = createViewportState({ getViewport: () => vp });
+      state.applyFitMode('none', 1000, 2000);
+      assert.equal(state.getNaturalW(), 1000);
+      assert.equal(state.getNaturalH(), 2000);
+
+      // Pan to bottom boundary
+      state.panBy(0, -600);
+      assert.equal(state.getTy(), -600);
+
+      // Update dimensions to shorter height
+      state.setDimensions(1000, 1500);
+      assert.equal(state.getNaturalH(), 1500);
+      // Clamped to new maxY: (1500 - 800) / 2 = 350
+      assert.equal(state.getTy(), -350);
     });
   });
 });

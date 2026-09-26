@@ -2,7 +2,7 @@ import { createViewportState } from '../services/viewerMath.js';
 import { createViewerRenderer } from './viewerRender.js';
 import { createViewerGestures } from './viewerGestures.js';
 import { createViewerPipelines } from './viewerPipelines.js';
-import { isManhwaStripActive } from './manhwaStrip.js';
+import { isManhwaStripActive, initManhwaStrip } from './manhwaStrip.js';
 
 const viewportState = createViewportState({
   getViewport: () => {
@@ -24,6 +24,7 @@ createViewerRenderer(viewportState, (img) => {
   else pipelines.clear();
 });
 const gestures = createViewerGestures(viewportState);
+initManhwaStrip(viewportState);
 
 const vpEl = document.getElementById('viewport');
 if (vpEl) {
@@ -50,16 +51,13 @@ export const Viewer = {
   applyFitMode: (mode) => viewportState.applyFitMode(mode),
   handleViewportResize: (w, h) => viewportState.handleViewportResize(w, h),
   zoomAt: (delta, x, y) => {
-    if (isManhwaStripActive()) return;
     viewportState.zoomAt(delta, x, y);
   },
   zoomCenter: (delta) => {
-    if (isManhwaStripActive()) return;
     const c = _getViewportCenter();
     if (c) viewportState.zoomAt(delta, c.x, c.y);
   },
   panBy: (dx, dy) => {
-    if (isManhwaStripActive()) return;
     viewportState.panBy(dx, dy);
   },
   rotate: (deg) => {
@@ -75,7 +73,6 @@ export const Viewer = {
     viewportState.flip('y');
   },
   setZoom: (exactScale) => {
-    if (isManhwaStripActive()) return;
     const c = _getViewportCenter();
     if (!c) return;
     viewportState.applyFitMode('none');

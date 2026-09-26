@@ -27,6 +27,103 @@ export function computeStripWidth(fitMode, viewportWidth, zoom = 1) {
   }
 }
 
+/**
+ * Compute column layout and per-item offsets from natural dimensions.
+ * Column width fits the widest known item times zoom.
+ * Per-item offsets derive from heights at that width.
+ */
+export function computeColumnOffsets(items = [], zoom = 1) {
+  if (!Array.isArray(items)) {
+    return { widestWidth: 0, columnWidth: 0, totalHeight: 0, offsets: [] };
+  }
+
+  let widestWidth = 0;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const w = typeof item === 'number' ? 0 : ((item && (item.naturalWidth ?? item.width)) || 0);
+    if (w > widestWidth) widestWidth = w;
+  }
+
+  const columnWidth = widestWidth * zoom;
+  const offsets = [];
+  let currentTop = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const rawH = typeof item === 'number' ? item : ((item && (item.naturalHeight ?? item.height)) || 0);
+    const h = rawH * zoom;
+    offsets.push({
+      top: currentTop,
+      height: h,
+      bottom: currentTop + h,
+    });
+    currentTop += h;
+  }
+
+  return {
+    widestWidth,
+    columnWidth,
+    totalHeight: currentTop,
+    offsets,
+  };
+}
+
+export const computeColumnLayout = computeColumnOffsets;
+
+/**
+ * Find index of item containing centerColY.
+ * Clamps to 0 or last index when outside bounds.
+ */
+export function findAnchorIndex(offsets, centerColY) {
+  if (!Array.isArray(offsets) || offsets.length === 0) return -1;
+  if (centerColY <= offsets[0].top) return 0;
+  const last = offsets.length - 1;
+  if (centerColY >= offsets[last].bottom) return last;
+
+  let lo = 0;
+  let hi = last;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const item = offsets[mid];
+    if (centerColY < item.top) {
+      hi = mid - 1;
+    } else if (centerColY >= item.bottom) {
+      lo = mid + 1;
+    } else {
+      return mid;
+    }
+  }
+  return Math.max(0, Math.min(last, lo));
+}
+
+/**
+ * Compute index range [startIndex, endIndex] of items overlapping [windowTopY, windowBottomY].
+ * Returns { startIndex: -1, endIndex: -1 } when no items overlap.
+ */
+export function computeWindowRange(offsets, windowTopY, windowBottomY) {
+  if (!Array.isArray(offsets) || offsets.length === 0) {
+    return { startIndex: -1, endIndex: -1 };
+  }
+  if (windowBottomY <= offsets[0].top || windowTopY >= offsets[offsets.length - 1].bottom) {
+    return { startIndex: -1, endIndex: -1 };
+  }
+
+  let startIndex = -1;
+  let endIndex = -1;
+
+  for (let i = 0; i < offsets.length; i++) {
+    const item = offsets[i];
+    if (item.bottom > windowTopY && item.top < windowBottomY) {
+      if (startIndex === -1) startIndex = i;
+      endIndex = i;
+    } else if (startIndex !== -1 && item.top >= windowBottomY) {
+      break;
+    }
+  }
+
+  return { startIndex, endIndex };
+}
+
 export function createViewportState({ getViewport = () => ({ clientWidth: 1000, clientHeight: 800, left: 0, top: 0 }) } = {}) {
   let _scale = 1;
   let _tx = 0;
@@ -286,6 +383,13 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     return inverted ? '45deg' : '-45deg';
   }
 
+  function setDimensions(naturalW, naturalH) {
+    if (naturalW !== undefined) _naturalW = naturalW;
+    if (naturalH !== undefined) _naturalH = naturalH;
+    _clampPan();
+    notify();
+  }
+
   return {
     subscribe: (fn) => listeners.push(fn),
     getTransform: () => `translate(calc(-50% + ${_tx}px), calc(-50% + ${_ty}px)) rotate(${_rotation}deg) scale(${_flipX * _scale}, ${_flipY * _scale})`,
@@ -311,6 +415,7 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     handleViewportResize,
     resetGeometry,
     applyFitMode,
+    setDimensions,
     zoomTo,
     zoomAt,
     panBy,
