@@ -18,14 +18,7 @@
 - **Syntax Highlighting:** Add syntax highlighting to the Custom CSS field in Customization using an available font (fonts that have syntax highlighting) or a small library.
 
 ### Supported Formats & Advanced Icons (Complex)
-- **Advanced .ico Processing:** Improve .ico processing (performance-first). Change the .ico processing and rendering spec:
-  1. Add a 'ICO Spritesheet' to the view dropdown under 'opaque canvas' (make sure this is configurable in the keybinds option). Default: ON.
-  2. OFF: .ico files should not be processed at all and should just act as a legacy image file. ON: .ico files should be processed.
-  3. Process each .ico size as an individual image file instead of a single spritesheet.
-  4. Render out each size individually in the canvas.
-  5. The largest ico size is the single source of truth; this element should be the only element that has canvas bounding calculations.
-  6. The remaining smaller sizes are just a shadow of the main ico element, layed out (with space between them) in the spritesheet order. This means that it follows the main ico file whilst not having any hitbox/bounding calculations.
-  7. Render out the 'opaque canvas' option for every ico element.
+- **Advanced .ico Processing:** Improve .ico processing/rendering following "performance-first". Change the .ico processing and rendering spec.
 - **Extended Format Support:** Support PSD, XCF, and PDF files (decide whether to process via JS or backend, performance-first).
 
 ### Documentation & GitHub (Project Health)

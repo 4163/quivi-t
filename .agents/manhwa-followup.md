@@ -71,3 +71,10 @@ Fit none, width, and width-if-larger return. Height and window modes map onto th
 Rotations stay off. Horizontal flip mirrors. Vertical flip flips the whole column, which reverses order and mirrors each image, exactly like mirroring one tall raster.
 
 - [ ] Unguard flip horizontal and flip vertical in the strip in `src/js/services/actions.js` and `src/js/viewer/viewer.js`, keeping clockwise and counterclockwise guarded off. Vertical flip goes through the existing flip path so the column mirrors as one raster. Accept: horizontal mirrors, vertical flips the column top to bottom, rotations do nothing.
+
+## K. ICO spritesheets and dimensionless SVGs
+
+The strip bypasses both code paths. `_buildSrc` uses the sync builders, and `fsUtils.js:286-292` states outright that ICO needs the async path, so `.ico` files render raw instead of the `data:image/png;base64` spritesheet from `get_ico_frames` and `get_archive_ico_frames` (`src-tauri/src/ico.rs:103-104`). Sizeless SVGs report the browser-default 150x150 or 300x150 as natural size, so slots lay out wrong and the 2048 and 512 caps never apply.
+
+- [ ] Route strip ICO entries through `get_ico_frames` and `get_archive_ico_frames` like `buildFileSrc` and `buildArchiveEntrySrc` in `src/js/fsUtils.js:260-292`, swapping the slot src when the invoke resolves and guarding against eviction races. Accept: `.ico` in the strip shows the identical spritesheet to single view, disk and archive.
+- [ ] Detect non-intrinsic SVGs in the strip decode path with the same browser-default check as `src/js/viewer/viewerPipelines.js:470-472`, fall back to the 1000x1000 slot from `_applySvgBounds` in `src/js/viewer/viewerRender.js:264-296`, and cap static at 2048 and animated at 512 per edge. Accept: sizeless SVGs lay out at fallback size with no 150px slivers, caps hold.

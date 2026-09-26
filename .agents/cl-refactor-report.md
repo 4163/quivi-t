@@ -33,7 +33,7 @@ These items modify the Rust backend or the OS integration. They do not affect th
 
 ### Priority 1: High-Impact / Core Reliability
 *   **[COMPLETED] Instrumentation System (Test Harness):** Writing `cargo test` coverage for archive parsing, caching, and config schemas. This is the safety net required before major backend refactoring.
-*   **[COMPLETED] .ico Spritesheet & Windows Icon Resolution (Slice 4.4):** Reworking how the backend fetches `SHGFI_LARGEICON` and how it passes those buffers to the frontend. The CL will just receive an array of URLs or a spritesheet image; the backend must do the heavy lifting of extracting and packing them.
+*   **[COMPLETED] Windows Icon Resolution (Slice 4.4):** Reworking how the backend fetches `SHGFI_LARGEICON` and how it passes those buffers to the frontend. The CL will just receive an array of URLs or a spritesheet image; the backend must do the heavy lifting of extracting and packing them.
 *   **[COMPLETED] Archive Loading Bottlenecks:** Fixed seek costs and backward scans in corrupted archives (O(1) entry map, trailing EOCD scan, microsecond header and boundary validation across ZIP, RAR, 7Z, and TAR) and eliminated condition variable / mutex lock contention during extraction.
 
 ### Priority 2: New Features
