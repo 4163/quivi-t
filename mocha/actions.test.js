@@ -88,8 +88,8 @@ describe('Actions registry and keybindings', () => {
       });
     });
 
-    it('routes navigation to stepAnchor and pan/zoom to Viewer when manhwa is active', async () => {
-      let steppedDelta = 0;
+    it('routes navigation to navigateManhwa and pan/zoom to Viewer when manhwa is active', async () => {
+      let manhwaNavDelta = 0;
       let coreNavigated = 0;
       let panCalls = [];
       let zoomCalls = [];
@@ -101,7 +101,7 @@ describe('Actions registry and keybindings', () => {
           navigate: (d) => { coreNavigated += d; }
         },
         keyboardPanStep: 72,
-        stepAnchor: (delta) => { steppedDelta += delta; },
+        navigateManhwa: (delta) => { manhwaNavDelta += delta; },
         Viewer: {
           panBy: (dx, dy) => { panCalls.push({ dx, dy }); },
           zoomAt: (d, x, y) => { zoomCalls.push({ d, x, y }); },
@@ -115,12 +115,19 @@ describe('Actions registry and keybindings', () => {
 
       // cmd-next / cmd-prev jump one image in strip
       await dispatch('cmd-next', null, fakeCtx);
-      assert.equal(steppedDelta, 1);
-      assert.equal(coreNavigated, 0);
+      assert.equal(manhwaNavDelta, 1);
 
       await dispatch('cmd-prev', null, fakeCtx);
-      assert.equal(steppedDelta, 0);
-      assert.equal(coreNavigated, 0);
+      assert.equal(manhwaNavDelta, 0);
+
+      // Fallback without navigateManhwa calls Core.navigate and centerListItem
+      delete fakeCtx.navigateManhwa;
+      let centeredIdx = -1;
+      fakeCtx.centerListItem = (idx) => { centeredIdx = idx; };
+      fakeCtx.Core.getState = () => ({ manhwaEnabled: true, index: 3 });
+      await dispatch('cmd-next', null, fakeCtx);
+      assert.equal(coreNavigated, 1);
+      assert.equal(centeredIdx, 3);
 
       // Pan keys move pixels via Viewer.panBy
       await dispatch('cmd-pan-up', null, fakeCtx);

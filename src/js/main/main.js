@@ -37,7 +37,15 @@ import { initPasswordOverlay } from './passwordOverlay.js';
 import { initUrlOverlay } from './urlOverlay.js';
 import { UrlLoader } from '../urlLoader.js';
 import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
-import { initManhwaStrip, isManhwaStripActive } from '../viewer/manhwaStrip.js';
+import {
+  initManhwaStrip,
+  isManhwaStripActive,
+  centerListItem,
+  getFirstImageIndex,
+  getLastImageIndex,
+  navigateManhwa,
+  pageStrip,
+} from '../viewer/manhwaStrip.js';
 
 // Reset the options tab on startup so each session starts on General.
 localStorage.removeItem('options-active-tab');
@@ -49,33 +57,43 @@ window.addEventListener('keydown', (e) => {
     emergencyCssReset(Core.getState().config);
   }
 
-  if (isManhwaStripActive() && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && !document.activeElement?.closest('#file-panel')) {
-    const vpH = viewport?.clientHeight || 800;
-    if (e.key === 'Home' && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
-      Viewer.panBy(0, 99999999);
-      return;
-    }
-    if (e.key === 'End' && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
-      Viewer.panBy(0, -99999999);
-      return;
-    }
-    if (e.key === 'PageUp' && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
-      Viewer.panBy(0, vpH);
-      return;
-    }
-    if (e.key === 'PageDown' && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
-      Viewer.panBy(0, -vpH);
-      return;
-    }
-  }
-
   // Home/End jumps across tabbable controls.
   handleTabJump(e);
 });
+
+// Manhwa strip owns Home/End/PageUp/PageDown at any focus (except text
+// inputs) so panel legacy keys never divert them to '..' or row jumps.
+// Capture phase plus stopPropagation preempts the file-list handler.
+window.addEventListener('keydown', (e) => {
+  if (!isManhwaStripActive()) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (e.ctrlKey || e.altKey) return;
+
+  let handled = false;
+  if (e.key === 'Home') {
+    const firstIdx = getFirstImageIndex();
+    if (firstIdx !== -1) {
+      Core.selectIndex(firstIdx);
+      handled = centerListItem(firstIdx);
+    }
+  } else if (e.key === 'End') {
+    const lastIdx = getLastImageIndex();
+    if (lastIdx !== -1) {
+      Core.selectIndex(lastIdx);
+      handled = centerListItem(lastIdx);
+    }
+  } else if (e.key === 'PageUp') {
+    handled = pageStrip(-1);
+  } else if (e.key === 'PageDown') {
+    handled = pageStrip(1);
+  }
+
+  if (handled) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, true);
 
 const dropOverlay = document.getElementById('drop-overlay');
 const passwordOverlay = document.getElementById('password-overlay');
@@ -134,7 +152,8 @@ const actionCtx = {
   isLibraryFocused: () => !!document.activeElement?.closest('#file-panel-library, .library-provider-list'),
   get keyboardPanStep() { return keyboardPanStep; },
   get wheelPanStep() { return wheelPanStep; },
-  get stepAnchor() { return stepAnchor; }
+  get centerListItem() { return centerListItem; },
+  get navigateManhwa() { return navigateManhwa; }
 };
 
 function bindMenuCommands() {

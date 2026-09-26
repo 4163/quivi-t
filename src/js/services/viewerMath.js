@@ -31,8 +31,10 @@ export function computeStripWidth(fitMode, viewportWidth, zoom = 1) {
  * Compute column layout and per-item offsets from natural dimensions.
  * Column width fits the widest known item times zoom.
  * Per-item offsets derive from heights at that width.
+ * seamOverlapPx subtracts the CSS inter-slot overlap per boundary so the
+ * offsets match rendered positions (each slot after the first shifts up).
  */
-export function computeColumnOffsets(items = [], zoom = 1) {
+export function computeColumnOffsets(items = [], zoom = 1, seamOverlapPx = 0) {
   if (!Array.isArray(items)) {
     return { widestWidth: 0, columnWidth: 0, totalHeight: 0, offsets: [] };
   }
@@ -44,6 +46,7 @@ export function computeColumnOffsets(items = [], zoom = 1) {
     if (w > widestWidth) widestWidth = w;
   }
 
+  const seam = Math.max(0, seamOverlapPx);
   const columnWidth = widestWidth * zoom;
   const offsets = [];
   let currentTop = 0;
@@ -52,10 +55,11 @@ export function computeColumnOffsets(items = [], zoom = 1) {
     const item = items[i];
     const rawH = typeof item === 'number' ? item : ((item && (item.naturalHeight ?? item.height)) || 0);
     const h = rawH * zoom;
+    const top = currentTop - i * seam;
     offsets.push({
-      top: currentTop,
+      top,
       height: h,
-      bottom: currentTop + h,
+      bottom: top + h,
     });
     currentTop += h;
   }
@@ -63,7 +67,7 @@ export function computeColumnOffsets(items = [], zoom = 1) {
   return {
     widestWidth,
     columnWidth,
-    totalHeight: currentTop,
+    totalHeight: items.length > 0 ? currentTop - (items.length - 1) * seam : 0,
     offsets,
   };
 }
@@ -168,9 +172,10 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     const { width, height } = _visualSize();
     const maxX = Math.abs(width - vp.clientWidth) / 2;
     const maxY = Math.abs(height - vp.clientHeight) / 2;
+    const minY = -maxY;
 
     _tx = maxX === 0 ? 0 : Math.min(maxX, Math.max(-maxX, _tx));
-    _ty = maxY === 0 ? 0 : Math.min(maxY, Math.max(-maxY, _ty));
+    _ty = maxY === 0 ? 0 : Math.min(maxY, Math.max(minY, _ty));
   }
 
   function applyFitMode(mode, naturalW, naturalH, clientW, clientH) {

@@ -12,44 +12,44 @@ Lanczos and filters stay out. They get a separate doc pass later. Nothing below 
 
 The first slot top equals the column top and the last slot bottom equals the column end. When the column is shorter than the viewport it pins to the top instead of centering.
 
-- [ ] Remove the top and bottom empty space in `src/js/viewer/manhwaStrip.js` (`_buildSlots`, `_updateLayout`) and `src/css/main.css`. Accept: the first image top edge sits at the column top with no gap, same at the bottom, and a short gallery pins top with empty space only below it.
+- [x] Remove the top and bottom empty space in `src/js/viewer/manhwaStrip.js` (`_buildSlots`, `_updateLayout`) and `src/css/main.css`. Short columns rest top-pinned but keep the symmetric clamp so 1 to 3 image galleries still pan with viewport edges as bounds. Accept: the first image top edge sits at the column top with no gap, same at the bottom, and a short gallery pins top with empty space only below it.
 
 ## B. Buffer loads before the viewport edge
 
 Images must finish loading before they enter view. The fixed pixel buffer misses at some zooms and pan speeds.
 
-- [ ] Size the window buffer as a named multiple of viewport height on each side instead of the fixed `STRIP_BUFFER_PX` in `src/js/viewer/manhwaStrip.js:19-20`, and mount ahead in the pan direction in `_updateWindow`. Accept: steady panning in either direction never reveals an unloaded slot.
+- [x] Size the window buffer as a named multiple of viewport height on each side instead of the fixed `STRIP_BUFFER_PX` in `src/js/viewer/manhwaStrip.js`, and mount ahead in the pan direction in `_updateWindow`. A prefetch ring warms fetch plus decode for items past the window edge in the direction of travel. Accept: steady panning in either direction never reveals an unloaded slot.
 
 ## C. Zoom refreshes the highlights
 
 Anchor and visible set must recompute on zoom settle and on relayout, even when the anchor index did not change.
 
-- [ ] Dispatch the settle update from `src/js/viewer/manhwaStrip.js` (`setViewportState` subscribe, `_updateWindow`, `_syncAnchorToCore`) on zoom settle as well as pan settle. Accept: zooming in or out updates the file list highlights with no pan needed.
+- [x] Dispatch the settle update from `src/js/viewer/manhwaStrip.js` (`setViewportState` subscribe, `_updateWindow`, `_syncAnchorToCore`) on zoom settle as well as pan settle. Accept: zooming in or out updates the file list highlights with no pan needed.
 
 ## D. One visible image means one highlight
 
 A single image in view must highlight exactly one row. The anchor and the visible set must share one range computation with exclusive boundaries.
 
-- [ ] Unify `getVisibleImageIndices` and the anchor path in `src/js/viewer/manhwaStrip.js:265-283` on `computeWindowRange` in `src/js/services/viewerMath.js:103-125`, and add a mocha case for a single visible item. Accept: one image in view highlights one row, never two.
+- [x] Unify `getVisibleImageIndices` and the anchor path in `src/js/viewer/manhwaStrip.js:265-283` on `computeWindowRange` in `src/js/services/viewerMath.js:103-125`, and add a mocha case for a single visible item. Accept: one image in view highlights one row, never two.
 
 ## E. Viewport click centers the image
 
 Clicking an item in the strip pans the column to center that image vertically. Drags keep panning.
 
-- [ ] Add a click path in `src/js/viewer/manhwaStrip.js` (or `src/js/viewer/viewerGestures.js`) with a small movement threshold separating click from drag, reusing `centerListItem`. Accept: a clean click centers the clicked image, a drag pans with no jump at release.
+- [x] Add a click path in `src/js/viewer/manhwaStrip.js` (or `src/js/viewer/viewerGestures.js`) with a small movement threshold separating click from drag, reusing `centerListItem`. All centering goes through `_centerColumnY`, which scales the offset by zoom. Accept: a clean click centers the clicked image, a drag pans with no jump at release.
 
 ## F. Next, previous, Home, and End center images
 
 Normal navigation returns. `cmd-next` and `cmd-prev` call `Core.navigate` and then center the result. Home goes to the first image entry, never `..`. End goes to the last image.
 
-- [ ] Route `cmd-next` and `cmd-prev` in `src/js/services/actions.js:9-22` through `Core.navigate` followed by `centerListItem` in `src/js/viewer/manhwaStrip.js:310-322`. A non-image landing centers the nearest image in the direction of travel. Accept: `Shift`+arrows walk images and center each one, no wrap, no `..` stop.
-- [ ] Point Home at the first image entry and End at the last one in `src/js/main/main.js:52-74`, replacing the giant pan deltas. Accept: Home always lands on the first image, End on the last.
+- [x] Route `cmd-next` and `cmd-prev` in `src/js/services/actions.js:9-22` through `Core.navigate` followed by `centerListItem` in `src/js/viewer/manhwaStrip.js`. A non-image landing centers the nearest image in the direction of travel. Centering goes through `_centerColumnY`, which scales the offset by zoom. Accept: `Shift`+arrows walk through normal navigation and center each landing image at any zoom.
+- [x] Point Home at the first image entry and End at the last one via a capture-phase listener in `src/js/main/main.js` that owns these keys at any focus, replacing the giant pan deltas. Accept: Home always lands on the first image, End on the last, never `..`.
 
 ## G. PageUp and PageDown come from the offsets
 
 Paging must derive from column offsets and the clamp, not from index steps, so the extremes behave like the rest of the column.
 
-- [ ] Page by viewport height through the existing clamp off the offset map in `src/js/main/main.js:64-73` and `src/js/viewer/manhwaStrip.js`, with targets clamped to the column ends. Accept: paging at the very top or bottom stops exactly at the end with no jitter or overshoot.
+- [x] Page by viewport height through the existing clamp off the offset map in `src/js/viewer/manhwaStrip.js` (`pageStrip`), driven by a capture-phase listener in `src/js/main/main.js` at any focus, with targets clamped to the column ends. Accept: paging at the very top or bottom stops exactly at the end with no jitter or overshoot.
 
 ## H. Grill follows the visible width only
 

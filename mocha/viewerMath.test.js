@@ -334,6 +334,21 @@ describe('viewerMath', () => {
     it('aliases computeColumnLayout to computeColumnOffsets', () => {
       assert.equal(computeColumnLayout, computeColumnOffsets);
     });
+
+    it('shifts offsets up by the seam overlap per boundary', () => {
+      const items = [
+        { naturalWidth: 800, naturalHeight: 1000 },
+        { naturalWidth: 800, naturalHeight: 1500 },
+        { naturalWidth: 800, naturalHeight: 1000 }
+      ];
+      const layout = computeColumnOffsets(items, 1, 1);
+      assert.deepEqual(layout.offsets.map((o) => o.top), [0, 999, 2498]);
+      assert.equal(layout.totalHeight, 3498);
+
+      const plain = computeColumnOffsets(items, 1);
+      assert.deepEqual(plain.offsets.map((o) => o.top), [0, 1000, 2500]);
+      assert.equal(plain.totalHeight, 3500);
+    });
   });
 
   describe('findAnchorIndex', () => {
@@ -386,6 +401,15 @@ describe('viewerMath', () => {
       assert.deepEqual(computeWindowRange(offsets, 5000, 6000), { startIndex: -1, endIndex: -1 });
       assert.deepEqual(computeWindowRange([], 0, 1000), { startIndex: -1, endIndex: -1 });
     });
+
+    it('handles exact exclusive boundaries and single visible item', () => {
+      // Exactly covers item 0 with exclusive boundary at 1000 (item 1 top)
+      assert.deepEqual(computeWindowRange(offsets, 0, 1000), { startIndex: 0, endIndex: 0 });
+      // Exactly covers item 1 with exclusive boundary at 1000 (item 0 bottom)
+      assert.deepEqual(computeWindowRange(offsets, 1000, 2000), { startIndex: 1, endIndex: 1 });
+      // Window fully inside item 1
+      assert.deepEqual(computeWindowRange(offsets, 1200, 1800), { startIndex: 1, endIndex: 1 });
+    });
   });
 
   describe('setDimensions on viewportState', () => {
@@ -407,4 +431,27 @@ describe('viewerMath', () => {
       assert.equal(state.getTy(), -350);
     });
   });
+
+  describe('short content clamping on viewportState', () => {
+    it('allows panning shorter content within viewport bounds', () => {
+      const vp = { clientWidth: 1000, clientHeight: 800, left: 0, top: 0 };
+      const state = createViewportState({ getViewport: () => vp });
+      state.applyFitMode('none', 800, 400);
+
+      // Short height 400 in 800 viewport clamps ty to +/- 200, never locked
+      state.panTo(0, -200);
+      assert.equal(state.getTy(), -200);
+      state.panTo(0, 200);
+      assert.equal(state.getTy(), 200);
+      state.panTo(0, 0);
+      assert.equal(state.getTy(), 0);
+
+      // Attempts past the edges clamp to viewport bounds
+      state.panBy(0, 500);
+      assert.equal(state.getTy(), 200);
+      state.panBy(0, -500);
+      assert.equal(state.getTy(), -200);
+    });
+  });
 });
+
