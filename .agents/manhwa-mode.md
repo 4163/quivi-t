@@ -6,15 +6,16 @@ Validation: this plan was compared against `.agents/skills/validate-changes/SKIL
 
 These hold for the whole slice set. A cold agent picks up from a dirty tree with these alone. Any change to this section needs user signoff first.
 
-- Manhwa mode means one vertical strip inside `#viewport`. It stacks every image in the current `Core` list top down. It never replaces the list.
-- The anchor means the strip item with the largest visible area. The anchor drives `Core.selectIndex`, the statusbar, and the file panel highlight.
-- Scroll drives the mode. The transform pan path in `viewerGestures.js` stays off while the strip is active.
-- Ends clamp. The strip never wraps to the start, never opens `..`, and never opens a sibling container on scroll. `Backspace`, `Ctrl+X`, and `Ctrl+Z` keep their current behavior.
+- Manhwa view means one vertical strip inside `#viewport`. It stacks every image in the current `Core` list top down. It never replaces the list.
+- The anchor is the image index that the strip window is centered on. The anchor drives `Core.selectIndex`, the statusbar, and the file panel highlight.
+- The window is index-driven, not scroll-driven. The strip renders `STRIP_WINDOW_HALF` items in each direction around the anchor index. No native scrollbar. Wheel, keyboard, and hold-key panning call `stepAnchor(delta)` to move the anchor.
+- The single-image pipeline (`viewerRender.js`, `viewerPipelines.js`) is guarded off when the strip is active. The strip owns its own image loading. CSS hides the single-image DOM, and JS guards prevent decode, pool swap, bridge, and filter churn.
+- Ends clamp. The strip never wraps to the start, never opens `..`, and never opens a sibling container on anchor step. `Backspace`, `Ctrl+X`, and `Ctrl+Z` keep their current behavior.
 - The bridge stays unused in the strip. Enter cancels pending parks. Exit returns to the single image path with the anchor as index.
 - Video rows never play in the strip. Each video entry renders as a fixed height placeholder so list indexes stay aligned.
 - V1 treats filters, Lanczos, and the grill as strip-wide concerns by turning per-image pipelines off. One continuous grill backdrop sits behind the strip. A later slice can composite the strip to a single canvas. No per-image filter pass in v1.
 - Spread and manhwa never run together. Entering one leaves the other.
-- Scroll sync uses `Core.selectIndex` only. Scroll never calls `Core.jumpToIndex` and never activates dirs or archives.
+- Anchor sync uses `Core.selectIndex` only. Anchor changes never call `Core.jumpToIndex` and never activate dirs or archives.
 - State key is `manhwaEnabled` on the state machine plus `manhwa_enabled` under `config.frontend_data`. Default is off. It persists across restart in both roaming and portable layouts.
 
 ## Deviation rules
@@ -41,7 +42,7 @@ Goal: user can turn the mode on and off from the View menu. Nothing visual yet b
 Goal: a scrollable strip coexists with the single image path. Single image behavior stays untouched when the mode is off.
 
 - [x] Add `#manhwa-strip` inside `#viewport` in `src/index.html:201-306`. Declare it as static markup, hidden by default with a class on `#viewport`. Accept: markup exists before any JS runs, no runtime `createElement` for the container.
-- [x] Add layout rules in `src/css/main.css` near `#viewport` at `src/css/main.css:1315-1331`. Strip gets `overflow-y: auto`, items stack top down, each item width follows the strip width rule. Accept: with test markup the strip scrolls natively and the old wrapper stays hidden when the mode class is set.
+- [x] Add layout rules in `src/css/main.css` near `#viewport` at `src/css/main.css:1315-1331`. Strip gets `overflow: hidden` (no scrollbar), items stack top down via flex column, each item width follows `--manhwa-strip-width`. Accept: old wrapper stays hidden when the mode class is set.
 - [x] Keep visual tokens in `src/css/global.css`. No new color or spacing tokens in the page sheet. Accept: page sheet consumes tokens only.
 - [x] Define the width rule in a pure helper, likely `src/js/services/viewerMath.js:8-308`. All fit modes map to a strip width. Width based modes fill viewport width. Window and height modes fall back to width behavior in the strip and zoom scales from there. Accept: helper has mocha coverage for each fit mode plus zoom factors.
 - [x] Hide `#viewer-img-wrapper`, `#viewer-bridge-layer`, `#viewer-lanczos-canvas`, and `#viewer-filter-canvas` in `src/index.html:253-270` while the strip is active. Use classes only. Accept: no inline style writes from JS.
@@ -51,34 +52,34 @@ Goal: a scrollable strip coexists with the single image path. Single image behav
 
 Goal: enough images stay loaded to fill the viewport plus a buffer in both directions. Anything far outside unloads.
 
-- [x] Build the image index list from `Core.getState().list` in `src/js/core.js:318-320`, keeping only entries where `FsUtils.isImageEntry` passes in `src/js/fsUtils.js:158-160`. Keep original list indexes alongside so anchor sync stays aligned. Accept: `..`, dirs, and archives never create strip items.
+- [x] Build the image index list from `Core.getState().list` in `src/js/core.js:318-320`, keeping only entries where `FsUtils.isImageEntry` passes in `src/js/fsUtils.js:158-160`. Keep original list indexes alongside with a reverse map (`_listToImgIdx`) so anchor sync stays aligned. Accept: `..`, dirs, and archives never create strip items.
 - [x] Reuse `buildFileSrc`, `buildArchiveEntrySrc`, and the archive blob path in `src/js/fsUtils.js:260-292` for strip item URLs. Accept: disk and archive items load through the same builders, no duplicated URL logic.
-- [x] Size the window from measured viewport height plus item heights, not from a fixed count. Keep one viewport of buffer above and below. Buffer size is a named constant at module scope. Accept: tall pages and short pages both fill without gaps during steady scroll.
-- [x] Evict on both ends. Items leaving the window release their `img` source and return the node to a bounded free pool. Cap the pool with a named constant. Accept: scrolling a 500 image archive never grows node count past the cap plus window.
-- [x] Gate decode work behind scroll settle with `requestAnimationFrame` throttle plus a short timer, same pattern as `TARGET_LOAD_DEBOUNCE_MS` in `src/js/viewer/viewerRender.js:8`. Fast flings load only the landing window. Accept: fling test shows no decode storm for skipped items.
-- [x] Handle unknown heights. Reserve estimated height from cached natural dims when known, correct on `decode()` resolve without jumping the anchor. Accept: loading a tall chapter does not yank scroll position.
-- [x] Reuse or mirror the thumbnail blob shortcut in `src/js/viewer/viewerRender.js:647-651` for archive items already thumbnailed. Accept: archive strip reuses cached blobs instead of refetching.
+- [x] Size the window as `STRIP_WINDOW_HALF` items (5) in each direction around the anchor index. Window size is a named constant at module scope. Accept: re-anchoring mounts the right range and evicts the rest.
+- [x] Evict on both ends. Items leaving the window release their `img` source and return the node to a bounded free pool. Cap the pool with `STRIP_POOL_CAP` (10). Accept: large archives never grow node count past cap plus window.
+- [x] Guard the single-image pipeline. `viewerRender.js` and `viewerPipelines.js` state handlers bail early when `state.manhwaEnabled` is set. Accept: no decode, pool swap, bridge, or filter churn on hidden elements.
+- [ ] Reserve layout height for unloaded items so re-anchor does not shift layout on first decode. Carried forward: decode caching was removed as dead code, first-visit pop-in stays visible until this lands. Accept: stepping through a chapter shows no layout jump on first decode.
+- [x] Reuse the thumbnail blob shortcut in `src/js/viewer/viewerRender.js:647-651` for archive items already thumbnailed. Accept: archive strip reuses cached blobs instead of refetching.
 
 ## Slice 4. Anchor sync
 
 Goal: file list, statusbar, and badge follow the most visible image.
 
-- [ ] Compute the anchor as largest visible area on scroll settle. Call `Core.selectIndex` in `src/js/core.js:546-548`. Accept: anchor changes only on settle, not per scroll tick.
-- [ ] Confirm `selectIndex` stays preview only. It must never open dirs or archives the way `jumpToIndex` does in `src/js/core.js:542-544`. Accept: scrolling past a dir entry never navigates away.
-- [ ] Let `renderFilePanel` in `src/js/filepanel/filePanel.js:2200-2329` highlight the anchor through its existing `updateSelection` path at `src/js/filepanel/filePanel.js:2118-2158`. Accept: panel scrolls minimally and favorites and library highlights stay consistent.
-- [ ] Update `Statusbar.update` and `setImage` in `src/js/menubar/statusbar.js:130-232` from the anchor entry. Filename, index, and dims show the anchor. Accept: statusbar matches the most visible image.
-- [ ] Panel clicks while the strip is active scroll to the matching strip item instead of jumping the viewer. Only `Enter` or double click on a dir or archive opens it through the existing `jumpToIndex` path at `src/js/filepanel/filePanel.js:1598-1619`. Accept: single click scrolls, container open still works.
-- [ ] Panel keyboard in `src/js/filepanel/filePanel.js:2553-2646` keeps working. Arrows move the panel highlight and scroll the strip to match. Accept: focus stays where the user put it.
+- [x] Anchor re-render syncs `Core.selectIndex` for the anchor item. Accept: selection changes only on `_setAnchor`, never from scroll or layout events.
+- [x] Confirm `selectIndex` stays preview only. It must never open dirs or archives the way `jumpToIndex` does in `src/js/core.js:542-544`. Accept: stepping past a dir entry never navigates away.
+- [x] Let `renderFilePanel` in `src/js/filepanel/filePanel.js:2200-2329` highlight the anchor through its existing `updateSelection` path at `src/js/filepanel/filePanel.js:2118-2158`. Accept: panel scrolls minimally and favorites and library highlights stay consistent.
+- [x] Update `Statusbar.update` and `setImage` in `src/js/menubar/statusbar.js:130-232` from the anchor entry. Filename, index, and dims show the anchor. Accept: statusbar matches the anchor image.
+- [x] Panel clicks while the strip is active re-anchor to the matching strip item via `_listToImgIdx` instead of scrolling. Only `Enter` or double click on a dir or archive opens it through the existing `jumpToIndex` path at `src/js/filepanel/filePanel.js:1598-1619`. Accept: single click re-anchors, container open still works.
+- [x] Panel keyboard in `src/js/filepanel/filePanel.js:2553-2646` keeps working. Arrows move the panel highlight and re-anchor the strip to match. Accept: focus stays where the user put it.
 
 ## Slice 5. Keyboard, wheel, and gestures
 
 Goal: inputs feel like reading, not like panning a photo.
 
-- [ ] Route plain wheel, `ArrowUp`, `ArrowDown`, `PageUp`, `PageDown`, `Home`, and `End` to native strip scroll. These currently pan via `cmd-pan-*` in `src/js/services/actions.js:149-172` and `src/js/shortcuts.js:130-135`. Accept: strip scrolls natively, single image pan behavior unchanged when mode is off.
-- [ ] Keep `cmd-next` and `cmd-prev` in `src/js/services/actions.js:9-22` as container navigation, not strip scroll. In the strip they jump the anchor by one image. Accept: `Shift+Arrow` moves one page in the strip, plain arrows scroll.
-- [ ] Clamp at both ends. At the first image `cmd-prev` does nothing. At the last image `cmd-next` does nothing. No modulo wrap from `src/js/core.js:535`, no `clampPreview` path from `src/js/core.js:513-533`, no `..` activation from `src/js/core.js:190-193`. Accept: end behavior covered by a mocha or e2e case.
+- [ ] Route plain wheel and `ArrowUp`, `ArrowDown` to `stepAnchor(±1)` when the strip is active. `PageUp`, `PageDown` step by a larger delta. `Home` and `End` jump to first and last image. These currently pan via `cmd-pan-*` in `src/js/services/actions.js:149-172` and `src/js/shortcuts.js:130-135`. Accept: strip navigates by image, single image pan behavior unchanged when mode is off.
+- [ ] Keep `cmd-next` and `cmd-prev` in `src/js/services/actions.js:9-22` as container navigation, not strip nav. In the strip they call `stepAnchor(±1)`. Accept: arrows move anchor by one image in the strip.
+- [ ] Clamp at both ends. At the first image `stepAnchor(-1)` does nothing. At the last image `stepAnchor(1)` does nothing. No modulo wrap from `src/js/core.js:535`, no `clampPreview` path from `src/js/core.js:513-533`, no `..` activation from `src/js/core.js:190-193`. Accept: end behavior covered by a mocha or e2e case.
 - [ ] Disable `Viewer.zoomAt`, `zoomCenter`, `panBy`, `rotate`, and flip in `src/js/viewer/viewer.js:48-67` while the strip is active, except for a strip wide zoom control. Accept: transform gestures do nothing to individual items.
-- [ ] Keep `Space` drag from `src/js/viewer/viewerGestures.js:151-246` disabled in the strip so it never fights native scroll. Accept: drag scrolls natively or does nothing, no transform jump.
+- [ ] Keep `Space` drag from `src/js/viewer/viewerGestures.js:151-246` disabled in the strip so it never fights anchor navigation. Accept: drag does nothing in the strip, no transform jump.
 - [ ] Keep history, parent, and sibling commands working. `cmd-history-back`, `cmd-history-forward`, `cmd-parent`, `cmd-open-next-container`, and `cmd-open-prev-container` in `src/js/services/actions.js:23-43` behave as today. Accept: leaving the strip via history restores single image state cleanly.
 
 ## Slice 6. Zoom, grill, filters, and scaling
@@ -113,7 +114,7 @@ Goal: the mode survives restart and leaves no trace in diagnostics contracts.
 - [ ] Add mocha coverage outside `src/` for the width rule, window range math, and anchor picking. Follow the existing files in `mocha/`. Accept: `npm run mocha` passes.
 - [ ] Add one e2e spec for enter, scroll anchor sync, end clamp, and exit. Keep probes and recorder contracts intact per `mocha/diagnosticsContract.test.js`. Accept: `npm run e2e` passes for the new spec, no probe selector breakage.
 - [ ] Run `node --check` on touched JS and `cargo check --tests --manifest-path src-tauri/Cargo.toml` if any Rust was touched. V1 expects no Rust touch. Accept: static checks clean before handoff.
-- [ ] Produce a short manual runtime list at handoff. Cover enter and exit, fling scroll, zoom relayout, archive chapter, locked archive, video placeholder, panel click sync, and restart persistence. Accept: each item names where to go, what to do, and what to see.
+- [ ] Produce a short manual runtime list at handoff. Cover enter and exit, anchor stepping, zoom relayout, archive chapter, locked archive, video placeholder, panel click sync, and restart persistence. Accept: each item names where to go, what to do, and what to see.
 
 ## Validation note
 

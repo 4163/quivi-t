@@ -1,11 +1,11 @@
 /**
- * manhwaStrip.js: windowed loader for the manhwa vertical strip.
+ * manhwaStrip.js: index-driven loader for the manhwa vertical strip.
  *
  * Owns #manhwa-strip and the .manhwa-active class on #viewport.
- * Subscribes to Core.onStateChange. When manhwaEnabled flips on,
- * it builds a filtered image index from Core.list, populates a
- * bounded node pool, and loads a viewport-sized window of images.
- * Scroll events extend and evict images outside the window.
+ * The window is centered on an anchor index in the filtered image
+ * list. Rendering N items around the anchor. External index changes
+ * (panel click, keyboard) re-anchor and re-render. Wheel/key/hold
+ * panning is wired in Slice 5.
  */
 
 import { Core } from '../core.js';
@@ -16,21 +16,18 @@ import { computeStripWidth } from '../services/viewerMath.js';
 /** Max img nodes kept in the free pool after eviction. */
 const STRIP_POOL_CAP = 10;
 
-/** Buffer above and below the viewport, in multiples of viewport height. */
-const STRIP_BUFFER_VIEWPORTS = 1;
-
-/** Debounce for scroll-settle before loading new items (ms). */
-const STRIP_SCROLL_SETTLE_MS = 60;
-
-/** Default estimated height for images with unknown dimensions (px). */
-const STRIP_DEFAULT_ITEM_HEIGHT = 800;
+/** Items rendered above and below the anchor (each direction). */
+const STRIP_WINDOW_HALF = 5;
 
 let _viewport = null;
 let _strip = null;
 let _active = false;
 
-/** Filtered image entries: { listIndex, entry }[] */
+/** Filtered image entries: { listIndex, entry, imgIdx }[] */
 let _imageIndex = [];
+
+/** Reverse map: listIndex → imgIdx (position in _imageIndex). */
+const _listToImgIdx = new Map();
 
 /** Map from listIndex → DOM img node for currently mounted items. */
 const _mounted = new Map();
@@ -38,15 +35,12 @@ const _mounted = new Map();
 /** Free pool of recycled img nodes. */
 const _freePool = [];
 
-/** Cached natural dimensions: listIndex → { w, h } */
-const _dimCache = new Map();
-
-let _scrollRafId = 0;
-let _scrollSettleTimer = 0;
+let _anchorImgIdx = 0;
 let _lastList = null;
 let _lastMode = null;
 let _lastArchivePath = null;
 let _lastDirectory = null;
+let _anchorUpdateInProgress = false;
 
 function _buildSrc(entry, state) {
   if (state.mode === 'archive') {
@@ -60,10 +54,13 @@ function _buildSrc(entry, state) {
 
 function _buildImageIndex(list) {
   const result = [];
+  _listToImgIdx.clear();
   for (let i = 0; i < list.length; i++) {
     const entry = list[i];
     if (FsUtils.isImageEntry(entry)) {
-      result.push({ listIndex: i, entry });
+      const imgIdx = result.length;
+      result.push({ listIndex: i, entry, imgIdx });
+      _listToImgIdx.set(i, imgIdx);
     }
   }
   return result;
@@ -80,25 +77,9 @@ function _acquireNode() {
 
 function _releaseNode(img) {
   img.removeAttribute('src');
-  img.removeAttribute('style');
   img.removeAttribute('data-list-index');
   if (_freePool.length < STRIP_POOL_CAP) {
     _freePool.push(img);
-  }
-}
-
-function _evictOutsideWindow(topEdge, bottomEdge) {
-  for (const [listIndex, img] of _mounted) {
-    const rect = img.getBoundingClientRect();
-    const stripRect = _strip.getBoundingClientRect();
-    const relTop = rect.top - stripRect.top + _strip.scrollTop;
-    const relBottom = relTop + rect.height;
-
-    if (relBottom < topEdge || relTop > bottomEdge) {
-      _mounted.delete(listIndex);
-      img.remove();
-      _releaseNode(img);
-    }
   }
 }
 
@@ -118,61 +99,55 @@ function _applyStripWidth() {
   }
 }
 
-function _estimateHeight(item) {
-  const cached = _dimCache.get(item.listIndex);
-  if (cached) {
-    const w = _getStripWidth() || _viewport.clientWidth;
-    return (cached.h / cached.w) * w;
-  }
-  return STRIP_DEFAULT_ITEM_HEIGHT;
-}
-
-function _loadWindow() {
+/**
+ * Render items in the window [anchorImgIdx - HALF, anchorImgIdx + HALF].
+ * Evict anything outside, mount anything missing.
+ */
+function _renderWindow() {
   if (!_strip || !_active || _imageIndex.length === 0) return;
 
-  const vh = _viewport.clientHeight;
-  const scrollTop = _strip.scrollTop;
-  const bufferPx = vh * STRIP_BUFFER_VIEWPORTS;
-  const topEdge = Math.max(0, scrollTop - bufferPx);
-  const bottomEdge = scrollTop + vh + bufferPx;
+  const lo = Math.max(0, _anchorImgIdx - STRIP_WINDOW_HALF);
+  const hi = Math.min(_imageIndex.length - 1, _anchorImgIdx + STRIP_WINDOW_HALF);
 
-  _evictOutsideWindow(topEdge, bottomEdge);
+  // Evict items outside the window.
+  const windowListIndices = new Set();
+  for (let i = lo; i <= hi; i++) {
+    windowListIndices.add(_imageIndex[i].listIndex);
+  }
 
-  // Walk through the image index and mount items inside the window.
-  let cumY = 0;
-  const state = Core.getState();
-  for (const item of _imageIndex) {
-    const estH = _estimateHeight(item);
-    const itemTop = cumY;
-    const itemBottom = cumY + estH;
-    cumY += estH;
-
-    if (itemBottom < topEdge) continue;
-    if (itemTop > bottomEdge) break;
-
-    if (!_mounted.has(item.listIndex)) {
-      const img = _acquireNode();
-      img.dataset.listIndex = item.listIndex;
-      const src = _buildSrc(item.entry, state);
-      img.src = src;
-
-      // Cache dims on decode.
-      img.onload = () => {
-        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-          _dimCache.set(item.listIndex, { w: img.naturalWidth, h: img.naturalHeight });
-        }
-        img.onload = null;
-      };
-
-      // Insert in correct order.
-      _insertAtPosition(img, item.listIndex);
-      _mounted.set(item.listIndex, img);
+  for (const [listIndex, img] of _mounted) {
+    if (!windowListIndices.has(listIndex)) {
+      _mounted.delete(listIndex);
+      img.remove();
+      _releaseNode(img);
     }
+  }
+
+  // Mount missing items in order.
+  const state = Core.getState();
+  for (let i = lo; i <= hi; i++) {
+    const item = _imageIndex[i];
+    if (_mounted.has(item.listIndex)) continue;
+
+    const img = _acquireNode();
+    img.dataset.listIndex = item.listIndex;
+    const src = _buildSrc(item.entry, state);
+    img.src = src;
+
+    _insertAtPosition(img, item.listIndex);
+    _mounted.set(item.listIndex, img);
+  }
+
+  // Sync Core selection to the anchor.
+  const anchorItem = _imageIndex[_anchorImgIdx];
+  if (anchorItem) {
+    _anchorUpdateInProgress = true;
+    Core.selectIndex(anchorItem.listIndex);
+    _anchorUpdateInProgress = false;
   }
 }
 
 function _insertAtPosition(img, listIndex) {
-  // Find the right position to maintain sorted order.
   const children = _strip.children;
   for (let i = 0; i < children.length; i++) {
     const childIdx = parseInt(children[i].dataset.listIndex, 10);
@@ -184,13 +159,23 @@ function _insertAtPosition(img, listIndex) {
   _strip.appendChild(img);
 }
 
-function _onScroll() {
-  if (_scrollRafId) return;
-  _scrollRafId = requestAnimationFrame(() => {
-    _scrollRafId = 0;
-    clearTimeout(_scrollSettleTimer);
-    _scrollSettleTimer = setTimeout(_loadWindow, STRIP_SCROLL_SETTLE_MS);
-  });
+/**
+ * Set the anchor to a given image index and re-render the window.
+ */
+function _setAnchor(imgIdx) {
+  if (imgIdx < 0 || imgIdx >= _imageIndex.length) return;
+  _anchorImgIdx = imgIdx;
+  _renderWindow();
+}
+
+/**
+ * Navigate the anchor by delta images (positive = forward, negative = back).
+ * Public API for Slice 5 (keyboard/wheel).
+ */
+export function stepAnchor(delta) {
+  if (!_active || _imageIndex.length === 0) return;
+  const next = Math.max(0, Math.min(_imageIndex.length - 1, _anchorImgIdx + delta));
+  if (next !== _anchorImgIdx) _setAnchor(next);
 }
 
 function _activate(state) {
@@ -204,28 +189,26 @@ function _activate(state) {
   _lastArchivePath = state.archivePath;
   _lastDirectory = state.directory;
 
+  // Start at the current Core index if it maps to an image.
+  const mapped = _listToImgIdx.get(state.index);
+  _anchorImgIdx = mapped !== undefined ? mapped : 0;
+
   _applyStripWidth();
-  _strip.scrollTop = 0;
-  _loadWindow();
-  _strip.addEventListener('scroll', _onScroll, { passive: true });
+  _renderWindow();
 }
 
 function _deactivate() {
   if (!_active) return;
   _active = false;
   _viewport.classList.remove('manhwa-active');
-  _strip.removeEventListener('scroll', _onScroll);
-  clearTimeout(_scrollSettleTimer);
-  if (_scrollRafId) { cancelAnimationFrame(_scrollRafId); _scrollRafId = 0; }
 
-  // Remove all mounted nodes.
   for (const [, img] of _mounted) {
-    img.onload = null;
     img.remove();
     _releaseNode(img);
   }
   _mounted.clear();
   _imageIndex = [];
+  _listToImgIdx.clear();
   _lastList = null;
 }
 
@@ -244,21 +227,18 @@ function _onStateChange(state) {
 
   if (!_active) return;
 
-  // List or container changed while active — rebuild.
+  // List or container changed — rebuild.
   const listChanged = state.list !== _lastList;
   const containerChanged = state.mode !== _lastMode ||
     state.archivePath !== _lastArchivePath ||
     state.directory !== _lastDirectory;
 
   if (listChanged || containerChanged) {
-    // Tear down and rebuild.
     for (const [, img] of _mounted) {
-      img.onload = null;
       img.remove();
       _releaseNode(img);
     }
     _mounted.clear();
-    _dimCache.clear();
 
     _imageIndex = _buildImageIndex(state.list || []);
     _lastList = state.list;
@@ -266,9 +246,20 @@ function _onStateChange(state) {
     _lastArchivePath = state.archivePath;
     _lastDirectory = state.directory;
 
-    _strip.scrollTop = 0;
+    const mapped = _listToImgIdx.get(state.index);
+    _anchorImgIdx = mapped !== undefined ? mapped : 0;
+
     _applyStripWidth();
-    _loadWindow();
+    _renderWindow();
+    return;
+  }
+
+  // External index change (panel click/keyboard) — re-anchor.
+  if (!_anchorUpdateInProgress && state.index >= 0) {
+    const mapped = _listToImgIdx.get(state.index);
+    if (mapped !== undefined && mapped !== _anchorImgIdx) {
+      _setAnchor(mapped);
+    }
   }
 }
 
@@ -279,10 +270,13 @@ export function initManhwaStrip() {
 
   Core.onStateChange(_onStateChange);
 
-  // Recompute strip width on viewport resize.
   const ro = new ResizeObserver(() => {
     if (!_active) return;
     _applyStripWidth();
   });
   ro.observe(_viewport);
+}
+
+export function isManhwaStripActive() {
+  return _active;
 }

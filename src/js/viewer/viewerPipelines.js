@@ -670,6 +670,9 @@ export function createViewerPipelines(viewportState) {
   }
 
   Core.onStateChange((state) => {
+    // Strip owns its own images; skip filter/scaling pipeline when active.
+    if (state.manhwaEnabled) return;
+
     const newFilter = _resolveActiveFilter(state);
     const isVideo = isVideoSource(_activeSource);
     const newIsAnimated = !!state.isAnimated;

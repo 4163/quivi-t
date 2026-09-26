@@ -506,6 +506,12 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   }
 
   Core.onStateChange((state) => {
+    // Strip owns its own images; skip single-image pipeline when active.
+    if (state.manhwaEnabled) {
+      clearDisplayedImage();
+      return;
+    }
+
     const isArchive = state.mode === 'archive';
     const currentArchivePath = isArchive ? state.archivePath : null;
     const archiveChanged = isArchive && currentArchivePath !== _lastRenderedArchivePath;
