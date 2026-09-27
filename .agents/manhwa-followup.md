@@ -59,13 +59,13 @@ The opaque canvas covers the strip box with no width variable and no updater. Sl
 
 ## I. Fit modes work in the strip
 
-Width basis is the widest image in the directory (widest known, converging on decode), never the visible set. Explicit selection sets zoom and centers X without touching Y, except fit none which centers the column. Per-navigation application keeps item Y from the navigation centering. Panning never re-fits, so the view never jumps under the user.
+Width basis is the widest image in the directory (widest known, converging on decode), never the visible set. Explicit selection sets zoom and centers X (0) without touching Y across all fit modes (including none, width, height, and window). Per-navigation application keeps item Y from the navigation centering. Panning never re-fits, so the view never jumps under the user.
 
 - [x] Re-enable the none, width, and width-if-larger rows in `src/js/menubar.js:713-735`. Accept: the rows are selectable in the strip with no single-image-only note.
-- [ ] Fit none sets zoom to 1 and pans to the column center on explicit selection. Per-navigation keeps item Y from the navigation centering. Accept: selecting none frames 1:1 at the column middle, navigating keeps the target item.
-- [ ] Fit width sets zoom from the widest image in the directory, width-if-larger caps at 1. Pan X resets to center (0), pan Y untouched on explicit selection. Accept: selecting width frames the widest page, reading position holds, panning away keeps the zoom.
+- [x] Fit none sets zoom to 1, centers X (0), and keeps Y position untouched on explicit selection instead of centering the column. Per-navigation keeps item Y from the navigation centering. Accept: selecting none frames 1:1, reading position holds, navigating keeps the target item.
+- [x] Fit width sets zoom from the widest image in the directory, width-if-larger caps at 1. Pan X resets to center (0), pan Y untouched on explicit selection. Accept: selecting width frames the widest page, reading position holds, panning away keeps the zoom.
 - [x] Fit height sets zoom from the total column height (active image height is ignored) and height-if-larger caps at 1. If the column cannot fit further, zoom clamps to the minimum zoom level (0.05). Pan X resets to center. Accept: 1 to 3 image galleries frame within viewport height, long columns clamp to minimum zoom.
-- [ ] Fit window sets zoom from the directory width basis and total column height (whichever constrains) and window-if-larger caps at 1, subject to the minimum zoom cap. Pan X resets to center (0), pan Y untouched on explicit selection. Accept: wide or few-image galleries fit without clipping, reading position holds.
+- [x] Fit window sets zoom from the directory width basis and total column height (whichever constrains) and window-if-larger caps at 1, subject to the minimum zoom cap. Pan X resets to center (0), pan Y untouched on explicit selection. Accept: wide or few-image galleries fit without clipping, reading position holds.
 
 ## J. Flips match the single raster model
 

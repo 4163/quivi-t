@@ -523,59 +523,10 @@ function _applyFitMode(mode, targetImgIdx = null) {
   if (!_active || !_viewportState || !_viewport || _imageIndex.length === 0) return;
   const fitMode = mode || Core.getState()?.fitMode || 'none';
 
-  let startIndex = -1;
-  let endIndex = -1;
-  const range = _computeVisibleRange();
-  if (range.startIndex !== -1 && range.endIndex !== -1) {
-    startIndex = range.startIndex;
-    endIndex = range.endIndex;
-  }
-
-  if (targetImgIdx !== null && targetImgIdx >= 0 && targetImgIdx < _imageIndex.length) {
-    if (startIndex === -1 || endIndex === -1) {
-      startIndex = targetImgIdx;
-      endIndex = targetImgIdx;
-    } else if (targetImgIdx < startIndex || targetImgIdx > endIndex) {
-      startIndex = targetImgIdx;
-      endIndex = targetImgIdx;
-    }
-  } else if (startIndex === -1 || endIndex === -1) {
-    startIndex = _anchorImgIdx >= 0 ? _anchorImgIdx : 0;
-    endIndex = _anchorImgIdx >= 0 ? _anchorImgIdx : 0;
-  }
-
-  let maxW = 0;
-  for (let i = startIndex; i <= endIndex; i++) {
-    const item = _imageIndex[i];
-    if (item) {
-      const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
-      const defW = isSvg ? 1000 : DEFAULT_ESTIMATED_WIDTH;
-      const w = item.naturalWidth || defW;
-      if (w > maxW) maxW = w;
-    }
-  }
-  if (targetImgIdx !== null && targetImgIdx >= 0 && targetImgIdx < _imageIndex.length) {
-    const item = _imageIndex[targetImgIdx];
-    if (item) {
-      const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
-      const defW = isSvg ? 1000 : DEFAULT_ESTIMATED_WIDTH;
-      const w = item.naturalWidth || defW;
-      if (w > maxW) maxW = w;
-    }
-  }
-  if (maxW <= 0) maxW = DEFAULT_ESTIMATED_WIDTH;
-
+  const maxW = (_layout.widestWidth && _layout.widestWidth > 0) ? _layout.widestWidth : DEFAULT_ESTIMATED_WIDTH;
   const colHeight = (_layout.totalHeight && _layout.totalHeight > 0) ? _layout.totalHeight : DEFAULT_ESTIMATED_HEIGHT;
   const vw = _viewport.clientWidth || 800;
   const vh = _viewport.clientHeight || 800;
-
-  // When fitting window, if the entire column can fit within the viewport height,
-  // the widest image in the entire column is in the viewport and wins.
-  if ((vh / colHeight) >= 0.05 && (fitMode === 'window' || fitMode === 'window-if-larger')) {
-    if (_layout.widestWidth && _layout.widestWidth > maxW) {
-      maxW = _layout.widestWidth;
-    }
-  }
 
   const scaleX = vw / maxW;
   const scaleY = vh / colHeight;
@@ -608,9 +559,6 @@ function _applyFitMode(mode, targetImgIdx = null) {
 
   targetScale = Math.min(32, Math.max(0.05, targetScale));
 
-  const resetPanX = fitMode !== 'none';
-  const targetTx = resetPanX ? 0 : _viewportState.getTx();
-
   const anchorIdx = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
   _anchorHoldover = anchorIdx;
   _anchorHoldoverScale = targetScale;
@@ -618,14 +566,22 @@ function _applyFitMode(mode, targetImgIdx = null) {
   _viewportState.zoomTo(targetScale, vw / 2, vh / 2);
   const colH = (_layout.totalHeight || 0) * targetScale;
 
-  if (colH <= vh) {
-    _viewportState.panTo(targetTx, (colH - vh) / 2);
-  } else if (anchorIdx === 0) {
-    _viewportState.panTo(targetTx, (colH - vh) / 2);
-  } else if (anchorIdx === _imageIndex.length - 1) {
-    _viewportState.panTo(targetTx, -(colH - vh) / 2);
-  } else if (_layout.offsets[anchorIdx]) {
-    _centerColumnY(_layout.offsets[anchorIdx].top + _layout.offsets[anchorIdx].height / 2, targetTx);
+  if (targetImgIdx === null) {
+    if (colH <= vh) {
+      _viewportState.panTo(0, (colH - vh) / 2);
+    } else {
+      _viewportState.panTo(0, _viewportState.getTy());
+    }
+  } else {
+    if (colH <= vh) {
+      _viewportState.panTo(0, (colH - vh) / 2);
+    } else if (targetImgIdx === 0) {
+      _viewportState.panTo(0, (colH - vh) / 2);
+    } else if (targetImgIdx === _imageIndex.length - 1) {
+      _viewportState.panTo(0, -(colH - vh) / 2);
+    } else if (_layout.offsets[targetImgIdx]) {
+      _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
+    }
   }
 
   _strip.style.transform = _viewportState.getTransform();
