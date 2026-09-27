@@ -1,16 +1,12 @@
 import { Core } from '../core.js';
 import { activeKeys } from '../shortcuts.js';
 import { MOUSE_BUTTON_NAMES } from '../services/keyCombo.js';
-import { isManhwaStripActive, handleViewportClick } from './manhwaStrip.js';
-
 export function createViewerGestures(viewportState) {
   let _isPanning = false;
   let _panStartX = 0;
   let _panStartY = 0;
   let _panOriginTx = 0;
   let _panOriginTy = 0;
-  let _mouseDownX = 0;
-  let _mouseDownY = 0;
   const _panButtonsDown = new Set();
 
   const PAN_BUTTONS = Object.fromEntries(
@@ -251,8 +247,6 @@ export function createViewerGestures(viewportState) {
   function _onMouseDown(e) {
     if (document.querySelector('#menubar .menu-item.open')) return;
     if (!_isMouseOverViewportNow()) return;
-    _mouseDownX = e.clientX;
-    _mouseDownY = e.clientY;
     const isPanKey = _isMousePanKey(e) || (e.button === 0 && _keyPanHeld(null));
     if (!isPanKey) return;
     e.preventDefault();
@@ -279,13 +273,8 @@ export function createViewerGestures(viewportState) {
   }
 
   function _onMouseUp(e) {
-    const moveDist = Math.hypot(e.clientX - _mouseDownX, e.clientY - _mouseDownY);
     _panButtonsDown.delete(e.button);
     if (_isPanning && !_panActive()) _stopPan();
-
-    if (e.button === 0 && moveDist < 5 && isManhwaStripActive()) {
-      handleViewportClick(e.clientX, e.clientY);
-    }
   }
 
   const viewport = document.getElementById('viewport');

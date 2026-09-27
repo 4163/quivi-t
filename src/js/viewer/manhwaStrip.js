@@ -11,7 +11,8 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { thumbnailCache } from '../filepanel/filePanel.js';
-import { computeColumnOffsets, findAnchorIndex, computeWindowRange } from '../services/viewerMath.js';
+import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale } from '../services/viewerMath.js';
+import { Statusbar } from '../menubar/statusbar.js';
 
 /** Max img nodes kept in the free pool after eviction. */
 const STRIP_POOL_CAP = 10;
@@ -64,6 +65,7 @@ let _lastArchiveEncryption = null;
 let _anchorUpdateInProgress = false;
 let _settleTimer = null;
 let _lastTy = null;
+let _lastScale = null;
 
 function _buildSrc(entry, state) {
   if (state.mode === 'archive') {
@@ -144,23 +146,34 @@ function _buildSlots() {
   }
 }
 
-/** Unzoomed px each slot after the first shifts up from the CSS seam overlap. */
-const STRIP_SEAM_OVERLAP_PX = 1;
+/** Zoom scale the column offsets were last built with. */
+let _layoutScale = null;
 
 function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
-  _layout = computeColumnOffsets(_imageIndex, 1, STRIP_SEAM_OVERLAP_PX);
+  const scale = _viewportState?.getScale() || 1;
+  _layoutScale = scale;
+  const vpH = _viewport?.clientHeight || 800;
+  const oldTy = _viewportState?.getTy() || 0;
+  const oldMaxTy = ((_layout.totalHeight || 0) * scale - vpH) / 2;
+  const wasAtTop = oldTy >= oldMaxTy - 0.5;
+  const wasAtBottom = oldTy <= -oldMaxTy + 0.5;
+
+  _layout = computeColumnOffsets(_imageIndex, 1, seamOverlapForScale(scale));
   if (_viewportState) {
     _viewportState.setDimensions(_layout.widestWidth, _layout.totalHeight);
-    const vpH = _viewport?.clientHeight || 800;
-    const scale = _viewportState.getScale() || 1;
     const colH = (_layout.totalHeight || 0) * scale;
-    if (colH <= vpH) {
-      _viewportState.panTo(_viewportState.getTx(), (colH - vpH) / 2);
-    } else if (anchorImgIdxToHold !== null && _layout.offsets[anchorImgIdxToHold]) {
-      const newAnchorTop = _layout.offsets[anchorImgIdxToHold].top;
-      const deltaY = newAnchorTop - oldAnchorTop;
-      if (deltaY !== 0) {
-        _viewportState.panBy(0, -deltaY * scale);
+    if (anchorImgIdxToHold !== null && _layout.offsets[anchorImgIdxToHold]) {
+      if (wasAtTop && !wasAtBottom) {
+        // View was end-pinned: re-pin the end instead of holding the anchor.
+        _viewportState.panTo(_viewportState.getTx(), (colH - vpH) / 2);
+      } else if (wasAtBottom && !wasAtTop) {
+        _viewportState.panTo(_viewportState.getTx(), -(colH - vpH) / 2);
+      } else {
+        const newAnchorTop = _layout.offsets[anchorImgIdxToHold].top;
+        const deltaY = newAnchorTop - oldAnchorTop;
+        if (deltaY !== 0) {
+          _viewportState.panBy(0, -deltaY * scale);
+        }
       }
     }
     _strip.style.transform = _viewportState.getTransform();
@@ -215,6 +228,11 @@ function _updateWindow() {
 
   const isPanningDown = deltaTy < 0;
   const isPanningUp = deltaTy > 0;
+
+  // Zooming in reframes the window: warm both sides regardless of direction.
+  const zoomedIn = _lastScale !== null && scale > _lastScale + 1e-9;
+  _lastScale = scale;
+  const prefetchDir = zoomedIn ? 0 : isPanningDown ? 1 : isPanningUp ? -1 : 0;
 
   const baseBufferH = (vpH * STRIP_BUFFER_VIEWPORTS) / scale;
   const aheadBufferH = (vpH * STRIP_AHEAD_BUFFER_VIEWPORTS) / scale;
@@ -277,19 +295,36 @@ function _updateWindow() {
 
   // Warm fetch plus decode for items just beyond the window so pixels arrive
   // before the viewport does. Off-DOM preloads, no nodes consumed.
-  _prefetchAhead(startIndex, endIndex, isPanningDown ? 1 : isPanningUp ? -1 : 0, state);
+  _prefetchAhead(startIndex, endIndex, prefetchDir, state);
 
-  // Derive center anchor unified with visible range.
-  const { startIndex: visStart, endIndex: visEnd } = _computeVisibleRange();
+  // Anchor follows view movement, not layout drift. Recompute only when the
+  // view (ty, scale, viewport height) moved; decode corrections alone keep it.
+  // An explicit center request holds through decodes until zoom reframes.
+  const anchorViewChanged = _lastAnchorTy === null || _lastAnchorScale === null || _lastAnchorVph === null ||
+    ty !== _lastAnchorTy || scale !== _lastAnchorScale || vpH !== _lastAnchorVph;
   let newAnchor = -1;
-  if (visStart !== -1 && visEnd !== -1) {
-    if (visStart === visEnd) {
-      newAnchor = visStart;
+  if (_anchorHoldover !== null && scale === _anchorHoldoverScale && _layout.offsets[_anchorHoldover]) {
+    newAnchor = _anchorHoldover;
+  } else {
+    if (_anchorHoldover !== null) _anchorHoldover = null;
+    if (anchorViewChanged) {
+      const { startIndex: visStart, endIndex: visEnd } = _computeVisibleRange();
+      if (visStart !== -1 && visEnd !== -1) {
+        if (visStart === visEnd) {
+          newAnchor = visStart;
+        } else {
+          const candidate = findAnchorIndex(_layout.offsets, centerColY);
+          newAnchor = Math.max(visStart, Math.min(visEnd, candidate));
+        }
+      }
     } else {
-      const candidate = findAnchorIndex(_layout.offsets, centerColY);
-      newAnchor = Math.max(visStart, Math.min(visEnd, candidate));
+      newAnchor = _anchorImgIdx;
     }
   }
+  _anchorHoldover = null;
+  _lastAnchorTy = ty;
+  _lastAnchorScale = scale;
+  _lastAnchorVph = vpH;
   if (newAnchor !== -1 && newAnchor !== _anchorImgIdx) {
     _anchorImgIdx = newAnchor;
     _scheduleSettle();
@@ -297,8 +332,10 @@ function _updateWindow() {
 }
 
 /** Items preloaded beyond the mount window, in pan direction. */
-const PREFETCH_AHEAD_COUNT = 3;
-const _prefetched = new Set();
+const PREFETCH_AHEAD_COUNT = 4;
+const PREFETCH_CONCURRENT_MAX = 3;
+/** imgIdx → off-DOM Image currently decoding ahead of the window. */
+const _prefetching = new Map();
 
 function _prefetchAhead(startIndex, endIndex, direction, state) {
   const targets = [];
@@ -313,16 +350,24 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
     }
   }
   for (const i of targets) {
+    if (_prefetching.size >= PREFETCH_CONCURRENT_MAX) break;
     const item = _imageIndex[i];
-    if (!item || item.isVideo || _mounted.has(i) || _prefetched.has(i)) continue;
-    _prefetched.add(i);
+    if (!item || item.isVideo || item.decoded || _mounted.has(i) || _prefetching.has(i)) continue;
     const pre = new Image();
     pre.decoding = 'async';
+    _prefetching.set(i, pre);
+    pre.onload = () => {
+      _prefetching.delete(i);
+      if (!_active) return;
+      const cur = _imageIndex[i];
+      if (!cur || cur.decoded || cur.isVideo) return;
+      // Record real dims before mount so slots, pins, and anchors use them.
+      _onItemDecoded(i, pre.naturalWidth, pre.naturalHeight);
+    };
+    pre.onerror = () => {
+      _prefetching.delete(i);
+    };
     pre.src = _buildSrc(item.entry, state);
-  }
-  // Forget entries that fell out of prefetch range so a later pass can retry.
-  if (_prefetched.size > PREFETCH_AHEAD_COUNT * 4) {
-    _prefetched.clear();
   }
 }
 
@@ -334,12 +379,34 @@ function _scheduleSettle() {
   }, 100);
 }
 
+/** Last selection and visible range pushed out; settle stays quiet otherwise. */
+let _lastSyncedListIndex = null;
+let _lastVisSig = null;
+
 function _syncAnchorToCore() {
   const anchorItem = _imageIndex[_anchorImgIdx];
   if (!anchorItem) return;
-  _anchorUpdateInProgress = true;
-  Core.selectIndex(anchorItem.listIndex);
-  _anchorUpdateInProgress = false;
+  const scale = _viewportState?.getScale() || 0;
+  const w = anchorItem.naturalWidth || 0;
+  const h = anchorItem.naturalHeight || 0;
+  // Scale 1 reads 100%. Updates even when selection is unchanged (zoom).
+  Statusbar.setImage({
+    filename: anchorItem.entry?.name || '',
+    dims: anchorItem.decoded && w > 0 && h > 0 ? `${w} × ${h}` : undefined,
+    zoom: scale || undefined,
+  });
+  const { startIndex, endIndex } = _computeVisibleRange();
+  const visSig = startIndex === -1 ? '' : `${startIndex}-${endIndex}`;
+  const anchorChanged = anchorItem.listIndex !== _lastSyncedListIndex;
+  const visChanged = visSig !== _lastVisSig;
+  _lastSyncedListIndex = anchorItem.listIndex;
+  _lastVisSig = visSig;
+  if (!anchorChanged && !visChanged) return;
+  if (anchorChanged) {
+    _anchorUpdateInProgress = true;
+    Core.selectIndex(anchorItem.listIndex);
+    _anchorUpdateInProgress = false;
+  }
   window.dispatchEvent(new CustomEvent('quivit-manhwa-settle'));
 }
 
@@ -355,34 +422,37 @@ export function getVisibleImageIndices() {
   return listIndices;
 }
 
+/** One-shot anchor request from explicit navigation, honored over re-derivation. */
+let _anchorHoldover = null;
+let _anchorHoldoverScale = 1;
+/** View params the anchor was last derived from; layout-only changes keep it. */
+let _lastAnchorTy = null;
+let _lastAnchorScale = null;
+let _lastAnchorVph = null;
+
 export function centerListItem(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
   _anchorImgIdx = mapped;
-  _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
+  const scale = _viewportState.getScale() || 1;
+  _anchorHoldover = mapped;
+  _anchorHoldoverScale = scale;
+  const vpH = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * scale;
+  if (mapped === 0) {
+    // First image pins to the top, never centers.
+    _viewportState.panTo(_viewportState.getTx(), (colH - vpH) / 2);
+  } else if (mapped === _imageIndex.length - 1) {
+    // Last image pins to the bottom, never centers.
+    _viewportState.panTo(_viewportState.getTx(), -(colH - vpH) / 2);
+  } else {
+    _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
+  }
+  _strip.style.transform = _viewportState.getTransform();
   _updateWindow();
   _scheduleSettle();
   return true;
-}
-
-export function handleViewportClick(clientX, clientY) {
-  if (!_active || !_viewport || !_viewportState || _imageIndex.length === 0 || !_layout.offsets.length) return false;
-  const vpRect = _viewport.getBoundingClientRect();
-  const scale = _viewportState.getScale() || 1;
-  const ty = _viewportState.getTy() || 0;
-  const vpH = vpRect.height || 800;
-  const yInVp = clientY - vpRect.top;
-
-  const centerColY = (_layout.totalHeight / 2) - (ty / scale);
-  const colY = centerColY + (yInVp - vpH / 2) / scale;
-
-  const clickedImgIdx = findAnchorIndex(_layout.offsets, colY);
-  if (clickedImgIdx === -1) return false;
-  const item = _imageIndex[clickedImgIdx];
-  if (!item) return false;
-
-  return centerListItem(item.listIndex);
 }
 
 export function getFirstImageIndex() {
@@ -445,13 +515,6 @@ function _centerColumnY(colY) {
   _strip.style.transform = _viewportState.getTransform();
 }
 
-function _centerImage(imgIdx) {
-  const offsets = _layout.offsets[imgIdx];
-  if (!offsets) return false;
-  _centerColumnY(offsets.top + offsets.height / 2);
-  return true;
-}
-
 function _activate(state) {
   if (_active) return;
   _active = true;
@@ -465,6 +528,14 @@ function _activate(state) {
   _lastDirectory = state.directory;
   _lastArchiveEncryption = state.archiveEncryption;
   _lastTy = null;
+  _lastScale = null;
+  _anchorHoldover = null;
+  _lastAnchorTy = null;
+  _lastAnchorScale = null;
+  _lastAnchorVph = null;
+  _lastSyncedListIndex = null;
+  _lastVisSig = null;
+  _layoutScale = null;
 
   if (_strip) {
     _strip.dataset.scaling = state.scalingMode || 'bilinear';
@@ -504,6 +575,14 @@ function _deactivate() {
   _viewport.classList.remove('manhwa-active');
 
   _lastTy = null;
+  _lastScale = null;
+  _anchorHoldover = null;
+  _lastAnchorTy = null;
+  _lastAnchorScale = null;
+  _lastAnchorVph = null;
+  _lastSyncedListIndex = null;
+  _lastVisSig = null;
+  _layoutScale = null;
 
   if (_settleTimer) {
     clearTimeout(_settleTimer);
@@ -518,7 +597,7 @@ function _deactivate() {
   }
   _mounted.clear();
   _slots.clear();
-  _prefetched.clear();
+  _prefetching.clear();
   if (_strip) _strip.replaceChildren();
 
   _imageIndex = [];
@@ -564,7 +643,7 @@ function _onStateChange(state) {
     }
     _mounted.clear();
     _slots.clear();
-    _prefetched.clear();
+    _prefetching.clear();
     if (_strip) _strip.replaceChildren();
 
     _imageIndex = isLocked ? [] : _buildImageIndex(state.list || []);
@@ -574,6 +653,14 @@ function _onStateChange(state) {
     _lastDirectory = state.directory;
     _lastArchiveEncryption = state.archiveEncryption;
     _lastTy = null;
+    _lastScale = null;
+    _anchorHoldover = null;
+    _lastAnchorTy = null;
+    _lastAnchorScale = null;
+    _lastAnchorVph = null;
+    _lastSyncedListIndex = null;
+    _lastVisSig = null;
+    _layoutScale = null;
 
     _buildSlots();
     _updateLayout();
@@ -602,16 +689,11 @@ function _onStateChange(state) {
     return;
   }
 
-  // External index change (panel click/keyboard) — re-anchor.
+  // External index change (panel click/keyboard) — center it like any request.
   if (!_anchorUpdateInProgress && state.index >= 0) {
     const mapped = _listToImgIdx.get(state.index);
     if (mapped !== undefined && mapped !== _anchorImgIdx) {
-      _anchorImgIdx = mapped;
-      if (_viewportState && _layout.offsets[mapped]) {
-        _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
-        _updateWindow();
-        _scheduleSettle();
-      }
+      centerListItem(state.index);
     }
   }
 }
@@ -621,8 +703,13 @@ export function setViewportState(vpState) {
   _viewportState = vpState;
   _viewportState.subscribe(() => {
     if (!_active || !_strip) return;
+    const scale = _viewportState.getScale() || 1;
+    if (_layoutScale === null || _layoutScale !== scale) {
+      // Seam overlap depends on zoom: rebuild offsets before positioning.
+      _updateLayout(_anchorImgIdx, _layout.offsets[_anchorImgIdx]?.top || 0);
+    }
     _strip.style.transform = _viewportState.getTransform();
-    _strip.style.setProperty('--zoom-scale', _viewportState.getScale() || 1);
+    _strip.style.setProperty('--zoom-scale', scale);
     _updateWindow();
     _scheduleSettle();
   });
@@ -641,6 +728,10 @@ export function initManhwaStrip(viewportState) {
 
   const ro = new ResizeObserver(() => {
     if (!_active || !_viewportState) return;
+    const scale = _viewportState.getScale() || 1;
+    if (_layoutScale === null || _layoutScale !== scale) {
+      _updateLayout(_anchorImgIdx, _layout.offsets[_anchorImgIdx]?.top || 0);
+    }
     _strip.style.transform = _viewportState.getTransform();
     _updateWindow();
     _scheduleSettle();

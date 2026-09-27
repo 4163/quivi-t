@@ -7,6 +7,7 @@ import {
   computeStripWidth,
   computeColumnOffsets,
   computeColumnLayout,
+  seamOverlapForScale,
   findAnchorIndex,
   computeWindowRange
 } from '../src/js/services/viewerMath.js';
@@ -333,6 +334,14 @@ describe('viewerMath', () => {
 
     it('aliases computeColumnLayout to computeColumnOffsets', () => {
       assert.equal(computeColumnLayout, computeColumnOffsets);
+    });
+
+    it('mirrors the CSS seam overlap for any zoom scale', () => {
+      assert.equal(seamOverlapForScale(1), 1);
+      assert.equal(seamOverlapForScale(2), 1);
+      assert.equal(seamOverlapForScale(0.5), 2);
+      assert.equal(seamOverlapForScale(0.25), 4);
+      assert.equal(seamOverlapForScale(0), 1);
     });
 
     it('shifts offsets up by the seam overlap per boundary', () => {

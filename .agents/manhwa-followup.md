@@ -12,13 +12,13 @@ Lanczos and filters stay out. They get a separate doc pass later. Nothing below 
 
 The first slot top equals the column top and the last slot bottom equals the column end. When the column is shorter than the viewport it pins to the top instead of centering.
 
-- [x] Remove the top and bottom empty space in `src/js/viewer/manhwaStrip.js` (`_buildSlots`, `_updateLayout`) and `src/css/main.css`. Short columns rest top-pinned but keep the symmetric clamp so 1 to 3 image galleries still pan with viewport edges as bounds. Accept: the first image top edge sits at the column top with no gap, same at the bottom, and a short gallery pins top with empty space only below it.
+- [x] Remove the top and bottom empty space in `src/js/viewer/manhwaStrip.js` (`_buildSlots`, `_updateLayout`) and `src/css/main.css`. Short columns rest top-pinned but keep the symmetric clamp so 1 to 3 image galleries still pan with viewport edges as bounds. Relayout re-pins an end-pinned view instead of holding the anchor. Offsets subtract the seam overlap per boundary via `seamOverlapForScale`, which mirrors the CSS `min(-1px, -1px/zoom)` rule, and the layout rebuilds on zoom change. Accept: the first image top edge sits at the column top with no gap, same at the bottom, and a short gallery pins top with empty space only below it.
 
 ## B. Buffer loads before the viewport edge
 
 Images must finish loading before they enter view. The fixed pixel buffer misses at some zooms and pan speeds.
 
-- [x] Size the window buffer as a named multiple of viewport height on each side instead of the fixed `STRIP_BUFFER_PX` in `src/js/viewer/manhwaStrip.js`, and mount ahead in the pan direction in `_updateWindow`. A prefetch ring warms fetch plus decode for items past the window edge in the direction of travel. Accept: steady panning in either direction never reveals an unloaded slot.
+- [x] Size the window buffer as a named multiple of viewport height on each side instead of the fixed `STRIP_BUFFER_PX` in `src/js/viewer/manhwaStrip.js`, and mount ahead in the pan direction in `_updateWindow`. A prefetch ring decodes items past the window edge ahead of time and records real dims through `_onItemDecoded`, both sides on zoom-in, so pins and anchors use real numbers before mount. Accept: steady panning in either direction never reveals an unloaded slot.
 
 ## C. Zoom refreshes the highlights
 
@@ -30,13 +30,13 @@ Anchor and visible set must recompute on zoom settle and on relayout, even when 
 
 A single image in view must highlight exactly one row. The anchor and the visible set must share one range computation with exclusive boundaries.
 
-- [x] Unify `getVisibleImageIndices` and the anchor path in `src/js/viewer/manhwaStrip.js:265-283` on `computeWindowRange` in `src/js/services/viewerMath.js:103-125`, and add a mocha case for a single visible item. Accept: one image in view highlights one row, never two.
+- [x] Unify `getVisibleImageIndices` and the anchor path in `src/js/viewer/manhwaStrip.js` on `computeWindowRange` in `src/js/services/viewerMath.js:103-125`, and add a mocha case for a single visible item. The anchor recomputes only when the view moves, and explicit centers hold through decode corrections. Accept: one image in view highlights one row, never two.
 
-## E. Viewport click centers the image
+## E. Viewport click stays a plain click (removed)
 
-Clicking an item in the strip pans the column to center that image vertically. Drags keep panning.
+Click-to-center behaved zoned and added nothing over drag panning plus file list selection, so it was stripped out per YAGNI. A viewport click now does nothing in the strip. Drags pan as before.
 
-- [x] Add a click path in `src/js/viewer/manhwaStrip.js` (or `src/js/viewer/viewerGestures.js`) with a small movement threshold separating click from drag, reusing `centerListItem`. All centering goes through `_centerColumnY`, which scales the offset by zoom. Accept: a clean click centers the clicked image, a drag pans with no jump at release.
+- [x] Remove the click branch in `src/js/viewer/viewerGestures.js` and the `handleViewportClick` export in `src/js/viewer/manhwaStrip.js`. Accept: clicking the viewport moves nothing, drag pans with no jump at release.
 
 ## F. Next, previous, Home, and End center images
 
@@ -78,3 +78,10 @@ The strip bypasses both code paths. `_buildSrc` uses the sync builders, and `fsU
 
 - [ ] Route strip ICO entries through `get_ico_frames` and `get_archive_ico_frames` like `buildFileSrc` and `buildArchiveEntrySrc` in `src/js/fsUtils.js:260-292`, swapping the slot src when the invoke resolves and guarding against eviction races. Accept: `.ico` in the strip shows the identical spritesheet to single view, disk and archive.
 - [ ] Detect non-intrinsic SVGs in the strip decode path with the same browser-default check as `src/js/viewer/viewerPipelines.js:470-472`, fall back to the 1000x1000 slot from `_applySvgBounds` in `src/js/viewer/viewerRender.js:264-296`, and cap static at 2048 and animated at 512 per edge. Accept: sizeless SVGs lay out at fallback size with no 150px slivers, caps hold.
+
+## L. Zoom readout and settle loop
+
+The statusbar zoom indicator stayed frozen because the single-image `setImage` path is guarded off in the strip. Separately, every settle re-fired `Core.selectIndex` unconditionally, which re-notified and re-armed the next settle in a perpetual 100ms loop.
+
+- [x] Report filename, dims, and zoom from the strip settle path in `src/js/viewer/manhwaStrip.js` (`_syncAnchorToCore` via `Statusbar.setImage`). Scale 1 reads 100%. Accept: zooming in the strip moves the statusbar percentage live with no pan needed.
+- [x] Push selection only when the anchor changed and the settle event when selection or visible range changed in `_syncAnchorToCore`. Accept: an idle strip fires no `selectIndex` traffic.

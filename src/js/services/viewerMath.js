@@ -75,6 +75,17 @@ export function computeColumnOffsets(items = [], zoom = 1, seamOverlapPx = 0) {
 export const computeColumnLayout = computeColumnOffsets;
 
 /**
+ * Inter-slot overlap in unzoomed px for a given zoom scale.
+ * Mirrors the strip CSS rule `margin-top: min(-1px, calc(-1px / zoom))`:
+ * one layout px at or above 100%, growing below so the visual overlap
+ * stays one screen px. Offsets must use this or pins drift on zoom-out.
+ */
+export function seamOverlapForScale(scale) {
+  const s = scale || 1;
+  return s >= 1 ? 1 : 1 / s;
+}
+
+/**
  * Find index of item containing centerColY.
  * Clamps to 0 or last index when outside bounds.
  */

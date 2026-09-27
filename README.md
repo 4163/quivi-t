@@ -23,7 +23,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Favorites**: Save images, folders and archives into named favorite lists for future use.
 - **Web Import**: Import manga and galleries from supported sites for offline reading (see [Supported sites](#supported-sites)).
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Mod`+wheel. Cursor auto-hides after inactivity over the viewport.
-- **Manga Spread Mode**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
+- **Manga Spread**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
 - **Scaling**: Choose from Pixelated, Bilinear, and Lanczos scaling.
 - **Filters**: WebGL filters for Anime4K (Mode A Fast/HQ), CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or Scanlines.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
