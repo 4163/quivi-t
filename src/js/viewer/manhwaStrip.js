@@ -227,14 +227,15 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
           scale,
           viewportHeight: vpH,
         });
-        _viewportState.panTo(0, targetTy);
+        _viewportState.panTo(_viewportState.getTx(), targetTy);
       } else {
+        const curTx = _viewportState.getTx();
         if (colH <= vpH || _anchorHoldover === 0) {
-          _viewportState.panTo(0, (colH - vpH) / 2);
+          _viewportState.panTo(curTx, (colH - vpH) / 2);
         } else if (_anchorHoldover === _imageIndex.length - 1) {
-          _viewportState.panTo(0, -(colH - vpH) / 2);
+          _viewportState.panTo(curTx, -(colH - vpH) / 2);
         } else {
-          _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2, 0);
+          _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2);
         }
       }
     } else if (anchorImgIdxToHold !== null && _layout.offsets[anchorImgIdxToHold]) {
@@ -684,7 +685,7 @@ export function alignListItemTop(listIndex) {
   const scale = _viewportState.getScale() || 1;
   _anchorHoldoverScale = scale;
 
-  _topAlignColumnY(_layout.offsets[mapped].top, 0);
+  _topAlignColumnY(_layout.offsets[mapped].top);
 
   _strip.style.transform = _viewportState.getTransform();
   _updateGrillAngles();
@@ -705,14 +706,15 @@ export function centerListItem(listIndex) {
 
   const colH = (_layout.totalHeight || 0) * scale;
   const vh = _viewport?.clientHeight || 800;
+  const curTx = _viewportState.getTx();
   if (colH <= vh) {
-    _viewportState.panTo(0, (colH - vh) / 2);
+    _viewportState.panTo(curTx, (colH - vh) / 2);
   } else if (mapped === 0) {
-    _viewportState.panTo(0, (colH - vh) / 2);
+    _viewportState.panTo(curTx, (colH - vh) / 2);
   } else if (mapped === _imageIndex.length - 1) {
-    _viewportState.panTo(0, -(colH - vh) / 2);
+    _viewportState.panTo(curTx, -(colH - vh) / 2);
   } else if (_layout.offsets[mapped]) {
-    _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2, 0);
+    _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
   }
 
   _strip.style.transform = _viewportState.getTransform();
