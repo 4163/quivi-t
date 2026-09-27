@@ -11,7 +11,7 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { thumbnailCache } from '../filepanel/filePanel.js';
-import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeSlotHue } from '../services/viewerMath.js';
+import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeSlotHue, computeStripFitScale } from '../services/viewerMath.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 /** Max img nodes kept in the free pool after eviction. */
@@ -617,40 +617,23 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
   const fitMode = mode || Core.getState()?.fitMode || 'none';
 
   const maxW = (_layout.widestWidth && _layout.widestWidth > 0) ? _layout.widestWidth : DEFAULT_ESTIMATED_WIDTH;
-  const colHeight = (_layout.totalHeight && _layout.totalHeight > 0) ? _layout.totalHeight : DEFAULT_ESTIMATED_HEIGHT;
   const vw = _viewport.clientWidth || 800;
   const vh = _viewport.clientHeight || 800;
 
-  const scaleX = vw / maxW;
-  const scaleY = vh / colHeight;
-
-  let targetScale = 1;
-  switch (fitMode) {
-    case 'none':
-      targetScale = 1;
-      break;
-    case 'width':
-      targetScale = scaleX;
-      break;
-    case 'width-if-larger':
-      targetScale = Math.min(scaleX, 1);
-      break;
-    case 'height':
-      targetScale = scaleY;
-      break;
-    case 'height-if-larger':
-      targetScale = Math.min(scaleY, 1);
-      break;
-    case 'window':
-      targetScale = Math.min(scaleX, scaleY);
-      break;
-    case 'window-if-larger':
-    default:
-      targetScale = Math.min(scaleX, scaleY, 1);
-      break;
+  let rawSumH = 0;
+  for (let i = 0; i < _imageIndex.length; i++) {
+    const item = _imageIndex[i];
+    rawSumH += typeof item === 'number' ? item : ((item && (item.naturalHeight ?? item.height)) || DEFAULT_ESTIMATED_HEIGHT);
   }
 
-  targetScale = Math.min(32, Math.max(0.05, targetScale));
+  const targetScale = computeStripFitScale({
+    fitMode,
+    vw,
+    vh,
+    maxW,
+    rawSumH,
+    itemCount: _imageIndex.length,
+  });
 
   const anchorIdx = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
   _anchorHoldover = anchorIdx;
@@ -661,7 +644,7 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
   const colH = (_layout.totalHeight || 0) * targetScale;
 
   if (targetImgIdx === null) {
-    if (colH <= vh) {
+    if (colH <= vh + 0.5) {
       _viewportState.panTo(0, (colH - vh) / 2);
     } else {
       _viewportState.panTo(0, _viewportState.getTy());
@@ -669,11 +652,11 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
   } else if (alignTop) {
     if (_layout.offsets[targetImgIdx]) {
       _topAlignColumnY(_layout.offsets[targetImgIdx].top, 0);
-    } else if (colH <= vh) {
+    } else if (colH <= vh + 0.5) {
       _viewportState.panTo(0, (colH - vh) / 2);
     }
   } else {
-    if (colH <= vh) {
+    if (colH <= vh + 0.5) {
       _viewportState.panTo(0, (colH - vh) / 2);
     } else if (targetImgIdx === 0) {
       _viewportState.panTo(0, (colH - vh) / 2);

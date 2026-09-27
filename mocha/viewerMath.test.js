@@ -11,7 +11,8 @@ import {
   findAnchorIndex,
   computeWindowRange,
   computeTopAlignTy,
-  computeSlotHue
+  computeSlotHue,
+  computeStripFitScale
 } from '../src/js/services/viewerMath.js';
 
 describe('viewerMath', () => {
@@ -594,6 +595,60 @@ describe('viewerMath', () => {
     it('handles zero or negative total gracefully without NaN', () => {
       assert.equal(computeSlotHue(0, 0), 'hsl(0, 80%, 45%)');
       assert.equal(computeSlotHue(3, -5), 'hsl(0, 80%, 45%)');
+    });
+  });
+
+  describe('computeStripFitScale', () => {
+    it('calculates scaleY matching viewport height with seam overlap on first call', () => {
+      const items = Array.from({ length: 10 }, () => ({ naturalHeight: 1000, naturalWidth: 800 }));
+      const rawSumH = 10 * 1000;
+      const vh = 800;
+      const scale = computeStripFitScale({
+        fitMode: 'height',
+        vw: 1000,
+        vh,
+        maxW: 800,
+        rawSumH,
+        itemCount: items.length,
+      });
+
+      const seam = seamOverlapForScale(scale);
+      const layout = computeColumnOffsets(items, 1, seam);
+      const visualH = layout.totalHeight * scale;
+
+      assert.ok(Math.abs(visualH - vh) < 1e-9, `Visual height ${visualH} did not match viewport ${vh}`);
+    });
+
+    it('handles short strips that fit within viewport at scale 1 or larger', () => {
+      const items = [{ naturalHeight: 300, naturalWidth: 400 }, { naturalHeight: 300, naturalWidth: 400 }];
+      const rawSumH = 600;
+      const vh = 800;
+      const scale = computeStripFitScale({
+        fitMode: 'height',
+        vw: 1000,
+        vh,
+        maxW: 400,
+        rawSumH,
+        itemCount: items.length,
+      });
+
+      assert.ok(scale > 1);
+      const seam = seamOverlapForScale(scale);
+      const layout = computeColumnOffsets(items, 1, seam);
+      const visualH = layout.totalHeight * scale;
+      assert.ok(Math.abs(visualH - vh) < 1e-9);
+    });
+
+    it('handles window and window-if-larger correctly', () => {
+      const scaleWindow = computeStripFitScale({
+        fitMode: 'window',
+        vw: 600,
+        vh: 800,
+        maxW: 800,
+        rawSumH: 6000,
+        itemCount: 6,
+      });
+      assert.equal(scaleWindow, (800 + 5) / 6000);
     });
   });
 });

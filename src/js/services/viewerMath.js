@@ -495,3 +495,58 @@ export function invertViewport(px, py, geom, naturalW, naturalH) {
     y: ly + (naturalH / 2)
   };
 }
+
+/**
+ * Compute the zoom scale for a given fit mode in manhwa strip view.
+ * Accounts for CSS inter-slot seam overlaps (which expand to 1/scale at zoom < 1)
+ * so height and window fit modes match the viewport without bottom gaps.
+ */
+export function computeStripFitScale({
+  fitMode = 'none',
+  vw = 800,
+  vh = 800,
+  maxW = 1000,
+  rawSumH = 0,
+  itemCount = 0,
+}) {
+  const numSeams = Math.max(0, itemCount - 1);
+  const scaleX = maxW > 0 ? vw / maxW : 1;
+
+  let scaleY = 1;
+  if (rawSumH > 0) {
+    if (rawSumH - numSeams <= vh) {
+      scaleY = (rawSumH - numSeams > 0) ? (vh / (rawSumH - numSeams)) : 1;
+    } else {
+      scaleY = (vh + numSeams) / rawSumH;
+    }
+  }
+
+  let targetScale = 1;
+  switch (fitMode) {
+    case 'none':
+      targetScale = 1;
+      break;
+    case 'width':
+      targetScale = scaleX;
+      break;
+    case 'width-if-larger':
+      targetScale = Math.min(scaleX, 1);
+      break;
+    case 'height':
+      targetScale = scaleY;
+      break;
+    case 'height-if-larger':
+      targetScale = Math.min(scaleY, 1);
+      break;
+    case 'window':
+      targetScale = Math.min(scaleX, scaleY);
+      break;
+    case 'window-if-larger':
+    default:
+      targetScale = Math.min(scaleX, scaleY, 1);
+      break;
+  }
+
+  return Math.min(32, Math.max(0.05, targetScale));
+}
+
