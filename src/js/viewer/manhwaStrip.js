@@ -11,7 +11,7 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { thumbnailCache } from '../filepanel/filePanel.js';
-import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale } from '../services/viewerMath.js';
+import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeSlotHue } from '../services/viewerMath.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 /** Max img nodes kept in the free pool after eviction. */
@@ -143,6 +143,7 @@ function _releaseNode(img) {
   img.removeAttribute('src');
   img.removeAttribute('data-list-index');
   img.removeAttribute('data-img-idx');
+  img.removeAttribute('style');
   if (_freePool.length < STRIP_POOL_CAP) {
     _freePool.push(img);
   }
@@ -154,7 +155,8 @@ function _buildSlots() {
   _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
   _slots.clear();
 
-  for (let i = 0; i < _imageIndex.length; i++) {
+  const total = _imageIndex.length;
+  for (let i = 0; i < total; i++) {
     const item = _imageIndex[i];
     const slot = document.createElement('div');
     slot.className = 'manhwa-slot';
@@ -172,6 +174,11 @@ function _buildSlots() {
     // the widest mounted image never shrinks the column or clips the grill.
     slot.style.width = `${item.naturalWidth || defW}px`;
 
+    const backdrop = document.createElement('div');
+    backdrop.className = 'manhwa-slot-backdrop';
+    slot.style.setProperty('--slot-backdrop-bg', computeSlotHue(i, total));
+    slot.appendChild(backdrop);
+
     if (item.isVideo) {
       const ph = document.createElement('div');
       ph.className = 'manhwa-video-placeholder';
@@ -184,6 +191,13 @@ function _buildSlots() {
   }
 }
 
+function _updateGrillAngles() {
+  if (!_strip || !_viewportState) return;
+  const grillAngle = _viewportState.getGrillAngle();
+  _strip.style.setProperty('--grill-angle', grillAngle);
+  _strip.style.setProperty('--slot-backdrop-angle', grillAngle === '45deg' ? '-45deg' : '45deg');
+}
+
 /** Zoom scale the column offsets were last built with. */
 let _layoutScale = null;
 
@@ -191,16 +205,52 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
   const scale = _viewportState?.getScale() || 1;
   _layoutScale = scale;
   const vpH = _viewport?.clientHeight || 800;
+  const vw = _viewport?.clientWidth || 800;
   const oldTy = _viewportState?.getTy() || 0;
-  const oldMaxTy = ((_layout.totalHeight || 0) * scale - vpH) / 2;
+  const oldTotalH = _layout.totalHeight || 0;
+  const oldMaxTy = (oldTotalH * scale - vpH) / 2;
   const wasAtTop = oldTy >= oldMaxTy - 0.5;
   const wasAtBottom = oldTy <= -oldMaxTy + 0.5;
 
   _layout = computeColumnOffsets(_imageIndex, 1, seamOverlapForScale(scale));
   if (_viewportState) {
     _viewportState.setDimensions(_layout.widestWidth, _layout.totalHeight);
-    const colH = (_layout.totalHeight || 0) * scale;
-    if (anchorImgIdxToHold !== null && _layout.offsets[anchorImgIdxToHold]) {
+    const newTotalH = _layout.totalHeight || 0;
+    const deltaTotalH = newTotalH - oldTotalH;
+    const colH = newTotalH * scale;
+
+    if (_anchorHoldover !== null && _layout.offsets[_anchorHoldover]) {
+      const fitMode = Core.getState()?.fitMode || _lastFitMode || 'none';
+      const maxW = (_layout.widestWidth && _layout.widestWidth > 0) ? _layout.widestWidth : DEFAULT_ESTIMATED_WIDTH;
+      const colHeight = (newTotalH > 0) ? newTotalH : DEFAULT_ESTIMATED_HEIGHT;
+      let targetScale = scale;
+      if (fitMode === 'width') {
+        targetScale = vw / maxW;
+      } else if (fitMode === 'width-if-larger') {
+        targetScale = Math.min(vw / maxW, 1);
+      } else if (fitMode === 'height') {
+        targetScale = vpH / colHeight;
+      } else if (fitMode === 'height-if-larger') {
+        targetScale = Math.min(vpH / colHeight, 1);
+      } else if (fitMode === 'window') {
+        targetScale = Math.min(vw / maxW, vpH / colHeight);
+      } else if (fitMode === 'window-if-larger') {
+        targetScale = Math.min(vw / maxW, vpH / colHeight, 1);
+      }
+      targetScale = Math.min(32, Math.max(0.05, targetScale));
+      if (Math.abs(targetScale - scale) > 1e-4) {
+        _viewportState.zoomTo(targetScale, vw / 2, vpH / 2);
+        _strip.style.setProperty('--zoom-scale', targetScale);
+        _anchorHoldoverScale = targetScale;
+      }
+      const targetTy = computeTopAlignTy({
+        slotTop: _layout.offsets[_anchorHoldover].top,
+        totalHeight: newTotalH,
+        scale: targetScale,
+        viewportHeight: vpH,
+      });
+      _viewportState.panTo(0, targetTy);
+    } else if (anchorImgIdxToHold !== null && _layout.offsets[anchorImgIdxToHold]) {
       if (wasAtTop && !wasAtBottom) {
         // View was end-pinned: re-pin the end instead of holding the anchor.
         _viewportState.panTo(_viewportState.getTx(), (colH - vpH) / 2);
@@ -208,13 +258,13 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
         _viewportState.panTo(_viewportState.getTx(), -(colH - vpH) / 2);
       } else {
         const newAnchorTop = _layout.offsets[anchorImgIdxToHold].top;
-        const deltaY = newAnchorTop - oldAnchorTop;
-        if (deltaY !== 0) {
-          _viewportState.panBy(0, -deltaY * scale);
-        }
+        const deltaAnchorTop = newAnchorTop - oldAnchorTop;
+        const targetTy = oldTy + (deltaTotalH * scale) / 2 - deltaAnchorTop * scale;
+        _viewportState.panTo(_viewportState.getTx(), targetTy);
       }
     }
     _strip.style.transform = _viewportState.getTransform();
+    _updateGrillAngles();
   }
   _positionSlotGrill();
 }
@@ -440,7 +490,6 @@ function _updateWindow() {
       newAnchor = _anchorImgIdx;
     }
   }
-  _anchorHoldover = null;
   _lastAnchorTy = ty;
   _lastAnchorScale = scale;
   _lastAnchorVph = vpH;
@@ -520,6 +569,13 @@ let _lastSyncedListIndex = null;
 let _lastVisSig = null;
 
 function _syncAnchorToCore() {
+  if (_anchorHoldover !== null) {
+    const { startIndex: visStart, endIndex: visEnd } = _computeVisibleRange();
+    if (visStart !== -1 && visEnd !== -1) {
+      _anchorImgIdx = Math.max(visStart, Math.min(visEnd, _anchorHoldover));
+    }
+    _anchorHoldover = null;
+  }
   const anchorItem = _imageIndex[_anchorImgIdx];
   if (!anchorItem) return;
   const scale = _viewportState?.getScale() || 0;
@@ -566,7 +622,7 @@ let _lastAnchorTy = null;
 let _lastAnchorScale = null;
 let _lastAnchorVph = null;
 
-function _applyFitMode(mode, targetImgIdx = null) {
+function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
   if (!_active || !_viewportState || !_viewport || _imageIndex.length === 0) return;
   const fitMode = mode || Core.getState()?.fitMode || 'none';
 
@@ -619,6 +675,12 @@ function _applyFitMode(mode, targetImgIdx = null) {
     } else {
       _viewportState.panTo(0, _viewportState.getTy());
     }
+  } else if (alignTop) {
+    if (_layout.offsets[targetImgIdx]) {
+      _topAlignColumnY(_layout.offsets[targetImgIdx].top, 0);
+    } else if (colH <= vh) {
+      _viewportState.panTo(0, (colH - vh) / 2);
+    }
   } else {
     if (colH <= vh) {
       _viewportState.panTo(0, (colH - vh) / 2);
@@ -633,8 +695,21 @@ function _applyFitMode(mode, targetImgIdx = null) {
 
   _strip.style.transform = _viewportState.getTransform();
   _strip.style.setProperty('--zoom-scale', targetScale);
+  _updateGrillAngles();
   _updateWindow();
   _scheduleSettle();
+}
+
+export function alignListItemTop(listIndex) {
+  if (!_active || !_viewportState) return false;
+  const mapped = _listToImgIdx.get(listIndex);
+  if (mapped === undefined || !_layout.offsets[mapped]) return false;
+  _anchorImgIdx = mapped;
+  _anchorHoldover = mapped;
+
+  const fitMode = Core.getState()?.fitMode || _lastFitMode || 'none';
+  _applyFitMode(fitMode, mapped, true);
+  return true;
 }
 
 export function centerListItem(listIndex) {
@@ -663,9 +738,9 @@ export function navigateManhwa(delta) {
   const state = Core.getState();
   const mapped = _listToImgIdx.get(state.index);
   if (mapped !== undefined) {
-    return centerListItem(state.index);
+    return alignListItemTop(state.index);
   }
-  // Landed on a non-image entry: center the nearest image in travel direction.
+  // Landed on a non-image entry: pin the nearest image top in travel direction.
   const dir = delta >= 0 ? 1 : -1;
   let candidate = -1;
   for (let i = 0; i < _imageIndex.length; i++) {
@@ -675,7 +750,7 @@ export function navigateManhwa(delta) {
   }
   if (candidate === -1) return false;
   Core.selectIndex(candidate);
-  return centerListItem(candidate);
+  return alignListItemTop(candidate);
 }
 
 export function pageStrip(direction) {
@@ -695,6 +770,25 @@ export function pageStrip(direction) {
   _updateWindow();
   _scheduleSettle();
   return true;
+}
+
+/**
+ * Pan so column position colY (unzoomed) lands at the viewport top.
+ * ty is screen px, clamped to column ends. Preserves horizontal pan.
+ */
+function _topAlignColumnY(colY, targetTx = null) {
+  if (!_viewportState || !_layout.offsets.length) return;
+  const scale = _viewportState.getScale() || 1;
+  const vpH = _viewport?.clientHeight || 800;
+  const targetTy = computeTopAlignTy({
+    slotTop: colY,
+    totalHeight: _layout.totalHeight || 0,
+    scale,
+    viewportHeight: vpH,
+  });
+  const tx = targetTx !== null ? targetTx : _viewportState.getTx();
+  _viewportState.panTo(tx, targetTy);
+  _strip.style.transform = _viewportState.getTransform();
 }
 
 /**
@@ -735,6 +829,7 @@ function _activate(state) {
 
   if (_strip) {
     _strip.dataset.scaling = state.scalingMode || 'bilinear';
+    _updateGrillAngles();
   }
 
   _buildSlots();
@@ -874,11 +969,11 @@ function _onStateChange(state) {
     return;
   }
 
-  // External index change (panel click/keyboard) — center it like any request.
+  // External index change (panel click/keyboard) — top align it.
   if (!_anchorUpdateInProgress && state.index >= 0) {
     const mapped = _listToImgIdx.get(state.index);
     if (mapped !== undefined && mapped !== _anchorImgIdx) {
-      centerListItem(state.index);
+      alignListItemTop(state.index);
     }
   }
 }
@@ -895,6 +990,7 @@ export function setViewportState(vpState) {
     }
     _strip.style.transform = _viewportState.getTransform();
     _strip.style.setProperty('--zoom-scale', scale);
+    _updateGrillAngles();
     _updateWindow();
     _scheduleSettle();
   });
