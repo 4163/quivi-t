@@ -342,11 +342,16 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
   }
 
   function panTo(tx, ty) {
+    const prevTransformed = _userTransformed;
     _userTransformed = true;
+    const prevTx = _tx;
+    const prevTy = _ty;
     _tx = tx;
     _ty = ty;
     _clampPan();
-    notify();
+    if (!prevTransformed || _tx !== prevTx || _ty !== prevTy) {
+      notify();
+    }
   }
 
   function rotate(deltaDegrees) {
@@ -437,9 +442,11 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     return inverted ? '45deg' : '-45deg';
   }
 
-  function setDimensions(naturalW, naturalH) {
+  function setDimensions(naturalW, naturalH, nextTx, nextTy) {
     if (naturalW !== undefined) _naturalW = naturalW;
     if (naturalH !== undefined) _naturalH = naturalH;
+    if (nextTx !== undefined) _tx = nextTx;
+    if (nextTy !== undefined) _ty = nextTy;
     _clampPan();
     notify();
   }

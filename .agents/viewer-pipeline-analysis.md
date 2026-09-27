@@ -23,20 +23,24 @@ Validation comparison performed against `.agents/skills/validate-changes/SKILL.m
 - `src/index.html:267,273,276` defines filter canvases and `#viewer-bridge-layer`.
 - `src/css/main.css:1419-1461,1601-1612,1979-2043,2103-2112` defines viewport overflow, strip show rules, bridge frozen transform rules, filter opacity rules. Strip active hides `#viewer-img-wrapper` and `#viewer-bridge-layer`.
 
-## Issue 1. Hold pan shifts the active image a tiny amount
+## Issue 1. Hold pan jitters as buffer images decode and layout corrects
 
-Discrete path is clean. It runs `shortcuts.js:311-321` to `main.js:132-135` to `viewer.js:60` to `viewerMath.js:336-342`. One integer step, one notify, no cursor poll.
+Prior analysis blamed cursor poll versus mousemove. That was wrong. Your read fits the code. Buffer decodes rewrite layout mid drag and the anchor correction fights the live pan.
 
-Hold path is different. `viewerGestures.js:247-328` stores pan origin on mouse down or Space hold, then calls `viewerMath.js:344-350 panTo` on every mousemove at 260-272 and on every 16 ms Tauri cursor poll at 185-234. Poll coords come from `innerPosition/scaleFactor` conversion at 178-195.
+How the shift happens.
 
-Causes, ranked.
+- Slots start at 1200 px estimated height in `manhwaStrip.js:152-194`. Real pages run 2000 to 5000 px tall. The window math in `computeColumnOffsets` at `viewerMath.js:38-74` uses those estimates until decode.
+- When a buffer item decodes, `_onItemDecoded` at `manhwaStrip.js:264-321` writes real width and height into the item and slot, then calls `_updateLayout` with the current anchor plus old anchor top.
+- `_updateLayout` at `manhwaStrip.js:206-262` rebuilds every offset, then pans to hold the anchor with `targetTy = oldTy + deltaTotalH * scale / 2 - deltaAnchorTop * scale` at 252-255. It writes the strip transform at 258.
+- That `panTo` runs on top of the live hold pan from `viewerGestures.js:239-272` to `viewerMath.js:344-350`. The user moves ty one way. The correction moves ty back to keep the old anchor fixed on screen. The visible image kicks up or down by the correction delta.
+- Direction tracks scroll direction because it depends on whether the decoded item sits above or below the anchor. Panning down decodes items below first. Panning up decodes items above first. The sign of `deltaAnchorTop` flips with that.
+- Prefetch makes it worse. `_prefetchAhead` at `manhwaStrip.js:501-548` decodes ahead off DOM and calls the same `_onItemDecoded` path. So layout can shift even before the new slot mounts. Mount at `manhwaStrip.js:401-455` then appends into an already moved column.
+- Anchor can be stale mid hold. `_updateWindow` at `manhwaStrip.js:461-491` keeps the old anchor when only decode changed layout and ty did not move that tick. During a fast hold the next mousemove has already moved ty, but the pending decode still corrects against the old anchor top. The correction holds the wrong item still for one frame.
+- Width rewrite adds a second kick. First raster decode rewrites all undecided slot widths at `manhwaStrip.js:296-309`. That changes `widestWidth` and `setDimensions` at `manhwaStrip.js:217-220`, which feeds clamp in `viewerMath.js:214-228`. Small tx and clamp changes read as extra jitter during the same drag.
 
-1. Two writers fight during Space hold. Mousemove gives CSS client coords. Poll gives window coords divided by scale factor. Any origin or scale error quantizes to a fraction of a CSS px. Sign flips with direction, so up pan reads high and down pan reads low. Fix probe is gate poll when mousemove is fresh, or rebase pan start in the same coord space as poll.
-2. Clamp feedback runs every tick. `viewerMath.js:214-228` reads viewport from `getBoundingClientRect` in `viewer.js:7-19`. Values are fractional. `viewer.js:31-40` observer plus `manhwaStrip.js:1066-1078` subscribe call layout, window update, and settle on each notify. Discrete steps stay mid range. Hold values sit near clamp edges where a 0.25 px viewport wobble changes the result.
-3. Base image moves sync while filter layers lag one frame or more. `viewerRender.js:747-756` writes transform sync. `viewerPipelines.js:194-242,697-702` defers WebGL and Lanczos. During hold the stale layer shows through. This reads as vertical shimmer. Repro with Filter Off plus Bilinear isolates it. If jank vanishes there, this path dominates.
-4. Subpixel output with no rounding. `getTransform` at `viewerMath.js:449` emits float px in calc. Discrete steps are integers. Hold deltas are fractional. This does not cause shift alone. It makes cause 1 and cause 2 visible.
+Why discrete pan looks clean. One key step moves, one correction settles, then quiet. No overlap. Hold keeps the pointer moving while decodes land, so every decode lands mid drag and stacks. Wheel looks cleaner for the same reason. Notches are sparse, so corrections settle between steps.
 
-Confirm with logs of both coord streams during hold on 100, 125, and 150 percent scaling, plus ty before and after clamp, plus filter on versus off.
+Confirm by logging `imgIdx`, `oldH`, `newH`, `anchorImgIdx`, `oldAnchorTop`, `newAnchorTop`, `oldTy`, `targetTy` around `_onItemDecoded` during a hold. Expect targetTy jumps aligned with decode events, sign correlated with pan direction, no jump when all items in window are already decoded.
 
 ## Issue 2. Buffer exists but next image still pops from blank
 
@@ -97,9 +101,8 @@ Fix direction is throttled anchor sync during hold, for example every 100 to 150
 
 ## Confirm checklist
 
-- [ ] Log hold coords versus poll coords on 100, 125, 150 percent scaling. Accept when jank source is tied to one stream or clamp.
-- [ ] Log ty before and after clamp plus rect versus contentRect height during hold. Accept when edge clamp wobble is measured or ruled out.
-- [ ] Repro hold jank with filters off and on. Accept when filter lag is measured or ruled out.
+- [x] Log decode corrections during hold with imgIdx, oldH, newH, anchor, oldAnchorTop, newAnchorTop, oldTy, targetTy. Accept when jumps align with decodes and sign tracks direction.
+- [x] Repro hold through a fully decoded chapter versus an unread chapter. Accept when jitter vanishes once no first decodes remain.
 - [ ] Log strip window versus visible range per update. Accept when edge mounts with zero lead time are counted.
 - [ ] Time src set versus onload versus first paint by archive versus disk. Accept when blank duration is split by cache hit and miss.
 - [ ] Count prefetch start versus skip and duplicate URL fetch. Accept when double fetch rate is known.

@@ -4,18 +4,25 @@ import { createViewerGestures } from './viewerGestures.js';
 import { createViewerPipelines } from './viewerPipelines.js';
 import { isManhwaStripActive, initManhwaStrip } from './manhwaStrip.js';
 
+let _cachedViewport = { clientWidth: 1000, clientHeight: 1000, left: 0, top: 0 };
+
+function _updateCachedViewport() {
+  const vp = document.getElementById('viewport');
+  if (!vp) return _cachedViewport;
+  const rect = vp.getBoundingClientRect();
+  _cachedViewport = {
+    clientWidth: rect.width,
+    clientHeight: rect.height,
+    left: rect.left,
+    top: rect.top
+  };
+  return _cachedViewport;
+}
+
+_updateCachedViewport();
+
 const viewportState = createViewportState({
-  getViewport: () => {
-    const vp = document.getElementById('viewport');
-    if (!vp) return { clientWidth: 1000, clientHeight: 1000, left: 0, top: 0 };
-    const rect = vp.getBoundingClientRect();
-    return {
-      clientWidth: rect.width,
-      clientHeight: rect.height,
-      left: rect.left,
-      top: rect.top
-    };
-  }
+  getViewport: () => _cachedViewport
 });
 
 const pipelines = createViewerPipelines(viewportState);
@@ -32,6 +39,7 @@ if (vpEl) {
     for (const entry of entries) {
       const { width, height } = entry.contentRect;
       if (width > 0 && height > 0) {
+        _updateCachedViewport();
         viewportState.handleViewportResize(width, height);
         pipelines.forceRender();
       }
@@ -39,12 +47,16 @@ if (vpEl) {
   });
   ro.observe(vpEl);
 }
+window.addEventListener('resize', _updateCachedViewport);
 
 function _getViewportCenter() {
-  const vp = document.getElementById('viewport');
-  if (!vp) return null;
-  const rect = vp.getBoundingClientRect();
-  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  if (!_cachedViewport.clientWidth || !_cachedViewport.clientHeight) {
+    _updateCachedViewport();
+  }
+  return {
+    x: _cachedViewport.left + _cachedViewport.clientWidth / 2,
+    y: _cachedViewport.top + _cachedViewport.clientHeight / 2
+  };
 }
 
 export const Viewer = { 

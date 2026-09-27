@@ -464,6 +464,21 @@ describe('viewerMath', () => {
       // Clamped to new maxY: (1500 - 800) / 2 = 350
       assert.equal(state.getTy(), -350);
     });
+
+    it('atomically updates dimensions and pan position when next coordinates are passed', () => {
+      const vp = { clientWidth: 1000, clientHeight: 800, left: 0, top: 0 };
+      const state = createViewportState({ getViewport: () => vp });
+      state.applyFitMode('none', 1000, 2000);
+      let notifyCount = 0;
+      state.subscribe(() => { notifyCount++; });
+
+      state.setDimensions(1200, 3000, 50, -200);
+      assert.equal(state.getNaturalW(), 1200);
+      assert.equal(state.getNaturalH(), 3000);
+      assert.equal(state.getTx(), 50);
+      assert.equal(state.getTy(), -200);
+      assert.equal(notifyCount, 1);
+    });
   });
 
   describe('short content clamping on viewportState', () => {
