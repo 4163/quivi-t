@@ -29,6 +29,17 @@ const DEFAULT_ESTIMATED_HEIGHT = 1200;
 /** Initial estimated width for images before decode. */
 const DEFAULT_ESTIMATED_WIDTH = 800;
 
+/**
+ * Adaptive width estimate. First decoded raster width wins, capped at the
+ * default so an outlier never inflates the column. Reset per column build.
+ * Heights keep the fixed default: width errors only move the box sideways,
+ * height errors shift the view.
+ */
+let _estWidth = null;
+function _widthEstimate() {
+  return _estWidth || DEFAULT_ESTIMATED_WIDTH;
+}
+
 /** Fixed height for video entry placeholders. */
 const VIDEO_PLACEHOLDER_HEIGHT = 400;
 
@@ -139,7 +150,8 @@ function _releaseNode(img) {
 
 function _buildSlots() {
   if (!_strip) return;
-  _strip.replaceChildren();
+  // Keep static strip children (slot grill backdrop), drop slots only.
+  _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
   _slots.clear();
 
   for (let i = 0; i < _imageIndex.length; i++) {
@@ -150,7 +162,7 @@ function _buildSlots() {
     slot.dataset.listIndex = String(item.listIndex);
 
     const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
-    const defW = isSvg ? 1000 : DEFAULT_ESTIMATED_WIDTH;
+    const defW = isSvg ? 1000 : _widthEstimate();
     const defH = isSvg ? 1000 : DEFAULT_ESTIMATED_HEIGHT;
     const initialH = item.isVideo ? VIDEO_PLACEHOLDER_HEIGHT : (item.naturalHeight || defH);
     item.naturalHeight = initialH;
@@ -204,6 +216,7 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
     }
     _strip.style.transform = _viewportState.getTransform();
   }
+  _positionSlotGrill();
 }
 
 function _onItemDecoded(imgIdx, nw, nh) {
@@ -211,6 +224,7 @@ function _onItemDecoded(imgIdx, nw, nh) {
   if (!item || item.isVideo) return;
   const oldH = item.naturalHeight;
   const oldAnchorTop = _layout.offsets[_anchorImgIdx]?.top || 0;
+  const wasEstimated = !item.decoded;
 
   const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
   if (isSvg) {
@@ -236,6 +250,21 @@ function _onItemDecoded(imgIdx, nw, nh) {
   item.naturalWidth = nw;
   item.naturalHeight = nh;
   item.decoded = true;
+
+  // First decoded raster width becomes the estimate for the rest. Uniform
+  // directories converge at once; the default cap keeps outliers harmless.
+  if (wasEstimated && !isSvg && _estWidth === null && nw > 0) {
+    _estWidth = Math.min(nw, DEFAULT_ESTIMATED_WIDTH);
+    for (let i = 0; i < _imageIndex.length; i++) {
+      const other = _imageIndex[i];
+      if (other.decoded || other.isVideo || i === imgIdx) continue;
+      const otherSvg = /\.svg($|[?#])/i.test(other.entry?.name || other.entry?.path || '');
+      if (otherSvg) continue;
+      other.naturalWidth = _estWidth;
+      const otherSlot = _slots.get(i);
+      if (otherSlot) otherSlot.style.width = `${_estWidth}px`;
+    }
+  }
 
   const slot = _slots.get(imgIdx);
   if (slot) {
@@ -264,6 +293,23 @@ function _computeVisibleRange() {
 
   const { startIndex, endIndex } = computeWindowRange(_layout.offsets, visibleTopY, visibleBottomY);
   return { startIndex, endIndex, centerColY };
+}
+
+/**
+ * Span the group grill backdrop over the visible slots via custom properties.
+ * Visible range never exceeds the viewport, so the painted layer stays small
+ * on long chapters while covering exactly what is on screen.
+ */
+function _positionSlotGrill() {
+  if (!_strip) return;
+  const { startIndex, endIndex } = _computeVisibleRange();
+  if (startIndex === -1 || endIndex === -1 || !_layout.offsets[startIndex] || !_layout.offsets[endIndex]) {
+    _strip.style.setProperty('--slot-grill-top', '0px');
+    _strip.style.setProperty('--slot-grill-height', '0px');
+    return;
+  }
+  _strip.style.setProperty('--slot-grill-top', `${_layout.offsets[startIndex].top}px`);
+  _strip.style.setProperty('--slot-grill-height', `${_layout.offsets[endIndex].bottom - _layout.offsets[startIndex].top}px`);
 }
 
 function _updateWindow() {
@@ -402,6 +448,7 @@ function _updateWindow() {
     _anchorImgIdx = newAnchor;
     _scheduleSettle();
   }
+  _positionSlotGrill();
 }
 
 /** Items preloaded beyond the mount window, in pan direction. */
@@ -670,6 +717,7 @@ function _activate(state) {
 
   const isLocked = state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect';
   _imageIndex = isLocked ? [] : _buildImageIndex(state.list || []);
+  _estWidth = null;
   _lastList = state.list;
   _lastMode = state.mode;
   _lastArchivePath = state.archivePath;
@@ -736,7 +784,7 @@ function _deactivate() {
   _mounted.clear();
   _slots.clear();
   _prefetching.clear();
-  if (_strip) _strip.replaceChildren();
+  if (_strip) _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
 
   _imageIndex = [];
   _listToImgIdx.clear();
@@ -782,9 +830,10 @@ function _onStateChange(state) {
     _mounted.clear();
     _slots.clear();
     _prefetching.clear();
-    if (_strip) _strip.replaceChildren();
+    if (_strip) _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
 
     _imageIndex = isLocked ? [] : _buildImageIndex(state.list || []);
+    _estWidth = null;
     _lastList = state.list;
     _lastMode = state.mode;
     _lastArchivePath = state.archivePath;

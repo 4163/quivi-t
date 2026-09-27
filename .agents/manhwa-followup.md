@@ -51,11 +51,12 @@ Paging must derive from column offsets and the clamp, not from index steps, so t
 
 - [x] Page by viewport height through the existing clamp off the offset map in `src/js/viewer/manhwaStrip.js` (`pageStrip`), driven by a capture-phase listener in `src/js/main/main.js` at any focus, with targets clamped to the column ends. Accept: paging at the very top or bottom stops exactly at the end with no jitter or overshoot.
 
-## H. Grill uses widest image in directory
+## H. Grill covers the mounted slot group
 
-The opaque canvas covers the strip box with no width variable and no updater. Slots carry explicit widths from known dimensions, so the strip box equals the widest known image and evicting the widest mounted image never shrinks the column or clips the outline.
+The opaque canvas is one absolutely positioned layer spanning the mounted slots, moved with custom properties only. Slots carry explicit widths from known dimensions, so the strip box equals the widest known image and evicting the widest mounted image never shrinks the column.
 
-- [x] Size slots explicitly in `src/js/viewer/manhwaStrip.js` (`_buildSlots`, `_onItemDecoded`), render the grill as a full-box `::before` in `src/css/main.css`, and delete `_updateGrillWidth`, `--grill-width`, and `grill-hidden`. Accept: grill never resizes from scrolling, zoom, selection, fit, or eviction; outline stays intact.
+- [x] Size slots explicitly in `src/js/viewer/manhwaStrip.js` (`_buildSlots`, `_onItemDecoded`), render the grill as a static `#manhwa-slot-grill` child in `src/index.html` positioned by `_positionSlotGrill` over the visible range, and delete `_updateGrillWidth`, `--grill-width`, and `grill-hidden`. Accept: painted grill never exceeds the viewport, outline follows the visible group.
+- [x] Adapt the width estimate in `src/js/viewer/manhwaStrip.js`: first decoded raster width wins, capped at the 800 default, refreshing undecoded slots once. Heights keep the fixed default since only width errors are shift-free. Accept: uniform directories report the true widest image, box and grill sit on content, outline stops jumping.
 
 ## I. Fit modes work in the strip
 
