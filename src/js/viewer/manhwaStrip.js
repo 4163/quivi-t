@@ -105,6 +105,13 @@ let _lastScale = null;
 let _lastFitMode = null;
 let _lastFitModeGen = -1;
 
+/** Sequential mount queue. Visible items that need a fresh fetch go here
+ * instead of firing img.src in parallel. Processed one at a time via
+ * onload/onerror chaining so images fill in scroll order. */
+let _mountQueue = [];
+/** imgIdx of the item currently loading through the queue, -1 if idle. */
+let _mountInFlight = -1;
+
 /** Session cache for resolved ICO spritesheet data URIs. */
 const _icoCache = new Map();
 
@@ -447,6 +454,7 @@ function _updateWindow() {
   // BEHIND + AHEAD plus whatever is visibly on screen.
   for (const [imgIdx, img] of _mounted) {
     if (imgIdx < startIndex || imgIdx > endIndex) {
+      if (_mountInFlight === imgIdx) _mountInFlight = -1;
       _mounted.delete(imgIdx);
       img.remove();
       _releaseNode(img);
@@ -469,6 +477,7 @@ function _updateWindow() {
 
   // Mount missing images inside [startIndex, endIndex].
   const state = Core.getState();
+  const newQueueEntries = [];
   for (let i = startIndex; i <= endIndex; i++) {
     const item = _imageIndex[i];
     if (item.isVideo || _mounted.has(i)) continue;
@@ -476,11 +485,6 @@ function _updateWindow() {
     const slot = _slots.get(i);
     if (!slot) continue;
 
-    // Items outside the visible range mount only from decoded prefetched
-    // nodes. Direct mounting here exposes an unrasterized image the moment
-    // it scrolls into view, which is exactly the first-scroll blank.
-    const visOk = visStart === -1 || visEnd === -1 || (i >= visStart && i <= visEnd);
-    if (!visOk && !_prefetchedImages.has(i)) continue;
 
     let img = null;
     let isPrefetched = false;
@@ -508,8 +512,13 @@ function _updateWindow() {
       }
     }
 
+    const imgIdx = i;
     img.onload = () => {
-      _onItemDecoded(i, img.naturalWidth, img.naturalHeight);
+      _onItemDecoded(imgIdx, img.naturalWidth, img.naturalHeight);
+      if (_mountInFlight === imgIdx) {
+        _mountInFlight = -1;
+        _advanceMountQueue();
+      }
     };
     img.onerror = () => {
       slot.classList.add('error');
@@ -519,33 +528,39 @@ function _updateWindow() {
         errDiv.textContent = `Failed to load: ${item.entry?.name || 'image'}`;
         slot.appendChild(errDiv);
       }
-      _onItemDecoded(i, item.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
+      _onItemDecoded(imgIdx, item.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
+      if (_mountInFlight === imgIdx) {
+        _mountInFlight = -1;
+        _advanceMountQueue();
+      }
     };
 
-    if (!isPrefetched && !img.src) {
-      const src = _buildSrc(item.entry, state);
-      img.src = src;
-
-      const isIco = FsUtils.isIco(item.entry.name || item.entry.path || '');
-      if (isIco) {
-        const key = _getIcoKey(item.entry, state);
-        if (!_icoCache.has(key)) {
-          _resolveIco(item.entry, state).then((icoSrc) => {
-            if (icoSrc) {
-              _icoCache.set(key, icoSrc);
-              if (!_active || _mounted.get(i) !== img) return;
-              img.src = icoSrc;
-            }
-          }).catch(() => {});
-        }
+    if (isPrefetched) {
+      // Already decoded off-DOM: mount immediately, no queue needed.
+      if (img.complete && img.naturalWidth > 0 && !item.decoded) {
+        _onItemDecoded(i, img.naturalWidth, img.naturalHeight);
       }
-    } else if (img.complete && img.naturalWidth > 0 && !item.decoded) {
-      _onItemDecoded(i, img.naturalWidth, img.naturalHeight);
+    } else if (img.src) {
+      // Promoted from _prefetching: already loading, will fire onload.
+      if (img.complete && img.naturalWidth > 0 && !item.decoded) {
+        _onItemDecoded(i, img.naturalWidth, img.naturalHeight);
+      }
+    } else {
+      // Fresh mount: queue for sequential loading.
+      newQueueEntries.push({ imgIdx: i, img, item, state });
     }
 
     slot.appendChild(img);
     _mounted.set(i, img);
   }
+
+  // Rebuild queue: drop stale entries, append new ones, sort anchor-out.
+  _mountQueue = _mountQueue.filter(e =>
+    _mounted.has(e.imgIdx) && _mounted.get(e.imgIdx) === e.img && !e.img.src
+  );
+  for (const e of newQueueEntries) _mountQueue.push(e);
+  _sortMountQueue(anchor, prefetchDir);
+  _advanceMountQueue();
 
   // Prefetch always runs, including the first build: the mount loop above
   // no longer mounts non-visible items raw, so the ahead item depends on
@@ -703,6 +718,49 @@ function _warmBackendAhead(state, startIndex, endIndex, direction) {
   if (key === _lastBackendWarmKey) return;
   _lastBackendWarmKey = key;
   FsUtils.prefetchArchiveEntries(state.archivePath, names);
+}
+
+/** Sort queue entries top-first (ascending index). When scrolling up,
+ * reverse to bottom-first so items fill in the direction of travel. */
+function _sortMountQueue(_anchor, direction) {
+  _mountQueue.sort((a, b) =>
+    direction < 0 ? b.imgIdx - a.imgIdx : a.imgIdx - b.imgIdx
+  );
+}
+
+/** Pop the next valid queue entry and set its img.src. One at a time. */
+function _advanceMountQueue() {
+  if (_mountInFlight !== -1) return;
+  while (_mountQueue.length > 0) {
+    const entry = _mountQueue.shift();
+    if (!_active) break;
+    if (_mounted.get(entry.imgIdx) !== entry.img) continue;
+    if (entry.img.src) continue;
+
+    _mountInFlight = entry.imgIdx;
+    const src = _buildSrc(entry.item.entry, entry.state);
+    entry.img.src = src;
+
+    const isIco = FsUtils.isIco(entry.item.entry.name || entry.item.entry.path || '');
+    if (isIco) {
+      const key = _getIcoKey(entry.item.entry, entry.state);
+      if (!_icoCache.has(key)) {
+        _resolveIco(entry.item.entry, entry.state).then((icoSrc) => {
+          if (icoSrc) {
+            _icoCache.set(key, icoSrc);
+            if (!_active || _mounted.get(entry.imgIdx) !== entry.img) return;
+            entry.img.src = icoSrc;
+          }
+        }).catch(() => {});
+      }
+    }
+    return;
+  }
+}
+
+function _resetMountQueue() {
+  _mountQueue = [];
+  _mountInFlight = -1;
 }
 
 function _scheduleSettle() {  if (_settleTimer) clearTimeout(_settleTimer);
@@ -1081,6 +1139,7 @@ function _activate(state) {
 }
 
 function _clearCaches() {
+  _resetMountQueue();
   for (const [, img] of _mounted) {
     img.onload = null;
     img.onerror = null;
@@ -1106,6 +1165,7 @@ function _clearCaches() {
 
 function _deactivate() {
   if (!_active) return;
+  _resetMountQueue();
   _active = false;
   _viewport.classList.remove('manhwa-active');
 

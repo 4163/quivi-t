@@ -92,7 +92,7 @@ Fix direction. When the resolved index has no image mapping and the setting is o
 
 ## Issue 7. Strip decodes in parallel where thumbnails queue in order
 
-Status: open, no code changes yet. From clipboard handoff.
+Status: implemented. Sequential mount queue added to `manhwaStrip.js:108-113,548-558,723-763`. Fresh visible and buffer items queue instead of firing `img.src` in parallel. Queue processes one item at a time via `onload`/`onerror` chaining, sorted top-first (reversed when scrolling up). Prefetched items still mount instantly. Queue resets on deactivation and cache clear.
 
 Thumbnail view serializes heavy work. `filePanel.js:282-293` bounds the viewport queue with a 1-row margin, parks uncached thumbs on `TRANSPARENT_PIXEL` with `pendingSrc` at 1853-1867, commits on scroll settle at 2428-2437 through `commitPendingThumbnails` at 2059-2130, exempts the viewer-active index at 1860-1862 and 1873-1881, and dedupes archive bytes through `ensureArchiveBlob` at 109 behind `isConstrainedThumbnailSrc` at `fsUtils.js:222`.
 
@@ -144,7 +144,7 @@ Fix direction is a manhwa token in the dedup guard. Record last rendered manhwa-
 - [ ] Log key repeat, panBy, scheduleSettle, selectIndex, settle event times during hold. Accept when starvation gap is measured.
 - [ ] Count shared versus per-mount handlers and style writes over one chapter scroll. Accept when one onload/onerror pair serves all mounts.
 - [ ] Open a folder in manhwa mode with open_first_image off and fit width. Accept when the overlay shows and no selection is forced. Repeat with the setting on. Accept when the first image pins top.
-- [ ] Log strip mount start order and concurrent fetches on a cold archive scroll. Accept when starts follow scroll order through a sequential queue.
+- [x] Log strip mount start order and concurrent fetches on a cold archive scroll. Accept when starts follow scroll order through a sequential queue.
 - [ ] Step through a mixed image and video folder in strip mode. Accept when videos highlight only, the overlay shows, and layout ignores them.
 - [ ] Import a gallery URL in strip mode before downloads finish. Accept when pending slots read Downloading, stay blank, and fill on arrival.
 - [ ] Toggle manhwa on, scroll, then toggle off. Accept when no row keeps in-view after toggle-off.
