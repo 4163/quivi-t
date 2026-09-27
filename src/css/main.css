@@ -1471,6 +1471,7 @@ li:hover>.favorite-remove,
   flex-shrink: 0;
   width: 100%;
   position: relative;
+  z-index: 1;
   padding: 0;
   margin: 0;
 }
@@ -1505,7 +1506,15 @@ li:hover>.favorite-remove,
   font-size: var(--fs-14);
 }
 
-#manhwa-strip.grill-active {
+#manhwa-strip.grill-active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 0;
   background-color: var(--grill-bg);
   background-image: linear-gradient(var(--grill-angle, -45deg),
       transparent 0,

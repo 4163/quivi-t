@@ -60,25 +60,25 @@ export const ACTION_REGISTRY = [
   
   // View
   { id: 'cmd-fit-none', label: 'Fit None', defaultBinds: ['r', 'DoubleClick'], category: 'View',
-    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('none', { persist: true }); }
+    run: (ctx) => ctx.Core.setFitMode('none', { persist: true })
   },
   { id: 'cmd-fit-width', label: 'Fit Width', defaultBinds: 'Shift+q', category: 'View',
-    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('width', { persist: true }); }
+    run: (ctx) => ctx.Core.setFitMode('width', { persist: true })
   },
   { id: 'cmd-fit-height', label: 'Fit Height', defaultBinds: 'Shift+e', category: 'View',
-    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('height', { persist: true }); }
+    run: (ctx) => ctx.Core.setFitMode('height', { persist: true })
   },
   { id: 'cmd-fit-best', label: 'Fit Window', description: 'Scale to fit entirely within the viewport, stretching small images', defaultBinds: 'Shift+f', category: 'View',
-    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('window', { persist: true }); }
+    run: (ctx) => ctx.Core.setFitMode('window', { persist: true })
   },
   { id: 'cmd-fit-width-if-larger', label: 'Fit Width if Larger', defaultBinds: 'q', category: 'View',
-    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('width-if-larger', { persist: true }); }
+    run: (ctx) => ctx.Core.setFitMode('width-if-larger', { persist: true })
   },
   { id: 'cmd-fit-height-if-larger', label: 'Fit Height if Larger', defaultBinds: 'e', category: 'View',
-    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('height-if-larger', { persist: true }); }
+    run: (ctx) => ctx.Core.setFitMode('height-if-larger', { persist: true })
   },
   { id: 'cmd-fit-window-if-larger', label: 'Fit Window if Larger', description: 'Shrink to fit the viewport, but never enlarge small images', defaultBinds: 'f', category: 'View',
-    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setFitMode('window-if-larger', { persist: true }); }
+    run: (ctx) => ctx.Core.setFitMode('window-if-larger', { persist: true })
   },
   { id: 'cmd-scale-none', label: 'Pixelated', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.setScalingMode('none', { persist: true })
@@ -201,10 +201,10 @@ export const ACTION_REGISTRY = [
     run: (ctx) => { if (!ctx.Core.getState().manhwaEnabled) ctx.Viewer.rotate(90); }
   },
   { id: 'cmd-flip-horizontal', label: 'Flip Horizontal', defaultBinds: 'v', category: 'Rotation',
-    run: (ctx) => { if (!ctx.Core.getState().manhwaEnabled) ctx.Viewer.flipHorizontal(); }
+    run: (ctx) => ctx.Viewer.flipHorizontal()
   },
   { id: 'cmd-flip-vertical', label: 'Flip Vertical', defaultBinds: 'b', category: 'Rotation',
-    run: (ctx) => { if (!ctx.Core.getState().manhwaEnabled) ctx.Viewer.flipVertical(); }
+    run: (ctx) => ctx.Viewer.flipVertical()
   },
 
   // Window & UI

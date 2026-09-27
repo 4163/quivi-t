@@ -717,9 +717,6 @@ export function syncViewMenu(state) {
   }
 
   const manhwaNote = 'Applies to single image view (Manhwa mode is 1:1 column)';
-  for (const id of Object.values(FIT_MODE_MAP)) {
-    _setMenuItemDisabled(id, manhwaOn, manhwaNote);
-  }
   _setMenuItemDisabled('cmd-scale-lanczos', manhwaOn, manhwaNote);
 
   _setMenuItemDisabled('cmd-filter-off', manhwaOn, manhwaNote);
@@ -727,7 +724,7 @@ export function syncViewMenu(state) {
     _setMenuItemDisabled(f.actionId, manhwaOn, manhwaNote);
   }
 
-  for (const id of ['cmd-rotate-cw', 'cmd-rotate-ccw', 'cmd-flip-horizontal', 'cmd-flip-vertical']) {
+  for (const id of ['cmd-rotate-cw', 'cmd-rotate-ccw']) {
     _setMenuItemDisabled(id, manhwaOn, manhwaNote);
   }
 

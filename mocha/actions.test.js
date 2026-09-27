@@ -94,6 +94,7 @@ describe('Actions registry and keybindings', () => {
       let panCalls = [];
       let zoomCalls = [];
       let rotateCalled = false;
+      let flipCalls = [];
 
       const fakeCtx = {
         Core: {
@@ -108,8 +109,8 @@ describe('Actions registry and keybindings', () => {
           zoomCenter: (d) => { zoomCalls.push({ d }); },
           setZoom: (z) => { zoomCalls.push({ z }); },
           rotate: () => { rotateCalled = true; },
-          flipHorizontal: () => { rotateCalled = true; },
-          flipVertical: () => { rotateCalled = true; }
+          flipHorizontal: () => { flipCalls.push('x'); },
+          flipVertical: () => { flipCalls.push('y'); }
         }
       };
 
@@ -146,24 +147,26 @@ describe('Actions registry and keybindings', () => {
       await dispatch('cmd-zoom-100', null, fakeCtx);
       assert.equal(zoomCalls.length, 3);
 
-      // Rotation and flip are guarded in manhwa mode
+      // Rotation is guarded, but flips are unforwarded in manhwa mode
       await dispatch('cmd-rotate-ccw', null, fakeCtx);
       await dispatch('cmd-rotate-cw', null, fakeCtx);
-      await dispatch('cmd-flip-horizontal', null, fakeCtx);
-      await dispatch('cmd-flip-vertical', null, fakeCtx);
       assert.equal(rotateCalled, false);
 
-      // Fit modes, lanczos, and filters are guarded in manhwa mode
-      let fitCalled = false;
+      await dispatch('cmd-flip-horizontal', null, fakeCtx);
+      await dispatch('cmd-flip-vertical', null, fakeCtx);
+      assert.deepEqual(flipCalls, ['x', 'y']);
+
+      // Fit modes work in manhwa mode; lanczos and filters remain guarded
+      let fitCalled = [];
       let filterCalled = false;
       let scalingSet = null;
-      fakeCtx.Core.setFitMode = () => { fitCalled = true; };
+      fakeCtx.Core.setFitMode = (m) => { fitCalled.push(m); };
       fakeCtx.Core.setActiveFilter = () => { filterCalled = true; };
       fakeCtx.Core.setScalingMode = (m) => { scalingSet = m; };
 
       await dispatch('cmd-fit-width', null, fakeCtx);
       await dispatch('cmd-fit-none', null, fakeCtx);
-      assert.equal(fitCalled, false);
+      assert.deepEqual(fitCalled, ['width', 'none']);
 
       await dispatch('cmd-filter-off', null, fakeCtx);
       await dispatch('cmd-toggle-anime4k-filter', null, fakeCtx);

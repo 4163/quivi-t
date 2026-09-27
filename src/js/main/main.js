@@ -196,6 +196,9 @@ Core.onStateChange((state) => {
     dropOverlay.classList.add('active');
     viewport.classList.add('empty');
     statusbar.classList.add('hidden');
+    document.getElementById('img-grill')?.classList.remove('active');
+    document.getElementById('img-grill-border')?.classList.remove('active');
+    document.getElementById('manhwa-strip')?.classList.remove('grill-active');
     return;
   }
 
@@ -217,9 +220,10 @@ Core.onStateChange((state) => {
     const stripEl = document.getElementById('manhwa-strip');
     const toggleEl = document.getElementById('cmd-toggle-transparent');
     
-    if (grillEl) grillEl.classList.toggle('active', !isTransparent);
-    if (grillBorderEl) grillBorderEl.classList.toggle('active', !isTransparent);
-    if (stripEl) stripEl.classList.toggle('grill-active', !isTransparent);
+    const showSingleGrill = !isTransparent && !!state.src;
+    if (grillEl) grillEl.classList.toggle('active', showSingleGrill);
+    if (grillBorderEl) grillBorderEl.classList.toggle('active', showSingleGrill);
+    if (stripEl) stripEl.classList.toggle('grill-active', !isTransparent && isManhwaStripActive() && (state.list?.length || 0) > 0);
     if (toggleEl) {
       toggleEl.classList.toggle('checked', !isTransparent);
     }

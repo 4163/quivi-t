@@ -66,8 +66,28 @@ let _anchorUpdateInProgress = false;
 let _settleTimer = null;
 let _lastTy = null;
 let _lastScale = null;
+let _lastFitMode = null;
+let _lastFitModeGen = -1;
+
+/** Session cache for resolved ICO spritesheet data URIs. */
+const _icoCache = new Map();
+
+function _getIcoKey(entry, state) {
+  return state.mode === 'archive' ? `${state.archivePath}:${entry.name}` : entry.path;
+}
+
+function _resolveIco(entry, state) {
+  return state.mode === 'archive'
+    ? FsUtils.buildArchiveEntrySrc(state.archivePath, entry.name)
+    : FsUtils.buildFileSrc(entry.path);
+}
 
 function _buildSrc(entry, state) {
+  const name = entry.name || entry.path || '';
+  if (FsUtils.isIco(name)) {
+    const key = _getIcoKey(entry, state);
+    if (_icoCache.has(key)) return _icoCache.get(key);
+  }
   if (state.mode === 'archive') {
     const archiveSrc = FsUtils.buildArchiveSrc(state.archivePath, entry.name);
     const cached = thumbnailCache.get(archiveSrc);
@@ -129,10 +149,16 @@ function _buildSlots() {
     slot.dataset.imgIdx = String(item.imgIdx);
     slot.dataset.listIndex = String(item.listIndex);
 
-    const initialH = item.isVideo ? VIDEO_PLACEHOLDER_HEIGHT : (item.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
+    const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
+    const defW = isSvg ? 1000 : DEFAULT_ESTIMATED_WIDTH;
+    const defH = isSvg ? 1000 : DEFAULT_ESTIMATED_HEIGHT;
+    const initialH = item.isVideo ? VIDEO_PLACEHOLDER_HEIGHT : (item.naturalHeight || defH);
     item.naturalHeight = initialH;
-    item.naturalWidth = item.naturalWidth || DEFAULT_ESTIMATED_WIDTH;
+    item.naturalWidth = item.naturalWidth || defW;
     slot.style.height = `${initialH}px`;
+    // Explicit width keeps the strip box at the widest known image so evicting
+    // the widest mounted image never shrinks the column or clips the grill.
+    slot.style.width = `${item.naturalWidth || defW}px`;
 
     if (item.isVideo) {
       const ph = document.createElement('div');
@@ -186,12 +212,36 @@ function _onItemDecoded(imgIdx, nw, nh) {
   const oldH = item.naturalHeight;
   const oldAnchorTop = _layout.offsets[_anchorImgIdx]?.top || 0;
 
+  const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
+  if (isSvg) {
+    const isBrowserDefault = (nw === 150 && nh === 150) || (nw === 300 && nh === 150);
+    const hasIntrinsic = nw > 0 && nh > 0 && !isBrowserDefault;
+    if (!hasIntrinsic) {
+      nw = 1000;
+      nh = 1000;
+    }
+    const maxEdge = item.isAnimated ? 512 : 2048;
+    if (nw > maxEdge || nh > maxEdge) {
+      const s = Math.min(maxEdge / nw, maxEdge / nh);
+      nw = Math.max(1, Math.round(nw * s));
+      nh = Math.max(1, Math.round(nh * s));
+    }
+    const img = _mounted.get(imgIdx);
+    if (!hasIntrinsic && img) {
+      img.style.width = `${nw}px`;
+      img.style.height = `${nh}px`;
+    }
+  }
+
   item.naturalWidth = nw;
   item.naturalHeight = nh;
   item.decoded = true;
 
   const slot = _slots.get(imgIdx);
-  if (slot) slot.style.height = `${nh}px`;
+  if (slot) {
+    slot.style.height = `${nh}px`;
+    slot.style.width = `${nw}px`;
+  }
 
   if (oldH !== nh || item.naturalWidth !== nw) {
     _updateLayout(_anchorImgIdx, oldAnchorTop);
@@ -274,6 +324,29 @@ function _updateWindow() {
     img.dataset.listIndex = String(item.listIndex);
     const src = _buildSrc(item.entry, state);
     img.src = src;
+
+    const isIco = FsUtils.isIco(item.entry.name || item.entry.path || '');
+    if (isIco) {
+      const key = _getIcoKey(item.entry, state);
+      if (!_icoCache.has(key)) {
+        _resolveIco(item.entry, state).then((icoSrc) => {
+          if (icoSrc) {
+            _icoCache.set(key, icoSrc);
+            if (!_active || _mounted.get(i) !== img) return;
+            img.src = icoSrc;
+          }
+        }).catch(() => {});
+      }
+    }
+
+    const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
+    if (isSvg && item.decoded) {
+      const isBrowserDefault = (item.naturalWidth === 150 && item.naturalHeight === 150) || (item.naturalWidth === 300 && item.naturalHeight === 150);
+      if (isBrowserDefault || (item.naturalWidth === 1000 && item.naturalHeight === 1000)) {
+        img.style.width = `${item.naturalWidth}px`;
+        img.style.height = `${item.naturalHeight}px`;
+      }
+    }
 
     img.onload = () => {
       _onItemDecoded(i, img.naturalWidth, img.naturalHeight);
@@ -367,7 +440,23 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
     pre.onerror = () => {
       _prefetching.delete(i);
     };
-    pre.src = _buildSrc(item.entry, state);
+    const isIco = FsUtils.isIco(item.entry.name || item.entry.path || '');
+    if (isIco) {
+      const key = _getIcoKey(item.entry, state);
+      if (!_icoCache.has(key)) {
+        _resolveIco(item.entry, state).then((icoSrc) => {
+          if (icoSrc) {
+            _icoCache.set(key, icoSrc);
+            if (!_active || !_prefetching.has(i)) return;
+            pre.src = icoSrc;
+          }
+        }).catch(() => {});
+      } else {
+        pre.src = _icoCache.get(key);
+      }
+    } else {
+      pre.src = _buildSrc(item.entry, state);
+    }
   }
 }
 
@@ -430,28 +519,130 @@ let _lastAnchorTy = null;
 let _lastAnchorScale = null;
 let _lastAnchorVph = null;
 
+function _applyFitMode(mode, targetImgIdx = null) {
+  if (!_active || !_viewportState || !_viewport || _imageIndex.length === 0) return;
+  const fitMode = mode || Core.getState()?.fitMode || 'none';
+
+  let startIndex = -1;
+  let endIndex = -1;
+  const range = _computeVisibleRange();
+  if (range.startIndex !== -1 && range.endIndex !== -1) {
+    startIndex = range.startIndex;
+    endIndex = range.endIndex;
+  }
+
+  if (targetImgIdx !== null && targetImgIdx >= 0 && targetImgIdx < _imageIndex.length) {
+    if (startIndex === -1 || endIndex === -1) {
+      startIndex = targetImgIdx;
+      endIndex = targetImgIdx;
+    } else if (targetImgIdx < startIndex || targetImgIdx > endIndex) {
+      startIndex = targetImgIdx;
+      endIndex = targetImgIdx;
+    }
+  } else if (startIndex === -1 || endIndex === -1) {
+    startIndex = _anchorImgIdx >= 0 ? _anchorImgIdx : 0;
+    endIndex = _anchorImgIdx >= 0 ? _anchorImgIdx : 0;
+  }
+
+  let maxW = 0;
+  for (let i = startIndex; i <= endIndex; i++) {
+    const item = _imageIndex[i];
+    if (item) {
+      const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
+      const defW = isSvg ? 1000 : DEFAULT_ESTIMATED_WIDTH;
+      const w = item.naturalWidth || defW;
+      if (w > maxW) maxW = w;
+    }
+  }
+  if (targetImgIdx !== null && targetImgIdx >= 0 && targetImgIdx < _imageIndex.length) {
+    const item = _imageIndex[targetImgIdx];
+    if (item) {
+      const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
+      const defW = isSvg ? 1000 : DEFAULT_ESTIMATED_WIDTH;
+      const w = item.naturalWidth || defW;
+      if (w > maxW) maxW = w;
+    }
+  }
+  if (maxW <= 0) maxW = DEFAULT_ESTIMATED_WIDTH;
+
+  const colHeight = (_layout.totalHeight && _layout.totalHeight > 0) ? _layout.totalHeight : DEFAULT_ESTIMATED_HEIGHT;
+  const vw = _viewport.clientWidth || 800;
+  const vh = _viewport.clientHeight || 800;
+
+  // When fitting window, if the entire column can fit within the viewport height,
+  // the widest image in the entire column is in the viewport and wins.
+  if ((vh / colHeight) >= 0.05 && (fitMode === 'window' || fitMode === 'window-if-larger')) {
+    if (_layout.widestWidth && _layout.widestWidth > maxW) {
+      maxW = _layout.widestWidth;
+    }
+  }
+
+  const scaleX = vw / maxW;
+  const scaleY = vh / colHeight;
+
+  let targetScale = 1;
+  switch (fitMode) {
+    case 'none':
+      targetScale = 1;
+      break;
+    case 'width':
+      targetScale = scaleX;
+      break;
+    case 'width-if-larger':
+      targetScale = Math.min(scaleX, 1);
+      break;
+    case 'height':
+      targetScale = scaleY;
+      break;
+    case 'height-if-larger':
+      targetScale = Math.min(scaleY, 1);
+      break;
+    case 'window':
+      targetScale = Math.min(scaleX, scaleY);
+      break;
+    case 'window-if-larger':
+    default:
+      targetScale = Math.min(scaleX, scaleY, 1);
+      break;
+  }
+
+  targetScale = Math.min(32, Math.max(0.05, targetScale));
+
+  const resetPanX = fitMode !== 'none';
+  const targetTx = resetPanX ? 0 : _viewportState.getTx();
+
+  const anchorIdx = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
+  _anchorHoldover = anchorIdx;
+  _anchorHoldoverScale = targetScale;
+
+  _viewportState.zoomTo(targetScale, vw / 2, vh / 2);
+  const colH = (_layout.totalHeight || 0) * targetScale;
+
+  if (colH <= vh) {
+    _viewportState.panTo(targetTx, (colH - vh) / 2);
+  } else if (anchorIdx === 0) {
+    _viewportState.panTo(targetTx, (colH - vh) / 2);
+  } else if (anchorIdx === _imageIndex.length - 1) {
+    _viewportState.panTo(targetTx, -(colH - vh) / 2);
+  } else if (_layout.offsets[anchorIdx]) {
+    _centerColumnY(_layout.offsets[anchorIdx].top + _layout.offsets[anchorIdx].height / 2, targetTx);
+  }
+
+  _strip.style.transform = _viewportState.getTransform();
+  _strip.style.setProperty('--zoom-scale', targetScale);
+  _updateWindow();
+  _scheduleSettle();
+}
+
 export function centerListItem(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
   _anchorImgIdx = mapped;
-  const scale = _viewportState.getScale() || 1;
   _anchorHoldover = mapped;
-  _anchorHoldoverScale = scale;
-  const vpH = _viewport?.clientHeight || 800;
-  const colH = (_layout.totalHeight || 0) * scale;
-  if (mapped === 0) {
-    // First image pins to the top, never centers.
-    _viewportState.panTo(_viewportState.getTx(), (colH - vpH) / 2);
-  } else if (mapped === _imageIndex.length - 1) {
-    // Last image pins to the bottom, never centers.
-    _viewportState.panTo(_viewportState.getTx(), -(colH - vpH) / 2);
-  } else {
-    _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
-  }
-  _strip.style.transform = _viewportState.getTransform();
-  _updateWindow();
-  _scheduleSettle();
+
+  const fitMode = Core.getState()?.fitMode || _lastFitMode || 'none';
+  _applyFitMode(fitMode, mapped);
   return true;
 }
 
@@ -507,11 +698,12 @@ export function pageStrip(direction) {
  * Pan so column position colY (unzoomed) lands at the viewport center.
  * ty is screen px, so the offset scales with zoom. Preserves horizontal pan.
  */
-function _centerColumnY(colY) {
+function _centerColumnY(colY, targetTx = null) {
   if (!_viewportState || !_layout.offsets.length) return;
   const scale = _viewportState.getScale() || 1;
   const targetTy = (_layout.totalHeight / 2 - colY) * scale;
-  _viewportState.panTo(_viewportState.getTx(), targetTy);
+  const tx = targetTx !== null ? targetTx : _viewportState.getTx();
+  _viewportState.panTo(tx, targetTy);
   _strip.style.transform = _viewportState.getTransform();
 }
 
@@ -547,21 +739,9 @@ function _activate(state) {
   const mapped = _listToImgIdx.get(state.index);
   _anchorImgIdx = mapped !== undefined ? mapped : 0;
 
-  if (_viewportState) {
-    _viewportState.applyFitMode('none', _layout.widestWidth, _layout.totalHeight);
-    const vpH = _viewport?.clientHeight || 800;
-    const scale = _viewportState.getScale() || 1;
-    const colH = (_layout.totalHeight || 0) * scale;
-    if (colH <= vpH) {
-      // Short column rests top-pinned; the symmetric clamp still allows panning.
-      _viewportState.panTo(_viewportState.getTx(), (colH - vpH) / 2);
-    } else if (_layout.offsets[_anchorImgIdx]) {
-      const anchorCenter = _layout.offsets[_anchorImgIdx].top + _layout.offsets[_anchorImgIdx].height / 2;
-      _centerColumnY(anchorCenter);
-    }
-    _strip.style.transform = _viewportState.getTransform();
-    _strip.style.setProperty('--zoom-scale', _viewportState.getScale() || 1);
-  }
+  _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
+  _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
+  _applyFitMode(_lastFitMode, _anchorImgIdx);
 
   _updateWindow();
   if (_imageIndex.length > 0) {
@@ -576,6 +756,8 @@ function _deactivate() {
 
   _lastTy = null;
   _lastScale = null;
+  _lastFitMode = null;
+  _lastFitModeGen = -1;
   _anchorHoldover = null;
   _lastAnchorTy = null;
   _lastAnchorScale = null;
@@ -668,24 +850,22 @@ function _onStateChange(state) {
     const mapped = _listToImgIdx.get(state.index);
     _anchorImgIdx = mapped !== undefined ? mapped : 0;
 
-    if (_viewportState) {
-      _viewportState.applyFitMode('none', _layout.widestWidth, _layout.totalHeight);
-      const vpH = _viewport?.clientHeight || 800;
-      const colH = (_layout.totalHeight || 0) * (_viewportState.getScale() || 1);
-      if (colH <= vpH) {
-        // Short column rests top-pinned; the symmetric clamp still allows panning.
-        _viewportState.panTo(_viewportState.getTx(), (colH - vpH) / 2);
-      } else if (_layout.offsets[_anchorImgIdx]) {
-        _centerColumnY(_layout.offsets[_anchorImgIdx].top + _layout.offsets[_anchorImgIdx].height / 2);
-      }
-      _strip.style.transform = _viewportState.getTransform();
-      _strip.style.setProperty('--zoom-scale', _viewportState.getScale() || 1);
-    }
+    _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
+    _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
+    _applyFitMode(_lastFitMode, _anchorImgIdx);
 
     _updateWindow();
     if (_imageIndex.length > 0) {
       _scheduleSettle();
     }
+    return;
+  }
+
+  const fitModeChanged = (state.fitMode && state.fitMode !== _lastFitMode) || (state.fitModeGen !== undefined && state.fitModeGen !== _lastFitModeGen);
+  if (fitModeChanged) {
+    _lastFitMode = state.fitMode;
+    _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : _lastFitModeGen;
+    _applyFitMode(state.fitMode);
     return;
   }
 
@@ -732,9 +912,7 @@ export function initManhwaStrip(viewportState) {
     if (_layoutScale === null || _layoutScale !== scale) {
       _updateLayout(_anchorImgIdx, _layout.offsets[_anchorImgIdx]?.top || 0);
     }
-    _strip.style.transform = _viewportState.getTransform();
-    _updateWindow();
-    _scheduleSettle();
+    _applyFitMode(Core.getState()?.fitMode || _lastFitMode);
   });
   ro.observe(_viewport);
 }

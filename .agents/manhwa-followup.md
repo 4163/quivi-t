@@ -51,33 +51,34 @@ Paging must derive from column offsets and the clamp, not from index steps, so t
 
 - [x] Page by viewport height through the existing clamp off the offset map in `src/js/viewer/manhwaStrip.js` (`pageStrip`), driven by a capture-phase listener in `src/js/main/main.js` at any focus, with targets clamped to the column ends. Accept: paging at the very top or bottom stops exactly at the end with no jitter or overshoot.
 
-## H. Grill follows the visible width only
+## H. Grill uses widest image in directory
 
-The opaque canvas hugs the widest image in view, not the widest in the chapter.
+The opaque canvas covers the strip box with no width variable and no updater. Slots carry explicit widths from known dimensions, so the strip box equals the widest known image and evicting the widest mounted image never shrinks the column or clips the outline.
 
-- [ ] Recompute the grill width on settle from the visible set in `src/js/main/main.js:196-203` and `src/js/viewer/manhwaStrip.js`, and hide it when nothing is visible. Accept: panning to a narrow page narrows the grill, off-screen wide pages never widen it.
+- [x] Size slots explicitly in `src/js/viewer/manhwaStrip.js` (`_buildSlots`, `_onItemDecoded`), render the grill as a full-box `::before` in `src/css/main.css`, and delete `_updateGrillWidth`, `--grill-width`, and `grill-hidden`. Accept: grill never resizes from scrolling, zoom, selection, fit, or eviction; outline stays intact.
 
 ## I. Fit modes work in the strip
 
-Fit none, width, and width-if-larger return. Height and window modes map onto the visible set. Every mode applies once on selection and on viewport resize. Panning never re-fits, so the view never jumps under the user.
+Width basis is the widest image in the directory (widest known, converging on decode), never the visible set. Explicit selection sets zoom and centers X without touching Y, except fit none which centers the column. Per-navigation application keeps item Y from the navigation centering. Panning never re-fits, so the view never jumps under the user.
 
-- [ ] Re-enable the none, width, and width-if-larger rows in `src/js/menubar.js:713-735`. Accept: the rows are selectable in the strip with no single-image-only note.
-- [ ] Fit width sets zoom from the widest visible item, width-if-larger caps at 1. None sets zoom to 1. Accept: selecting each mode frames the visible page correctly and panning away keeps the zoom.
-- [ ] Fit height sets zoom from the tallest visible item and height-if-larger caps at 1, both subject to the existing minimum zoom cap. Accept: a 1 to 3 image gallery frames like single image mode, long columns show a slice.
-- [ ] Fit window sets zoom from the constraining dimension of the visible set and window-if-larger caps at 1, subject to the existing caps. Accept: small galleries frame like single image mode.
+- [x] Re-enable the none, width, and width-if-larger rows in `src/js/menubar.js:713-735`. Accept: the rows are selectable in the strip with no single-image-only note.
+- [ ] Fit none sets zoom to 1 and pans to the column center on explicit selection. Per-navigation keeps item Y from the navigation centering. Accept: selecting none frames 1:1 at the column middle, navigating keeps the target item.
+- [ ] Fit width sets zoom from the widest image in the directory, width-if-larger caps at 1. Pan X resets to center (0), pan Y untouched on explicit selection. Accept: selecting width frames the widest page, reading position holds, panning away keeps the zoom.
+- [x] Fit height sets zoom from the total column height (active image height is ignored) and height-if-larger caps at 1. If the column cannot fit further, zoom clamps to the minimum zoom level (0.05). Pan X resets to center. Accept: 1 to 3 image galleries frame within viewport height, long columns clamp to minimum zoom.
+- [ ] Fit window sets zoom from the directory width basis and total column height (whichever constrains) and window-if-larger caps at 1, subject to the minimum zoom cap. Pan X resets to center (0), pan Y untouched on explicit selection. Accept: wide or few-image galleries fit without clipping, reading position holds.
 
 ## J. Flips match the single raster model
 
 Rotations stay off. Horizontal flip mirrors. Vertical flip flips the whole column, which reverses order and mirrors each image, exactly like mirroring one tall raster.
 
-- [ ] Unguard flip horizontal and flip vertical in the strip in `src/js/services/actions.js` and `src/js/viewer/viewer.js`, keeping clockwise and counterclockwise guarded off. Vertical flip goes through the existing flip path so the column mirrors as one raster. Accept: horizontal mirrors, vertical flips the column top to bottom, rotations do nothing.
+- [x] Unguard flip horizontal and flip vertical in the strip in `src/js/services/actions.js` and `src/js/viewer/viewer.js`, keeping clockwise and counterclockwise guarded off. Vertical flip goes through the existing flip path so the column mirrors as one raster. Accept: horizontal mirrors, vertical flips the column top to bottom, rotations do nothing.
 
 ## K. ICO spritesheets and dimensionless SVGs
 
 The strip bypasses both code paths. `_buildSrc` uses the sync builders, and `fsUtils.js:286-292` states outright that ICO needs the async path, so `.ico` files render raw instead of the `data:image/png;base64` spritesheet from `get_ico_frames` and `get_archive_ico_frames` (`src-tauri/src/ico.rs:103-104`). Sizeless SVGs report the browser-default 150x150 or 300x150 as natural size, so slots lay out wrong and the 2048 and 512 caps never apply.
 
-- [ ] Route strip ICO entries through `get_ico_frames` and `get_archive_ico_frames` like `buildFileSrc` and `buildArchiveEntrySrc` in `src/js/fsUtils.js:260-292`, swapping the slot src when the invoke resolves and guarding against eviction races. Accept: `.ico` in the strip shows the identical spritesheet to single view, disk and archive.
-- [ ] Detect non-intrinsic SVGs in the strip decode path with the same browser-default check as `src/js/viewer/viewerPipelines.js:470-472`, fall back to the 1000x1000 slot from `_applySvgBounds` in `src/js/viewer/viewerRender.js:264-296`, and cap static at 2048 and animated at 512 per edge. Accept: sizeless SVGs lay out at fallback size with no 150px slivers, caps hold.
+- [x] Route strip ICO entries through `get_ico_frames` and `get_archive_ico_frames` like `buildFileSrc` and `buildArchiveEntrySrc` in `src/js/fsUtils.js:260-292`, swapping the slot src when the invoke resolves and guarding against eviction races. Accept: `.ico` in the strip shows the identical spritesheet to single view, disk and archive.
+- [x] Detect non-intrinsic SVGs in the strip decode path with the same browser-default check as `src/js/viewer/viewerPipelines.js:470-472`, fall back to the 1000x1000 slot from `_applySvgBounds` in `src/js/viewer/viewerRender.js:264-296`, and cap static at 2048 and animated at 512 per edge. Accept: sizeless SVGs lay out at fallback size with no 150px slivers, caps hold.
 
 ## L. Zoom readout and settle loop
 

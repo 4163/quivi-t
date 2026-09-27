@@ -65,11 +65,9 @@ export const Viewer = {
     viewportState.rotate(deg);
   },
   flipHorizontal: () => {
-    if (isManhwaStripActive()) return;
     viewportState.flip('x');
   },
   flipVertical: () => {
-    if (isManhwaStripActive()) return;
     viewportState.flip('y');
   },
   setZoom: (exactScale) => {
