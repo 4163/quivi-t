@@ -1,4 +1,5 @@
 import { DEFAULT_FIT_MODE } from '../keybinds.js';
+export { computeSlotHue } from './keybindDomain.js';
 
 export function checkIsSpread(w, h) {
   if (!w || !h) return false;
@@ -137,6 +138,22 @@ export function computeWindowRange(offsets, windowTopY, windowBottomY) {
   }
 
   return { startIndex, endIndex };
+}
+
+/**
+ * Compute the vertical pan (ty) so that a slot top lands at the viewport top.
+ * When the column is shorter than the viewport, pins to the top of the column.
+ * When the column is taller, clamps between the top pin and bottom pin.
+ */
+export function computeTopAlignTy({ slotTop = 0, totalHeight = 0, scale = 1, viewportHeight = 800 } = {}) {
+  const colVisualH = totalHeight * scale;
+  if (colVisualH <= viewportHeight) {
+    return (colVisualH - viewportHeight) / 2;
+  }
+  const maxTy = (colVisualH - viewportHeight) / 2;
+  const minTy = -maxTy;
+  const rawTy = (totalHeight / 2 - slotTop) * scale - viewportHeight / 2;
+  return Math.max(minTy, Math.min(maxTy, rawTy));
 }
 
 export function createViewportState({ getViewport = () => ({ clientWidth: 1000, clientHeight: 800, left: 0, top: 0 }) } = {}) {

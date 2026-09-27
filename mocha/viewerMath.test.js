@@ -9,7 +9,9 @@ import {
   computeColumnLayout,
   seamOverlapForScale,
   findAnchorIndex,
-  computeWindowRange
+  computeWindowRange,
+  computeTopAlignTy,
+  computeSlotHue
 } from '../src/js/services/viewerMath.js';
 
 describe('viewerMath', () => {
@@ -460,6 +462,117 @@ describe('viewerMath', () => {
       assert.equal(state.getTy(), 200);
       state.panBy(0, -500);
       assert.equal(state.getTy(), -200);
+    });
+  });
+
+  describe('computeTopAlignTy', () => {
+    it('pins the first item to viewport top', () => {
+      const ty = computeTopAlignTy({
+        slotTop: 0,
+        totalHeight: 3000,
+        scale: 1,
+        viewportHeight: 800
+      });
+      // (3000 - 800) / 2 = 1100
+      assert.equal(ty, 1100);
+    });
+
+    it('aligns middle item top to viewport top', () => {
+      const ty = computeTopAlignTy({
+        slotTop: 1000,
+        totalHeight: 3000,
+        scale: 1,
+        viewportHeight: 800
+      });
+      // (1500 - 1000) * 1 - 400 = 100
+      assert.equal(ty, 100);
+    });
+
+    it('clamps last item to column bottom boundary', () => {
+      const ty = computeTopAlignTy({
+        slotTop: 2600,
+        totalHeight: 3000,
+        scale: 1,
+        viewportHeight: 800
+      });
+      // minTy = -(3000 - 800) / 2 = -1100
+      assert.equal(ty, -1100);
+    });
+
+    it('pins short columns to top regardless of slot offset', () => {
+      const tyFirst = computeTopAlignTy({
+        slotTop: 0,
+        totalHeight: 500,
+        scale: 1,
+        viewportHeight: 800
+      });
+      // (500 - 800) / 2 = -150
+      assert.equal(tyFirst, -150);
+
+      const tyLater = computeTopAlignTy({
+        slotTop: 200,
+        totalHeight: 500,
+        scale: 1,
+        viewportHeight: 800
+      });
+      assert.equal(tyLater, -150);
+    });
+
+    it('scales correctly for zoomed in and zoomed out states', () => {
+      // Zoomed in (scale 2): visual height = 6000
+      const tyZoomIn = computeTopAlignTy({
+        slotTop: 1000,
+        totalHeight: 3000,
+        scale: 2,
+        viewportHeight: 800
+      });
+      // (1500 - 1000) * 2 - 400 = 600
+      assert.equal(tyZoomIn, 600);
+
+      // Zoomed out (scale 0.5): visual height = 1500
+      const tyZoomOut = computeTopAlignTy({
+        slotTop: 1000,
+        totalHeight: 3000,
+        scale: 0.5,
+        viewportHeight: 800
+      });
+      // (1500 - 1000) * 0.5 - 400 = -150
+      assert.equal(tyZoomOut, -150);
+    });
+  });
+
+  describe('computeSlotHue', () => {
+    it('produces distinct hues for all items in a set', () => {
+      const colors = new Set();
+      const count = 8;
+      for (let i = 0; i < count; i++) {
+        colors.add(computeSlotHue(i, count));
+      }
+      assert.equal(colors.size, count);
+    });
+
+    it('wraps around cleanly when index exceeds total or is negative', () => {
+      const count = 6;
+      assert.equal(computeSlotHue(count, count), computeSlotHue(0, count));
+      assert.equal(computeSlotHue(count + 2, count), computeSlotHue(2, count));
+      assert.equal(computeSlotHue(-1, count), computeSlotHue(count - 1, count));
+    });
+
+    it('skips the 190 through 240 blue/cyan range across various counts', () => {
+      for (let count = 1; count <= 50; count++) {
+        for (let i = 0; i < count; i++) {
+          const color = computeSlotHue(i, count);
+          const match = color.match(/^hsl\((\d+),\s*80%,\s*45%\)$/);
+          assert.ok(match, `Invalid hsl format: ${color}`);
+          const hue = parseInt(match[1], 10);
+          assert.ok(hue < 190 || hue > 240, `Hue ${hue} fell inside skipped range [190, 240] for index ${i}/${count}`);
+        }
+      }
+    });
+
+    it('handles zero or negative total gracefully without NaN', () => {
+      assert.equal(computeSlotHue(0, 0), 'hsl(0, 80%, 45%)');
+      assert.equal(computeSlotHue(3, -5), 'hsl(0, 80%, 45%)');
     });
   });
 });

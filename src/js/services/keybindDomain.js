@@ -29,6 +29,23 @@ export function validateKeybindSafety(config) {
   return { ok: true, message: '' };
 }
 
+export function computeSlotHue(index, total) {
+  if (!total || total <= 0) return 'hsl(0, 80%, 45%)';
+  const count = Math.max(1, total);
+  const normIdx = ((index % count) + count) % count;
+  const SKIP_START = 190;
+  const SKIP_END = 240;
+  const SKIP_SIZE = SKIP_END - SKIP_START;
+  const usable = 360 - SKIP_SIZE;
+  const rawHue = (normIdx / count) * usable;
+  const hue = rawHue < SKIP_START ? rawHue : rawHue + SKIP_SIZE;
+  let rounded = Math.round(hue) % 360;
+  if (rounded >= SKIP_START && rounded <= SKIP_END) {
+    rounded = rawHue < SKIP_START ? (SKIP_START - 1) : (SKIP_END + 1);
+  }
+  return `hsl(${rounded}, 80%, 45%)`;
+}
+
 export function getConflictColors(binds) {
   const comboToActions = {};
   for (const [actionId, raw] of Object.entries(binds)) {
@@ -45,19 +62,10 @@ export function getConflictColors(binds) {
 
   if (conflictCombos.length === 0) return { comboToActions, conflictColorMap: {} };
 
-  const SKIP_START = 190, SKIP_END = 240;
-  const SKIP_SIZE = SKIP_END - SKIP_START;
-  const usable = 360 - SKIP_SIZE;
   const N = conflictCombos.length;
-  
-  const hues = conflictCombos.map((_, i) => {
-    const rawHue = (i / N) * usable;
-    return rawHue < SKIP_START ? rawHue : rawHue + SKIP_SIZE;
-  });
-
   const conflictColorMap = {};
   conflictCombos.forEach((combo, i) => {
-    conflictColorMap[combo] = `hsl(${Math.round(hues[i])}, 80%, 45%)`;
+    conflictColorMap[combo] = computeSlotHue(i, N);
   });
 
   return { comboToActions, conflictColorMap };
