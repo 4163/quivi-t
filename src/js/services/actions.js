@@ -11,11 +11,13 @@ export const ACTION_REGISTRY = [
       if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(1);
       else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(1);
       else if (ctx.Core.getState().manhwaEnabled) {
-        if (ctx.navigateManhwa) {
+        if (ctx.pageStrip) {
+          ctx.pageStrip(1);
+        } else if (ctx.navigateManhwa) {
           ctx.navigateManhwa(1);
         } else {
           ctx.Core.navigate(1);
-          ctx.centerListItem?.(ctx.Core.getState().index);
+          (ctx.alignListItemTop || ctx.centerListItem)?.(ctx.Core.getState().index);
         }
       }
       else ctx.Core.navigate(1);
@@ -26,11 +28,13 @@ export const ACTION_REGISTRY = [
       if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(-1);
       else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(-1);
       else if (ctx.Core.getState().manhwaEnabled) {
-        if (ctx.navigateManhwa) {
+        if (ctx.pageStrip) {
+          ctx.pageStrip(-1);
+        } else if (ctx.navigateManhwa) {
           ctx.navigateManhwa(-1);
         } else {
           ctx.Core.navigate(-1);
-          ctx.centerListItem?.(ctx.Core.getState().index);
+          (ctx.alignListItemTop || ctx.centerListItem)?.(ctx.Core.getState().index);
         }
       }
       else ctx.Core.navigate(-1);

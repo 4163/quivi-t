@@ -40,7 +40,7 @@ import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
 import {
   initManhwaStrip,
   isManhwaStripActive,
-  centerListItem,
+  alignListItemTop,
   getFirstImageIndex,
   getLastImageIndex,
   navigateManhwa,
@@ -75,13 +75,13 @@ window.addEventListener('keydown', (e) => {
     const firstIdx = getFirstImageIndex();
     if (firstIdx !== -1) {
       Core.selectIndex(firstIdx);
-      handled = centerListItem(firstIdx);
+      handled = alignListItemTop(firstIdx);
     }
   } else if (e.key === 'End') {
     const lastIdx = getLastImageIndex();
     if (lastIdx !== -1) {
       Core.selectIndex(lastIdx);
-      handled = centerListItem(lastIdx);
+      handled = alignListItemTop(lastIdx);
     }
   } else if (e.key === 'PageUp') {
     handled = pageStrip(-1);
@@ -153,7 +153,8 @@ const actionCtx = {
   get keyboardPanStep() { return keyboardPanStep; },
   get wheelPanStep() { return wheelPanStep; },
   get centerListItem() { return centerListItem; },
-  get navigateManhwa() { return navigateManhwa; }
+  get navigateManhwa() { return navigateManhwa; },
+  get pageStrip() { return pageStrip; }
 };
 
 function bindMenuCommands() {

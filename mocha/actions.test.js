@@ -114,14 +114,25 @@ describe('Actions registry and keybindings', () => {
         }
       };
 
-      // cmd-next / cmd-prev jump one image in strip
+      let pageStripDelta = 0;
+      fakeCtx.pageStrip = (dir) => { pageStripDelta += dir; };
+
+      // cmd-next / cmd-prev page the strip like PageDown / PageUp
+      await dispatch('cmd-next', null, fakeCtx);
+      assert.equal(pageStripDelta, 1);
+
+      await dispatch('cmd-prev', null, fakeCtx);
+      assert.equal(pageStripDelta, 0);
+
+      // Fallback with navigateManhwa
+      delete fakeCtx.pageStrip;
       await dispatch('cmd-next', null, fakeCtx);
       assert.equal(manhwaNavDelta, 1);
 
       await dispatch('cmd-prev', null, fakeCtx);
       assert.equal(manhwaNavDelta, 0);
 
-      // Fallback without navigateManhwa calls Core.navigate and centerListItem
+      // Fallback without navigateManhwa calls Core.navigate and centerListItem / alignListItemTop
       delete fakeCtx.navigateManhwa;
       let centeredIdx = -1;
       fakeCtx.centerListItem = (idx) => { centeredIdx = idx; };
@@ -129,6 +140,11 @@ describe('Actions registry and keybindings', () => {
       await dispatch('cmd-next', null, fakeCtx);
       assert.equal(coreNavigated, 1);
       assert.equal(centeredIdx, 3);
+
+      let alignedIdx = -1;
+      fakeCtx.alignListItemTop = (idx) => { alignedIdx = idx; };
+      await dispatch('cmd-next', null, fakeCtx);
+      assert.equal(alignedIdx, 3);
 
       // Pan keys move pixels via Viewer.panBy
       await dispatch('cmd-pan-up', null, fakeCtx);

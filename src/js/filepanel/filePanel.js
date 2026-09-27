@@ -25,7 +25,7 @@ import {
 } from './libraryStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
-import { getVisibleImageIndices, isManhwaStripActive, centerListItem } from '../viewer/manhwaStrip.js';
+import { getVisibleImageIndices, isManhwaStripActive, centerListItem, alignListItemTop } from '../viewer/manhwaStrip.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
 import {
   setVisibleRange as setDownloadVisibleRange,
@@ -1605,15 +1605,10 @@ function wireRowListeners(li) {
       return;
     }
     if (Core.getState().manhwaEnabled && isManhwaStripActive()) {
-      if (!centerListItem(index)) {
-        if (Core.getState().index !== index) {
-          Core.selectIndex(index);
-        }
-      }
-    } else {
-      if (Core.getState().index !== index) {
-        Core.selectIndex(index);
-      }
+      alignListItemTop(index);
+    }
+    if (Core.getState().index !== index) {
+      Core.selectIndex(index);
     }
     const now = Date.now();
     if (lastClickIndex === index && (now - lastClickTime < 400)) {
@@ -2664,6 +2659,9 @@ export function initFilePanel(deps) {
     }
 
     if (targetIdx !== null && targetIdx !== state.index) {
+      if (Core.getState().manhwaEnabled && isManhwaStripActive()) {
+        alignListItemTop(targetIdx);
+      }
       Core.selectIndex(targetIdx);
       updateSelection(targetIdx, true, true);
     }
