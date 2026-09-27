@@ -768,18 +768,51 @@ export function navigateManhwa(delta) {
   return alignListItemTop(candidate);
 }
 
-export function pageStrip(direction) {
-  if (!_active || !_viewportState || !_layout.offsets.length) return false;
+export function pageStrip(direction, pageMultiplier = 1) {
+  if (!_active || !_viewportState || !_layout.offsets.length || _imageIndex.length === 0) return false;
   const scale = _viewportState.getScale() || 1;
   const vpH = _viewport?.clientHeight || 800;
   const colVisualH = (_layout.totalHeight || 0) * scale;
-  if (colVisualH <= vpH) return false;
+
+  if (colVisualH <= vpH) {
+    const targetIdx = direction > 0 ? getLastImageIndex() : getFirstImageIndex();
+    if (targetIdx !== -1) {
+      if (Core.getState().index !== targetIdx) {
+        Core.selectIndex(targetIdx);
+      }
+      alignListItemTop(targetIdx);
+    }
+    return true;
+  }
 
   const ty = _viewportState.getTy() || 0;
   const maxTy = (colVisualH - vpH) / 2;
   const minTy = -(colVisualH - vpH) / 2;
+  const step = Math.max(1, pageMultiplier) * vpH;
 
-  const targetTy = direction > 0 ? Math.max(minTy, ty - vpH) : Math.min(maxTy, ty + vpH);
+  if (direction < 0 && ty >= maxTy - 0.5) {
+    const firstIdx = getFirstImageIndex();
+    if (firstIdx !== -1) {
+      if (Core.getState().index !== firstIdx) {
+        Core.selectIndex(firstIdx);
+      }
+      alignListItemTop(firstIdx);
+    }
+    return true;
+  }
+
+  if (direction > 0 && ty <= minTy + 0.5) {
+    const lastIdx = getLastImageIndex();
+    if (lastIdx !== -1) {
+      if (Core.getState().index !== lastIdx) {
+        Core.selectIndex(lastIdx);
+      }
+      alignListItemTop(lastIdx);
+    }
+    return true;
+  }
+
+  const targetTy = direction > 0 ? Math.max(minTy, ty - step) : Math.min(maxTy, ty + step);
   _viewportState.panTo(_viewportState.getTx(), targetTy);
   _strip.style.transform = _viewportState.getTransform();
   _updateWindow();

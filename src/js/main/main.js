@@ -84,9 +84,9 @@ window.addEventListener('keydown', (e) => {
       handled = alignListItemTop(lastIdx);
     }
   } else if (e.key === 'PageUp') {
-    handled = pageStrip(-1);
+    handled = pageStrip(-1, 2);
   } else if (e.key === 'PageDown') {
-    handled = pageStrip(1);
+    handled = pageStrip(1, 2);
   }
 
   if (handled) {

@@ -25,7 +25,7 @@ import {
 } from './libraryStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
-import { getVisibleImageIndices, isManhwaStripActive, centerListItem, alignListItemTop } from '../viewer/manhwaStrip.js';
+import { getVisibleImageIndices, isManhwaStripActive, centerListItem, alignListItemTop, pageStrip, getFirstImageIndex, getLastImageIndex } from '../viewer/manhwaStrip.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
 import {
   setVisibleRange as setDownloadVisibleRange,
@@ -2579,44 +2579,63 @@ export function initFilePanel(deps) {
       return;
     }
 
+    const isManhwa = Core.getState().manhwaEnabled && isManhwaStripActive();
     let targetIdx = null;
     switch (e.key) {
-      case 'ArrowDown':
+      case 'ArrowDown': {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        targetIdx = state.index === -1 ? 0 : Math.min(state.index + 1, list.length - 1);
+        const lastImg = isManhwa ? getLastImageIndex() : (list.length - 1);
+        const maxBound = lastImg !== -1 ? lastImg : (list.length - 1);
+        targetIdx = state.index === -1 ? (isManhwa ? getFirstImageIndex() : 0) : Math.min(state.index + 1, maxBound);
         break;
-      case 'ArrowUp':
+      }
+      case 'ArrowUp': {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        targetIdx = state.index === -1 ? list.length - 1 : Math.max(state.index - 1, 0);
+        const firstImg = isManhwa ? getFirstImageIndex() : 0;
+        const minBound = firstImg !== -1 ? firstImg : 0;
+        targetIdx = state.index === -1 ? (isManhwa ? getLastImageIndex() : list.length - 1) : Math.max(state.index - 1, minBound);
         break;
+      }
       case 'PageDown':
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
+        if (isManhwa) {
+          pageStrip(1, 2);
+          break;
+        }
         targetIdx = Math.min((state.index === -1 ? 0 : state.index) + 10, list.length - 1);
         break;
       case 'PageUp':
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
+        if (isManhwa) {
+          pageStrip(-1, 2);
+          break;
+        }
         targetIdx = Math.max((state.index === -1 ? 0 : state.index) - 10, 0);
         break;
-      case 'Home':
+      case 'Home': {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        targetIdx = 0;
+        const firstImg = isManhwa ? getFirstImageIndex() : 0;
+        targetIdx = firstImg !== -1 ? firstImg : 0;
         break;
-      case 'End':
+      }
+      case 'End': {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        targetIdx = list.length - 1;
+        const lastImg = isManhwa ? getLastImageIndex() : (list.length - 1);
+        targetIdx = lastImg !== -1 ? lastImg : (list.length - 1);
         break;
+      }
       case 'Enter': {
         if (state.index < 0 || state.index >= list.length) {
           break;

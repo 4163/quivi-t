@@ -125,6 +125,8 @@ Goal: the pass lands with contracts intact and a human checklist.
 - [x] Zoom level retention on file list click: `alignListItemTop` and `centerListItem` in `src/js/viewer/manhwaStrip.js` preserve active zoom scale instead of refitting to fit mode. `_updateLayout` holds active scale through decode corrections.
 - [x] In-view neighbor highlight accuracy: `computeWindowRange` and `findAnchorIndex` in `src/js/services/viewerMath.js` evaluate visual slot boundaries (`(i < last) ? offsets[i + 1].top : item.bottom`) with epsilon checks so seam overlap does not leak preceding images into the active view range.
 - [x] Zoomed-out file list click synchronization: in `src/js/filepanel/filePanel.js` (`wireRowListeners`), trigger synchronous `updateSelection(index, false, true)` immediately upon row click. In `src/js/viewer/manhwaStrip.js` (`_syncAnchorToCore`), track explicit holdovers so `quivit-manhwa-settle` and core index selection dispatch without getting silenced by unchanged visible signatures when zoomed all the way out.
+- [x] Default keybind `m` for Manhwa View: assigned `defaultBinds: 'm'` to `cmd-toggle-manhwa` in `src/js/services/actions.js`, set menu shortcut indicator in `src/index.html`, and cleared `cmd-toggle-audio` default bind to prevent conflict warnings.
+- [x] PageUp/PageDown 2-page jump and image clamping: `pageStrip(direction, pageMultiplier)` in `src/js/viewer/manhwaStrip.js` jumps 2 visible pages on PageUp/PageDown while Shift+WASD navigation keeps a 1-page jump. Clamped PageUp/PageDown, Home, End, and Arrow navigation in manhwa mode strictly to image indices (`getFirstImageIndex()` and `getLastImageIndex()`) to prevent selecting `..` or non-image items.
 
 ## Validation note
 
