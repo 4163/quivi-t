@@ -153,11 +153,27 @@ export function computeWindowRange(offsets, windowTopY, windowBottomY) {
 export function computeTopAlignTy({ slotTop = 0, totalHeight = 0, scale = 1, viewportHeight = 800 } = {}) {
   const colVisualH = totalHeight * scale;
   if (colVisualH <= viewportHeight) {
-    return (colVisualH - viewportHeight) / 2;
+    return -(colVisualH - viewportHeight) / 2;
   }
   const maxTy = (colVisualH - viewportHeight) / 2;
   const minTy = -maxTy;
   const rawTy = (totalHeight / 2 - slotTop) * scale - viewportHeight / 2;
+  return Math.max(minTy, Math.min(maxTy, rawTy));
+}
+
+/**
+ * Compute the vertical pan (ty) so that a slot bottom lands at the viewport bottom.
+ * When the column is shorter than the viewport, moves up towards viewport top.
+ * When the column is taller, clamps between the top pin and bottom pin.
+ */
+export function computeBottomAlignTy({ slotBottom = 0, totalHeight = 0, scale = 1, viewportHeight = 800 } = {}) {
+  const colVisualH = totalHeight * scale;
+  if (colVisualH <= viewportHeight) {
+    return (colVisualH - viewportHeight) / 2;
+  }
+  const maxTy = (colVisualH - viewportHeight) / 2;
+  const minTy = -maxTy;
+  const rawTy = (totalHeight / 2 - slotBottom) * scale + viewportHeight / 2;
   return Math.max(minTy, Math.min(maxTy, rawTy));
 }
 

@@ -25,7 +25,7 @@ import {
 } from './libraryStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
-import { getVisibleImageIndices, isManhwaStripActive, centerListItem, alignListItemTop, pageStrip, getFirstImageIndex, getLastImageIndex } from '../viewer/manhwaStrip.js';
+import { getVisibleImageIndices, isManhwaStripActive, centerListItem, alignListItemTop, alignListItemBottom, pageStrip, getFirstImageIndex, getLastImageIndex } from '../viewer/manhwaStrip.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
 import {
   setVisibleRange as setDownloadVisibleRange,
@@ -2729,7 +2729,11 @@ export function initFilePanel(deps) {
 
     if (targetIdx !== null && targetIdx !== state.index) {
       if (Core.getState().manhwaEnabled && isManhwaStripActive()) {
-        alignListItemTop(targetIdx);
+        if (targetIdx === getLastImageIndex()) {
+          alignListItemBottom(targetIdx);
+        } else {
+          alignListItemTop(targetIdx);
+        }
       }
       Core.selectIndex(targetIdx);
       updateSelection(targetIdx, true, true);

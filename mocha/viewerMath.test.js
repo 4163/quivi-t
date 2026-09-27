@@ -11,6 +11,7 @@ import {
   findAnchorIndex,
   computeWindowRange,
   computeTopAlignTy,
+  computeBottomAlignTy,
   computeSlotHue,
   computeStripFitScale
 } from '../src/js/services/viewerMath.js';
@@ -521,15 +522,15 @@ describe('viewerMath', () => {
       assert.equal(ty, -1100);
     });
 
-    it('pins short columns to top regardless of slot offset', () => {
+    it('pins short columns down/towards bottom on top align regardless of slot offset', () => {
       const tyFirst = computeTopAlignTy({
         slotTop: 0,
         totalHeight: 500,
         scale: 1,
         viewportHeight: 800
       });
-      // (500 - 800) / 2 = -150
-      assert.equal(tyFirst, -150);
+      // -(500 - 800) / 2 = 150
+      assert.equal(tyFirst, 150);
 
       const tyLater = computeTopAlignTy({
         slotTop: 200,
@@ -537,7 +538,7 @@ describe('viewerMath', () => {
         scale: 1,
         viewportHeight: 800
       });
-      assert.equal(tyLater, -150);
+      assert.equal(tyLater, 150);
     });
 
     it('scales correctly for zoomed in and zoomed out states', () => {
@@ -560,6 +561,60 @@ describe('viewerMath', () => {
       });
       // (1500 - 1000) * 0.5 - 400 = -150
       assert.equal(tyZoomOut, -150);
+    });
+  });
+
+  describe('computeBottomAlignTy', () => {
+    it('pins the last item to viewport bottom', () => {
+      const ty = computeBottomAlignTy({
+        slotBottom: 3000,
+        totalHeight: 3000,
+        scale: 1,
+        viewportHeight: 800
+      });
+      // -(3000 - 800) / 2 = -1100
+      assert.equal(ty, -1100);
+    });
+
+    it('pins short columns up/towards top on bottom align regardless of slot offset', () => {
+      const tyLast = computeBottomAlignTy({
+        slotBottom: 500,
+        totalHeight: 500,
+        scale: 1,
+        viewportHeight: 800
+      });
+      // (500 - 800) / 2 = -150
+      assert.equal(tyLast, -150);
+
+      const tyEarlier = computeBottomAlignTy({
+        slotBottom: 200,
+        totalHeight: 500,
+        scale: 1,
+        viewportHeight: 800
+      });
+      assert.equal(tyEarlier, -150);
+    });
+
+    it('scales correctly for zoomed in and zoomed out states', () => {
+      // Zoomed in (scale 2): visual height = 6000
+      const tyZoomIn = computeBottomAlignTy({
+        slotBottom: 2000,
+        totalHeight: 3000,
+        scale: 2,
+        viewportHeight: 800
+      });
+      // (1500 - 2000) * 2 + 400 = -600
+      assert.equal(tyZoomIn, -600);
+
+      // Zoomed out (scale 0.5): visual height = 1500
+      const tyZoomOut = computeBottomAlignTy({
+        slotBottom: 2000,
+        totalHeight: 3000,
+        scale: 0.5,
+        viewportHeight: 800
+      });
+      // (1500 - 2000) * 0.5 + 400 = 150
+      assert.equal(tyZoomOut, 150);
     });
   });
 

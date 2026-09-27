@@ -41,6 +41,7 @@ import {
   initManhwaStrip,
   isManhwaStripActive,
   alignListItemTop,
+  alignListItemBottom,
   getFirstImageIndex,
   getLastImageIndex,
   navigateManhwa,
@@ -81,7 +82,7 @@ window.addEventListener('keydown', (e) => {
     const lastIdx = getLastImageIndex();
     if (lastIdx !== -1) {
       Core.selectIndex(lastIdx);
-      handled = alignListItemTop(lastIdx);
+      handled = alignListItemBottom(lastIdx);
     }
   } else if (e.key === 'PageUp') {
     handled = pageStrip(-1, 2);
@@ -153,6 +154,7 @@ const actionCtx = {
   get keyboardPanStep() { return keyboardPanStep; },
   get wheelPanStep() { return wheelPanStep; },
   get centerListItem() { return centerListItem; },
+  get alignListItemBottom() { return alignListItemBottom; },
   get navigateManhwa() { return navigateManhwa; },
   get pageStrip() { return pageStrip; }
 };

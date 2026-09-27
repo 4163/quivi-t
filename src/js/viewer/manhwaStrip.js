@@ -11,7 +11,7 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { thumbnailCache } from '../filepanel/filePanel.js';
-import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeSlotHue, computeStripFitScale } from '../services/viewerMath.js';
+import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale } from '../services/viewerMath.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 /** Max img nodes kept in the free pool after eviction. */
@@ -208,7 +208,7 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
   const vw = _viewport?.clientWidth || 800;
   const oldTy = _viewportState?.getTy() || 0;
   const oldTotalH = _layout.totalHeight || 0;
-  const oldMaxTy = (oldTotalH * scale - vpH) / 2;
+  const oldMaxTy = Math.abs(oldTotalH * scale - vpH) / 2;
   const wasAtTop = oldTy >= oldMaxTy - 0.5;
   const wasAtBottom = oldTy <= -oldMaxTy + 0.5;
 
@@ -230,10 +230,10 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
         _viewportState.panTo(_viewportState.getTx(), targetTy);
       } else {
         const curTx = _viewportState.getTx();
-        if (colH <= vpH || _anchorHoldover === 0) {
-          _viewportState.panTo(curTx, (colH - vpH) / 2);
-        } else if (_anchorHoldover === _imageIndex.length - 1) {
-          _viewportState.panTo(curTx, -(colH - vpH) / 2);
+        if (_anchorHoldover === _imageIndex.length - 1) {
+          _viewportState.panTo(curTx, -Math.abs(colH - vpH) / 2);
+        } else if (_anchorHoldover === 0 || colH <= vpH) {
+          _viewportState.panTo(curTx, Math.abs(colH - vpH) / 2);
         } else {
           _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2);
         }
@@ -241,9 +241,9 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
     } else if (anchorImgIdxToHold !== null && _layout.offsets[anchorImgIdxToHold]) {
       if (wasAtTop && !wasAtBottom) {
         // View was end-pinned: re-pin the end instead of holding the anchor.
-        _viewportState.panTo(_viewportState.getTx(), (colH - vpH) / 2);
+        _viewportState.panTo(_viewportState.getTx(), Math.abs(colH - vpH) / 2);
       } else if (wasAtBottom && !wasAtTop) {
-        _viewportState.panTo(_viewportState.getTx(), -(colH - vpH) / 2);
+        _viewportState.panTo(_viewportState.getTx(), -Math.abs(colH - vpH) / 2);
       } else {
         const newAnchorTop = _layout.offsets[anchorImgIdxToHold].top;
         const deltaAnchorTop = newAnchorTop - oldAnchorTop;
@@ -646,7 +646,7 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
 
   if (targetImgIdx === null) {
     if (colH <= vh + 0.5) {
-      _viewportState.panTo(0, (colH - vh) / 2);
+      _viewportState.panTo(0, Math.abs(colH - vh) / 2);
     } else {
       _viewportState.panTo(0, _viewportState.getTy());
     }
@@ -654,15 +654,13 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
     if (_layout.offsets[targetImgIdx]) {
       _topAlignColumnY(_layout.offsets[targetImgIdx].top, 0);
     } else if (colH <= vh + 0.5) {
-      _viewportState.panTo(0, (colH - vh) / 2);
+      _viewportState.panTo(0, Math.abs(colH - vh) / 2);
     }
   } else {
-    if (colH <= vh + 0.5) {
-      _viewportState.panTo(0, (colH - vh) / 2);
-    } else if (targetImgIdx === 0) {
-      _viewportState.panTo(0, (colH - vh) / 2);
-    } else if (targetImgIdx === _imageIndex.length - 1) {
-      _viewportState.panTo(0, -(colH - vh) / 2);
+    if (targetImgIdx === _imageIndex.length - 1) {
+      _viewportState.panTo(0, -Math.abs(colH - vh) / 2);
+    } else if (targetImgIdx === 0 || colH <= vh + 0.5) {
+      _viewportState.panTo(0, Math.abs(colH - vh) / 2);
     } else if (_layout.offsets[targetImgIdx]) {
       _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
     }
@@ -694,6 +692,25 @@ export function alignListItemTop(listIndex) {
   return true;
 }
 
+export function alignListItemBottom(listIndex) {
+  if (!_active || !_viewportState) return false;
+  const mapped = _listToImgIdx.get(listIndex);
+  if (mapped === undefined || !_layout.offsets[mapped]) return false;
+  _anchorImgIdx = mapped;
+  _anchorHoldover = mapped;
+  _anchorHoldoverAlignTop = false;
+  const scale = _viewportState.getScale() || 1;
+  _anchorHoldoverScale = scale;
+
+  _bottomAlignColumnY(_layout.offsets[mapped].bottom);
+
+  _strip.style.transform = _viewportState.getTransform();
+  _updateGrillAngles();
+  _updateWindow();
+  _scheduleSettle();
+  return true;
+}
+
 export function centerListItem(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
@@ -707,12 +724,10 @@ export function centerListItem(listIndex) {
   const colH = (_layout.totalHeight || 0) * scale;
   const vh = _viewport?.clientHeight || 800;
   const curTx = _viewportState.getTx();
-  if (colH <= vh) {
-    _viewportState.panTo(curTx, (colH - vh) / 2);
-  } else if (mapped === 0) {
-    _viewportState.panTo(curTx, (colH - vh) / 2);
-  } else if (mapped === _imageIndex.length - 1) {
-    _viewportState.panTo(curTx, -(colH - vh) / 2);
+  if (mapped === _imageIndex.length - 1) {
+    _viewportState.panTo(curTx, -Math.abs(colH - vh) / 2);
+  } else if (mapped === 0 || colH <= vh) {
+    _viewportState.panTo(curTx, Math.abs(colH - vh) / 2);
   } else if (_layout.offsets[mapped]) {
     _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
   }
@@ -765,7 +780,11 @@ export function pageStrip(direction, pageMultiplier = 1) {
       if (Core.getState().index !== targetIdx) {
         Core.selectIndex(targetIdx);
       }
-      alignListItemTop(targetIdx);
+      if (direction > 0) {
+        alignListItemBottom(targetIdx);
+      } else {
+        alignListItemTop(targetIdx);
+      }
     }
     return true;
   }
@@ -792,7 +811,7 @@ export function pageStrip(direction, pageMultiplier = 1) {
       if (Core.getState().index !== lastIdx) {
         Core.selectIndex(lastIdx);
       }
-      alignListItemTop(lastIdx);
+      alignListItemBottom(lastIdx);
     }
     return true;
   }
@@ -815,6 +834,25 @@ function _topAlignColumnY(colY, targetTx = null) {
   const vpH = _viewport?.clientHeight || 800;
   const targetTy = computeTopAlignTy({
     slotTop: colY,
+    totalHeight: _layout.totalHeight || 0,
+    scale,
+    viewportHeight: vpH,
+  });
+  const tx = targetTx !== null ? targetTx : _viewportState.getTx();
+  _viewportState.panTo(tx, targetTy);
+  _strip.style.transform = _viewportState.getTransform();
+}
+
+/**
+ * Pan so column position colY (unzoomed) lands at the viewport bottom.
+ * ty is screen px, clamped to column ends. Preserves horizontal pan.
+ */
+function _bottomAlignColumnY(colY, targetTx = null) {
+  if (!_viewportState || !_layout.offsets.length) return;
+  const scale = _viewportState.getScale() || 1;
+  const vpH = _viewport?.clientHeight || 800;
+  const targetTy = computeBottomAlignTy({
+    slotBottom: colY,
     totalHeight: _layout.totalHeight || 0,
     scale,
     viewportHeight: vpH,
