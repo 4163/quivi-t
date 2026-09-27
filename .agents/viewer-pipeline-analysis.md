@@ -7,7 +7,7 @@ Validation comparison performed against `.agents/skills/validate-changes/SKILL.m
 - Viewer is single image mode. Strip is manhwa continuous scroll mode.
 - Hold pan is Space or mouse drag held down through `viewerGestures.js`. Discrete pan is one keyboard or wheel step through `actions.js` to `Viewer.panBy`.
 - Navigation is any index or container change. That includes next, previous, file panel click, panel keyboard nav, Home, End, PageUp, PageDown, parent, sibling, refresh, history, and manhwa toggle.
-- Bridge is keep old pixels up until new pixels decode. Legacy viewer has it. Strip has none today.
+- Bridge is keep old pixels up until new pixels decode. Legacy viewer has it. Strip handles bridging case-by-case per edge case.
 - Deviation rule. If a fix changes who owns a surface, stop and update this doc first. Do not split one owner across sibling files.
 
 ## Pipeline map
@@ -50,38 +50,6 @@ Status: resolved and user-confirmed in the running app.
 
 As-built behavior in `manhwaStrip.js:408-600`. The window is anchor minus 1 to anchor plus 1, unioned with the visible range, computed from item indexes so height estimates never misalign it. Everything outside unmounts on every update. Items outside the visible range mount only from decoded prefetched nodes. Prefetch runs from the first build, covers non-visible window items first with an off-DOM `decode()` gate, and retains one ready node. Backend warms 2 entries past the window from the strip lead edge. Protocol serves plain zips through an unlocked parallel extraction path with short-lock cache check plus insert. First-build backend warm waits one update to protect cold-open CPU.
 
-## Issue 3. Any navigation in strip mode blanks instead of bridging
-
-Status: open, no code changes yet. Next issue to work.
-
-Scope covers all navigation, not only file select or mode toggle. Verified paths all land in destructive teardown with no holdover.
-
-Legacy viewer behavior.
-
-- `viewerRender.js:137-161` parks outgoing node and freezes geometry into bridge props.
-- `viewerRender.js:400-422,611-615,711-715` shows incoming node only after decode and holds 45 ms on cold cache.
-- `viewerRender.js:163-203` bridges image to video swaps.
-- `core.js:226-232` keeps old src on empty placeholder checks so active change stays false.
-
-Strip behavior today.
-
-- `viewerRender.js:508-513` returns early in manhwa mode through `clearDisplayedImage` at `viewerRender.js:468-480`. That call cancels the retiring bridge node and recycles pool nodes. It parks nothing.
-- `manhwaStrip.js` has zero bridge refs. `_activate` at 1038 builds empty estimated slots. Rebuild on list or container change at 1139 removes all mounted images and clears slots and prefetch maps. `_deactivate` at 1107 removes everything. `_updateWindow` at 408 evicts outside the 1-item window. Video slots are text placeholders.
-- CSS hides the old layer in strip mode at `main.css:1601-1608`.
-
-Navigation paths that hit this.
-
-- Next and previous through `actions.js:9-42` to `pageStrip` at `manhwaStrip.js:931` or `navigateManhwa` at 910.
-- File panel click through `filePanel.js:1594-1625` to `alignListItemTop` plus `Core.selectIndex`.
-- Panel keyboard nav through `filePanel.js:2622-2740`.
-- Home, End, PageUp, PageDown through `main.js:68-97`.
-- Container change through open parent, sibling, refresh, history load, all landing in `_onStateChange` rebuild at `manhwaStrip.js:1139`.
-- Mode toggle through `actions.js:138-140` to `core.js:485-502`.
-
-Root cause is missing holdover owner. Fan out through `Core._notify` tears down old pixels before new pixels decode. Estimated slots still guarantee blank first paint on rebuilds. The 1-deep prefetched node only covers scroll-adjacent mounts, not navigation jumps or rebuilds.
-
-Fix direction has to pick one holdover owner. Keep old strip nodes mounted until replacements for the same scroll anchor decode, or snapshot viewport into the bridge layer across navigation and release after first decoded mount. Decode before append matters more than buffer size here.
-
 ## Issue 4. File list stays static during key hold
 
 Paint path works. `filePanel.js:2035,2140-2214,2825-2829` paints selected and in view sync. Panel subscribes at 2446. Scroll over panel paints sync at 2422-2433.
@@ -94,6 +62,76 @@ Secondary trap is `filePanel.js:2627-2629` diverts viewport hovered arrows and S
 
 Fix direction is throttled anchor sync during hold, for example every 100 to 150 ms while repeat continues, or direct visible paint without waiting for `Core.selectIndex`, with `Core.selectIndex` kept as trailing commit.
 
+## Issue 5. Identical per-image work that belongs on the container
+
+Status: open, no code changes yet. From clipboard handoff.
+
+The big transform already sits in one place. Every pan, zoom, align, and layout path writes one container transform at `manhwaStrip.js:304,829,848,867,895,981,1003,1022,1035,1231` through `getTransform` at `viewerMath.js:456`. Rotation, flip, and scale ride that single write. No per-image geometry transform exists in code.
+
+What still runs once per image with identical content.
+
+- Mount builds fresh onload plus onerror closures per node at `manhwaStrip.js:511-523`, plus dataset writes at 499-500.
+- Decode writes slot width and height at 362-366 and fans the width estimate out to every undecided slot at 349-360.
+- SVG sizing writes inline width and height on the img at 337-340 and again at 503-509.
+- `_buildSlots` at 197-239 writes per-slot width, height, backdrop node, `--slot-backdrop-bg` tint, and video placeholder divs.
+- `--zoom-scale`, `--grill-angle`, `--slot-backdrop-angle`, and `data-scaling` already live on the strip at 241-246, 830, 1063, 1155, 1232. CSS still targets `.manhwa-slot>img[data-scaling]` at `main.css:1589-1599`, so confirm no per-img scaling write exists before touching that selector.
+
+Fix direction is dedupe inside the same owner. Share one onload and one onerror handler across mounts, keyed by imgIdx from the dataset. Size the slot, not the img, wherever the img only mirrors the slot. Keep the per-slot tint, that one is intentionally per slot. `manhwaStrip.js` stays the sole strip owner. No state, CSS token, or IPC change.
+
+## Issue 6. Strip ignores open_first_image and centers width-fit opens
+
+Status: open, no code changes yet. From clipboard handoff. Two sub-bugs, one area.
+
+Off means blank elsewhere. `fsUtils.js:526-537` for folders and `700-704` for archives resolve index 0 (`..`, empty src) when `open_first_image` is off. Single-image view then shows the drop overlay.
+
+The strip overrides that. `_buildImageIndex` at `manhwaStrip.js:136-156` keeps image and video entries only, so `..` never maps. `_activate` at 1070-1071 and the rebuild path at 1190-1191 fall back to anchor 0 when the map misses. Off still lands on the first image, and `_scheduleSettle` then pushes that selection into Core.
+
+Width-family fits open centered. `_activate` at 1075 calls `_applyFitMode(mode, anchor)` with alignTop false. That runs the center path at 819-826 (`_centerColumnY`, last-item end-pin at 820-821). Same for the rebuild path at 1195. Opening a folder in manhwa mode with fit width, width-if-larger, window, or window-if-larger puts the viewport at the first image center instead of the column top.
+
+Fix direction. When the resolved index has no image mapping and the setting is off, hold no anchor, force no selection, and leave the viewport on the drop overlay instead of falling back to anchor 0. First open in a width-family fit top-aligns through `computeTopAlignTy` at `viewerMath.js:153-162` rather than centering. Keep single-image open behavior as is. `manhwaStrip.js` stays the sole strip owner.
+
+## Issue 7. Strip decodes in parallel where thumbnails queue in order
+
+Status: open, no code changes yet. From clipboard handoff.
+
+Thumbnail view serializes heavy work. `filePanel.js:282-293` bounds the viewport queue with a 1-row margin, parks uncached thumbs on `TRANSPARENT_PIXEL` with `pendingSrc` at 1853-1867, commits on scroll settle at 2428-2437 through `commitPendingThumbnails` at 2059-2130, exempts the viewer-active index at 1860-1862 and 1873-1881, and dedupes archive bytes through `ensureArchiveBlob` at 109 behind `isConstrainedThumbnailSrc` at `fsUtils.js:222`.
+
+The strip runs hot. Prefetch allows 2 concurrent decodes at `manhwaStrip.js:39`, backend warm fires 2 past the window at 683-706, and the mount loop at 470-548 mounts every visible item raw the same tick. Parallel unlocked ZIP extraction piles onto first scroll. Completion order, not scroll order, decides what lands first.
+
+Fix direction is a sequential queue in scroll order for strip mounts and prefetches, mirroring the thumbnail settle and commit pattern, with the anchor-visible item exempt the way the viewer-active thumb is. Keep the 1-image buffer and the decode gate. No new owner. The strip owns the queue inline; no shared queue module unless a second caller appears.
+
+## Issue 8. Video rows hold layout instead of skipping
+
+Status: open, no code changes yet. From clipboard handoff.
+
+Today videos are layout members. `_buildImageIndex` at `manhwaStrip.js:136-156` includes them, `_buildSlots` at 214,229-234 reserves a 400 px row with a text label, offsets and totalHeight count them, and the anchor can land on one. Mount at 474, prefetch at 624, decode at 312, and backend warm at 690,697 skip video, so each row stays a dead placeholder that shifts every image below it.
+
+Requested behavior treats a video as a file-list highlight only. The strip index and layout exclude videos entirely. Selecting one paints the row, shows the drop overlay in the viewport, and mounts nothing. Single-image view keeps its player at `viewerRender.js:533-586`. The audio pill is already hidden in strip mode.
+
+Watch the landings. `navigateManhwa` at 910-929 and the external-index branch at 1212-1218 must route video selections to highlight-only without moving the strip or pushing a bogus anchor through settle at 719-753. Settle must not drag Core back onto a nearby image while a video row stays highlighted.
+
+## Issue 9. Imported-but-downloading slots render as errors
+
+Status: open, no code changes yet. From clipboard handoff.
+
+The importer writes 0-byte placeholders first and returns before bytes arrive (`urlLoader.js:1829,1912,1994,2108,2213,2519`), then swaps on `quivit-download-complete` at 2353-2370. Single-image view rides that swap at `viewerRender.js:493-505` and the statusbar reads `Downloading...` at `statusbar.js:191-207`.
+
+The strip has no downloading state. `_buildSrc` at `manhwaStrip.js:121-134` hands the 0-byte path to an img, the load fails, and onerror at 514-523 stamps the slot `error` plus a `.manhwa-error-placeholder` div. `_acquireNode` at 158-165 sets `alt` to empty, so nothing names the state.
+
+Requested behavior leaves the slot blank with `alt="Downloading..."` on the img and fills it when the bytes land. No error class, no error div, no decoded flag, no prefetch-cache poisoning from the failed attempt. The download-complete event remounts or retries that slot the way the single-image swap does.
+
+## Issue 10. Secondary highlights survive manhwa toggle-off
+
+Status: open, no code changes yet. From clipboard handoff.
+
+Secondary highlight is the `in-view` class on file rows, painted only in strip mode. Both paint paths gate it on `isManhwa = state.manhwaEnabled && isManhwaStripActive()` and remove it otherwise: `renderVisibleSlice` at `filePanel.js:2036-2040`, `updateSelection` at 2215-2219.
+
+Toggle-off never reaches either path. `renderFilePanel` dedups at `filePanel.js:2318-2327` on list identity, index, view mode, panel visibility, and directory only. Toggling manhwa changes none of those, so it returns early with stale `in-view` classes still on the rows. `_deactivate` at `manhwaStrip.js:1107-1137` dispatches no event and cancels the settle timer at 1125-1128, so no later pass repaints the panel.
+
+Toggle-on self-heals by accident. `_activate` schedules a settle that fires `quivit-manhwa-settle`, and the panel listener at `filePanel.js:2825-2829` repaints while the strip is active. Toggle-off has no such trailing event, so the stale highlight sits until the next selection change.
+
+Fix direction is a manhwa token in the dedup guard. Record last rendered manhwa-active state next to `lastRenderedIndex` at 305 and include it in the early-return comparison, so toggle on and off both force a repaint through the existing remove path. Do not let the strip reach into panel rows to clear classes; the panel stays the sole owner and the Core notify stays the only channel.
+
 ## Confirm checklist
 
 - [x] Log decode corrections during hold with imgIdx, oldH, newH, anchor, oldAnchorTop, newAnchorTop, oldTy, targetTy. Accept when jumps align with decodes and sign tracks direction.
@@ -102,5 +140,11 @@ Fix direction is throttled anchor sync during hold, for example every 100 to 150
 - [x] Time src set versus onload versus first paint by archive versus disk. Accept when blank duration is split by cache hit and miss.
 - [x] Count prefetch start versus skip and duplicate URL fetch. Accept when double fetch rate is known.
 - [x] Count evict to remount of same index within 2 seconds. Accept when thrash rate is known.
-- [ ] Record blank frames across next, previous, panel click, container change, mode toggle on and off. Accept when all six are measured with current code.
+
 - [ ] Log key repeat, panBy, scheduleSettle, selectIndex, settle event times during hold. Accept when starvation gap is measured.
+- [ ] Count shared versus per-mount handlers and style writes over one chapter scroll. Accept when one onload/onerror pair serves all mounts.
+- [ ] Open a folder in manhwa mode with open_first_image off and fit width. Accept when the overlay shows and no selection is forced. Repeat with the setting on. Accept when the first image pins top.
+- [ ] Log strip mount start order and concurrent fetches on a cold archive scroll. Accept when starts follow scroll order through a sequential queue.
+- [ ] Step through a mixed image and video folder in strip mode. Accept when videos highlight only, the overlay shows, and layout ignores them.
+- [ ] Import a gallery URL in strip mode before downloads finish. Accept when pending slots read Downloading, stay blank, and fill on arrival.
+- [ ] Toggle manhwa on, scroll, then toggle off. Accept when no row keeps in-view after toggle-off.
