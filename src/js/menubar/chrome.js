@@ -38,6 +38,7 @@ export function applyStatusBarVisibility() {
     statusbarEl.classList.toggle('hidden', !statusBarVisible);
   }
   Statusbar.syncSpreadIndicator(state);
+  Statusbar.syncManhwaIndicator(state);
 }
 
 export function setStatusBarVisible(visible, { persist = false } = {}) {

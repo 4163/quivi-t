@@ -728,10 +728,6 @@ export function syncViewMenu(state) {
     _setMenuItemDisabled(id, manhwaOn, manhwaNote);
   }
 
-  for (const id of ['cmd-spread-off', 'cmd-spread-direction-rtl', 'cmd-spread-direction-ltr']) {
-    _setMenuItemDisabled(id, manhwaOn, manhwaNote);
-  }
-
   const spreadEnabled = !!(state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? (state.spreadMode && state.spreadMode !== 'off'));
   const spreadDirection = state.spreadDirection ?? state.config?.frontend_data?.spread_direction ?? 'rtl';
 

@@ -785,8 +785,9 @@ li:hover>.favorite-remove,
   pointer-events: none;
 }
 
-/* When the spread indicator is also visible, stack above it. */
-#viewport:has(#spread-indicator:not(:empty)) .audio-control-container {
+/* When the spread or manhwa indicator is also visible, stack above it. */
+#viewport:has(#spread-indicator:not(:empty)) .audio-control-container,
+#viewport:has(#manhwa-indicator:not(:empty)) .audio-control-container {
   bottom: 38px;
 }
 
@@ -1607,6 +1608,10 @@ li:hover>.favorite-remove,
   display: none;
 }
 
+#viewport:not(.manhwa-active) #manhwa-indicator {
+  display: none;
+}
+
 #viewport.manhwa-active .audio-control-container {
   display: none;
 }
@@ -1953,12 +1958,14 @@ body.is-importing-url .header-cell:hover {
 
 
 
-/* Spread indicator when the status bar is hidden. */
-#spread-indicator:empty {
+/* Spread and manhwa indicators when the status bar is hidden. */
+#spread-indicator:empty,
+#manhwa-indicator:empty {
   display: none;
 }
 
-#spread-indicator {
+#spread-indicator,
+#manhwa-indicator {
   position: absolute;
   bottom: 10px;
   left: 10px;
@@ -2186,6 +2193,7 @@ body.is-importing-url .header-cell:hover {
 }
 
 .status-spread,
+.status-manhwa,
 .status-dims,
 .status-index,
 .status-zoom,
@@ -2199,7 +2207,8 @@ body.is-importing-url .header-cell:hover {
   color: var(--text-dim);
 }
 
-.status-spread:not(:empty)::before {
+.status-spread:not(:empty)::before,
+.status-manhwa:not(:empty)::before {
   content: '·';
   margin-right: 12px;
   color: var(--border);

@@ -24,6 +24,8 @@ let statusFit;
 let statusScrollZoom;
 let statusSpread;
 let spreadIndicator;
+let statusManhwa;
+let manhwaIndicator;
 const MIN_REFRESH_DURATION_MS = 200;
 const FLASH_MESSAGE_DURATION_MS = 3000;
 let _refreshTimer = null;
@@ -42,7 +44,10 @@ export const Statusbar = {
     statusScrollZoom = document.querySelector('.status-scroll-zoom');
     statusSpread = document.querySelector('.status-spread');
     spreadIndicator = document.getElementById('spread-indicator');
+    statusManhwa = document.querySelector('.status-manhwa');
+    manhwaIndicator = document.getElementById('manhwa-indicator');
     this.syncSpreadIndicator(Core.getState());
+    this.syncManhwaIndicator(Core.getState());
 
     if (typeof window !== 'undefined' && window.addEventListener) {
       window.addEventListener('quivit-download-complete', () => {
@@ -115,6 +120,31 @@ export const Statusbar = {
     }
   },
 
+  syncManhwaIndicator(state) {
+    if (!statusManhwa && !manhwaIndicator) return;
+    const s = state || Core.getState();
+    const manhwaEnabled = !!(s.manhwaEnabled ?? s.config?.frontend_data?.manhwa_enabled);
+    const isManhwaActive = manhwaEnabled && s.mode !== 'empty' && (!s.list || s.list.length > 0);
+    const manhwaText = isManhwaActive ? '[Manhwa View]' : '';
+    const isStatusBarHidden = !statusbar || statusbar.classList.contains('hidden');
+
+    if (isStatusBarHidden) {
+      if (manhwaIndicator && manhwaIndicator.textContent !== manhwaText) {
+        manhwaIndicator.textContent = manhwaText;
+      }
+      if (statusManhwa && statusManhwa.textContent !== '') {
+        statusManhwa.textContent = '';
+      }
+    } else {
+      if (statusManhwa && statusManhwa.textContent !== manhwaText) {
+        statusManhwa.textContent = manhwaText;
+      }
+      if (manhwaIndicator && manhwaIndicator.textContent !== '') {
+        manhwaIndicator.textContent = '';
+      }
+    }
+  },
+
   isCurrentEntryDownloading(state) {
     const s = state || Core.getState();
     const currentEntry = s.list?.[s.index];
@@ -130,6 +160,7 @@ export const Statusbar = {
   update(state) {
     if (!statusbar) return;
     this.syncSpreadIndicator(state);
+    this.syncManhwaIndicator(state);
 
     if (statusFit) {
       const mode = state.fitMode ?? 'window';
@@ -229,6 +260,7 @@ export const Statusbar = {
       }
     }
     this.syncSpreadIndicator(Core.getState());
+    this.syncManhwaIndicator(Core.getState());
   },
 
   // Hot-path zoom update from _applyTransform.
