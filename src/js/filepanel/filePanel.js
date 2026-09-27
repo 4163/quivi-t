@@ -226,6 +226,7 @@ let columnResizeMoved = false;
 let lastRenderedList = null;
 let lastDownloadOrderList = null;
 let lastScrolledIndex = -1;
+let lastScrolledSig = '';
 let lastClickTime = 0;
 let lastClickIndex = -1;
 let pendingClickIndex = -1;
@@ -1926,7 +1927,7 @@ function renderVisibleSlice() {
       li.style.display = 'none';
       li.style.top = '';
       li.dataset.index = '';
-      li.classList.remove('selected');
+      li.classList.remove('selected', 'in-view');
       const img = li._slots?.thumbImg;
       if (img) {
         delete img.dataset.pendingSrc;
@@ -1991,7 +1992,7 @@ function renderVisibleSlice() {
       li.style.display = 'none';
       li.style.top = '';
       li.dataset.index = '';
-      li.classList.remove('selected');
+      li.classList.remove('selected', 'in-view');
       const img = li._slots?.thumbImg;
       if (img) {
         delete img.dataset.pendingSrc;
@@ -2049,6 +2050,8 @@ function onScrollSettle() {
 function commitPendingThumbnails() {
   const activeIdx = Core.getState().index;
   const isThumbnailView = Core.getState().fileListViewMode === 'thumbnail';
+  const isManhwa = Core.getState().manhwaEnabled && isManhwaStripActive();
+  const visibleIndices = isManhwa ? new Set(getVisibleImageIndices()) : null;
 
   // Filter to rows within viewport (constrained URLs only), sort by: active first, then scroll direction
   const ordered = Array.from(activeRows.values()).filter(li => {
@@ -2063,6 +2066,12 @@ function commitPendingThumbnails() {
     const bi = parseInt(b.dataset.index, 10);
     if (ai === activeIdx) return -1;
     if (bi === activeIdx) return 1;
+    if (visibleIndices) {
+      const aInView = visibleIndices.has(ai);
+      const bInView = visibleIndices.has(bi);
+      if (aInView && !bInView) return -1;
+      if (!aInView && bInView) return 1;
+    }
     // Load in scroll direction: down (+1) loads ascending, up (-1) loads descending
     return scrollDirection >= 0 ? ai - bi : bi - ai;
   });
@@ -2136,22 +2145,63 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
     (document.activeElement && fileListUl.contains(document.activeElement)) ||
     (isDefaultFocus && Core.getState().fileListVisible);
 
+  const isManhwa = Core.getState().manhwaEnabled && isManhwaStripActive();
+  const visibleListIndices = isManhwa ? getVisibleImageIndices() : null;
+  const visibleIndices = visibleListIndices ? new Set(visibleListIndices) : null;
+
+  const hasVisible = visibleListIndices && visibleListIndices.length > 0;
+  const minActiveIdx = hasVisible
+    ? Math.min(selectedIndex >= 0 ? selectedIndex : Infinity, ...visibleListIndices)
+    : selectedIndex;
+  const maxActiveIdx = hasVisible
+    ? Math.max(selectedIndex >= 0 ? selectedIndex : -Infinity, ...visibleListIndices)
+    : selectedIndex;
+
+  const currentScrollSig = `${selectedIndex}:${minActiveIdx}:${maxActiveIdx}`;
+
   let didScroll = false;
-  if (selectedIndex >= 0 && selectedIndex < lastRenderedList.length) {
-    if (selectedIndex !== lastScrolledIndex) {
+  if (minActiveIdx >= 0 && maxActiveIdx < lastRenderedList.length && ROW_HEIGHT > 0) {
+    if (currentScrollSig !== lastScrolledSig) {
+      lastScrolledSig = currentScrollSig;
       lastScrolledIndex = selectedIndex;
-      const itemTop = selectedIndex * ROW_HEIGHT;
-      const itemBottom = itemTop + ROW_HEIGHT;
+
       const viewTop = fileListUl.scrollTop;
       const clientH = fileListUl.clientHeight || 600;
       const viewBottom = viewTop + clientH;
 
-      if (itemTop < viewTop) {
-        fileListUl.scrollTop = itemTop;
-        didScroll = true;
-      } else if (itemBottom > viewBottom) {
-        fileListUl.scrollTop = itemBottom - clientH;
-        didScroll = true;
+      const selectedTop = selectedIndex * ROW_HEIGHT;
+      const selectedBottom = selectedTop + ROW_HEIGHT;
+
+      const rangeTop = minActiveIdx * ROW_HEIGHT;
+      const rangeBottom = (maxActiveIdx + 1) * ROW_HEIGHT;
+
+      const minScrollForSelected = selectedIndex >= 0 ? selectedBottom - clientH : -Infinity;
+      const maxScrollForSelected = selectedIndex >= 0 ? selectedTop : Infinity;
+
+      if (selectedTop < viewTop) {
+        const target = Math.max(0, Math.max(rangeTop, minScrollForSelected));
+        if (target < viewTop) {
+          fileListUl.scrollTop = target;
+          didScroll = true;
+        }
+      } else if (selectedBottom > viewBottom) {
+        const target = Math.max(0, Math.min(rangeBottom - clientH, maxScrollForSelected));
+        if (target > viewTop) {
+          fileListUl.scrollTop = target;
+          didScroll = true;
+        }
+      } else if (rangeBottom > viewBottom) {
+        const target = Math.max(0, Math.min(rangeBottom - clientH, maxScrollForSelected));
+        if (target > viewTop) {
+          fileListUl.scrollTop = target;
+          didScroll = true;
+        }
+      } else if (rangeTop < viewTop) {
+        const target = Math.max(0, Math.max(rangeTop, minScrollForSelected));
+        if (target < viewTop) {
+          fileListUl.scrollTop = target;
+          didScroll = true;
+        }
       }
     }
   }
@@ -2160,8 +2210,6 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
     renderVisibleSlice();
   } else {
     // Surgical update: directly update .selected on active elements without re-rendering
-    const isManhwa = Core.getState().manhwaEnabled && isManhwaStripActive();
-    const visibleIndices = isManhwa ? new Set(getVisibleImageIndices()) : null;
     for (const [idx, li] of activeRows) {
       li.classList.toggle('selected', idx === selectedIndex);
       if (visibleIndices) {
@@ -2332,6 +2380,7 @@ export function renderFilePanel(state) {
   lastRenderedVisible = state.fileListVisible;
   lastRenderedDirectory = currentDir;
   lastScrolledIndex = -1;
+  lastScrolledSig = '';
   lastClickTime = 0;
   lastClickIndex = -1;
   isScrolling = false;
