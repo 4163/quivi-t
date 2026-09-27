@@ -18,10 +18,22 @@ import { Statusbar } from '../menubar/statusbar.js';
 const STRIP_POOL_CAP = 10;
 
 /** Buffer in multiples of viewport height above and below the visible viewport. */
-const STRIP_BUFFER_VIEWPORTS = 2;
+const STRIP_BUFFER_VIEWPORTS = 1.0;
 
 /** Additional viewport height multiple to mount ahead in the pan direction. */
-const STRIP_AHEAD_BUFFER_VIEWPORTS = 1;
+const STRIP_AHEAD_BUFFER_VIEWPORTS = 1.0;
+
+/** Small hysteresis margin (0.25 vpH) before unmounting to prevent boundary flutter. */
+const STRIP_EVICT_MARGIN_VIEWPORTS = 0.25;
+
+/** Max completed off-DOM prefetched images retained in memory (lead edge only). */
+const PREFETCH_CACHE_CAPACITY = 2;
+
+/** Items preloaded beyond the mount window, in pan direction. */
+const PREFETCH_AHEAD_COUNT = 2;
+
+/** Max concurrent in-flight prefetch decodes. */
+const PREFETCH_CONCURRENT_MAX = 2;
 
 /** Initial estimated height for images before decode. */
 const DEFAULT_ESTIMATED_HEIGHT = 1200;
@@ -60,6 +72,15 @@ const _slots = new Map();
 
 /** Map from imgIdx → DOM img node for currently mounted items. */
 const _mounted = new Map();
+
+/** Map from imgIdx → off-DOM Image currently decoding ahead of the window. */
+const _prefetching = new Map();
+
+/** Map from imgIdx → off-DOM Image that finished prefetch and is ready for instant mount. */
+const _prefetchedImages = new Map();
+
+/** Set of archive entry names already requested for backend prefetch in current container. */
+const _prefetchedArchiveEntries = new Set();
 
 /** Free pool of recycled img nodes. */
 const _freePool = [];
@@ -140,12 +161,32 @@ function _acquireNode() {
 }
 
 function _releaseNode(img) {
+  img.onload = null;
+  img.onerror = null;
   img.removeAttribute('src');
   img.removeAttribute('data-list-index');
   img.removeAttribute('data-img-idx');
   img.removeAttribute('style');
   if (_freePool.length < STRIP_POOL_CAP) {
     _freePool.push(img);
+  }
+}
+
+function _trimPrefetchCache() {
+  while (_prefetchedImages.size > PREFETCH_CACHE_CAPACITY) {
+    let furthestIdx = -1;
+    let maxDist = -1;
+    for (const idx of _prefetchedImages.keys()) {
+      const dist = Math.abs(idx - _anchorImgIdx);
+      if (dist > maxDist) {
+        maxDist = dist;
+        furthestIdx = idx;
+      }
+    }
+    if (furthestIdx === -1) break;
+    const oldImg = _prefetchedImages.get(furthestIdx);
+    _prefetchedImages.delete(furthestIdx);
+    _releaseNode(oldImg);
   }
 }
 
@@ -392,14 +433,19 @@ function _updateWindow() {
 
   if (startIndex === -1 || endIndex === -1) return;
 
-  // Evict mounted images outside [startIndex, endIndex].
-  for (const [imgIdx, img] of _mounted) {
-    if (imgIdx < startIndex || imgIdx > endIndex) {
-      _mounted.delete(imgIdx);
-      img.onload = null;
-      img.onerror = null;
-      img.remove();
-      _releaseNode(img);
+  // Evict mounted images outside [evictStart, evictEnd] using hysteresis margin.
+  const evictMarginH = (vpH * STRIP_EVICT_MARGIN_VIEWPORTS) / scale;
+  const evictTopY = windowTopY - evictMarginH;
+  const evictBottomY = windowBottomY + evictMarginH;
+  const { startIndex: evictStart, endIndex: evictEnd } = computeWindowRange(_layout.offsets, evictTopY, evictBottomY);
+
+  if (evictStart !== -1 && evictEnd !== -1) {
+    for (const [imgIdx, img] of _mounted) {
+      if (imgIdx < evictStart || imgIdx > evictEnd) {
+        _mounted.delete(imgIdx);
+        img.remove();
+        _releaseNode(img);
+      }
     }
   }
 
@@ -412,25 +458,22 @@ function _updateWindow() {
     const slot = _slots.get(i);
     if (!slot) continue;
 
-    const img = _acquireNode();
+    let img = null;
+    let isPrefetched = false;
+
+    if (_prefetchedImages.has(i)) {
+      img = _prefetchedImages.get(i);
+      _prefetchedImages.delete(i);
+      isPrefetched = true;
+    } else if (_prefetching.has(i)) {
+      img = _prefetching.get(i);
+      _prefetching.delete(i);
+    } else {
+      img = _acquireNode();
+    }
+
     img.dataset.imgIdx = String(i);
     img.dataset.listIndex = String(item.listIndex);
-    const src = _buildSrc(item.entry, state);
-    img.src = src;
-
-    const isIco = FsUtils.isIco(item.entry.name || item.entry.path || '');
-    if (isIco) {
-      const key = _getIcoKey(item.entry, state);
-      if (!_icoCache.has(key)) {
-        _resolveIco(item.entry, state).then((icoSrc) => {
-          if (icoSrc) {
-            _icoCache.set(key, icoSrc);
-            if (!_active || _mounted.get(i) !== img) return;
-            img.src = icoSrc;
-          }
-        }).catch(() => {});
-      }
-    }
 
     const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
     if (isSvg && item.decoded) {
@@ -454,6 +497,27 @@ function _updateWindow() {
       }
       _onItemDecoded(i, item.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
     };
+
+    if (!isPrefetched && !img.src) {
+      const src = _buildSrc(item.entry, state);
+      img.src = src;
+
+      const isIco = FsUtils.isIco(item.entry.name || item.entry.path || '');
+      if (isIco) {
+        const key = _getIcoKey(item.entry, state);
+        if (!_icoCache.has(key)) {
+          _resolveIco(item.entry, state).then((icoSrc) => {
+            if (icoSrc) {
+              _icoCache.set(key, icoSrc);
+              if (!_active || _mounted.get(i) !== img) return;
+              img.src = icoSrc;
+            }
+          }).catch(() => {});
+        }
+      }
+    } else if (isPrefetched && img.complete && img.naturalWidth > 0 && !item.decoded) {
+      _onItemDecoded(i, img.naturalWidth, img.naturalHeight);
+    }
 
     slot.appendChild(img);
     _mounted.set(i, img);
@@ -497,12 +561,6 @@ function _updateWindow() {
   _positionSlotGrill();
 }
 
-/** Items preloaded beyond the mount window, in pan direction. */
-const PREFETCH_AHEAD_COUNT = 4;
-const PREFETCH_CONCURRENT_MAX = 3;
-/** imgIdx → off-DOM Image currently decoding ahead of the window. */
-const _prefetching = new Map();
-
 function _prefetchAhead(startIndex, endIndex, direction, state) {
   const targets = [];
   if (direction >= 0) {
@@ -515,10 +573,29 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
       targets.push(i);
     }
   }
+
+  // Trigger backend archive prefetch for leading edge archive entries
+  if (state.mode === 'archive' && state.archivePath && targets.length > 0) {
+    const unrequestedArchiveEntries = [];
+    for (const idx of targets) {
+      const entry = _imageIndex[idx]?.entry;
+      const name = entry?.name;
+      if (name && !FsUtils.isIco(name) && !FsUtils.isVideo(name) && !_prefetchedArchiveEntries.has(name)) {
+        _prefetchedArchiveEntries.add(name);
+        unrequestedArchiveEntries.push(name);
+      }
+    }
+    if (unrequestedArchiveEntries.length > 0) {
+      FsUtils.prefetchArchiveEntries(state.archivePath, unrequestedArchiveEntries);
+    }
+  }
+
   for (const i of targets) {
     if (_prefetching.size >= PREFETCH_CONCURRENT_MAX) break;
     const item = _imageIndex[i];
-    if (!item || item.isVideo || item.decoded || _mounted.has(i) || _prefetching.has(i)) continue;
+    if (!item || item.isVideo || _mounted.has(i) || _prefetching.has(i) || _prefetchedImages.has(i)) {
+      continue;
+    }
     const pre = new Image();
     pre.decoding = 'async';
     _prefetching.set(i, pre);
@@ -526,9 +603,12 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
       _prefetching.delete(i);
       if (!_active) return;
       const cur = _imageIndex[i];
-      if (!cur || cur.decoded || cur.isVideo) return;
-      // Record real dims before mount so slots, pins, and anchors use them.
-      _onItemDecoded(i, pre.naturalWidth, pre.naturalHeight);
+      if (!cur || cur.isVideo) return;
+      _prefetchedImages.set(i, pre);
+      _trimPrefetchCache();
+      if (!cur.decoded) {
+        _onItemDecoded(i, pre.naturalWidth, pre.naturalHeight);
+      }
     };
     pre.onerror = () => {
       _prefetching.delete(i);
@@ -542,13 +622,16 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
             _icoCache.set(key, icoSrc);
             if (!_active || !_prefetching.has(i)) return;
             pre.src = icoSrc;
+            if (typeof pre.decode === 'function') pre.decode().catch(() => {});
           }
         }).catch(() => {});
       } else {
         pre.src = _icoCache.get(key);
+        if (typeof pre.decode === 'function') pre.decode().catch(() => {});
       }
     } else {
       pre.src = _buildSrc(item.entry, state);
+      if (typeof pre.decode === 'function') pre.decode().catch(() => {});
     }
   }
 }
@@ -933,6 +1016,31 @@ function _activate(state) {
   }
 }
 
+function _clearCaches() {
+  for (const [, img] of _mounted) {
+    img.onload = null;
+    img.onerror = null;
+    img.remove();
+    _releaseNode(img);
+  }
+  _mounted.clear();
+
+  for (const [, img] of _prefetchedImages) {
+    _releaseNode(img);
+  }
+  _prefetchedImages.clear();
+
+  for (const [, pre] of _prefetching) {
+    pre.onload = null;
+    pre.onerror = null;
+    pre.removeAttribute('src');
+  }
+  _prefetching.clear();
+  _prefetchedArchiveEntries.clear();
+  _slots.clear();
+  if (_strip) _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
+}
+
 function _deactivate() {
   if (!_active) return;
   _active = false;
@@ -956,16 +1064,7 @@ function _deactivate() {
     _settleTimer = null;
   }
 
-  for (const [, img] of _mounted) {
-    img.onload = null;
-    img.onerror = null;
-    img.remove();
-    _releaseNode(img);
-  }
-  _mounted.clear();
-  _slots.clear();
-  _prefetching.clear();
-  if (_strip) _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
+  _clearCaches();
 
   _imageIndex = [];
   _listToImgIdx.clear();
@@ -1002,16 +1101,7 @@ function _onStateChange(state) {
     encryptionChanged;
 
   if (listChanged || containerChanged) {
-    for (const [, img] of _mounted) {
-      img.onload = null;
-      img.onerror = null;
-      img.remove();
-      _releaseNode(img);
-    }
-    _mounted.clear();
-    _slots.clear();
-    _prefetching.clear();
-    if (_strip) _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
+    _clearCaches();
 
     _imageIndex = isLocked ? [] : _buildImageIndex(state.list || []);
     _estWidth = null;

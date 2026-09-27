@@ -57,6 +57,8 @@ Causes, ranked.
 
 Confirm with per update logs of ty, scale, window top and bottom, start and end, visible range, plus src set time versus onload time, plus hit rate in `_buildSrc`, plus evict to remount churn during a wheel burst.
 
+Resolution: Retained off-DOM prefetched images in `_prefetchedImages` (capacity 2) so decoded bitmaps mount directly into slots with zero lead time and no double fetch. In-flight prefetches are adopted directly when a slot enters the mount window. Added leading-edge backend archive prefetch via `FsUtils.prefetchArchiveEntries`. Configured active buffer to 1.0 vpH base, 1.0 vpH ahead, and 0.25 vpH hysteresis eviction, immediately stripping evicted nodes to keep memory lightweight.
+
 ## Issue 3. Any navigation in strip mode blanks instead of bridging
 
 Scope covers all navigation, not only file select or mode toggle. Verified paths all land in destructive teardown with no holdover.
@@ -103,9 +105,9 @@ Fix direction is throttled anchor sync during hold, for example every 100 to 150
 
 - [x] Log decode corrections during hold with imgIdx, oldH, newH, anchor, oldAnchorTop, newAnchorTop, oldTy, targetTy. Accept when jumps align with decodes and sign tracks direction.
 - [x] Repro hold through a fully decoded chapter versus an unread chapter. Accept when jitter vanishes once no first decodes remain.
-- [ ] Log strip window versus visible range per update. Accept when edge mounts with zero lead time are counted.
-- [ ] Time src set versus onload versus first paint by archive versus disk. Accept when blank duration is split by cache hit and miss.
-- [ ] Count prefetch start versus skip and duplicate URL fetch. Accept when double fetch rate is known.
-- [ ] Count evict to remount of same index within 2 seconds. Accept when thrash rate is known.
+- [x] Log strip window versus visible range per update. Accept when edge mounts with zero lead time are counted.
+- [x] Time src set versus onload versus first paint by archive versus disk. Accept when blank duration is split by cache hit and miss.
+- [x] Count prefetch start versus skip and duplicate URL fetch. Accept when double fetch rate is known.
+- [x] Count evict to remount of same index within 2 seconds. Accept when thrash rate is known.
 - [ ] Record blank frames across next, previous, panel click, container change, mode toggle on and off. Accept when all six are measured with current code.
 - [ ] Log key repeat, panBy, scheduleSettle, selectIndex, settle event times during hold. Accept when starvation gap is measured.
