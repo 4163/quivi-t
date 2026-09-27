@@ -174,10 +174,12 @@ function _buildSlots() {
     // the widest mounted image never shrinks the column or clips the grill.
     slot.style.width = `${item.naturalWidth || defW}px`;
 
-    const backdrop = document.createElement('div');
-    backdrop.className = 'manhwa-slot-backdrop';
-    slot.style.setProperty('--slot-backdrop-bg', computeSlotHue(i, total));
-    slot.appendChild(backdrop);
+    if (total > 1) {
+      const backdrop = document.createElement('div');
+      backdrop.className = 'manhwa-slot-backdrop';
+      slot.style.setProperty('--slot-backdrop-bg', computeSlotHue(i, total));
+      slot.appendChild(backdrop);
+    }
 
     if (item.isVideo) {
       const ph = document.createElement('div');
@@ -230,9 +232,11 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
         _viewportState.panTo(_viewportState.getTx(), targetTy);
       } else {
         const curTx = _viewportState.getTx();
-        if (_anchorHoldover === _imageIndex.length - 1) {
+        if (_anchorHoldover === 0) {
+          _viewportState.panTo(curTx, Math.abs(colH - vpH) / 2);
+        } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
           _viewportState.panTo(curTx, -Math.abs(colH - vpH) / 2);
-        } else if (_anchorHoldover === 0 || colH <= vpH) {
+        } else if (colH <= vpH) {
           _viewportState.panTo(curTx, Math.abs(colH - vpH) / 2);
         } else {
           _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2);
@@ -657,9 +661,11 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
       _viewportState.panTo(0, Math.abs(colH - vh) / 2);
     }
   } else {
-    if (targetImgIdx === _imageIndex.length - 1) {
+    if (targetImgIdx === 0) {
+      _viewportState.panTo(0, Math.abs(colH - vh) / 2);
+    } else if (targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
       _viewportState.panTo(0, -Math.abs(colH - vh) / 2);
-    } else if (targetImgIdx === 0 || colH <= vh + 0.5) {
+    } else if (colH <= vh + 0.5) {
       _viewportState.panTo(0, Math.abs(colH - vh) / 2);
     } else if (_layout.offsets[targetImgIdx]) {
       _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
@@ -724,9 +730,11 @@ export function centerListItem(listIndex) {
   const colH = (_layout.totalHeight || 0) * scale;
   const vh = _viewport?.clientHeight || 800;
   const curTx = _viewportState.getTx();
-  if (mapped === _imageIndex.length - 1) {
+  if (mapped === 0) {
+    _viewportState.panTo(curTx, Math.abs(colH - vh) / 2);
+  } else if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
     _viewportState.panTo(curTx, -Math.abs(colH - vh) / 2);
-  } else if (mapped === 0 || colH <= vh) {
+  } else if (colH <= vh) {
     _viewportState.panTo(curTx, Math.abs(colH - vh) / 2);
   } else if (_layout.offsets[mapped]) {
     _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);

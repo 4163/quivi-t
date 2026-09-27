@@ -2729,7 +2729,7 @@ export function initFilePanel(deps) {
 
     if (targetIdx !== null && targetIdx !== state.index) {
       if (Core.getState().manhwaEnabled && isManhwaStripActive()) {
-        if (targetIdx === getLastImageIndex()) {
+        if (targetIdx === getLastImageIndex() && getLastImageIndex() !== getFirstImageIndex()) {
           alignListItemBottom(targetIdx);
         } else {
           alignListItemTop(targetIdx);
