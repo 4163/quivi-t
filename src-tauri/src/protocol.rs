@@ -96,6 +96,29 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
         }
 
         tauri::async_runtime::spawn_blocking(move || {
+            // Unlocked ZIP path first: extraction runs without the global
+            // lock so parallel entry fetches overlap instead of queueing.
+            let state = app_handle.state::<std::sync::RwLock<ArchiveCache>>();
+            if let Some(shared) = crate::archives::read_plain_zip_entry_shared(
+                &state,
+                &archive_path,
+                &entry_name,
+            ) {
+                match shared {
+                    Ok(d) => {
+                        responder.respond(entry_response(&entry_name, &d, range_header.as_deref()))
+                    }
+                    Err(_) => {
+                        let response = Response::builder()
+                            .status(404)
+                            .body(b"Entry not found or failed to extract".to_vec())
+                            .unwrap();
+                        responder.respond(response);
+                    }
+                }
+                return;
+            }
+
             let entry_data = app_handle
                 .state::<std::sync::RwLock<ArchiveCache>>()
                 .write()

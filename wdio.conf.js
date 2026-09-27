@@ -148,6 +148,7 @@ export const config = {
           delete cfg.frontend_data.last_active_image;
           delete cfg.frontend_data.scroll_zoom_latched;
           delete cfg.frontend_data.e2e_suite;
+          delete cfg.frontend_data.manhwa_enabled;
           cfg.frontend_data.remember_last_image = false;
         }
         fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));

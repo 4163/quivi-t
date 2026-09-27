@@ -16,7 +16,7 @@ Validation comparison performed against `.agents/skills/validate-changes/SKILL.m
 - `src/js/services/viewerMath.js:180-489` owns transform math. It holds scale, tx, ty, rotation, flip, fit, spread. `panTo` at 344 and `panBy` at 336 both call clamp plus notify. `getTransform` at 449 emits full float px. No rounding exists on this path.
 - `src/js/viewer/viewerRender.js:6-39,337-466,747-756` owns the 4 node single image pool, `PRELOAD_HALF=1`, 45 ms target debounce, 2x rAF bridge retire. It paints transform sync on notify. It returns early in manhwa mode at 508-513.
 - `src/js/viewer/viewerPipelines.js:32-273,315-670,697-702` owns `#viewer-lanczos-canvas` and `#viewer-filter-canvas`. Base image moves sync. WebGL defers to rAF. Lanczos defers 80 ms. Comment at 696 says pan path is render, not rebuild.
-- `src/js/viewer/manhwaStrip.js:18-30,206-262,357-549,1063-1079` owns `#manhwa-strip`. Constants are `STRIP_POOL_CAP=10`, `STRIP_BUFFER_VIEWPORTS=2`, `STRIP_AHEAD_BUFFER_VIEWPORTS=1`, `PREFETCH_AHEAD_COUNT=4`, `PREFETCH_CONCURRENT_MAX=3`, estimated slot 1200 by 800. No native scroll is used. `#viewport` has `overflow:hidden`. Pan writes state and moves the strip with transform. Mount and evict run inside state subscribe.
+- `src/js/viewer/manhwaStrip.js:17-39,250-304,408-600` owns `#manhwa-strip`. Strict item-count buffer `STRIP_BEHIND_COUNT=1` / `STRIP_AHEAD_COUNT=1` around the anchor, unioned with the visible range, evict outside. One-deep off-DOM prefetch ring with `decode()` gate, lead-edge Rust zip warm of 2 past the window, parallel unlocked ZIP extraction. Estimated slot 1200 by 800. No native scroll is used. `#viewport` has `overflow:hidden`. Pan writes state and moves the strip with transform. Mount and evict run inside state subscribe at `manhwaStrip.js:1221-1238`.
 - `src/js/core.js:93-119,485-502,575-597` owns index, list, mode, manhwa flag, fit, spread, view mode. `selectIndex` and `navigate` notify all subscribers.
 - `src/js/services/actions.js:9-42,138-140,155-198` plus `src/js/shortcuts.js:204-325,465-493` own dispatch. Next and previous call `pageStrip` or `navigateManhwa` in strip mode, `Core.navigate` otherwise. Pan actions call `Viewer.panBy`. Toggle manhwa calls `Core.toggleManhwaMode`.
 - `src/js/filepanel/filePanel.js:1921-2214,2268-2374,2422-2433,2446` owns list paint. It toggles `li.selected` and `in-view`. It subscribes with `Core.onStateChange`. Scroll over the panel paints sync.
@@ -40,26 +40,19 @@ How the shift happens.
 
 Why discrete pan looks clean. One key step moves, one correction settles, then quiet. No overlap. Hold keeps the pointer moving while decodes land, so every decode lands mid drag and stacks. Wheel looks cleaner for the same reason. Notches are sparse, so corrections settle between steps.
 
+Status: partly fixed in code, needs a confirm pass. End-pin re-pins in `_updateLayout` now gate on 150 ms pan quiet via `_lastPanAt`, so a decode landing mid-scroll rebuilds offsets without snapping `ty`. Delta-anchor correction is unchanged. Confirm by holding pan through fresh decodes and watching for kicks.
+
 Confirm by logging `imgIdx`, `oldH`, `newH`, `anchorImgIdx`, `oldAnchorTop`, `newAnchorTop`, `oldTy`, `targetTy` around `_onItemDecoded` during a hold. Expect targetTy jumps aligned with decode events, sign correlated with pan direction, no jump when all items in window are already decoded.
 
-## Issue 2. Buffer exists but next image still pops from blank
+## Issue 2. Buffer pop-in on scroll
 
-Mount logic is `manhwaStrip.js:357-455`. It computes window from the already updated ty, finds start and end with `viewerMath.js:121-146`, evicts outside, sets `img.src` at 414, appends slot at 453. Decode callback is at 439. Fetch starts the same frame the user expects pixels. Slot paints empty first.
+Status: resolved and user-confirmed in the running app.
 
-Causes, ranked.
-
-1. Load triggers after the move. No idle filler exists. No observer with margin exists. No scroll listener exists. Subscribe at `manhwaStrip.js:1066-1078` is the only hook.
-2. Estimated heights misalign the window. `_buildSlots` at `manhwaStrip.js:152-194` reserves 1200 px height. Real pages run 2000 to 5000 px tall. Each `_onItemDecoded` at `manhwaStrip.js:264-321` shifts later offsets and mounts newly covered items blank.
-3. Prefetch warms size only. `_prefetchAhead` at `manhwaStrip.js:501-548` uses off DOM images, learns natural size, then drops the bitmap. Later mount refetches the same URL. Cap is 4 items and 3 concurrent, direction gated. Fast scroll jumps past it.
-4. Archive blob sharing misses. `_buildSrc` at `manhwaStrip.js:96-109` reuses `thumbnailCache` only if file panel already fetched the same URL. Strip never calls `ensureArchiveBlob` at `filePanel.js:100-164`. Bounds are 8 entries, 24 MB total, 4 MB per entry at `filePanel.js:50-52`. Large chapters churn through it. Disk suffers less. Archives pop worst.
-5. Eviction is instant and destructive at `manhwaStrip.js:391-398`. It clears handlers, removes the node, strips src and style. Scroll back redecodes from scratch. Pool cap 10 bounds node reuse, not decoded pixels.
-6. Backend prefetch lags the leading edge. `core.js:310-312` plus `fsUtils.js:1100-1140` debounce 75 ms and key off current index. Strip settle adds 100 ms at `manhwaStrip.js:551-597` and keys off center anchor, not scroll edge.
-
-Confirm with per update logs of ty, scale, window top and bottom, start and end, visible range, plus src set time versus onload time, plus hit rate in `_buildSrc`, plus evict to remount churn during a wheel burst.
-
-Resolution: Retained off-DOM prefetched images in `_prefetchedImages` (capacity 2) so decoded bitmaps mount directly into slots with zero lead time and no double fetch. In-flight prefetches are adopted directly when a slot enters the mount window. Added leading-edge backend archive prefetch via `FsUtils.prefetchArchiveEntries`. Configured active buffer to 1.0 vpH base, 1.0 vpH ahead, and 0.25 vpH hysteresis eviction, immediately stripping evicted nodes to keep memory lightweight.
+As-built behavior in `manhwaStrip.js:408-600`. The window is anchor minus 1 to anchor plus 1, unioned with the visible range, computed from item indexes so height estimates never misalign it. Everything outside unmounts on every update. Items outside the visible range mount only from decoded prefetched nodes. Prefetch runs from the first build, covers non-visible window items first with an off-DOM `decode()` gate, and retains one ready node. Backend warms 2 entries past the window from the strip lead edge. Protocol serves plain zips through an unlocked parallel extraction path with short-lock cache check plus insert. First-build backend warm waits one update to protect cold-open CPU.
 
 ## Issue 3. Any navigation in strip mode blanks instead of bridging
+
+Status: open, no code changes yet. Next issue to work.
 
 Scope covers all navigation, not only file select or mode toggle. Verified paths all land in destructive teardown with no holdover.
 
@@ -73,19 +66,19 @@ Legacy viewer behavior.
 Strip behavior today.
 
 - `viewerRender.js:508-513` returns early in manhwa mode through `clearDisplayedImage` at `viewerRender.js:468-480`. That call cancels the retiring bridge node and recycles pool nodes. It parks nothing.
-- `manhwaStrip.js` has zero bridge refs. `_activate` at 886-929 builds empty estimated slots. Rebuild on list or container change at 999-1043 removes all mounted images and clears slots and prefetch maps. `_deactivate` at 931-970 removes everything. `_updateWindow` at 357-493 evicts then sets src on empty slots. Video slots are text placeholders at 184-189.
+- `manhwaStrip.js` has zero bridge refs. `_activate` at 1038 builds empty estimated slots. Rebuild on list or container change at 1139 removes all mounted images and clears slots and prefetch maps. `_deactivate` at 1107 removes everything. `_updateWindow` at 408 evicts outside the 1-item window. Video slots are text placeholders.
 - CSS hides the old layer in strip mode at `main.css:1601-1608`.
 
 Navigation paths that hit this.
 
-- Next and previous through `actions.js:9-42` to `pageStrip` at `manhwaStrip.js:779-833` or `navigateManhwa` at 758-777.
+- Next and previous through `actions.js:9-42` to `pageStrip` at `manhwaStrip.js:931` or `navigateManhwa` at 910.
 - File panel click through `filePanel.js:1594-1625` to `alignListItemTop` plus `Core.selectIndex`.
 - Panel keyboard nav through `filePanel.js:2622-2740`.
 - Home, End, PageUp, PageDown through `main.js:68-97`.
-- Container change through open parent, sibling, refresh, history load, all landing in `_onStateChange` rebuild at `manhwaStrip.js:972-1043`.
+- Container change through open parent, sibling, refresh, history load, all landing in `_onStateChange` rebuild at `manhwaStrip.js:1139`.
 - Mode toggle through `actions.js:138-140` to `core.js:485-502`.
 
-Root cause is missing holdover owner. Fan out through `Core._notify` tears down old pixels before new pixels decode. Estimated slots guarantee blank first paint. Prefetch cannot supply a bitmap because it discards it.
+Root cause is missing holdover owner. Fan out through `Core._notify` tears down old pixels before new pixels decode. Estimated slots still guarantee blank first paint on rebuilds. The 1-deep prefetched node only covers scroll-adjacent mounts, not navigation jumps or rebuilds.
 
 Fix direction has to pick one holdover owner. Keep old strip nodes mounted until replacements for the same scroll anchor decode, or snapshot viewport into the bridge layer across navigation and release after first decoded mount. Decode before append matters more than buffer size here.
 

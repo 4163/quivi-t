@@ -4,8 +4,8 @@
  * Owns #manhwa-strip and the .manhwa-active class on #viewport.
  * Appends every image entry top-down at 1:1 scale with transform-based
  * pan and zoom via viewportState. Slots reserve estimated heights before
- * decode and correct after without jumping the view. Loading windows off
- * the visible range plus a buffer.
+ * decode and correct after without jumping the view. An item-count buffer
+ * around the anchor mounts images before they scroll into view.
  */
 
 import { Core } from '../core.js';
@@ -17,20 +17,23 @@ import { Statusbar } from '../menubar/statusbar.js';
 /** Max img nodes kept in the free pool after eviction. */
 const STRIP_POOL_CAP = 10;
 
-/** Buffer in multiples of viewport height above and below the visible viewport. */
-const STRIP_BUFFER_VIEWPORTS = 1.0;
+/** Item-count buffer behind the anchor. Strict 1-image policy: index based,
+ * so wrong height estimates never misalign it. */
+const STRIP_BEHIND_COUNT = 1;
 
-/** Additional viewport height multiple to mount ahead in the pan direction. */
-const STRIP_AHEAD_BUFFER_VIEWPORTS = 1.0;
+/** Item-count buffer ahead of the anchor. 1 image only. Anything outside
+ * [anchor - BEHIND, anchor + AHEAD] unmounts. */
+const STRIP_AHEAD_COUNT = 1;
 
-/** Small hysteresis margin (0.25 vpH) before unmounting to prevent boundary flutter. */
-const STRIP_EVICT_MARGIN_VIEWPORTS = 0.25;
+/** Max completed off-DOM prefetched images retained in memory. Strict 1. */
+const PREFETCH_CACHE_CAPACITY = 1;
 
-/** Max completed off-DOM prefetched images retained in memory (lead edge only). */
-const PREFETCH_CACHE_CAPACITY = 2;
+/** Items preloaded beyond the mount window, in pan direction. Strict 1. */
+const PREFETCH_AHEAD_COUNT = 1;
 
-/** Items preloaded beyond the mount window, in pan direction. */
-const PREFETCH_AHEAD_COUNT = 2;
+/** Entries past the mount window to warm in the Rust zip LRU, per side.
+ * Covers the 1-ahead mount plus its prefetch, nothing more. */
+const BACKEND_WARM_AHEAD = 2;
 
 /** Max concurrent in-flight prefetch decodes. */
 const PREFETCH_CONCURRENT_MAX = 2;
@@ -79,8 +82,6 @@ const _prefetching = new Map();
 /** Map from imgIdx → off-DOM Image that finished prefetch and is ready for instant mount. */
 const _prefetchedImages = new Map();
 
-/** Set of archive entry names already requested for backend prefetch in current container. */
-const _prefetchedArchiveEntries = new Set();
 
 /** Free pool of recycled img nodes. */
 const _freePool = [];
@@ -96,7 +97,10 @@ let _lastDirectory = null;
 let _lastArchiveEncryption = null;
 let _anchorUpdateInProgress = false;
 let _settleTimer = null;
+/** Last backend warm key. Skips repeat warms while the window is static. */
+let _lastBackendWarmKey = null;
 let _lastTy = null;
+let _lastPanAt = 0;
 let _lastScale = null;
 let _lastFitMode = null;
 let _lastFitModeGen = -1;
@@ -281,10 +285,13 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
         }
       }
     } else if (anchorImgIdxToHold !== null && _layout.offsets[anchorImgIdxToHold]) {
-      if (wasAtTop && !wasAtBottom) {
+      // End-pin re-pins snap the whole column. Gate them on quiet: replay
+      // showed a top re-pin kicking ty mid-scroll when slot 1 decoded.
+      const panning = performance.now() - _lastPanAt < 150;
+      if (wasAtTop && !wasAtBottom && !panning) {
         // View was end-pinned: re-pin the end instead of holding the anchor.
         targetTy = Math.abs(colH - vpH) / 2;
-      } else if (wasAtBottom && !wasAtTop) {
+      } else if (wasAtBottom && !wasAtTop && !panning) {
         targetTy = -Math.abs(colH - vpH) / 2;
       } else {
         const newAnchorTop = _layout.offsets[anchorImgIdxToHold].top;
@@ -405,8 +412,10 @@ function _updateWindow() {
   const ty = _viewportState.getTy() || 0;
   const vpH = _viewport?.clientHeight || 800;
 
-  const deltaTy = _lastTy !== null ? ty - _lastTy : 0;
+  const isFirstBuild = _lastTy === null;
+  const deltaTy = isFirstBuild ? 0 : ty - _lastTy;
   _lastTy = ty;
+  if (deltaTy !== 0) _lastPanAt = performance.now();
 
   const isPanningDown = deltaTy < 0;
   const isPanningUp = deltaTy > 0;
@@ -416,34 +425,45 @@ function _updateWindow() {
   _lastScale = scale;
   const prefetchDir = zoomedIn ? 0 : isPanningDown ? 1 : isPanningUp ? -1 : 0;
 
-  const baseBufferH = (vpH * STRIP_BUFFER_VIEWPORTS) / scale;
-  const aheadBufferH = (vpH * STRIP_AHEAD_BUFFER_VIEWPORTS) / scale;
-  const topBufferH = baseBufferH + (isPanningUp ? aheadBufferH : 0);
-  const bottomBufferH = baseBufferH + (isPanningDown ? aheadBufferH : 0);
-
   const centerColY = (_layout.totalHeight / 2) - (ty / scale);
-  const halfVpH = vpH / (2 * scale);
 
-  const windowTopY = centerColY - halfVpH - topBufferH;
-  const windowBottomY = centerColY + halfVpH + bottomBufferH;
+  const { startIndex: visStart, endIndex: visEnd } = _computeVisibleRange();
+  const lastIdx = _imageIndex.length - 1;
+  let anchor = findAnchorIndex(_layout.offsets, centerColY);
+  if (anchor === -1) anchor = Math.max(0, Math.min(lastIdx, _anchorImgIdx));
 
-  const { startIndex, endIndex } = computeWindowRange(_layout.offsets, windowTopY, windowBottomY);
+  // Item-count buffer around the anchor, unioned with the visible range so
+  // zoomed-out views with many small items on screen stay covered.
+  let startIndex = Math.max(0, anchor - STRIP_BEHIND_COUNT);
+  let endIndex = Math.min(lastIdx, anchor + STRIP_AHEAD_COUNT);
+  if (visStart !== -1 && visEnd !== -1) {
+    startIndex = Math.min(startIndex, visStart);
+    endIndex = Math.max(endIndex, visEnd);
+  }
 
-  if (startIndex === -1 || endIndex === -1) return;
+  if (startIndex > endIndex) return;
 
-  // Evict mounted images outside [evictStart, evictEnd] using hysteresis margin.
-  const evictMarginH = (vpH * STRIP_EVICT_MARGIN_VIEWPORTS) / scale;
-  const evictTopY = windowTopY - evictMarginH;
-  const evictBottomY = windowBottomY + evictMarginH;
-  const { startIndex: evictStart, endIndex: evictEnd } = computeWindowRange(_layout.offsets, evictTopY, evictBottomY);
-
-  if (evictStart !== -1 && evictEnd !== -1) {
-    for (const [imgIdx, img] of _mounted) {
-      if (imgIdx < evictStart || imgIdx > evictEnd) {
-        _mounted.delete(imgIdx);
-        img.remove();
-        _releaseNode(img);
-      }
+  // Evict everything outside the buffer. Mounted nodes stay bounded by
+  // BEHIND + AHEAD plus whatever is visibly on screen.
+  for (const [imgIdx, img] of _mounted) {
+    if (imgIdx < startIndex || imgIdx > endIndex) {
+      _mounted.delete(imgIdx);
+      img.remove();
+      _releaseNode(img);
+    }
+  }
+  for (const [imgIdx, img] of _prefetchedImages) {
+    if (imgIdx < startIndex - PREFETCH_AHEAD_COUNT || imgIdx > endIndex + PREFETCH_AHEAD_COUNT) {
+      _prefetchedImages.delete(imgIdx);
+      _releaseNode(img);
+    }
+  }
+  for (const [imgIdx, pre] of _prefetching) {
+    if (imgIdx < startIndex - PREFETCH_AHEAD_COUNT || imgIdx > endIndex + PREFETCH_AHEAD_COUNT) {
+      _prefetching.delete(imgIdx);
+      pre.onload = null;
+      pre.onerror = null;
+      pre.removeAttribute('src');
     }
   }
 
@@ -455,6 +475,12 @@ function _updateWindow() {
 
     const slot = _slots.get(i);
     if (!slot) continue;
+
+    // Items outside the visible range mount only from decoded prefetched
+    // nodes. Direct mounting here exposes an unrasterized image the moment
+    // it scrolls into view, which is exactly the first-scroll blank.
+    const visOk = visStart === -1 || visEnd === -1 || (i >= visStart && i <= visEnd);
+    if (!visOk && !_prefetchedImages.has(i)) continue;
 
     let img = null;
     let isPrefetched = false;
@@ -513,7 +539,7 @@ function _updateWindow() {
           }).catch(() => {});
         }
       }
-    } else if (isPrefetched && img.complete && img.naturalWidth > 0 && !item.decoded) {
+    } else if (img.complete && img.naturalWidth > 0 && !item.decoded) {
       _onItemDecoded(i, img.naturalWidth, img.naturalHeight);
     }
 
@@ -521,9 +547,21 @@ function _updateWindow() {
     _mounted.set(i, img);
   }
 
-  // Warm fetch plus decode for items just beyond the window so pixels arrive
-  // before the viewport does. Off-DOM preloads, no nodes consumed.
+  // Prefetch always runs, including the first build: the mount loop above
+  // no longer mounts non-visible items raw, so the ahead item depends on
+  // this pre-decode path from the very first window.
   _prefetchAhead(startIndex, endIndex, prefetchDir, state);
+
+  // Backend warm still waits one update after activate or rebuild so the
+  // visible images get full CPU on cold open instead of racing warm
+  // extractions on huge files.
+  if (!isFirstBuild) {
+    // Warm Rust extraction for entries past the window. JS prefetch fetches
+    // through quivit:// with no-store, so without this each ahead mount pays
+    // full extraction on arrival. Keyed off the strip lead edge, not Core
+    // index, which only moves on settle and lags scrolling by ~175ms.
+    _warmBackendAhead(state, startIndex, endIndex, prefetchDir);
+  }
 
   // Anchor follows view movement, not layout drift. Recompute only when the
   // view (ty, scale, viewport height) moved; decode corrections alone keep it.
@@ -561,6 +599,13 @@ function _updateWindow() {
 
 function _prefetchAhead(startIndex, endIndex, direction, state) {
   const targets = [];
+  // Window items outside the visible range must pre-decode off-DOM because
+  // the mount loop no longer mounts them raw. Enqueue first for priority.
+  const { startIndex: visStart, endIndex: visEnd } = _computeVisibleRange();
+  for (let i = startIndex; i <= endIndex; i++) {
+    if (visStart !== -1 && visEnd !== -1 && i >= visStart && i <= visEnd) continue;
+    targets.push(i);
+  }
   if (direction >= 0) {
     for (let i = endIndex + 1; i <= endIndex + PREFETCH_AHEAD_COUNT && i < _imageIndex.length; i++) {
       targets.push(i);
@@ -572,21 +617,6 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
     }
   }
 
-  // Trigger backend archive prefetch for leading edge archive entries
-  if (state.mode === 'archive' && state.archivePath && targets.length > 0) {
-    const unrequestedArchiveEntries = [];
-    for (const idx of targets) {
-      const entry = _imageIndex[idx]?.entry;
-      const name = entry?.name;
-      if (name && !FsUtils.isIco(name) && !FsUtils.isVideo(name) && !_prefetchedArchiveEntries.has(name)) {
-        _prefetchedArchiveEntries.add(name);
-        unrequestedArchiveEntries.push(name);
-      }
-    }
-    if (unrequestedArchiveEntries.length > 0) {
-      FsUtils.prefetchArchiveEntries(state.archivePath, unrequestedArchiveEntries);
-    }
-  }
 
   for (const i of targets) {
     if (_prefetching.size >= PREFETCH_CONCURRENT_MAX) break;
@@ -597,14 +627,25 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
     const pre = new Image();
     pre.decoding = 'async';
     _prefetching.set(i, pre);
-    pre.onload = () => {
+    pre.onload = async () => {
       _prefetching.delete(i);
       if (!_active) return;
       const cur = _imageIndex[i];
       if (!cur || cur.isVideo) return;
+      // Pre-decode gate: force rasterization off-DOM so the node paints on
+      // its first frame in the slot. A node that fails decode drops out and
+      // the mount path falls back to normal onload behavior.
+      try {
+        if (typeof pre.decode === 'function') await pre.decode();
+      } catch {
+        return;
+      }
+      if (!_active) return;
+      const stillCur = _imageIndex[i];
+      if (!stillCur || stillCur.isVideo) return;
       _prefetchedImages.set(i, pre);
       _trimPrefetchCache();
-      if (!cur.decoded) {
+      if (!stillCur.decoded && pre.naturalWidth > 0) {
         _onItemDecoded(i, pre.naturalWidth, pre.naturalHeight);
       }
     };
@@ -634,8 +675,37 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
   }
 }
 
-function _scheduleSettle() {
-  if (_settleTimer) clearTimeout(_settleTimer);
+/**
+ * Warm the Rust zip LRU for entries past the mount window. Direct invoke
+ * with no debounce: FsUtils.prefetchAhead keys off Core index and lags
+ * scrolling, this keys off the strip lead edge every window advance.
+ */
+function _warmBackendAhead(state, startIndex, endIndex, direction) {
+  if (state.mode !== 'archive' || !state.archivePath) return;
+  const last = _imageIndex.length - 1;
+  const names = [];
+  if (direction >= 0) {
+    for (let i = endIndex + 1; i <= endIndex + BACKEND_WARM_AHEAD && i <= last; i++) {
+      const item = _imageIndex[i];
+      if (!item || item.isVideo || !item.entry) continue;
+      names.push(item.entry.name);
+    }
+  }
+  if (direction <= 0) {
+    for (let i = startIndex - 1; i >= startIndex - BACKEND_WARM_AHEAD && i >= 0; i--) {
+      const item = _imageIndex[i];
+      if (!item || item.isVideo || !item.entry) continue;
+      names.push(item.entry.name);
+    }
+  }
+  if (names.length === 0) return;
+  const key = `${state.archivePath}|${direction}|${names[0]}|${names[names.length - 1]}|${names.length}`;
+  if (key === _lastBackendWarmKey) return;
+  _lastBackendWarmKey = key;
+  FsUtils.prefetchArchiveEntries(state.archivePath, names);
+}
+
+function _scheduleSettle() {  if (_settleTimer) clearTimeout(_settleTimer);
   _settleTimer = setTimeout(() => {
     _settleTimer = null;
     _syncAnchorToCore();
@@ -1030,7 +1100,6 @@ function _clearCaches() {
     pre.removeAttribute('src');
   }
   _prefetching.clear();
-  _prefetchedArchiveEntries.clear();
   _slots.clear();
   if (_strip) _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
 }

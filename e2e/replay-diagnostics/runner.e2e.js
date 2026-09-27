@@ -168,7 +168,7 @@ describe('Replay Diagnostics Runner', function () {
     );
 
     // Restore initial pipeline settings if recorded
-    if (scenario.initialState?.pipeline || scenario.initialState?.transparentBg !== undefined || scenario.initialState?.opaqueCanvas !== undefined) {
+    if (scenario.initialState?.pipeline || scenario.initialState?.transparentBg !== undefined || scenario.initialState?.opaqueCanvas !== undefined || scenario.initialState?.manhwa !== undefined) {
       await browser.execute(async (pipeline, rawInitState) => {
         const { Core } = await import('/js/core.js');
         const p = pipeline || {};
@@ -253,6 +253,15 @@ describe('Replay Diagnostics Runner', function () {
             Core.toggleTransparentBg();
           }
         }
+
+        // 7. Manhwa view mode sync
+        const wantManhwa = p.manhwa !== undefined ? !!p.manhwa : (rawInitState?.manhwa !== undefined ? !!rawInitState.manhwa : null);
+        if (wantManhwa !== null) {
+          const currentManhwa = !!Core.getState().manhwaEnabled;
+          if (currentManhwa !== wantManhwa) {
+            Core.setManhwaMode(wantManhwa, { persist: false });
+          }
+        }
       }, scenario.initialState.pipeline, scenario.initialState);
 
       // Brief pause to allow pipeline changes to render
@@ -324,14 +333,16 @@ describe('Replay Diagnostics Runner', function () {
             { FsUtils },
             { Viewer },
             { NavigationHistory },
-            { Chrome }
+            { Chrome },
+            manhwaStrip
           ] = await Promise.all([
             import('/js/services/actions.js'),
             import('/js/core.js'),
             import('/js/fsUtils.js'),
             import('/js/viewer/viewer.js'),
             import('/js/navigationHistory.js'),
-            import('/js/menubar/chrome.js')
+            import('/js/menubar/chrome.js'),
+            import('/js/viewer/manhwaStrip.js').catch(() => ({}))
           ]);
           const actionCtx = {
             Core,
@@ -339,6 +350,7 @@ describe('Replay Diagnostics Runner', function () {
             Viewer,
             NavigationHistory,
             Chrome,
+            ...manhwaStrip,
           };
           if (typeof dispatch === 'function') {
             await dispatch(effectiveId, item?.payload, actionCtx);
