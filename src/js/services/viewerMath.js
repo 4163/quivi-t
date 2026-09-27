@@ -101,9 +101,10 @@ export function findAnchorIndex(offsets, centerColY) {
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
     const item = offsets[mid];
+    const visualBottom = (mid < last) ? offsets[mid + 1].top : item.bottom;
     if (centerColY < item.top) {
       hi = mid - 1;
-    } else if (centerColY >= item.bottom) {
+    } else if (centerColY >= visualBottom) {
       lo = mid + 1;
     } else {
       return mid;
@@ -114,25 +115,29 @@ export function findAnchorIndex(offsets, centerColY) {
 
 /**
  * Compute index range [startIndex, endIndex] of items overlapping [windowTopY, windowBottomY].
+ * Uses visual slot boundaries so seam-overlapped preceding slots do not leak into the active range.
  * Returns { startIndex: -1, endIndex: -1 } when no items overlap.
  */
 export function computeWindowRange(offsets, windowTopY, windowBottomY) {
   if (!Array.isArray(offsets) || offsets.length === 0) {
     return { startIndex: -1, endIndex: -1 };
   }
-  if (windowBottomY <= offsets[0].top || windowTopY >= offsets[offsets.length - 1].bottom) {
+  const lastBottom = offsets[offsets.length - 1].bottom;
+  if (windowBottomY <= offsets[0].top || windowTopY >= lastBottom) {
     return { startIndex: -1, endIndex: -1 };
   }
 
   let startIndex = -1;
   let endIndex = -1;
+  const EPSILON = 1e-4;
 
   for (let i = 0; i < offsets.length; i++) {
     const item = offsets[i];
-    if (item.bottom > windowTopY && item.top < windowBottomY) {
+    const visualBottom = (i < offsets.length - 1) ? offsets[i + 1].top : item.bottom;
+    if (visualBottom - windowTopY > EPSILON && windowBottomY - item.top > EPSILON) {
       if (startIndex === -1) startIndex = i;
       endIndex = i;
-    } else if (startIndex !== -1 && item.top >= windowBottomY) {
+    } else if (startIndex !== -1 && item.top >= windowBottomY - EPSILON) {
       break;
     }
   }

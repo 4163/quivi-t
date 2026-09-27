@@ -1610,6 +1610,7 @@ function wireRowListeners(li) {
     if (Core.getState().index !== index) {
       Core.selectIndex(index);
     }
+    updateSelection(index, false, true);
     const now = Date.now();
     if (lastClickIndex === index && (now - lastClickTime < 400)) {
       panelKeyboardActive = true;

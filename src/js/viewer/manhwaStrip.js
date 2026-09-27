@@ -220,36 +220,23 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
     const colH = newTotalH * scale;
 
     if (_anchorHoldover !== null && _layout.offsets[_anchorHoldover]) {
-      const fitMode = Core.getState()?.fitMode || _lastFitMode || 'none';
-      const maxW = (_layout.widestWidth && _layout.widestWidth > 0) ? _layout.widestWidth : DEFAULT_ESTIMATED_WIDTH;
-      const colHeight = (newTotalH > 0) ? newTotalH : DEFAULT_ESTIMATED_HEIGHT;
-      let targetScale = scale;
-      if (fitMode === 'width') {
-        targetScale = vw / maxW;
-      } else if (fitMode === 'width-if-larger') {
-        targetScale = Math.min(vw / maxW, 1);
-      } else if (fitMode === 'height') {
-        targetScale = vpH / colHeight;
-      } else if (fitMode === 'height-if-larger') {
-        targetScale = Math.min(vpH / colHeight, 1);
-      } else if (fitMode === 'window') {
-        targetScale = Math.min(vw / maxW, vpH / colHeight);
-      } else if (fitMode === 'window-if-larger') {
-        targetScale = Math.min(vw / maxW, vpH / colHeight, 1);
+      if (_anchorHoldoverAlignTop) {
+        const targetTy = computeTopAlignTy({
+          slotTop: _layout.offsets[_anchorHoldover].top,
+          totalHeight: newTotalH,
+          scale,
+          viewportHeight: vpH,
+        });
+        _viewportState.panTo(0, targetTy);
+      } else {
+        if (colH <= vpH || _anchorHoldover === 0) {
+          _viewportState.panTo(0, (colH - vpH) / 2);
+        } else if (_anchorHoldover === _imageIndex.length - 1) {
+          _viewportState.panTo(0, -(colH - vpH) / 2);
+        } else {
+          _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2, 0);
+        }
       }
-      targetScale = Math.min(32, Math.max(0.05, targetScale));
-      if (Math.abs(targetScale - scale) > 1e-4) {
-        _viewportState.zoomTo(targetScale, vw / 2, vpH / 2);
-        _strip.style.setProperty('--zoom-scale', targetScale);
-        _anchorHoldoverScale = targetScale;
-      }
-      const targetTy = computeTopAlignTy({
-        slotTop: _layout.offsets[_anchorHoldover].top,
-        totalHeight: newTotalH,
-        scale: targetScale,
-        viewportHeight: vpH,
-      });
-      _viewportState.panTo(0, targetTy);
     } else if (anchorImgIdxToHold !== null && _layout.offsets[anchorImgIdxToHold]) {
       if (wasAtTop && !wasAtBottom) {
         // View was end-pinned: re-pin the end instead of holding the anchor.
@@ -569,12 +556,14 @@ let _lastSyncedListIndex = null;
 let _lastVisSig = null;
 
 function _syncAnchorToCore() {
+  const hadHoldover = _anchorHoldover !== null;
   if (_anchorHoldover !== null) {
     const { startIndex: visStart, endIndex: visEnd } = _computeVisibleRange();
     if (visStart !== -1 && visEnd !== -1) {
       _anchorImgIdx = Math.max(visStart, Math.min(visEnd, _anchorHoldover));
     }
     _anchorHoldover = null;
+    _anchorHoldoverAlignTop = true;
   }
   const anchorItem = _imageIndex[_anchorImgIdx];
   if (!anchorItem) return;
@@ -593,8 +582,8 @@ function _syncAnchorToCore() {
   const visChanged = visSig !== _lastVisSig;
   _lastSyncedListIndex = anchorItem.listIndex;
   _lastVisSig = visSig;
-  if (!anchorChanged && !visChanged) return;
-  if (anchorChanged) {
+  if (!hadHoldover && !anchorChanged && !visChanged) return;
+  if (anchorChanged || hadHoldover) {
     _anchorUpdateInProgress = true;
     Core.selectIndex(anchorItem.listIndex);
     _anchorUpdateInProgress = false;
@@ -617,6 +606,7 @@ export function getVisibleImageIndices() {
 /** One-shot anchor request from explicit navigation, honored over re-derivation. */
 let _anchorHoldover = null;
 let _anchorHoldoverScale = 1;
+let _anchorHoldoverAlignTop = true;
 /** View params the anchor was last derived from; layout-only changes keep it. */
 let _lastAnchorTy = null;
 let _lastAnchorScale = null;
@@ -665,6 +655,7 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
   const anchorIdx = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
   _anchorHoldover = anchorIdx;
   _anchorHoldoverScale = targetScale;
+  _anchorHoldoverAlignTop = !!alignTop;
 
   _viewportState.zoomTo(targetScale, vw / 2, vh / 2);
   const colH = (_layout.totalHeight || 0) * targetScale;
@@ -706,9 +697,16 @@ export function alignListItemTop(listIndex) {
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
   _anchorImgIdx = mapped;
   _anchorHoldover = mapped;
+  _anchorHoldoverAlignTop = true;
+  const scale = _viewportState.getScale() || 1;
+  _anchorHoldoverScale = scale;
 
-  const fitMode = Core.getState()?.fitMode || _lastFitMode || 'none';
-  _applyFitMode(fitMode, mapped, true);
+  _topAlignColumnY(_layout.offsets[mapped].top, 0);
+
+  _strip.style.transform = _viewportState.getTransform();
+  _updateGrillAngles();
+  _updateWindow();
+  _scheduleSettle();
   return true;
 }
 
@@ -718,9 +716,26 @@ export function centerListItem(listIndex) {
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
   _anchorImgIdx = mapped;
   _anchorHoldover = mapped;
+  _anchorHoldoverAlignTop = false;
+  const scale = _viewportState.getScale() || 1;
+  _anchorHoldoverScale = scale;
 
-  const fitMode = Core.getState()?.fitMode || _lastFitMode || 'none';
-  _applyFitMode(fitMode, mapped);
+  const colH = (_layout.totalHeight || 0) * scale;
+  const vh = _viewport?.clientHeight || 800;
+  if (colH <= vh) {
+    _viewportState.panTo(0, (colH - vh) / 2);
+  } else if (mapped === 0) {
+    _viewportState.panTo(0, (colH - vh) / 2);
+  } else if (mapped === _imageIndex.length - 1) {
+    _viewportState.panTo(0, -(colH - vh) / 2);
+  } else if (_layout.offsets[mapped]) {
+    _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2, 0);
+  }
+
+  _strip.style.transform = _viewportState.getTransform();
+  _updateGrillAngles();
+  _updateWindow();
+  _scheduleSettle();
   return true;
 }
 
@@ -820,6 +835,7 @@ function _activate(state) {
   _lastTy = null;
   _lastScale = null;
   _anchorHoldover = null;
+  _anchorHoldoverAlignTop = true;
   _lastAnchorTy = null;
   _lastAnchorScale = null;
   _lastAnchorVph = null;
@@ -858,6 +874,7 @@ function _deactivate() {
   _lastFitMode = null;
   _lastFitModeGen = -1;
   _anchorHoldover = null;
+  _anchorHoldoverAlignTop = true;
   _lastAnchorTy = null;
   _lastAnchorScale = null;
   _lastAnchorVph = null;
@@ -937,6 +954,7 @@ function _onStateChange(state) {
     _lastTy = null;
     _lastScale = null;
     _anchorHoldover = null;
+    _anchorHoldoverAlignTop = true;
     _lastAnchorTy = null;
     _lastAnchorScale = null;
     _lastAnchorVph = null;

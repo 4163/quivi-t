@@ -388,6 +388,15 @@ describe('viewerMath', () => {
       assert.equal(findAnchorIndex([], 500), -1);
       assert.equal(findAnchorIndex(null, 500), -1);
     });
+
+    it('picks correct slot when center coordinate is in seam overlap', () => {
+      const seamOffsets = [
+        { top: 0, bottom: 1000, height: 1000 },
+        { top: 999, bottom: 2499, height: 1500 }
+      ];
+      // 999.5 is in item 1's visual domain (since item 1 starts at 999 and covers item 0)
+      assert.equal(findAnchorIndex(seamOffsets, 999.5), 1);
+    });
   });
 
   describe('computeWindowRange', () => {
@@ -420,6 +429,18 @@ describe('viewerMath', () => {
       assert.deepEqual(computeWindowRange(offsets, 1000, 2000), { startIndex: 1, endIndex: 1 });
       // Window fully inside item 1
       assert.deepEqual(computeWindowRange(offsets, 1200, 1800), { startIndex: 1, endIndex: 1 });
+    });
+
+    it('does not include preceding slot when next slot is top aligned with seam overlap', () => {
+      const seamOffsets = [
+        { top: 0, bottom: 1000, height: 1000 },
+        { top: 999, bottom: 2499, height: 1500 },
+        { top: 2498, bottom: 3498, height: 1000 },
+      ];
+      // Top aligned to item 1 (top: 999) with viewport height 800
+      assert.deepEqual(computeWindowRange(seamOffsets, 999, 1799), { startIndex: 1, endIndex: 1 });
+      // Top aligned to item 2 (top: 2498) with viewport height 800
+      assert.deepEqual(computeWindowRange(seamOffsets, 2498, 3298), { startIndex: 2, endIndex: 2 });
     });
   });
 
