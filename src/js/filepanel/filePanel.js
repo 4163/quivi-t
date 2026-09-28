@@ -306,6 +306,7 @@ let lastRenderedIndex = -1;
 let lastRenderedViewMode = null;
 let lastRenderedVisible = null;
 let lastRenderedDirectory = null;
+let lastRenderedManhwa = null;
 
 // Favorites
 let favoritesExpanded = false;
@@ -2022,7 +2023,7 @@ function renderVisibleSlice() {
   }
 
   // Phase 2: Allocate or update only rows not already rendered
-  const visibleIndices = stripVisibleIndices(state.list, state.index);
+  const visibleIndices = stripVisibleIndices(state.list, state.index, state.manhwaEnabled);
 
   for (let i = startIndex; i < endIndex; i++) {
     let li = activeRows.get(i);
@@ -2139,9 +2140,11 @@ function commitPendingThumbnails() {
 /** Strip secondary highlights follow the viewport. When the selected entry
  * is anything but an image (video, folder, parent, non-image file), the
  * viewport shows the drop overlay instead of the strip, so no row counts
- * as in view. */
-function stripVisibleIndices(list, index) {
-  if (!Core.getState().manhwaEnabled || !isManhwaStripActive()) return null;
+ * as in view. Keys off the passed mode flag rather than live strip activity
+ * so toggle-off repaints correctly regardless of listener order; the index
+ * query itself tolerates an inactive strip. */
+function stripVisibleIndices(list, index, manhwaOn) {
+  if (!manhwaOn) return null;
   const entry = list?.[index];
   if (entry && (!FsUtils.isImageEntry(entry) || FsUtils.isVideoEntry(entry))) return null;
   return new Set(getVisibleImageIndices());
@@ -2155,7 +2158,7 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
     (document.activeElement && fileListUl.contains(document.activeElement)) ||
     (isDefaultFocus && Core.getState().fileListVisible);
 
-  const visibleIndices = stripVisibleIndices(lastRenderedList, selectedIndex);
+  const visibleIndices = stripVisibleIndices(lastRenderedList, selectedIndex, Core.getState().manhwaEnabled);
   const visibleListIndices = visibleIndices ? Array.from(visibleIndices) : null;
 
   const hasVisible = visibleListIndices && visibleListIndices.length > 0;
@@ -2324,13 +2327,16 @@ export function renderFilePanel(state) {
 
   const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
 
-  // Deduplication guard: if file list state has not changed, exit early
+  // Deduplication guard: if file list state has not changed, exit early.
+  // Manhwa mode is a token: toggling it changes no list, index, or view
+  // mode, but must still repaint to drop secondary highlights.
   if (
     lastRenderedList === state.list &&
     lastRenderedIndex === state.index &&
     lastRenderedViewMode === viewMode &&
     lastRenderedVisible === state.fileListVisible &&
-    lastRenderedDirectory === currentDir
+    lastRenderedDirectory === currentDir &&
+    lastRenderedManhwa === state.manhwaEnabled
   ) {
     return;
   }
@@ -2379,6 +2385,7 @@ export function renderFilePanel(state) {
     lastRenderedViewMode = viewMode;
     lastRenderedVisible = state.fileListVisible;
     lastRenderedDirectory = currentDir;
+    lastRenderedManhwa = state.manhwaEnabled;
     updateSelection(state.index, forceFocus, wasFocused);
     return;
   }
@@ -2388,6 +2395,7 @@ export function renderFilePanel(state) {
   lastRenderedViewMode = viewMode;
   lastRenderedVisible = state.fileListVisible;
   lastRenderedDirectory = currentDir;
+  lastRenderedManhwa = state.manhwaEnabled;
   lastScrolledIndex = -1;
   lastScrolledSig = '';
   lastClickTime = 0;

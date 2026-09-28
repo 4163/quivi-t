@@ -124,7 +124,7 @@ Requested behavior leaves the slot blank with `alt="Downloading..."` on the img 
 
 ## Issue 10. Secondary highlights survive manhwa toggle-off
 
-Status: open, no code changes yet. From clipboard handoff.
+Status: resolved and user-confirmed in the running app. A manhwa token joins the panel dedup guard, so toggle on and off both force a repaint through the existing remove path. The highlight rule keys off the state snapshot flag rather than live strip activity, so the order of `Core` listeners cannot defeat it. No strip reach-in; `Core` notify stays the only channel.
 
 Secondary highlight is the `in-view` class on file rows, painted only in strip mode. Both paint paths gate it on `isManhwa = state.manhwaEnabled && isManhwaStripActive()` and remove it otherwise: `renderVisibleSlice` at `filePanel.js:2036-2040`, `updateSelection` at 2215-2219.
 
