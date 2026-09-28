@@ -551,10 +551,12 @@ function _updateWindow() {
   }
 
   // Rebuild queue: drop entries that mounted through another path, append
-  // new ones, sort in travel direction.
+  // new ones, sort in travel direction. Quiet passes (decode flushes with
+  // no pan delta) must not re-sort: they would flip a bottom-first scroll-up
+  // queue back to top-first mid-travel.
   _mountQueue = _mountQueue.filter((e) => !_mounted.has(e.imgIdx));
   for (const e of newQueueEntries) _mountQueue.push(e);
-  _sortMountQueue(anchor, prefetchDir);
+  if (prefetchDir !== 0) _sortMountQueue(anchor, prefetchDir);
   _advanceMountQueue();
 
   // Prefetch always runs, including the first build: the mount loop above

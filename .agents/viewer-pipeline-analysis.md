@@ -92,7 +92,7 @@ Fix direction. When the resolved index has no image mapping and the setting is o
 
 ## Issue 7. Strip decodes in parallel where thumbnails queue in order
 
-Status: implemented. Sequential mount queue added to `manhwaStrip.js:108-113,548-558,723-763`. Fresh visible and buffer items queue instead of firing `img.src` in parallel. Queue processes one item at a time via `onload`/`onerror` chaining, sorted top-first (reversed when scrolling up). Prefetched items still mount instantly. Queue resets on deactivation and cache clear.
+Status: implemented. Sequential decode queue in `manhwaStrip.js`. Fresh items decode off-DOM one at a time in scroll order and mount only with known dims. Queue sorts top-first, bottom-first while scrolling up. Quiet passes with no pan delta no longer re-sort, so a scroll-up queue keeps its direction through decode flushes. Prefetched items still mount instantly. Queue resets on deactivation and cache clear.
 
 Thumbnail view serializes heavy work. `filePanel.js:282-293` bounds the viewport queue with a 1-row margin, parks uncached thumbs on `TRANSPARENT_PIXEL` with `pendingSrc` at 1853-1867, commits on scroll settle at 2428-2437 through `commitPendingThumbnails` at 2059-2130, exempts the viewer-active index at 1860-1862 and 1873-1881, and dedupes archive bytes through `ensureArchiveBlob` at 109 behind `isConstrainedThumbnailSrc` at `fsUtils.js:222`.
 
