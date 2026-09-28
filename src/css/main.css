@@ -1570,7 +1570,7 @@ li:hover>.favorite-remove,
   opacity: 0.35;
 }
 
-#manhwa-strip.grill-active .manhwa-slot-backdrop {
+#manhwa-strip.grill-active .manhwa-slot[data-ready] .manhwa-slot-backdrop {
   display: block;
 }
 

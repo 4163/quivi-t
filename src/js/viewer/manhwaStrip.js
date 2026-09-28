@@ -105,12 +105,14 @@ let _lastScale = null;
 let _lastFitMode = null;
 let _lastFitModeGen = -1;
 
-/** Sequential mount queue. Visible items that need a fresh fetch go here
- * instead of firing img.src in parallel. Processed one at a time via
- * onload/onerror chaining so images fill in scroll order. */
+/** Sequential decode queue. Fresh items decode off-DOM here in scroll order
+ * and mount only with known dims, so images never paint at estimated size.
+ * Entries are { imgIdx, item, state }; no DOM node exists until decode. */
 let _mountQueue = [];
-/** imgIdx of the item currently loading through the queue, -1 if idle. */
+/** imgIdx of the item currently decoding through the queue, -1 if idle. */
 let _mountInFlight = -1;
+/** Coalesced layout pass for decode bursts. One rebuild per frame. */
+let _layoutRaf = 0;
 
 /** Session cache for resolved ICO spritesheet data URIs. */
 const _icoCache = new Map();
@@ -352,12 +354,8 @@ function _onItemDecoded(imgIdx, nw, nh) {
   const item = _imageIndex[imgIdx];
   if (!item || item.isVideo) return;
   const oldH = item.naturalHeight;
-  const scale = _viewportState?.getScale() || 1;
-  const ty = _viewportState?.getTy() || 0;
-  const centerColY = (_layout.totalHeight / 2) - (ty / scale);
-  const currentAnchor = findAnchorIndex(_layout.offsets, centerColY);
-  const anchorToHold = currentAnchor !== -1 ? currentAnchor : _anchorImgIdx;
-  const oldAnchorTop = _layout.offsets[anchorToHold]?.top || 0;
+  // The anchor correction runs at flush time in _requestLayout, recomputed
+  // from current state so a burst of decodes settles once, not once each.
   const wasEstimated = !item.decoded;
 
   const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
@@ -400,12 +398,15 @@ function _onItemDecoded(imgIdx, nw, nh) {
   if (slot) {
     slot.style.height = `${nh}px`;
     slot.style.width = `${nw}px`;
+    // Exact dims from here on: reveal the tinted backdrop with the image
+    // instead of painting it at estimated size first. Loaded images cover
+    // their slot fully, so the backdrop is only ever visible for undecided
+    // slots, which stay neutral until this flag lands.
+    slot.dataset.ready = 'true';
   }
 
   if (oldH !== nh || item.naturalWidth !== nw) {
-    _updateLayout(anchorToHold, oldAnchorTop);
-    _updateWindow();
-    _scheduleSettle();
+    _requestLayout();
   }
 }
 
@@ -505,81 +506,60 @@ function _updateWindow() {
     }
   }
 
-  // Mount missing images inside [startIndex, endIndex].
+  // Mount missing images inside [startIndex, endIndex]. Nodes mount only
+  // with known dims: decoded prefetches append at once, everything else
+  // decodes off-DOM through the sequential queue first, so images paint
+  // once at the right size instead of stretching from the estimate.
   const state = Core.getState();
+  const queued = new Set(_mountQueue.map((e) => e.imgIdx));
+  if (_mountInFlight !== -1) queued.add(_mountInFlight);
   const newQueueEntries = [];
   for (let i = startIndex; i <= endIndex; i++) {
     const item = _imageIndex[i];
-    if (item.isVideo || _mounted.has(i)) continue;
+    if (item.isVideo || _mounted.has(i) || queued.has(i)) continue;
 
     const slot = _slots.get(i);
     if (!slot) continue;
 
-
-    let img = null;
-    let isPrefetched = false;
-
     if (_prefetchedImages.has(i)) {
-      img = _prefetchedImages.get(i);
+      const img = _prefetchedImages.get(i);
       _prefetchedImages.delete(i);
-      isPrefetched = true;
-    } else if (_prefetching.has(i)) {
-      img = _prefetching.get(i);
-      _prefetching.delete(i);
-    } else {
-      img = _acquireNode();
-    }
-
-    img.dataset.imgIdx = String(i);
-    img.dataset.listIndex = String(item.listIndex);
-
-    // Slot drives display size via CSS height:100%. No per-img inline sizing.
-    img.onload = _handleStripImgLoad;
-    img.onerror = _handleStripImgError;
-
-    // Claim the slot before any decode callback below can re-enter
-    // _updateWindow. _onItemDecoded calls _updateWindow synchronously for
-    // already-ready nodes, and the re-entrant pass must see this index as
-    // mounted. Otherwise both passes append, leaving two imgs in one slot
-    // while _mounted tracks only the second. Drop any orphan left by that
-    // older race so the slot holds exactly one node.
-    for (const old of Array.from(slot.querySelectorAll(':scope > img'))) {
-      if (old === img) continue;
-      old.onload = null;
-      old.onerror = null;
-      old.remove();
-      _releaseNode(old);
-    }
-    slot.appendChild(img);
-    _mounted.set(i, img);
-
-    if (isPrefetched) {
-      // Already decoded off-DOM: mount immediately, no queue needed.
-      if (img.complete && img.naturalWidth > 0 && !item.decoded) {
+      if (!item.decoded && img.naturalWidth > 0) {
         _onItemDecoded(i, img.naturalWidth, img.naturalHeight);
       }
-    } else if (img.src) {
-      // Promoted from _prefetching: already loading, will fire onload.
-      if (img.complete && img.naturalWidth > 0 && !item.decoded) {
-        _onItemDecoded(i, img.naturalWidth, img.naturalHeight);
-      }
-    } else {
-      // Fresh mount: queue for sequential loading.
-      newQueueEntries.push({ imgIdx: i, img, item, state });
+      _claimSlot(i, item, slot, img);
+      continue;
     }
+
+    if (_prefetching.has(i)) {
+      const pre = _prefetching.get(i);
+      if (pre.complete && pre.naturalWidth > 0) {
+        // Finished while off-DOM: take over, size the slot, then mount.
+        _prefetching.delete(i);
+        if (!item.decoded) {
+          _onItemDecoded(i, pre.naturalWidth, pre.naturalHeight);
+        }
+        _claimSlot(i, item, slot, pre);
+      }
+      // Still loading: leave it off-DOM. Its onload hands to
+      // _prefetchedImages, and a later pass appends it with known dims.
+      continue;
+    }
+
+    // Fresh: decode off-DOM through the sequential queue before mounting.
+    newQueueEntries.push({ imgIdx: i, item, state });
   }
 
-  // Rebuild queue: drop stale entries, append new ones, sort anchor-out.
-  _mountQueue = _mountQueue.filter(e =>
-    _mounted.has(e.imgIdx) && _mounted.get(e.imgIdx) === e.img && !e.img.src
-  );
+  // Rebuild queue: drop entries that mounted through another path, append
+  // new ones, sort in travel direction.
+  _mountQueue = _mountQueue.filter((e) => !_mounted.has(e.imgIdx));
   for (const e of newQueueEntries) _mountQueue.push(e);
   _sortMountQueue(anchor, prefetchDir);
   _advanceMountQueue();
 
   // Prefetch always runs, including the first build: the mount loop above
-  // no longer mounts non-visible items raw, so the ahead item depends on
-  // this pre-decode path from the very first window.
+  // only appends decoded nodes, so window items outside the visible range
+  // and the ahead item depend on this pre-decode path from the first window.
   _prefetchAhead(startIndex, endIndex, prefetchDir, state);
 
   // Backend warm still waits one update after activate or rebuild so the
@@ -651,7 +631,7 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
   for (const i of targets) {
     if (_prefetching.size >= PREFETCH_CONCURRENT_MAX) break;
     const item = _imageIndex[i];
-    if (!item || item.isVideo || _mounted.has(i) || _prefetching.has(i) || _prefetchedImages.has(i)) {
+    if (!item || item.isVideo || _mounted.has(i) || _prefetching.has(i) || _prefetchedImages.has(i) || _isDecodeQueued(i)) {
       continue;
     }
     const pre = new Image();
@@ -743,31 +723,183 @@ function _sortMountQueue(_anchor, direction) {
   );
 }
 
-/** Pop the next valid queue entry and set its img.src. One at a time. */
+/** Coalesce decode-driven corrections into one layout pass per frame.
+ * Serial decodes each shifting the column reads as a staircase; one pass
+ * per burst settles once. Slot styles stay synchronous in _onItemDecoded,
+ * so only the model rebuild and anchor correction are deferred, and the
+ * anchor is recomputed here from current state. */
+function _requestLayout() {
+  if (_layoutRaf) return;
+  _layoutRaf = requestAnimationFrame(() => {
+    _layoutRaf = null;
+    if (!_active || !_viewportState || !_strip) return;
+    const scale = _viewportState.getScale() || 1;
+    const ty = _viewportState.getTy() || 0;
+    const centerColY = (_layout.totalHeight / 2) - (ty / scale);
+    const currentAnchor = findAnchorIndex(_layout.offsets, centerColY);
+    const anchorToHold = currentAnchor !== -1 ? currentAnchor : _anchorImgIdx;
+    const oldAnchorTop = _layout.offsets[anchorToHold]?.top || 0;
+    _updateLayout(anchorToHold, oldAnchorTop);
+    _updateWindow();
+    _scheduleSettle();
+  });
+}
+
+/** True while an index awaits or undergoes queued off-DOM decode. */
+function _isDecodeQueued(imgIdx) {
+  if (_mountInFlight === imgIdx) return true;
+  for (const e of _mountQueue) {
+    if (e.imgIdx === imgIdx) return true;
+  }
+  return false;
+}
+
+/** Stamp, attach, and append a decoded node. The slot already carries exact
+ * dims, so the node paints once at the right size in the same task. */
+function _claimSlot(imgIdx, item, slot, img) {
+  img.dataset.imgIdx = String(imgIdx);
+  img.dataset.listIndex = String(item.listIndex);
+  img.onload = _handleStripImgLoad;
+  img.onerror = _handleStripImgError;
+  for (const old of Array.from(slot.querySelectorAll(':scope > img'))) {
+    if (old === img) continue;
+    old.onload = null;
+    old.onerror = null;
+    old.remove();
+    _releaseNode(old);
+  }
+  slot.appendChild(img);
+  _mounted.set(imgIdx, img);
+}
+
+/** Mount a node whose decode failed. Error UI plus estimated sizing.
+ * The slot is sized before the node enters DOM, same as the happy path. */
+function _mountFailed(imgIdx, item, slot, img) {
+  _onItemDecoded(imgIdx, item.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
+  _claimSlot(imgIdx, item, slot, img);
+  slot.classList.add('error');
+  if (!slot.querySelector('.manhwa-error-placeholder')) {
+    const errDiv = document.createElement('div');
+    errDiv.className = 'manhwa-error-placeholder';
+    errDiv.textContent = `Failed to load: ${item.entry?.name || 'image'}`;
+    slot.appendChild(errDiv);
+  }
+}
+
+/** Decode the next queued entry off-DOM, then mount it with known dims.
+ * One at a time, in scroll order. The slot is resized first in the same
+ * task as the append, so the mounted node never paints at estimated size. */
 function _advanceMountQueue() {
   if (_mountInFlight !== -1) return;
   while (_mountQueue.length > 0) {
     const entry = _mountQueue.shift();
     if (!_active) break;
-    if (_mounted.get(entry.imgIdx) !== entry.img) continue;
-    if (entry.img.src) continue;
+    if (_mounted.has(entry.imgIdx)) continue;
+    const item = _imageIndex[entry.imgIdx];
+    if (!item || item.isVideo || item !== entry.item) continue;
 
     _mountInFlight = entry.imgIdx;
-    const src = _buildSrc(entry.item.entry, entry.state);
-    entry.img.src = src;
+    const pre = new Image();
+    pre.decoding = 'async';
 
-    const isIco = FsUtils.isIco(entry.item.entry.name || entry.item.entry.path || '');
-    if (isIco) {
+    const drop = () => {
+      _mountInFlight = -1;
+      _releaseNode(pre);
+      _advanceMountQueue();
+    };
+    const fail = () => {
+      const idx = entry.imgIdx;
+      _mountInFlight = -1;
+      const cur = _imageIndex[idx];
+      const slot = _slots.get(idx);
+      if (_active && cur && cur === entry.item && !cur.isVideo && slot && !_mounted.has(idx)) {
+        _mountFailed(idx, cur, slot, pre);
+      } else {
+        _releaseNode(pre);
+      }
+      _advanceMountQueue();
+    };
+
+    pre.onload = async () => {
+      if (_mountInFlight !== entry.imgIdx || !_active) {
+        drop();
+        return;
+      }
+      const cur = _imageIndex[entry.imgIdx];
+      if (!cur || cur.isVideo || cur !== entry.item) {
+        drop();
+        return;
+      }
+      // Rasterize off-DOM so the node paints on its first frame in the slot.
+      try {
+        if (typeof pre.decode === 'function') await pre.decode();
+      } catch {
+        // Dims below still size the slot correctly.
+      }
+      if (_mountInFlight !== entry.imgIdx || !_active) {
+        drop();
+        return;
+      }
+      const now = _imageIndex[entry.imgIdx];
+      if (!now || now.isVideo || now !== entry.item || _mounted.has(entry.imgIdx)) {
+        drop();
+        return;
+      }
+      if (!(pre.naturalWidth > 0)) {
+        fail();
+        return;
+      }
+      const slot = _slots.get(entry.imgIdx);
+      if (!slot) {
+        drop();
+        return;
+      }
+      _mountInFlight = -1;
+      _onItemDecoded(entry.imgIdx, pre.naturalWidth, pre.naturalHeight);
+      _claimSlot(entry.imgIdx, now, slot, pre);
+      _advanceMountQueue();
+    };
+    pre.onerror = () => {
+      if (_mountInFlight !== entry.imgIdx) {
+        drop();
+        return;
+      }
+      fail();
+    };
+
+    const entryName = entry.item.entry.name || entry.item.entry.path || '';
+    if (FsUtils.isIco(entryName)) {
       const key = _getIcoKey(entry.item.entry, entry.state);
-      if (!_icoCache.has(key)) {
+      const cached = _icoCache.get(key);
+      if (cached) {
+        pre.src = cached;
+      } else {
         _resolveIco(entry.item.entry, entry.state).then((icoSrc) => {
+          if (_mountInFlight !== entry.imgIdx) {
+            _releaseNode(pre);
+            return;
+          }
           if (icoSrc) {
             _icoCache.set(key, icoSrc);
-            if (!_active || _mounted.get(entry.imgIdx) !== entry.img) return;
-            entry.img.src = icoSrc;
+            if (!_active || _mountInFlight !== entry.imgIdx) {
+              _releaseNode(pre);
+              _advanceMountQueue();
+              return;
+            }
+            pre.src = icoSrc;
+          } else {
+            fail();
           }
-        }).catch(() => {});
+        }).catch(() => {
+          if (_mountInFlight !== entry.imgIdx) {
+            _releaseNode(pre);
+            return;
+          }
+          fail();
+        });
       }
+    } else {
+      pre.src = _buildSrc(entry.item.entry, entry.state);
     }
     return;
   }
@@ -776,6 +908,10 @@ function _advanceMountQueue() {
 function _resetMountQueue() {
   _mountQueue = [];
   _mountInFlight = -1;
+  if (_layoutRaf) {
+    cancelAnimationFrame(_layoutRaf);
+    _layoutRaf = null;
+  }
 }
 
 function _scheduleSettle() {  if (_settleTimer) clearTimeout(_settleTimer);

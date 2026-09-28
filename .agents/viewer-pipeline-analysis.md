@@ -64,7 +64,7 @@ Fix direction is throttled anchor sync during hold, for example every 100 to 150
 
 ## Issue 5. Identical per-image work that belongs on the container
 
-Status: open, no code changes yet. From clipboard handoff.
+Status: done. Shared mount handlers, slot-driven sizing, and container scaling are in code. Single-viewer pan path keeps the canvas up instead of cancelling. Strip mounts only with known dims and batches layout per frame. Per-slot backdrops gate on decoded dims.
 
 The big transform already sits in one place. Every pan, zoom, align, and layout path writes one container transform at `manhwaStrip.js:304,829,848,867,895,981,1003,1022,1035,1231` through `getTransform` at `viewerMath.js:456`. Rotation, flip, and scale ride that single write. No per-image geometry transform exists in code.
 
@@ -142,7 +142,7 @@ Fix direction is a manhwa token in the dedup guard. Record last rendered manhwa-
 - [x] Count evict to remount of same index within 2 seconds. Accept when thrash rate is known.
 
 - [ ] Log key repeat, panBy, scheduleSettle, selectIndex, settle event times during hold. Accept when starvation gap is measured.
-- [ ] Count shared versus per-mount handlers and style writes over one chapter scroll. Accept when one onload/onerror pair serves all mounts.
+- [x] Count shared versus per-mount handlers and style writes over one chapter scroll. Accept when one onload/onerror pair serves all mounts.
 - [ ] Open a folder in manhwa mode with open_first_image off and fit width. Accept when the overlay shows and no selection is forced. Repeat with the setting on. Accept when the first image pins top.
 - [x] Log strip mount start order and concurrent fetches on a cold archive scroll. Accept when starts follow scroll order through a sequential queue.
 - [ ] Step through a mixed image and video folder in strip mode. Accept when videos highlight only, the overlay shows, and layout ignores them.
