@@ -414,8 +414,9 @@ impl ArchiveCache {
 /// Protocol hot-path ZIP read that never holds the global lock across
 /// extraction. Short-lock cache check, unlocked inflate, short-lock insert
 /// with dedup, so parallel entry fetches overlap instead of queueing behind
-/// a large inflate. Returns None for non-ZIP kinds or password archives, in
-/// which case callers keep the locked `read_entry_bytes` path.
+/// a large inflate. Forwards the stored password for unlocked encrypted
+/// archives. Returns None for non-ZIP kinds or archives still awaiting a
+/// password, in which case callers keep the locked `read_entry_bytes` path.
 pub(crate) fn read_plain_zip_entry_shared(
     state: &std::sync::RwLock<ArchiveCache>,
     archive_path: &str,
@@ -424,6 +425,7 @@ pub(crate) fn read_plain_zip_entry_shared(
     if ArchiveKind::from_path(archive_path).ok()? != ArchiveKind::Zip {
         return None;
     }
+    let password;
     {
         let mut cache = state.write().ok()?;
         if cache.is_archive_password_required(archive_path) {
@@ -432,9 +434,10 @@ pub(crate) fn read_plain_zip_entry_shared(
         if let Some(hit) = cache.get_zip_entry(archive_path, entry_name) {
             return Some(Ok(hit));
         }
+        password = cache.get_archive_password(archive_path);
         cache.prepare_archive_state(archive_path, ArchiveKind::Zip, None, None, None, None);
     }
-    let extracted = match zip::extract_zip_entry(archive_path, entry_name, None) {
+    let extracted = match zip::extract_zip_entry(archive_path, entry_name, password.as_deref()) {
         Ok(bytes) => cache::SharedEntryBytes::from(bytes),
         Err(_) => return Some(Err(format!("Cannot find ZIP entry: {entry_name}"))),
     };
