@@ -645,24 +645,32 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
       const cur = _imageIndex[i];
       if (!cur || cur.isVideo) return;
       // Pre-decode gate: force rasterization off-DOM so the node paints on
-      // its first frame in the slot. A node that fails decode drops out and
-      // the mount path falls back to normal onload behavior.
+      // its first frame in the slot. A node that fails the gate drops out
+      // and the follow-up pass retries it through the sequential worker.
+      let gated = true;
       try {
         if (typeof pre.decode === 'function') await pre.decode();
       } catch {
-        return;
+        gated = false;
       }
       if (!_active) return;
       const stillCur = _imageIndex[i];
       if (!stillCur || stillCur.isVideo) return;
-      _prefetchedImages.set(i, pre);
-      _trimPrefetchCache();
-      if (!stillCur.decoded && pre.naturalWidth > 0) {
-        _onItemDecoded(i, pre.naturalWidth, pre.naturalHeight);
+      if (gated) {
+        _prefetchedImages.set(i, pre);
+        _trimPrefetchCache();
+        if (!stillCur.decoded && pre.naturalWidth > 0) {
+          _onItemDecoded(i, pre.naturalWidth, pre.naturalHeight);
+        }
       }
+      // Always follow up while active. Gate failures and already-decoded
+      // hits schedule nothing above, so without this the slot sits blank
+      // with no pass left to mount or retry it while idle.
+      _requestLayout();
     };
     pre.onerror = () => {
       _prefetching.delete(i);
+      if (_active) _requestLayout();
     };
     const isIco = FsUtils.isIco(item.entry.name || item.entry.path || '');
     if (isIco) {
