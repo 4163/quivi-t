@@ -2,7 +2,8 @@ import { createViewportState } from '../services/viewerMath.js';
 import { createViewerRenderer } from './viewerRender.js';
 import { createViewerGestures } from './viewerGestures.js';
 import { createViewerPipelines } from './viewerPipelines.js';
-import { isManhwaStripActive, initManhwaStrip } from './manhwaStrip.js';
+import { isManhwaStripActive, initManhwaStrip, isStripAtTop } from './manhwaStrip.js';
+import { revealListTop } from '../filepanel/filePanel.js';
 
 let _cachedViewport = { clientWidth: 1000, clientHeight: 1000, left: 0, top: 0 };
 
@@ -70,6 +71,9 @@ export const Viewer = {
     if (c) viewportState.zoomAt(delta, c.x, c.y);
   },
   panBy: (dx, dy) => {
+    // Upward pan with the strip already top-pinned has nowhere to go:
+    // hand it to the file list so `..` scrolls into view.
+    if (dy > 0 && isManhwaStripActive() && isStripAtTop()) revealListTop();
     viewportState.panBy(dx, dy);
   },
   rotate: (deg) => {

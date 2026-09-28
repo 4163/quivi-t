@@ -52,6 +52,8 @@ As-built behavior in `manhwaStrip.js:408-600`. The window is anchor minus 1 to a
 
 ## Issue 4. File list stays static during key hold
 
+Status: resolved and user-confirmed in the running app.
+
 Paint path works. `filePanel.js:2035,2140-2214,2825-2829` paints selected and in view sync. Panel subscribes at 2446. Scroll over panel paints sync at 2422-2433.
 
 Hold pan never writes `Core` until settle. Path is `shortcuts.js:311-320` to `main.js:132-135 Viewer.panBy` to `viewerMath.js:336-342 notify` to `manhwaStrip.js:1066-1078`, which calls `_updateWindow` plus `_scheduleSettle` at 551-557. Settle waits 100 ms quiet, then calls `Core.selectIndex` at 563-597 only if center anchor changed.
@@ -60,7 +62,7 @@ OS repeat fires about every 30 to 50 ms. Each repeat resets the 100 ms timer. Se
 
 Secondary trap is `filePanel.js:2627-2629` diverts viewport hovered arrows and Space away from immediate panel nav into shortcuts pan path. `viewerGestures.js:312-313` ignores repeat for Space poll setup, but pan dispatch still repeats and still resets settle.
 
-Fix direction is throttled anchor sync during hold, for example every 100 to 150 ms while repeat continues, or direct visible paint without waiting for `Core.selectIndex`, with `Core.selectIndex` kept as trailing commit.
+Status: implemented. Heartbeat sync in `manhwaStrip.js`: while pan ticks keep arriving, the anchor commits through `Core.selectIndex` at most every 150 ms and the panel follows through the settle event. Trailing settle still owns the final commit. External index echoes stay gated on 150 ms pan quiet, so stale async notifies from heartbeat selects never yank the strip mid-hold. No panel changes; `Core` notify stays the only channel.
 
 ## Issue 5. Identical per-image work that belongs on the container
 

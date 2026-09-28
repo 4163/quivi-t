@@ -10,7 +10,7 @@
 
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
-import { thumbnailCache } from '../filepanel/filePanel.js';
+import { thumbnailCache, revealListTop } from '../filepanel/filePanel.js';
 import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale } from '../services/viewerMath.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
@@ -37,6 +37,11 @@ const BACKEND_WARM_AHEAD = 2;
 
 /** Max concurrent in-flight prefetch decodes. */
 const PREFETCH_CONCURRENT_MAX = 2;
+
+/** Hold-sync heartbeat. OS key repeat resets the 100 ms settle timer faster
+ * than it fires, so the panel starves until key-up. Syncing the anchor at
+ * this interval keeps the panel following mid-hold; settle still commits. */
+const STRIP_SYNC_HEARTBEAT_MS = 150;
 
 /** Initial estimated height for images before decode. */
 const DEFAULT_ESTIMATED_HEIGHT = 1200;
@@ -101,6 +106,7 @@ let _settleTimer = null;
 let _lastBackendWarmKey = null;
 let _lastTy = null;
 let _lastPanAt = 0;
+let _lastHeartbeatAt = 0;
 let _lastScale = null;
 let _lastFitMode = null;
 let _lastFitModeGen = -1;
@@ -606,6 +612,14 @@ function _updateWindow() {
     _anchorImgIdx = newAnchor;
     _scheduleSettle();
   }
+  // Heartbeat sync during hold. Repeat pan ticks keep resetting the settle
+  // timer, so without this the panel never follows until key-up. Well below
+  // repeat rate; _syncAnchorToCore skips when nothing moved.
+  const now = performance.now();
+  if (now - _lastPanAt < 150 && now - _lastHeartbeatAt >= STRIP_SYNC_HEARTBEAT_MS) {
+    _lastHeartbeatAt = now;
+    _syncAnchorToCore();
+  }
   _positionSlotGrill();
 }
 
@@ -971,6 +985,18 @@ function _syncAnchorToCore() {
   window.dispatchEvent(new CustomEvent('quivit-manhwa-settle'));
 }
 
+/** True while the strip sits pinned at the very top. A further upward pan
+ * has nowhere to go in the viewport, so callers hand it to the file list. */
+export function isStripAtTop() {
+  if (!_active || !_viewportState) return false;
+  const scale = _viewportState.getScale() || 1;
+  const colH = (_layout.totalHeight || 0) * scale;
+  const vpH = _viewport?.clientHeight || 800;
+  if (colH <= vpH + 0.5) return true;
+  const maxTy = Math.abs(colH - vpH) / 2;
+  return _viewportState.getTy() >= maxTy - 0.5;
+}
+
 export function getVisibleImageIndices() {
   if (!_active) return [];
   const { startIndex, endIndex } = _computeVisibleRange();
@@ -1162,6 +1188,9 @@ export function pageStrip(direction, pageMultiplier = 1) {
       if (direction > 0) {
         alignListItemBottom(targetIdx);
       } else {
+        // Whole column fits: paging up lands on the top, so reveal `..`
+        // in the same gesture instead of asking for a second press.
+        revealListTop();
         alignListItemTop(targetIdx);
       }
     }
@@ -1174,6 +1203,9 @@ export function pageStrip(direction, pageMultiplier = 1) {
   const step = Math.max(1, pageMultiplier) * vpH;
 
   if (direction < 0 && ty >= maxTy - 0.5) {
+    // Nowhere left to go upstairs: hand the gesture to the file list so
+    // one more page-up reveals `..`.
+    revealListTop();
     const firstIdx = getFirstImageIndex();
     if (firstIdx !== -1) {
       if (Core.getState().index !== firstIdx) {
@@ -1430,8 +1462,10 @@ function _onStateChange(state) {
     return;
   }
 
-  // External index change (panel click/keyboard) — top align it.
-  if (!_anchorUpdateInProgress && state.index >= 0) {
+  // External index change (panel click/keyboard) — top align it. Ignored
+  // while a pan is in flight: async Core notifies from heartbeat selects
+  // land stale mid-hold and must not yank the strip back.
+  if (!_anchorUpdateInProgress && state.index >= 0 && performance.now() - _lastPanAt > 150) {
     const mapped = _listToImgIdx.get(state.index);
     if (mapped !== undefined && mapped !== _anchorImgIdx) {
       alignListItemTop(state.index);

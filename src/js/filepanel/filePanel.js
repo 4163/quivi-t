@@ -2022,8 +2022,7 @@ function renderVisibleSlice() {
   }
 
   // Phase 2: Allocate or update only rows not already rendered
-  const isManhwa = state.manhwaEnabled && isManhwaStripActive();
-  const visibleIndices = isManhwa ? new Set(getVisibleImageIndices()) : null;
+  const visibleIndices = stripVisibleIndices(state.list, state.index);
 
   for (let i = startIndex; i < endIndex; i++) {
     let li = activeRows.get(i);
@@ -2137,6 +2136,16 @@ function commitPendingThumbnails() {
   }
 }
 
+/** Strip secondary highlights follow the viewport. When the selected entry
+ * has no strip mapping (folder, parent, non-image file), the viewport shows
+ * the drop overlay instead of the strip, so no row counts as in view. */
+function stripVisibleIndices(list, index) {
+  if (!Core.getState().manhwaEnabled || !isManhwaStripActive()) return null;
+  const entry = list?.[index];
+  if (entry && !FsUtils.isImageEntry(entry) && !FsUtils.isVideoEntry(entry)) return null;
+  return new Set(getVisibleImageIndices());
+}
+
 function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) {
   if (!lastRenderedList) return;
 
@@ -2145,9 +2154,8 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
     (document.activeElement && fileListUl.contains(document.activeElement)) ||
     (isDefaultFocus && Core.getState().fileListVisible);
 
-  const isManhwa = Core.getState().manhwaEnabled && isManhwaStripActive();
-  const visibleListIndices = isManhwa ? getVisibleImageIndices() : null;
-  const visibleIndices = visibleListIndices ? new Set(visibleListIndices) : null;
+  const visibleIndices = stripVisibleIndices(lastRenderedList, selectedIndex);
+  const visibleListIndices = visibleIndices ? Array.from(visibleIndices) : null;
 
   const hasVisible = visibleListIndices && visibleListIndices.length > 0;
   const minActiveIdx = hasVisible
@@ -2837,6 +2845,13 @@ export function focusFileList() {
 
 export function isFileListFocused() {
   return !!(fileListUl && document.activeElement && fileListUl.contains(document.activeElement));
+}
+
+/** Scroll the list to the very top so `..` is visible. Panel stays the sole
+ * owner of its scroll; other modules call this instead of touching the UL. */
+export function revealListTop() {
+  if (!fileListUl) return;
+  fileListUl.scrollTop = 0;
 }
 
 export function getFileListViewportRange() {
