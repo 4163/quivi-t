@@ -1,6 +1,6 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
-import { thumbnailCache } from '../filepanel/filePanel.js';
+import { getCachedArchiveBlob, hasCachedArchiveBlob } from '../services/archiveImageCache.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 const PRELOAD_HALF = 1;
@@ -440,11 +440,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     srcs.forEach((src, index) => {
       const timer = setTimeout(() => {
         if (generation !== _poolGeneration) return;
-        // Reuse blob URL from file-panel thumbnail cache for archive entries.
+        // Reuse blob URL from archive image cache for archive entries.
         // Avoids redundant quivit:// fetch for neighbors (next/prev) when thumb already loaded.
         let actualSrc = src;
-        const cached = thumbnailCache.get(src);
-        if (typeof cached === 'string' && cached.startsWith('blob:')) actualSrc = cached;
+        const cached = getCachedArchiveBlob(src);
+        if (cached) actualSrc = cached;
         const preloader = new Image();
         preloader.decoding = 'async';
         preloader.crossOrigin = 'anonymous';
@@ -622,7 +622,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       if (activeEl) activeEl.alt = LOADING_LABEL;
 
       const isAlreadyLoaded = !isReload && activeEl && activeEl.complete && activeEl.naturalWidth > 0;
-      const isCacheWarm = !isAlreadyLoaded && thumbnailCache.has(state.src);
+      const isCacheWarm = !isAlreadyLoaded && hasCachedArchiveBlob(state.src);
       if (!isAlreadyLoaded && !isCacheWarm) {
         _startLoadingAnimation(activeEl);
       }
@@ -650,8 +650,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
           } else if (state.isAnimated) {
             newSrc = state.src.includes('?') ? `${state.src}&_reset=${Date.now()}` : `${state.src}?_reset=${Date.now()}`;
           } else {
-            const cached = thumbnailCache.get(state.src);
-            if (typeof cached === 'string' && cached.startsWith('blob:')) {
+            const cached = getCachedArchiveBlob(state.src);
+            if (cached) {
               newSrc = cached;
             }
           }

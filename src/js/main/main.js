@@ -16,7 +16,8 @@ import {
   focusFileList,
   isFileListFocused,
   getFileListViewportRange,
-  clearLibraryPathCaches
+  clearLibraryPathCaches,
+  revealListTop
 } from '../filepanel/filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from '../shortcuts.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
@@ -46,6 +47,8 @@ import {
   getLastImageIndex,
   navigateManhwa,
   pageStrip,
+  setRevealListTop,
+  getVisibleImageIndices
 } from '../viewer/manhwaStrip.js';
 
 // Reset the options tab on startup so each session starts on General.
@@ -251,8 +254,21 @@ window.addEventListener('quivit-history-changed', () => {
 // Initialization.
 Statusbar.init();
 initFullscreen();
-initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, FsUtils });
+initFilePanel({
+  filePanel,
+  breadcrumbEl: filePanelBreadcrumb,
+  fileListUl,
+  resizeHandle,
+  Core,
+  FsUtils,
+  isManhwaActive: isManhwaStripActive,
+  getVisibleImageIndices,
+  alignListItemTop,
+  alignListItemBottom,
+  pageStrip
+});
 initManhwaStrip();
+setRevealListTop(revealListTop);
 initMenuBar();
 bindMenuCommands();
 initDropZone({ dropOverlay, FsUtils });

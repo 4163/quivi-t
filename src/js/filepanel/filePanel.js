@@ -25,7 +25,7 @@ import {
 } from './libraryStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
-import { getVisibleImageIndices, isManhwaStripActive, centerListItem, alignListItemTop, alignListItemBottom, pageStrip, getFirstImageIndex, getLastImageIndex } from '../viewer/manhwaStrip.js';
+import { ensureArchiveBlob, hasCachedArchiveBlob, clearArchiveBlobCache } from '../services/archiveImageCache.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
 import {
   setVisibleRange as setDownloadVisibleRange,
@@ -42,125 +42,34 @@ import {
   isLibraryLocationError
 } from '../urlLoader.js';
 
-let _activeViewerKey = null;
-let _activeViewerBlob = null;
-let _archiveBlobBytes = 0;
-const _archiveBlobSizes = new Map();
-
-export const ARCHIVE_BLOB_CACHE_CAPACITY = 8;
-export const ARCHIVE_BLOB_CACHE_MAX_BYTES = 24 * 1024 * 1024;
-export const ARCHIVE_BLOB_CACHE_ENTRY_MAX_BYTES = 4 * 1024 * 1024;
-
-function _forgetArchiveBlobSize(key) {
-  const size = _archiveBlobSizes.get(key);
-  if (!size) return;
-  _archiveBlobBytes = Math.max(0, _archiveBlobBytes - size);
-  _archiveBlobSizes.delete(key);
-}
-
-function _rememberArchiveBlobSize(key, size) {
-  _forgetArchiveBlobSize(key);
-  if (!size) return;
-  _archiveBlobSizes.set(key, size);
-  _archiveBlobBytes += size;
-}
-
-function _trimArchiveBlobCache() {
-  while (_archiveBlobSizes.size > ARCHIVE_BLOB_CACHE_CAPACITY || _archiveBlobBytes > ARCHIVE_BLOB_CACHE_MAX_BYTES) {
-    let evicted = false;
-    for (const key of thumbnailCache.keys()) {
-      if (_archiveBlobSizes.has(key)) {
-        thumbnailCache.delete(key);
-        evicted = true;
-        break;
-      }
-    }
-    if (!evicted) break;
-  }
-}
-
-function _revokeBlobEntry(key, value) {
+function _revokeBlobEntry(_key, value) {
   if (typeof value === 'string' && value.startsWith('blob:')) {
-    _forgetArchiveBlobSize(key);
-    const activeSrc = Core?.getState()?.src;
-    if (activeSrc && (key === activeSrc || value === activeSrc)) {
-      if (_activeViewerBlob && _activeViewerBlob !== value) {
-        URL.revokeObjectURL(_activeViewerBlob);
-      }
-      _activeViewerKey = key;
-      _activeViewerBlob = value;
-      return;
-    }
     URL.revokeObjectURL(value);
   }
 }
 
 // Bounded in-memory thumbnail cache: covers ~14 full screens (1080p) or typical volume chapters.
-// Revokes blob URLs on capacity eviction, key replacement, and clear to prevent blob storage leaks.
 export const THUMB_CACHE_CAPACITY = 250;
-export const thumbnailCache = new BoundedMap(THUMB_CACHE_CAPACITY, _revokeBlobEntry);
+const thumbnailCache = new BoundedMap(THUMB_CACHE_CAPACITY, _revokeBlobEntry);
 
-let _archiveBlobGeneration = 0;
-let _archiveBlobAbortController = null;
+let _isManhwaActive = () => false;
+let _getVisibleImageIndices = () => [];
+let _alignListItemTop = null;
+let _alignListItemBottom = null;
+let _pageStrip = null;
 
-// Archive blob deduplication: viewer and nearby thumbnails share the same quivit:// fetch.
-// Only one fetch per src, prioritized for viewer. Archive only. Disk thumbs are shell 96px, different URL.
-const _archiveBlobPromises = new Map();
-export function ensureArchiveBlob(src) {
-  if (!src || !src.includes('/archive/')) return Promise.resolve(null);
-  const cached = thumbnailCache.get(src);
-  if (typeof cached === 'string' && cached.startsWith('blob:')) return Promise.resolve(cached);
-  if (_archiveBlobPromises.has(src)) return _archiveBlobPromises.get(src);
+function _firstImageIndex(list) {
+  if (!list || !list.length) return -1;
+  const idx = FsUtils.firstImageIndex(list);
+  return (idx >= 0 && FsUtils.isImageEntry(list[idx]) && !FsUtils.isVideoEntry(list[idx])) ? idx : -1;
+}
 
-  const gen = _archiveBlobGeneration;
-  let signal;
-  if (typeof AbortController !== 'undefined') {
-    if (!_archiveBlobAbortController) _archiveBlobAbortController = new AbortController();
-    signal = _archiveBlobAbortController.signal;
+function _lastImageIndex(list) {
+  if (!list || !list.length) return -1;
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (FsUtils.isImageEntry(list[i]) && !FsUtils.isVideoEntry(list[i])) return i;
   }
-
-  let p;
-  p = fetch(src, signal ? { signal } : {}).then(r => r.blob()).then(blob => {
-    if (gen !== _archiveBlobGeneration) {
-      _archiveBlobPromises.delete(src);
-      return null;
-    }
-    if (blob.size > ARCHIVE_BLOB_CACHE_ENTRY_MAX_BYTES) {
-      _archiveBlobPromises.delete(src);
-      return null;
-    }
-    const existing = thumbnailCache.get(src);
-    if (typeof existing === 'string' && existing.startsWith('blob:')) {
-      _archiveBlobPromises.delete(src);
-      return existing;
-    }
-    if (thumbnailCache.has(src)) {
-      // Thumbnail already set to true/retain while fetch was in flight, do not overwrite warm flag
-      _archiveBlobPromises.delete(src);
-      return null;
-    }
-    const blobUrl = URL.createObjectURL(blob);
-    if (gen !== _archiveBlobGeneration) {
-      URL.revokeObjectURL(blobUrl);
-      _archiveBlobPromises.delete(src);
-      return null;
-    }
-    thumbnailCache.set(src, blobUrl);
-    _rememberArchiveBlobSize(src, blob.size);
-    _trimArchiveBlobCache();
-    _archiveBlobPromises.delete(src);
-    return blobUrl;
-  }).catch((err) => {
-    if (gen !== _archiveBlobGeneration || err?.name === 'AbortError') {
-      _archiveBlobPromises.delete(src);
-      return null;
-    }
-    if (!thumbnailCache.has(src)) thumbnailCache.set(src, true);
-    _archiveBlobPromises.delete(src);
-    return null;
-  });
-  _archiveBlobPromises.set(src, p);
-  return p;
+  return -1;
 }
 
 export const FAVORITES_CACHE_CAPACITY = 250;
@@ -1606,8 +1515,8 @@ function wireRowListeners(li) {
     if (failedItem?.path && retryGalleryDownload(failedItem.path)) {
       return;
     }
-    if (Core.getState().manhwaEnabled && isManhwaStripActive()) {
-      alignListItemTop(index);
+    if (Core.getState().manhwaEnabled && _isManhwaActive()) {
+      _alignListItemTop?.(index);
     }
     if (Core.getState().index !== index) {
       Core.selectIndex(index);
@@ -1893,7 +1802,7 @@ function updateEntry(li, item, index) {
               if (!Number.isFinite(currentIdx) || currentIdx !== index) return;
               // Yield if viewer is still loading the active image (archive blob not yet ready)
               const viewerSrc = Core.getState().src;
-              const viewerBlobPending = viewerSrc && viewerSrc.includes('/archive/') && !thumbnailCache.has(viewerSrc);
+              const viewerBlobPending = viewerSrc && viewerSrc.includes('/archive/') && !hasCachedArchiveBlob(viewerSrc);
               if (viewerBlobPending) {
                 // Retry after viewer blob settles
                 setTimeout(() => {
@@ -2050,8 +1959,8 @@ function onScrollSettle() {
 function commitPendingThumbnails() {
   const activeIdx = Core.getState().index;
   const isThumbnailView = Core.getState().fileListViewMode === 'thumbnail';
-  const isManhwa = Core.getState().manhwaEnabled && isManhwaStripActive();
-  const visibleIndices = isManhwa ? new Set(getVisibleImageIndices()) : null;
+  const isManhwa = Core.getState().manhwaEnabled && _isManhwaActive();
+  const visibleIndices = isManhwa ? new Set(_getVisibleImageIndices()) : null;
 
   // Filter to rows within viewport (constrained URLs only), sort by: active first, then scroll direction
   const ordered = Array.from(activeRows.values()).filter(li => {
@@ -2112,7 +2021,7 @@ function commitPendingThumbnails() {
             if (currentIdx !== idx) return;
             if (img.getAttribute('src') === pendingSrc) return;
             const viewerSrc = Core.getState().src;
-            const viewerBlobPending = viewerSrc && viewerSrc.includes('/archive/') && !thumbnailCache.has(viewerSrc);
+            const viewerBlobPending = viewerSrc && viewerSrc.includes('/archive/') && !hasCachedArchiveBlob(viewerSrc);
             if (viewerBlobPending) {
               setTimeout(() => {
                 if (parseInt(li.dataset.index, 10) === idx && img.getAttribute('src') !== pendingSrc) {
@@ -2147,7 +2056,7 @@ function stripVisibleIndices(list, index, manhwaOn) {
   if (!manhwaOn) return null;
   const entry = list?.[index];
   if (entry && (!FsUtils.isImageEntry(entry) || FsUtils.isVideoEntry(entry))) return null;
-  return new Set(getVisibleImageIndices());
+  return new Set(_getVisibleImageIndices());
 }
 
 function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) {
@@ -2242,12 +2151,7 @@ function setRefreshingVisual(active) {
   clearTimeout(refreshPulseTimer);
 
   if (active) {
-    _archiveBlobGeneration++;
-    if (_archiveBlobAbortController) {
-      _archiveBlobAbortController.abort();
-      _archiveBlobAbortController = null;
-    }
-    _archiveBlobPromises.clear();
+    clearArchiveBlobCache();
     thumbnailCache.clear();
     thumbRefreshTimestamp = Date.now();
     refreshStartTime = performance.now();
@@ -2280,20 +2184,6 @@ function setRefreshingVisual(active) {
 export function renderFilePanel(state) {
   if (!filePanel) return;
 
-  if (_activeViewerBlob && state.src !== _activeViewerKey && state.src !== _activeViewerBlob) {
-    let stillInCache = false;
-    for (const val of thumbnailCache.values()) {
-      if (val === _activeViewerBlob) {
-        stillInCache = true;
-        break;
-      }
-    }
-    if (!stillInCache) {
-      URL.revokeObjectURL(_activeViewerBlob);
-      _activeViewerBlob = null;
-      _activeViewerKey = null;
-    }
-  }
 
   filePanel.classList.toggle('hidden', !state.fileListVisible);
   if (!state.fileListVisible) return;
@@ -2433,6 +2323,11 @@ function isPointerOverActiveViewport() {
 
 export function initFilePanel(deps) {
   ({ filePanel, breadcrumbEl, fileListUl, resizeHandle } = deps);
+  if (deps.isManhwaActive) _isManhwaActive = deps.isManhwaActive;
+  if (deps.getVisibleImageIndices) _getVisibleImageIndices = deps.getVisibleImageIndices;
+  if (deps.alignListItemTop) _alignListItemTop = deps.alignListItemTop;
+  if (deps.alignListItemBottom) _alignListItemBottom = deps.alignListItemBottom;
+  if (deps.pageStrip) _pageStrip = deps.pageStrip;
 
   ensureSpacer();
 
@@ -2645,25 +2540,25 @@ export function initFilePanel(deps) {
       return;
     }
 
-    const isManhwa = Core.getState().manhwaEnabled && isManhwaStripActive();
+    const isManhwa = Core.getState().manhwaEnabled && _isManhwaActive();
     let targetIdx = null;
     switch (e.key) {
       case 'ArrowDown': {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        const lastImg = isManhwa ? getLastImageIndex() : (list.length - 1);
+        const lastImg = isManhwa ? _lastImageIndex(list) : (list.length - 1);
         const maxBound = lastImg !== -1 ? lastImg : (list.length - 1);
-        targetIdx = state.index === -1 ? (isManhwa ? getFirstImageIndex() : 0) : Math.min(state.index + 1, maxBound);
+        targetIdx = state.index === -1 ? (isManhwa ? _firstImageIndex(list) : 0) : Math.min(state.index + 1, maxBound);
         break;
       }
       case 'ArrowUp': {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        const firstImg = isManhwa ? getFirstImageIndex() : 0;
+        const firstImg = isManhwa ? _firstImageIndex(list) : 0;
         const minBound = firstImg !== -1 ? firstImg : 0;
-        targetIdx = state.index === -1 ? (isManhwa ? getLastImageIndex() : list.length - 1) : Math.max(state.index - 1, minBound);
+        targetIdx = state.index === -1 ? (isManhwa ? _lastImageIndex(list) : list.length - 1) : Math.max(state.index - 1, minBound);
         break;
       }
       case 'PageDown':
@@ -2671,7 +2566,7 @@ export function initFilePanel(deps) {
         e.stopPropagation();
         panelKeyboardActive = true;
         if (isManhwa) {
-          pageStrip(1, 2);
+          _pageStrip?.(1, 2);
           break;
         }
         targetIdx = Math.min((state.index === -1 ? 0 : state.index) + 10, list.length - 1);
@@ -2681,7 +2576,7 @@ export function initFilePanel(deps) {
         e.stopPropagation();
         panelKeyboardActive = true;
         if (isManhwa) {
-          pageStrip(-1, 2);
+          _pageStrip?.(-1, 2);
           break;
         }
         targetIdx = Math.max((state.index === -1 ? 0 : state.index) - 10, 0);
@@ -2690,7 +2585,7 @@ export function initFilePanel(deps) {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        const firstImg = isManhwa ? getFirstImageIndex() : 0;
+        const firstImg = isManhwa ? _firstImageIndex(list) : 0;
         targetIdx = firstImg !== -1 ? firstImg : 0;
         break;
       }
@@ -2698,7 +2593,7 @@ export function initFilePanel(deps) {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        const lastImg = isManhwa ? getLastImageIndex() : (list.length - 1);
+        const lastImg = isManhwa ? _lastImageIndex(list) : (list.length - 1);
         targetIdx = lastImg !== -1 ? lastImg : (list.length - 1);
         break;
       }
@@ -2745,11 +2640,13 @@ export function initFilePanel(deps) {
     }
 
     if (targetIdx !== null && targetIdx !== state.index) {
-      if (Core.getState().manhwaEnabled && isManhwaStripActive()) {
-        if (targetIdx === getLastImageIndex() && getLastImageIndex() !== getFirstImageIndex()) {
-          alignListItemBottom(targetIdx);
+      if (Core.getState().manhwaEnabled && _isManhwaActive()) {
+        const lastImg = _lastImageIndex(list);
+        const firstImg = _firstImageIndex(list);
+        if (targetIdx === lastImg && lastImg !== firstImg) {
+          _alignListItemBottom?.(targetIdx);
         } else {
-          alignListItemTop(targetIdx);
+          _alignListItemTop?.(targetIdx);
         }
       }
       Core.selectIndex(targetIdx);
@@ -2840,7 +2737,7 @@ export function initFilePanel(deps) {
   });
 
   window.addEventListener('quivit-manhwa-settle', () => {
-    if (Core.getState().fileListVisible && isManhwaStripActive()) {
+    if (Core.getState().fileListVisible && _isManhwaActive()) {
       updateSelection(Core.getState().index);
     }
   });

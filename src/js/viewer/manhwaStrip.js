@@ -11,7 +11,7 @@
 import { Core } from '../core.js';
 import { BoundedMap } from '../services/cache.js';
 import { FsUtils } from '../fsUtils.js';
-import { thumbnailCache, revealListTop } from '../filepanel/filePanel.js';
+import { getCachedArchiveBlob } from '../services/archiveImageCache.js';
 import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale } from '../services/viewerMath.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
@@ -144,8 +144,8 @@ function _buildSrc(entry, state) {
   }
   if (state.mode === 'archive') {
     const archiveSrc = FsUtils.buildArchiveSrc(state.archivePath, entry.name);
-    const cached = thumbnailCache.get(archiveSrc);
-    if (typeof cached === 'string' && cached.startsWith('blob:')) return cached;
+    const cached = getCachedArchiveBlob(archiveSrc);
+    if (cached) return cached;
     return archiveSrc;
   }
   return FsUtils.buildFileSrcSync(entry.path);
@@ -353,6 +353,8 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
       }
     }
 
+    _lastTy = targetTy;
+    _lastAnchorTy = targetTy;
     _viewportState.setDimensions(_layout.widestWidth, _layout.totalHeight, _viewportState.getTx(), targetTy);
     _strip.style.transform = _viewportState.getTransform();
     _updateGrillAngles();
@@ -483,7 +485,10 @@ function _updateWindow() {
   const isFirstBuild = _lastTy === null;
   const deltaTy = isFirstBuild ? 0 : ty - _lastTy;
   _lastTy = ty;
-  if (deltaTy !== 0) _lastPanAt = performance.now();
+  if (deltaTy !== 0) {
+    _lastPanAt = performance.now();
+    _anchorHoldover = null;
+  }
 
   const isPanningDown = deltaTy < 0;
   const isPanningUp = deltaTy > 0;
@@ -785,12 +790,16 @@ function _requestLayout() {
     const ty = _viewportState.getTy() || 0;
     const centerColY = (_layout.totalHeight / 2) - (ty / scale);
     const currentAnchor = findAnchorIndex(_layout.offsets, centerColY);
-    const anchorToHold = currentAnchor !== -1 ? currentAnchor : _anchorImgIdx;
+    const anchorToHold = _anchorHoldover !== null && _layout.offsets[_anchorHoldover]
+      ? _anchorHoldover
+      : (_anchorImgIdx >= 0 && _layout.offsets[_anchorImgIdx]
+        ? _anchorImgIdx
+        : (currentAnchor !== -1 ? currentAnchor : 0));
     const oldAnchorTop = _layout.offsets[anchorToHold]?.top || 0;
     _updateLayout(anchorToHold, oldAnchorTop);
     if (_fitRefreshPending) {
       _fitRefreshPending = false;
-      _applyFitMode(Core.getState()?.fitMode || _lastFitMode);
+      _applyFitMode(Core.getState()?.fitMode || _lastFitMode, _anchorImgIdx, _anchorHoldoverAlignTop);
       return;
     }
     _updateWindow();
@@ -979,8 +988,6 @@ function _syncAnchorToCore() {
     if (visStart !== -1 && visEnd !== -1) {
       _anchorImgIdx = Math.max(visStart, Math.min(visEnd, _anchorHoldover));
     }
-    _anchorHoldover = null;
-    _anchorHoldoverAlignTop = true;
   }
   const anchorItem = _imageIndex[_anchorImgIdx];
   if (!anchorItem) return;
@@ -1094,21 +1101,31 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
 
   if (targetImgIdx === null) {
     if (colH <= vh + 0.5) {
-      _viewportState.panTo(0, Math.abs(colH - vh) / 2);
+      _lastTy = Math.abs(colH - vh) / 2;
+      _lastAnchorTy = _lastTy;
+      _viewportState.panTo(0, _lastTy);
     } else {
-      _viewportState.panTo(0, _viewportState.getTy());
+      _lastTy = _viewportState.getTy();
+      _lastAnchorTy = _lastTy;
+      _viewportState.panTo(0, _lastTy);
     }
   } else if (alignTop) {
     if (_layout.offsets[targetImgIdx]) {
       _topAlignColumnY(_layout.offsets[targetImgIdx].top, 0);
     } else if (colH <= vh + 0.5) {
-      _viewportState.panTo(0, Math.abs(colH - vh) / 2);
+      _lastTy = Math.abs(colH - vh) / 2;
+      _lastAnchorTy = _lastTy;
+      _viewportState.panTo(0, _lastTy);
     }
   } else {
     if (targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
-      _viewportState.panTo(0, -Math.abs(colH - vh) / 2);
+      _lastTy = -Math.abs(colH - vh) / 2;
+      _lastAnchorTy = _lastTy;
+      _viewportState.panTo(0, _lastTy);
     } else if (colH <= vh + 0.5) {
-      _viewportState.panTo(0, Math.abs(colH - vh) / 2);
+      _lastTy = Math.abs(colH - vh) / 2;
+      _lastAnchorTy = _lastTy;
+      _viewportState.panTo(0, _lastTy);
     } else if (_layout.offsets[targetImgIdx]) {
       _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
     }
@@ -1173,9 +1190,15 @@ export function centerListItem(listIndex) {
   const vh = _viewport?.clientHeight || 800;
   const curTx = _viewportState.getTx();
   if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
-    _viewportState.panTo(curTx, -Math.abs(colH - vh) / 2);
+    const targetTy = -Math.abs(colH - vh) / 2;
+    _lastTy = targetTy;
+    _lastAnchorTy = targetTy;
+    _viewportState.panTo(curTx, targetTy);
   } else if (colH <= vh) {
-    _viewportState.panTo(curTx, Math.abs(colH - vh) / 2);
+    const targetTy = Math.abs(colH - vh) / 2;
+    _lastTy = targetTy;
+    _lastAnchorTy = targetTy;
+    _viewportState.panTo(curTx, targetTy);
   } else if (_layout.offsets[mapped]) {
     _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
   }
@@ -1226,7 +1249,7 @@ export function pageStrip(direction, pageMultiplier = 1) {
       } else {
         // Whole column fits: paging up lands on the top, so reveal `..`
         // in the same gesture instead of asking for a second press.
-        revealListTop();
+        triggerRevealListTop();
         alignListItemTop(targetIdx);
       }
     }
@@ -1241,7 +1264,7 @@ export function pageStrip(direction, pageMultiplier = 1) {
   if (direction < 0 && ty >= maxTy - 0.5) {
     // Nowhere left to go upstairs: hand the gesture to the file list so
     // one more page-up reveals `..`.
-    revealListTop();
+    triggerRevealListTop();
     const firstIdx = getFirstImageIndex();
     if (firstIdx !== -1) {
       if (Core.getState().index !== firstIdx) {
@@ -1264,6 +1287,7 @@ export function pageStrip(direction, pageMultiplier = 1) {
   }
 
   const targetTy = direction > 0 ? Math.max(minTy, ty - step) : Math.min(maxTy, ty + step);
+  _anchorHoldover = null;
   _viewportState.panTo(_viewportState.getTx(), targetTy);
   _strip.style.transform = _viewportState.getTransform();
   _updateWindow();
@@ -1286,6 +1310,8 @@ function _topAlignColumnY(colY, targetTx = null) {
     viewportHeight: vpH,
   });
   const tx = targetTx !== null ? targetTx : _viewportState.getTx();
+  _lastTy = targetTy;
+  _lastAnchorTy = targetTy;
   _viewportState.panTo(tx, targetTy);
   _strip.style.transform = _viewportState.getTransform();
 }
@@ -1305,6 +1331,8 @@ function _bottomAlignColumnY(colY, targetTx = null) {
     viewportHeight: vpH,
   });
   const tx = targetTx !== null ? targetTx : _viewportState.getTx();
+  _lastTy = targetTy;
+  _lastAnchorTy = targetTy;
   _viewportState.panTo(tx, targetTy);
   _strip.style.transform = _viewportState.getTransform();
 }
@@ -1318,6 +1346,8 @@ function _centerColumnY(colY, targetTx = null) {
   const scale = _viewportState.getScale() || 1;
   const targetTy = (_layout.totalHeight / 2 - colY) * scale;
   const tx = targetTx !== null ? targetTx : _viewportState.getTx();
+  _lastTy = targetTy;
+  _lastAnchorTy = targetTy;
   _viewportState.panTo(tx, targetTy);
   _strip.style.transform = _viewportState.getTransform();
 }
@@ -1682,11 +1712,20 @@ export function initManhwaStrip(viewportState) {
     if (_layoutScale === null || _layoutScale !== scale) {
       _updateLayout(_anchorImgIdx, _layout.offsets[_anchorImgIdx]?.top || 0);
     }
-    _applyFitMode(Core.getState()?.fitMode || _lastFitMode);
+    _applyFitMode(Core.getState()?.fitMode || _lastFitMode, _anchorImgIdx, _anchorHoldoverAlignTop);
   });
   ro.observe(_viewport);
 }
 
 export function isManhwaStripActive() {
   return _active;
+}
+
+let _onRevealListTop = null;
+export function setRevealListTop(fn) {
+  _onRevealListTop = fn;
+}
+
+export function triggerRevealListTop() {
+  _onRevealListTop?.();
 }
