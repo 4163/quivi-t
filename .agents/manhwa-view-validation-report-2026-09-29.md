@@ -68,10 +68,10 @@ The passing Mocha suite covers the pure action and layout helpers. It does not c
 
 **Scope lock:** Address the defects and direct verification listed below. Do not use this work to refresh user documentation or repair pre-existing test suites. Keep deviations in this report with the reason and the affected file.
 
-1. [ ] **Restore authenticated reads for unlocked encrypted ZIPs.** [src-tauri/src/archives/mod.rs:429] Preserve the cached password path for encrypted archive protocol requests, or make the fast path prove that an archive is unencrypted before it calls `extract_zip_entry` without a password.
+1. [x] **Restore authenticated reads for unlocked encrypted ZIPs.** [src-tauri/src/archives/cache.rs:276-280; src-tauri/src/archives/mod.rs:435,440] Added `get_archive_password` to `ArchiveCache`. The fast path now retrieves the stored password before dropping the lock and forwards it to `extract_zip_entry`.
    **Accept when:** an encrypted ZIP opened with its correct password serves an image through `quivit://archive/`, and a missing or incorrect password still fails without exposing data.
 
-2. [ ] **Invalidate strip geometry when decoded dimensions change.** [src/js/viewer/manhwaStrip.js:357] Compare the previous width and height before overwriting either value, then request layout whenever either dimension differs.
+2. [x] **Invalidate strip geometry when decoded dimensions change.** [src/js/viewer/manhwaStrip.js:359-360] `oldW` is now saved before assignment so the comparison at L437 detects width-only changes.
    **Accept when:** an image whose decoded width differs from its estimate updates the widest width, fit scale, and pan limits without requiring a mode change or reload.
 
 3. [x] **Move strip dimensions back under CSS ownership.** [src/js/viewer/manhwaStrip.js:272, 403, 413, 419-420, 1629-1630; src/css/main.css:1468] Slot dimensions now flow through leaf-scoped `--slot-width` and `--slot-height` properties consumed by the manhwa stylesheet.
@@ -86,13 +86,13 @@ The passing Mocha suite covers the pure action and layout helpers. It does not c
 6. [ ] **Remove full-chapter work from the pan path.** [src/js/services/viewerMath.js:38, 134; src/js/viewer/manhwaStrip.js:472, 1532-1543] Maintain prefix geometry when dimensions change and locate the visible range with indexed lookup.
    **Accept when:** ordinary pan and zoom updates do not scan the full image list, and layout changes still place every image at the correct offset.
 
-7. [ ] **Bound and clear the ICO data-URI cache.** [src/js/viewer/manhwaStrip.js:123, 693, 899] Use named entry or byte limits and clear the cache at its defined lifecycle boundary.
+7. [x] **Bound and clear the ICO data-URI cache.** [src/js/viewer/manhwaStrip.js:124-125] Now a `BoundedMap(50)`, cleared in `_clearCaches` on deactivation.
    **Accept when:** the cache cannot grow without limit across folders or archives, and repeated current-folder icons remain available from cache.
 
-8. [ ] **Implement the animated-SVG sizing policy.** [src/js/viewer/manhwaStrip.js:169-177, 370; src-tauri/src/models.rs:4-13] Provide animation metadata to strip items, or replace the unreachable branch with an explicit, bounded fallback rule.
+8. [x] **Implement the animated-SVG sizing policy.** [src/js/viewer/manhwaStrip.js:381-384] Dead `isAnimated` ternary replaced with an explicit 2048px cap and a comment documenting the policy.
    **Accept when:** animated SVGs take the intended decode limit and static SVG behavior remains unchanged.
 
-9. [ ] **Remove the three trailing blank lines.** [src/js/viewer/manhwaStrip.js:1661; src/js/services/viewerMath.js:575; mocha/viewerMath.test.js:725]
+9. [x] **Remove the three trailing blank lines.** All three removed; `git diff --check` clean.
    **Accept when:** `git diff --check` reports no errors for this branch.
 
 10. [ ] **Run the focused final checks.** Re-run `npm run mocha`, `cargo check --tests --manifest-path src-tauri/Cargo.toml`, JavaScript syntax checks, and a desktop smoke test that opens an unlocked encrypted ZIP, loads a long gallery incrementally, and changes an image from estimated to decoded dimensions.
