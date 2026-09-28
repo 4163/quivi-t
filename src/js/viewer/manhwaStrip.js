@@ -147,13 +147,25 @@ function _buildSrc(entry, state) {
   return FsUtils.buildFileSrcSync(entry.path);
 }
 
+/** Pending downloads hold no slot and no height. They join the index when
+ * their bytes land instead of painting placeholders that later shift. */
+function _isPendingEntry(entry) {
+  if (!entry || entry.is_dir || entry.is_parent) return false;
+  if ((entry.size || 0) === 0) return true;
+  try {
+    if (Core.isPlaceholder(entry.path || entry.name || '')) return true;
+  } catch {
+    // Registry unavailable: size check above already decided.
+  }
+  return false;
+}
+
 function _buildImageIndex(list) {
   const result = [];
   _listToImgIdx.clear();
   for (let i = 0; i < list.length; i++) {
     const entry = list[i];
-    // mp4 counts as both image and video upstream: the video check wins.
-    if (FsUtils.isImageEntry(entry) && !FsUtils.isVideoEntry(entry)) {
+    if (FsUtils.isImageEntry(entry) && !FsUtils.isVideoEntry(entry) && !_isPendingEntry(entry)) {
       const imgIdx = result.length;
       result.push({
         listIndex: i,
@@ -1505,6 +1517,91 @@ export function setViewportState(vpState) {
   });
 }
 
+/** Admit a finished download into the index without tearing down mounted
+ * nodes. Decoded dims ride over by stable listIndex, kept nodes reattach
+ * to rebuilt slots, and only the new image decodes fresh. */
+function _admitCompleted(destPath) {
+  if (!_active || !destPath || _lastMode === 'archive' || !_lastDirectory) return;
+  const norm = (p) => String(p || '').replace(/\//g, '\\').toLowerCase();
+  if (!norm(destPath).startsWith(norm(_lastDirectory) + '\\')) return;
+  const list = _lastList || [];
+  const listIndex = list.findIndex((e) => norm(e.path) === norm(destPath));
+  if (listIndex === -1) return;
+  if (_listToImgIdx.has(listIndex)) return;
+  const entry = list[listIndex];
+  if (!entry || !FsUtils.isImageEntry(entry) || FsUtils.isVideoEntry(entry) || _isPendingEntry(entry)) return;
+
+  const oldByList = new Map();
+  for (const it of _imageIndex) oldByList.set(it.listIndex, it);
+  const anchorListIndex = _anchorImgIdx >= 0 ? _imageIndex[_anchorImgIdx]?.listIndex : undefined;
+  // Pre-growth anchor top: the column center moves as the admitted slot
+  // lands, so the rebuild must hold the anchor like a decode correction.
+  const holdTop = _anchorImgIdx >= 0 ? _layout.offsets[_anchorImgIdx]?.top || 0 : 0;
+
+  _resetMountQueue();
+  for (const [, img] of _prefetchedImages) _releaseNode(img);
+  _prefetchedImages.clear();
+  for (const [, pre] of _prefetching) {
+    pre.onload = null;
+    pre.onerror = null;
+    pre.removeAttribute('src');
+  }
+  _prefetching.clear();
+
+  const kept = new Map();
+  for (const [, img] of _mounted) {
+    const li = Number(img.dataset.listIndex);
+    img.remove();
+    if (Number.isFinite(li)) kept.set(li, img);
+    else _releaseNode(img);
+  }
+  _mounted.clear();
+
+  _imageIndex = _buildImageIndex(list);
+  const admitted = _listToImgIdx.get(listIndex);
+  if (admitted === undefined) return;
+  _buildSlots();
+
+  for (const it of _imageIndex) {
+    const old = oldByList.get(it.listIndex);
+    if (old && old.decoded) {
+      it.naturalWidth = old.naturalWidth;
+      it.naturalHeight = old.naturalHeight;
+      it.decoded = true;
+      const s = _slots.get(it.imgIdx);
+      if (s) {
+        s.style.height = `${it.naturalHeight}px`;
+        s.style.width = `${it.naturalWidth}px`;
+        s.dataset.ready = 'true';
+      }
+    }
+  }
+  for (const [li, img] of kept) {
+    const ni = _listToImgIdx.get(li);
+    const slot = ni !== undefined ? _slots.get(ni) : null;
+    if (slot) _claimSlot(ni, _imageIndex[ni], slot, img);
+    else _releaseNode(img);
+  }
+
+  if (anchorListIndex !== undefined) {
+    const remapped = _imageIndex.findIndex((it) => it.listIndex === anchorListIndex);
+    _anchorImgIdx = remapped;
+  }
+
+  // Preserve the user's zoom and position exactly: no re-fit on admit, and
+  // the rebuild holds the anchor against the column growth the same way a
+  // decode correction does. Without the hold, admitted pages above shove
+  // everything below, which reads as a position reset mid-chapter.
+  _updateLayout(_anchorImgIdx >= 0 ? _anchorImgIdx : null, holdTop);
+  _updateWindow();
+  _scheduleSettle();
+
+  // The completed row itself was selected while pending: jump to it now.
+  if (Core.getState().index === listIndex) {
+    alignListItemTop(listIndex);
+  }
+}
+
 export function initManhwaStrip(viewportState) {
   if (viewportState) setViewportState(viewportState);
   _viewport = document.getElementById('viewport');
@@ -1515,6 +1612,10 @@ export function initManhwaStrip(viewportState) {
   _initialized = true;
 
   Core.onStateChange(_onStateChange);
+
+  window.addEventListener('quivit-download-complete', (e) => {
+    _admitCompleted(e.detail?.destPath);
+  });
 
   const ro = new ResizeObserver(() => {
     if (!_active || !_viewportState) return;

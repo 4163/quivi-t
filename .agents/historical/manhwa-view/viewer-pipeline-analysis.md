@@ -40,7 +40,7 @@ How the shift happens.
 
 Why discrete pan looks clean. One key step moves, one correction settles, then quiet. No overlap. Hold keeps the pointer moving while decodes land, so every decode lands mid drag and stacks. Wheel looks cleaner for the same reason. Notches are sparse, so corrections settle between steps.
 
-Status: partly fixed in code, needs a confirm pass. End-pin re-pins in `_updateLayout` now gate on 150 ms pan quiet via `_lastPanAt`, so a decode landing mid-scroll rebuilds offsets without snapping `ty`. Delta-anchor correction is unchanged. Confirm by holding pan through fresh decodes and watching for kicks.
+Status: resolved and user-confirmed in the running app. End-pin re-pins gate on 150 ms pan quiet via `_lastPanAt`, and deferred mounts plus batched settles keep corrections minimal. No further hardening: suppressing the anchor hold would trade unfelt kicks for visible drift plus a release snap.
 
 Confirm by logging `imgIdx`, `oldH`, `newH`, `anchorImgIdx`, `oldAnchorTop`, `newAnchorTop`, `oldTy`, `targetTy` around `_onItemDecoded` during a hold. Expect targetTy jumps aligned with decode events, sign correlated with pan direction, no jump when all items in window are already decoded.
 
@@ -114,13 +114,7 @@ Watch the landings. `navigateManhwa` at 910-929 and the external-index branch at
 
 ## Issue 9. Imported-but-downloading slots render as errors
 
-Status: open, no code changes yet. From clipboard handoff.
-
-The importer writes 0-byte placeholders first and returns before bytes arrive (`urlLoader.js:1829,1912,1994,2108,2213,2519`), then swaps on `quivit-download-complete` at 2353-2370. Single-image view rides that swap at `viewerRender.js:493-505` and the statusbar reads `Downloading...` at `statusbar.js:191-207`.
-
-The strip has no downloading state. `_buildSrc` at `manhwaStrip.js:121-134` hands the 0-byte path to an img, the load fails, and onerror at 514-523 stamps the slot `error` plus a `.manhwa-error-placeholder` div. `_acquireNode` at 158-165 sets `alt` to empty, so nothing names the state.
-
-Requested behavior leaves the slot blank with `alt="Downloading..."` on the img and fills it when the bytes land. No error class, no error div, no decoded flag, no prefetch-cache poisoning from the failed attempt. The download-complete event remounts or retries that slot the way the single-image swap does.
+Status: resolved and user-confirmed in the running app. Spec changed: pending downloads hold no slot and no height at all. `_buildImageIndex` skips placeholder entries (0-byte or registry-pending), so nothing paints, errors, or reserves space for them. On `quivit-download-complete`, `_admitCompleted` inserts the image into the index, carrying decoded dims over by stable listIndex and reattaching kept nodes to rebuilt slots, then opens the window with zoom and position preserved and no re-fit, holding the anchor against the admitted growth like a decode correction so reading never shoves. A row selected while pending jumps into view on arrival. Single-image view rides its swap as before.
 
 ## Issue 10. Secondary highlights survive manhwa toggle-off
 
@@ -147,6 +141,6 @@ Fix direction is a manhwa token in the dedup guard. Record last rendered manhwa-
 - [x] Count shared versus per-mount handlers and style writes over one chapter scroll. Accept when one onload/onerror pair serves all mounts.
 - [ ] Open a folder in manhwa mode with open_first_image off and fit width. Accept when the overlay shows and no selection is forced. Repeat with the setting on. Accept when the first image pins top.
 - [x] Log strip mount start order and concurrent fetches on a cold archive scroll. Accept when starts follow scroll order through a sequential queue.
-- [ ] Step through a mixed image and video folder in strip mode. Accept when videos highlight only, the overlay shows, and layout ignores them.
-- [ ] Import a gallery URL in strip mode before downloads finish. Accept when pending slots read Downloading, stay blank, and fill on arrival.
-- [ ] Toggle manhwa on, scroll, then toggle off. Accept when no row keeps in-view after toggle-off.
+- [x] Step through a mixed image and video folder in strip mode. Accept when videos highlight only, the overlay shows, and layout ignores them.
+- [x] Import a gallery URL in strip mode before downloads finish. Accept when pending pages hold no slot, insert at sorted positions on arrival, and zoom and position never reset.
+- [x] Toggle manhwa on, scroll, then toggle off. Accept when no row keeps in-view after toggle-off.
