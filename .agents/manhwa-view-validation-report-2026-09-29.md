@@ -74,7 +74,7 @@ The passing Mocha suite covers the pure action and layout helpers. It does not c
 2. [ ] **Invalidate strip geometry when decoded dimensions change.** [src/js/viewer/manhwaStrip.js:357] Compare the previous width and height before overwriting either value, then request layout whenever either dimension differs.
    **Accept when:** an image whose decoded width differs from its estimate updates the widest width, fit scale, and pan limits without requiring a mode change or reload.
 
-3. [ ] **Move strip dimensions back under CSS ownership.** [src/js/viewer/manhwaStrip.js:268, 394, 400-401, 1600-1601] Replace inline `style.width` and `style.height` writes with component-scoped custom properties consumed by the manhwa stylesheet.
+3. [x] **Move strip dimensions back under CSS ownership.** [src/js/viewer/manhwaStrip.js:272, 403, 413, 419-420, 1629-1630; src/css/main.css:1468] Slot dimensions now flow through leaf-scoped `--slot-width` and `--slot-height` properties consumed by the manhwa stylesheet.
    **Accept when:** the strip has no JavaScript writes to intrinsic `width` or `height`, while slot sizing and placeholders remain correct through load, reload, and resize.
 
 4. [ ] **Break the file-panel and strip import cycle.** [src/js/viewer/manhwaStrip.js:13; src/js/filepanel/filePanel.js:28; src/js/viewer.js:6] Move archive image caching to a domain owner and route the list-reveal action through state or an injected callback.
@@ -97,3 +97,6 @@ The passing Mocha suite covers the pure action and layout helpers. It does not c
 
 10. [ ] **Run the focused final checks.** Re-run `npm run mocha`, `cargo check --tests --manifest-path src-tauri/Cargo.toml`, JavaScript syntax checks, and a desktop smoke test that opens an unlocked encrypted ZIP, loads a long gallery incrementally, and changes an image from estimated to decoded dimensions.
    **Accept when:** all listed checks pass and the three former blockers cannot be reproduced.
+
+11. [x] **Refresh the existing column fit after ICO dimensions resolve.** [src/js/viewer/manhwaStrip.js:358, 775] This pre-existing race occurred only on fresh navigation to an ICO directory. The reader first fit the full column from 1200 px placeholder heights. `get_ico_frames` then returned each 256 px spritesheet, but layout updated without recalculating the active fit. Pressing a fit key later recalculated the same column fit and made the problem disappear. The first ICO now supplies the height estimate for unresolved ICO entries, then the reader reapplies the same active column fit after the coalesced layout update.
+   **Accept when:** enable Manhwa View, open `E:\Projects\QuiviT\icons\formats`, and use Height, Height if Larger, Window, or Window if Larger before the ICO previews appear. Once they load, the strip occupies the same correct full-column bounds as it would after pressing that fit key a second time. `npm run mocha` passes.
