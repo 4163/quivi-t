@@ -110,6 +110,8 @@ let _lastHeartbeatAt = 0;
 let _lastScale = null;
 let _lastFitMode = null;
 let _lastFitModeGen = -1;
+/** Reapply the current column fit after ICO dimensions replace placeholders. */
+let _fitRefreshPending = false;
 
 /** Sequential decode queue. Fresh items decode off-DOM here in scroll order
  * and mount only with known dims, so images never paint at estimated size.
@@ -181,6 +183,12 @@ function _buildImageIndex(list) {
     }
   }
   return result;
+}
+
+function _setSlotDimensions(slot, width, height) {
+  if (!slot) return;
+  if (width !== undefined) slot.style.setProperty('--slot-width', `${width}px`);
+  if (height !== undefined) slot.style.setProperty('--slot-height', `${height}px`);
 }
 
 function _acquireNode() {
@@ -267,10 +275,9 @@ function _buildSlots() {
     const initialH = item.naturalHeight || defH;
     item.naturalHeight = initialH;
     item.naturalWidth = item.naturalWidth || defW;
-    slot.style.height = `${initialH}px`;
+    _setSlotDimensions(slot, item.naturalWidth || defW, initialH);
     // Explicit width keeps the strip box at the widest known image so evicting
     // the widest mounted image never shrinks the column or clips the grill.
-    slot.style.width = `${item.naturalWidth || defW}px`;
 
     if (total > 1) {
       const backdrop = document.createElement('div');
@@ -363,6 +370,7 @@ function _onItemDecoded(imgIdx, nw, nh) {
   const wasEstimated = !item.decoded;
 
   const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
+  const isIco = FsUtils.isIco(item.entry?.name || item.entry?.path || '');
   if (isSvg) {
     const isBrowserDefault = (nw === 150 && nh === 150) || (nw === 300 && nh === 150);
     const hasIntrinsic = nw > 0 && nh > 0 && !isBrowserDefault;
@@ -397,14 +405,23 @@ function _onItemDecoded(imgIdx, nw, nh) {
       if (otherSvg) continue;
       other.naturalWidth = _estWidth;
       const otherSlot = _slots.get(i);
-      if (otherSlot) otherSlot.style.width = `${_estWidth}px`;
+      _setSlotDimensions(otherSlot, _estWidth);
+    }
+  }
+
+  if (wasEstimated && isIco && nh > 0) {
+    for (let i = 0; i < _imageIndex.length; i++) {
+      const other = _imageIndex[i];
+      if (other.decoded || i === imgIdx || !FsUtils.isIco(other.entry?.name || other.entry?.path || '')) continue;
+      other.naturalHeight = nh;
+      const otherSlot = _slots.get(i);
+      _setSlotDimensions(otherSlot, undefined, nh);
     }
   }
 
   const slot = _slots.get(imgIdx);
   if (slot) {
-    slot.style.height = `${nh}px`;
-    slot.style.width = `${nw}px`;
+    _setSlotDimensions(slot, nw, nh);
     // Exact dims from here on: reveal the tinted backdrop with the image
     // instead of painting it at estimated size first. Loaded images cover
     // their slot fully, so the backdrop is only ever visible for undecided
@@ -413,6 +430,9 @@ function _onItemDecoded(imgIdx, nw, nh) {
   }
 
   if (oldH !== nh || oldW !== nw) {
+    if (isIco && (Core.getState()?.fitMode || _lastFitMode) !== 'none') {
+      _fitRefreshPending = true;
+    }
     _requestLayout();
   }
 }
@@ -768,6 +788,11 @@ function _requestLayout() {
     const anchorToHold = currentAnchor !== -1 ? currentAnchor : _anchorImgIdx;
     const oldAnchorTop = _layout.offsets[anchorToHold]?.top || 0;
     _updateLayout(anchorToHold, oldAnchorTop);
+    if (_fitRefreshPending) {
+      _fitRefreshPending = false;
+      _applyFitMode(Core.getState()?.fitMode || _lastFitMode);
+      return;
+    }
     _updateWindow();
     _scheduleSettle();
   });
@@ -1381,6 +1406,7 @@ function _deactivate() {
   _lastScale = null;
   _lastFitMode = null;
   _lastFitModeGen = -1;
+  _fitRefreshPending = false;
   _anchorHoldover = null;
   _anchorHoldoverAlignTop = true;
   _lastAnchorTy = null;
@@ -1604,8 +1630,7 @@ function _admitCompleted(destPath) {
       it.decoded = true;
       const s = _slots.get(it.imgIdx);
       if (s) {
-        s.style.height = `${it.naturalHeight}px`;
-        s.style.width = `${it.naturalWidth}px`;
+        _setSlotDimensions(s, it.naturalWidth, it.naturalHeight);
         s.dataset.ready = 'true';
       }
     }

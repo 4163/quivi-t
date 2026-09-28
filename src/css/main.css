@@ -1470,7 +1470,8 @@ li:hover>.favorite-remove,
   justify-content: center;
   align-items: flex-start;
   flex-shrink: 0;
-  width: 100%;
+  width: var(--slot-width, 100%);
+  height: var(--slot-height, auto);
   position: relative;
   padding: 0;
   margin: 0;
