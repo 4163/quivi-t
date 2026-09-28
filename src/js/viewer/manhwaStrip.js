@@ -219,16 +219,7 @@ function _handleStripImgError(event) {
   const imgIdx = Number(img?.dataset?.imgIdx);
   if (!Number.isFinite(imgIdx)) return;
   const item = _imageIndex[imgIdx];
-  const slot = _slots.get(imgIdx);
-  if (slot) {
-    slot.classList.add('error');
-    if (!slot.querySelector('.manhwa-error-placeholder')) {
-      const errDiv = document.createElement('div');
-      errDiv.className = 'manhwa-error-placeholder';
-      errDiv.textContent = `Failed to load: ${item?.entry?.name || 'image'}`;
-      slot.appendChild(errDiv);
-    }
-  }
+  // No failure UI by policy.
   _onItemDecoded(imgIdx, item?.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
   if (_mountInFlight === imgIdx) {
     _mountInFlight = -1;
@@ -806,15 +797,9 @@ function _claimSlot(imgIdx, item, slot, img) {
 /** Mount a node whose decode failed. Error UI plus estimated sizing.
  * The slot is sized before the node enters DOM, same as the happy path. */
 function _mountFailed(imgIdx, item, slot, img) {
+  // No failure UI by policy: the slot keeps its estimate and stays imageless.
   _onItemDecoded(imgIdx, item.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
   _claimSlot(imgIdx, item, slot, img);
-  slot.classList.add('error');
-  if (!slot.querySelector('.manhwa-error-placeholder')) {
-    const errDiv = document.createElement('div');
-    errDiv.className = 'manhwa-error-placeholder';
-    errDiv.textContent = `Failed to load: ${item.entry?.name || 'image'}`;
-    slot.appendChild(errDiv);
-  }
 }
 
 /** Decode the next queued entry off-DOM, then mount it with known dims.
@@ -1440,10 +1425,33 @@ function _onStateChange(state) {
     encryptionChanged;
 
   if (listChanged || containerChanged) {
+    // Same-container reload (manual refresh, queue-complete refresh): keep
+    // the reading position instead of reopening. Only a real container
+    // switch earns a refit.
+    const preserveView = !containerChanged && _anchorImgIdx >= 0;
+    const holdTop = preserveView ? _layout.offsets[_anchorImgIdx]?.top || 0 : 0;
+    const holdListIndex = preserveView ? _imageIndex[_anchorImgIdx]?.listIndex : undefined;
+    const holdEstWidth = _estWidth;
+    // Same-container reload: carried dims keep slots exact so the refresh
+    // remounts without replaying the estimate staircase.
+    const carryDims = !containerChanged
+      ? new Map(_imageIndex.map((it) => [it.listIndex, it]))
+      : null;
+
     _clearCaches();
 
     _imageIndex = isLocked ? [] : _buildImageIndex(state.list || []);
-    _estWidth = null;
+    if (carryDims) {
+      for (const it of _imageIndex) {
+        const old = carryDims.get(it.listIndex);
+        if (old && old.decoded) {
+          it.naturalWidth = old.naturalWidth;
+          it.naturalHeight = old.naturalHeight;
+          it.decoded = true;
+        }
+      }
+    }
+    _estWidth = preserveView ? holdEstWidth : null;
     _lastList = state.list;
     _lastMode = state.mode;
     _lastArchivePath = state.archivePath;
@@ -1456,11 +1464,30 @@ function _onStateChange(state) {
     _lastAnchorTy = null;
     _lastAnchorScale = null;
     _lastAnchorVph = null;
-    _lastSyncedListIndex = null;
-    _lastVisSig = null;
+    if (!preserveView) {
+      _lastSyncedListIndex = null;
+      _lastVisSig = null;
+    }
     _layoutScale = null;
 
     _buildSlots();
+
+    if (preserveView) {
+      const remapped = holdListIndex !== undefined
+        ? _imageIndex.findIndex((it) => it.listIndex === holdListIndex)
+        : -1;
+      if (remapped >= 0) {
+        _anchorImgIdx = remapped;
+        _updateLayout(remapped, holdTop);
+        _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
+        _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
+        _updateWindow();
+        _scheduleSettle();
+        return;
+      }
+      // Anchor file is gone: reopen from the surviving selection below.
+    }
+
     _updateLayout();
 
     _anchorImgIdx = _resolveOpenAnchor(state);
