@@ -82,7 +82,7 @@ Fix direction is dedupe inside the same owner. Share one onload and one onerror 
 
 ## Issue 6. Strip ignores open_first_image and centers width-fit opens
 
-Status: open, no code changes yet. From clipboard handoff. Two sub-bugs, one area.
+Status: implemented. Opens resolve through `_resolveOpenAnchor`: an index with no image mapping and `open_first_image` off holds no anchor, so the drop overlay stays up and nothing mounts or syncs until the user picks an image. Width-family fits (`width`, `width-if-larger`, `window`, `window-if-larger`) top-align on open; other fits keep centering. Single-image open behavior untouched.
 
 Off means blank elsewhere. `fsUtils.js:526-537` for folders and `700-704` for archives resolve index 0 (`..`, empty src) when `open_first_image` is off. Single-image view then shows the drop overlay.
 

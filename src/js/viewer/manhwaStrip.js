@@ -451,6 +451,9 @@ function _positionSlotGrill() {
 
 function _updateWindow() {
   if (!_strip || !_active || _imageIndex.length === 0 || !_viewportState) return;
+  // No anchor (open_first_image off with a non-image selection): nothing
+  // mounts or derives until the user picks an image.
+  if (_anchorImgIdx < 0 && _anchorHoldover === null) return;
 
   const scale = _viewportState.getScale() || 1;
   const ty = _viewportState.getTy() || 0;
@@ -1009,6 +1012,20 @@ export function getVisibleImageIndices() {
   return listIndices;
 }
 
+/** Width-family fits open top-aligned; other fits keep existing centering. */
+const STRIP_TOP_ALIGN_FITS = ['width', 'width-if-larger', 'window', 'window-if-larger'];
+
+/** Resolve the opening anchor. Honors open_first_image off: an index with
+ * no image mapping holds no anchor (-1), leaving the drop overlay up
+ * instead of forcing the first image. */
+function _resolveOpenAnchor(state) {
+  const mapped = _listToImgIdx.get(state.index);
+  if (mapped !== undefined) return mapped;
+  const openFirst = state.config?.frontend_data?.open_first_image === true;
+  if (openFirst && _imageIndex.length > 0) return 0;
+  return -1;
+}
+
 /** One-shot anchor request from explicit navigation, honored over re-derivation. */
 let _anchorHoldover = null;
 let _anchorHoldoverScale = 1;
@@ -1042,7 +1059,7 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
   });
 
   const anchorIdx = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
-  _anchorHoldover = anchorIdx;
+  _anchorHoldover = anchorIdx >= 0 ? anchorIdx : null;
   _anchorHoldoverScale = targetScale;
   _anchorHoldoverAlignTop = !!alignTop;
 
@@ -1318,17 +1335,20 @@ function _activate(state) {
   _buildSlots();
   _updateLayout();
 
-  const mapped = _listToImgIdx.get(state.index);
-  _anchorImgIdx = mapped !== undefined ? mapped : 0;
+  _anchorImgIdx = _resolveOpenAnchor(state);
 
   _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
   _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
-  _applyFitMode(_lastFitMode, _anchorImgIdx);
+  if (_anchorImgIdx < 0) {
+    // No image selection: the overlay stays up. Scale still applies so a
+    // later pick aligns correctly; nothing mounts or syncs until then.
+    _applyFitMode(_lastFitMode);
+    return;
+  }
+  _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode));
 
   _updateWindow();
-  if (_imageIndex.length > 0) {
-    _scheduleSettle();
-  }
+  _scheduleSettle();
 }
 
 function _clearCaches() {
@@ -1440,17 +1460,20 @@ function _onStateChange(state) {
     _buildSlots();
     _updateLayout();
 
-    const mapped = _listToImgIdx.get(state.index);
-    _anchorImgIdx = mapped !== undefined ? mapped : 0;
+    _anchorImgIdx = _resolveOpenAnchor(state);
 
     _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
     _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
-    _applyFitMode(_lastFitMode, _anchorImgIdx);
+    if (_anchorImgIdx < 0) {
+      // No image selection: the overlay stays up. Scale still applies so a
+      // later pick aligns correctly; nothing mounts or syncs until then.
+      _applyFitMode(_lastFitMode);
+      return;
+    }
+    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode));
 
     _updateWindow();
-    if (_imageIndex.length > 0) {
-      _scheduleSettle();
-    }
+    _scheduleSettle();
     return;
   }
 
