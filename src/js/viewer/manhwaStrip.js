@@ -9,6 +9,7 @@
  */
 
 import { Core } from '../core.js';
+import { BoundedMap } from '../services/cache.js';
 import { FsUtils } from '../fsUtils.js';
 import { thumbnailCache, revealListTop } from '../filepanel/filePanel.js';
 import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale } from '../services/viewerMath.js';
@@ -120,7 +121,8 @@ let _mountInFlight = -1;
 let _layoutRaf = 0;
 
 /** Session cache for resolved ICO spritesheet data URIs. */
-const _icoCache = new Map();
+const ICO_CACHE_CAPACITY = 50;
+const _icoCache = new BoundedMap(ICO_CACHE_CAPACITY);
 
 function _getIcoKey(entry, state) {
   return state.mode === 'archive' ? `${state.archivePath}:${entry.name}` : entry.path;
@@ -354,6 +356,7 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
 function _onItemDecoded(imgIdx, nw, nh) {
   const item = _imageIndex[imgIdx];
   if (!item) return;
+  const oldW = item.naturalWidth;
   const oldH = item.naturalHeight;
   // The anchor correction runs at flush time in _requestLayout, recomputed
   // from current state so a burst of decodes settles once, not once each.
@@ -367,7 +370,10 @@ function _onItemDecoded(imgIdx, nw, nh) {
       nw = 1000;
       nh = 1000;
     }
-    const maxEdge = item.isAnimated ? 512 : 2048;
+    // Animation status is unavailable on strip items without an async IPC
+    // call per entry. Cap all SVGs at 2048px; animated SVGs in manhwa strips
+    // are rare and 2048px is already bounded enough to avoid decode stalls.
+    const maxEdge = 2048;
     if (nw > maxEdge || nh > maxEdge) {
       const s = Math.min(maxEdge / nw, maxEdge / nh);
       nw = Math.max(1, Math.round(nw * s));
@@ -406,7 +412,7 @@ function _onItemDecoded(imgIdx, nw, nh) {
     slot.dataset.ready = 'true';
   }
 
-  if (oldH !== nh || item.naturalWidth !== nw) {
+  if (oldH !== nh || oldW !== nw) {
     _requestLayout();
   }
 }
@@ -1361,6 +1367,7 @@ function _clearCaches() {
   }
   _prefetching.clear();
   _slots.clear();
+  _icoCache.clear();
   if (_strip) _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
 }
 
@@ -1658,4 +1665,3 @@ export function initManhwaStrip(viewportState) {
 export function isManhwaStripActive() {
   return _active;
 }
-
