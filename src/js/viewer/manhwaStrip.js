@@ -537,6 +537,22 @@ function _updateWindow() {
     img.onload = _handleStripImgLoad;
     img.onerror = _handleStripImgError;
 
+    // Claim the slot before any decode callback below can re-enter
+    // _updateWindow. _onItemDecoded calls _updateWindow synchronously for
+    // already-ready nodes, and the re-entrant pass must see this index as
+    // mounted. Otherwise both passes append, leaving two imgs in one slot
+    // while _mounted tracks only the second. Drop any orphan left by that
+    // older race so the slot holds exactly one node.
+    for (const old of Array.from(slot.querySelectorAll(':scope > img'))) {
+      if (old === img) continue;
+      old.onload = null;
+      old.onerror = null;
+      old.remove();
+      _releaseNode(old);
+    }
+    slot.appendChild(img);
+    _mounted.set(i, img);
+
     if (isPrefetched) {
       // Already decoded off-DOM: mount immediately, no queue needed.
       if (img.complete && img.naturalWidth > 0 && !item.decoded) {
@@ -551,9 +567,6 @@ function _updateWindow() {
       // Fresh mount: queue for sequential loading.
       newQueueEntries.push({ imgIdx: i, img, item, state });
     }
-
-    slot.appendChild(img);
-    _mounted.set(i, img);
   }
 
   // Rebuild queue: drop stale entries, append new ones, sort anchor-out.
