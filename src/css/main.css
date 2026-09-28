@@ -1450,7 +1450,7 @@ li:hover>.favorite-remove,
   transform: translate(-50%, -50%);
   flex-direction: column;
   align-items: center;
-  width: max-content;
+  width: var(--strip-width, max-content);
   overflow: hidden;
   pointer-events: none;
   padding: 0;
@@ -1463,6 +1463,25 @@ li:hover>.favorite-remove,
 
 #manhwa-strip>* {
   flex-shrink: 0;
+}
+
+#manhwa-strip-spacer-top,
+#manhwa-strip-spacer-bottom {
+  width: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  flex-shrink: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+#manhwa-strip-spacer-top {
+  height: var(--strip-spacer-top, 0px);
+}
+
+#manhwa-strip-spacer-bottom {
+  height: var(--strip-spacer-bottom, 0px);
 }
 
 .manhwa-slot {
@@ -1483,17 +1502,8 @@ li:hover>.favorite-remove,
 }
 
 
-/* Group grill bed for the mounted slots. One absolutely positioned layer spans
-   the mounted range, so no painted surface ever spans the whole column on long
-   chapters. JS moves it with custom properties only. */
-#manhwa-slot-grill {
-  display: none;
-  position: absolute;
-  top: var(--slot-grill-top, 0px);
-  left: 0;
-  right: 0;
-  height: var(--slot-grill-height, 0px);
-  pointer-events: none;
+/* Grill bed for the manhwa strip. */
+#manhwa-strip.grill-active {
   background-color: var(--grill-bg);
   background-image: linear-gradient(var(--grill-angle, -45deg),
       transparent 0,
@@ -1509,10 +1519,6 @@ li:hover>.favorite-remove,
   background-size: calc(var(--grill-spacing) / var(--zoom-scale, 1)) calc(var(--grill-spacing) / var(--zoom-scale, 1));
   background-repeat: repeat;
   box-shadow: inset 0 0 0 calc(var(--grill-thickness-px) * 1px / var(--zoom-scale, 1)) var(--grill-border);
-}
-
-#manhwa-strip.grill-active #manhwa-slot-grill {
-  display: block;
 }
 
 /* Individual slot backdrop tint with mirrored diagonal lines. */

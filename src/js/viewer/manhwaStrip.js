@@ -66,6 +66,8 @@ let _strip = null;
 let _viewportState = null;
 let _active = false;
 let _initialized = false;
+let _topSpacer = null;
+let _bottomSpacer = null;
 
 /** Filtered image entries: { listIndex, entry, imgIdx, naturalWidth, naturalHeight, decoded }[].
  * Videos are excluded entirely: selecting one is highlight-only with the
@@ -75,7 +77,7 @@ let _imageIndex = [];
 /** Reverse map: listIndex → imgIdx (position in _imageIndex). */
 const _listToImgIdx = new Map();
 
-/** Map from imgIdx → slot container element. */
+/** Map from imgIdx → slot container element for currently mounted items. */
 const _slots = new Map();
 
 /** Map from imgIdx → DOM img node for currently mounted items. */
@@ -87,9 +89,14 @@ const _prefetching = new Map();
 /** Map from imgIdx → off-DOM Image that finished prefetch and is ready for instant mount. */
 const _prefetchedImages = new Map();
 
-
 /** Free pool of recycled img nodes. */
 const _freePool = [];
+
+/** Max slot container nodes kept in the free pool after eviction. */
+const SLOT_POOL_CAP = 15;
+
+/** Free pool of recycled slot container nodes. */
+const _freeSlotPool = [];
 
 /** Current column layout: { widestWidth, columnWidth, totalHeight, offsets }. */
 let _layout = { widestWidth: 0, columnWidth: 0, totalHeight: 0, offsets: [] };
@@ -255,39 +262,124 @@ function _trimPrefetchCache() {
   }
 }
 
-function _buildSlots() {
+function _ensureStripSpacers() {
   if (!_strip) return;
-  // Keep static strip children (slot grill backdrop), drop slots only.
-  _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
-  _slots.clear();
+  _topSpacer = _strip.querySelector('#manhwa-strip-spacer-top');
+  if (!_topSpacer) {
+    _topSpacer = document.createElement('div');
+    _topSpacer.id = 'manhwa-strip-spacer-top';
+    _strip.appendChild(_topSpacer);
+  }
+  _bottomSpacer = _strip.querySelector('#manhwa-strip-spacer-bottom');
+  if (!_bottomSpacer) {
+    _bottomSpacer = document.createElement('div');
+    _bottomSpacer.id = 'manhwa-strip-spacer-bottom';
+    _strip.appendChild(_bottomSpacer);
+  }
+}
 
+function _updateSpacers(startIndex, endIndex) {
+  if (!_strip) return;
+  _strip.style.setProperty('--strip-width', `${_layout.widestWidth || 0}px`);
+  if (!_layout.offsets || !_layout.offsets.length) {
+    _strip.style.setProperty('--strip-spacer-top', '0px');
+    _strip.style.setProperty('--strip-spacer-bottom', '0px');
+    return;
+  }
+  const total = _imageIndex.length;
+  if (startIndex < 0 || endIndex < 0 || startIndex >= total || endIndex >= total || startIndex > endIndex) {
+    _strip.style.setProperty('--strip-spacer-top', '0px');
+    _strip.style.setProperty('--strip-spacer-bottom', `${_layout.totalHeight || 0}px`);
+    return;
+  }
+  const topH = _layout.offsets[startIndex] ? _layout.offsets[startIndex].top : 0;
+  const bottomH = _layout.offsets[endIndex] ? Math.max(0, _layout.totalHeight - _layout.offsets[endIndex].bottom) : 0;
+  _strip.style.setProperty('--strip-spacer-top', `${topH}px`);
+  _strip.style.setProperty('--strip-spacer-bottom', `${bottomH}px`);
+}
+
+function _syncMountedSpacers() {
+  if (_slots.size === 0) {
+    _updateSpacers(-1, -1);
+    return;
+  }
+  let minIdx = Infinity;
+  let maxIdx = -Infinity;
+  for (const idx of _slots.keys()) {
+    if (idx < minIdx) minIdx = idx;
+    if (idx > maxIdx) maxIdx = idx;
+  }
+  _updateSpacers(minIdx, maxIdx);
+}
+
+function _createSlotNode() {
+  const slot = document.createElement('div');
+  slot.className = 'manhwa-slot';
+  const backdrop = document.createElement('div');
+  backdrop.className = 'manhwa-slot-backdrop';
+  slot.appendChild(backdrop);
+  return slot;
+}
+
+function _acquireSlotNode(item, total) {
+  const slot = _freeSlotPool.length > 0 ? _freeSlotPool.pop() : _createSlotNode();
+  slot.className = 'manhwa-slot';
+  slot.dataset.imgIdx = String(item.imgIdx);
+  slot.dataset.listIndex = String(item.listIndex);
+  _setSlotDimensions(slot, item.naturalWidth, item.naturalHeight);
+  if (item.decoded) {
+    slot.dataset.ready = 'true';
+  } else {
+    delete slot.dataset.ready;
+  }
+  if (total > 1) {
+    slot.style.setProperty('--slot-backdrop-bg', computeSlotHue(item.imgIdx, total));
+  } else {
+    slot.style.removeProperty('--slot-backdrop-bg');
+  }
+  return slot;
+}
+
+function _releaseSlotNode(slot) {
+  slot.removeAttribute('data-img-idx');
+  slot.removeAttribute('data-list-index');
+  delete slot.dataset.ready;
+  slot.style.removeProperty('--slot-width');
+  slot.style.removeProperty('--slot-height');
+  slot.style.removeProperty('--slot-backdrop-bg');
+  const img = slot.querySelector('img');
+  if (img) img.remove();
+  if (_freeSlotPool.length < SLOT_POOL_CAP) {
+    _freeSlotPool.push(slot);
+  }
+}
+
+function _insertSlotOrdered(slot, imgIdx) {
+  if (!_strip) return;
+  const existingSlots = _strip.querySelectorAll('.manhwa-slot');
+  for (const existing of existingSlots) {
+    const existingIdx = Number(existing.dataset.imgIdx);
+    if (existingIdx > imgIdx) {
+      _strip.insertBefore(slot, existing);
+      return;
+    }
+  }
+  if (_bottomSpacer && _bottomSpacer.parentNode === _strip) {
+    _strip.insertBefore(slot, _bottomSpacer);
+  } else {
+    _strip.appendChild(slot);
+  }
+}
+
+function _initEstimatedDimensions() {
   const total = _imageIndex.length;
   for (let i = 0; i < total; i++) {
     const item = _imageIndex[i];
-    const slot = document.createElement('div');
-    slot.className = 'manhwa-slot';
-    slot.dataset.imgIdx = String(item.imgIdx);
-    slot.dataset.listIndex = String(item.listIndex);
-
     const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
     const defW = isSvg ? 1000 : _widthEstimate();
     const defH = isSvg ? 1000 : DEFAULT_ESTIMATED_HEIGHT;
-    const initialH = item.naturalHeight || defH;
-    item.naturalHeight = initialH;
+    item.naturalHeight = item.naturalHeight || defH;
     item.naturalWidth = item.naturalWidth || defW;
-    _setSlotDimensions(slot, item.naturalWidth || defW, initialH);
-    // Explicit width keeps the strip box at the widest known image so evicting
-    // the widest mounted image never shrinks the column or clips the grill.
-
-    if (total > 1) {
-      const backdrop = document.createElement('div');
-      backdrop.className = 'manhwa-slot-backdrop';
-      slot.style.setProperty('--slot-backdrop-bg', computeSlotHue(i, total));
-      slot.appendChild(backdrop);
-    }
-
-    _strip.appendChild(slot);
-    _slots.set(item.imgIdx, slot);
   }
 }
 
@@ -357,9 +449,10 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
     _lastAnchorTy = targetTy;
     _viewportState.setDimensions(_layout.widestWidth, _layout.totalHeight, _viewportState.getTx(), targetTy);
     _strip.style.transform = _viewportState.getTransform();
+    _strip.style.setProperty('--strip-width', `${_layout.widestWidth}px`);
     _updateGrillAngles();
   }
-  _positionSlotGrill();
+  _syncMountedSpacers();
 }
 
 function _onItemDecoded(imgIdx, nw, nh) {
@@ -407,7 +500,9 @@ function _onItemDecoded(imgIdx, nw, nh) {
       if (otherSvg) continue;
       other.naturalWidth = _estWidth;
       const otherSlot = _slots.get(i);
-      _setSlotDimensions(otherSlot, _estWidth);
+      if (otherSlot) {
+        _setSlotDimensions(otherSlot, _estWidth);
+      }
     }
   }
 
@@ -417,7 +512,9 @@ function _onItemDecoded(imgIdx, nw, nh) {
       if (other.decoded || i === imgIdx || !FsUtils.isIco(other.entry?.name || other.entry?.path || '')) continue;
       other.naturalHeight = nh;
       const otherSlot = _slots.get(i);
-      _setSlotDimensions(otherSlot, undefined, nh);
+      if (otherSlot) {
+        _setSlotDimensions(otherSlot, undefined, nh);
+      }
     }
   }
 
@@ -455,22 +552,6 @@ function _computeVisibleRange() {
   return { startIndex, endIndex, centerColY };
 }
 
-/**
- * Span the group grill backdrop over the visible slots via custom properties.
- * Visible range never exceeds the viewport, so the painted layer stays small
- * on long chapters while covering exactly what is on screen.
- */
-function _positionSlotGrill() {
-  if (!_strip) return;
-  const { startIndex, endIndex } = _computeVisibleRange();
-  if (startIndex === -1 || endIndex === -1 || !_layout.offsets[startIndex] || !_layout.offsets[endIndex]) {
-    _strip.style.setProperty('--slot-grill-top', '0px');
-    _strip.style.setProperty('--slot-grill-height', '0px');
-    return;
-  }
-  _strip.style.setProperty('--slot-grill-top', `${_layout.offsets[startIndex].top}px`);
-  _strip.style.setProperty('--slot-grill-height', `${_layout.offsets[endIndex].bottom - _layout.offsets[startIndex].top}px`);
-}
 
 function _updateWindow() {
   if (!_strip || !_active || _imageIndex.length === 0 || !_viewportState) return;
@@ -526,6 +607,13 @@ function _updateWindow() {
       _releaseNode(img);
     }
   }
+  for (const [imgIdx, slot] of _slots) {
+    if (imgIdx < startIndex || imgIdx > endIndex) {
+      _slots.delete(imgIdx);
+      slot.remove();
+      _releaseSlotNode(slot);
+    }
+  }
   for (const [imgIdx, img] of _prefetchedImages) {
     if (imgIdx < startIndex - PREFETCH_AHEAD_COUNT || imgIdx > endIndex + PREFETCH_AHEAD_COUNT) {
       _prefetchedImages.delete(imgIdx);
@@ -540,6 +628,20 @@ function _updateWindow() {
       pre.removeAttribute('src');
     }
   }
+
+  // Ensure slots are mounted for all items in the window [startIndex, endIndex].
+  for (let i = startIndex; i <= endIndex; i++) {
+    const item = _imageIndex[i];
+    if (!item) continue;
+    let slot = _slots.get(i);
+    if (!slot) {
+      slot = _acquireSlotNode(item, _imageIndex.length);
+      _insertSlotOrdered(slot, i);
+      _slots.set(i, slot);
+    }
+  }
+
+  _updateSpacers(startIndex, endIndex);
 
   // Mount missing images inside [startIndex, endIndex]. Nodes mount only
   // with known dims: decoded prefetches append at once, everything else
@@ -649,7 +751,6 @@ function _updateWindow() {
     _lastHeartbeatAt = now;
     _syncAnchorToCore();
   }
-  _positionSlotGrill();
 }
 
 function _prefetchAhead(startIndex, endIndex, direction, state) {
@@ -1381,7 +1482,8 @@ function _activate(state) {
     _updateGrillAngles();
   }
 
-  _buildSlots();
+  _ensureStripSpacers();
+  _initEstimatedDimensions();
   _updateLayout();
 
   _anchorImgIdx = _resolveOpenAnchor(state);
@@ -1421,9 +1523,18 @@ function _clearCaches() {
     pre.removeAttribute('src');
   }
   _prefetching.clear();
+  for (const [, slot] of _slots) {
+    slot.remove();
+    _releaseSlotNode(slot);
+  }
   _slots.clear();
   _icoCache.clear();
-  if (_strip) _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
+  if (_strip) {
+    _strip.querySelectorAll('.manhwa-slot').forEach((n) => n.remove());
+    _strip.style.setProperty('--strip-spacer-top', '0px');
+    _strip.style.setProperty('--strip-spacer-bottom', '0px');
+    _strip.style.setProperty('--strip-width', '0px');
+  }
 }
 
 function _deactivate() {
@@ -1533,7 +1644,13 @@ function _onStateChange(state) {
     }
     _layoutScale = null;
 
-    _buildSlots();
+    _ensureStripSpacers();
+    _initEstimatedDimensions();
+    for (const [, slot] of _slots) {
+      slot.remove();
+      _releaseSlotNode(slot);
+    }
+    _slots.clear();
 
     if (preserveView) {
       const remapped = holdListIndex !== undefined
@@ -1628,29 +1745,11 @@ function _admitCompleted(destPath) {
   // lands, so the rebuild must hold the anchor like a decode correction.
   const holdTop = _anchorImgIdx >= 0 ? _layout.offsets[_anchorImgIdx]?.top || 0 : 0;
 
-  _resetMountQueue();
-  for (const [, img] of _prefetchedImages) _releaseNode(img);
-  _prefetchedImages.clear();
-  for (const [, pre] of _prefetching) {
-    pre.onload = null;
-    pre.onerror = null;
-    pre.removeAttribute('src');
-  }
-  _prefetching.clear();
-
-  const kept = new Map();
-  for (const [, img] of _mounted) {
-    const li = Number(img.dataset.listIndex);
-    img.remove();
-    if (Number.isFinite(li)) kept.set(li, img);
-    else _releaseNode(img);
-  }
-  _mounted.clear();
-
   _imageIndex = _buildImageIndex(list);
   const admitted = _listToImgIdx.get(listIndex);
   if (admitted === undefined) return;
-  _buildSlots();
+
+  _initEstimatedDimensions();
 
   for (const it of _imageIndex) {
     const old = oldByList.get(it.listIndex);
@@ -1658,18 +1757,70 @@ function _admitCompleted(destPath) {
       it.naturalWidth = old.naturalWidth;
       it.naturalHeight = old.naturalHeight;
       it.decoded = true;
-      const s = _slots.get(it.imgIdx);
-      if (s) {
-        _setSlotDimensions(s, it.naturalWidth, it.naturalHeight);
-        s.dataset.ready = 'true';
-      }
     }
   }
-  for (const [li, img] of kept) {
-    const ni = _listToImgIdx.get(li);
-    const slot = ni !== undefined ? _slots.get(ni) : null;
-    if (slot) _claimSlot(ni, _imageIndex[ni], slot, img);
-    else _releaseNode(img);
+
+  // Remap mounted slots to new imgIdx without replacing DOM elements
+  const newSlots = new Map();
+  for (const [, slot] of _slots) {
+    const li = Number(slot.dataset.listIndex);
+    const ni = Number.isFinite(li) ? _listToImgIdx.get(li) : undefined;
+    if (ni !== undefined) {
+      slot.dataset.imgIdx = String(ni);
+      if (_imageIndex.length > 1) {
+        slot.style.setProperty('--slot-backdrop-bg', computeSlotHue(ni, _imageIndex.length));
+      }
+      newSlots.set(ni, slot);
+    } else {
+      slot.remove();
+      _releaseSlotNode(slot);
+    }
+  }
+  _slots.clear();
+  for (const [k, v] of newSlots) _slots.set(k, v);
+
+  // Remap mounted images to new imgIdx without replacing DOM elements
+  const newMounted = new Map();
+  for (const [, img] of _mounted) {
+    const li = Number(img.dataset.listIndex);
+    const ni = Number.isFinite(li) ? _listToImgIdx.get(li) : undefined;
+    if (ni !== undefined) {
+      img.dataset.imgIdx = String(ni);
+      newMounted.set(ni, img);
+    } else {
+      img.remove();
+      _releaseNode(img);
+    }
+  }
+  _mounted.clear();
+  for (const [k, v] of newMounted) _mounted.set(k, v);
+
+  // Remap prefetched images
+  const newPrefetched = new Map();
+  for (const [, img] of _prefetchedImages) {
+    const li = Number(img.dataset?.listIndex);
+    const ni = Number.isFinite(li) ? _listToImgIdx.get(li) : undefined;
+    if (ni !== undefined) {
+      newPrefetched.set(ni, img);
+    } else {
+      _releaseNode(img);
+    }
+  }
+  _prefetchedImages.clear();
+  for (const [k, v] of newPrefetched) _prefetchedImages.set(k, v);
+
+  // Remap mount queue entries
+  _mountQueue = _mountQueue.map((e) => {
+    const ni = _listToImgIdx.get(e.item.listIndex);
+    return ni !== undefined ? { ...e, imgIdx: ni, item: _imageIndex[ni] } : null;
+  }).filter(Boolean);
+
+  if (_mountInFlight !== -1) {
+    const inFlightItem = _imageIndex[_mountInFlight];
+    if (inFlightItem) {
+      const ni = _listToImgIdx.get(inFlightItem.listIndex);
+      _mountInFlight = ni !== undefined ? ni : -1;
+    }
   }
 
   if (anchorListIndex !== undefined) {
@@ -1696,6 +1847,7 @@ export function initManhwaStrip(viewportState) {
   _viewport = document.getElementById('viewport');
   _strip = document.getElementById('manhwa-strip');
   if (!_viewport || !_strip) return;
+  _ensureStripSpacers();
 
   if (_initialized) return;
   _initialized = true;
