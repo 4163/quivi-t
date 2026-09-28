@@ -102,6 +102,16 @@ export function createViewerPipelines(viewportState) {
     }
   }
 
+  /** Cancel pending work without blanking the visible canvas. Pan/zoom moves
+   * the existing pixels via transform, so the old canvas stays up until the
+   * next render swaps in. Full _cancelRender is for source/filter changes. */
+  function _cancelPendingRender() {
+    _renderGeneration++;
+    if (pipeline) pipeline.cancel();
+    if (_renderTimeout) clearTimeout(_renderTimeout);
+    _renderTimeout = null;
+  }
+
   function _applyScaling(incomingFilter, incomingIsAnimated) {
     const live = Core.getState();
     const isVideo = isVideoSource(_activeSource);
@@ -116,13 +126,12 @@ export function createViewerPipelines(viewportState) {
     const usesWebgl = activeFilter !== null || useWebGlForLanczos;
     const usesLanczos = scaling === 'lanczos' && !usesWebgl;
     
-    if (_activeSource) {
-      _activeSource.dataset.scaling = scaling;
-    }
-    
     const viewportNode = document.getElementById('viewport');
-    if (viewportNode && !usesWebgl) {
-      viewportNode.removeAttribute('data-filter');
+    if (viewportNode) {
+      viewportNode.dataset.scaling = scaling;
+      if (!usesWebgl) {
+        viewportNode.removeAttribute('data-filter');
+      }
     }
 
     if (!usesLanczos && lanczosCanvas) {
@@ -693,10 +702,12 @@ export function createViewerPipelines(viewportState) {
     }
   });
 
-  // Pan path is render, not rebuild.
+  // Pan path is render, not rebuild. Keep the current canvas visible while
+  // the transform updates. Clearing here flashed the base image every pan
+  // tick and doubled the LCP candidate on zoom.
   viewportState.subscribe(() => {
     if (Core.getState()?.manhwaEnabled) return;
-    _cancelRender();
+    _cancelPendingRender();
     _scheduleTransform();
     _triggerRender();
   });

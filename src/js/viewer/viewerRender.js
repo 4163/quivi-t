@@ -366,7 +366,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       el.removeAttribute('src');
       el.removeAttribute('data-pool-src');
       el.removeAttribute('data-played');
-      el.removeAttribute('data-scaling');
       el.classList.remove('active');
       _releaseBridgeNode(el);
       if (el === img) {

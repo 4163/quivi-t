@@ -183,6 +183,40 @@ function _releaseNode(img) {
   }
 }
 
+/** Shared mount handlers. One pair serves all slots, keyed by dataset.imgIdx. */
+function _handleStripImgLoad(event) {
+  const img = event?.currentTarget;
+  const imgIdx = Number(img?.dataset?.imgIdx);
+  if (!Number.isFinite(imgIdx)) return;
+  _onItemDecoded(imgIdx, img.naturalWidth, img.naturalHeight);
+  if (_mountInFlight === imgIdx) {
+    _mountInFlight = -1;
+    _advanceMountQueue();
+  }
+}
+
+function _handleStripImgError(event) {
+  const img = event?.currentTarget;
+  const imgIdx = Number(img?.dataset?.imgIdx);
+  if (!Number.isFinite(imgIdx)) return;
+  const item = _imageIndex[imgIdx];
+  const slot = _slots.get(imgIdx);
+  if (slot) {
+    slot.classList.add('error');
+    if (!slot.querySelector('.manhwa-error-placeholder')) {
+      const errDiv = document.createElement('div');
+      errDiv.className = 'manhwa-error-placeholder';
+      errDiv.textContent = `Failed to load: ${item?.entry?.name || 'image'}`;
+      slot.appendChild(errDiv);
+    }
+  }
+  _onItemDecoded(imgIdx, item?.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
+  if (_mountInFlight === imgIdx) {
+    _mountInFlight = -1;
+    _advanceMountQueue();
+  }
+}
+
 function _trimPrefetchCache() {
   while (_prefetchedImages.size > PREFETCH_CACHE_CAPACITY) {
     let furthestIdx = -1;
@@ -340,11 +374,7 @@ function _onItemDecoded(imgIdx, nw, nh) {
       nw = Math.max(1, Math.round(nw * s));
       nh = Math.max(1, Math.round(nh * s));
     }
-    const img = _mounted.get(imgIdx);
-    if (!hasIntrinsic && img) {
-      img.style.width = `${nw}px`;
-      img.style.height = `${nh}px`;
-    }
+    // Slot drives display size via CSS height:100%. No per-img inline sizing.
   }
 
   item.naturalWidth = nw;
@@ -503,37 +533,9 @@ function _updateWindow() {
     img.dataset.imgIdx = String(i);
     img.dataset.listIndex = String(item.listIndex);
 
-    const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
-    if (isSvg && item.decoded) {
-      const isBrowserDefault = (item.naturalWidth === 150 && item.naturalHeight === 150) || (item.naturalWidth === 300 && item.naturalHeight === 150);
-      if (isBrowserDefault || (item.naturalWidth === 1000 && item.naturalHeight === 1000)) {
-        img.style.width = `${item.naturalWidth}px`;
-        img.style.height = `${item.naturalHeight}px`;
-      }
-    }
-
-    const imgIdx = i;
-    img.onload = () => {
-      _onItemDecoded(imgIdx, img.naturalWidth, img.naturalHeight);
-      if (_mountInFlight === imgIdx) {
-        _mountInFlight = -1;
-        _advanceMountQueue();
-      }
-    };
-    img.onerror = () => {
-      slot.classList.add('error');
-      if (!slot.querySelector('.manhwa-error-placeholder')) {
-        const errDiv = document.createElement('div');
-        errDiv.className = 'manhwa-error-placeholder';
-        errDiv.textContent = `Failed to load: ${item.entry?.name || 'image'}`;
-        slot.appendChild(errDiv);
-      }
-      _onItemDecoded(imgIdx, item.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
-      if (_mountInFlight === imgIdx) {
-        _mountInFlight = -1;
-        _advanceMountQueue();
-      }
-    };
+    // Slot drives display size via CSS height:100%. No per-img inline sizing.
+    img.onload = _handleStripImgLoad;
+    img.onerror = _handleStripImgError;
 
     if (isPrefetched) {
       // Already decoded off-DOM: mount immediately, no queue needed.
