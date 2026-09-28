@@ -2137,12 +2137,13 @@ function commitPendingThumbnails() {
 }
 
 /** Strip secondary highlights follow the viewport. When the selected entry
- * has no strip mapping (folder, parent, non-image file), the viewport shows
- * the drop overlay instead of the strip, so no row counts as in view. */
+ * is anything but an image (video, folder, parent, non-image file), the
+ * viewport shows the drop overlay instead of the strip, so no row counts
+ * as in view. */
 function stripVisibleIndices(list, index) {
   if (!Core.getState().manhwaEnabled || !isManhwaStripActive()) return null;
   const entry = list?.[index];
-  if (entry && !FsUtils.isImageEntry(entry) && !FsUtils.isVideoEntry(entry)) return null;
+  if (entry && (!FsUtils.isImageEntry(entry) || FsUtils.isVideoEntry(entry))) return null;
   return new Set(getVisibleImageIndices());
 }
 

@@ -104,7 +104,7 @@ Fix direction is a sequential queue in scroll order for strip mounts and prefetc
 
 ## Issue 8. Video rows hold layout instead of skipping
 
-Status: open, no code changes yet. From clipboard handoff.
+Status: resolved and user-confirmed in the running app. The strip index and layout exclude videos entirely: no rows, no offsets, no anchor landings. mp4 counts as both image and video upstream, so the video check wins at the strip gate and the highlight rule. Selecting a video paints the row and raises the drop overlay while the strip and its anchor stay put; `navigateManhwa` landings are highlight-only and settle never drags `Core` back onto a nearby image while an unmapped row stays selected. Single-image playback untouched.
 
 Today videos are layout members. `_buildImageIndex` at `manhwaStrip.js:136-156` includes them, `_buildSlots` at 214,229-234 reserves a 400 px row with a text label, offsets and totalHeight count them, and the anchor can land on one. Mount at 474, prefetch at 624, decode at 312, and backend warm at 690,697 skip video, so each row stays a dead placeholder that shifts every image below it.
 

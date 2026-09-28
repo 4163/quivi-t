@@ -205,7 +205,12 @@ Core.onStateChange((state) => {
     return;
   }
 
-  if (!state.src) {
+  // A video selected in strip mode behaves like a folder: the strip holds
+  // no video rows, so the overlay covers the viewport even though a src
+  // exists (single-image playback needs it).
+  const selectedEntry = state.list?.[state.index];
+  const stripVideoSelected = isManhwaStripActive() && !!selectedEntry && FsUtils.isVideoEntry(selectedEntry);
+  if (!state.src || stripVideoSelected) {
     dropOverlay.classList.toggle('active', !isPasswordBlocked);
     viewport.classList.add('empty');
   } else {

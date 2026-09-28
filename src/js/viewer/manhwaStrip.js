@@ -60,16 +60,15 @@ function _widthEstimate() {
   return _estWidth || DEFAULT_ESTIMATED_WIDTH;
 }
 
-/** Fixed height for video entry placeholders. */
-const VIDEO_PLACEHOLDER_HEIGHT = 400;
-
 let _viewport = null;
 let _strip = null;
 let _viewportState = null;
 let _active = false;
 let _initialized = false;
 
-/** Filtered image entries: { listIndex, entry, imgIdx, naturalWidth, naturalHeight, decoded, isVideo }[] */
+/** Filtered image entries: { listIndex, entry, imgIdx, naturalWidth, naturalHeight, decoded }[].
+ * Videos are excluded entirely: selecting one is highlight-only with the
+ * drop overlay up, and the strip never reserves rows for them. */
 let _imageIndex = [];
 
 /** Reverse map: listIndex → imgIdx (position in _imageIndex). */
@@ -153,13 +152,13 @@ function _buildImageIndex(list) {
   _listToImgIdx.clear();
   for (let i = 0; i < list.length; i++) {
     const entry = list[i];
-    if (FsUtils.isImageEntry(entry) || FsUtils.isVideoEntry(entry)) {
+    // mp4 counts as both image and video upstream: the video check wins.
+    if (FsUtils.isImageEntry(entry) && !FsUtils.isVideoEntry(entry)) {
       const imgIdx = result.length;
       result.push({
         listIndex: i,
         entry,
         imgIdx,
-        isVideo: FsUtils.isVideoEntry(entry),
         naturalWidth: 0,
         naturalHeight: 0,
         decoded: false,
@@ -260,7 +259,7 @@ function _buildSlots() {
     const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
     const defW = isSvg ? 1000 : _widthEstimate();
     const defH = isSvg ? 1000 : DEFAULT_ESTIMATED_HEIGHT;
-    const initialH = item.isVideo ? VIDEO_PLACEHOLDER_HEIGHT : (item.naturalHeight || defH);
+    const initialH = item.naturalHeight || defH;
     item.naturalHeight = initialH;
     item.naturalWidth = item.naturalWidth || defW;
     slot.style.height = `${initialH}px`;
@@ -273,13 +272,6 @@ function _buildSlots() {
       backdrop.className = 'manhwa-slot-backdrop';
       slot.style.setProperty('--slot-backdrop-bg', computeSlotHue(i, total));
       slot.appendChild(backdrop);
-    }
-
-    if (item.isVideo) {
-      const ph = document.createElement('div');
-      ph.className = 'manhwa-video-placeholder';
-      ph.textContent = `Video: ${item.entry.name || 'mp4'}`;
-      slot.appendChild(ph);
     }
 
     _strip.appendChild(slot);
@@ -358,7 +350,7 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
 
 function _onItemDecoded(imgIdx, nw, nh) {
   const item = _imageIndex[imgIdx];
-  if (!item || item.isVideo) return;
+  if (!item) return;
   const oldH = item.naturalHeight;
   // The anchor correction runs at flush time in _requestLayout, recomputed
   // from current state so a burst of decodes settles once, not once each.
@@ -391,7 +383,7 @@ function _onItemDecoded(imgIdx, nw, nh) {
     _estWidth = Math.min(nw, DEFAULT_ESTIMATED_WIDTH);
     for (let i = 0; i < _imageIndex.length; i++) {
       const other = _imageIndex[i];
-      if (other.decoded || other.isVideo || i === imgIdx) continue;
+      if (other.decoded || i === imgIdx) continue;
       const otherSvg = /\.svg($|[?#])/i.test(other.entry?.name || other.entry?.path || '');
       if (otherSvg) continue;
       other.naturalWidth = _estWidth;
@@ -525,7 +517,7 @@ function _updateWindow() {
   const newQueueEntries = [];
   for (let i = startIndex; i <= endIndex; i++) {
     const item = _imageIndex[i];
-    if (item.isVideo || _mounted.has(i) || queued.has(i)) continue;
+    if (_mounted.has(i) || queued.has(i)) continue;
 
     const slot = _slots.get(i);
     if (!slot) continue;
@@ -650,7 +642,7 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
   for (const i of targets) {
     if (_prefetching.size >= PREFETCH_CONCURRENT_MAX) break;
     const item = _imageIndex[i];
-    if (!item || item.isVideo || _mounted.has(i) || _prefetching.has(i) || _prefetchedImages.has(i) || _isDecodeQueued(i)) {
+    if (!item || _mounted.has(i) || _prefetching.has(i) || _prefetchedImages.has(i) || _isDecodeQueued(i)) {
       continue;
     }
     const pre = new Image();
@@ -660,7 +652,7 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
       _prefetching.delete(i);
       if (!_active) return;
       const cur = _imageIndex[i];
-      if (!cur || cur.isVideo) return;
+      if (!cur) return;
       // Pre-decode gate: force rasterization off-DOM so the node paints on
       // its first frame in the slot. A node that fails the gate drops out
       // and the follow-up pass retries it through the sequential worker.
@@ -672,7 +664,7 @@ function _prefetchAhead(startIndex, endIndex, direction, state) {
       }
       if (!_active) return;
       const stillCur = _imageIndex[i];
-      if (!stillCur || stillCur.isVideo) return;
+      if (!stillCur) return;
       if (gated) {
         _prefetchedImages.set(i, pre);
         _trimPrefetchCache();
@@ -724,14 +716,14 @@ function _warmBackendAhead(state, startIndex, endIndex, direction) {
   if (direction >= 0) {
     for (let i = endIndex + 1; i <= endIndex + BACKEND_WARM_AHEAD && i <= last; i++) {
       const item = _imageIndex[i];
-      if (!item || item.isVideo || !item.entry) continue;
+      if (!item || !item.entry) continue;
       names.push(item.entry.name);
     }
   }
   if (direction <= 0) {
     for (let i = startIndex - 1; i >= startIndex - BACKEND_WARM_AHEAD && i >= 0; i--) {
       const item = _imageIndex[i];
-      if (!item || item.isVideo || !item.entry) continue;
+      if (!item || !item.entry) continue;
       names.push(item.entry.name);
     }
   }
@@ -823,7 +815,7 @@ function _advanceMountQueue() {
     if (!_active) break;
     if (_mounted.has(entry.imgIdx)) continue;
     const item = _imageIndex[entry.imgIdx];
-    if (!item || item.isVideo || item !== entry.item) continue;
+    if (!item || item !== entry.item) continue;
 
     _mountInFlight = entry.imgIdx;
     const pre = new Image();
@@ -839,7 +831,7 @@ function _advanceMountQueue() {
       _mountInFlight = -1;
       const cur = _imageIndex[idx];
       const slot = _slots.get(idx);
-      if (_active && cur && cur === entry.item && !cur.isVideo && slot && !_mounted.has(idx)) {
+      if (_active && cur && cur === entry.item && slot && !_mounted.has(idx)) {
         _mountFailed(idx, cur, slot, pre);
       } else {
         _releaseNode(pre);
@@ -853,7 +845,7 @@ function _advanceMountQueue() {
         return;
       }
       const cur = _imageIndex[entry.imgIdx];
-      if (!cur || cur.isVideo || cur !== entry.item) {
+      if (!cur || cur !== entry.item) {
         drop();
         return;
       }
@@ -868,7 +860,7 @@ function _advanceMountQueue() {
         return;
       }
       const now = _imageIndex[entry.imgIdx];
-      if (!now || now.isVideo || now !== entry.item || _mounted.has(entry.imgIdx)) {
+      if (!now || now !== entry.item || _mounted.has(entry.imgIdx)) {
         drop();
         return;
       }
@@ -980,7 +972,10 @@ function _syncAnchorToCore() {
   _lastSyncedListIndex = anchorItem.listIndex;
   _lastVisSig = visSig;
   if (!hadHoldover && !anchorChanged && !visChanged) return;
-  if (anchorChanged || hadHoldover) {
+  // Never drag Core back onto a nearby image while a video or other
+  // unmapped row stays deliberately highlighted.
+  const liveMapped = _listToImgIdx.has(Core.getState().index);
+  if ((anchorChanged || hadHoldover) && liveMapped) {
     _anchorUpdateInProgress = true;
     Core.selectIndex(anchorItem.listIndex);
     _anchorUpdateInProgress = false;
@@ -1021,6 +1016,9 @@ const STRIP_TOP_ALIGN_FITS = ['width', 'width-if-larger', 'window', 'window-if-l
 function _resolveOpenAnchor(state) {
   const mapped = _listToImgIdx.get(state.index);
   if (mapped !== undefined) return mapped;
+  // A video selection stays highlight-only regardless of the setting.
+  const entry = state.list?.[state.index];
+  if (entry && FsUtils.isVideoEntry(entry)) return -1;
   const openFirst = state.config?.frontend_data?.open_first_image === true;
   if (openFirst && _imageIndex.length > 0) return 0;
   return -1;
@@ -1177,17 +1175,10 @@ export function navigateManhwa(delta) {
   if (mapped !== undefined) {
     return alignListItemTop(state.index);
   }
-  // Landed on a non-image entry: pin the nearest image top in travel direction.
-  const dir = delta >= 0 ? 1 : -1;
-  let candidate = -1;
-  for (let i = 0; i < _imageIndex.length; i++) {
-    const li = _imageIndex[i].listIndex;
-    if (dir > 0 && li > state.index) { candidate = li; break; }
-    if (dir < 0 && li < state.index) { candidate = li; }
-  }
-  if (candidate === -1) return false;
-  Core.selectIndex(candidate);
-  return alignListItemTop(candidate);
+  // Landed on an entry with no image mapping (video, folder edge):
+  // highlight-only. The row paints, the overlay shows, and the strip and
+  // its anchor stay exactly where they are.
+  return true;
 }
 
 export function pageStrip(direction, pageMultiplier = 1) {
