@@ -554,7 +554,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       if (img && img.src && img.classList.contains('active')) {
         _parkNodeInBridge(img, null, false);
         clearDisplayedImage(true);
-      } else {
+      } else if (_activeMedia === 'video' && _activeVideoEl && _activeVideoEl.classList.contains('active')) {
+        _parkNodeInBridge(_activeVideoEl, null, false);
+        clearDisplayedImage(true);
+      } else if (!_retiringNode) {
         clearDisplayedImage(false);
       }
       return;

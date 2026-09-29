@@ -32,17 +32,17 @@ Validation note. Keeps single-image pool and bridge layer ownership strictly in 
 
 ## Slice 2. Bridge legacy image into manhwa view on toggle
 
-**Status:** `[ ]` Diagnostic analysis complete, awaiting re-entrant notification guard fix.
+**Status:** `[x]` Done 2026-09-29. Confirmed working at runtime and verified via replay diagnostics (12/12 steps pass, 0 blackout frames, 0 anomalies).
 
 Hold the active legacy image in `#viewer-bridge-layer` across the transition into manhwa view until the manhwa anchor slot finishes decode and mounts.
 
-- [ ] In `src/js/viewer/viewerRender.js:553-561`, when `state.manhwaEnabled` becomes true in `onStateChange`, check if `img && img.src && img.classList.contains('active')`.
-- [ ] If an active image exists, park it in `#viewer-bridge-layer` with its current geometry before recycling the rest of the pool, and hold it without a 2-frame auto-release (`autoRetire = false`).
-- [ ] In `src/js/viewer/viewerRender.js:557`, guard the `else` branch with `else if (!_retiringNode) { clearDisplayedImage(false); }`. Synchronous double notifications from `Core.setManhwaMode()` (`setSpreadEnabled(false)` notification 1 followed by `setManhwaMode()` notification 2) must not cancel an active in-flight bridge node when `img` was already nulled by notification 1.
-- [ ] In `src/js/viewer/manhwaStrip.js:1683-1698`, seed known active dimensions into `_imageIndex[_anchorImgIdx]` before `_initEstimatedDimensions()` and `_updateLayout()`.
-- [ ] In `src/js/viewer/manhwaStrip.js:986`, update `_claimSlot` to emit `_onSlotMounted` when a slot image mounts into DOM. Export `setOnSlotMounted`.
-- [ ] In `src/js/viewer/viewer.js:36-44`, wire `setOnSlotMounted` to release the bridge layer after double `requestAnimationFrame` compositor paints.
-- [ ] Accept when toggling Manhwa ON while an image is displayed shows no blank flicker, and telemetry records 0 blackout frames for Legacy to Manhwa steps (Step 0 and Step 4 in `manhwa-fit-entry`).
+- [x] In `src/js/viewer/viewerRender.js:553-561`, when `state.manhwaEnabled` becomes true in `onStateChange`, check if `img && img.src && img.classList.contains('active')`.
+- [x] If an active image exists, park it in `#viewer-bridge-layer` with its current geometry before recycling the rest of the pool, and hold it without a 2-frame auto-release (`autoRetire = false`).
+- [x] In `src/js/viewer/viewerRender.js:557`, guard the `else` branch with `else if (!_retiringNode) { clearDisplayedImage(false); }`. Synchronous double notifications from `Core.setManhwaMode()` (`setSpreadEnabled(false)` notification 1 followed by `setManhwaMode()` notification 2) must not cancel an active in-flight bridge node when `img` was already nulled by notification 1.
+- [x] In `src/js/viewer/manhwaStrip.js:1683-1698`, seed known active dimensions into `_imageIndex[_anchorImgIdx]` before `_initEstimatedDimensions()` and `_updateLayout()`.
+- [x] In `src/js/viewer/manhwaStrip.js:986`, update `_claimSlot` to emit `_onSlotMounted` when a slot image mounts into DOM. Export `setOnSlotMounted`.
+- [x] In `src/js/viewer/viewer.js:36-44`, wire `setOnSlotMounted` to release the bridge layer after double `requestAnimationFrame` compositor paints.
+- [x] Accept when toggling Manhwa ON while an image is displayed shows no blank flicker, and telemetry records 0 blackout frames for Legacy to Manhwa steps (Step 0 and Step 4 in `manhwa-fit-entry`).
 
 Diagnostic report note (2026-09-29). Replay diagnostics on `manhwa-fit-entry` isolated a synchronous notification race. `setSpreadEnabled(false)` inside `setManhwaMode` triggers notification 1, parking `img` and setting `img = null`. `setManhwaMode` then triggers notification 2, where `img` is null. The unguarded `else` called `clearDisplayedImage(false)`, invoking `_cancelRetiringNode()` and unmounting the bridge node at +595.8ms before any compositor frame could paint. Guarding the `else` branch allows the bridge node to persist until `setOnSlotMounted` releases it.
 
