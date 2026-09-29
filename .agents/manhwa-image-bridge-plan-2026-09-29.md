@@ -32,14 +32,15 @@ Validation note. Keeps single-image pool and bridge layer ownership strictly in 
 
 ## Slice 2. Bridge legacy image into manhwa view on toggle
 
-**Status:** `[ ]` Ready for implementation.
+**Status:** `[ ]` In progress (changes applied, awaiting user remote save and verification).
 
 Hold the active legacy image in `#viewer-bridge-layer` across the transition into manhwa view until the manhwa anchor slot finishes decode and mounts.
 
-- [ ] In `src/js/viewer/viewerRender.js:507-513`, when `state.manhwaEnabled` becomes true in `onStateChange`, check if `img && img.src && img.classList.contains('active')`.
-- [ ] If an active image exists, park it in `#viewer-bridge-layer` with its current geometry before recycling the rest of the pool, and hold it without a 2-frame auto-release.
-- [ ] In `src/js/viewer/manhwaStrip.js:985-1070`, update `_claimSlot` to emit or call an `onFirstMount` callback when a slot image mounts into DOM.
-- [ ] In `src/js/viewer/viewer.js`, wire the manhwa strip mount notification to `viewerRender.releaseBridge()`.
+- [ ] In `src/js/viewer/viewerRender.js:542-552`, when `state.manhwaEnabled` becomes true in `onStateChange`, check if `img && img.src && img.classList.contains('active')`.
+- [ ] If an active image exists, park it in `#viewer-bridge-layer` with its current geometry before recycling the rest of the pool, and hold it without a 2-frame auto-release (`autoRetire = false`).
+- [ ] In `src/js/viewer/manhwaStrip.js:1683-1698`, seed known active dimensions into `_imageIndex[_anchorImgIdx]` before `_initEstimatedDimensions()` and `_updateLayout()`.
+- [ ] In `src/js/viewer/manhwaStrip.js:986`, update `_claimSlot` to emit `_onSlotMounted` when a slot image mounts into DOM. Export `setOnSlotMounted`.
+- [ ] In `src/js/viewer/viewer.js`, wire the manhwa strip mount notification to `renderer.releaseBridge()`.
 - [ ] Accept when toggling Manhwa ON while an image is displayed shows no blank flicker, and telemetry records 0 blackout frames for Legacy to Manhwa steps.
 
 Validation note. Reuses the already decoded legacy image element. No redundant decodes or duplicate network requests. Pure module boundary between strip and renderer coordinated via `viewer.js`.

@@ -257,6 +257,15 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       node.remove();
     } else if (imgWrapper && node.parentElement !== imgWrapper && !node.classList.contains('is-placeholder')) {
       imgWrapper.appendChild(node);
+      const poolSrc = node.dataset?.poolSrc;
+      if (!poolSrc || _activeNodes.get(poolSrc) !== node) {
+        node.removeAttribute('src');
+        node.removeAttribute('data-pool-src');
+        node.removeAttribute('data-played');
+        node.classList.remove('active');
+        if (!_freeNodes.includes(node)) _freeNodes.push(node);
+        while (_freeNodes.length > VIEWER_IMAGE_POOL_CAPACITY) _freeNodes.pop()?.remove();
+      }
     }
   }
 
@@ -492,8 +501,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     });
   }
 
-  function clearDisplayedImage() {
-    _cancelRetiringNode();
+  function clearDisplayedImage(preserveBridge = false) {
+    if (!preserveBridge) _cancelRetiringNode();
     _stopLoadingAnimation();
     _activeTargetSrc = null;
     _hideVideo();
@@ -501,7 +510,14 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _activationGeneration += 1;
     _clearTargetLoadTimer();
     _clearScheduledPreloads();
-    for (const src of _activeNodes.keys()) _recyclePoolNode(src);
+    for (const src of Array.from(_activeNodes.keys())) {
+      const el = _activeNodes.get(src);
+      if (preserveBridge && el === _retiringNode) {
+        _activeNodes.delete(src);
+        continue;
+      }
+      _recyclePoolNode(src);
+    }
     img = null;
     onActiveImageChanged(null);
   }
@@ -535,7 +551,12 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   Core.onStateChange((state) => {
     // Strip owns its own images; skip single-image pipeline when active.
     if (state.manhwaEnabled) {
-      clearDisplayedImage();
+      if (img && img.src && img.classList.contains('active')) {
+        _parkNodeInBridge(img, null, false);
+        clearDisplayedImage(true);
+      } else {
+        clearDisplayedImage(false);
+      }
       return;
     }
 

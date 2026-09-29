@@ -984,6 +984,7 @@ function _claimSlot(imgIdx, item, slot, img) {
   }
   slot.appendChild(img);
   _mounted.set(imgIdx, img);
+  _onSlotMounted?.(imgIdx);
 }
 
 /** Mount a node whose decode failed. Error UI plus estimated sizing.
@@ -1680,10 +1681,21 @@ function _activate(state) {
   }
 
   _ensureStripSpacers();
-  _initEstimatedDimensions();
-  _updateLayout();
 
   _anchorImgIdx = _resolveOpenAnchor(state);
+
+  const knownW = state.naturalWidth || (_viewportState?.getNaturalW?.() || 0);
+  const knownH = state.naturalHeight || (_viewportState?.getNaturalH?.() || 0);
+  if (_anchorImgIdx >= 0 && _imageIndex[_anchorImgIdx] && knownW > 0 && knownH > 0) {
+    const anchorItem = _imageIndex[_anchorImgIdx];
+    anchorItem.naturalWidth = knownW;
+    anchorItem.naturalHeight = knownH;
+    anchorItem.decoded = true;
+    _estWidth = knownW;
+  }
+
+  _initEstimatedDimensions();
+  _updateLayout();
 
   _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
   _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
@@ -2105,4 +2117,9 @@ export function setRevealListTop(fn) {
 
 export function triggerRevealListTop() {
   _onRevealListTop?.();
+}
+
+let _onSlotMounted = null;
+export function setOnSlotMounted(fn) {
+  _onSlotMounted = fn;
 }

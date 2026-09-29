@@ -2,7 +2,7 @@ import { createViewportState } from '../services/viewerMath.js';
 import { createViewerRenderer } from './viewerRender.js';
 import { createViewerGestures } from './viewerGestures.js';
 import { createViewerPipelines } from './viewerPipelines.js';
-import { isManhwaStripActive, initManhwaStrip, isStripAtTop, triggerRevealListTop, resetZoom as resetStripZoom } from './manhwaStrip.js';
+import { isManhwaStripActive, initManhwaStrip, isStripAtTop, triggerRevealListTop, resetZoom as resetStripZoom, setOnSlotMounted } from './manhwaStrip.js';
 
 
 let _cachedViewport = { clientWidth: 1000, clientHeight: 1000, left: 0, top: 0 };
@@ -33,6 +33,15 @@ const renderer = createViewerRenderer(viewportState, (img) => {
 });
 const gestures = createViewerGestures(viewportState);
 initManhwaStrip(viewportState);
+setOnSlotMounted(() => {
+  if (renderer.isBridgeActive()) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        renderer.releaseBridge();
+      });
+    });
+  }
+});
 
 const vpEl = document.getElementById('viewport');
 if (vpEl) {
