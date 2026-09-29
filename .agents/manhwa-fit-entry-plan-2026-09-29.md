@@ -83,6 +83,16 @@ Images failed to mount ~15-25% of the time on directory open, requiring a zoom/p
 - [x] **Flight ownership in `drop()`.** `drop()` unconditionally reset `_mountInFlight = -1`, which clobbered a newer container's in-progress flight when a stale `await pre.decode()` from the previous container completed. Now `drop()` only resets `_mountInFlight` if it still matches `entry.imgIdx`. (`src/js/viewer/manhwaStrip.js:1013-1018`).
 - [x] **Subscriber guard during programmatic viewport changes.** The viewport subscriber skips `_updateWindow()` and `_scheduleSettle()` while `_viewportProgram > 0`. Intermediate `zoomTo`/`panTo` ticks inside `_applyFitMode` were starting mount flights at transient ty values whose slots got evicted by the next tick's visible range shift. The caller's explicit `_updateWindow()` at the end handles mounting with the final ty. (`src/js/viewer/manhwaStrip.js:1927-1932`).
 
+## Post-slice fix: first/last latch for fit none
+
+**Status:** `[x]` Done 2026-09-29, user-confirmed.
+
+In `none` (natural size) mode, navigating to the first or last image centered in Y instead of latching to top/bottom. Three sites fixed:
+
+- [x] Added `'none'` to `LATCH_FIT_MODES` so entry and fit-key paths check first/last and latch to top/bottom. (`src/js/viewer/manhwaStrip.js:1198`).
+- [x] `navigateManhwa` now calls `alignListItemBottom` for the last image instead of `alignListItemTop`. (`src/js/viewer/manhwaStrip.js:1522-1524`).
+- [x] External index change in `_onStateChange` (panel click/keyboard) now bottom-aligns the last image. (`src/js/viewer/manhwaStrip.js:1907-1911`).
+
 ## Slice 5. Keep the test suites and replay loop current
 
 **Status:** `[ ]`

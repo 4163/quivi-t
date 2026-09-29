@@ -1195,9 +1195,8 @@ export function getVisibleImageIndices() {
   return listIndices;
 }
 
-/** Width and window fits latch to top or bottom when an end is highlighted;
- * every other fit centers the anchor on fit application. */
-const LATCH_FIT_MODES = ['width', 'width-if-larger', 'window', 'window-if-larger'];
+/** Fit modes that latch to top or bottom when a column end is highlighted. */
+const LATCH_FIT_MODES = ['none', 'width', 'width-if-larger', 'window', 'window-if-larger'];
 const STRIP_TOP_ALIGN_FITS = ['width', 'width-if-larger'];
 
 /** Height-family fits clamp to the active image on entry instead of fitting
@@ -1520,6 +1519,9 @@ export function navigateManhwa(delta) {
   const state = Core.getState();
   const mapped = _listToImgIdx.get(state.index);
   if (mapped !== undefined) {
+    if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
+      return alignListItemBottom(state.index);
+    }
     return alignListItemTop(state.index);
   }
   // Landed on an entry with no image mapping (video, folder edge):
@@ -1902,7 +1904,11 @@ function _onStateChange(state) {
   if (!_anchorUpdateInProgress && state.index >= 0 && performance.now() - _lastPanAt > 150) {
     const mapped = _listToImgIdx.get(state.index);
     if (mapped !== undefined && mapped !== _anchorImgIdx) {
-      alignListItemTop(state.index);
+      if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
+        alignListItemBottom(state.index);
+      } else {
+        alignListItemTop(state.index);
+      }
     }
   }
 }
