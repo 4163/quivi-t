@@ -9,8 +9,42 @@ export function createViewerPipelineProbe() {
   let observer = null;
   let hadVisibleContentAtStart = false;
   let hasRenderedContent = false;
+  let lastStripTy = null;
+
+  function getStripMetrics() {
+    const strip = document.getElementById('manhwa-strip');
+    if (!strip) return null;
+    const transform = strip.style.transform || '';
+    let ty = 0;
+    const match = transform.match(/translate(?:3d)?\([^,]+,\s*([^,)]+)/);
+    if (match) ty = parseFloat(match[1]);
+
+    const zoomScale = parseFloat(strip.style.getPropertyValue('--zoom-scale')) || 1;
+    const mountedSlots = strip.querySelectorAll('.manhwa-slot').length;
+    const topSpacer = document.getElementById('manhwa-strip-spacer-top');
+    const bottomSpacer = document.getElementById('manhwa-strip-spacer-bottom');
+    const spacerTop = topSpacer ? parseFloat(topSpacer.style.getPropertyValue('--strip-spacer-top')) || 0 : 0;
+    const spacerBottom = bottomSpacer ? parseFloat(bottomSpacer.style.getPropertyValue('--strip-spacer-bottom')) || 0 : 0;
+
+    return {
+      ty,
+      zoomScale,
+      mountedSlotCount: mountedSlots,
+      spacerTop,
+      spacerBottom,
+    };
+  }
 
   function isContentVisible() {
+    const viewport = document.getElementById('viewport');
+    if (viewport?.classList.contains('manhwa-active')) {
+      const strip = document.getElementById('manhwa-strip');
+      const mountedImg = strip?.querySelector('.manhwa-slot img');
+      if (mountedImg && mountedImg.complete && mountedImg.naturalWidth > 0) {
+        return true;
+      }
+    }
+
     const imgWrapper = document.getElementById('viewer-img-wrapper');
     const activeImg = imgWrapper?.querySelector('.viewer-img.active');
     const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge') ?? imgWrapper?.querySelector('.viewer-img.bridge');
@@ -153,10 +187,40 @@ export function createViewerPipelineProbe() {
   return {
     onStepStart(step) {
       ensureInitialized();
+      lastStripTy = null;
       hadVisibleContentAtStart = isContentVisible();
       hasRenderedContent = hadVisibleContentAtStart;
+      const strip = getStripMetrics();
+      if (strip) {
+        const diag = window.__QUIVIT_DIAGNOSTICS__;
+        diag?.recordEvent('viewer', 'strip-metrics', strip);
+      }
+    },
+    onStepStop(step) {
+      const strip = getStripMetrics();
+      if (strip) {
+        const diag = window.__QUIVIT_DIAGNOSTICS__;
+        diag?.recordEvent('viewer', 'strip-state', strip);
+      }
     },
     checkFrame(frameCtx) {
+      const viewport = document.getElementById('viewport');
+      if (viewport?.classList.contains('manhwa-active')) {
+        const strip = getStripMetrics();
+        if (strip && lastStripTy !== null) {
+          if (Math.abs(strip.ty - lastStripTy) > 40000) {
+            return {
+              type: 'ty-teleport',
+              t: frameCtx.relMs,
+              prevTy: lastStripTy,
+              currTy: strip.ty,
+              delta: Math.abs(strip.ty - lastStripTy),
+            };
+          }
+        }
+        if (strip) lastStripTy = strip.ty;
+      }
+
       const statusbarFilename = document.querySelector('#statusbar .status-filename, #statusbar .filename')?.textContent?.trim() || '';
       if (statusbarFilename === '..' || statusbarFilename.endsWith('/') || statusbarFilename.endsWith('\\')) {
         return null;

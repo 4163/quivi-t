@@ -1,0 +1,72 @@
+{
+  "name": "grill-desync",
+  "recordedAt": "2026-09-15T03:03:11.419Z",
+  "initialPath": "test-files/BAKEMONOGATARI - c013 (v03) - p002 [Kodansha Comics] [Digital] [1r0n] {HQ}.jpg",
+  "initialState": {
+    "container": "test-files",
+    "dims": "",
+    "filename": "BAKEMONOGATARI - c013 (v03) - p002 [Kodansha Comics] [Digital] [1r0n] {HQ}.jpg",
+    "format": "jpg",
+    "index": 7,
+    "isAnimated": false,
+    "isArchive": false,
+    "pipeline": {
+      "filter": "crt",
+      "fitMode": "height-if-larger",
+      "opaqueCanvas": true,
+      "scaling": "bilinear",
+      "spread": "Off",
+      "transparentBg": false,
+      "viewMode": "list"
+    },
+    "totalItems": 13
+  },
+  "actions": [
+    {
+      "action": "cmd-next",
+      "context": {
+        "container": "test-files",
+        "dims": "",
+        "filename": "BDレーベル.bmp",
+        "format": "bmp",
+        "index": 8,
+        "isAnimated": false,
+        "isArchive": false,
+        "pipeline": {
+          "filter": "crt",
+          "fitMode": "height-if-larger",
+          "opaqueCanvas": true,
+          "scaling": "bilinear",
+          "spread": "Off",
+          "transparentBg": false,
+          "viewMode": "list"
+        },
+        "totalItems": 13
+      },
+      "trigger": "command"
+    },
+    {
+      "action": "cmd-prev",
+      "context": {
+        "container": "test-files",
+        "dims": "",
+        "filename": "BAKEMONOGATARI - c013 (v03) - p002 [Kodansha Comics] [Digital] [1r0n] {HQ}.jpg",
+        "format": "jpg",
+        "index": 7,
+        "isAnimated": false,
+        "isArchive": false,
+        "pipeline": {
+          "filter": "crt",
+          "fitMode": "height-if-larger",
+          "opaqueCanvas": true,
+          "scaling": "bilinear",
+          "spread": "Off",
+          "transparentBg": false,
+          "viewMode": "list"
+        },
+        "totalItems": 13
+      },
+      "trigger": "command"
+    }
+  ]
+}

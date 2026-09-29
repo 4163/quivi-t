@@ -40,9 +40,10 @@ test-logs/
 outputlog*.txt
 
 # E2E recorded scenarios and replay diagnostics
-# E2E recorded scenarios (runtime traces, overwritten on each record)
-e2e/scenarios/*.json
-!e2e/scenarios/sample-navigation.json
+# Runtime recording traces (overwritten on each record)
+e2e/scenarios/last-recording.json
+# Scenarios with sensitive or local-only paths (e.g. local library / AppData)
+e2e/scenarios/mangadex-*.json
 # Replay diagnostic reports (generated on each diagnose, contain local absolute paths)
 # Note: e2e/replay-diagnostics/investigation.js is intentionally tracked to support multi-session investigations across commits
 e2e/replay-diagnostics/reports/

@@ -2853,7 +2853,7 @@ export const UrlLoader = {
           return;
         }
 
-        // Same directory: a changed list means sort/reload (never anchor —
+        // Same directory: a changed list means sort/reload (never anchor,
         // the walk must restart at the window top), while an unchanged list
         // with a moved index is genuine user navigation (anchor the walk).
         const listChanged = state.list !== _lastSyncList;

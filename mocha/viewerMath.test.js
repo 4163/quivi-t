@@ -13,7 +13,8 @@ import {
   computeTopAlignTy,
   computeBottomAlignTy,
   computeSlotHue,
-  computeStripFitScale
+  computeStripFitScale,
+  firstLastHighlight
 } from '../src/js/services/viewerMath.js';
 
 describe('viewerMath', () => {
@@ -444,6 +445,28 @@ describe('viewerMath', () => {
       // Top aligned to item 2 (top: 2498) with viewport height 800
       assert.deepEqual(computeWindowRange(seamOffsets, 2498, 3298), { startIndex: 2, endIndex: 2 });
     });
+
+    it('pins binary search behavior on long lists and boundary edges', () => {
+      // 50 uniform items, each 100px tall with 1px seam overlap
+      const items = Array.from({ length: 50 }, () => ({ naturalHeight: 100, naturalWidth: 800 }));
+      const { offsets } = computeColumnOffsets(items, 1, 1);
+      assert.equal(offsets.length, 50);
+
+      // Window exactly covering items 20 to 24 (exclusive boundary at item 25's top)
+      const winTop = offsets[20].top;
+      const winBottom = offsets[25].top;
+      assert.deepEqual(computeWindowRange(offsets, winTop, winBottom), { startIndex: 20, endIndex: 24 });
+
+      // Window at first item boundary (exclusive at item 1's top with seam overlap)
+      assert.deepEqual(computeWindowRange(offsets, offsets[0].top, offsets[1].top), { startIndex: 0, endIndex: 0 });
+
+      // Window at last item boundary
+      assert.deepEqual(computeWindowRange(offsets, offsets[49].top, offsets[49].bottom), { startIndex: 49, endIndex: 49 });
+
+      // Window completely above or below
+      assert.deepEqual(computeWindowRange(offsets, -500, offsets[0].top), { startIndex: -1, endIndex: -1 });
+      assert.deepEqual(computeWindowRange(offsets, offsets[49].bottom, offsets[49].bottom + 500), { startIndex: -1, endIndex: -1 });
+    });
   });
 
   describe('setDimensions on viewportState', () => {
@@ -720,6 +743,52 @@ describe('viewerMath', () => {
       });
       assert.equal(scaleWindow, (800 + 5) / 6000);
     });
+
+    it('handles single-item strip (itemCount = 1) without seam overlap offset', () => {
+      const scaleHeight = computeStripFitScale({
+        fitMode: 'height',
+        vw: 1000,
+        vh: 800,
+        maxW: 400,
+        rawSumH: 1600,
+        itemCount: 1,
+      });
+      assert.equal(scaleHeight, 800 / 1600);
+
+      const scaleHeightIfLarger = computeStripFitScale({
+        fitMode: 'height-if-larger',
+        vw: 1000,
+        vh: 800,
+        maxW: 400,
+        rawSumH: 400,
+        itemCount: 1,
+      });
+      assert.equal(scaleHeightIfLarger, 1);
+    });
+  });
+
+  describe('firstLastHighlight', () => {
+    it('returns neither for empty or single-item total', () => {
+      assert.equal(firstLastHighlight({ total: 0 }), 'neither');
+      assert.equal(firstLastHighlight({ total: 1 }), 'neither');
+      assert.equal(firstLastHighlight({ primary: 0, total: 1 }), 'neither');
+    });
+
+    it('prioritizes primary selection at index 0 or total - 1 even if whole column is visible', () => {
+      assert.equal(firstLastHighlight({ primary: 0, visStart: 0, visEnd: 9, total: 10 }), 'first');
+      assert.equal(firstLastHighlight({ primary: 9, visStart: 0, visEnd: 9, total: 10 }), 'last');
+    });
+
+    it('returns first or last when only that column end is visible', () => {
+      assert.equal(firstLastHighlight({ primary: 2, visStart: 0, visEnd: 3, total: 10 }), 'first');
+      assert.equal(firstLastHighlight({ primary: 7, visStart: 6, visEnd: 9, total: 10 }), 'last');
+      assert.equal(firstLastHighlight({ primary: 5, visStart: 4, visEnd: 6, total: 10 }), 'neither');
+    });
+
+    it('resolves tie by proximity to nearest end when both ends are visible with middle primary', () => {
+      assert.equal(firstLastHighlight({ primary: 2, visStart: 0, visEnd: 9, total: 10 }), 'first');
+      assert.equal(firstLastHighlight({ primary: 7, visStart: 0, visEnd: 9, total: 10 }), 'last');
+      assert.equal(firstLastHighlight({ primary: -1, visStart: 0, visEnd: 9, total: 10 }), 'first');
+    });
   });
 });
-

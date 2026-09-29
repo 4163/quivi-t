@@ -1898,7 +1898,7 @@ function _onStateChange(state) {
     return;
   }
 
-  // External index change (panel click/keyboard) — top align it. Ignored
+  // External index change (panel click/keyboard). Top align it. Ignored
   // while a pan is in flight: async Core notifies from heartbeat selects
   // land stale mid-hold and must not yank the strip back.
   if (!_anchorUpdateInProgress && state.index >= 0 && performance.now() - _lastPanAt > 150) {

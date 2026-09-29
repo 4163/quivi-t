@@ -1,0 +1,21 @@
+{
+  "name": "manhwa-fit-entry",
+  "initialPath": "test-files/_archives/zip.zip",
+  "initialState": {
+    "index": 0
+  },
+  "actions": [
+    "cmd-toggle-manhwa",
+    "cmd-fit-none",
+    "cmd-toggle-manhwa",
+    "cmd-fit-width",
+    "cmd-toggle-manhwa",
+    "cmd-toggle-manhwa",
+    "cmd-fit-height",
+    "cmd-toggle-manhwa",
+    "cmd-toggle-manhwa",
+    "cmd-fit-best",
+    "cmd-toggle-manhwa",
+    "cmd-toggle-manhwa"
+  ]
+}

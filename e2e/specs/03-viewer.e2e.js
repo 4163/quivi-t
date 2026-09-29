@@ -135,4 +135,30 @@ describe('03 - Viewport & Viewer Controls', () => {
     // Disable spread mode
     await menubarPage.selectSpreadMode('off');
   });
+
+  it('toggles manhwa continuous strip view and updates viewport state', async () => {
+    // Toggle manhwa mode on using shortcut 'm'
+    await browser.keys(['m']);
+    await browser.waitUntil(
+      async () => await viewerPage.isManhwaActive(),
+      { timeout: 5000, timeoutMsg: 'Viewport did not gain manhwa-active class' }
+    );
+
+    // Manhwa strip should be present and active
+    const strip = await viewerPage.manhwaStrip;
+    expect(await strip.isExisting()).toBe(true);
+
+    // Verify top and bottom spacers exist
+    const topSpacer = await viewerPage.manhwaTopSpacer;
+    const bottomSpacer = await viewerPage.manhwaBottomSpacer;
+    expect(await topSpacer.isExisting()).toBe(true);
+    expect(await bottomSpacer.isExisting()).toBe(true);
+
+    // Toggle manhwa mode off
+    await browser.keys(['m']);
+    await browser.waitUntil(
+      async () => !(await viewerPage.isManhwaActive()),
+      { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class' }
+    );
+  });
 });

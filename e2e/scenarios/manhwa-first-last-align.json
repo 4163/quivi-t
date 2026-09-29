@@ -1,0 +1,19 @@
+{
+  "name": "manhwa-first-last-align",
+  "initialPath": "test-files/_archives/zip.zip",
+  "initialState": {
+    "index": 0
+  },
+  "actions": [
+    "cmd-toggle-manhwa",
+    "cmd-fit-none",
+    "cmd-next",
+    "cmd-next",
+    "cmd-next",
+    "cmd-prev",
+    "cmd-prev",
+    "cmd-prev",
+    "cmd-fit-best",
+    "cmd-toggle-manhwa"
+  ]
+}

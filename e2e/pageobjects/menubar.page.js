@@ -49,6 +49,7 @@ class MenubarPage extends Page {
   get cmdToggleMenubar() { return $('#cmd-toggle-menubar'); }
   get cmdToggleStatusbar() { return $('#cmd-toggle-statusbar'); }
   get cmdFullscreen() { return $('#cmd-fullscreen'); }
+  get cmdToggleManhwa() { return $('#cmd-toggle-manhwa'); }
 
   async openFileMenu() {
     await this.fileTrigger.click();

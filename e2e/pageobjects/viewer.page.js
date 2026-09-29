@@ -8,6 +8,22 @@ class ViewerPage extends Page {
   get images() { return $$('#viewer-img-wrapper img.viewer-img'); }
   get lanczosCanvas() { return $('#viewer-lanczos-canvas'); }
   get filterCanvas() { return $('#viewer-filter-canvas'); }
+  get manhwaStrip() { return $('#manhwa-strip'); }
+  get manhwaSlots() { return $$('#manhwa-strip .manhwa-slot'); }
+  get manhwaTopSpacer() { return $('#manhwa-strip-spacer-top'); }
+  get manhwaBottomSpacer() { return $('#manhwa-strip-spacer-bottom'); }
+
+  async isManhwaActive() {
+    const vp = await this.viewport;
+    if (!(await vp.isExisting())) return false;
+    const classes = await vp.getAttribute('class');
+    return classes.includes('manhwa-active');
+  }
+
+  async getManhwaTransform() {
+    const strip = await this.manhwaStrip;
+    return strip.getCSSProperty('transform');
+  }
 
   async isDropOverlayVisible() {
     const overlay = await this.dropOverlay;
