@@ -40,20 +40,15 @@ export function computeColumnOffsets(items = [], zoom = 1, seamOverlapPx = 0) {
     return { widestWidth: 0, columnWidth: 0, totalHeight: 0, offsets: [] };
   }
 
-  let widestWidth = 0;
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const w = typeof item === 'number' ? 0 : ((item && (item.naturalWidth ?? item.width)) || 0);
-    if (w > widestWidth) widestWidth = w;
-  }
-
   const seam = Math.max(0, seamOverlapPx);
-  const columnWidth = widestWidth * zoom;
+  let widestWidth = 0;
   const offsets = [];
   let currentTop = 0;
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
+    const w = typeof item === 'number' ? 0 : ((item && (item.naturalWidth ?? item.width)) || 0);
+    if (w > widestWidth) widestWidth = w;
     const rawH = typeof item === 'number' ? item : ((item && (item.naturalHeight ?? item.height)) || 0);
     const h = rawH * zoom;
     const top = currentTop - i * seam;
@@ -64,6 +59,8 @@ export function computeColumnOffsets(items = [], zoom = 1, seamOverlapPx = 0) {
     });
     currentTop += h;
   }
+
+  const columnWidth = widestWidth * zoom;
 
   return {
     widestWidth,
@@ -122,24 +119,46 @@ export function computeWindowRange(offsets, windowTopY, windowBottomY) {
   if (!Array.isArray(offsets) || offsets.length === 0) {
     return { startIndex: -1, endIndex: -1 };
   }
-  const lastBottom = offsets[offsets.length - 1].bottom;
+  const n = offsets.length;
+  const lastBottom = offsets[n - 1].bottom;
   if (windowBottomY <= offsets[0].top || windowTopY >= lastBottom) {
     return { startIndex: -1, endIndex: -1 };
   }
 
-  let startIndex = -1;
-  let endIndex = -1;
   const EPSILON = 1e-4;
+  const visualBottomAt = (i) => (i < n - 1 ? offsets[i + 1].top : offsets[i].bottom);
 
-  for (let i = 0; i < offsets.length; i++) {
-    const item = offsets[i];
-    const visualBottom = (i < offsets.length - 1) ? offsets[i + 1].top : item.bottom;
-    if (visualBottom - windowTopY > EPSILON && windowBottomY - item.top > EPSILON) {
-      if (startIndex === -1) startIndex = i;
-      endIndex = i;
-    } else if (startIndex !== -1 && item.top >= windowBottomY - EPSILON) {
-      break;
+  let lo = 0;
+  let hi = n - 1;
+  let startIndex = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (visualBottomAt(mid) - windowTopY > EPSILON) {
+      startIndex = mid;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
     }
+  }
+  if (startIndex === -1) {
+    return { startIndex: -1, endIndex: -1 };
+  }
+
+  lo = startIndex;
+  hi = n - 1;
+  let firstBeyond = n;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (offsets[mid].top >= windowBottomY - EPSILON) {
+      firstBeyond = mid;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  const endIndex = firstBeyond - 1;
+  if (endIndex < startIndex) {
+    return { startIndex: -1, endIndex: -1 };
   }
 
   return { startIndex, endIndex };

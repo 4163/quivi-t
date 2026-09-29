@@ -699,7 +699,7 @@ function _updateWindow() {
   // Prefetch always runs, including the first build: the mount loop above
   // only appends decoded nodes, so window items outside the visible range
   // and the ahead item depend on this pre-decode path from the first window.
-  _prefetchAhead(startIndex, endIndex, prefetchDir, state);
+  _prefetchAhead(startIndex, endIndex, prefetchDir, state, visStart, visEnd);
 
   // Backend warm still waits one update after activate or rebuild so the
   // visible images get full CPU on cold open instead of racing warm
@@ -723,7 +723,6 @@ function _updateWindow() {
   } else {
     if (_anchorHoldover !== null) _anchorHoldover = null;
     if (anchorViewChanged) {
-      const { startIndex: visStart, endIndex: visEnd } = _computeVisibleRange();
       if (visStart !== -1 && visEnd !== -1) {
         if (visStart === visEnd) {
           newAnchor = visStart;
@@ -753,13 +752,21 @@ function _updateWindow() {
   }
 }
 
-function _prefetchAhead(startIndex, endIndex, direction, state) {
+function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, visEnd = -1) {
   const targets = [];
   // Window items outside the visible range must pre-decode off-DOM because
   // the mount loop no longer mounts them raw. Enqueue first for priority.
-  const { startIndex: visStart, endIndex: visEnd } = _computeVisibleRange();
+  // The pan path passes the already-computed visible range so a pan tick
+  // does not rescan the full chapter for it.
+  let visS = visStart;
+  let visE = visEnd;
+  if (visS === -1 || visE === -1) {
+    const vis = _computeVisibleRange();
+    visS = vis.startIndex;
+    visE = vis.endIndex;
+  }
   for (let i = startIndex; i <= endIndex; i++) {
-    if (visStart !== -1 && visEnd !== -1 && i >= visStart && i <= visEnd) continue;
+    if (visS !== -1 && visE !== -1 && i >= visS && i <= visE) continue;
     targets.push(i);
   }
   if (direction >= 0) {
@@ -1084,10 +1091,10 @@ let _lastVisSig = null;
 
 function _syncAnchorToCore() {
   const hadHoldover = _anchorHoldover !== null;
+  const { startIndex, endIndex } = _computeVisibleRange();
   if (_anchorHoldover !== null) {
-    const { startIndex: visStart, endIndex: visEnd } = _computeVisibleRange();
-    if (visStart !== -1 && visEnd !== -1) {
-      _anchorImgIdx = Math.max(visStart, Math.min(visEnd, _anchorHoldover));
+    if (startIndex !== -1 && endIndex !== -1) {
+      _anchorImgIdx = Math.max(startIndex, Math.min(endIndex, _anchorHoldover));
     }
   }
   const anchorItem = _imageIndex[_anchorImgIdx];
@@ -1101,7 +1108,6 @@ function _syncAnchorToCore() {
     dims: anchorItem.decoded && w > 0 && h > 0 ? `${w} × ${h}` : undefined,
     zoom: scale || undefined,
   });
-  const { startIndex, endIndex } = _computeVisibleRange();
   const visSig = startIndex === -1 ? '' : `${startIndex}-${endIndex}`;
   const anchorChanged = anchorItem.listIndex !== _lastSyncedListIndex;
   const visChanged = visSig !== _lastVisSig;
@@ -1712,8 +1718,11 @@ export function setViewportState(vpState) {
   _viewportState.subscribe(() => {
     if (!_active || !_strip) return;
     const scale = _viewportState.getScale() || 1;
-    if (_layoutScale === null || _layoutScale !== scale) {
+    if (_layoutScale === null || seamOverlapForScale(_layoutScale) !== seamOverlapForScale(scale)) {
       // Seam overlap depends on zoom: rebuild offsets before positioning.
+      // Offsets are built unzoomed, so only a seam change needs a rebuild.
+      // Ordinary pan and zoom ticks at or above 100% keep seam at 1px and
+      // stay on the indexed lookup path in _updateWindow.
       _updateLayout(_anchorImgIdx, _layout.offsets[_anchorImgIdx]?.top || 0);
     }
     _strip.style.transform = _viewportState.getTransform();
@@ -1861,7 +1870,7 @@ export function initManhwaStrip(viewportState) {
   const ro = new ResizeObserver(() => {
     if (!_active || !_viewportState) return;
     const scale = _viewportState.getScale() || 1;
-    if (_layoutScale === null || _layoutScale !== scale) {
+    if (_layoutScale === null || seamOverlapForScale(_layoutScale) !== seamOverlapForScale(scale)) {
       _updateLayout(_anchorImgIdx, _layout.offsets[_anchorImgIdx]?.top || 0);
     }
     _applyFitMode(Core.getState()?.fitMode || _lastFitMode, _anchorImgIdx, _anchorHoldoverAlignTop);
