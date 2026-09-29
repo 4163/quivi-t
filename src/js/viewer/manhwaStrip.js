@@ -1934,6 +1934,14 @@ export function setViewportState(vpState) {
     // inside _viewportProgram would start mount flights at a transient ty,
     // whose slots get evicted when the next tick shifts the visible range.
     if (_viewportProgram === 0) {
+      // During a manhwa-off toggle, the single-image viewer rewrites the
+      // shared viewport state before _deactivate runs. The massive ty delta
+      // from single-image geometry would clear the holdover and re-derive
+      // the anchor to center. Gate on Core state to avoid clobbering the
+      // index while deactivation is pending.
+      const s = Core.getState();
+      const stillManhwa = !!(s.manhwaEnabled ?? s.config?.frontend_data?.manhwa_enabled);
+      if (!stillManhwa) return;
       _updateWindow();
       _scheduleSettle();
     }

@@ -93,6 +93,16 @@ In `none` (natural size) mode, navigating to the first or last image centered in
 - [x] `navigateManhwa` now calls `alignListItemBottom` for the last image instead of `alignListItemTop`. (`src/js/viewer/manhwaStrip.js:1522-1524`).
 - [x] External index change in `_onStateChange` (panel click/keyboard) now bottom-aligns the last image. (`src/js/viewer/manhwaStrip.js:1907-1911`).
 
+## Post-slice fix: fit-none anchor clobber on manhwa toggle-off
+
+**Status:** `[x]` Done 2026-09-29, user-confirmed.
+
+Toggling manhwa off after pressing R (fit none) jumped the page index to center (~62 of 126) instead of staying on the original page. Root cause traced with `[ANCHOR]` logs (removed after diagnosis).
+
+When M toggles manhwa off, `Core.notify` fires. The single-image viewer (`viewerRender.js`) reacts first and calls `applyFitMode` on the shared viewport state, producing a massive ty delta (~75,000px). The manhwa strip's viewport subscriber was still active (`_active = true`, `_deactivate` hadn't run yet). It saw the delta, cleared the holdover, re-derived the anchor to center, and synced `Core.selectIndex(63)`.
+
+- [x] **Subscriber Core-state gate.** The viewport subscriber now checks `Core.getState().manhwaEnabled` before running `_updateWindow` / `_scheduleSettle` when `_viewportProgram === 0`. When manhwa is already disabled in Core (but `_deactivate` hasn't run yet), the subscriber skips the update, preventing holdover clearing and anchor re-derivation. (`src/js/viewer/manhwaStrip.js:1942-1949`).
+
 ## Slice 5. Keep the test suites and replay loop current
 
 **Status:** `[ ]`
