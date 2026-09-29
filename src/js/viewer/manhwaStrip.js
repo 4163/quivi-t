@@ -748,7 +748,14 @@ function _updateWindow() {
     if (_anchorHoldover !== null) _anchorHoldover = null;
     if (anchorViewChanged) {
       if (visStart !== -1 && visEnd !== -1) {
-        if (visStart === visEnd) {
+        // When the primary selection sits at a column edge and is still
+        // visible, hold that edge during zoom instead of drifting to center.
+        const primaryImgIdx = _listToImgIdx.get(Core.getState()?.index);
+        const last = _imageIndex.length - 1;
+        if (primaryImgIdx !== undefined && (primaryImgIdx === 0 || primaryImgIdx === last) &&
+            primaryImgIdx >= visStart && primaryImgIdx <= visEnd) {
+          newAnchor = primaryImgIdx;
+        } else if (visStart === visEnd) {
           newAnchor = visStart;
         } else {
           const candidate = findAnchorIndex(_layout.offsets, centerColY);
@@ -1186,9 +1193,9 @@ export function getVisibleImageIndices() {
   return listIndices;
 }
 
-/** Width fits open top-aligned; every other fit centers the anchor on fit
- * application. Top placement belongs to file-list selection only
- * (click and arrow navigation pin the picked image top). */
+/** Width and window fits latch to top or bottom when an end is highlighted;
+ * every other fit centers the anchor on fit application. */
+const LATCH_FIT_MODES = ['width', 'width-if-larger', 'window', 'window-if-larger'];
 const STRIP_TOP_ALIGN_FITS = ['width', 'width-if-larger'];
 
 /** Height-family fits clamp to the active image on entry instead of fitting
@@ -1221,7 +1228,8 @@ function _armEntryRefresh(entry) {
 function _firstLastEdge() {
   const total = _imageIndex.length;
   if (total === 0) return 'neither';
-  const primary = _listToImgIdx.get(Core.getState()?.index);
+  const rawPrimary = _listToImgIdx.get(Core.getState()?.index);
+  const primary = (rawPrimary !== undefined && rawPrimary >= 0) ? rawPrimary : _anchorImgIdx;
   const { startIndex, endIndex } = _computeVisibleRange();
   return firstLastHighlight({
     primary: primary ?? -1,
@@ -1266,18 +1274,22 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   const fitMode = mode || Core.getState()?.fitMode || 'none';
 
   // Decide first/last alignment on the highlighted state, before the zoom
-  // below moves the visible window. A settle sync first repaints the panel
-  // from live state so a storm-stale highlight cannot decide.
-  let edgeForFitKey = 'neither';
-  if (targetImgIdx === null && (fitMode === 'none' || fitMode === 'width' || fitMode === 'width-if-larger')) {
-    _syncAnchorToCore();
-    edgeForFitKey = _firstLastEdge();
+  // below moves the visible window.
+  if (targetImgIdx === null && LATCH_FIT_MODES.includes(fitMode)) {
+    const edge = _firstLastEdge();
+    if (edge === 'first' && _layout.offsets[0]) {
+      targetImgIdx = 0;
+      alignTop = true;
+    } else if (edge === 'last' && _layout.offsets[_imageIndex.length - 1]) {
+      targetImgIdx = _imageIndex.length - 1;
+      alignTop = false;
+    }
   }
 
   // Entry has no meaningful visible range yet (leftover single-image view),
   // so only the primary selection counts here. Fit-key presses above use
   // the full highlight check with secondaries.
-  if (entry && (fitMode === 'none' || fitMode === 'width' || fitMode === 'width-if-larger')) {
+  if (entry && LATCH_FIT_MODES.includes(fitMode)) {
     const total = _imageIndex.length;
     const primary = _listToImgIdx.get(Core.getState()?.index);
     if (total > 1 && primary === 0 && _layout.offsets[0]) {
@@ -1321,55 +1333,55 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   _anchorHoldover = anchorIdx >= 0 ? anchorIdx : null;
   _anchorHoldoverScale = targetScale;
   _anchorHoldoverAlignTop = !!alignTop;
+  if (targetImgIdx !== null) {
+    _anchorImgIdx = targetImgIdx;
+    if (_imageIndex[targetImgIdx]) {
+      _anchorUpdateInProgress = true;
+      Core.selectIndex(_imageIndex[targetImgIdx].listIndex);
+      _anchorUpdateInProgress = false;
+    }
+  }
 
   _viewportState.zoomTo(targetScale, vw / 2, vh / 2);
   const colH = (_layout.totalHeight || 0) * targetScale;
 
-  if (targetImgIdx === null) {
-    if (edgeForFitKey === 'first' && _layout.offsets[0]) {
-      _anchorHoldover = 0;
-      _anchorHoldoverAlignTop = true;
-      _topAlignColumnY(_layout.offsets[0].top, 0);
-    } else if (edgeForFitKey === 'last' && _layout.offsets[_imageIndex.length - 1]) {
-      const lastIdx = _imageIndex.length - 1;
-      _anchorHoldover = lastIdx;
-      _anchorHoldoverAlignTop = false;
-      _bottomAlignColumnY(_layout.offsets[lastIdx].bottom, 0);
-    } else if (colH <= vh + 0.5) {
-      _lastTy = Math.abs(colH - vh) / 2;
-      _lastAnchorTy = _lastTy;
-      _viewportState.panTo(0, _lastTy);
+  if (targetImgIdx !== null) {
+    if (alignTop) {
+      if (_layout.offsets[targetImgIdx]) {
+        _topAlignColumnY(_layout.offsets[targetImgIdx].top, 0);
+      } else if (colH <= vh + 0.5) {
+        _lastTy = Math.abs(colH - vh) / 2;
+        _lastAnchorTy = _lastTy;
+        _viewportState.panTo(0, _lastTy);
+      }
     } else {
-      _lastTy = _viewportState.getTy();
-      _lastAnchorTy = _lastTy;
-      _viewportState.panTo(0, _lastTy);
+      if (targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
+        _bottomAlignColumnY(_layout.offsets[targetImgIdx].bottom, 0);
+      } else if (colH <= vh + 0.5) {
+        _lastTy = Math.abs(colH - vh) / 2;
+        _lastAnchorTy = _lastTy;
+        _viewportState.panTo(0, _lastTy);
+      } else if (_layout.offsets[targetImgIdx]) {
+        _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
+      }
     }
-  } else if (alignTop) {
-    if (_layout.offsets[targetImgIdx]) {
-      _topAlignColumnY(_layout.offsets[targetImgIdx].top, 0);
-    } else if (colH <= vh + 0.5) {
-      _lastTy = Math.abs(colH - vh) / 2;
-      _lastAnchorTy = _lastTy;
-      _viewportState.panTo(0, _lastTy);
-    }
+  } else if (colH <= vh + 0.5) {
+    _lastTy = Math.abs(colH - vh) / 2;
+    _lastAnchorTy = _lastTy;
+    _viewportState.panTo(0, _lastTy);
   } else {
-    if (targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
-      _lastTy = -Math.abs(colH - vh) / 2;
-      _lastAnchorTy = _lastTy;
-      _viewportState.panTo(0, _lastTy);
-    } else if (colH <= vh + 0.5) {
-      _lastTy = Math.abs(colH - vh) / 2;
-      _lastAnchorTy = _lastTy;
-      _viewportState.panTo(0, _lastTy);
-    } else if (_layout.offsets[targetImgIdx]) {
-      _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
-    }
+    _lastTy = _viewportState.getTy();
+    _lastAnchorTy = _lastTy;
+    _viewportState.panTo(0, _lastTy);
   }
 
   _strip.style.transform = _viewportState.getTransform();
   _strip.style.setProperty('--zoom-scale', targetScale);
   _updateGrillAngles();
   _updateWindow();
+  if (targetImgIdx !== null) {
+    _syncAnchorToCore();
+  }
   _scheduleSettle();
   } finally {
     _viewportProgram--;

@@ -170,11 +170,18 @@ export function computeWindowRange(offsets, windowTopY, windowBottomY) {
  * or 'neither'. Both ends highlighted means keep position.
  */
 export function firstLastHighlight({ primary = -1, visStart = -1, visEnd = -1, total = 0 } = {}) {
-  if (!total || total <= 0) return 'neither';
+  if (!total || total <= 1) return 'neither';
   const last = total - 1;
-  const firstHit = primary === 0 || (visStart !== -1 && visStart <= 0 && visEnd >= 0);
-  const lastHit = primary === last || (visStart !== -1 && visStart <= last && visEnd >= last);
-  if (firstHit && lastHit) return 'both';
+  // Primary selection outranks everything: a selected end clamps even when
+  // the whole column is visible. Secondaries only decide below this.
+  const firstHit = (primary === 0) || (visStart !== -1 && visStart <= 0 && visEnd >= 0);
+  const lastHit = (primary === last) || (visStart !== -1 && visStart <= last && visEnd >= last);
+  if (firstHit && lastHit) {
+    if (primary !== -1) {
+      return (last - primary) < (primary - 0) ? 'last' : 'first';
+    }
+    return 'first';
+  }
   if (firstHit) return 'first';
   if (lastHit) return 'last';
   return 'neither';
