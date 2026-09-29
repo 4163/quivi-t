@@ -27,7 +27,7 @@ const viewportState = createViewportState({
 });
 
 const pipelines = createViewerPipelines(viewportState);
-createViewerRenderer(viewportState, (img) => {
+const renderer = createViewerRenderer(viewportState, (img) => {
   if (img) pipelines.setSource(img);
   else pipelines.clear();
 });
@@ -93,5 +93,9 @@ export const Viewer = {
     viewportState.applyFitMode('none');
     viewportState.zoomTo(exactScale, c.x, c.y);
   },
-  toggleCursorAutoHide: () => gestures.toggleCursorAutoHide()
+  toggleCursorAutoHide: () => gestures.toggleCursorAutoHide(),
+  parkInBridge: (node, geom, autoRetire) => renderer?.parkInBridge(node, geom, autoRetire),
+  releaseBridge: () => renderer?.releaseBridge(),
+  isBridgeActive: () => renderer?.isBridgeActive?.() || false,
+  getActiveImage: () => renderer?.getActiveImage?.() || null
 };

@@ -55,6 +55,14 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   let _loadingDots = 0;
   let _retiringNode = null;
   let _retireRaf = null;
+  let _bridgeFallbackTimer = null;
+
+  function _clearBridgeFallback() {
+    if (_bridgeFallbackTimer) {
+      clearTimeout(_bridgeFallbackTimer);
+      _bridgeFallbackTimer = null;
+    }
+  }
   let _lastRenderedIsAnimated = false;
   let _lastRenderedArchivePath = null;
   let _activeVideoSrc = null;
@@ -134,30 +142,47 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     }, 120);
   }
 
-  function _parkNodeInBridge(node) {
-    const frozen = viewportState.getGeometry ? viewportState.getGeometry() : null;
+  function _parkNodeInBridge(node, explicitGeometry = null, autoRetire = true) {
+    if (!node) return;
+    const frozen = explicitGeometry || (viewportState.getGeometry ? viewportState.getGeometry() : null);
     _cancelRetiringNode();
     if (node.tagName === 'VIDEO') node.pause();
     node.classList.remove('active');
     if (frozen && bridgeLayer) {
-      node.style.setProperty('--bridge-tx', `${frozen.tx}px`);
-      node.style.setProperty('--bridge-ty', `${frozen.ty}px`);
-      node.style.setProperty('--bridge-rot', `${frozen.rotation}deg`);
-      node.style.setProperty('--bridge-sx', `${frozen.flipX * frozen.scale}`);
-      node.style.setProperty('--bridge-sy', `${frozen.flipY * frozen.scale}`);
+      const rot = frozen.rotation || 0;
+      const flipX = frozen.flipX !== undefined ? frozen.flipX : 1;
+      const flipY = frozen.flipY !== undefined ? frozen.flipY : 1;
+      const scale = frozen.scale !== undefined ? frozen.scale : 1;
+      const sx = frozen.sx !== undefined ? frozen.sx : (flipX * scale);
+      const sy = frozen.sy !== undefined ? frozen.sy : (flipY * scale);
+      node.style.setProperty('--bridge-tx', `${frozen.tx || 0}px`);
+      node.style.setProperty('--bridge-ty', `${frozen.ty || 0}px`);
+      node.style.setProperty('--bridge-rot', `${rot}deg`);
+      node.style.setProperty('--bridge-sx', `${sx}`);
+      node.style.setProperty('--bridge-sy', `${sy}`);
       bridgeLayer.appendChild(node);
     }
     node.classList.add('bridge');
     _retiringNode = node;
-    _retireRaf = requestAnimationFrame(() => {
+    if (autoRetire) {
       _retireRaf = requestAnimationFrame(() => {
+        _retireRaf = requestAnimationFrame(() => {
+          if (_retiringNode === node) {
+            _releaseBridgeNode(node);
+            _retiringNode = null;
+          }
+          _retireRaf = null;
+        });
+      });
+    } else {
+      _clearBridgeFallback();
+      _bridgeFallbackTimer = setTimeout(() => {
         if (_retiringNode === node) {
           _releaseBridgeNode(node);
           _retiringNode = null;
         }
-        _retireRaf = null;
-      });
-    });
+      }, 1200);
+    }
   }
 
   function _swapInVideo(incoming, state) {
@@ -228,12 +253,15 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     node.style.removeProperty('--bridge-rot');
     node.style.removeProperty('--bridge-sx');
     node.style.removeProperty('--bridge-sy');
-    if (imgWrapper && node.parentElement !== imgWrapper && !node.classList.contains('is-placeholder')) {
+    if (node.dataset?.borrowedBridge === 'true') {
+      node.remove();
+    } else if (imgWrapper && node.parentElement !== imgWrapper && !node.classList.contains('is-placeholder')) {
       imgWrapper.appendChild(node);
     }
   }
 
   function _cancelRetiringNode() {
+    _clearBridgeFallback();
     if (_retireRaf) {
       cancelAnimationFrame(_retireRaf);
       _retireRaf = null;
@@ -753,4 +781,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       Statusbar.setZoom(viewportState.getScale());
     }
   });
+
+  return {
+    parkInBridge: (node, explicitGeometry = null, autoRetire = true) => _parkNodeInBridge(node, explicitGeometry, autoRetire),
+    releaseBridge: () => _cancelRetiringNode(),
+    isBridgeActive: () => !!_retiringNode,
+    getActiveImage: () => img,
+  };
 }

@@ -1576,7 +1576,6 @@ li:hover>.favorite-remove,
 
 /* Hide single-image viewer elements while the strip is active */
 #viewport.manhwa-active #viewer-img-wrapper,
-#viewport.manhwa-active #viewer-bridge-layer,
 #viewport.manhwa-active #viewer-lanczos-canvas,
 #viewport.manhwa-active #viewer-filter-canvas,
 #viewport.manhwa-active #viewer-svg-pump,
