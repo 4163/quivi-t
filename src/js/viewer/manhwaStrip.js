@@ -12,7 +12,7 @@ import { Core } from '../core.js';
 import { BoundedMap } from '../services/cache.js';
 import { FsUtils } from '../fsUtils.js';
 import { getCachedArchiveBlob } from '../services/archiveImageCache.js';
-import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale } from '../services/viewerMath.js';
+import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale, firstLastHighlight } from '../services/viewerMath.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 /** Max img nodes kept in the free pool after eviction. */
@@ -454,9 +454,12 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
       }
     }
 
-    _lastTy = targetTy;
-    _lastAnchorTy = targetTy;
     _viewportState.setDimensions(_layout.widestWidth, _layout.totalHeight, _viewportState.getTx(), targetTy);
+    // Track what the viewport kept, not what was asked. Clamping inside
+    // setDimensions would otherwise read back as a phantom manual pan that
+    // clears the holdover and re-derives the anchor on the next pass.
+    _lastTy = _viewportState.getTy();
+    _lastAnchorTy = _lastTy;
     _strip.style.transform = _viewportState.getTransform();
     _strip.style.setProperty('--strip-width', `${_layout.widestWidth}px`);
     _updateGrillAngles();
@@ -1199,6 +1202,21 @@ function _armEntryRefresh() {
   _entryRefreshArmedAt = performance.now();
 }
 
+/** Which column end is highlighted, primary or secondary. Strict: only a
+ * highlight on the first or last image counts, never proximity. */
+function _firstLastEdge() {
+  const total = _imageIndex.length;
+  if (total === 0) return 'neither';
+  const primary = _listToImgIdx.get(Core.getState()?.index);
+  const { startIndex, endIndex } = _computeVisibleRange();
+  return firstLastHighlight({
+    primary: primary ?? -1,
+    visStart: startIndex,
+    visEnd: endIndex,
+    total,
+  });
+}
+
 /** Resolve the opening anchor. Honors open_first_image off: an index with
  * no image mapping holds no anchor (-1), leaving the drop overlay up
  * instead of forcing the first image. */
@@ -1226,6 +1244,30 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   if (!_active || !_viewportState || !_viewport || _imageIndex.length === 0) return;
   if (!entry) _disarmEntryRefresh();
   const fitMode = mode || Core.getState()?.fitMode || 'none';
+
+  // Decide first/last alignment on the highlighted state, before the zoom
+  // below moves the visible window. A settle sync first repaints the panel
+  // from live state so a storm-stale highlight cannot decide.
+  let edgeForFitKey = 'neither';
+  if (targetImgIdx === null && (fitMode === 'none' || fitMode === 'width' || fitMode === 'width-if-larger')) {
+    _syncAnchorToCore();
+    edgeForFitKey = _firstLastEdge();
+  }
+
+  // Entry has no meaningful visible range yet (leftover single-image view),
+  // so only the primary selection counts here. Fit-key presses above use
+  // the full highlight check with secondaries.
+  if (entry && (fitMode === 'none' || fitMode === 'width' || fitMode === 'width-if-larger')) {
+    const total = _imageIndex.length;
+    const primary = _listToImgIdx.get(Core.getState()?.index);
+    if (total > 1 && primary === 0 && _layout.offsets[0]) {
+      targetImgIdx = 0;
+      alignTop = true;
+    } else if (total > 1 && primary === total - 1 && _layout.offsets[total - 1]) {
+      targetImgIdx = total - 1;
+      alignTop = false;
+    }
+  }
 
   const vw = _viewport.clientWidth || 800;
   const vh = _viewport.clientHeight || 800;
@@ -1264,7 +1306,16 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   const colH = (_layout.totalHeight || 0) * targetScale;
 
   if (targetImgIdx === null) {
-    if (colH <= vh + 0.5) {
+    if (edgeForFitKey === 'first' && _layout.offsets[0]) {
+      _anchorHoldover = 0;
+      _anchorHoldoverAlignTop = true;
+      _topAlignColumnY(_layout.offsets[0].top, 0);
+    } else if (edgeForFitKey === 'last' && _layout.offsets[_imageIndex.length - 1]) {
+      const lastIdx = _imageIndex.length - 1;
+      _anchorHoldover = lastIdx;
+      _anchorHoldoverAlignTop = false;
+      _bottomAlignColumnY(_layout.offsets[lastIdx].bottom, 0);
+    } else if (colH <= vh + 0.5) {
       _lastTy = Math.abs(colH - vh) / 2;
       _lastAnchorTy = _lastTy;
       _viewportState.panTo(0, _lastTy);

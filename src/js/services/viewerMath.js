@@ -165,6 +165,22 @@ export function computeWindowRange(offsets, windowTopY, windowBottomY) {
 }
 
 /**
+ * Answer which column end is highlighted: primary image index, visible
+ * image-index range, and total count in. Returns 'first', 'last', 'both',
+ * or 'neither'. Both ends highlighted means keep position.
+ */
+export function firstLastHighlight({ primary = -1, visStart = -1, visEnd = -1, total = 0 } = {}) {
+  if (!total || total <= 0) return 'neither';
+  const last = total - 1;
+  const firstHit = primary === 0 || (visStart !== -1 && visStart <= 0 && visEnd >= 0);
+  const lastHit = primary === last || (visStart !== -1 && visStart <= last && visEnd >= last);
+  if (firstHit && lastHit) return 'both';
+  if (firstHit) return 'first';
+  if (lastHit) return 'last';
+  return 'neither';
+}
+
+/**
  * Compute the vertical pan (ty) so that a slot top lands at the viewport top.
  * When the column is shorter than the viewport, pins to the top of the column.
  * When the column is taller, clamps between the top pin and bottom pin.
