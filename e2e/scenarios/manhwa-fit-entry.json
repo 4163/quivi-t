@@ -2,7 +2,7 @@
   "name": "manhwa-fit-entry",
   "initialPath": "test-files/_archives/zip.zip",
   "initialState": {
-    "index": 0
+    "index": 1
   },
   "actions": [
     "cmd-toggle-manhwa",

@@ -149,6 +149,7 @@ export function initReplayDiagnostics() {
   }
 
   function stopStep() {
+    _activeMonitoring = false;
     if (_rafId) {
       cancelAnimationFrame(_rafId);
       _rafId = null;
@@ -168,7 +169,6 @@ export function initReplayDiagnostics() {
         }
       }
     }
-    _activeMonitoring = false;
 
     const blackoutDetails = _anomalies.filter((a) => a.type === 'blackout');
     const currentFilename = document.querySelector('#statusbar .status-filename, #statusbar .filename')?.textContent?.trim() || '';
@@ -358,12 +358,15 @@ export function initReplayDiagnostics() {
     };
   }
 
+  let _sessionHadRenderedContent = false;
+
   function _isViewerContentVisible() {
     const viewport = document.getElementById('viewport');
     if (viewport?.classList.contains('manhwa-active')) {
       const strip = document.getElementById('manhwa-strip');
       const mountedImg = strip?.querySelector('.manhwa-slot img');
       if (mountedImg && mountedImg.complete && mountedImg.naturalWidth > 0) {
+        _sessionHadRenderedContent = true;
         return true;
       }
     }
@@ -392,7 +395,9 @@ export function initReplayDiagnostics() {
     const hasBridgeVideo = !!(bridgeVideo && bridgeVideoOpacity > 0 && bridgeVideo.readyState >= 2);
     const hasCanvas = (lanczosReady && lanczosOpacity > 0) || (filterReady && filterOpacity > 0);
 
-    return hasActive || hasBridge || hasActiveVideo || hasBridgeVideo || hasCanvas;
+    const visible = hasActive || hasBridge || hasActiveVideo || hasBridgeVideo || hasCanvas;
+    if (visible) _sessionHadRenderedContent = true;
+    return visible;
   }
 
   function _initViewerProbe() {
@@ -538,7 +543,7 @@ export function initReplayDiagnostics() {
         _hasRenderedContent = true;
       }
 
-      const isBlackout = !isVisible && (_hadVisibleContentAtStart || _hasRenderedContent);
+      const isBlackout = !isVisible && (_hadVisibleContentAtStart || _hasRenderedContent || _sessionHadRenderedContent);
       if (!isBlackout) return null;
 
       const imgWrapper = document.getElementById('viewer-img-wrapper');
@@ -643,82 +648,6 @@ export function initReplayDiagnostics() {
   registerProbe('ipc-protocol', {
     onStepStart() {
       _initIpcProbe();
-    },
-  });
-
-  // =========================================================================
-  // 5. MANHWA STRIP BUFFER PROBE
-  // =========================================================================
-  registerProbe('manhwa-buffer', {
-    checkFrame(frameCtx) {
-      const viewport = document.getElementById('viewport');
-      if (!viewport || !viewport.classList.contains('manhwa-active')) return null;
-      const vpRect = viewport.getBoundingClientRect();
-      const slots = document.querySelectorAll('.manhwa-slot');
-      for (const slot of slots) {
-        const rect = slot.getBoundingClientRect();
-        if (rect.bottom > vpRect.top + 1 && rect.top < vpRect.bottom - 1) {
-          const img = slot.querySelector('img');
-          const imgIdx = parseInt(slot.dataset.imgIdx, 10);
-          if (!img) {
-            return {
-              type: 'manhwa-visible-unmounted',
-              imgIdx,
-              slotTop: Math.round(rect.top),
-              slotBottom: Math.round(rect.bottom),
-              vpTop: Math.round(vpRect.top),
-              vpBottom: Math.round(vpRect.bottom),
-            };
-          }
-          if (!img.complete || img.naturalWidth === 0) {
-            return {
-              type: 'manhwa-visible-incomplete',
-              imgIdx,
-              complete: img.complete,
-              naturalWidth: img.naturalWidth,
-              src: img.src ? img.src.slice(-40) : null,
-            };
-          }
-        }
-      }
-      return null;
-    },
-    onStepStop(step) {
-      const viewport = document.getElementById('viewport');
-      const strip = document.getElementById('manhwa-strip');
-      if (!strip || !viewport) return;
-      const vpRect = viewport.getBoundingClientRect();
-      const slots = Array.from(strip.querySelectorAll('.manhwa-slot'));
-      const visibleSlots = [];
-      const mounted = [];
-
-      for (const slot of slots) {
-        const rect = slot.getBoundingClientRect();
-        const imgIdx = parseInt(slot.dataset.imgIdx, 10);
-        const isVis = rect.bottom > vpRect.top + 1 && rect.top < vpRect.bottom - 1;
-        if (isVis) visibleSlots.push(imgIdx);
-
-        const img = slot.querySelector('img');
-        if (img) {
-          mounted.push({
-            imgIdx,
-            complete: img.complete,
-            nw: img.naturalWidth,
-            nh: img.naturalHeight,
-            src: img.src ? img.src.split('?')[0].slice(-35) : null,
-          });
-        }
-      }
-
-      recordEvent('manhwa', 'strip-step-snapshot', {
-        stepIndex: step.stepIndex,
-        actionId: step.actionId,
-        visibleSlots,
-        mountedIndices: mounted.map((m) => m.imgIdx),
-        mounted,
-        totalSlots: slots.length,
-        manhwaActive: viewport.classList.contains('manhwa-active'),
-      });
     },
   });
 
