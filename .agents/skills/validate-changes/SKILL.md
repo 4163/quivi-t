@@ -1,7 +1,7 @@
 ---
 name: validate-changes
 description: "Trigger only when asked to 'validate'. Runs an architectural review against AGENTS.md and checks for stale code and references. Do not use this for general slice completion, instead use verify-implementation."
-argument-hint: "<files, diff, branch, or working tree>"
+argument-hint: "<target file, diff, commit range, branch, or working tree>"
 ---
 
 # Validate changes
@@ -14,10 +14,11 @@ Use this skill to run a strict compliance check of code changes against the repo
 
 ## Workflow
 
-1. **Scope the Review:**
-   Identify what you are reviewing based on the user's request (e.g., the current working tree, staged changes, or a specific commit range/branch).
-   - Use `git status`, `git diff`, or `git diff --cached` to gather the code changes.
-   - If the diff is large, focus on files that affect core logic, architecture, UI, and performance.
+1. **Scope the review.** Determine what to check:
+   - **File as an anchor.** Use the specified file to find where a slice began: run `git log <upstream> --full-history --oneline -- "*<name>*"`. The review covers all code changed across that range: `git diff <commit>^..HEAD -- ":(exclude)*.md"`.
+   - **Branch or commit range.** Run `git diff <range>` or `git diff <base>..HEAD`.
+   - **Working tree.** Run `git diff` or `git diff --cached`.
+   If the diff is large, focus on core logic, architecture boundaries, UI lifecycles, and performance.
 
 2. **Review Against `.agents/AGENTS.md`:**
     Read and cross-reference the changes specifically against the guidelines in `.agents/AGENTS.md`. Pay special attention to:
