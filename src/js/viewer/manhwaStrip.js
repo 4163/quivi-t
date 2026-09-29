@@ -1162,6 +1162,10 @@ export function getVisibleImageIndices() {
 /** Width-family fits open top-aligned; other fits keep existing centering. */
 const STRIP_TOP_ALIGN_FITS = ['width', 'width-if-larger', 'window', 'window-if-larger'];
 
+/** Height-family fits clamp to the active image on entry instead of fitting
+ * the whole column. The user looks at one image when the strip opens. */
+const ENTRY_ACTIVE_FITS = ['height', 'height-if-larger', 'window', 'window-if-larger'];
+
 /** Resolve the opening anchor. Honors open_first_image off: an index with
  * no image mapping holds no anchor (-1), leaving the drop overlay up
  * instead of forcing the first image. */
@@ -1185,18 +1189,27 @@ let _lastAnchorTy = null;
 let _lastAnchorScale = null;
 let _lastAnchorVph = null;
 
-function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
+function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = false) {
   if (!_active || !_viewportState || !_viewport || _imageIndex.length === 0) return;
   const fitMode = mode || Core.getState()?.fitMode || 'none';
 
-  const maxW = (_layout.widestWidth && _layout.widestWidth > 0) ? _layout.widestWidth : DEFAULT_ESTIMATED_WIDTH;
   const vw = _viewport.clientWidth || 800;
   const vh = _viewport.clientHeight || 800;
 
+  let maxW = (_layout.widestWidth && _layout.widestWidth > 0) ? _layout.widestWidth : DEFAULT_ESTIMATED_WIDTH;
   let rawSumH = 0;
-  for (let i = 0; i < _imageIndex.length; i++) {
-    const item = _imageIndex[i];
-    rawSumH += typeof item === 'number' ? item : ((item && (item.naturalHeight ?? item.height)) || DEFAULT_ESTIMATED_HEIGHT);
+  let itemCount = _imageIndex.length;
+  const anchorIdxForEntry = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
+  const activeItem = (entry && ENTRY_ACTIVE_FITS.includes(fitMode)) ? _imageIndex[anchorIdxForEntry] : null;
+  if (activeItem) {
+    maxW = activeItem.naturalWidth || DEFAULT_ESTIMATED_WIDTH;
+    rawSumH = activeItem.naturalHeight || DEFAULT_ESTIMATED_HEIGHT;
+    itemCount = 1;
+  } else {
+    for (let i = 0; i < _imageIndex.length; i++) {
+      const item = _imageIndex[i];
+      rawSumH += typeof item === 'number' ? item : ((item && (item.naturalHeight ?? item.height)) || DEFAULT_ESTIMATED_HEIGHT);
+    }
   }
 
   const targetScale = computeStripFitScale({
@@ -1205,7 +1218,7 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false) {
     vh,
     maxW,
     rawSumH,
-    itemCount: _imageIndex.length,
+    itemCount,
   });
 
   const anchorIdx = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
@@ -1512,7 +1525,7 @@ function _activate(state) {
     _applyFitMode(_lastFitMode);
     return;
   }
-  _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode));
+  _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), true);
 
   _updateWindow();
   _scheduleSettle();
@@ -1696,7 +1709,7 @@ function _onStateChange(state) {
       _applyFitMode(_lastFitMode);
       return;
     }
-    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode));
+    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), true);
 
     _updateWindow();
     _scheduleSettle();
