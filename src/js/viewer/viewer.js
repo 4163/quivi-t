@@ -2,7 +2,7 @@ import { createViewportState } from '../services/viewerMath.js';
 import { createViewerRenderer } from './viewerRender.js';
 import { createViewerGestures } from './viewerGestures.js';
 import { createViewerPipelines } from './viewerPipelines.js';
-import { isManhwaStripActive, initManhwaStrip, isStripAtTop, triggerRevealListTop } from './manhwaStrip.js';
+import { isManhwaStripActive, initManhwaStrip, isStripAtTop, triggerRevealListTop, resetZoom as resetStripZoom } from './manhwaStrip.js';
 
 
 let _cachedViewport = { clientWidth: 1000, clientHeight: 1000, left: 0, top: 0 };
@@ -87,6 +87,7 @@ export const Viewer = {
     viewportState.flip('y');
   },
   setZoom: (exactScale) => {
+    if (isManhwaStripActive() && resetStripZoom(exactScale)) return;
     const c = _getViewportCenter();
     if (!c) return;
     viewportState.applyFitMode('none');

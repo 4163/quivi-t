@@ -1460,6 +1460,50 @@ export function centerListItem(listIndex) {
   return true;
 }
 
+/** Zoom to exactScale while keeping the current anchor and Y position.
+ * Called from Viewer.setZoom when the strip is active so reset (X) does
+ * not jump to the column center. */
+export function resetZoom(exactScale) {
+  if (!_active || !_viewportState || !_viewport) return false;
+  _viewportProgram++;
+  try {
+    const vw = _viewport.clientWidth || 800;
+    const vh = _viewport.clientHeight || 800;
+
+    _anchorHoldover = _anchorImgIdx >= 0 ? _anchorImgIdx : null;
+    _anchorHoldoverScale = exactScale;
+
+    _viewportState.zoomTo(exactScale, vw / 2, vh / 2);
+
+    // Re-pin the anchor at its current offset so ty stays stable.
+    if (_anchorHoldover !== null && _layout.offsets[_anchorHoldover]) {
+      if (_anchorHoldoverAlignTop) {
+        _topAlignColumnY(_layout.offsets[_anchorHoldover].top, 0);
+      } else {
+        const colH = (_layout.totalHeight || 0) * exactScale;
+        if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
+          _bottomAlignColumnY(_layout.offsets[_anchorHoldover].bottom, 0);
+        } else if (colH <= vh + 0.5) {
+          _lastTy = Math.abs(colH - vh) / 2;
+          _lastAnchorTy = _lastTy;
+          _viewportState.panTo(0, _lastTy);
+        } else {
+          _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2, 0);
+        }
+      }
+    }
+
+    _strip.style.transform = _viewportState.getTransform();
+    _strip.style.setProperty('--zoom-scale', exactScale);
+    _updateGrillAngles();
+    _updateWindow();
+    _scheduleSettle();
+  } finally {
+    _viewportProgram--;
+  }
+  return true;
+}
+
 export function getFirstImageIndex() {
   return _imageIndex[0]?.listIndex ?? -1;
 }
