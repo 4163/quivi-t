@@ -74,6 +74,15 @@ Re-triaged twice: the jump reproduces most often when switching Manhwa View on a
 
 Validation note. Touches shared pan and zoom behavior, so this is the highest blast-radius slice. Prove with the replay trace plus `npm run mocha`, one mocha file for viewer math, and `cargo check --tests` (no Rust changes expected, compile check only if touched).
 
+## Post-slice fix: mount queue race on rapid navigation
+
+**Status:** `[x]` Done 2026-09-29, user-confirmed. Two fixes.
+
+Images failed to mount ~15-25% of the time on directory open, requiring a zoom/pan/scroll to recover. Root cause traced with a temporary `window.__stripDebug` probe and `[MOUNT]` trace logs (both removed after diagnosis).
+
+- [x] **Flight ownership in `drop()`.** `drop()` unconditionally reset `_mountInFlight = -1`, which clobbered a newer container's in-progress flight when a stale `await pre.decode()` from the previous container completed. Now `drop()` only resets `_mountInFlight` if it still matches `entry.imgIdx`. (`src/js/viewer/manhwaStrip.js:1013-1018`).
+- [x] **Subscriber guard during programmatic viewport changes.** The viewport subscriber skips `_updateWindow()` and `_scheduleSettle()` while `_viewportProgram > 0`. Intermediate `zoomTo`/`panTo` ticks inside `_applyFitMode` were starting mount flights at transient ty values whose slots got evicted by the next tick's visible range shift. The caller's explicit `_updateWindow()` at the end handles mounting with the final ty. (`src/js/viewer/manhwaStrip.js:1927-1932`).
+
 ## Slice 5. Keep the test suites and replay loop current
 
 **Status:** `[ ]`

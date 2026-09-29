@@ -1011,9 +1011,11 @@ function _advanceMountQueue() {
     pre.decoding = 'async';
 
     const drop = () => {
-      _mountInFlight = -1;
+      // Only reset if this flight still owns _mountInFlight. Stale decodes
+      // from a previous container must not clobber a newer flight.
+      if (_mountInFlight === entry.imgIdx) _mountInFlight = -1;
       _releaseNode(pre);
-      _advanceMountQueue();
+      if (_mountInFlight === -1) _advanceMountQueue();
     };
     const fail = () => {
       const idx = entry.imgIdx;
@@ -1921,8 +1923,14 @@ export function setViewportState(vpState) {
     _strip.style.transform = _viewportState.getTransform();
     _strip.style.setProperty('--zoom-scale', scale);
     _updateGrillAngles();
-    _updateWindow();
-    _scheduleSettle();
+    // Programmatic viewport changes (fit, reset, layout) call _updateWindow
+    // explicitly after the final ty is set. Intermediate zoomTo/panTo ticks
+    // inside _viewportProgram would start mount flights at a transient ty,
+    // whose slots get evicted when the next tick shifts the visible range.
+    if (_viewportProgram === 0) {
+      _updateWindow();
+      _scheduleSettle();
+    }
   });
 }
 
@@ -2079,6 +2087,7 @@ let _onRevealListTop = null;
 export function setRevealListTop(fn) {
   _onRevealListTop = fn;
 }
+
 
 export function triggerRevealListTop() {
   _onRevealListTop?.();
