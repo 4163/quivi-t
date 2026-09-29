@@ -554,9 +554,19 @@ export function initReplayDiagnostics() {
       const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
       const filterCanvas = document.getElementById('viewer-filter-canvas');
 
+      const isManhwaActive = viewport?.classList.contains('manhwa-active') || false;
+      const strip = document.getElementById('manhwa-strip');
+      const manhwaImg = strip?.querySelector('.manhwa-slot img');
+
       return {
         type: 'blackout',
         t: frameCtx.relMs,
+        isManhwaActive,
+        manhwaSlots: strip?.querySelectorAll('.manhwa-slot').length || 0,
+        manhwaImgSrc: manhwaImg?.getAttribute('src') || manhwaImg?.src || null,
+        manhwaImgComplete: manhwaImg?.complete || false,
+        manhwaImgNatW: manhwaImg?.naturalWidth || 0,
+        manhwaImgOpacity: manhwaImg ? parseFloat(window.getComputedStyle(manhwaImg).opacity) : 0,
         activeSrc: activeImg?.getAttribute('src') || activeImg?.src || null,
         activeComplete: activeImg?.complete || false,
         activeNaturalWidth: activeImg?.naturalWidth || 0,
