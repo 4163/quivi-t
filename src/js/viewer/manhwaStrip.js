@@ -113,6 +113,10 @@ let _settleTimer = null;
 let _lastBackendWarmKey = null;
 let _lastTy = null;
 let _lastPanAt = 0;
+/** Last viewport scale change. Zoom and fit steps reschedule the debounced
+ * settle like pans do, so without this the file list lags them whenever
+ * decode bursts keep resetting the settle timer. */
+let _lastZoomAt = 0;
 let _lastHeartbeatAt = 0;
 let _lastScale = null;
 let _lastFitMode = null;
@@ -576,6 +580,9 @@ function _updateWindow() {
 
   // Zooming in reframes the window: warm both sides regardless of direction.
   const zoomedIn = _lastScale !== null && scale > _lastScale + 1e-9;
+  if (_lastScale !== null && Math.abs(scale - _lastScale) > 1e-9) {
+    _lastZoomAt = performance.now();
+  }
   _lastScale = scale;
   const prefetchDir = zoomedIn ? 0 : isPanningDown ? 1 : isPanningUp ? -1 : 0;
 
@@ -742,11 +749,14 @@ function _updateWindow() {
     _anchorImgIdx = newAnchor;
     _scheduleSettle();
   }
-  // Heartbeat sync during hold. Repeat pan ticks keep resetting the settle
-  // timer, so without this the panel never follows until key-up. Well below
-  // repeat rate; _syncAnchorToCore skips when nothing moved.
+  // Heartbeat sync during hold and zoom. Repeat pan ticks and decode bursts
+  // keep resetting the settle timer, so without this the panel never follows
+  // until key-up or decode quiet. Zoom and fit steps reschedule the same
+  // timer without touching pan recency, so they share the heartbeat.
+  // Well below repeat rate; _syncAnchorToCore skips when nothing moved.
   const now = performance.now();
-  if (now - _lastPanAt < 150 && now - _lastHeartbeatAt >= STRIP_SYNC_HEARTBEAT_MS) {
+  const viewActive = now - _lastPanAt < 150 || now - _lastZoomAt < 150;
+  if (viewActive && now - _lastHeartbeatAt >= STRIP_SYNC_HEARTBEAT_MS) {
     _lastHeartbeatAt = now;
     _syncAnchorToCore();
   }
