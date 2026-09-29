@@ -123,6 +123,11 @@ let _lastFitMode = null;
 let _lastFitModeGen = -1;
 /** Reapply the current column fit after ICO dimensions replace placeholders. */
 let _fitRefreshPending = false;
+/** One-shot entry refit. Entry scale derives from estimates, so the first
+ * resolved raster width replays the entry fit once against real dims. */
+let _entryRefreshArmed = false;
+let _entryRefreshArmedAt = 0;
+let _entryRefreshPending = false;
 
 /** Sequential decode queue. Fresh items decode off-DOM here in scroll order
  * and mount only with known dims, so images never paint at estimated size.
@@ -508,6 +513,7 @@ function _onItemDecoded(imgIdx, nw, nh) {
         _setSlotDimensions(otherSlot, _estWidth);
       }
     }
+    if (_entryRefreshArmed) _entryRefreshPending = true;
   }
 
   if (wasEstimated && isIco && nh > 0) {
@@ -920,6 +926,15 @@ function _requestLayout() {
       _applyFitMode(Core.getState()?.fitMode || _lastFitMode, _anchorImgIdx, _anchorHoldoverAlignTop);
       return;
     }
+    if (_entryRefreshPending && !_fitRefreshPending) {
+      const fit = Core.getState()?.fitMode || _lastFitMode;
+      const quiet = _lastPanAt < _entryRefreshArmedAt && _lastZoomAt < _entryRefreshArmedAt;
+      _disarmEntryRefresh();
+      if (quiet && fit && fit !== 'none') {
+        _applyFitMode(fit, _anchorImgIdx, _anchorHoldoverAlignTop, true);
+        return;
+      }
+    }
     _updateWindow();
     _scheduleSettle();
   });
@@ -1166,6 +1181,24 @@ const STRIP_TOP_ALIGN_FITS = ['width', 'width-if-larger', 'window', 'window-if-l
  * the whole column. The user looks at one image when the strip opens. */
 const ENTRY_ACTIVE_FITS = ['height', 'height-if-larger', 'window', 'window-if-larger'];
 
+function _disarmEntryRefresh() {
+  _entryRefreshArmed = false;
+  _entryRefreshArmedAt = 0;
+  _entryRefreshPending = false;
+}
+
+/** Arm the one-shot entry refit after an entry fit. Timestamped after the
+ * entry zoom and pan so their own view changes never trip the quiet guard. */
+function _armEntryRefresh() {
+  _entryRefreshPending = false;
+  if (!_active || !_lastFitMode || _lastFitMode === 'none') {
+    _entryRefreshArmed = false;
+    return;
+  }
+  _entryRefreshArmed = true;
+  _entryRefreshArmedAt = performance.now();
+}
+
 /** Resolve the opening anchor. Honors open_first_image off: an index with
  * no image mapping holds no anchor (-1), leaving the drop overlay up
  * instead of forcing the first image. */
@@ -1191,6 +1224,7 @@ let _lastAnchorVph = null;
 
 function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = false) {
   if (!_active || !_viewportState || !_viewport || _imageIndex.length === 0) return;
+  if (!entry) _disarmEntryRefresh();
   const fitMode = mode || Core.getState()?.fitMode || 'none';
 
   const vw = _viewport.clientWidth || 800;
@@ -1526,6 +1560,7 @@ function _activate(state) {
     return;
   }
   _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), true);
+  _armEntryRefresh();
 
   _updateWindow();
   _scheduleSettle();
@@ -1577,6 +1612,7 @@ function _deactivate() {
   _lastFitMode = null;
   _lastFitModeGen = -1;
   _fitRefreshPending = false;
+  _disarmEntryRefresh();
   _anchorHoldover = null;
   _anchorHoldoverAlignTop = true;
   _lastAnchorTy = null;
@@ -1671,6 +1707,7 @@ function _onStateChange(state) {
       _lastSyncedListIndex = null;
       _lastVisSig = null;
     }
+    _disarmEntryRefresh();
     _layoutScale = null;
 
     _ensureStripSpacers();
@@ -1710,6 +1747,7 @@ function _onStateChange(state) {
       return;
     }
     _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), true);
+    _armEntryRefresh();
 
     _updateWindow();
     _scheduleSettle();

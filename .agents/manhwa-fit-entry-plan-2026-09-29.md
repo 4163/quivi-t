@@ -33,7 +33,7 @@ Validation note. Reuses the tested helper instead of new formulas, so no duplica
 
 ## Slice 2. Make width fit span the viewport on entry
 
-**Status:** `[ ]`
+**Status:** `[x]` Done 2026-09-29 in the working tree, user-confirmed in the running app. One-shot entry refit armed on entry for non-`none` fits. The first resolved raster width replays the entry fit once against real dims in the decode flush, holding the current anchor. It stands down on any pan, zoom, fit change, reload, or deactivation, and same-container reloads never arm it. ICO refresh keeps priority. `node --check` passes, `git diff --check` clean, `npm run mocha` passes with 247 tests.
 
 Likely mechanism, still a hypothesis. Entry scale derives from estimate widths, then real dims land through `_onItemDecoded` and `_updateLayout` rebuilds geometry without ever recomputing fit scale. The column keeps estimate scale forever. The `_estWidth` propagation (`src/js/viewer/manhwaStrip.js:494-507`) updates slot widths but not scale, which matches the reported narrow column. Needs one runtime confirmation before building.
 
