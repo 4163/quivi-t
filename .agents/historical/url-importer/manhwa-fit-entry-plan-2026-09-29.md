@@ -105,16 +105,16 @@ When M toggles manhwa off, `Core.notify` fires. The single-image viewer (`viewer
 
 ## Slice 5. Keep the test suites and replay loop current
 
-**Status:** `[ ]`
+**Status:** `[x]` Implemented and verified against mocha and diagnostic replay. Ready for user review.
 
 Extend the existing loop. No new harnesses.
 
-- [ ] Mocha (`mocha/`, outside `src/`). Entry-scale cases for `computeStripFitScale` with `itemCount` 1. Cases for the slice 3 highlight helper. Cases pinning binary `computeWindowRange` behavior used by first and last detection.
-- [ ] Contract (`mocha/diagnosticsContract.test.js`). Assert `#manhwa-strip` and spacer IDs from `src/index.html` and `src/js/viewer/manhwaStrip.js` so future DOM moves fail loud.
-- [ ] Probes (`e2e/replay-diagnostics/probes/viewerPipelineProbe.js`). Add strip reads: strip transform ty, `--zoom-scale`, mounted slot count, spacer heights. No changes to existing single-image assertions.
-- [ ] Scenarios (`e2e/scenarios/`). Record `manhwa-fit-entry.json` (enter on each fit), `manhwa-width-span.json`, `manhwa-first-last-align.json`, and `manhwa-fit-cycle.json` (fit spam plus X). All action IDs must already exist in `ACTION_MAP` or the contract test fails.
-- [ ] Reports stay in `e2e/replay-diagnostics/reports/`. `investigation.js` is committed and intentional; leave it unless a slice needs it, then clean up per the verify skill.
-- [ ] Accept when `npm run mocha` passes, `npm run diagnose -- manhwa-fit-cycle` reports no ty teleport, and the contract test passes.
+- [x] Mocha (`mocha/viewerMath.test.js`). Entry-scale cases for `computeStripFitScale` with `itemCount = 1`. Highlight cases for `firstLastHighlight` covering single-item bounds, edge priorities, and tie-breaking. Binary search coverage for `computeWindowRange` over 50 items with seam overlap boundaries.
+- [x] Contract (`mocha/diagnosticsContract.test.js`). Asserted `#manhwa-strip`, `#manhwa-strip-spacer-top`, and `#manhwa-strip-spacer-bottom` exist in `src/index.html` and are referenced in `src/js/viewer/manhwaStrip.js`.
+- [x] Probes (`e2e/replay-diagnostics/probes/viewerPipelineProbe.js`, `base.js`, `investigation.js`). Added `getStripMetrics()` (strip ty, `--zoom-scale`, slot count, spacer heights), manhwa-aware `isContentVisible()`, and `ty-teleport` anomaly check (>40,000px per-frame delta). Single-image checks left unchanged.
+- [x] Scenarios (`e2e/scenarios/`). Added `manhwa-fit-entry.json`, `manhwa-width-span.json`, `manhwa-first-last-align.json`, and `manhwa-fit-cycle.json`. All action IDs map to `ACTION_MAP`.
+- [x] Reports stay in `e2e/replay-diagnostics/reports/`. `investigation.js` synchronized with base probes.
+- [x] Accept: `npm run mocha` passed (253 tests), `npm run diagnose -- manhwa-fit-cycle` ran 13 steps with 0 blackouts, 0 anomalies, and 0 ty teleports. Contract test passed.
 
 ## Verification
 
