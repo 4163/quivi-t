@@ -7,6 +7,7 @@ const PRELOAD_HALF = 1;
 const VIEWER_IMAGE_POOL_CAPACITY = 4;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
 const VIDEO_READY_TIMEOUT_MS = 2000;
+const BRIDGE_FALLBACK_MS = 1200;
 const LOADING_LABEL = 'Loading...';
 
 export function createViewerRenderer(viewportState, onActiveImageChanged = () => {}) {
@@ -148,20 +149,23 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _cancelRetiringNode();
     if (node.tagName === 'VIDEO') node.pause();
     node.classList.remove('active');
-    if (frozen && bridgeLayer) {
-      const rot = frozen.rotation || 0;
-      const flipX = frozen.flipX !== undefined ? frozen.flipX : 1;
-      const flipY = frozen.flipY !== undefined ? frozen.flipY : 1;
-      const scale = frozen.scale !== undefined ? frozen.scale : 1;
-      const sx = frozen.sx !== undefined ? frozen.sx : (flipX * scale);
-      const sy = frozen.sy !== undefined ? frozen.sy : (flipY * scale);
-      node.style.setProperty('--bridge-tx', `${frozen.tx || 0}px`);
-      node.style.setProperty('--bridge-ty', `${frozen.ty || 0}px`);
-      node.style.setProperty('--bridge-rot', `${rot}deg`);
-      node.style.setProperty('--bridge-sx', `${sx}`);
-      node.style.setProperty('--bridge-sy', `${sy}`);
+    if (bridgeLayer) {
+      if (frozen) {
+        const rot = frozen.rotation || 0;
+        const flipX = frozen.flipX !== undefined ? frozen.flipX : 1;
+        const flipY = frozen.flipY !== undefined ? frozen.flipY : 1;
+        const scale = frozen.scale !== undefined ? frozen.scale : 1;
+        const sx = frozen.sx !== undefined ? frozen.sx : (flipX * scale);
+        const sy = frozen.sy !== undefined ? frozen.sy : (flipY * scale);
+        node.style.setProperty('--bridge-tx', `${frozen.tx || 0}px`);
+        node.style.setProperty('--bridge-ty', `${frozen.ty || 0}px`);
+        node.style.setProperty('--bridge-rot', `${rot}deg`);
+        node.style.setProperty('--bridge-sx', `${sx}`);
+        node.style.setProperty('--bridge-sy', `${sy}`);
+      }
       bridgeLayer.appendChild(node);
     }
+    node.classList.add('viewer-img');
     node.classList.add('bridge');
     _retiringNode = node;
     if (autoRetire) {
@@ -181,8 +185,23 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
           _releaseBridgeNode(node);
           _retiringNode = null;
         }
-      }, 1200);
+      }, BRIDGE_FALLBACK_MS);
     }
+  }
+
+  function _parkHandoff(node, natW, natH, fitMode) {
+    if (!node || !natW || !natH) return;
+    const liveState = Core.getState();
+    const mode = fitMode || liveState.fitMode || 'window';
+    const spreadEnabled = liveState.spreadEnabled ?? liveState.config?.frontend_data?.spread_enabled ?? true;
+    const spreadDirection = liveState.spreadDirection ?? liveState.config?.frontend_data?.spread_direction ?? 'rtl';
+    viewportState.setSpreadEnabled(spreadEnabled);
+    viewportState.setSpreadDirection(spreadDirection);
+    viewportState.setSpreadStep(liveState.spreadStep || 1);
+    viewportState.resetGeometry();
+    viewportState.applyFitMode(mode, natW, natH);
+    const geom = viewportState.getGeometry ? viewportState.getGeometry() : null;
+    _parkNodeInBridge(node, geom, false);
   }
 
   function _swapInVideo(incoming, state) {
@@ -436,6 +455,18 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   function _activatePoolNode(el, filename, state) {
     if (img && img !== el) {
       _parkNodeInBridge(img);
+    } else if (_retiringNode && _retiringNode !== el) {
+      _clearBridgeFallback();
+      if (_retireRaf) cancelAnimationFrame(_retireRaf);
+      const retiring = _retiringNode;
+      _retireRaf = requestAnimationFrame(() => {
+        _retireRaf = requestAnimationFrame(() => {
+          if (_retiringNode === retiring) {
+            _cancelRetiringNode();
+          }
+          _retireRaf = null;
+        });
+      });
     }
 
     img = el;
@@ -808,6 +839,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
   return {
     parkInBridge: (node, explicitGeometry = null, autoRetire = true) => _parkNodeInBridge(node, explicitGeometry, autoRetire),
+    parkHandoff: (node, natW, natH, fitMode) => _parkHandoff(node, natW, natH, fitMode),
     releaseBridge: () => _cancelRetiringNode(),
     isBridgeActive: () => !!_retiringNode,
     getActiveImage: () => img,

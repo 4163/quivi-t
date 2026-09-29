@@ -1753,6 +1753,51 @@ function _deactivate() {
   if (!_active) return;
   _resetMountQueue();
   _active = false;
+
+  const anchorIdx = _anchorImgIdx >= 0 ? _anchorImgIdx : 0;
+  let anchorImg = _mounted.get(anchorIdx) || _mounted.values().next()?.value;
+  let anchorSource = '_mounted';
+
+  // Fall back to prefetched or completed prefetching entries when no image
+  // has finished the sequential decode queue yet (fast toggle-off).
+  if (!anchorImg) {
+    anchorImg = _prefetchedImages.get(anchorIdx) || _prefetchedImages.values().next()?.value;
+    if (anchorImg) {
+      anchorSource = '_prefetchedImages';
+    } else {
+      const pre = _prefetching.get(anchorIdx) || _prefetching.values().next()?.value;
+      if (pre && pre.complete && pre.naturalWidth > 0) {
+        anchorImg = pre;
+        anchorSource = '_prefetching';
+      }
+    }
+  }
+
+  const anchorItem = _imageIndex[anchorIdx];
+  const natW = anchorImg?.naturalWidth || anchorItem?.naturalWidth || 0;
+  const natH = anchorImg?.naturalHeight || anchorItem?.naturalHeight || 0;
+
+  if (anchorImg && anchorImg.src && natW > 0 && natH > 0) {
+    if (anchorSource === '_mounted') {
+      for (const [idx, img] of _mounted) {
+        if (img === anchorImg) { _mounted.delete(idx); break; }
+      }
+    } else if (anchorSource === '_prefetchedImages') {
+      for (const [idx, img] of _prefetchedImages) {
+        if (img === anchorImg) { _prefetchedImages.delete(idx); break; }
+      }
+    } else {
+      for (const [idx, img] of _prefetching) {
+        if (img === anchorImg) { _prefetching.delete(idx); break; }
+      }
+    }
+    anchorImg.onload = null;
+    anchorImg.onerror = null;
+    anchorImg.dataset.borrowedBridge = 'true';
+    const targetFit = Core.getState()?.fitMode || _lastFitMode || 'window';
+    _onBridgeHandoff?.(anchorImg, natW, natH, targetFit);
+  }
+
   _viewport.classList.remove('manhwa-active');
 
   _lastTy = null;
@@ -2122,4 +2167,9 @@ export function triggerRevealListTop() {
 let _onSlotMounted = null;
 export function setOnSlotMounted(fn) {
   _onSlotMounted = fn;
+}
+
+let _onBridgeHandoff = null;
+export function setOnBridgeHandoff(fn) {
+  _onBridgeHandoff = fn;
 }

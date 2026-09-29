@@ -2,7 +2,7 @@ import { createViewportState } from '../services/viewerMath.js';
 import { createViewerRenderer } from './viewerRender.js';
 import { createViewerGestures } from './viewerGestures.js';
 import { createViewerPipelines } from './viewerPipelines.js';
-import { isManhwaStripActive, initManhwaStrip, isStripAtTop, triggerRevealListTop, resetZoom as resetStripZoom, setOnSlotMounted } from './manhwaStrip.js';
+import { isManhwaStripActive, initManhwaStrip, isStripAtTop, triggerRevealListTop, resetZoom as resetStripZoom, setOnSlotMounted, setOnBridgeHandoff } from './manhwaStrip.js';
 
 
 let _cachedViewport = { clientWidth: 1000, clientHeight: 1000, left: 0, top: 0 };
@@ -41,6 +41,9 @@ setOnSlotMounted(() => {
       });
     });
   }
+});
+setOnBridgeHandoff((node, natW, natH, fitMode) => {
+  renderer.parkHandoff(node, natW, natH, fitMode);
 });
 
 const vpEl = document.getElementById('viewport');
@@ -104,6 +107,7 @@ export const Viewer = {
   },
   toggleCursorAutoHide: () => gestures.toggleCursorAutoHide(),
   parkInBridge: (node, geom, autoRetire) => renderer?.parkInBridge(node, geom, autoRetire),
+  parkHandoff: (node, natW, natH, fitMode) => renderer?.parkHandoff(node, natW, natH, fitMode),
   releaseBridge: () => renderer?.releaseBridge(),
   isBridgeActive: () => renderer?.isBridgeActive?.() || false,
   getActiveImage: () => renderer?.getActiveImage?.() || null
