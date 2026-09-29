@@ -64,6 +64,15 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _bridgeFallbackTimer = null;
     }
   }
+
+  function _scheduleRetireRaf(callback) {
+    _retireRaf = requestAnimationFrame(() => {
+      _retireRaf = requestAnimationFrame(() => {
+        callback();
+        _retireRaf = null;
+      });
+    });
+  }
   let _lastRenderedIsAnimated = false;
   let _lastRenderedArchivePath = null;
   let _activeVideoSrc = null;
@@ -169,14 +178,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     node.classList.add('bridge');
     _retiringNode = node;
     if (autoRetire) {
-      _retireRaf = requestAnimationFrame(() => {
-        _retireRaf = requestAnimationFrame(() => {
-          if (_retiringNode === node) {
-            _releaseBridgeNode(node);
-            _retiringNode = null;
-          }
-          _retireRaf = null;
-        });
+      _scheduleRetireRaf(() => {
+        if (_retiringNode === node) {
+          _releaseBridgeNode(node);
+          _retiringNode = null;
+        }
       });
     } else {
       _clearBridgeFallback();
@@ -459,13 +465,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _clearBridgeFallback();
       if (_retireRaf) cancelAnimationFrame(_retireRaf);
       const retiring = _retiringNode;
-      _retireRaf = requestAnimationFrame(() => {
-        _retireRaf = requestAnimationFrame(() => {
-          if (_retiringNode === retiring) {
-            _cancelRetiringNode();
-          }
-          _retireRaf = null;
-        });
+      _scheduleRetireRaf(() => {
+        if (_retiringNode === retiring) {
+          _cancelRetiringNode();
+        }
       });
     }
 
@@ -838,10 +841,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   });
 
   return {
-    parkInBridge: (node, explicitGeometry = null, autoRetire = true) => _parkNodeInBridge(node, explicitGeometry, autoRetire),
     parkHandoff: (node, natW, natH, fitMode) => _parkHandoff(node, natW, natH, fitMode),
     releaseBridge: () => _cancelRetiringNode(),
     isBridgeActive: () => !!_retiringNode,
-    getActiveImage: () => img,
   };
 }

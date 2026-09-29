@@ -554,19 +554,9 @@ export function initReplayDiagnostics() {
       const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
       const filterCanvas = document.getElementById('viewer-filter-canvas');
 
-      const isManhwaActive = viewport?.classList.contains('manhwa-active') || false;
-      const strip = document.getElementById('manhwa-strip');
-      const manhwaImg = strip?.querySelector('.manhwa-slot img');
-
       return {
         type: 'blackout',
         t: frameCtx.relMs,
-        isManhwaActive,
-        manhwaSlots: strip?.querySelectorAll('.manhwa-slot').length || 0,
-        manhwaImgSrc: manhwaImg?.getAttribute('src') || manhwaImg?.src || null,
-        manhwaImgComplete: manhwaImg?.complete || false,
-        manhwaImgNatW: manhwaImg?.naturalWidth || 0,
-        manhwaImgOpacity: manhwaImg ? parseFloat(window.getComputedStyle(manhwaImg).opacity) : 0,
         activeSrc: activeImg?.getAttribute('src') || activeImg?.src || null,
         activeComplete: activeImg?.complete || false,
         activeNaturalWidth: activeImg?.naturalWidth || 0,
@@ -583,94 +573,6 @@ export function initReplayDiagnostics() {
         filterReady: filterCanvas?.getAttribute('data-render-ready') === 'true',
         filterOpacity: filterCanvas ? parseFloat(window.getComputedStyle(filterCanvas).opacity) : 0,
       };
-    },
-  });
-
-  // =========================================================================
-  // 3b. MANHWA BRIDGE HANDOFF PROBE
-  // =========================================================================
-  let _bridgeHandoffProbeInit = false;
-
-  function _initBridgeHandoffProbe() {
-    if (_bridgeHandoffProbeInit) return;
-    _bridgeHandoffProbeInit = true;
-
-    // Observe bridge layer child additions/removals to track handoff nodes.
-    const bridgeLayer = document.getElementById('viewer-bridge-layer');
-    if (bridgeLayer && typeof MutationObserver !== 'undefined') {
-      const childObserver = new MutationObserver((mutations) => {
-        for (const m of mutations) {
-          if (m.type !== 'childList') continue;
-          for (const node of m.addedNodes) {
-            if (node.nodeType !== 1) continue;
-            recordEvent('bridge-handoff', 'node-added', {
-              tag: node.tagName,
-              src: node.getAttribute('src') || null,
-              classes: node.className,
-              borrowed: node.dataset?.borrowedBridge || 'false',
-              natW: node.naturalWidth || 0,
-              complete: node.complete || false,
-            });
-          }
-          for (const node of m.removedNodes) {
-            if (node.nodeType !== 1) continue;
-            recordEvent('bridge-handoff', 'node-removed', {
-              tag: node.tagName,
-              src: node.getAttribute('src') || null,
-              classes: node.className,
-              borrowed: node.dataset?.borrowedBridge || 'false',
-            });
-          }
-        }
-      });
-      childObserver.observe(bridgeLayer, { childList: true });
-    }
-
-    // Observe manhwa-active class toggling on viewport.
-    const viewport = document.getElementById('viewport');
-    if (viewport && typeof MutationObserver !== 'undefined') {
-      let wasManhwaActive = viewport.classList.contains('manhwa-active');
-      const classObserver = new MutationObserver((mutations) => {
-        for (const m of mutations) {
-          if (m.attributeName !== 'class') continue;
-          const nowActive = viewport.classList.contains('manhwa-active');
-          if (nowActive !== wasManhwaActive) {
-            recordEvent('bridge-handoff', 'manhwa-toggle', {
-              from: wasManhwaActive,
-              to: nowActive,
-              bridgeChildren: bridgeLayer ? bridgeLayer.children.length : 0,
-            });
-            wasManhwaActive = nowActive;
-          }
-        }
-      });
-      classObserver.observe(viewport, { attributes: true, attributeFilter: ['class'] });
-    }
-  }
-
-  registerProbe('bridge-handoff', {
-    onStepStart() {
-      _initBridgeHandoffProbe();
-    },
-    checkFrame(frameCtx) {
-      // On every frame, log bridge layer state when it has children.
-      const bridgeLayer = document.getElementById('viewer-bridge-layer');
-      if (!bridgeLayer || bridgeLayer.children.length === 0) return null;
-
-      const child = bridgeLayer.children[0];
-      const computed = window.getComputedStyle(child);
-      recordEvent('bridge-handoff', 'bridge-frame-state', {
-        childCount: bridgeLayer.children.length,
-        tag: child.tagName,
-        src: child.getAttribute('src')?.slice(-40) || null,
-        classes: child.className,
-        display: computed.display,
-        opacity: parseFloat(computed.opacity),
-        natW: child.naturalWidth || 0,
-        complete: child.complete || false,
-        borrowed: child.dataset?.borrowedBridge || 'false',
-      });
-      return null;
     },
   });
 

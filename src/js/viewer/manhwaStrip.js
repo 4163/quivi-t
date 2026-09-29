@@ -1778,17 +1778,13 @@ function _deactivate() {
   const natH = anchorImg?.naturalHeight || anchorItem?.naturalHeight || 0;
 
   if (anchorImg && anchorImg.src && natW > 0 && natH > 0) {
-    if (anchorSource === '_mounted') {
-      for (const [idx, img] of _mounted) {
-        if (img === anchorImg) { _mounted.delete(idx); break; }
-      }
-    } else if (anchorSource === '_prefetchedImages') {
-      for (const [idx, img] of _prefetchedImages) {
-        if (img === anchorImg) { _prefetchedImages.delete(idx); break; }
-      }
-    } else {
-      for (const [idx, img] of _prefetching) {
-        if (img === anchorImg) { _prefetching.delete(idx); break; }
+    const sourceMap = anchorSource === '_mounted'
+      ? _mounted
+      : (anchorSource === '_prefetchedImages' ? _prefetchedImages : _prefetching);
+    for (const [idx, img] of sourceMap) {
+      if (img === anchorImg) {
+        sourceMap.delete(idx);
+        break;
       }
     }
     anchorImg.onload = null;

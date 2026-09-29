@@ -33,12 +33,14 @@ const renderer = createViewerRenderer(viewportState, (img) => {
 });
 const gestures = createViewerGestures(viewportState);
 initManhwaStrip(viewportState);
+function _doubleRaf(fn) {
+  requestAnimationFrame(() => requestAnimationFrame(fn));
+}
+
 setOnSlotMounted(() => {
   if (renderer.isBridgeActive()) {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        renderer.releaseBridge();
-      });
+    _doubleRaf(() => {
+      renderer.releaseBridge();
     });
   }
 });
@@ -105,10 +107,5 @@ export const Viewer = {
     viewportState.applyFitMode('none');
     viewportState.zoomTo(exactScale, c.x, c.y);
   },
-  toggleCursorAutoHide: () => gestures.toggleCursorAutoHide(),
-  parkInBridge: (node, geom, autoRetire) => renderer?.parkInBridge(node, geom, autoRetire),
-  parkHandoff: (node, natW, natH, fitMode) => renderer?.parkHandoff(node, natW, natH, fitMode),
-  releaseBridge: () => renderer?.releaseBridge(),
-  isBridgeActive: () => renderer?.isBridgeActive?.() || false,
-  getActiveImage: () => renderer?.getActiveImage?.() || null
+  toggleCursorAutoHide: () => gestures.toggleCursorAutoHide()
 };
