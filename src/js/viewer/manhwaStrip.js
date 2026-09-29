@@ -406,6 +406,8 @@ function _updateGrillAngles() {
 let _layoutScale = null;
 
 function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
+  _viewportProgram++;
+  try {
   const scale = _viewportState?.getScale() || 1;
   _layoutScale = scale;
   const vpH = _viewport?.clientHeight || 800;
@@ -468,6 +470,9 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
     _updateGrillAngles();
   }
   _syncMountedSpacers();
+  } finally {
+    _viewportProgram--;
+  }
 }
 
 function _onItemDecoded(imgIdx, nw, nh) {
@@ -582,7 +587,7 @@ function _updateWindow() {
   const isFirstBuild = _lastTy === null;
   const deltaTy = isFirstBuild ? 0 : ty - _lastTy;
   _lastTy = ty;
-  if (deltaTy !== 0) {
+  if (deltaTy !== 0 && _viewportProgram === 0) {
     _lastPanAt = performance.now();
     _anchorHoldover = null;
   }
@@ -1181,8 +1186,10 @@ export function getVisibleImageIndices() {
   return listIndices;
 }
 
-/** Width-family fits open top-aligned; other fits keep existing centering. */
-const STRIP_TOP_ALIGN_FITS = ['width', 'width-if-larger', 'window', 'window-if-larger'];
+/** Width fits open top-aligned; every other fit centers the anchor on fit
+ * application. Top placement belongs to file-list selection only
+ * (click and arrow navigation pin the picked image top). */
+const STRIP_TOP_ALIGN_FITS = ['width', 'width-if-larger'];
 
 /** Height-family fits clamp to the active image on entry instead of fitting
  * the whole column. The user looks at one image when the strip opens. */
@@ -1242,6 +1249,10 @@ function _resolveOpenAnchor(state) {
 let _anchorHoldover = null;
 let _anchorHoldoverScale = 1;
 let _anchorHoldoverAlignTop = true;
+/** Nonzero while this module drives the viewport itself (fit, layout).
+ * Nested window updates must not read our own zoomTo/panTo/setDimensions
+ * as a manual pan that clears the holdover just set. */
+let _viewportProgram = 0;
 /** View params the anchor was last derived from; layout-only changes keep it. */
 let _lastAnchorTy = null;
 let _lastAnchorScale = null;
@@ -1249,6 +1260,8 @@ let _lastAnchorVph = null;
 
 function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = false) {
   if (!_active || !_viewportState || !_viewport || _imageIndex.length === 0) return;
+  _viewportProgram++;
+  try {
   if (!entry) _disarmEntryRefresh();
   const fitMode = mode || Core.getState()?.fitMode || 'none';
 
@@ -1358,6 +1371,9 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   _updateGrillAngles();
   _updateWindow();
   _scheduleSettle();
+  } finally {
+    _viewportProgram--;
+  }
 }
 
 export function alignListItemTop(listIndex) {
