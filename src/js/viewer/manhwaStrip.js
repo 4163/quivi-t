@@ -124,10 +124,13 @@ let _lastFitModeGen = -1;
 /** Reapply the current column fit after ICO dimensions replace placeholders. */
 let _fitRefreshPending = false;
 /** One-shot entry refit. Entry scale derives from estimates, so the first
- * resolved raster width replays the entry fit once against real dims. */
+ * resolved raster width replays the entry fit once against real dims.
+ * _entryRefreshEntry replays the arming fit's semantics: directory opens use
+ * the fresh-open clamp, toggles replay legacy whole-column math. */
 let _entryRefreshArmed = false;
 let _entryRefreshArmedAt = 0;
 let _entryRefreshPending = false;
+let _entryRefreshEntry = false;
 
 /** Sequential decode queue. Fresh items decode off-DOM here in scroll order
  * and mount only with known dims, so images never paint at estimated size.
@@ -932,9 +935,10 @@ function _requestLayout() {
     if (_entryRefreshPending && !_fitRefreshPending) {
       const fit = Core.getState()?.fitMode || _lastFitMode;
       const quiet = _lastPanAt < _entryRefreshArmedAt && _lastZoomAt < _entryRefreshArmedAt;
+      const replayEntry = _entryRefreshEntry;
       _disarmEntryRefresh();
       if (quiet && fit && fit !== 'none') {
-        _applyFitMode(fit, _anchorImgIdx, _anchorHoldoverAlignTop, true);
+        _applyFitMode(fit, _anchorImgIdx, _anchorHoldoverAlignTop, replayEntry);
         return;
       }
     }
@@ -1188,12 +1192,15 @@ function _disarmEntryRefresh() {
   _entryRefreshArmed = false;
   _entryRefreshArmedAt = 0;
   _entryRefreshPending = false;
+  _entryRefreshEntry = false;
 }
 
 /** Arm the one-shot entry refit after an entry fit. Timestamped after the
- * entry zoom and pan so their own view changes never trip the quiet guard. */
-function _armEntryRefresh() {
+ * entry zoom and pan so their own view changes never trip the quiet guard.
+ * Directory opens arm fresh-open semantics, toggles arm legacy replay. */
+function _armEntryRefresh(entry) {
   _entryRefreshPending = false;
+  _entryRefreshEntry = !!entry;
   if (!_active || !_lastFitMode || _lastFitMode === 'none') {
     _entryRefreshArmed = false;
     return;
@@ -1610,8 +1617,10 @@ function _activate(state) {
     _applyFitMode(_lastFitMode);
     return;
   }
-  _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), true);
-  _armEntryRefresh();
+  // Toggling the view on keeps legacy whole-column fits. Fresh-open
+  // semantics belong to directory opens in _onStateChange below.
+  _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode));
+  _armEntryRefresh(false);
 
   _updateWindow();
   _scheduleSettle();
@@ -1798,7 +1807,7 @@ function _onStateChange(state) {
       return;
     }
     _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), true);
-    _armEntryRefresh();
+    _armEntryRefresh(true);
 
     _updateWindow();
     _scheduleSettle();

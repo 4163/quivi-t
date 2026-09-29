@@ -22,7 +22,7 @@ Validation comparison performed against `.agents/AGENTS.md` and `.agents/skills/
 
 ## Slice 1. Clamp height-family fits to the active image on entry
 
-**Status:** `[x]` Done 2026-09-29 in the working tree, user-confirmed in the running app. Entry flag threads through `_activate` and the container-reload reopen into `_applyFitMode`, which runs `computeStripFitScale` against active-image dims with item count 1 for height-family fits. Width fits, `none`, later fit presses, same-container reloads, and the single-image viewer are unchanged. `node --check` passes, `git diff --check` clean, `npm run mocha` passes with 247 tests.
+**Status:** `[x]` Done 2026-09-29 in the working tree, user-confirmed in the running app. Entry flag threads through the container-reload reopen into `_applyFitMode`, which runs `computeStripFitScale` against active-image dims with item count 1 for height-family fits. Scoped back out of `_activate` after it overstepped: toggling the view keeps legacy whole-column fits, the clamp is directory-open only. Toggle scoping user-confirmed in the running app. Width fits, `none`, later fit presses, same-container reloads, and the single-image viewer are unchanged. `node --check` passes, `git diff --check` clean, `npm run mocha` passes with 247 tests.
 
 Fit on entry uses whole-column math, so a height fit shrinks the active page until the full chapter fits the viewport. On entry the user looks at one image, so the fit should use that image.
 
@@ -64,6 +64,7 @@ Re-triaged twice: the jump reproduces most often when switching Manhwa View on a
 
 - [ ] Resolve the open anchor before the first `_updateLayout` in `_activate` and in the container-reload reopen. Hold the resolved anchor through the first layout instead of the stale default.
 - [ ] Clamp a holdover into the visible range in `_syncAnchorToCore` only when the view moved since the last sync. Snapshot ty, scale, and viewport height per sync. Layout-only drift keeps the anchor untouched.
+- [x] Found cause, fixed 2026-09-29: the slice 1 clamp had overstepped onto toggling the view on, forcing a fit re-press to recover legacy behavior, and that re-press jumped. directory opens keep the clamp, toggles keep legacy fits, and the one-shot refresh replays whichever semantics armed it.
 - [ ] Hold the current anchor across reset when the strip is active, through a tiny strip export called from `Viewer.setZoom` before it touches the viewport. Reset still lands at scale 1 through the same viewport calls. Nothing else about X changes.
 - [ ] Accept when toggling Manhwa View on lands on the active image across repeated trials with cold estimates, fit spam plus X across a mixed-size folder never jumps, and the scripted fit cycle from slice 5 shows no anchor or ty teleport.
 
