@@ -38,6 +38,7 @@ import { initPasswordOverlay } from './passwordOverlay.js';
 import { initUrlOverlay } from './urlOverlay.js';
 import { UrlLoader } from '../urlLoader.js';
 import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
+import { ManhwaAudio } from '../viewer/manhwaAudio.js';
 import {
   initManhwaStrip,
   isManhwaStripActive,
@@ -49,7 +50,8 @@ import {
   pageStrip,
   setRevealListTop,
   getVisibleImageIndices,
-  isListIndexMapped
+  isListIndexMapped,
+  getAnchorImgIdx
 } from '../viewer/manhwaStrip.js';
 
 // Reset the options tab on startup so each session starts on General.
@@ -153,6 +155,8 @@ const actionCtx = {
   get toggleFullscreen() { return toggleFullscreen; },
   get UrlLoader() { return UrlLoader; },
   get ViewerAudio() { return ViewerAudio; },
+  get ManhwaAudio() { return ManhwaAudio; },
+  getStripAnchorImgIdx: () => getAnchorImgIdx(),
   isFavoritesFocused: () => !!document.activeElement?.closest('#favorites-list'),
   isLibraryFocused: () => !!document.activeElement?.closest('#file-panel-library, .library-provider-list'),
   get keyboardPanStep() { return keyboardPanStep; },

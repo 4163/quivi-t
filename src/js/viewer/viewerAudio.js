@@ -245,6 +245,7 @@ export function initViewerAudio({ Core, FsUtils }) {
     _btnToggleEl.addEventListener('click', (e) => {
       e.stopPropagation();
       toggleAudioMute();
+      if (e.detail > 0) _btnToggleEl.blur();
     });
   }
 
@@ -253,6 +254,7 @@ export function initViewerAudio({ Core, FsUtils }) {
       const val = parseFloat(e.target.value);
       setAudioVolume(val);
     });
+    _sliderEl.addEventListener('pointerup', () => _sliderEl.blur());
   }
 
   if (_audioEl) {

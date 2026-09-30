@@ -14,12 +14,16 @@ import { FsUtils } from '../fsUtils.js';
 import { getCachedArchiveBlob } from '../services/archiveImageCache.js';
 import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale, firstLastHighlight } from '../services/viewerMath.js';
 import { Statusbar } from '../menubar/statusbar.js';
+import { initManhwaAudio, ManhwaAudio } from './manhwaAudio.js';
 
 /** Max img nodes kept in the free pool after eviction. */
 const STRIP_POOL_CAP = 10;
 
 /** Max video nodes kept in the free pool after eviction. */
 const STRIP_VIDEO_POOL_CAP = 4;
+
+/** Volume a pooled video node resets to on release. */
+const STRIP_DEFAULT_VOLUME = 0.5;
 
 /** Item-count buffer behind the anchor. Strict 1-image policy: index based,
  * so wrong height estimates never misalign it. */
@@ -253,6 +257,8 @@ function _releaseVideoNode(video) {
   video.onloadedmetadata = null;
   video.onerror = null;
   video.pause();
+  video.muted = true;
+  video.volume = STRIP_DEFAULT_VOLUME;
   video.removeAttribute('src');
   video.load();
   video.removeAttribute('data-list-index');
@@ -426,6 +432,8 @@ function _acquireSlotNode(item, total) {
 }
 
 function _releaseSlotNode(slot) {
+  const releasedIdx = Number(slot.dataset.imgIdx);
+  if (Number.isFinite(releasedIdx)) ManhwaAudio.detach(releasedIdx, { reset: true });
   slot.removeAttribute('data-img-idx');
   slot.removeAttribute('data-list-index');
   delete slot.dataset.ready;
@@ -1083,6 +1091,23 @@ function _visibleDecided(visStart, visEnd) {
   return true;
 }
 
+/**
+ * Silence mounted videos without tearing down. The overlay is up on an
+ * unmapped selection, so nothing visible should sound. Matches legacy
+ * clearing on non video picks. Resume on the way back out.
+ */
+function _pauseMountedVideos() {
+  for (const [, node] of _mounted) {
+    if (node.tagName === 'VIDEO') node.pause();
+  }
+}
+
+function _resumeMountedVideos() {
+  for (const [, node] of _mounted) {
+    if (node.tagName === 'VIDEO' && node.paused) node.play().catch(() => {});
+  }
+}
+
 /** Intrinsic dims of an off-DOM probe node, img or video. Null until known:
  * images need completion plus raster dims, videos only metadata dims. */
 function _probeDims(node) {
@@ -1124,6 +1149,7 @@ function _claimSlot(imgIdx, item, slot, node) {
   if (item?.kind === 'video') {
     node.preload = 'auto';
     node.play().catch(() => {});
+    ManhwaAudio.attach(imgIdx, item, slot, node);
   }
   _mounted.set(imgIdx, node);
   if (item?.kind === 'video' && node.readyState < 2) {
@@ -1363,15 +1389,20 @@ function _syncAnchorToCore() {
   }
   const anchorItem = _imageIndex[_anchorImgIdx];
   if (!anchorItem) return;
-  const scale = _viewportState?.getScale() || 0;
-  const w = anchorItem.naturalWidth || 0;
-  const h = anchorItem.naturalHeight || 0;
-  // Scale 1 reads 100%. Updates even when selection is unchanged (zoom).
-  Statusbar.setImage({
-    filename: anchorItem.entry?.name || '',
-    dims: anchorItem.decoded && w > 0 && h > 0 ? `${w} × ${h}` : undefined,
-    zoom: scale || undefined,
-  });
+  const liveIndex = Core.getState().index;
+  // Cleared selection keeps the N/A placeholders from Statusbar.update.
+  // Anchor data paints only while something is actually selected.
+  if (liveIndex >= 0) {
+    const scale = _viewportState?.getScale() || 0;
+    const w = anchorItem.naturalWidth || 0;
+    const h = anchorItem.naturalHeight || 0;
+    // Scale 1 reads 100%. Updates even when selection is unchanged (zoom).
+    Statusbar.setImage({
+      filename: anchorItem.entry?.name || '',
+      dims: anchorItem.decoded && w > 0 && h > 0 ? `${w} × ${h}` : undefined,
+      zoom: scale || undefined,
+    });
+  }
   const visSig = startIndex === -1 ? '' : `${startIndex}-${endIndex}`;
   const anchorChanged = anchorItem.listIndex !== _lastSyncedListIndex;
   const visChanged = visSig !== _lastVisSig;
@@ -1379,9 +1410,10 @@ function _syncAnchorToCore() {
   _lastVisSig = visSig;
   if (!hadHoldover && !anchorChanged && !visChanged) return;
   // Never drag Core back onto a nearby row while an unmapped entry
-  // (folder edge) stays deliberately highlighted.
-  const liveMapped = _listToImgIdx.has(Core.getState().index);
-  if ((anchorChanged || hadHoldover) && liveMapped) {
+  // (folder edge) stays deliberately highlighted. A cleared selection
+  // (-1) is not deliberate: moving the strip reselects like legacy nav.
+  const liveMapped = _listToImgIdx.has(liveIndex);
+  if ((anchorChanged || hadHoldover) && (liveMapped || liveIndex < 0)) {
     _anchorUpdateInProgress = true;
     Core.selectIndex(anchorItem.listIndex);
     _anchorUpdateInProgress = false;
@@ -1724,6 +1756,10 @@ export function isListIndexMapped(listIndex) {
   return _listToImgIdx.has(listIndex);
 }
 
+export function getAnchorImgIdx() {
+  return _anchorImgIdx;
+}
+
 export function getFirstImageIndex() {
   return _imageIndex[0]?.listIndex ?? -1;
 }
@@ -1734,6 +1770,15 @@ export function getLastImageIndex() {
 
 export function navigateManhwa(delta) {
   if (!_active || _imageIndex.length === 0) return false;
+  // Cleared or unmapped selection restarts at the near image end instead of
+  // stepping through edge rows. Select first so the jump lands even when
+  // layout is not ready, then latch top or bottom like the fit keys do.
+  if (!_listToImgIdx.has(Core.getState().index)) {
+    const target = delta < 0 ? _imageIndex[_imageIndex.length - 1] : _imageIndex[0];
+    Core.selectIndex(target.listIndex);
+    if (delta < 0 && _imageIndex.length > 1) return alignListItemBottom(target.listIndex);
+    return alignListItemTop(target.listIndex);
+  }
   Core.navigate(delta);
   const state = Core.getState();
   const mapped = _listToImgIdx.get(state.index);
@@ -1751,6 +1796,11 @@ export function navigateManhwa(delta) {
 
 export function pageStrip(direction, pageMultiplier = 1) {
   if (!_active || !_viewportState || !_layout.offsets.length || _imageIndex.length === 0) return false;
+  // Cleared or unmapped selection restarts at the near image end instead of
+  // paging blindly from a stale anchor. navigateManhwa owns that jump.
+  if (!_listToImgIdx.has(Core.getState().index)) {
+    return navigateManhwa(direction);
+  }
   const scale = _viewportState.getScale() || 1;
   const vpH = _viewport?.clientHeight || 800;
   const colVisualH = (_layout.totalHeight || 0) * scale;
@@ -2182,6 +2232,11 @@ function _onStateChange(state) {
       } else {
         alignListItemTop(state.index);
       }
+      _resumeMountedVideos();
+    } else if (mapped === undefined) {
+      // Unmapped pick puts the overlay up. Mounted videos keep decoding
+      // behind it, so pause them the way legacy clears on a non video pick.
+      _pauseMountedVideos();
     }
   }
 }
@@ -2334,8 +2389,10 @@ function _admitCompleted(destPath) {
   _scheduleSettle();
 
   // The completed row itself was selected while pending: jump to it now.
+  // The overlay clears here too, so resume like the mapped pick path does.
   if (Core.getState().index === listIndex) {
     alignListItemTop(listIndex);
+    _resumeMountedVideos();
   }
 }
 
@@ -2348,6 +2405,8 @@ export function initManhwaStrip(viewportState) {
 
   if (_initialized) return;
   _initialized = true;
+
+  initManhwaAudio({ Core, FsUtils });
 
   Core.onStateChange(_onStateChange);
 

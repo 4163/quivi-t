@@ -561,7 +561,11 @@ export const Core = {
       }
     }
 
-    const next = (_state.index + delta + _state.list.length) % _state.list.length;
+    // Cleared selection restarts at the near end instead of wrapping
+    // around to the far end minus one.
+    const next = _state.index < 0
+      ? (delta < 0 ? _state.list.length - 1 : 0)
+      : (_state.index + delta + _state.list.length) % _state.list.length;
     _selectEntry(next, false, clampPreview, Math.sign(delta) || 1);
   },
 

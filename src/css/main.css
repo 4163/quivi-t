@@ -890,6 +890,125 @@ li:hover>.favorite-remove,
   margin-top: calc((3px - min(var(--fs-11), 12px)) / 2);
 }
 
+/* Per slot volume pill for manhwa strip videos. Bottom left of its slot,
+   same visual language as the viewport audio pill. JS toggles is-visible
+   and data-state only; hover and transitions live here. */
+.manhwa-volume {
+  display: none;
+  align-items: center;
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 2;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 4px;
+  padding: 2px;
+  pointer-events: auto;
+  opacity: 1;
+  transition: opacity 0.15s linear;
+}
+
+.manhwa-volume.is-visible {
+  display: flex;
+}
+
+#viewport.cursor-hidden .manhwa-volume {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.manhwa-volume-toggle {
+  position: relative;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+
+.manhwa-volume-toggle .mvol-icon {
+  display: none;
+  width: var(--fs-16);
+  height: var(--fs-16);
+}
+
+.manhwa-volume-toggle[data-state="muted"] .mvol-x {
+  display: block;
+}
+
+.manhwa-volume-toggle[data-state="zero"] .mvol-base {
+  display: block;
+}
+
+.manhwa-volume-toggle[data-state="low"] .mvol-1 {
+  display: block;
+}
+
+.manhwa-volume-toggle[data-state="high"] .mvol-2 {
+  display: block;
+}
+
+.manhwa-volume-popover {
+  display: flex;
+  align-items: center;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: max-width 0.18s ease, opacity 0.12s ease, padding 0.18s ease;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.manhwa-volume:hover .manhwa-volume-popover,
+.manhwa-volume:focus-within .manhwa-volume-popover {
+  max-width: calc(var(--fs-16) * 5 + 8px);
+  opacity: 1;
+  pointer-events: auto;
+  padding: 0 6px 0 2px;
+}
+
+.manhwa-volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: calc(var(--fs-16) * 5);
+  height: var(--fs-11);
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  display: block;
+}
+
+.manhwa-volume-slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.manhwa-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: min(var(--fs-11), 12px);
+  height: min(var(--fs-11), 12px);
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  margin-top: calc((3px - min(var(--fs-11), 12px)) / 2);
+}
+
+/* Slider outlines clip inside the overflow popovers, so ring the pill
+   instead. :has with focus-visible keeps mouse clicks ring free. */
+.audio-control-container:has(:focus-visible),
+.manhwa-volume:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
 #file-panel-header {
   display: grid;
   grid-template-columns: var(--col-name-w) var(--col-ext-w) var(--col-date-w);

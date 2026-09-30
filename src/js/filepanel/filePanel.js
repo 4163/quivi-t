@@ -2053,7 +2053,7 @@ function commitPendingThumbnails() {
  * so toggle-off repaints correctly regardless of listener order; the index
  * query itself tolerates an inactive strip. */
 function stripVisibleIndices(list, index, manhwaOn) {
-  if (!manhwaOn) return null;
+  if (!manhwaOn || index < 0) return null;
   const entry = list?.[index];
   if (entry && !FsUtils.isImageEntry(entry)) return null;
   return new Set(_getVisibleImageIndices());
