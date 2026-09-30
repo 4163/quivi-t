@@ -117,6 +117,11 @@ Confidence. Items above stop at step 2 until implementation runs code. Step 4 pr
 - [ ] Confirm replay probes that match `.bridge`, viewer classes, or action ids still pass. Run `npm test` for contract integrity.
 - Accept. Targeted mocha file passes. Single e2e spec passes. Contract tests pass. Full `cargo test` is not needed since no Rust changes are planned. `cargo check --tests` only if a Rust touch appears.
 
+## Polish
+
+- [ ] m to l blank flicker on large landscape files, no loading indicators. Stale release gate landed in `src/js/viewer/viewer.js:40-46` but the flicker persists. All other static kill paths audited closed. Root cause unknown, needs replay telemetry. Scenario `e2e/scenarios/manhwa-video-bridge.json` is ready. Diagnosis handed off, awaiting report.
+- [x] Toggle spam jumps the file list to the middle file. `_updateWindow` derives the anchor from the viewport center over estimate-built layout, and settle commits it. Fix: `_visibleDecided` holds the anchor while any visible row is undecided. Only the multi visible branch changes. Single visible, edge latch, and holdover paths untouched. Runtime confirmed.
+
 ## Files to touch
 
 Frontend. `src/index.html`, `src/css/main.css`, `src/js/viewer/manhwaStrip.js`, one new strip audio coordinator next to the strip, `src/js/main/main.js`, `src/js/viewer/viewer.js` only if handoff wiring needs a video branch.

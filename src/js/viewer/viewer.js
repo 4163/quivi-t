@@ -38,11 +38,13 @@ function _doubleRaf(fn) {
 }
 
 setOnSlotMounted(() => {
-  if (renderer.isBridgeActive()) {
-    _doubleRaf(() => {
-      renderer.releaseBridge();
-    });
-  }
+  if (!isManhwaStripActive() || !renderer.isBridgeActive()) return;
+  _doubleRaf(() => {
+    // A toggle-off inside these two frames must not spend a stale release
+    // on the fresh m->l bridge. The fallback timer owns that retirement.
+    if (!isManhwaStripActive()) return;
+    renderer.releaseBridge();
+  });
 });
 setOnBridgeHandoff((node, natW, natH, fitMode) => {
   renderer.parkHandoff(node, natW, natH, fitMode);

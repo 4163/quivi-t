@@ -833,9 +833,13 @@ function _updateWindow() {
           newAnchor = primaryImgIdx;
         } else if (visStart === visEnd) {
           newAnchor = visStart;
-        } else {
+        } else if (_visibleDecided(visStart, visEnd)) {
           const candidate = findAnchorIndex(_layout.offsets, centerColY);
           newAnchor = Math.max(visStart, Math.min(visEnd, candidate));
+        } else {
+          // Estimate-built layout has no trustworthy center. Hold the anchor
+          // instead of committing the middle file on the next settle.
+          newAnchor = _anchorImgIdx;
         }
       }
     } else {
@@ -1068,6 +1072,15 @@ function _requestLayout() {
     _updateWindow();
     _scheduleSettle();
   });
+}
+
+/** True when every row in a visible range carries decoded dims. Center
+ * derivation means nothing on estimates, so callers hold instead. */
+function _visibleDecided(visStart, visEnd) {
+  for (let i = visStart; i <= visEnd; i++) {
+    if (!_imageIndex[i]?.decoded) return false;
+  }
+  return true;
 }
 
 /** Intrinsic dims of an off-DOM probe node, img or video. Null until known:
