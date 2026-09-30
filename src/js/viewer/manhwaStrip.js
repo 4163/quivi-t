@@ -635,6 +635,9 @@ function _onItemDecoded(imgIdx, nw, nh) {
     if (isIco && (Core.getState()?.fitMode || _lastFitMode) !== 'none') {
       _fitRefreshPending = true;
     }
+    if (_entryRefreshArmed && !_entryRefreshEntry) {
+      _entryRefreshPending = true;
+    }
     _requestLayout();
   }
 }
@@ -1064,7 +1067,9 @@ function _requestLayout() {
     _updateLayout(anchorToHold, oldAnchorTop);
     if (_fitRefreshPending) {
       _fitRefreshPending = false;
-      _applyFitMode(Core.getState()?.fitMode || _lastFitMode, _anchorImgIdx, _anchorHoldoverAlignTop);
+      const fitRefreshEntry = _entryRefreshEntry;
+      _disarmEntryRefresh();
+      _applyFitMode(Core.getState()?.fitMode || _lastFitMode, _anchorImgIdx, _anchorHoldoverAlignTop, fitRefreshEntry);
       return;
     }
     if (_entryRefreshPending && !_fitRefreshPending) {
@@ -1074,6 +1079,9 @@ function _requestLayout() {
       _disarmEntryRefresh();
       if (quiet && fit && fit !== 'none') {
         _applyFitMode(fit, _anchorImgIdx, _anchorHoldoverAlignTop, replayEntry);
+        if (!replayEntry && _imageIndex.some((it) => !it.decoded)) {
+          _armEntryRefresh(false);
+        }
         return;
       }
     }
@@ -2218,6 +2226,9 @@ function _onStateChange(state) {
     _lastFitMode = state.fitMode;
     _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : _lastFitModeGen;
     _applyFitMode(state.fitMode);
+    if (_imageIndex.some((it) => !it.decoded)) {
+      _armEntryRefresh(false);
+    }
     return;
   }
 
