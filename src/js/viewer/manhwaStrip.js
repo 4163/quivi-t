@@ -69,9 +69,9 @@ let _initialized = false;
 let _topSpacer = null;
 let _bottomSpacer = null;
 
-/** Filtered image entries: { listIndex, entry, imgIdx, naturalWidth, naturalHeight, decoded }[].
- * Videos are excluded entirely: selecting one is highlight-only with the
- * drop overlay up, and the strip never reserves rows for them. */
+/** Filtered strip entries: { listIndex, entry, imgIdx, kind, naturalWidth, naturalHeight, decoded }[].
+ * kind is 'image' or 'video'. Videos hold rows like images do; video nodes
+ * mount into their slots once the video slice lands. */
 let _imageIndex = [];
 
 /** Reverse map: listIndex → imgIdx (position in _imageIndex). */
@@ -188,12 +188,13 @@ function _buildImageIndex(list) {
   _listToImgIdx.clear();
   for (let i = 0; i < list.length; i++) {
     const entry = list[i];
-    if (FsUtils.isImageEntry(entry) && !FsUtils.isVideoEntry(entry) && !_isPendingEntry(entry)) {
+    if (FsUtils.isImageEntry(entry) && !_isPendingEntry(entry)) {
       const imgIdx = result.length;
       result.push({
         listIndex: i,
         entry,
         imgIdx,
+        kind: FsUtils.isVideoEntry(entry) ? 'video' : 'image',
         naturalWidth: 0,
         naturalHeight: 0,
         decoded: false,
@@ -678,6 +679,8 @@ function _updateWindow() {
   for (let i = startIndex; i <= endIndex; i++) {
     const item = _imageIndex[i];
     if (_mounted.has(i) || queued.has(i)) continue;
+    // Slice 1: video rows reserve layout space but mount in a later slice.
+    if (item?.kind === 'video') continue;
 
     const slot = _slots.get(i);
     if (!slot) continue;
@@ -821,6 +824,8 @@ function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, v
     if (!item || _mounted.has(i) || _prefetching.has(i) || _prefetchedImages.has(i) || _isDecodeQueued(i)) {
       continue;
     }
+    // Slice 1: video rows reserve layout space but decode in a later slice.
+    if (item.kind === 'video') continue;
     const pre = new Image();
     pre.decoding = 'async';
     _prefetching.set(i, pre);
@@ -1161,8 +1166,8 @@ function _syncAnchorToCore() {
   _lastSyncedListIndex = anchorItem.listIndex;
   _lastVisSig = visSig;
   if (!hadHoldover && !anchorChanged && !visChanged) return;
-  // Never drag Core back onto a nearby image while a video or other
-  // unmapped row stays deliberately highlighted.
+  // Never drag Core back onto a nearby row while an unmapped entry
+  // (folder edge) stays deliberately highlighted.
   const liveMapped = _listToImgIdx.has(Core.getState().index);
   if ((anchorChanged || hadHoldover) && liveMapped) {
     _anchorUpdateInProgress = true;
@@ -1247,9 +1252,6 @@ function _firstLastEdge() {
 function _resolveOpenAnchor(state) {
   const mapped = _listToImgIdx.get(state.index);
   if (mapped !== undefined) return mapped;
-  // A video selection stays highlight-only regardless of the setting.
-  const entry = state.list?.[state.index];
-  if (entry && FsUtils.isVideoEntry(entry)) return -1;
   const openFirst = state.config?.frontend_data?.open_first_image === true;
   if (openFirst && _imageIndex.length > 0) return 0;
   return -1;
@@ -1506,6 +1508,10 @@ export function resetZoom(exactScale) {
   return true;
 }
 
+export function isListIndexMapped(listIndex) {
+  return _listToImgIdx.has(listIndex);
+}
+
 export function getFirstImageIndex() {
   return _imageIndex[0]?.listIndex ?? -1;
 }
@@ -1525,9 +1531,9 @@ export function navigateManhwa(delta) {
     }
     return alignListItemTop(state.index);
   }
-  // Landed on an entry with no image mapping (video, folder edge):
-  // highlight-only. The row paints, the overlay shows, and the strip and
-  // its anchor stay exactly where they are.
+  // Landed on an entry with no strip mapping (folder edge):
+  // highlight-only. The overlay shows, and the strip and its anchor stay
+  // exactly where they are.
   return true;
 }
 
@@ -1700,7 +1706,7 @@ function _activate(state) {
   _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
   _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
   if (_anchorImgIdx < 0) {
-    // No image selection: the overlay stays up. Scale still applies so a
+    // No mapped selection: the overlay stays up. Scale still applies so a
     // later pick aligns correctly; nothing mounts or syncs until then.
     _applyFitMode(_lastFitMode);
     return;
@@ -2013,7 +2019,7 @@ function _admitCompleted(destPath) {
   if (listIndex === -1) return;
   if (_listToImgIdx.has(listIndex)) return;
   const entry = list[listIndex];
-  if (!entry || !FsUtils.isImageEntry(entry) || FsUtils.isVideoEntry(entry) || _isPendingEntry(entry)) return;
+  if (!entry || !FsUtils.isImageEntry(entry) || _isPendingEntry(entry)) return;
 
   const oldByList = new Map();
   for (const it of _imageIndex) oldByList.set(it.listIndex, it);

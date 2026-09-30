@@ -48,7 +48,8 @@ import {
   navigateManhwa,
   pageStrip,
   setRevealListTop,
-  getVisibleImageIndices
+  getVisibleImageIndices,
+  isListIndexMapped
 } from '../viewer/manhwaStrip.js';
 
 // Reset the options tab on startup so each session starts on General.
@@ -208,12 +209,10 @@ Core.onStateChange((state) => {
     return;
   }
 
-  // A video selected in strip mode behaves like a folder: the strip holds
-  // no video rows, so the overlay covers the viewport even though a src
-  // exists (single-image playback needs it).
-  const selectedEntry = state.list?.[state.index];
-  const stripVideoSelected = isManhwaStripActive() && !!selectedEntry && FsUtils.isVideoEntry(selectedEntry);
-  if (!state.src || stripVideoSelected) {
+  // A selection with no strip row behaves like a folder: the overlay
+  // covers the viewport. Mapped rows (images and videos alike) clear it.
+  const stripUnmappedSelected = isManhwaStripActive() && state.index >= 0 && !isListIndexMapped(state.index);
+  if (!state.src || stripUnmappedSelected) {
     dropOverlay.classList.toggle('active', !isPasswordBlocked);
     viewport.classList.add('empty');
   } else {

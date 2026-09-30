@@ -2047,7 +2047,7 @@ function commitPendingThumbnails() {
 }
 
 /** Strip secondary highlights follow the viewport. When the selected entry
- * is anything but an image (video, folder, parent, non-image file), the
+ * is anything but a strip row (folder, parent, non-image file), the
  * viewport shows the drop overlay instead of the strip, so no row counts
  * as in view. Keys off the passed mode flag rather than live strip activity
  * so toggle-off repaints correctly regardless of listener order; the index
@@ -2055,7 +2055,7 @@ function commitPendingThumbnails() {
 function stripVisibleIndices(list, index, manhwaOn) {
   if (!manhwaOn) return null;
   const entry = list?.[index];
-  if (entry && (!FsUtils.isImageEntry(entry) || FsUtils.isVideoEntry(entry))) return null;
+  if (entry && !FsUtils.isImageEntry(entry)) return null;
   return new Set(_getVisibleImageIndices());
 }
 
