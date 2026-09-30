@@ -1116,7 +1116,10 @@ function _claimSlot(imgIdx, item, slot, node) {
   if (item?.kind === 'video' && node.readyState < 2) {
     // Metadata only means dims, not pixels. Hold the retiring bridge frame
     // until this slot has a real frame, or an error decides it never will.
-    const release = () => _onSlotMounted?.(imgIdx);
+    // A handed-off node skips: the m->l bridge owns its own retirement.
+    const release = () => {
+      if (node.dataset.borrowedBridge !== 'true') _onSlotMounted?.(imgIdx);
+    };
     node.addEventListener('loadeddata', release, { once: true });
     node.addEventListener('error', release, { once: true });
   } else {
@@ -1955,43 +1958,47 @@ function _deactivate() {
   _active = false;
 
   const anchorIdx = _anchorImgIdx >= 0 ? _anchorImgIdx : 0;
-  let anchorImg = _mounted.get(anchorIdx) || _mounted.values().next()?.value;
+  let anchorNode = _mounted.get(anchorIdx) || _mounted.values().next()?.value;
   let anchorSource = '_mounted';
 
-  // Fall back to prefetched or completed prefetching entries when no image
-  // has finished the sequential decode queue yet (fast toggle-off).
-  if (!anchorImg) {
-    anchorImg = _prefetchedImages.get(anchorIdx) || _prefetchedImages.values().next()?.value;
-    if (anchorImg) {
+  // Fall back to prefetched or completed prefetching entries when no node
+  // has finished the sequential queue yet (fast toggle-off). _probeDims
+  // covers completed images and metadata-ready videos alike.
+  if (!anchorNode) {
+    anchorNode = _prefetchedImages.get(anchorIdx) || _prefetchedImages.values().next()?.value;
+    if (anchorNode) {
       anchorSource = '_prefetchedImages';
     } else {
       const pre = _prefetching.get(anchorIdx) || _prefetching.values().next()?.value;
-      if (pre && pre.complete && pre.naturalWidth > 0) {
-        anchorImg = pre;
+      if (pre && _probeDims(pre)) {
+        anchorNode = pre;
         anchorSource = '_prefetching';
       }
     }
   }
 
   const anchorItem = _imageIndex[anchorIdx];
-  const natW = anchorImg?.naturalWidth || anchorItem?.naturalWidth || 0;
-  const natH = anchorImg?.naturalHeight || anchorItem?.naturalHeight || 0;
+  const nodeW = anchorNode?.naturalWidth || anchorNode?.videoWidth || 0;
+  const nodeH = anchorNode?.naturalHeight || anchorNode?.videoHeight || 0;
+  const natW = nodeW || anchorItem?.naturalWidth || 0;
+  const natH = nodeH || anchorItem?.naturalHeight || 0;
 
-  if (anchorImg && anchorImg.src && natW > 0 && natH > 0) {
+  if (anchorNode && anchorNode.src && natW > 0 && natH > 0) {
     const sourceMap = anchorSource === '_mounted'
       ? _mounted
       : (anchorSource === '_prefetchedImages' ? _prefetchedImages : _prefetching);
-    for (const [idx, img] of sourceMap) {
-      if (img === anchorImg) {
+    for (const [idx, node] of sourceMap) {
+      if (node === anchorNode) {
         sourceMap.delete(idx);
         break;
       }
     }
-    anchorImg.onload = null;
-    anchorImg.onerror = null;
-    anchorImg.dataset.borrowedBridge = 'true';
+    anchorNode.onload = null;
+    anchorNode.onerror = null;
+    anchorNode.onloadedmetadata = null;
+    anchorNode.dataset.borrowedBridge = 'true';
     const targetFit = Core.getState()?.fitMode || _lastFitMode || 'window';
-    _onBridgeHandoff?.(anchorImg, natW, natH, targetFit);
+    _onBridgeHandoff?.(anchorNode, natW, natH, targetFit);
   }
 
   _viewport.classList.remove('manhwa-active');

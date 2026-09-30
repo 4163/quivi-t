@@ -95,9 +95,9 @@ Confidence. Items above stop at step 2 until implementation runs code. Step 4 pr
 
 ### 7. m to l bridge hands back a video anchor
 
-- [ ] Extend `_deactivate` at `src/js/viewer/manhwaStrip.js:1752-1796` to pick a video anchor from `_mounted`, `_prefetchedImages`, or completed `_prefetching`, mirroring `manhwaStrip.js:1757-1774`. Read dims from `videoWidth` and `videoHeight`.
-- [ ] Pass the video node through `_onBridgeHandoff` at `manhwaStrip.js:1794` with `borrowedBridge` set, same as img. Confirm `parkHandoff` at `src/js/viewer/viewer.js:47-49` into `viewerRender.js:198-211` parks video nodes and legacy resumes playback through its existing swap path at `viewerRender.js:618-670`.
-- [ ] Clear strip caches and index after handoff exactly as today at `manhwaStrip.js:1814-1826`.
+- [x] Extend `_deactivate` at `src/js/viewer/manhwaStrip.js:1752-1796` to pick a video anchor from `_mounted`, `_prefetchedImages`, or completed `_prefetching`, mirroring `manhwaStrip.js:1757-1774`. Read dims from `videoWidth` and `videoHeight`.
+- [x] Pass the video node through `_onBridgeHandoff` at `manhwaStrip.js:1794` with `borrowedBridge` set, same as img. Confirm `parkHandoff` at `src/js/viewer/viewer.js:47-49` into `viewerRender.js:198-211` parks video nodes and legacy resumes playback through its existing swap path at `viewerRender.js:618-670`. First frame listener skips borrowed nodes so a late `loadeddata` cannot retire the m to l bridge early.
+- [x] Clear strip caches and index after handoff exactly as today at `manhwaStrip.js:1814-1826`. Runtime confirmed.
 - Accept. Toggling strip off on a video anchor returns to legacy with that video current, sized, and playing muted per legacy rules. Toggling off on an image anchor behaves as before. Fast toggle off before decode still finds an anchor or exits clean with no throw.
 
 ### 8. Per slot volume pill, bottom left, auto hide, mutually exclusive
