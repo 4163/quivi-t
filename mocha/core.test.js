@@ -179,6 +179,27 @@ describe('Core state machine', () => {
     });
   });
 
+  describe('cleared selection navigation', () => {
+    const dummyList = [
+      { name: '01.png', path: '/manga/01.png' },
+      { name: '02.png', path: '/manga/02.png' },
+      { name: '03.png', path: '/manga/03.png' },
+      { name: '04.png', path: '/manga/04.png' }
+    ];
+
+    it('restarts at the last item moving backward from cleared selection', () => {
+      Core.setState({ list: dummyList, index: -1 });
+      Core.navigate(-1);
+      assert.equal(Core.getState().index, 3);
+    });
+
+    it('restarts at the first item moving forward from cleared selection', () => {
+      Core.setState({ list: dummyList, index: -1 });
+      Core.navigate(1);
+      assert.equal(Core.getState().index, 0);
+    });
+  });
+
   describe('file list view mode', () => {
     it('toggles between list and thumbnail view modes', () => {
       Core.setFileListViewMode('list');

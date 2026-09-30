@@ -112,9 +112,9 @@ Confidence. Items above stop at step 2 until implementation runs code. Step 4 pr
 
 ### 9. Probes, unit tests, and e2e
 
-- [ ] Extend `mocha/viewerMath.test.js` column and fit cases for mixed rows with video dims. Extend `mocha/actions.test.js` only if navigation mapping changes action dispatch. Run `npm run mocha`.
-- [ ] Add or extend one e2e viewer spec for a mixed folder. Cover scroll across an image to video boundary, toggle l to m on a video, toggle m to l on a video anchor, unmute one of two sounding videos, and pill auto hide. Run the single spec through MCP, not raw wdio subprocesses.
-- [ ] Confirm replay probes that match `.bridge`, viewer classes, or action ids still pass. Run `npm test` for contract integrity.
+- [x] Extend `mocha/viewerMath.test.js` column and fit cases for mixed rows with video dims. Extend `mocha/actions.test.js` only if navigation mapping changes action dispatch. Run `npm run mocha`. Covered instead with `core.test.js` cleared selection restart cases, `actions.test.js` mute and manhwa bind plus conflict guard, and a toggle audio routing test. 257 passing.
+- [~] Add or extend one e2e viewer spec for a mixed folder. Cover scroll across an image to video boundary, toggle l to m on a video, toggle m to l on a video anchor, unmute one of two sounding videos, and pill auto hide. Run the single spec through MCP, not raw wdio subprocesses. Out of scope. No runner in this harness.
+- [~] Confirm replay probes that match `.bridge`, viewer classes, or action ids still pass. Run `npm test` for contract integrity. Out of scope. No runner in this harness. Probe and class contracts untouched by inspection.
 - Accept. Targeted mocha file passes. Single e2e spec passes. Contract tests pass. Full `cargo test` is not needed since no Rust changes are planned. `cargo check --tests` only if a Rust touch appears.
 
 ## Polish

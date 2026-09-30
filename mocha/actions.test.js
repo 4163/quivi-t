@@ -62,6 +62,23 @@ describe('Actions registry and keybindings', () => {
       assert.equal(normalizeCombo('mouseback'), 'MouseBack');
       assert.equal(normalizeCombo('mouseforward'), 'MouseForward');
     });
+
+    it('binds mute to m and manhwa to Ctrl+m with no default conflicts', () => {
+      const byId = Object.fromEntries(ACTION_REGISTRY.map((a) => [a.id, a]));
+      const asArray = (binds) => Array.isArray(binds) ? binds : [binds];
+      assert.deepEqual(asArray(byId['cmd-toggle-audio'].defaultBinds), ['m']);
+      assert.deepEqual(asArray(byId['cmd-toggle-manhwa'].defaultBinds), ['Ctrl+m']);
+
+      const seen = new Map();
+      for (const action of ACTION_REGISTRY) {
+        const binds = Array.isArray(action.defaultBinds) ? action.defaultBinds : [action.defaultBinds];
+        for (const bind of binds) {
+          const norm = normalizeCombo(bind);
+          assert.ok(!seen.has(norm), `Default bind conflict: ${norm} on ${action.id} and ${seen.get(norm)}`);
+          seen.set(norm, action.id);
+        }
+      }
+    });
   });
 
   describe('dispatch function', () => {
@@ -86,6 +103,25 @@ describe('Actions registry and keybindings', () => {
       await assert.doesNotReject(async () => {
         await dispatch('cmd-nonexistent-action-id', null, {});
       });
+    });
+
+    it('routes audio toggle to the strip coordinator when manhwa is active', async () => {
+      let stripAnchor = null;
+      let legacyMuted = false;
+      const fakeCtx = {
+        Core: { getState: () => ({ manhwaEnabled: true }) },
+        getStripAnchorImgIdx: () => 4,
+        ManhwaAudio: { toggleStripMute: (anchor) => { stripAnchor = anchor; } },
+        ViewerAudio: { toggleAudioMute: () => { legacyMuted = true; } }
+      };
+
+      await dispatch('cmd-toggle-audio', null, fakeCtx);
+      assert.equal(stripAnchor, 4);
+      assert.equal(legacyMuted, false);
+
+      fakeCtx.Core = { getState: () => ({ manhwaEnabled: false }) };
+      await dispatch('cmd-toggle-audio', null, fakeCtx);
+      assert.equal(legacyMuted, true);
     });
 
     it('routes navigation to navigateManhwa and pan/zoom to Viewer when manhwa is active', async () => {
