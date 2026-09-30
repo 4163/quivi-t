@@ -60,10 +60,10 @@ Confidence. Items above stop at step 2 until implementation runs code. Step 4 pr
 
 ### 2. Slot nodes carry video as well as img
 
-- [ ] Add a video node pool next to `_acquireNode` and `_releaseNode` at `manhwaStrip.js:213-232`. Video nodes are `video` elements with `loop`, `muted`, `playsinline`, `preload="metadata"`. Never push a video node into the img `_freePool`. Name caps at module scope.
-- [ ] Extend `_createSlotNode`, `_acquireSlotNode`, `_releaseSlotNode`, `_insertSlotOrdered` at `manhwaStrip.js:327-384` so a slot hosts one img or one video. Slot keeps `position: relative` from `src/css/main.css:1487-1497` so the per slot pill has an anchor.
-- [ ] Extend `_claimSlot` at `manhwaStrip.js:973-988` to stamp `dataset.imgIdx` and `dataset.listIndex` on video nodes and attach `loadedmetadata` and `error` handlers that feed `_onItemDecoded` with `videoWidth` and `videoHeight`.
-- [ ] Pause, remove src, and load on `_releaseSlotNode` and evict paths at `manhwaStrip.js:626-654` so off window videos stop and free their element. Revoke blob URLs with `FsUtils.revokeIfObjectURL` where the src came from cache.
+- [x] Add a video node pool next to `_acquireNode` and `_releaseNode` at `manhwaStrip.js:213-232`. Video nodes are `video` elements with `loop`, `muted`, `playsinline`, `preload="metadata"`. Never push a video node into the img `_freePool`. Name caps at module scope.
+- [x] Extend `_createSlotNode`, `_acquireSlotNode`, `_releaseSlotNode`, `_insertSlotOrdered` at `manhwaStrip.js:327-367` so a slot hosts one img or one video. Slot keeps `position: relative` from `src/css/main.css:1487-1497` so the per slot pill has an anchor.
+- [x] Extend `_claimSlot` at `manhwaStrip.js:973-988` to stamp `dataset.imgIdx` and `dataset.listIndex` on video nodes and attach `loadedmetadata` and `error` handlers that feed `_onItemDecoded` with `videoWidth` and `videoHeight`.
+- [x] Pause, remove src, and load on `_releaseSlotNode` and evict paths at `manhwaStrip.js:626-654` so off window videos stop and free their element. No blob revoke. The archive blob cache owns those URLs and revokes on its own eviction. Slot sizing rules for video landed early in `main.css`. Runtime confirmed.
 - Accept. Rapid scroll through mixed rows mounts and evicts without stalled slots. Paused off window videos use no CPU. No img handler fires for a video node and back.
 
 ### 3. Mount queue, prefetch, and src building understand video

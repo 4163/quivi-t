@@ -18,6 +18,9 @@ import { Statusbar } from '../menubar/statusbar.js';
 /** Max img nodes kept in the free pool after eviction. */
 const STRIP_POOL_CAP = 10;
 
+/** Max video nodes kept in the free pool after eviction. */
+const STRIP_VIDEO_POOL_CAP = 4;
+
 /** Item-count buffer behind the anchor. Strict 1-image policy: index based,
  * so wrong height estimates never misalign it. */
 const STRIP_BEHIND_COUNT = 1;
@@ -91,6 +94,9 @@ const _prefetchedImages = new Map();
 
 /** Free pool of recycled img nodes. */
 const _freePool = [];
+
+/** Free pool of recycled video nodes. Never mixed with the img pool. */
+const _freeVideoPool = [];
 
 /** Max slot container nodes kept in the free pool after eviction. */
 const SLOT_POOL_CAP = 15;
@@ -232,6 +238,47 @@ function _releaseNode(img) {
   }
 }
 
+function _acquireVideoNode() {
+  if (_freeVideoPool.length > 0) return _freeVideoPool.pop();
+  const video = document.createElement('video');
+  video.loop = true;
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = 'metadata';
+  video.draggable = false;
+  return video;
+}
+
+function _releaseVideoNode(video) {
+  video.onloadedmetadata = null;
+  video.onerror = null;
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
+  video.removeAttribute('data-list-index');
+  video.removeAttribute('data-img-idx');
+  video.removeAttribute('style');
+  if (_freeVideoPool.length < STRIP_VIDEO_POOL_CAP) {
+    _freeVideoPool.push(video);
+  }
+}
+
+/** Release a strip node to its own pool. Img and video pools never mix. */
+function _releaseStripNode(node) {
+  if (!node) return;
+  if (node.tagName === 'VIDEO') _releaseVideoNode(node);
+  else _releaseNode(node);
+}
+
+/** Unhook a slot child without pooling. Evict paths pool via _releaseStripNode. */
+function _detachStripNode(node) {
+  node.onload = null;
+  node.onerror = null;
+  node.onloadedmetadata = null;
+  if (node.tagName === 'VIDEO') node.pause();
+  node.remove();
+}
+
 /** Shared mount handlers. One pair serves all slots, keyed by dataset.imgIdx. */
 function _handleStripImgLoad(event) {
   const img = event?.currentTarget;
@@ -257,6 +304,31 @@ function _handleStripImgError(event) {
   }
 }
 
+/** Shared video mount handlers. Mirror the img pair, keyed by dataset.imgIdx. */
+function _handleStripVideoMetadata(event) {
+  const video = event?.currentTarget;
+  const imgIdx = Number(video?.dataset?.imgIdx);
+  if (!Number.isFinite(imgIdx)) return;
+  _onItemDecoded(imgIdx, video.videoWidth, video.videoHeight);
+  if (_mountInFlight === imgIdx) {
+    _mountInFlight = -1;
+    _advanceMountQueue();
+  }
+}
+
+function _handleStripVideoError(event) {
+  const video = event?.currentTarget;
+  const imgIdx = Number(video?.dataset?.imgIdx);
+  if (!Number.isFinite(imgIdx)) return;
+  const item = _imageIndex[imgIdx];
+  // No failure UI by policy.
+  _onItemDecoded(imgIdx, item?.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
+  if (_mountInFlight === imgIdx) {
+    _mountInFlight = -1;
+    _advanceMountQueue();
+  }
+}
+
 function _trimPrefetchCache() {
   while (_prefetchedImages.size > PREFETCH_CACHE_CAPACITY) {
     let furthestIdx = -1;
@@ -269,9 +341,9 @@ function _trimPrefetchCache() {
       }
     }
     if (furthestIdx === -1) break;
-    const oldImg = _prefetchedImages.get(furthestIdx);
+    const oldNode = _prefetchedImages.get(furthestIdx);
     _prefetchedImages.delete(furthestIdx);
-    _releaseNode(oldImg);
+    _releaseStripNode(oldNode);
   }
 }
 
@@ -360,8 +432,9 @@ function _releaseSlotNode(slot) {
   slot.style.removeProperty('--slot-width');
   slot.style.removeProperty('--slot-height');
   slot.style.removeProperty('--slot-backdrop-bg');
-  const img = slot.querySelector('img');
-  if (img) img.remove();
+  for (const child of slot.querySelectorAll(':scope > img, :scope > video')) {
+    _detachStripNode(child);
+  }
   if (_freeSlotPool.length < SLOT_POOL_CAP) {
     _freeSlotPool.push(slot);
   }
@@ -624,12 +697,12 @@ function _updateWindow() {
 
   // Evict everything outside the buffer. Mounted nodes stay bounded by
   // BEHIND + AHEAD plus whatever is visibly on screen.
-  for (const [imgIdx, img] of _mounted) {
+  for (const [imgIdx, node] of _mounted) {
     if (imgIdx < startIndex || imgIdx > endIndex) {
       if (_mountInFlight === imgIdx) _mountInFlight = -1;
       _mounted.delete(imgIdx);
-      img.remove();
-      _releaseNode(img);
+      _detachStripNode(node);
+      _releaseStripNode(node);
     }
   }
   for (const [imgIdx, slot] of _slots) {
@@ -639,10 +712,10 @@ function _updateWindow() {
       _releaseSlotNode(slot);
     }
   }
-  for (const [imgIdx, img] of _prefetchedImages) {
+  for (const [imgIdx, node] of _prefetchedImages) {
     if (imgIdx < startIndex - PREFETCH_AHEAD_COUNT || imgIdx > endIndex + PREFETCH_AHEAD_COUNT) {
       _prefetchedImages.delete(imgIdx);
-      _releaseNode(img);
+      _releaseStripNode(node);
     }
   }
   for (const [imgIdx, pre] of _prefetching) {
@@ -975,20 +1048,22 @@ function _isDecodeQueued(imgIdx) {
 
 /** Stamp, attach, and append a decoded node. The slot already carries exact
  * dims, so the node paints once at the right size in the same task. */
-function _claimSlot(imgIdx, item, slot, img) {
-  img.dataset.imgIdx = String(imgIdx);
-  img.dataset.listIndex = String(item.listIndex);
-  img.onload = _handleStripImgLoad;
-  img.onerror = _handleStripImgError;
-  for (const old of Array.from(slot.querySelectorAll(':scope > img'))) {
-    if (old === img) continue;
-    old.onload = null;
-    old.onerror = null;
-    old.remove();
-    _releaseNode(old);
+function _claimSlot(imgIdx, item, slot, node) {
+  node.dataset.imgIdx = String(imgIdx);
+  node.dataset.listIndex = String(item.listIndex);
+  if (item?.kind === 'video') {
+    node.onloadedmetadata = _handleStripVideoMetadata;
+    node.onerror = _handleStripVideoError;
+  } else {
+    node.onload = _handleStripImgLoad;
+    node.onerror = _handleStripImgError;
   }
-  slot.appendChild(img);
-  _mounted.set(imgIdx, img);
+  for (const old of Array.from(slot.querySelectorAll(':scope > img, :scope > video'))) {
+    if (old === node) continue;
+    _detachStripNode(old);
+  }
+  slot.appendChild(node);
+  _mounted.set(imgIdx, node);
   _onSlotMounted?.(imgIdx);
 }
 
@@ -1722,16 +1797,14 @@ function _activate(state) {
 
 function _clearCaches() {
   _resetMountQueue();
-  for (const [, img] of _mounted) {
-    img.onload = null;
-    img.onerror = null;
-    img.remove();
-    _releaseNode(img);
+  for (const [, node] of _mounted) {
+    _detachStripNode(node);
+    _releaseStripNode(node);
   }
   _mounted.clear();
 
-  for (const [, img] of _prefetchedImages) {
-    _releaseNode(img);
+  for (const [, node] of _prefetchedImages) {
+    _releaseStripNode(node);
   }
   _prefetchedImages.clear();
 

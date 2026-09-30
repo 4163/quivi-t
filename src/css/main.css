@@ -1554,7 +1554,8 @@ li:hover>.favorite-remove,
 }
 
 #manhwa-strip>img,
-.manhwa-slot>img {
+.manhwa-slot>img,
+.manhwa-slot>video {
   display: block;
   position: relative;
   z-index: 1;
@@ -1565,12 +1566,15 @@ li:hover>.favorite-remove,
   -webkit-user-select: none;
 }
 
-#manhwa-strip[data-scaling="none"] img {
+#manhwa-strip[data-scaling="none"] img,
+#manhwa-strip[data-scaling="none"] .manhwa-slot>video {
   image-rendering: pixelated;
 }
 
 #manhwa-strip[data-scaling="bilinear"] img,
-#manhwa-strip[data-scaling="lanczos"] img {
+#manhwa-strip[data-scaling="lanczos"] img,
+#manhwa-strip[data-scaling="bilinear"] .manhwa-slot>video,
+#manhwa-strip[data-scaling="lanczos"] .manhwa-slot>video {
   image-rendering: auto;
 }
 
