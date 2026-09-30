@@ -1113,7 +1113,15 @@ function _claimSlot(imgIdx, item, slot, node) {
     node.play().catch(() => {});
   }
   _mounted.set(imgIdx, node);
-  _onSlotMounted?.(imgIdx);
+  if (item?.kind === 'video' && node.readyState < 2) {
+    // Metadata only means dims, not pixels. Hold the retiring bridge frame
+    // until this slot has a real frame, or an error decides it never will.
+    const release = () => _onSlotMounted?.(imgIdx);
+    node.addEventListener('loadeddata', release, { once: true });
+    node.addEventListener('error', release, { once: true });
+  } else {
+    _onSlotMounted?.(imgIdx);
+  }
 }
 
 /** Mount a node whose decode failed. Error UI plus estimated sizing.

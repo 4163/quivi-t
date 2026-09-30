@@ -258,6 +258,9 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _clearVideoPreload();
     _pendingVideoEl = null;
     for (const el of videoEls) {
+      // A node parked in the bridge keeps its frozen frame. It was already
+      // paused at park time and rejoins the pool on bridge release.
+      if (el === _retiringNode) continue;
       el.pause();
       el.classList.remove('active');
       el.removeAttribute('src');

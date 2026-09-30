@@ -83,14 +83,14 @@ Confidence. Items above stop at step 2 until implementation runs code. Step 4 pr
 ### 5. Overlay gating stops hiding video rows
 
 - [x] Narrow `stripVideoSelected` at `src/js/main/main.js:211-222` so the overlay only covers truly unmapped selections. Mapped video rows clear the overlay and the `empty` viewport class. Landed early with slice 1 via `isListIndexMapped`. Runtime confirmed.
-- [ ] Keep grill toggle at `src/js/main/main.js:231-237` working for mixed rows.
+- [x] Keep grill toggle at `src/js/main/main.js:231-237` working for mixed rows. Verified zero diff slice. Runtime confirmed.
 - Accept. Opening a folder on a video row with strip on paints the column. Opening on an unmapped row keeps the old overlay behavior.
 
 ### 6. l to m bridge carries video
 
-- [ ] Keep renderer bail at `src/js/viewer/viewerRender.js:585-598` as the l to m owner. It already parks img and video. Confirm the parked video pauses at `viewerRender.js:155-196`.
-- [ ] Confirm strip mount releases the bridge through `setOnSlotMounted` at `src/js/viewer/viewer.js:40-46`. Video slot mount must emit the same mounted callback as img at `manhwaStrip.js:987`. No second release path.
-- [ ] Confirm target fit geometry passes through the existing handoff. Strip video mount must not call `viewportState.applyFitMode` a second time for the same toggle.
+- [x] Keep renderer bail at `src/js/viewer/viewerRender.js:585-598` as the l to m owner. It already parks img and video. Confirm the parked video pauses at `viewerRender.js:155-196`. Fixed: `_hideVideo` at `viewerRender.js:255-272` stripped src from the parked node in the same tick. It now skips `_retiringNode`, mirroring the image sweep.
+- [x] Confirm strip mount releases the bridge through `setOnSlotMounted` at `src/js/viewer/viewer.js:40-46`. Video slot mount emits on first frame (`loadeddata`, or `error`, or immediately when `readyState` is already 2) instead of on metadata, since metadata means dims but not pixels. No second release path. Repeat emissions are safe no-ops behind `isBridgeActive`.
+- [x] Confirm target fit geometry passes through the existing handoff. Strip video mount must not call `viewportState.applyFitMode` a second time for the same toggle.
 - Accept. Toggling strip on while legacy shows an image keeps a frozen bridge frame until the strip row mounts, then retires it. Same holds while legacy shows a playing video. No blank flash and no stuck bridge node after double raf.
 
 ### 7. m to l bridge hands back a video anchor
