@@ -8,9 +8,6 @@ argument-hint: "<scenario name, issue description, or target module>"
 
 Isolate frontend rendering glitches, blank frame blackouts, state desynchronization, and IPC latency using recorded action replays and in-browser telemetry probes without modifying production files.
 
-- **Inspect existing reports.** Run `npm run diagnose -- --inspect [scenario]` or read `e2e/replay-diagnostics/reports/<scenario>-report.json` directly. Runs in Node without WebDriver.
-- **Ad-hoc inspection.** Use `@wdio/mcp` tools to drive the application and inspect state without the full replay harness.
-
 ## Core rules
 
 1. Zero guesswork. Formulate an explicit, falsifiable hypothesis before investigating.

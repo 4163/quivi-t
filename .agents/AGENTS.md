@@ -6,10 +6,10 @@ Coding standards, architecture rules, and agent workflow for QuiviT.
 - Read every rule and referenced skill before starting work. Confirm adherence to the user.
 - Keep responses concise and focused on the task.
 - Follow existing code style and formatting for each directory and its associated files.
+- Avoid using browser automation/browser subagent, use mocha when possible, or use e2e for any complex frontend problems that requires debugging.
 - For writing work, read `.agents/skills/unslop/SKILL.md` and follow it even if the harness does not auto-load always-active skills. This applies to docs, prompts, comments, and user-facing copy.
-- WebDriver via MCP. Use `@wdio/mcp` tools (configured in `.mcp.json`) for e2e desktop tests, replay diagnostics, and interactive browser inspection. Do not spawn `wdio` terminal subprocesses from the harness. Prefer mocha when a live window is not needed.
-- Verify using `.agents/skills/verify-implementation/SKILL.md` when finishing a slice or when asked to "verify".
-- Validate using `.agents/skills/validate-changes/SKILL.md` when explicitly asked to "validate" code. Do not confuse "verify" (tests and docs) with "validate" (architecture review).
+- **Verify:** Run `.agents/skills/verify-implementation/SKILL.md` when finishing a slice or when asked to "verify".
+- **Validate:** Run `.agents/skills/validate-changes/SKILL.md` when explicitly asked to "validate" code. Do not confuse "verify" (tests and docs) with "validate" (architecture review).
 
 ## Code guidelines
 - **Self-documenting code.** Write code that reads clearly on its own. Use descriptive names and flat control flow (early returns over multi-layer nesting). Keep comments minimal and concise. Reserve them for *why*, non-obvious constraints, and maintained module invariants. A short local heading is fine when a file needs to explain an ownership, lifecycle, or persistence rule. Do not add commentary that merely narrates the code.

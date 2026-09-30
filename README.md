@@ -275,7 +275,6 @@ For automated iterative probing, see [`.agents/skills/replay-debugging/SKILL.md`
 | **Unit Testing** | [`mocha`](https://mochajs.org) | Frontend unit tests |
 | **E2E Testing** | [WebdriverIO](https://webdriver.io) ([`@wdio/tauri-service`](https://www.npmjs.com/package/@wdio/tauri-service)) | Tests against the running app |
 | **Replay Diagnostics** | [WebdriverIO](https://webdriver.io) / In-Browser Probes | Replays a recording and checks frames, WebGL, and IPC timing |
-| **Agent Automation** | [WebdriverIO MCP](https://webdriver.io/docs/mcp) ([`@wdio/mcp`](https://www.npmjs.com/package/@wdio/mcp)) | Model Context Protocol server for AI assistant automation |
 | **Animated Decode** | WebCodecs [`ImageDecoder`](https://developer.mozilla.org/en-US/docs/Web/API/ImageDecoder) | GIF, WebP, APNG, and AVIF playback under filters |
 | **Video Playback** | HTML5 [`<video>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video) / [`<audio>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/audio) | MP4 playback, filters, and soundtrack detection |
 | **Lanczos Scaling** | [`pica`](https://www.npmjs.com/package/pica) | Lanczos resize for still images, off the UI thread |
@@ -415,8 +414,6 @@ QuiviT/
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json
 ├─ themes/                        # Example themes shipped with the app
-├─ opencode.json                  # OpenCode MCP configuration
-├─ .mcp.json                      # Standard MCP configuration
 ├─ package.json
 └─ README.md
 ```

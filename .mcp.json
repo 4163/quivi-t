@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "wdio-mcp": {
-      "command": "node",
-      "args": ["./node_modules/@wdio/mcp/lib/server.js"]
-    }
-  }
-}
