@@ -1,0 +1,12 @@
+{
+  "mcp": {
+    "wdio-mcp": {
+      "type": "local",
+      "command": [
+        "node",
+        "./node_modules/@wdio/mcp/lib/server.js"
+      ],
+      "enabled": true
+    }
+  }
+}

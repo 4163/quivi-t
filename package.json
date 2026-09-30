@@ -12,12 +12,14 @@
     "e2e:split": "node scripts/e2e.js --layout split",
     "record": "wdio run wdio.conf.js --spec e2e/specs/record.e2e.js",
     "replay": "node e2e/replay-diagnostics/cli.js",
-    "diagnose": "node e2e/replay-diagnostics/cli.js"
+    "diagnose": "node e2e/replay-diagnostics/cli.js",
+    "mcp": "wdio-mcp"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "@wdio/cli": "^9.31.9",
     "@wdio/local-runner": "^9.31.9",
+    "@wdio/mcp": "^3.14.0",
     "@wdio/mocha-framework": "^9.31.9",
     "@wdio/spec-reporter": "^9.31.2",
     "@wdio/tauri-service": "^1.4.0",
