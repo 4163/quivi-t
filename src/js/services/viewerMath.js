@@ -307,24 +307,22 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
       default: _scale = Math.min(scaleX, scaleY, 1); break;
     }
 
-    if (_currentFitMode !== 'none') {
-      if (['width', 'width-if-larger'].includes(_currentFitMode)) {
-        const { width, height } = _visualSize();
-        _ty = height > vh ? (height - vh) / 2 : 0;
-        if (isSpread && width > vw) {
-          const maxX = (width - vw) / 2;
-          if (_spreadDirection === 'rtl') {
-            _tx = _spreadStep === 1 ? -maxX : maxX;
-          } else {
-            _tx = _spreadStep === 1 ? maxX : -maxX;
-          }
+    if (['width', 'width-if-larger'].includes(_currentFitMode)) {
+      const { width, height } = _visualSize();
+      _ty = height > vh ? (height - vh) / 2 : 0;
+      if (isSpread && width > vw) {
+        const maxX = (width - vw) / 2;
+        if (_spreadDirection === 'rtl') {
+          _tx = _spreadStep === 1 ? -maxX : maxX;
         } else {
-          _tx = 0;
+          _tx = _spreadStep === 1 ? maxX : -maxX;
         }
       } else {
         _tx = 0;
-        _ty = 0;
       }
+    } else {
+      _tx = 0;
+      _ty = 0;
     }
     _clampPan();
     notify();
@@ -373,6 +371,13 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
 
   function zoomAt(delta, cx, cy) {
     zoomTo(_scale * (1 + delta * 0.12), cx, cy);
+  }
+
+  function resetZoomOnly(exactScale) {
+    _userTransformed = true;
+    _scale = Math.min(32, Math.max(0.05, exactScale));
+    _clampPan();
+    notify();
   }
 
   function panBy(dx, dy) {
@@ -521,6 +526,7 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     setDimensions,
     zoomTo,
     zoomAt,
+    resetZoomOnly,
     panBy,
     panTo,
     rotate,

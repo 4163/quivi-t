@@ -104,10 +104,7 @@ export const Viewer = {
   },
   setZoom: (exactScale) => {
     if (isManhwaStripActive() && resetStripZoom(exactScale)) return;
-    const c = _getViewportCenter();
-    if (!c) return;
-    viewportState.applyFitMode('none');
-    viewportState.zoomTo(exactScale, c.x, c.y);
+    viewportState.resetZoomOnly(exactScale);
   },
   toggleCursorAutoHide: () => gestures.toggleCursorAutoHide()
 };

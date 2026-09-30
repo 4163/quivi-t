@@ -552,6 +552,7 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
     _updateGrillAngles();
   }
   _syncMountedSpacers();
+  _positionSlotGrill();
   } finally {
     _viewportProgram--;
   }
@@ -656,6 +657,23 @@ function _computeVisibleRange() {
 
   const { startIndex, endIndex } = computeWindowRange(_layout.offsets, visibleTopY, visibleBottomY);
   return { startIndex, endIndex, centerColY };
+}
+
+/**
+ * Span the group grill backdrop over the visible slots via custom properties.
+ * Visible range never exceeds the viewport, so the painted layer stays small
+ * on long chapters while covering exactly what is on screen.
+ */
+function _positionSlotGrill() {
+  if (!_strip) return;
+  const { startIndex, endIndex } = _computeVisibleRange();
+  if (startIndex === -1 || endIndex === -1 || !_layout.offsets[startIndex] || !_layout.offsets[endIndex]) {
+    _strip.style.setProperty('--slot-grill-top', '0px');
+    _strip.style.setProperty('--slot-grill-height', '0px');
+    return;
+  }
+  _strip.style.setProperty('--slot-grill-top', `${_layout.offsets[startIndex].top}px`);
+  _strip.style.setProperty('--slot-grill-height', `${_layout.offsets[endIndex].bottom - _layout.offsets[startIndex].top}px`);
 }
 
 
@@ -875,6 +893,7 @@ function _updateWindow() {
     _lastHeartbeatAt = now;
     _syncAnchorToCore();
   }
+  _positionSlotGrill();
 }
 
 /** Probe one video row off-DOM for metadata dims. Mirrors the image
@@ -2020,6 +2039,8 @@ function _clearCaches() {
     _strip.style.setProperty('--strip-spacer-top', '0px');
     _strip.style.setProperty('--strip-spacer-bottom', '0px');
     _strip.style.setProperty('--strip-width', '0px');
+    _strip.style.setProperty('--slot-grill-top', '0px');
+    _strip.style.setProperty('--slot-grill-height', '0px');
   }
 }
 
