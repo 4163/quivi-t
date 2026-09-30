@@ -44,6 +44,7 @@ outputlog*.txt
 e2e/scenarios/last-recording.json
 # Scenarios with sensitive or local-only paths (e.g. local library / AppData)
 e2e/scenarios/mangadex-*.json
+e2e/scenarios/manhwa-video-bridge.json
 # Replay diagnostic reports (generated on each diagnose, contain local absolute paths)
 # Note: e2e/replay-diagnostics/investigation.js is intentionally tracked to support multi-session investigations across commits
 e2e/replay-diagnostics/reports/
