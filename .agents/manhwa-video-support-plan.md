@@ -75,9 +75,9 @@ Confidence. Items above stop at step 2 until implementation runs code. Step 4 pr
 
 ### 4. Layout, fit, and status treat video dims like image dims
 
-- [ ] Feed `videoWidth` and `videoHeight` into `_onItemDecoded` at `manhwaStrip.js:478-558` so `ready`, slot dims, and `_requestLayout` behave the same. SVG caps at `manhwaStrip.js:489-506` stay image only.
-- [ ] Confirm `_updateLayout` at `manhwaStrip.js:408-476` and `_applyFitMode` at `manhwaStrip.js:1271-1391` need no kind branch beyond dims. Width family top latch and height family active clamp from `manhwaStrip.js:1200-1205` apply to video rows.
-- [ ] Keep status dims in `_syncAnchorToCore` at `manhwaStrip.js:1153-1157` working for video anchors. Show `videoWidth x videoHeight` once decoded, blank before.
+- [x] Feed `videoWidth` and `videoHeight` into `_onItemDecoded` at `manhwaStrip.js:478-558` so `ready`, slot dims, and `_requestLayout` behave the same. SVG caps at `manhwaStrip.js:489-506` stay image only.
+- [x] Confirm `_updateLayout` at `manhwaStrip.js:408-476` and `_applyFitMode` at `manhwaStrip.js:1271-1391` need no kind branch beyond dims. Width family top latch and height family active clamp from `manhwaStrip.js:1200-1205` apply to video rows.
+- [x] Keep status dims in `_syncAnchorToCore` at `manhwaStrip.js:1153-1157` working for video anchors. Show `videoWidth x videoHeight` once decoded, blank before. Verified zero diff slice. Runtime confirmed.
 - Accept. Mixed column measures one widest width and one total height. Fit width, fit height family, and fit none align video rows the same as images. Zoom keeps the anchor.
 
 ### 5. Overlay gating stops hiding video rows
