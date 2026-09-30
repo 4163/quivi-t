@@ -752,33 +752,33 @@ function _updateWindow() {
   for (let i = startIndex; i <= endIndex; i++) {
     const item = _imageIndex[i];
     if (_mounted.has(i) || queued.has(i)) continue;
-    // Slice 1: video rows reserve layout space but mount in a later slice.
-    if (item?.kind === 'video') continue;
 
     const slot = _slots.get(i);
     if (!slot) continue;
 
     if (_prefetchedImages.has(i)) {
-      const img = _prefetchedImages.get(i);
+      const node = _prefetchedImages.get(i);
       _prefetchedImages.delete(i);
-      if (!item.decoded && img.naturalWidth > 0) {
-        _onItemDecoded(i, img.naturalWidth, img.naturalHeight);
+      const dims = _probeDims(node);
+      if (!item.decoded && dims) {
+        _onItemDecoded(i, dims.w, dims.h);
       }
-      _claimSlot(i, item, slot, img);
+      _claimSlot(i, item, slot, node);
       continue;
     }
 
     if (_prefetching.has(i)) {
       const pre = _prefetching.get(i);
-      if (pre.complete && pre.naturalWidth > 0) {
+      const dims = _probeDims(pre);
+      if (dims) {
         // Finished while off-DOM: take over, size the slot, then mount.
         _prefetching.delete(i);
         if (!item.decoded) {
-          _onItemDecoded(i, pre.naturalWidth, pre.naturalHeight);
+          _onItemDecoded(i, dims.w, dims.h);
         }
         _claimSlot(i, item, slot, pre);
       }
-      // Still loading: leave it off-DOM. Its onload hands to
+      // Still loading: leave it off-DOM. Its load handler hands to
       // _prefetchedImages, and a later pass appends it with known dims.
       continue;
     }
@@ -862,6 +862,37 @@ function _updateWindow() {
   }
 }
 
+/** Probe one video row off-DOM for metadata dims. Mirrors the image
+ * prefetch below: completed probes wait in _prefetchedImages for the window
+ * pass to claim, failures drop out and schedule a follow-up pass. */
+function _prefetchVideo(i, item, state) {
+  const pre = _acquireVideoNode();
+  _prefetching.set(i, pre);
+  pre.onloadedmetadata = () => {
+    _prefetching.delete(i);
+    if (!_active) {
+      _releaseStripNode(pre);
+      return;
+    }
+    const cur = _imageIndex[i];
+    if (!cur || cur !== item) {
+      _releaseStripNode(pre);
+      return;
+    }
+    _prefetchedImages.set(i, pre);
+    _trimPrefetchCache();
+    if (!cur.decoded && pre.videoWidth > 0) {
+      _onItemDecoded(i, pre.videoWidth, pre.videoHeight);
+    }
+    _requestLayout();
+  };
+  pre.onerror = () => {
+    _prefetching.delete(i);
+    if (_active) _requestLayout();
+  };
+  pre.src = _buildSrc(item.entry, state);
+}
+
 function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, visEnd = -1) {
   const targets = [];
   // Window items outside the visible range must pre-decode off-DOM because
@@ -897,8 +928,10 @@ function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, v
     if (!item || _mounted.has(i) || _prefetching.has(i) || _prefetchedImages.has(i) || _isDecodeQueued(i)) {
       continue;
     }
-    // Slice 1: video rows reserve layout space but decode in a later slice.
-    if (item.kind === 'video') continue;
+    if (item.kind === 'video') {
+      _prefetchVideo(i, item, state);
+      continue;
+    }
     const pre = new Image();
     pre.decoding = 'async';
     _prefetching.set(i, pre);
@@ -1037,6 +1070,18 @@ function _requestLayout() {
   });
 }
 
+/** Intrinsic dims of an off-DOM probe node, img or video. Null until known:
+ * images need completion plus raster dims, videos only metadata dims. */
+function _probeDims(node) {
+  if (!node) return null;
+  const w = node.naturalWidth || node.videoWidth || 0;
+  const h = node.naturalHeight || node.videoHeight || 0;
+  if (!(w > 0 && h > 0)) return null;
+  if (node.tagName === 'VIDEO') return { w, h };
+  if (!node.complete) return null;
+  return { w, h };
+}
+
 /** True while an index awaits or undergoes queued off-DOM decode. */
 function _isDecodeQueued(imgIdx) {
   if (_mountInFlight === imgIdx) return true;
@@ -1063,6 +1108,10 @@ function _claimSlot(imgIdx, item, slot, node) {
     _detachStripNode(old);
   }
   slot.appendChild(node);
+  if (item?.kind === 'video') {
+    node.preload = 'auto';
+    node.play().catch(() => {});
+  }
   _mounted.set(imgIdx, node);
   _onSlotMounted?.(imgIdx);
 }
@@ -1073,6 +1122,66 @@ function _mountFailed(imgIdx, item, slot, img) {
   // No failure UI by policy: the slot keeps its estimate and stays imageless.
   _onItemDecoded(imgIdx, item.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
   _claimSlot(imgIdx, item, slot, img);
+}
+
+/** Mount one queued video row off-DOM, then append it with metadata dims.
+ * One at a time, in scroll order, sharing _mountInFlight with images. */
+function _advanceVideoMount(entry) {
+  const pre = _acquireVideoNode();
+  const drop = () => {
+    if (_mountInFlight === entry.imgIdx) _mountInFlight = -1;
+    _releaseStripNode(pre);
+    if (_mountInFlight === -1) _advanceMountQueue();
+  };
+  const fail = () => {
+    const idx = entry.imgIdx;
+    _mountInFlight = -1;
+    const cur = _imageIndex[idx];
+    const slot = _slots.get(idx);
+    if (_active && cur && cur === entry.item && slot && !_mounted.has(idx)) {
+      _mountFailed(idx, cur, slot, pre);
+    } else {
+      _releaseStripNode(pre);
+    }
+    _advanceMountQueue();
+  };
+  pre.onloadedmetadata = () => {
+    if (_mountInFlight !== entry.imgIdx || !_active) {
+      drop();
+      return;
+    }
+    const cur = _imageIndex[entry.imgIdx];
+    if (!cur || cur !== entry.item) {
+      drop();
+      return;
+    }
+    const now = _imageIndex[entry.imgIdx];
+    if (!now || now !== entry.item || _mounted.has(entry.imgIdx)) {
+      drop();
+      return;
+    }
+    if (!(pre.videoWidth > 0)) {
+      fail();
+      return;
+    }
+    const slot = _slots.get(entry.imgIdx);
+    if (!slot) {
+      drop();
+      return;
+    }
+    _mountInFlight = -1;
+    _onItemDecoded(entry.imgIdx, pre.videoWidth, pre.videoHeight);
+    _claimSlot(entry.imgIdx, now, slot, pre);
+    _advanceMountQueue();
+  };
+  pre.onerror = () => {
+    if (_mountInFlight !== entry.imgIdx) {
+      drop();
+      return;
+    }
+    fail();
+  };
+  pre.src = _buildSrc(entry.item.entry, entry.state);
 }
 
 /** Decode the next queued entry off-DOM, then mount it with known dims.
@@ -1088,6 +1197,10 @@ function _advanceMountQueue() {
     if (!item || item !== entry.item) continue;
 
     _mountInFlight = entry.imgIdx;
+    if (item.kind === 'video') {
+      _advanceVideoMount(entry);
+      return;
+    }
     const pre = new Image();
     pre.decoding = 'async';
 

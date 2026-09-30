@@ -68,9 +68,9 @@ Confidence. Items above stop at step 2 until implementation runs code. Step 4 pr
 
 ### 3. Mount queue, prefetch, and src building understand video
 
-- [ ] Keep `_buildSrc` at `manhwaStrip.js:158-171` as the single src builder. Confirm it returns archive and file URLs for mp4 the same way it does for images. `getCachedArchiveBlob` stays the read path.
-- [ ] Split `_advanceMountQueue` at `manhwaStrip.js:1001-1117` by row kind. Images keep `new Image` plus `decode`. Videos set `src`, wait `loadedmetadata` or `canplay`, then mount. Keep `_mountInFlight`, `_sortMountQueue` at `manhwaStrip.js:915-919`, and `_resetMountQueue` at `manhwaStrip.js:1119-1126` shared.
-- [ ] Extend `_prefetchAhead` at `manhwaStrip.js:789-881` and `_warmBackendAhead` at `manhwaStrip.js:888-911` to cover video rows with the same strict counts at `manhwaStrip.js:21-40`. No new cache cap without a named constant.
+- [x] Keep `_buildSrc` at `manhwaStrip.js:158-171` as the single src builder. Confirm it returns archive and file URLs for mp4 the same way it does for images. `getCachedArchiveBlob` stays the read path.
+- [x] Split `_advanceMountQueue` at `manhwaStrip.js:1001-1117` by row kind. Images keep `new Image` plus `decode`. Videos set `src`, wait `loadedmetadata` or `canplay`, then mount. Keep `_mountInFlight`, `_sortMountQueue` at `manhwaStrip.js:915-919`, and `_resetMountQueue` at `manhwaStrip.js:1119-1126` shared.
+- [x] Extend `_prefetchAhead` at `manhwaStrip.js:789-881` and `_warmBackendAhead` at `manhwaStrip.js:888-911` to cover video rows with the same strict counts at `manhwaStrip.js:21-40`. No new cache cap without a named constant. Mounted videos play muted. Out of window videos eject like images, with pause plus src drop on release. Runtime confirmed.
 - Accept. A three row window mounts the anchor plus one behind and one ahead regardless of kind. Prefetch never exceeds the named caps. Fast toggle on and off leaves no in flight decode.
 
 ### 4. Layout, fit, and status treat video dims like image dims
