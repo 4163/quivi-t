@@ -7,6 +7,7 @@ import { activeFilterId } from '../services/registry.js';
 import { getFilterModule } from '../services/filterModules.js';
 import { createTextureCache } from '../services/pipelines/textureCache.js';
 import { createQuadCompositor } from '../services/pipelines/quadCompositor.js';
+import { prepareSvgForCanvas } from '../shared/svgUtils.js';
 
 const SVG_ANIMATED_MAX_EDGE = 1080;
 const SVG_STATIC_MAX_EDGE = 2048;
@@ -60,7 +61,7 @@ export function createViewerPipelines(viewportState) {
       const url = new URL(src);
       return url.pathname.toLowerCase().endsWith('.svg');
     } catch {
-      return src.toLowerCase().endsWith('.svg');
+      return src.split('?')[0].toLowerCase().endsWith('.svg');
     }
   }
 
@@ -225,7 +226,7 @@ export function createViewerPipelines(viewportState) {
   }
 
   async function _applyTransform() {
-    if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated || isVideoSource(_activeSource)) return;
+    if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated || isVideoSource(_activeSource) || isSvgSource(_activeSource?.src)) return;
     if (!_activeSource || !_activeSource.complete || _activeSource.naturalWidth <= 0 || _activeSource.naturalHeight <= 0) return;
     
     const src = _activeSource.currentSrc || _activeSource.src;
@@ -471,12 +472,20 @@ export function createViewerPipelines(viewportState) {
     // --- SVG DOM Fallback Pump ---
     if (isSvg) {
       // SVGs cannot be parsed by WebCodecs ImageDecoder.
-      // Fallback to DOM <img> drawing technique.
-      const resp = await fetch(currentSrc);
-      if (_livePumpSrc !== currentSrc) return;
-      const blob = await resp.blob();
+      // Fallback to DOM <img> drawing technique with sanitized entities and stripped foreignObject.
+      let svgText = '';
+      try {
+        const resp = await fetch(currentSrc);
+        if (_livePumpSrc !== currentSrc) return;
+        svgText = await resp.text();
+      } catch (e) {
+        console.warn('[pump] Failed to fetch SVG:', e);
+        return;
+      }
       if (_livePumpSrc !== currentSrc) return;
 
+      const cleanSvg = prepareSvgForCanvas(svgText);
+      const blob = new Blob([cleanSvg], { type: 'image/svg+xml' });
       const blobUrl = URL.createObjectURL(blob);
       _livePumpBlobUrl = blobUrl;
       const liveImg = document.getElementById('viewer-svg-pump');
@@ -484,10 +493,16 @@ export function createViewerPipelines(viewportState) {
       liveImg.src = blobUrl;
       _livePumpImg = liveImg;
 
-      await new Promise((resolve, reject) => {
-        if (liveImg.complete && liveImg.naturalWidth) resolve();
-        else { liveImg.onload = resolve; liveImg.onerror = reject; }
-      });
+      try {
+        await new Promise((resolve, reject) => {
+          if (liveImg.complete && liveImg.naturalWidth) resolve();
+          else { liveImg.onload = resolve; liveImg.onerror = reject; }
+        });
+      } catch (err) {
+        console.warn('[pump] Failed to load SVG image:', err);
+        liveImg.classList.add('hidden');
+        return;
+      }
       if (_livePumpSrc !== currentSrc) {
         liveImg.classList.add('hidden');
         return;
@@ -495,6 +510,10 @@ export function createViewerPipelines(viewportState) {
 
       let pumpVisible = false;
       let stagingCtx = null;
+      let lastVpW = 0;
+      let lastVpH = 0;
+      let lastGeometryHash = '';
+      let lastFilter = pipeline?.filter;
 
       const maxEdge = isAnimated ? SVG_ANIMATED_MAX_EDGE : SVG_STATIC_MAX_EDGE;
 
@@ -525,24 +544,38 @@ export function createViewerPipelines(viewportState) {
           sh = Math.max(1, Math.round(ch * scale));
         }
 
-        if (_liveStagingCanvas.width !== sw) _liveStagingCanvas.width = sw;
-        if (_liveStagingCanvas.height !== sh) _liveStagingCanvas.height = sh;
-        if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d');
+        const geom = viewportState.getGeometry();
+        const geomHash = `${geom.scale}_${geom.tx}_${geom.ty}_${geom.rotation}_${geom.flipX}_${geom.flipY}_${geom.viewport?.clientWidth}_${geom.viewport?.clientHeight}`;
+        const curFilter = pipeline?.filter;
 
-        liveImg.width = sw;
-        liveImg.height = sh;
+        const dimensionsChanged = _liveStagingCanvas.width !== sw || _liveStagingCanvas.height !== sh || vpW !== lastVpW || vpH !== lastVpH;
+        const renderStateChanged = geomHash !== lastGeometryHash || curFilter !== lastFilter || !pumpVisible;
 
-        stagingCtx.clearRect(0, 0, sw, sh);
-        stagingCtx.drawImage(liveImg, 0, 0, sw, sh);
+        if (isAnimated || dimensionsChanged || !stagingCtx) {
+          if (_liveStagingCanvas.width !== sw) _liveStagingCanvas.width = sw;
+          if (_liveStagingCanvas.height !== sh) _liveStagingCanvas.height = sh;
+          if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d');
 
-        if (pipeline && pipeline.type === 'webgl') {
-          pipeline.updateSource(_liveStagingCanvas);
+          liveImg.width = sw;
+          liveImg.height = sh;
+
+          stagingCtx.clearRect(0, 0, sw, sh);
+          stagingCtx.drawImage(liveImg, 0, 0, sw, sh);
+
+          if (pipeline && pipeline.type === 'webgl') {
+            pipeline.updateSource(_liveStagingCanvas);
+          }
+          lastVpW = vpW;
+          lastVpH = vpH;
+        }
+
+        if (pipeline && pipeline.type === 'webgl' && (isAnimated || dimensionsChanged || renderStateChanged)) {
           // Use CSS display dimensions (set by _applySvgBounds) so the WebGL
           // geometry matches the pool image's actual display box, not the
           // browser-default naturalWidth which can be 150 for dimensionless SVGs.
           const cw = _activeSource.clientWidth || _activeSource.naturalWidth;
           const ch = _activeSource.clientHeight || _activeSource.naturalHeight;
-          pipeline.render({ naturalWidth: cw, naturalHeight: ch }, viewportState.getGeometry(), true);
+          pipeline.render({ naturalWidth: cw, naturalHeight: ch }, geom, true);
 
           if (!pumpVisible) {
             pumpVisible = true;
@@ -550,6 +583,8 @@ export function createViewerPipelines(viewportState) {
             const vpEl = document.getElementById('viewport');
             if (vpEl && (_lastActiveFilter || pipeline.filter === 'lanczos')) vpEl.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
           }
+          lastGeometryHash = geomHash;
+          lastFilter = curFilter;
         }
         _livePumpRaf = requestAnimationFrame(pumpTickSvg);
       }

@@ -251,49 +251,8 @@ export function sanitizeSvgText(text) {
   return purify.sanitize(expandSvgEntities(text), { USE_PROFILES: { svg: true } });
 }
 
-// Illustrator-style internal entities (`<!ENTITY st12 "fill:url(#g);">`,
-// referenced as `&st12;`) die with the DOCTYPE block under sanitization,
-// taking every gradient fill with them. A single non-recursive expansion
-// pass restores them: references expand once and replacement text is never
-// rescanned, so billion-laughs amplification is impossible by construction, and anything beyond plain quoted literals
-// (parameter, external, or oversized entities) refuses the import outright.
-const SVG_ENTITY_MAX_COUNT = 500;
-const SVG_ENTITY_MAX_LITERAL = 4096;
-const SVG_MAX_BYTES = 10 * 1024 * 1024;
-
-export function expandSvgEntities(text) {
-  if (typeof text !== 'string' || !text.includes('<!ENTITY')) return text;
-  const doctype = text.match(/<!DOCTYPE[^[\]]*\[([\s\S]*?)\]>/);
-  if (!doctype) return text;
-  const subset = doctype[1];
-  if (subset.includes('%') || subset.includes('SYSTEM') || subset.includes('PUBLIC')) {
-    throw new Error('SVG entity block rejected');
-  }
-  const declared = (subset.match(/<!ENTITY/g) || []).length;
-  const table = new Map();
-  const simple = /<!ENTITY\s+([A-Za-z_][\w.-]*)\s+"([^"<>]*)"\s*>/g;
-  let m;
-  let simpleCount = 0;
-  while ((m = simple.exec(subset)) !== null) {
-    simpleCount++;
-    if (table.size >= SVG_ENTITY_MAX_COUNT || m[2].length > SVG_ENTITY_MAX_LITERAL) {
-      throw new Error('SVG entity block rejected');
-    }
-    if (!table.has(m[1])) table.set(m[1], m[2]);
-  }
-  if (simpleCount !== declared) {
-    throw new Error('SVG entity block rejected');
-  }
-  let out = text.replace(doctype[0], '');
-  if (table.size > 0) {
-    const names = [...table.keys()].map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    out = out.replace(new RegExp(`&(${names.join('|')});`, 'g'), (hit, name) => table.get(name));
-  }
-  if (out.length > SVG_MAX_BYTES) {
-    throw new Error('SVG entity block rejected');
-  }
-  return out;
-}
+export { expandSvgEntities } from './shared/svgUtils.js';
+import { expandSvgEntities } from './shared/svgUtils.js';
 
 export async function downloadSanitizedSvg(url, destPath, headers) {
   const text = await fetchRemoteText(url, headers);
