@@ -1578,6 +1578,7 @@ li:hover>.favorite-remove,
 
 #viewport.manhwa-active #manhwa-strip {
   display: flex;
+  z-index: 1;
 }
 
 #manhwa-strip>* {
@@ -2238,6 +2239,7 @@ body.is-importing-url .header-cell:hover {
   pointer-events: none;
   opacity: 0;
   display: none;
+  z-index: 0;
 }
 
 #viewport.manhwa-active #manhwa-filter-canvas[data-render-ready="true"] {
@@ -2245,11 +2247,13 @@ body.is-importing-url .header-cell:hover {
   opacity: 1;
 }
 
-/* While the column canvas paints, hide raw slot media.
+/* While the column canvas paints, hide raw slot media and backdrops.
    Visibility keeps slot layout so scroll offsets stay valid. Video.play()
    advances frames regardless of visibility for the live texImage2D path. */
 #viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>img,
-#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>video {
+#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>video,
+#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot-backdrop,
+#viewport.manhwa-active[data-filter] #manhwa-strip #manhwa-slot-grill {
   visibility: hidden;
 }
 
