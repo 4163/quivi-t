@@ -6,10 +6,8 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "node scripts/dev.js",
-    "dev:portable": "node scripts/dev.js --portable",
     "mocha": "mocha 'mocha/*.test.js'",
-    "e2e": "node scripts/e2e.js --layout portable",
-    "e2e:split": "node scripts/e2e.js --layout split",
+    "e2e": "node scripts/e2e.js",
     "record": "wdio run wdio.conf.js --spec e2e/specs/record.e2e.js",
     "replay": "node e2e/replay-diagnostics/cli.js",
     "diagnose": "node e2e/replay-diagnostics/cli.js"

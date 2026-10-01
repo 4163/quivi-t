@@ -223,21 +223,24 @@ Clicking **Apply** registers QuiviT for the formats you selected. If changes doe
 
 ```bash
 npm install
-npm run tauri dev     # Historical; bypasses isolation and touches roaming data
-npm run dev           # Launch with isolated settings (.dev-config)
-npm run dev:portable  # Forces portable mode (single-file layout) in .dev-config, regardless of frontend config state
+npm run tauri dev          # Historical; bypasses isolation and touches roaming data
+npm run dev                # Launch with isolated settings (.dev-config)
+npm run dev -- --portable  # Portable mode (single-file layout), regardless of frontend config state
 ```
 
 Tests and syntax checks:
 
 ```bash
-npm run mocha                                    # Frontend unit tests
-npm run e2e                                      # Desktop end-to-end tests (portable layout)
-npm run e2e:split                                # Desktop end-to-end tests (split layout)
-cargo test --manifest-path src-tauri/Cargo.toml  # Rust tests
-cd src-tauri && cargo check                      # Rust compile check
-node --check src/js/main/main.js                 # Syntax-check a JS file
+npm run mocha                                              # Frontend unit tests
+npm run e2e                                                # End-to-end tests (portable layout)
+npm run e2e -- --split                                     # End-to-end tests (split layout)
+npm run e2e -- --agent --spec e2e/specs/01-startup.e2e.js  # Agent runner (cleanup, logging, etc.)
+cargo test --manifest-path src-tauri/Cargo.toml            # Rust tests
+cd src-tauri && cargo check                                # Rust compile check
+node --check src/js/main/main.js                           # Syntax-check a JS file
 ```
+
+Run E2E tests in a non-elevated terminal. WebView2 remote debugging cannot attach under Administrator.
 
 ### Action recorder and replay diagnostics
 
@@ -321,7 +324,8 @@ QuiviT/
 │  └─ viewerMath.test.js          # Zoom, pan, fit, and spread
 ├─ scripts/                       # Dev and test runner scripts
 │  ├─ dev.js                      # npm run dev with isolated config
-│  └─ e2e.js                      # npm run e2e with layout selection
+│  ├─ e2e.js                      # npm run e2e with layout selection
+│  └─ e2e-agent.js                # npm run e2e with --agent cleanup
 ├─ extractors/ (orphan branch)    # Site support, fetched while the app runs
 ├─ src/
 │  ├─ index.html                  # Main window
@@ -415,7 +419,7 @@ QuiviT/
 │  └─ tauri.conf.json
 ├─ themes/                        # Example themes shipped with the app
 ├─ package.json
-└─ README.md
+└─ README.md                      # End-user features and maintainer documentation
 ```
 
 ## Attributions

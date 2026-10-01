@@ -21,11 +21,6 @@
 - **Advanced .ico Processing:** Improve .ico processing/rendering following "performance-first". Change the .ico processing and rendering spec.
 - **Extended Format Support:** Support PSD, XCF, and PDF files (decide whether to process via JS or backend, performance-first).
 
-### Test Infrastructure (Alongside e2e, mocha, cargo)
-- **Playwright CDP attach spike:** Drive the real app through WebView2's remote debugging port instead of `tauri-driver` plus `msedgedriver`. Real binary, real Rust backend, real paint, so it catches the runtime class mocha and cargo miss: blank frames, stuck bridge nodes, state desync.
-- **Limits:** DOM only. Native file dialogs, single instance handoff, shell icons, and window snapping stay manual.
-- **Prerequisite:** Needs a GUI capable machine. It replaces the driver half of the wdio stack, not the display half.
-
 ### Documentation & GitHub (Project Health)
 - **Contributing Section:** Add a contributing section to the github page, for general contributions to the project, but more on documenting how new languages should be created for the language settings.
 
