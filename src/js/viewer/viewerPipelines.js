@@ -913,7 +913,7 @@ export function createViewerPipelines(viewportState) {
   let _columnGeneration = 0;
   let _columnTextureCache = null;
   let _columnQuadCompositor = null;
-  let _columnLiveTexture = null;
+  const _columnLiveTextures = new Map();
   let _columnLiveLoopId = 0;
   let _columnHasLive = false;
   let _columnRenderInFlight = false;
@@ -927,6 +927,7 @@ export function createViewerPipelines(viewportState) {
       _teardownColumnCanvas();
       if (_columnPipeline) { _columnPipeline.dispose(); _columnPipeline = null; }
       _columnFilter = null;
+      _columnLiveTextures.clear();
       _syncColumnPipeline(Core.getState());
       _requestColumnRender();
     });
@@ -994,10 +995,13 @@ export function createViewerPipelines(viewportState) {
     _columnHasLive = false;
     _cachedDrawsScratch.length = 0;
     _liveDrawsScratch.length = 0;
-    if (_columnLiveTexture && _columnPipeline?.gl) {
-      _columnPipeline.gl.deleteTexture(_columnLiveTexture);
+    if (_columnPipeline?.gl) {
+      const gl = _columnPipeline.gl;
+      for (const entry of _columnLiveTextures.values()) {
+        if (entry.texture) gl.deleteTexture(entry.texture);
+      }
     }
-    _columnLiveTexture = null;
+    _columnLiveTextures.clear();
     if (_columnCompositeFbo && _columnPipeline?.gl) {
       const gl = _columnPipeline.gl;
       if (_columnCompositeFbo.tex) gl.deleteTexture(_columnCompositeFbo.tex);
@@ -1156,6 +1160,16 @@ export function createViewerPipelines(viewportState) {
     const gl = _columnPipeline.gl;
     if (!gl || !_columnQuadCompositor || !_columnTextureCache) return;
 
+    // Prune entries in _columnLiveTextures whose imgIdx is no longer present in snap.liveSlots.
+    if (_columnLiveTextures.size > 0) {
+      for (const [imgIdx, entry] of _columnLiveTextures.entries()) {
+        if (!snap.liveSlots || !snap.liveSlots.has(imgIdx)) {
+          if (entry.texture) gl.deleteTexture(entry.texture);
+          _columnLiveTextures.delete(imgIdx);
+        }
+      }
+    }
+
     // Partition draws into cached (still raster/SVG) and live (video).
     _cachedDrawsScratch.length = 0;
     _liveDrawsScratch.length = 0;
@@ -1242,23 +1256,32 @@ export function createViewerPipelines(viewportState) {
       if (nodeW <= 0 || nodeH <= 0) continue;
       if (isVideo && node.readyState < 2) continue;
 
-      if (!_columnLiveTexture) {
-        _columnLiveTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, _columnLiveTexture);
+      let entry = _columnLiveTextures.get(draw.imgIdx);
+      if (!entry) {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, nodeW, nodeH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        entry = { texture: tex, width: nodeW, height: nodeH };
+        _columnLiveTextures.set(draw.imgIdx, entry);
       } else {
-        gl.bindTexture(gl.TEXTURE_2D, _columnLiveTexture);
+        gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+        if (entry.width !== nodeW || entry.height !== nodeH) {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, nodeW, nodeH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+          entry.width = nodeW;
+          entry.height = nodeH;
+        }
       }
       try {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, node);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, node);
       } catch {
         continue;
       }
       const item = snap.items ? snap.items[draw.imgIdx] : null;
-      if (_drawSlotQuad(_columnQuadCompositor, _columnLiveTexture, draw, item, nodeW, nodeH, vpW, vpH, flipY, sampler)) {
+      if (_drawSlotQuad(_columnQuadCompositor, entry.texture, draw, item, nodeW, nodeH, vpW, vpH, flipY, sampler)) {
         painted++;
       }
     }

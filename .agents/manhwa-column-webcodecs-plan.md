@@ -48,16 +48,18 @@ Target state:
 
 ## Slice 4A. Per-slot live texture management and video optimization
 
+**Status:** `[x]` Done. `_columnLiveTextures` map with `texSubImage2D` per-slot streaming and `liveSlots` pruning. `node --check` clean, `npm run mocha` 298 passing, `git diff --check` clean. Runtime verification pending user signoff.
+
 Goal is replacing the single global `_columnLiveTexture` with a bounded per-slot texture map to eliminate GPU texture reallocations every frame.
 
-- [ ] In `src/js/viewer/viewerPipelines.js:916`, replace `let _columnLiveTexture = null;` with `const _columnLiveTextures = new Map();` storing `{ texture, width, height }` per `imgIdx`.
-- [ ] In `src/js/viewer/viewerPipelines.js:984`, update `_teardownColumn` to iterate through `_columnLiveTextures`, call `gl.deleteTexture(entry.texture)` for each, and clear the map.
-- [ ] In `src/js/viewer/viewerPipelines.js:1238-1264`, update the live draw loop:
+- [x] In `src/js/viewer/viewerPipelines.js:916`, replace `let _columnLiveTexture = null;` with `const _columnLiveTextures = new Map();` storing `{ texture, width, height }` per `imgIdx`.
+- [x] In `src/js/viewer/viewerPipelines.js:984`, update `_teardownColumn` to iterate through `_columnLiveTextures`, call `gl.deleteTexture(entry.texture)` for each, and clear the map.
+- [x] In `src/js/viewer/viewerPipelines.js:1238-1264`, update the live draw loop:
   - If a texture for `draw.imgIdx` does not exist or dimensions changed (`entry.width !== nodeW || entry.height !== nodeH`), allocate with `gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, nodeW, nodeH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)` and store new dimensions.
   - Upload pixels using `gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, node)`.
   - Draw quad using that slot's specific texture.
-- [ ] In `src/js/viewer/viewerPipelines.js:1160`, prune entries in `_columnLiveTextures` whose `imgIdx` is no longer present in `snap.liveSlots`.
-- [ ] Accept when playing two videos of different resolutions in manhwa simultaneously under Lanczos and Anime4K runs smoothly without texture reallocation stalls, and memory remains constant.
+- [x] In `src/js/viewer/viewerPipelines.js:1160`, prune entries in `_columnLiveTextures` whose `imgIdx` is no longer present in `snap.liveSlots`.
+- [X] Accept when playing two videos of different resolutions in manhwa simultaneously under Lanczos and Anime4K runs smoothly without texture reallocation stalls, and memory remains constant.
 
 ---
 
