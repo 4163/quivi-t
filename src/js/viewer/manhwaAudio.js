@@ -24,6 +24,7 @@ let _audibleImgIdx = null;
 
 let _Core = null;
 let _FsUtils = null;
+let _getScale = null;
 
 function _fileKey(item) {
   return item?.entry?.path || item?.entry?.name || '';
@@ -150,8 +151,32 @@ function _buildPill(slot, rec) {
     e.stopPropagation();
     stepSlotVolume(rec.imgIdx, e.deltaY < 0 ? 0.05 : -0.05);
   }, { passive: false });
-  slot.appendChild(pill);
+  const overlay = document.getElementById('manhwa-audio-overlay');
+  (overlay || slot).appendChild(pill);
   return pill;
+}
+
+function _positionPill(rec) {
+  if (!rec?.pill || !rec?.slot) return;
+  const overlay = document.getElementById('manhwa-audio-overlay');
+  if (!overlay || rec.pill.parentElement !== overlay) return;
+  const vp = document.getElementById('viewport');
+  if (!vp) return;
+  const targetEl = rec.videoNode || rec.slot;
+  const rect = targetEl.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return;
+  const vpRect = vp.getBoundingClientRect();
+  const scale = _getScale ? _getScale() : 1;
+  const pad = Math.round(8 * scale);
+  const x = Math.round(rect.left - vpRect.left + pad);
+  const y = Math.round(rect.bottom - vpRect.top - pad);
+  rec.pill.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale}) translateY(-100%)`;
+}
+
+export function syncPills() {
+  for (const rec of _attached.values()) {
+    _positionPill(rec);
+  }
 }
 
 async function _probeTrack(rec) {
@@ -173,13 +198,14 @@ async function _probeTrack(rec) {
     return;
   }
   live.pill?.classList.add('is-visible');
+  _positionPill(live);
 }
 
 export function attachSlotAudio(imgIdx, item, slot, videoNode) {
   detachSlotAudio(imgIdx);
   const filePath = _fileKey(item);
   if (!filePath || !slot || !videoNode) return;
-  const rec = { imgIdx, videoNode, filePath, pill: null, btn: null, slider: null };
+  const rec = { imgIdx, slot, videoNode, filePath, pill: null, btn: null, slider: null };
   _attached.set(imgIdx, rec);
   _applyToNode(rec);
   if (!_buildPill(slot, rec)) {
@@ -187,6 +213,7 @@ export function attachSlotAudio(imgIdx, item, slot, videoNode) {
     return;
   }
   _paint(rec);
+  _positionPill(rec);
   _probeTrack(rec);
 }
 
@@ -233,9 +260,13 @@ export function toggleStripMute(anchorImgIdx) {
   _paint(rec);
 }
 
-export function initManhwaAudio({ Core, FsUtils }) {
+export function initManhwaAudio({ Core, FsUtils, getScale }) {
   _Core = Core;
   _FsUtils = FsUtils;
+  if (typeof getScale === 'function') _getScale = getScale;
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', syncPills);
+  }
 }
 
 export const ManhwaAudio = {
@@ -245,4 +276,5 @@ export const ManhwaAudio = {
   setVolume: setSlotVolume,
   stepVolume: stepSlotVolume,
   toggleStripMute,
+  syncPills,
 };

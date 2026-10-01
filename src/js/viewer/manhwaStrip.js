@@ -907,6 +907,7 @@ function _updateWindow() {
     _syncAnchorToCore();
   }
   _positionSlotGrill();
+  ManhwaAudio.syncPills();
 }
 
 /** Probe one video row off-DOM for metadata dims. Mirrors the image
@@ -2133,6 +2134,7 @@ function _deactivate() {
   }
 
   _clearCaches();
+  document.getElementById('manhwa-audio-overlay')?.replaceChildren();
 
   _imageIndex = [];
   _listToImgIdx.clear();
@@ -2306,6 +2308,7 @@ export function setViewportState(vpState) {
     _strip.style.transform = _viewportState.getTransform();
     _strip.style.setProperty('--zoom-scale', scale);
     _updateGrillAngles();
+    ManhwaAudio.syncPills();
     // Programmatic viewport changes (fit, reset, layout) call _updateWindow
     // explicitly after the final ty is set. Intermediate zoomTo/panTo ticks
     // inside _viewportProgram would start mount flights at a transient ty,
@@ -2467,7 +2470,11 @@ export function initManhwaStrip(viewportState) {
   if (_initialized) return;
   _initialized = true;
 
-  initManhwaAudio({ Core, FsUtils });
+  initManhwaAudio({
+    Core,
+    FsUtils,
+    getScale: () => _viewportState?.getScale() || 1,
+  });
 
   Core.onStateChange(_onStateChange);
 

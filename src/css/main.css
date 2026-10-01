@@ -1578,7 +1578,7 @@ li:hover>.favorite-remove,
 
 #viewport.manhwa-active #manhwa-strip {
   display: flex;
-  z-index: 1;
+  z-index: 0;
 }
 
 #manhwa-strip>* {
@@ -2239,7 +2239,7 @@ body.is-importing-url .header-cell:hover {
   pointer-events: none;
   opacity: 0;
   display: none;
-  z-index: 0;
+  z-index: 1;
 }
 
 #viewport.manhwa-active #manhwa-filter-canvas[data-render-ready="true"] {
@@ -2247,13 +2247,34 @@ body.is-importing-url .header-cell:hover {
   opacity: 1;
 }
 
-/* While the column canvas paints, hide raw slot media and backdrops.
+/* Manhwa audio overlay: host for per-slot volume pills. Sits above the
+   filter canvas so pills remain accessible when WebGL filters are active. */
+#manhwa-audio-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+}
+
+#viewport.manhwa-active #manhwa-audio-overlay {
+  display: block;
+}
+
+#manhwa-audio-overlay .manhwa-volume {
+  top: 0;
+  left: 0;
+  bottom: auto;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/* While the column canvas paints, hide raw slot media.
    Visibility keeps slot layout so scroll offsets stay valid. Video.play()
    advances frames regardless of visibility for the live texImage2D path. */
 #viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>img,
-#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>video,
-#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot-backdrop,
-#viewport.manhwa-active[data-filter] #manhwa-strip #manhwa-slot-grill {
+#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>video {
   visibility: hidden;
 }
 
