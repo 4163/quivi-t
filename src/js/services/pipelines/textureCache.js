@@ -54,11 +54,13 @@ export class TextureCache {
    * @param {WebGL2RenderingContext|WebGLRenderingContext|null} [gl=null]
    * @param {object} [options={}]
    * @param {number} [options.maxBytes=DEFAULT_TEXTURE_CACHE_BYTES]
+   * @param {number} [options.maxEntries=0]
    * @param {function(string, object):void} [options.onEvict=null]
    */
   constructor(gl = null, options = {}) {
     this.gl = gl;
     this.maxBytes = options.maxBytes ?? DEFAULT_TEXTURE_CACHE_BYTES;
+    this.maxEntries = options.maxEntries ?? 0;
     this.onEvict = options.onEvict || null;
     this._entries = new Map();
     this._totalBytes = 0;
@@ -127,7 +129,11 @@ export class TextureCache {
       this._entries.delete(key);
     }
 
-    while (this._totalBytes + bytes > this.maxBytes && this._entries.size > 0) {
+    while (
+      ((this.maxBytes > 0 && this._totalBytes + bytes > this.maxBytes) ||
+       (this.maxEntries > 0 && this._entries.size >= this.maxEntries)) &&
+      this._entries.size > 0
+    ) {
       const oldestKey = this._entries.keys().next().value;
       this.delete(oldestKey);
     }

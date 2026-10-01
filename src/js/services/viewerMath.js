@@ -371,58 +371,6 @@ export function computeColumnComposite(options = {}, ...rest) {
 
 export const computeColumnDrawList = computeColumnComposite;
 
-/**
- * Map a composite viewport pixel Y coordinate back to continuous column Y space.
- * Used by shaders (scanline, phosphor, CRT) to compute continuous uniforms
- * down the column across slot seams.
- *
- * Inputs:
- *   pixelY: composite pixel Y coordinate (0 at top of viewport)
- *   options: {
- *     totalHeight,
- *     viewportHeight,
- *     scale,
- *     ty,
- *     columnYOrigin,
- *     offsets,
- *     items,
- *     seamOverlapPx
- *   }
- */
-export function compositePixelToColumnY(pixelY, options = {}) {
-  let py = pixelY;
-  let opts = options;
-  if (typeof pixelY === 'object' && pixelY !== null) {
-    opts = pixelY;
-    py = opts.pixelY ?? opts.compositeY ?? opts.y ?? 0;
-  }
-
-  const scale = opts.scale || 1;
-
-  if (opts.columnYOrigin !== undefined) {
-    return opts.columnYOrigin + py / scale;
-  }
-
-  let totalH = opts.totalHeight;
-  if (totalH === undefined && opts.offsets) {
-    totalH = opts.offsets.totalHeight ?? (Array.isArray(opts.offsets) && opts.offsets.length > 0 ? opts.offsets[opts.offsets.length - 1].bottom : 0);
-  }
-  if (totalH === undefined && Array.isArray(opts.items)) {
-    const seam = opts.seamOverlapPx !== undefined ? opts.seamOverlapPx : seamOverlapForScale(scale);
-    const layout = computeColumnOffsets(opts.items, 1, seam);
-    totalH = layout.totalHeight;
-  }
-  if (totalH === undefined) {
-    totalH = 0;
-  }
-
-  const vph = opts.viewportHeight ?? 800;
-  const ty = opts.ty || 0;
-
-  return (totalH / 2) + (py - vph / 2 - ty) / scale;
-}
-
-export const mapCompositePixelToColumnY = compositePixelToColumnY;
 
 export function createViewportState({ getViewport = () => ({ clientWidth: 1000, clientHeight: 800, left: 0, top: 0 }) } = {}) {
   let _scale = 1;

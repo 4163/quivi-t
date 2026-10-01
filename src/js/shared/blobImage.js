@@ -3,7 +3,7 @@
 // without this workaround.
 import { BoundedMap } from '../services/cache.js';
 
-export const TEXTURE_CACHE_CAPACITY = 1;
+export const TEXTURE_CACHE_CAPACITY = 4;
 
 function _evictEntry(entry) {
   if (!entry) return;

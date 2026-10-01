@@ -15,8 +15,7 @@ import {
   computeSlotHue,
   computeStripFitScale,
   firstLastHighlight,
-  computeColumnComposite,
-  compositePixelToColumnY
+  computeColumnComposite
 } from '../src/js/services/viewerMath.js';
 
 describe('viewerMath', () => {
@@ -962,96 +961,6 @@ describe('viewerMath', () => {
 
       assert.ok(withOverscan.drawList[0].destRect.dy <= withoutOverscan.drawList[0].destRect.dy);
       assert.ok(withOverscan.drawList[0].destRect.dh >= withoutOverscan.drawList[0].destRect.dh);
-    });
-  });
-
-  describe('compositePixelToColumnY', () => {
-    it('maps composite pixel 0 to columnYOrigin', () => {
-      const layout = computeColumnOffsets([1000, 1000], 1, 1);
-      const composite = computeColumnComposite({
-        offsets: layout.offsets,
-        totalHeight: layout.totalHeight,
-        viewportWidth: 800,
-        viewportHeight: 600,
-        scale: 1.5,
-        ty: 120
-      });
-
-      const colY0 = compositePixelToColumnY(0, {
-        totalHeight: layout.totalHeight,
-        viewportHeight: 600,
-        scale: 1.5,
-        ty: 120
-      });
-
-      assert.equal(colY0, composite.columnYOrigin);
-    });
-
-    it('provides continuous coordinates across slot seams without resetting per slot', () => {
-      const layout = computeColumnOffsets([1000, 1000, 1000], 1, 1);
-      const scale = 1.25;
-      const vph = 800;
-      const ty = -50;
-
-      let prevColY = -Infinity;
-      for (let y = 0; y <= vph; y += 50) {
-        const colY = compositePixelToColumnY(y, {
-          totalHeight: layout.totalHeight,
-          viewportHeight: vph,
-          scale,
-          ty
-        });
-        assert.ok(colY > prevColY, `Expected colY (${colY}) > prevColY (${prevColY}) at y=${y}`);
-        if (prevColY !== -Infinity) {
-          const expectedDelta = 50 / scale;
-          assert.ok(Math.abs((colY - prevColY) - expectedDelta) < 1e-9);
-        }
-        prevColY = colY;
-      }
-    });
-
-    it('includes seam overlap so pins do not drift below 100% zoom', () => {
-      const items = [{ width: 1000, height: 1000 }, { width: 1000, height: 1000 }];
-      const scale = 0.5;
-      const seam = seamOverlapForScale(scale);
-      assert.equal(seam, 2);
-
-      const colY = compositePixelToColumnY(400, {
-        items,
-        viewportHeight: 800,
-        scale,
-        ty: 0
-      });
-
-      assert.equal(colY, 999);
-    });
-
-    it('inverts slot destination positions back to layout top', () => {
-      const layout = computeColumnOffsets([800, 1200, 900], 1, 1);
-      const scale = 1.2;
-      const ty = 75;
-      const vph = 600;
-
-      const comp = computeColumnComposite({
-        offsets: layout.offsets,
-        totalHeight: layout.totalHeight,
-        viewportWidth: 800,
-        viewportHeight: vph,
-        scale,
-        ty
-      });
-
-      for (const draw of comp.drawList) {
-        const unclippedDy = draw.unclippedDestRect.dy;
-        const colY = compositePixelToColumnY(unclippedDy, {
-          totalHeight: layout.totalHeight,
-          viewportHeight: vph,
-          scale,
-          ty
-        });
-        const expectedTop = layout.offsets[draw.imgIdx].top;
-        assert.ok(Math.abs(colY - expectedTop) < 1e-6, `colY ${colY} should match expectedTop ${expectedTop}`);
-      }
     });
   });
 });

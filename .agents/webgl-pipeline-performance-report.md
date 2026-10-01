@@ -195,7 +195,7 @@ Adopting this architecture improves the single-image viewport while preserving e
 
 ### Phase 4. Unified single-image pipeline and legacy alignment
 - [x] Retain Pica for legacy still images, applying the targeted CSS/pan fix so `.viewer-img` stays visible underneath during active pan to eliminate blank margins.
-- [ ] Update `viewerPipelines.js` single-image path to use `TextureCache` with capacity matching `VIEWER_IMAGE_POOL_CAPACITY = 4`.
-- [ ] Connect video and WebCodecs pumps directly to `texImage2D`, bypassing `_liveStagingCanvas`.
-- [ ] Clean up unused helpers in `viewerMath.js`.
-- [ ] Accept when flipping between images in legacy view does not re-decode textures, video playback under filters shows reduced CPU load, and Pica still images pan without blank margins.
+- [x] Update `viewerPipelines.js` single-image path to use `TextureCache` with capacity matching `VIEWER_IMAGE_POOL_CAPACITY = 4`.
+- [x] Connect video and WebCodecs pumps directly to `texImage2D`, bypassing `_liveStagingCanvas`.
+- [x] Clean up unused helpers in `viewerMath.js`.
+- [x] Accept when flipping between images in legacy view does not re-decode textures, video playback under filters shows reduced CPU load, and Pica still images pan without blank margins.

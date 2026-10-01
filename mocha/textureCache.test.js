@@ -149,6 +149,42 @@ describe('TextureCache pipeline module', () => {
       assert.equal(gl.deletedTextures[0], t2);
     });
 
+    it('evicts least recently used items when maxEntries capacity is reached', () => {
+      const gl = createMockGl();
+      const cache = new TextureCache(gl, { maxEntries: 4, maxBytes: 1000000 });
+
+      const t1 = gl.createTexture();
+      const t2 = gl.createTexture();
+      const t3 = gl.createTexture();
+      const t4 = gl.createTexture();
+      const t5 = gl.createTexture();
+
+      cache.put('img1', t1, 10, 10);
+      cache.put('img2', t2, 10, 10);
+      cache.put('img3', t3, 10, 10);
+      cache.put('img4', t4, 10, 10);
+      assert.equal(cache.size, 4);
+
+      // 5th item exceeds maxEntries (4). 'img1' is oldest and evicted.
+      cache.put('img5', t5, 10, 10);
+      assert.equal(cache.size, 4);
+      assert.equal(cache.has('img1'), false);
+      assert.equal(cache.has('img2'), true);
+      assert.equal(cache.has('img5'), true);
+      assert.equal(gl.deletedTextures.length, 1);
+      assert.equal(gl.deletedTextures[0], t1);
+
+      // Access img2 to make it most recent, then add img6. img3 should be evicted next.
+      cache.get('img2');
+      const t6 = gl.createTexture();
+      cache.put('img6', t6, 10, 10);
+      assert.equal(cache.size, 4);
+      assert.equal(cache.has('img3'), false);
+      assert.equal(cache.has('img2'), true);
+      assert.equal(gl.deletedTextures.length, 2);
+      assert.equal(gl.deletedTextures[1], t3);
+    });
+
     it('getTexture returns texture reference or null on miss', () => {
       const gl = createMockGl();
       const cache = new TextureCache(gl);

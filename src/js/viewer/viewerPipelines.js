@@ -8,12 +8,14 @@ import { getFilterModule } from '../services/filterModules.js';
 import { createTextureCache } from '../services/pipelines/textureCache.js';
 import { createQuadCompositor } from '../services/pipelines/quadCompositor.js';
 
-const SVG_ANIMATED_MAX_EDGE = 512;
+const SVG_ANIMATED_MAX_EDGE = 1080;
 const SVG_STATIC_MAX_EDGE = 2048;
+const VIEWER_IMAGE_POOL_CAPACITY = 4;
 
 export function createViewerPipelines(viewportState) {
   let _activeSource = null;
   let pipeline = null;
+  let _singleTextureCache = null;
   let _lastScalingMode = Core.getState().scalingMode;
   let _lastActiveFilter = _resolveActiveFilter(Core.getState());
   let _lastAnime4kVariant = null;
@@ -39,6 +41,10 @@ export function createViewerPipelines(viewportState) {
     });
     filterCanvas.addEventListener('webglcontextrestored', () => {
       _cancelRender();
+      if (_singleTextureCache) {
+        _singleTextureCache.dispose();
+        _singleTextureCache = null;
+      }
       if (pipeline) pipeline.dispose();
       pipeline = null;
       _applyScaling();
@@ -155,6 +161,10 @@ export function createViewerPipelines(viewportState) {
       if (usesLanczos && pipeline.type !== 'lanczos') needsNewPipeline = true;
       if (!usesWebgl && !usesLanczos) {
         _teardownWebglCanvas();
+        if (_singleTextureCache) {
+          _singleTextureCache.dispose();
+          _singleTextureCache = null;
+        }
         pipeline.dispose();
         pipeline = null;
         needsNewPipeline = false;
@@ -170,10 +180,22 @@ export function createViewerPipelines(viewportState) {
       _livePumpLastDrawnFrameIndex = -1;
       if (pipeline) {
         _teardownWebglCanvas();
+        if (_singleTextureCache) {
+          _singleTextureCache.dispose();
+          _singleTextureCache = null;
+        }
         pipeline.dispose();
       }
       if (usesWebgl) {
         pipeline = createGlRuntime(filterCanvas);
+        if (_singleTextureCache) {
+          _singleTextureCache.dispose();
+          _singleTextureCache = null;
+        }
+        _singleTextureCache = createTextureCache(pipeline.gl, {
+          maxEntries: VIEWER_IMAGE_POOL_CAPACITY,
+          maxBytes: 128 * 1024 * 1024,
+        });
         if (useWebGlForLanczos) {
           pipeline.setFilter(lanczosWebGlModule);
           pipeline.filter = 'lanczos';
@@ -202,21 +224,46 @@ export function createViewerPipelines(viewportState) {
     _lastIsAnimated = isAnimated;
   }
 
-  function _applyTransform() {
+  async function _applyTransform() {
     if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated || isVideoSource(_activeSource)) return;
     if (!_activeSource || !_activeSource.complete || _activeSource.naturalWidth <= 0 || _activeSource.naturalHeight <= 0) return;
     
+    const src = _activeSource.currentSrc || _activeSource.src;
+    if (!src) return;
+
     const geom = viewportState.getGeometry();
     const gen = _renderGeneration;
-    
-    pipeline.render(_activeSource, geom).then((ok) => {
-      if (gen !== _renderGeneration) return;
-      if (ok && filterCanvas) {
-        filterCanvas.setAttribute('data-render-ready', 'true');
-        const vp = document.getElementById('viewport');
-        if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
+    const nw = _activeSource.naturalWidth;
+    const nh = _activeSource.naturalHeight;
+
+    if (!_singleTextureCache && pipeline.gl) {
+      _singleTextureCache = createTextureCache(pipeline.gl, {
+        maxEntries: VIEWER_IMAGE_POOL_CAPACITY,
+        maxBytes: 128 * 1024 * 1024,
+      });
+    }
+
+    let texEntry = _singleTextureCache ? _singleTextureCache.get(src) : null;
+    if (!texEntry && _singleTextureCache) {
+      try {
+        texEntry = await _singleTextureCache.getOrCreate(src);
+      } catch (e) {
+        console.warn('Failed to load texture for single-image pipeline', e);
+        return;
       }
-    });
+    }
+    if (gen !== _renderGeneration || !pipeline || pipeline.type !== 'webgl') return;
+    if (!texEntry || !texEntry.texture) return;
+
+    const ok = pipeline.renderFromTexture(texEntry.texture, geom, nw, nh);
+    if (gen !== _renderGeneration) return;
+    if (ok && filterCanvas) {
+      filterCanvas.setAttribute('data-render-ready', 'true');
+      const vp = document.getElementById('viewport');
+      if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) {
+        vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
+      }
+    }
   }
 
   function _scheduleTransform() {
@@ -350,11 +397,9 @@ export function createViewerPipelines(viewportState) {
       const videoEl = _activeSource;
       _videoElAttached = videoEl;
       let pumpVisible = false;
-      let stagingCtx = null;
       let lastCurrentTime = -1;
       let lastGeometryHash = '';
       let lastFilter = pipeline?.filter;
-      const ANIME4K_MAX_EDGE = 2048;
 
       function renderFrame() {
         if (_livePumpSrc !== currentSrc || _activeSource !== videoEl) return;
@@ -364,25 +409,8 @@ export function createViewerPipelines(viewportState) {
         const vh = videoEl.videoHeight;
         if (vw <= 0 || vh <= 0) return;
 
-        let drawW = vw;
-        let drawH = vh;
-
-        if (_lastActiveFilter === 'anime4k') {
-          const maxEdge = Math.max(vw, vh);
-          if (maxEdge > ANIME4K_MAX_EDGE) {
-            const ratio = ANIME4K_MAX_EDGE / maxEdge;
-            drawW = Math.round(vw * ratio);
-            drawH = Math.round(vh * ratio);
-          }
-        }
-
-        if (_liveStagingCanvas.width !== drawW) _liveStagingCanvas.width = drawW;
-        if (_liveStagingCanvas.height !== drawH) _liveStagingCanvas.height = drawH;
-        if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d');
-        stagingCtx.drawImage(videoEl, 0, 0, drawW, drawH);
-
         const geom = viewportState.getGeometry();
-        pipeline.updateSource(_liveStagingCanvas);
+        pipeline.updateSource(videoEl);
         pipeline.render(videoEl, geom, true);
 
         if (!pumpVisible) {
@@ -570,13 +598,11 @@ export function createViewerPipelines(viewportState) {
 
     _livePumpImg = decoder;
 
-    const ANIME4K_MAX_EDGE = 2048;
     let frameIndex = 0;
     let currentLoopIteration = 1;
     let lastFrameTime = performance.now();
     let frameDurationMs = 100;
     let pumpVisible = false;
-    let stagingCtx = null;
     let lastGeometryHash = '';
 
     _visibilityListener = () => {
@@ -635,28 +661,9 @@ export function createViewerPipelines(viewportState) {
 
       if (vf.duration) frameDurationMs = Math.max(10, vf.duration / 1000);
 
-      const sw = vf.displayWidth;
-      const sh = vf.displayHeight;
-      let drawW = sw, drawH = sh;
-
-      if (_lastActiveFilter === 'anime4k') {
-        const maxEdge = Math.max(sw, sh);
-        if (maxEdge > ANIME4K_MAX_EDGE) {
-          const ratio = ANIME4K_MAX_EDGE / maxEdge;
-          drawW = Math.round(sw * ratio);
-          drawH = Math.round(sh * ratio);
-        }
-      }
-
-      if (_liveStagingCanvas.width !== drawW) _liveStagingCanvas.width = drawW;
-      if (_liveStagingCanvas.height !== drawH) _liveStagingCanvas.height = drawH;
-      if (!stagingCtx) stagingCtx = _liveStagingCanvas.getContext('2d');
-
       if (frameIndex !== _livePumpLastDrawnFrameIndex) {
-        stagingCtx.clearRect(0, 0, drawW, drawH);
-        stagingCtx.drawImage(vf, 0, 0, drawW, drawH);
         if (pipeline && pipeline.type === 'webgl') {
-          pipeline.updateSource(_liveStagingCanvas);
+          pipeline.updateSource(vf);
         }
       }
       vf.close();
@@ -1110,6 +1117,10 @@ export function createViewerPipelines(viewportState) {
       _teardownColumn();
       if (pipeline) {
         _teardownWebglCanvas();
+        if (_singleTextureCache) {
+          _singleTextureCache.dispose();
+          _singleTextureCache = null;
+        }
         pipeline.dispose();
         pipeline = null;
       }
