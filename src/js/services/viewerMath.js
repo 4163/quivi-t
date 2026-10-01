@@ -219,6 +219,211 @@ export function computeBottomAlignTy({ slotBottom = 0, totalHeight = 0, scale = 
   return Math.max(minTy, Math.min(maxTy, rawTy));
 }
 
+/**
+ * Map visible strip offsets to a viewport-sized composite draw list.
+ * Inputs:
+ *   offsets: Array of { top, height, bottom } from computeColumnOffsets (or layout result)
+ *   viewportWidth, viewportHeight: size of the composite canvas
+ *   scale: zoom factor (default 1)
+ *   ty: vertical pan translation (default 0)
+ *   tx: horizontal pan translation (default 0)
+ *   overscan: extra margin in px beyond the viewport (default 0)
+ *   totalHeight: total column height (optional, inferred from offsets)
+ *   columnWidth: unscaled column width (optional, inferred from offsets/items)
+ *   items: optional natural items array [{ width, height, naturalWidth, naturalHeight }]
+ *
+ * Output:
+ *   drawList: Array of { imgIdx, sourceRect, destRect, unclippedDestRect }
+ *   columnYOrigin: column Y coordinate corresponding to composite Y = 0
+ *   startIndex, endIndex: indices of visible slots
+ */
+export function computeColumnComposite(options = {}, ...rest) {
+  let offsets, totalHeight, columnWidth, widestWidth, viewportWidth, viewportHeight, scale, ty, tx, overscan, items;
+  if (options && typeof options === 'object' && !Array.isArray(options)) {
+    ({
+      offsets,
+      totalHeight,
+      columnWidth,
+      widestWidth,
+      viewportWidth = 0,
+      viewportHeight = 0,
+      scale = 1,
+      ty = 0,
+      tx = 0,
+      overscan = 0,
+      items
+    } = options);
+  } else {
+    offsets = options;
+    [viewportWidth = 0, viewportHeight = 0, scale = 1, ty = 0, overscan = 0, totalHeight, columnWidth, tx = 0, items] = rest;
+  }
+
+  const offsetsList = Array.isArray(offsets) ? offsets : (offsets?.offsets || []);
+  const n = offsetsList.length;
+  if (n === 0) {
+    return {
+      drawList: [],
+      draws: [],
+      columnYOrigin: 0,
+      startIndex: -1,
+      endIndex: -1
+    };
+  }
+
+  const s = scale || 1;
+  const vpw = Math.max(0, viewportWidth);
+  const vph = Math.max(0, viewportHeight);
+  const totalH = totalHeight ?? offsets?.totalHeight ?? offsetsList[n - 1].bottom;
+  const colW = columnWidth ?? offsets?.columnWidth ?? offsets?.widestWidth ?? 0;
+
+  const norm0 = (v) => (v === 0 ? 0 : v);
+  const columnYOrigin = norm0((totalH / 2) - ((vph / 2 + ty) / s));
+
+  // Visible window in column coordinates (extended by overscan)
+  const windowTopY = (totalH / 2) - ((vph / 2 + ty + overscan) / s);
+  const windowBottomY = (totalH / 2) - ((ty - vph / 2 - overscan) / s);
+
+  const { startIndex, endIndex } = computeWindowRange(offsetsList, windowTopY, windowBottomY);
+  if (startIndex === -1 || endIndex === -1) {
+    return {
+      drawList: [],
+      draws: [],
+      columnYOrigin,
+      startIndex: -1,
+      endIndex: -1
+    };
+  }
+
+  const clipTop = overscan ? -overscan : 0;
+  const clipBottom = vph + overscan;
+  const drawList = [];
+
+  for (let i = startIndex; i <= endIndex; i++) {
+    const off = offsetsList[i];
+    const item = items && items[i];
+    const itemW = (item && (item.naturalWidth ?? item.width)) || off.width || colW || vpw;
+    const itemH = (item && (item.naturalHeight ?? item.height)) || off.height;
+
+    // Center slot horizontally within column if column width exceeds item width
+    const slotX = colW > itemW ? (colW - itemW) / 2 : 0;
+    const destX = norm0((vpw / 2) + tx + (slotX - colW / 2) * s);
+    const destW = norm0(itemW * s);
+
+    // Unclipped vertical destination on viewport
+    const destY = norm0((vph / 2) + ty + (off.top - totalH / 2) * s);
+    const destH = norm0(off.height * s);
+
+    // Clip to visible window
+    const clippedDestY = norm0(Math.max(clipTop, destY));
+    const clippedDestBottom = norm0(Math.min(clipBottom, destY + destH));
+    if (clippedDestBottom <= clippedDestY) continue;
+
+    const clippedDestH = norm0(clippedDestBottom - clippedDestY);
+    const topDeltaScreen = norm0(clippedDestY - destY);
+    const sy = norm0(topDeltaScreen / s);
+    const sh = norm0(clippedDestH / s);
+    const sx = 0;
+    const sw = itemW;
+
+    drawList.push({
+      imgIdx: i,
+      sourceRect: {
+        x: sx,
+        y: sy,
+        width: sw,
+        height: sh,
+        sx,
+        sy,
+        sw,
+        sh
+      },
+      destRect: {
+        x: destX,
+        y: clippedDestY,
+        width: destW,
+        height: clippedDestH,
+        dx: destX,
+        dy: clippedDestY,
+        dw: destW,
+        dh: clippedDestH
+      },
+      unclippedDestRect: {
+        x: destX,
+        y: destY,
+        width: destW,
+        height: destH,
+        dx: destX,
+        dy: destY,
+        dw: destW,
+        dh: destH
+      }
+    });
+  }
+
+  return {
+    drawList,
+    draws: drawList,
+    columnYOrigin,
+    startIndex,
+    endIndex
+  };
+}
+
+export const computeColumnDrawList = computeColumnComposite;
+
+/**
+ * Map a composite viewport pixel Y coordinate back to continuous column Y space.
+ * Used by shaders (scanline, phosphor, CRT) to compute continuous uniforms
+ * down the column across slot seams.
+ *
+ * Inputs:
+ *   pixelY: composite pixel Y coordinate (0 at top of viewport)
+ *   options: {
+ *     totalHeight,
+ *     viewportHeight,
+ *     scale,
+ *     ty,
+ *     columnYOrigin,
+ *     offsets,
+ *     items,
+ *     seamOverlapPx
+ *   }
+ */
+export function compositePixelToColumnY(pixelY, options = {}) {
+  let py = pixelY;
+  let opts = options;
+  if (typeof pixelY === 'object' && pixelY !== null) {
+    opts = pixelY;
+    py = opts.pixelY ?? opts.compositeY ?? opts.y ?? 0;
+  }
+
+  const scale = opts.scale || 1;
+
+  if (opts.columnYOrigin !== undefined) {
+    return opts.columnYOrigin + py / scale;
+  }
+
+  let totalH = opts.totalHeight;
+  if (totalH === undefined && opts.offsets) {
+    totalH = opts.offsets.totalHeight ?? (Array.isArray(opts.offsets) && opts.offsets.length > 0 ? opts.offsets[opts.offsets.length - 1].bottom : 0);
+  }
+  if (totalH === undefined && Array.isArray(opts.items)) {
+    const seam = opts.seamOverlapPx !== undefined ? opts.seamOverlapPx : seamOverlapForScale(scale);
+    const layout = computeColumnOffsets(opts.items, 1, seam);
+    totalH = layout.totalHeight;
+  }
+  if (totalH === undefined) {
+    totalH = 0;
+  }
+
+  const vph = opts.viewportHeight ?? 800;
+  const ty = opts.ty || 0;
+
+  return (totalH / 2) + (py - vph / 2 - ty) / scale;
+}
+
+export const mapCompositePixelToColumnY = compositePixelToColumnY;
+
 export function createViewportState({ getViewport = () => ({ clientWidth: 1000, clientHeight: 800, left: 0, top: 0 }) } = {}) {
   let _scale = 1;
   let _tx = 0;

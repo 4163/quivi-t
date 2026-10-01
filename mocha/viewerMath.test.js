@@ -14,7 +14,9 @@ import {
   computeBottomAlignTy,
   computeSlotHue,
   computeStripFitScale,
-  firstLastHighlight
+  firstLastHighlight,
+  computeColumnComposite,
+  compositePixelToColumnY
 } from '../src/js/services/viewerMath.js';
 
 describe('viewerMath', () => {
@@ -789,6 +791,267 @@ describe('viewerMath', () => {
       assert.equal(firstLastHighlight({ primary: 2, visStart: 0, visEnd: 9, total: 10 }), 'first');
       assert.equal(firstLastHighlight({ primary: 7, visStart: 0, visEnd: 9, total: 10 }), 'last');
       assert.equal(firstLastHighlight({ primary: -1, visStart: 0, visEnd: 9, total: 10 }), 'first');
+    });
+  });
+
+  describe('computeColumnComposite', () => {
+    it('returns empty draw list for empty offsets or offscreen windows', () => {
+      const empty = computeColumnComposite({ offsets: [], viewportWidth: 1000, viewportHeight: 800 });
+      assert.deepEqual(empty.drawList, []);
+      assert.equal(empty.startIndex, -1);
+      assert.equal(empty.endIndex, -1);
+
+      const layout = computeColumnOffsets([1000, 1000], 1, 1);
+      const offscreen = computeColumnComposite({
+        offsets: layout.offsets,
+        totalHeight: layout.totalHeight,
+        viewportWidth: 1000,
+        viewportHeight: 800,
+        scale: 1,
+        ty: 5000
+      });
+      assert.deepEqual(offscreen.drawList, []);
+      assert.equal(offscreen.startIndex, -1);
+      assert.equal(offscreen.endIndex, -1);
+    });
+
+    it('maps still layout into visible draw items with columnYOrigin', () => {
+      const layout = computeColumnOffsets([600, 600, 600], 1, 1);
+      const res = computeColumnComposite({
+        offsets: layout.offsets,
+        totalHeight: layout.totalHeight,
+        columnWidth: 800,
+        viewportWidth: 800,
+        viewportHeight: 800,
+        scale: 1,
+        ty: 0
+      });
+
+      assert.equal(res.columnYOrigin, 499);
+      assert.equal(res.startIndex, 0);
+      assert.equal(res.endIndex, 2);
+      assert.equal(res.drawList.length, 3);
+
+      const d0 = res.drawList[0];
+      assert.equal(d0.imgIdx, 0);
+      assert.equal(d0.destRect.dy, 0);
+      assert.equal(d0.destRect.dh, 101);
+      assert.equal(d0.sourceRect.sy, 499);
+      assert.equal(d0.sourceRect.sh, 101);
+
+      const d1 = res.drawList[1];
+      assert.equal(d1.imgIdx, 1);
+      assert.equal(d1.destRect.dy, 100);
+      assert.equal(d1.destRect.dh, 600);
+      assert.equal(d1.sourceRect.sy, 0);
+      assert.equal(d1.sourceRect.sh, 600);
+
+      const d2 = res.drawList[2];
+      assert.equal(d2.imgIdx, 2);
+      assert.equal(d2.destRect.dy, 699);
+      assert.equal(d2.destRect.dh, 101);
+      assert.equal(d2.sourceRect.sy, 0);
+      assert.equal(d2.sourceRect.sh, 101);
+    });
+
+    it('covers a window that spans a slot boundary cleanly', () => {
+      const layout = computeColumnOffsets([1000, 1000], 1, 1);
+      const res = computeColumnComposite({
+        offsets: layout.offsets,
+        totalHeight: layout.totalHeight,
+        viewportWidth: 800,
+        viewportHeight: 600,
+        scale: 1,
+        ty: 0
+      });
+
+      assert.equal(res.startIndex, 0);
+      assert.equal(res.endIndex, 1);
+      assert.equal(res.drawList.length, 2);
+
+      const d0 = res.drawList[0];
+      const d1 = res.drawList[1];
+      assert.equal(d0.imgIdx, 0);
+      assert.equal(d1.imgIdx, 1);
+
+      assert.equal(d0.destRect.dy, 0);
+      assert.equal(d0.destRect.dh, 300.5);
+      assert.equal(d0.sourceRect.sy, 699.5);
+      assert.equal(d0.sourceRect.sh, 300.5);
+
+      assert.equal(d1.destRect.dy, 299.5);
+      assert.equal(d1.destRect.dh, 300.5);
+      assert.equal(d1.sourceRect.sy, 0);
+      assert.equal(d1.sourceRect.sh, 300.5);
+
+      assert.equal(d0.destRect.dy + d0.destRect.dh - d1.destRect.dy, 1);
+    });
+
+    it('covers tall layout where only a slice of one slot is visible', () => {
+      const layout = computeColumnOffsets([5000], 1, 0);
+      const res = computeColumnComposite({
+        offsets: layout.offsets,
+        totalHeight: layout.totalHeight,
+        viewportWidth: 800,
+        viewportHeight: 1000,
+        scale: 1,
+        ty: 0
+      });
+
+      assert.equal(res.startIndex, 0);
+      assert.equal(res.endIndex, 0);
+      assert.equal(res.drawList.length, 1);
+
+      const d = res.drawList[0];
+      assert.equal(d.destRect.dy, 0);
+      assert.equal(d.destRect.dh, 1000);
+      assert.equal(d.sourceRect.sy, 2000);
+      assert.equal(d.sourceRect.sh, 1000);
+      assert.equal(res.columnYOrigin, 2000);
+    });
+
+    it('covers scale below 1 where seam overlap grows', () => {
+      const seam = seamOverlapForScale(0.5);
+      assert.equal(seam, 2);
+
+      const items = [{ width: 1000, height: 1000 }, { width: 1000, height: 1000 }];
+      const layout = computeColumnOffsets(items, 1, seam);
+      assert.equal(layout.totalHeight, 1998);
+
+      const res = computeColumnComposite({
+        offsets: layout.offsets,
+        totalHeight: layout.totalHeight,
+        viewportWidth: 1000,
+        viewportHeight: 800,
+        scale: 0.5,
+        ty: 0
+      });
+
+      assert.equal(res.startIndex, 0);
+      assert.equal(res.endIndex, 1);
+      assert.equal(res.drawList.length, 2);
+
+      const d0 = res.drawList[0];
+      const d1 = res.drawList[1];
+      assert.equal(d0.unclippedDestRect.dh, 500);
+      assert.equal(d1.unclippedDestRect.dh, 500);
+      assert.equal(d0.unclippedDestRect.dy + d0.unclippedDestRect.dh - d1.unclippedDestRect.dy, 1);
+    });
+
+    it('expands visible window when overscan is specified', () => {
+      const layout = computeColumnOffsets([1000, 1000], 1, 1);
+      const withoutOverscan = computeColumnComposite({
+        offsets: layout.offsets,
+        totalHeight: layout.totalHeight,
+        viewportWidth: 800,
+        viewportHeight: 600,
+        scale: 1,
+        ty: -800,
+        overscan: 0
+      });
+
+      const withOverscan = computeColumnComposite({
+        offsets: layout.offsets,
+        totalHeight: layout.totalHeight,
+        viewportWidth: 800,
+        viewportHeight: 600,
+        scale: 1,
+        ty: -800,
+        overscan: 100
+      });
+
+      assert.ok(withOverscan.drawList[0].destRect.dy <= withoutOverscan.drawList[0].destRect.dy);
+      assert.ok(withOverscan.drawList[0].destRect.dh >= withoutOverscan.drawList[0].destRect.dh);
+    });
+  });
+
+  describe('compositePixelToColumnY', () => {
+    it('maps composite pixel 0 to columnYOrigin', () => {
+      const layout = computeColumnOffsets([1000, 1000], 1, 1);
+      const composite = computeColumnComposite({
+        offsets: layout.offsets,
+        totalHeight: layout.totalHeight,
+        viewportWidth: 800,
+        viewportHeight: 600,
+        scale: 1.5,
+        ty: 120
+      });
+
+      const colY0 = compositePixelToColumnY(0, {
+        totalHeight: layout.totalHeight,
+        viewportHeight: 600,
+        scale: 1.5,
+        ty: 120
+      });
+
+      assert.equal(colY0, composite.columnYOrigin);
+    });
+
+    it('provides continuous coordinates across slot seams without resetting per slot', () => {
+      const layout = computeColumnOffsets([1000, 1000, 1000], 1, 1);
+      const scale = 1.25;
+      const vph = 800;
+      const ty = -50;
+
+      let prevColY = -Infinity;
+      for (let y = 0; y <= vph; y += 50) {
+        const colY = compositePixelToColumnY(y, {
+          totalHeight: layout.totalHeight,
+          viewportHeight: vph,
+          scale,
+          ty
+        });
+        assert.ok(colY > prevColY, `Expected colY (${colY}) > prevColY (${prevColY}) at y=${y}`);
+        if (prevColY !== -Infinity) {
+          const expectedDelta = 50 / scale;
+          assert.ok(Math.abs((colY - prevColY) - expectedDelta) < 1e-9);
+        }
+        prevColY = colY;
+      }
+    });
+
+    it('includes seam overlap so pins do not drift below 100% zoom', () => {
+      const items = [{ width: 1000, height: 1000 }, { width: 1000, height: 1000 }];
+      const scale = 0.5;
+      const seam = seamOverlapForScale(scale);
+      assert.equal(seam, 2);
+
+      const colY = compositePixelToColumnY(400, {
+        items,
+        viewportHeight: 800,
+        scale,
+        ty: 0
+      });
+
+      assert.equal(colY, 999);
+    });
+
+    it('inverts slot destination positions back to layout top', () => {
+      const layout = computeColumnOffsets([800, 1200, 900], 1, 1);
+      const scale = 1.2;
+      const ty = 75;
+      const vph = 600;
+
+      const comp = computeColumnComposite({
+        offsets: layout.offsets,
+        totalHeight: layout.totalHeight,
+        viewportWidth: 800,
+        viewportHeight: vph,
+        scale,
+        ty
+      });
+
+      for (const draw of comp.drawList) {
+        const unclippedDy = draw.unclippedDestRect.dy;
+        const colY = compositePixelToColumnY(unclippedDy, {
+          totalHeight: layout.totalHeight,
+          viewportHeight: vph,
+          scale,
+          ty
+        });
+        const expectedTop = layout.offsets[draw.imgIdx].top;
+        assert.ok(Math.abs(colY - expectedTop) < 1e-6, `colY ${colY} should match expectedTop ${expectedTop}`);
+      }
     });
   });
 });

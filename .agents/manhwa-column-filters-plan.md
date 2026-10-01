@@ -68,10 +68,10 @@ Validation note. Keeps one owner per concern. Actions own dispatch, Core owns st
 
 Goal is tested geometry for a window composite whose filter space stays continuous down the column.
 
-- [ ] In `src/js/services/viewerMath.js`, add a helper that maps visible strip offsets to a viewport sized composite. Inputs are layout offsets from `computeColumnOffsets` in `src/js/services/viewerMath.js:38`, viewport size, scale, ty, and overscan. Output is a draw list of imgIdx, source rect, and dest rect plus a column Y origin for shader UVs.
-- [ ] In the same file, add a helper that maps a composite pixel back to column Y so scanline, phosphor, and CRT uniforms use column continuous coordinates instead of restarting per slot. Seam overlap from `seamOverlapForScale` in `src/js/services/viewerMath.js:81` must be included so pins do not drift below 100 percent zoom.
-- [ ] Cover still, tall, and zoomed out layouts. Cover a window that spans a slot boundary. Cover scale below 1 where seam overlap grows.
-- [ ] Accept when `npm run mocha` passes with new cases for window spanning, seam aware offsets, and column Y continuity, and no DOM import appears in the new code.
+- [x] In `src/js/services/viewerMath.js`, add a helper that maps visible strip offsets to a viewport sized composite. Inputs are layout offsets from `computeColumnOffsets` in `src/js/services/viewerMath.js:38`, viewport size, scale, ty, and overscan. Output is a draw list of imgIdx, source rect, and dest rect plus a column Y origin for shader UVs.
+- [x] In the same file, add a helper that maps a composite pixel back to column Y so scanline, phosphor, and CRT uniforms use column continuous coordinates instead of restarting per slot. Seam overlap from `seamOverlapForScale` in `src/js/services/viewerMath.js:81` must be included so pins do not drift below 100 percent zoom.
+- [x] Cover still, tall, and zoomed out layouts. Cover a window that spans a slot boundary. Cover scale below 1 where seam overlap grows.
+- [x] Accept when `npm run mocha` passes with new cases for window spanning, seam aware offsets, and column Y continuity, and no DOM import appears in the new code.
 
 Validation note. Pure modules first. Math lives in `viewerMath.js` with zero DOM imports. UI files consume it and never reverse the direction.
 
