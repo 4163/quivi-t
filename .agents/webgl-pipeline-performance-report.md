@@ -152,13 +152,14 @@ A single, unified architecture can serve single-image mode, two-page spread, and
 
 ---
 
-## Crossover wins for legacy view mode
+## Crossover wins and legacy view alignment
 
-Adopting this architecture improves the single-image viewport as well:
+Adopting this architecture improves the single-image viewport while preserving existing legacy behavior:
 
-1. **Elimination of Pica CPU pop-in:**
-   - Single-image still Lanczos currently runs on the CPU via Pica in Web Workers with an 80 ms debounce. On large images (20 to 50 MP), Pica takes 100 to 500 ms, causing visible blur-to-sharp pop-in.
-   - Using the GPU Lanczos shader for stills reduces processing time to under 3 ms.
+1. **Retain Pica for legacy still images with targeted pan fix:**
+   - Legacy still images continue using Pica in Web Workers to preserve its unsharp-mask post-processing (`unsharpAmount: 80, unsharpRadius: 0.6`) and adaptive downscaling quality.
+   - Pica resizes the visible viewport bounding box (`src/js/services/scaling/lanczos.js:53-76`). Because commit `3b7470e` switched pan handling to `_cancelPendingRender()` to avoid base image flashing, `#viewer-lanczos-canvas` remains visible during pan while the base `.viewer-img` is hidden via CSS (`opacity: 0 !important`). Panning moves the old crop box, revealing blank margins outside the previous viewport until the pan settles and Pica re-resamples.
+   - The fix retains Pica and adjusts CSS/pan state so the bilinear base `.viewer-img` remains visible underneath `#viewer-lanczos-canvas` during active drag/pan, ensuring margins never show blank while preserving Pica's high-quality resample when stationary.
 2. **Direct video and animated frame upload:**
    - `viewerPipelines.js:380` (video) and `viewerPipelines.js:655` (WebCodecs) blit frames into an intermediate 2D staging canvas before WebGL upload.
    - Uploading `HTMLVideoElement` and `VideoFrame` directly to `gl.texImage2D` cuts CPU copy overhead.
@@ -172,10 +173,10 @@ Adopting this architecture improves the single-image viewport as well:
 ## Phased implementation plan
 
 ### Phase 1. Shared texture cache and quad compositor modules
-- [ ] Create `src/js/services/pipelines/textureCache.js` with LRU eviction and byte budgeting.
-- [ ] Create `src/js/services/pipelines/quadCompositor.js` with quad VBO and bilinear sampling shader.
-- [ ] Add unit tests in `mocha/textureCache.test.js` and `mocha/quadCompositor.test.js` validating budget calculation, LRU ordering, and vertex NDC coordinate math.
-- [ ] Accept when tests pass and both modules have zero DOM references.
+- [x] Create `src/js/services/pipelines/textureCache.js` with LRU eviction and byte budgeting.
+- [x] Create `src/js/services/pipelines/quadCompositor.js` with quad VBO and bilinear sampling shader.
+- [x] Add unit tests in `mocha/textureCache.test.js` and `mocha/quadCompositor.test.js` validating budget calculation, LRU ordering, and vertex NDC coordinate math.
+- [x] Accept when tests pass and both modules have zero DOM references.
 
 ### Phase 2. WebGL multi-quad composition in manhwa view
 - [ ] In `src/js/viewer/viewerPipelines.js`, replace `_renderColumn()`'s 2D canvas blitting with `QuadCompositor` rendering into `compositeFBO`.
@@ -191,9 +192,9 @@ Adopting this architecture improves the single-image viewport as well:
 - [ ] Verify that pan and zoom adjustments update the composite FBO immediately on every frame.
 - [ ] Accept when no visual freezing or position snapping occurs during active mouse wheel or drag scrolling.
 
-### Phase 4. Unified single-image pipeline and legacy crossover
+### Phase 4. Unified single-image pipeline and legacy alignment
+- [x] Retain Pica for legacy still images, applying the targeted CSS/pan fix so `.viewer-img` stays visible underneath during active pan to eliminate blank margins.
 - [ ] Update `viewerPipelines.js` single-image path to use `TextureCache` with capacity matching `VIEWER_IMAGE_POOL_CAPACITY = 4`.
-- [ ] Connect still image Lanczos to `lanczosWebGL.js` instead of Pica, removing CPU pop-in.
 - [ ] Connect video and WebCodecs pumps directly to `texImage2D`, bypassing `_liveStagingCanvas`.
 - [ ] Clean up unused helpers in `viewerMath.js`.
-- [ ] Accept when flipping between images in legacy view does not re-decode textures, and video playback under filters shows reduced CPU load.
+- [ ] Accept when flipping between images in legacy view does not re-decode textures, video playback under filters shows reduced CPU load, and Pica still images pan without blank margins.

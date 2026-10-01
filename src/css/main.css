@@ -2196,6 +2196,8 @@ body.is-importing-url .header-cell:hover {
   width: var(--crop-w);
   height: var(--crop-h);
   opacity: 0;
+  z-index: 2;
+  pointer-events: none;
 }
 
 #viewer-lanczos-canvas[data-render-ready="true"] {
@@ -2220,12 +2222,8 @@ body.is-importing-url .header-cell:hover {
 
 #viewport[data-filter] #viewer-img-wrapper .viewer-img,
 #viewport[data-filter] #viewer-img-wrapper .viewer-video,
-#viewer-img-wrapper:has(#viewer-lanczos-canvas[data-render-ready="true"]) .viewer-img,
-#viewer-img-wrapper:has(#viewer-lanczos-canvas[data-render-ready="true"]) .viewer-video,
 #viewport[data-filter] #viewer-bridge-layer .viewer-img,
-#viewport[data-filter] #viewer-bridge-layer .viewer-video,
-#viewport:has(#viewer-lanczos-canvas[data-render-ready="true"]) #viewer-bridge-layer .viewer-img,
-#viewport:has(#viewer-lanczos-canvas[data-render-ready="true"]) #viewer-bridge-layer .viewer-video {
+#viewport[data-filter] #viewer-bridge-layer .viewer-video {
   opacity: 0 !important;
 }
 
