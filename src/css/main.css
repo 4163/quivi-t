@@ -2229,6 +2229,31 @@ body.is-importing-url .header-cell:hover {
   opacity: 0 !important;
 }
 
+/* Manhwa column filter canvas: one output for the whole column. */
+#manhwa-filter-canvas {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: auto;
+  pointer-events: none;
+  opacity: 0;
+  display: none;
+}
+
+#viewport.manhwa-active #manhwa-filter-canvas[data-render-ready="true"] {
+  display: block;
+  opacity: 1;
+}
+
+/* While the column canvas paints, hide raw slot media.
+   Visibility keeps slot layout so scroll offsets stay valid. */
+#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>img,
+#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>video {
+  visibility: hidden;
+}
+
 /* Percentage-sized SVGs need concrete dimensions in the shrink-wrap wrapper. */
 .viewer-img[data-svg-bounds] {
   width: var(--svg-base-w);

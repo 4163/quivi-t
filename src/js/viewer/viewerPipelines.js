@@ -1,10 +1,11 @@
 import { Core } from '../core.js';
-import { getEffectiveScaling } from '../services/viewerMath.js';
+import { getEffectiveScaling, computeColumnComposite } from '../services/viewerMath.js';
 import { createLanczosPipeline } from '../services/scaling/lanczos.js';
 import { filter as lanczosWebGlModule } from '../services/scaling/lanczosWebGL.js';
 import { createGlRuntime } from '../services/pipelines/glRuntime.js';
 import { activeFilterId } from '../services/registry.js';
 import { getFilterModule } from '../services/filterModules.js';
+import { getCleanImageCrop } from '../shared/blobImage.js';
 
 const SVG_ANIMATED_MAX_EDGE = 512;
 const SVG_STATIC_MAX_EDGE = 2048;
@@ -679,11 +680,28 @@ export function createViewerPipelines(viewportState) {
   }
 
   Core.onStateChange((state) => {
-    // Strip owns its own images; skip filter/scaling pipeline when active.
     if (state.manhwaEnabled) {
+      // Legacy pipeline parks. The column pipeline takes over from here.
       _cancelRender();
       _stopLivePump();
+      _syncColumnPipeline(state);
+      _requestColumnRender();
       return;
+    }
+
+    if (_columnPipeline || _columnVisible) {
+      const hadFrame = _columnVisible;
+      _teardownColumn();
+      if (hadFrame) {
+        // Markers still hold pre-manhwa values and the legacy overlay was
+        // cleared on entry, so repaint once instead of trusting the diff.
+        _cancelRender();
+        _applyScaling();
+        _scheduleTransform();
+        _triggerRender();
+        _syncLivePump();
+        return;
+      }
     }
 
     const newFilter = _resolveActiveFilter(state);
@@ -706,11 +724,318 @@ export function createViewerPipelines(viewportState) {
   // the transform updates. Clearing here flashed the base image every pan
   // tick and doubled the LCP candidate on zoom.
   viewportState.subscribe(() => {
-    if (Core.getState()?.manhwaEnabled) return;
+    if (Core.getState()?.manhwaEnabled) {
+      // Keep the last column frame up while scrolling. The debounced
+      // render below swaps the new frame in.
+      _requestColumnRender();
+      return;
+    }
     _cancelPendingRender();
     _scheduleTransform();
     _triggerRender();
   });
+
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    // Decode corrections rebuild layout without a viewport tick. Repaint
+    // the column so the composite tracks the corrected offsets.
+    window.addEventListener('quivit-manhwa-settle', () => {
+      _requestColumnRender();
+    });
+  }
+
+  // --- Manhwa column pipeline: one WebGL pass over the visible window ---
+  // Filter patterns stay continuous across slot seams because the shader
+  // runs once over the whole composite, never per slot. No pica here: the
+  // column scrolls, so it follows the live path like animated and video.
+  // Staging reads through clean bitmap crops because quivit:// and asset://
+  // sources taint canvas and WebGL contexts (see shared/blobImage.js).
+  const COLUMN_RENDER_DEBOUNCE_MS = 80;
+  const COLUMN_BITMAP_CACHE_CAPACITY = 12;
+  // Temporary slice 3 diagnosis. Removed before signoff.
+  const COLUMN_DEBUG = true;
+  function _columnLog(...args) {
+    if (COLUMN_DEBUG) console.log('[column]', ...args);
+  }
+
+  let _columnSourceProvider = null;
+  let _columnPipeline = null;
+  let _columnFilter = null;
+  let _columnAnime4kVariant = null;
+  let _columnScaling = null;
+  let _columnVisible = false;
+  let _columnTimer = 0;
+  let _columnGeneration = 0;
+  let _columnPending = false;
+  const _columnStaging = document.createElement('canvas');
+  let _columnStagingCtx = null;
+  const _columnBitmapCache = new Map();
+  const _columnCanvas = document.getElementById('manhwa-filter-canvas');
+  if (_columnCanvas) {
+    _columnCanvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+    });
+    _columnCanvas.addEventListener('webglcontextrestored', () => {
+      _teardownColumnCanvas();
+      if (_columnPipeline) { _columnPipeline.dispose(); _columnPipeline = null; }
+      _columnFilter = null;
+      _syncColumnPipeline(Core.getState());
+      _requestColumnRender();
+    });
+  }
+
+  function _resolveColumnFilter(state) {
+    if (!state) return null;
+    const fd = state.config?.frontend_data;
+    if (!fd) return null;
+    // The column is one raster, so the per-slot SVG policy does not apply.
+    return activeFilterId(fd);
+  }
+
+  function _columnNeedsWebGL(state) {
+    if (!state) return false;
+    if (_resolveColumnFilter(state) !== null) return true;
+    // The column counts as one raster: lanczos always goes through WebGL.
+    return state.scalingMode === 'lanczos';
+  }
+
+  function _teardownColumnCanvas() {
+    if (!_columnCanvas) return;
+    _columnCanvas.removeAttribute('data-render-ready');
+    const gl = _columnCanvas.getContext('webgl2');
+    if (gl) {
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    } else {
+      _columnCanvas.width = _columnCanvas.width;
+    }
+  }
+
+  function _clearColumnBitmapCache() {
+    for (const bmp of _columnBitmapCache.values()) {
+      if (bmp && bmp.close) bmp.close();
+    }
+    _columnBitmapCache.clear();
+  }
+
+  function _teardownColumn() {
+    _columnGeneration++;
+    if (_columnTimer) { clearTimeout(_columnTimer); _columnTimer = 0; }
+    _columnPending = false;
+    _clearColumnBitmapCache();
+    if (_columnStaging) { _columnStaging.width = 0; _columnStaging.height = 0; }
+    _columnStagingCtx = null;
+    _teardownColumnCanvas();
+    if (_columnPipeline) { _columnPipeline.dispose(); _columnPipeline = null; }
+    if (_columnVisible) {
+      _columnVisible = false;
+      const vp = document.getElementById('viewport');
+      // Clear only the flag the column set. Legacy repaints right after on
+      // the m->l path and sets its own flag when its filter is active.
+      if (vp && _columnFilter && vp.getAttribute('data-filter') === _columnFilter) {
+        vp.removeAttribute('data-filter');
+      }
+    }
+    _columnFilter = null;
+    _columnAnime4kVariant = null;
+    _columnScaling = null;
+  }
+
+  function _syncColumnPipeline(state) {
+    if (!state || !state.manhwaEnabled || !_columnCanvas) {
+      _columnLog('sync skip', { hasState: !!state, manhwa: state?.manhwaEnabled, hasCanvas: !!_columnCanvas });
+      _teardownColumn();
+      return;
+    }
+    const needs = _columnNeedsWebGL(state);
+    _columnLog('sync', { scaling: state.scalingMode, needs });
+    if (!needs) {
+      _teardownColumn();
+      return;
+    }
+    const filter = _resolveColumnFilter(state);
+    const scaling = state.scalingMode;
+    const variant = filter === 'anime4k' ? state?.config?.frontend_data?.filter_options?.anime4k?.variant : null;
+    const wantFilter = filter !== null ? filter : 'lanczos';
+    if (!_columnPipeline) {
+      _columnPipeline = createGlRuntime(_columnCanvas);
+    }
+    if (_columnPipeline.filter !== wantFilter || variant !== _columnAnime4kVariant) {
+      if (wantFilter === 'lanczos') {
+        _columnPipeline.setFilter(lanczosWebGlModule);
+      } else {
+        _columnPipeline.setFilter(getFilterModule(filter, state?.config?.frontend_data));
+      }
+      _columnPipeline.filter = wantFilter;
+      _columnAnime4kVariant = variant;
+    }
+    _columnFilter = wantFilter;
+    _columnScaling = scaling;
+    _columnLog('pipeline ready', { wantFilter, variant });
+  }
+
+  function _requestColumnRender() {
+    const st = Core.getState();
+    if (!st?.manhwaEnabled || !_columnPipeline) return;
+    if (_columnTimer || _columnPending) {
+      _columnLog('request skip', { timer: !!_columnTimer, pending: _columnPending });
+      return;
+    }
+    _columnLog('request scheduled');
+    _columnTimer = setTimeout(() => {
+      _columnTimer = 0;
+      if (!Core.getState()?.manhwaEnabled) return;
+      if (!_columnPipeline) return;
+      _columnPending = true;
+      _renderColumn();
+    }, COLUMN_RENDER_DEBOUNCE_MS);
+  }
+
+  async function _columnBitmapFor(src, sx, sy, sw, sh) {
+    const key = `${src}|${sx}|${sy}|${sw}|${sh}`;
+    const hit = _columnBitmapCache.get(key);
+    if (hit) return hit;
+    let bmp = null;
+    try {
+      bmp = await getCleanImageCrop(src, sx, sy, sw, sh);
+    } catch {
+      return null;
+    }
+    if (!bmp) return null;
+    _columnBitmapCache.set(key, bmp);
+    if (_columnBitmapCache.size > COLUMN_BITMAP_CACHE_CAPACITY) {
+      const oldest = _columnBitmapCache.keys().next().value;
+      const old = _columnBitmapCache.get(oldest);
+      _columnBitmapCache.delete(oldest);
+      if (old && old.close) old.close();
+    }
+    return bmp;
+  }
+
+  async function _renderColumn() {
+    _columnPending = false;
+    const state = Core.getState();
+    _columnLog('render entry', {
+      manhwa: !!state?.manhwaEnabled,
+      hasPipeline: !!_columnPipeline,
+      filter: _columnFilter,
+      vpW: document.getElementById('viewport')?.clientWidth,
+      vpH: document.getElementById('viewport')?.clientHeight,
+    });
+    if (!state?.manhwaEnabled) return;
+    if (!_columnPipeline || !_columnFilter) return;
+    const gen = _columnGeneration;
+    const vp = document.getElementById('viewport');
+    const vpW = vp?.clientWidth || 0;
+    const vpH = vp?.clientHeight || 0;
+    if (vpW <= 0 || vpH <= 0) return;
+    const snap = _columnSourceProvider ? _columnSourceProvider() : null;
+    if (!snap || !snap.offsets || snap.offsets.length === 0) {
+      _columnLog('render abort', { hasProvider: !!_columnSourceProvider, hasSnap: !!snap, offsets: snap?.offsets?.length });
+      // No content under a live frame means the list emptied. Drop the
+      // stale frame so raw slots, not a frozen composite, show.
+      if (_columnVisible) _teardownColumn();
+      return;
+    }
+
+    const scale = viewportState.getScale() || 1;
+    const tx = viewportState.getTx() || 0;
+    const ty = viewportState.getTy() || 0;
+    const { drawList } = computeColumnComposite({
+      offsets: snap.offsets,
+      totalHeight: snap.totalHeight,
+      columnWidth: snap.columnWidth,
+      viewportWidth: vpW,
+      viewportHeight: vpH,
+      scale,
+      tx,
+      ty,
+      overscan: 0,
+      items: snap.items,
+    });
+    if (!drawList || drawList.length === 0) {
+      _columnLog('render abort', { draws: 0, vpW, vpH, scale, ty });
+      return;
+    }
+    _columnLog('composite ready', {
+      draws: drawList.length,
+      nodes: snap.nodes.size,
+      firstSrc: (() => {
+        const n0 = snap.nodes.get(drawList[0]?.imgIdx);
+        return (n0?.currentSrc || n0?.src || '').slice(0, 80);
+      })(),
+    });
+
+    if (_columnStaging.width !== vpW) _columnStaging.width = vpW;
+    if (_columnStaging.height !== vpH) _columnStaging.height = vpH;
+    if (!_columnStagingCtx) _columnStagingCtx = _columnStaging.getContext('2d');
+    const ctx = _columnStagingCtx;
+    // Lanczos reconstructs from box-sampled staging. Filters expect scaled input.
+    ctx.imageSmoothingEnabled = _columnFilter !== 'lanczos';
+    ctx.imageSmoothingQuality = 'high';
+    ctx.clearRect(0, 0, vpW, vpH);
+
+    let painted = 0;
+    for (const draw of drawList) {
+      if (gen !== _columnGeneration) return;
+      const node = snap.nodes.get(draw.imgIdx);
+      if (!node) continue;
+      // Slice 3 covers stills. Video rows land in slice 4 with a live loop.
+      if (node.tagName === 'VIDEO') continue;
+      const src = node.currentSrc || node.src;
+      if (!src) continue;
+      const item = snap.items ? snap.items[draw.imgIdx] : null;
+      const itemW = (item && (item.naturalWidth ?? item.width)) || 0;
+      const itemH = (item && (item.naturalHeight ?? item.height)) || 0;
+      const nodeW = node.naturalWidth || 0;
+      const nodeH = node.naturalHeight || 0;
+      if (!nodeW || !nodeH) continue;
+      const sr = draw.sourceRect || {};
+      // Map item pixels to decoded bitmap pixels when they differ.
+      const kx = itemW > 0 ? nodeW / itemW : 1;
+      const ky = itemH > 0 ? nodeH / itemH : 1;
+      const sx = Math.max(0, Math.round((sr.x ?? sr.sx ?? 0) * kx));
+      const sy = Math.max(0, Math.round((sr.y ?? sr.sy ?? 0) * ky));
+      const sw = Math.min(nodeW - sx, Math.round((sr.width ?? sr.sw ?? nodeW) * kx));
+      const sh = Math.min(nodeH - sy, Math.round((sr.height ?? sr.sh ?? nodeH) * ky));
+      if (sw <= 0 || sh <= 0) continue;
+      const dr = draw.destRect || {};
+      const dx = Math.round(dr.x ?? dr.dx ?? 0);
+      const dy = Math.round(dr.y ?? dr.dy ?? 0);
+      const dw = Math.round(dr.width ?? dr.dw ?? 0);
+      const dh = Math.round(dr.height ?? dr.dh ?? 0);
+      if (dw <= 0 || dh <= 0) continue;
+      const bmp = await _columnBitmapFor(src, sx, sy, sw, sh);
+      if (gen !== _columnGeneration) return;
+      if (!bmp) continue;
+      try {
+        ctx.drawImage(bmp, dx, dy, dw, dh);
+        painted++;
+      } catch {
+        continue;
+      }
+    }
+    if (painted === 0) {
+      _columnLog('render abort', { painted: 0, draws: drawList.length, nodes: snap.nodes.size });
+      return;
+    }
+    if (gen !== _columnGeneration) return;
+
+    _columnPipeline.updateSource(_columnStaging);
+    // Staging already holds the transformed composite, so identity geometry
+    // keeps filter phase continuous down the column instead of per slot.
+    const geom = {
+      scale: 1, tx: 0, ty: 0, rotation: 0, flipX: 1, flipY: 1,
+      viewport: { clientWidth: vpW, clientHeight: vpH },
+    };
+    const ok = await _columnPipeline.render(_columnStaging, geom, true);
+    if (gen !== _columnGeneration) return;
+    _columnLog('render done', { ok, painted });
+    if (ok && _columnCanvas) {
+      _columnCanvas.setAttribute('data-render-ready', 'true');
+      if (vp) vp.setAttribute('data-filter', _columnFilter);
+      _columnVisible = true;
+    }
+  }
 
   return {
     setSource(img) {
@@ -735,7 +1060,11 @@ export function createViewerPipelines(viewportState) {
       _syncLivePump();
     },
     forceRender() {
-      if (Core.getState()?.manhwaEnabled) return;
+      if (Core.getState()?.manhwaEnabled) {
+        _syncColumnPipeline(Core.getState());
+        _requestColumnRender();
+        return;
+      }
       _cancelRender();
       if (pipeline && pipeline.type === 'webgl') {
         _applyTransform();
@@ -748,6 +1077,11 @@ export function createViewerPipelines(viewportState) {
       _activeSource = null;
       _cancelRender();
       _stopLivePump();
+      // In manhwa the renderer parks its single source on every notify, which
+      // funnels here through onActiveImageChanged(null). The column lifecycle
+      // stays state-driven through _syncColumnPipeline, so leave it alone.
+      if (Core.getState()?.manhwaEnabled) return;
+      _teardownColumn();
       if (pipeline) {
         _teardownWebglCanvas();
         pipeline.dispose();
@@ -755,6 +1089,12 @@ export function createViewerPipelines(viewportState) {
       }
       const vp = document.getElementById('viewport');
       if (vp) vp.removeAttribute('data-filter');
+    },
+    setColumnSource(fn) {
+      _columnSourceProvider = fn;
+    },
+    notifyColumnChanged() {
+      _requestColumnRender();
     }
   };
 }

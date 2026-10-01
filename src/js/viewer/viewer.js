@@ -2,7 +2,7 @@ import { createViewportState } from '../services/viewerMath.js';
 import { createViewerRenderer } from './viewerRender.js';
 import { createViewerGestures } from './viewerGestures.js';
 import { createViewerPipelines } from './viewerPipelines.js';
-import { isManhwaStripActive, initManhwaStrip, isStripAtTop, triggerRevealListTop, resetZoom as resetStripZoom, setOnSlotMounted, setOnBridgeHandoff } from './manhwaStrip.js';
+import { isManhwaStripActive, initManhwaStrip, isStripAtTop, triggerRevealListTop, resetZoom as resetStripZoom, setOnSlotMounted, setOnBridgeHandoff, getManhwaColumnSnapshot } from './manhwaStrip.js';
 
 
 let _cachedViewport = { clientWidth: 1000, clientHeight: 1000, left: 0, top: 0 };
@@ -33,11 +33,13 @@ const renderer = createViewerRenderer(viewportState, (img) => {
 });
 const gestures = createViewerGestures(viewportState);
 initManhwaStrip(viewportState);
+pipelines.setColumnSource(getManhwaColumnSnapshot);
 function _doubleRaf(fn) {
   requestAnimationFrame(() => requestAnimationFrame(fn));
 }
 
 setOnSlotMounted(() => {
+  pipelines.notifyColumnChanged();
   if (!isManhwaStripActive() || !renderer.isBridgeActive()) return;
   _doubleRaf(() => {
     // A toggle-off inside these two frames must not spend a stale release

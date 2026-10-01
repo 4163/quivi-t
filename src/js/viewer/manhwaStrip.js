@@ -2461,6 +2461,19 @@ export function isManhwaStripActive() {
   return _active;
 }
 
+/** Read only snapshot for the column filter pipeline. The pipeline draws
+ * mounted nodes into its own staging canvas and must not mutate this. */
+export function getManhwaColumnSnapshot() {
+  if (!_active) return null;
+  return {
+    offsets: _layout.offsets,
+    totalHeight: _layout.totalHeight,
+    columnWidth: _layout.columnWidth || _layout.widestWidth || 0,
+    items: _imageIndex,
+    nodes: new Map(_mounted),
+  };
+}
+
 let _onRevealListTop = null;
 export function setRevealListTop(fn) {
   _onRevealListTop = fn;
