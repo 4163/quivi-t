@@ -570,7 +570,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _pendingVideoEl = null;
     });
 
-    window.addEventListener('quivit-download-complete', (e) => {
+    window.addEventListener('quivit-download-complete', async (e) => {
       const destPath = e.detail?.destPath;
       if (!destPath) return;
       const state = Core.getState();
@@ -580,7 +580,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         _forceReloadTarget = true;
         _reloadTimestamp = Date.now();
         _activeTargetSrc = null;
-        Core.setState({ fitModeGen: (state.fitModeGen || 0) + 1 });
+        const update = { fitModeGen: (state.fitModeGen || 0) + 1 };
+        if (!state.src) {
+          update.src = await FsUtils.buildFileSrc(targetPath);
+        }
+        Core.setState(update);
       }
     });
   }
