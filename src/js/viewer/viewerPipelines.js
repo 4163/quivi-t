@@ -5,13 +5,135 @@ import { filter as lanczosWebGlModule } from '../services/scaling/lanczosWebGL.j
 import { createGlRuntime } from '../services/pipelines/glRuntime.js';
 import { activeFilterId } from '../services/registry.js';
 import { getFilterModule } from '../services/filterModules.js';
-import { createTextureCache } from '../services/pipelines/textureCache.js';
+import { createTextureCache, uploadTexture } from '../services/pipelines/textureCache.js';
 import { createQuadCompositor } from '../services/pipelines/quadCompositor.js';
 import { prepareSvgForCanvas } from '../shared/svgUtils.js';
 
 const SVG_ANIMATED_MAX_EDGE = 1080;
 const SVG_STATIC_MAX_EDGE = 2048;
 const VIEWER_IMAGE_POOL_CAPACITY = 4;
+
+const _scratchUV = { u0: 0, v0: 0, u1: 1, v1: 1 };
+const _scratchDest = { x: 0, y: 0, width: 0, height: 0 };
+const _scratchSize = { w: 0, h: 0 };
+const _cachedDrawsScratch = [];
+const _liveDrawsScratch = [];
+
+function _drawSlotQuad(compositor, texture, draw, item, nodeW, nodeH, vpW, vpH, flipY, sampler) {
+  if (!nodeW || !nodeH) return false;
+  const itemW = (item && (item.naturalWidth ?? item.width)) || 0;
+  const itemH = (item && (item.naturalHeight ?? item.height)) || 0;
+
+  const sr = draw.sourceRect || {};
+  const kx = itemW > 0 ? nodeW / itemW : 1;
+  const ky = itemH > 0 ? nodeH / itemH : 1;
+  const sx = Math.max(0, (sr.x ?? sr.sx ?? 0) * kx);
+  const sy = Math.max(0, (sr.y ?? sr.sy ?? 0) * ky);
+  const sw = Math.min(nodeW - sx, (sr.width ?? sr.sw ?? nodeW) * kx);
+  const sh = Math.min(nodeH - sy, (sr.height ?? sr.sh ?? nodeH) * ky);
+  if (sw <= 0 || sh <= 0) return false;
+
+  const dr = draw.destRect || {};
+  const dx = dr.x ?? dr.dx ?? 0;
+  const dy = dr.y ?? dr.dy ?? 0;
+  const dw = dr.width ?? dr.dw ?? 0;
+  const dh = dr.height ?? dr.dh ?? 0;
+  if (dw <= 0 || dh <= 0) return false;
+
+  _scratchUV.u0 = sx / nodeW;
+  _scratchUV.v0 = sy / nodeH;
+  _scratchUV.u1 = (sx + sw) / nodeW;
+  _scratchUV.v1 = (sy + sh) / nodeH;
+
+  _scratchDest.x = dx;
+  _scratchDest.y = dy;
+  _scratchDest.width = dw;
+  _scratchDest.height = dh;
+
+  _scratchSize.w = nodeW;
+  _scratchSize.h = nodeH;
+
+  return compositor.drawQuad(texture, _scratchDest, _scratchUV, vpW, vpH, flipY, sampler, _scratchSize);
+}
+
+function isSvgSource(src, item = null) {
+  if (item?.entry) {
+    const name = item.entry.name || item.entry.path || '';
+    if (/\.svg($|[?#])/i.test(name)) return true;
+  }
+  if (!src) return false;
+  try {
+    const url = new URL(src);
+    return url.pathname.toLowerCase().endsWith('.svg');
+  } catch {
+    return src.split('?')[0].toLowerCase().endsWith('.svg');
+  }
+}
+
+async function loadSvgCanvas(src) {
+  try {
+    const resp = await globalThis.fetch(src);
+    if (!resp.ok) return null;
+    const text = await resp.text();
+    const cleanSvg = prepareSvgForCanvas(text);
+    if (!cleanSvg) return null;
+    const blob = new Blob([cleanSvg], { type: 'image/svg+xml' });
+    const blobUrl = URL.createObjectURL(blob);
+    try {
+      const img = new Image();
+      img.src = blobUrl;
+      await new Promise((resolve, reject) => {
+        if (img.complete && img.naturalWidth) resolve();
+        else {
+          img.onload = resolve;
+          img.onerror = reject;
+        }
+      });
+
+      let w = img.naturalWidth || 0;
+      let h = img.naturalHeight || 0;
+      const isBrowserDefault = (w === 150 && h === 150) || (w === 300 && h === 150);
+      if (w <= 0 || h <= 0 || isBrowserDefault) {
+        const vb = cleanSvg.match(/viewBox=["']\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)["']/i);
+        if (vb) {
+          const vbW = parseFloat(vb[3]);
+          const vbH = parseFloat(vb[4]);
+          if (vbW > 0 && vbH > 0) {
+            w = Math.round(vbW);
+            h = Math.round(vbH);
+          } else {
+            w = 1000;
+            h = 1000;
+          }
+        } else {
+          w = 1000;
+          h = 1000;
+        }
+      }
+      const maxEdge = SVG_STATIC_MAX_EDGE;
+      if (w > maxEdge || h > maxEdge) {
+        const s = Math.min(maxEdge / w, maxEdge / h);
+        w = Math.max(1, Math.round(w * s));
+        h = Math.max(1, Math.round(h * s));
+      }
+
+      img.width = w;
+      img.height = h;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      return canvas;
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+  } catch (err) {
+    console.warn('[loadSvgCanvas] Failed to load SVG canvas for', src, err);
+    return null;
+  }
+}
 
 export function createViewerPipelines(viewportState) {
   let _activeSource = null;
@@ -53,16 +175,6 @@ export function createViewerPipelines(viewportState) {
       _triggerRender();
       _syncLivePump();
     });
-  }
-
-  function isSvgSource(src) {
-    if (!src) return false;
-    try {
-      const url = new URL(src);
-      return url.pathname.toLowerCase().endsWith('.svg');
-    } catch {
-      return src.split('?')[0].toLowerCase().endsWith('.svg');
-    }
   }
 
   function isVideoSource(el) {
@@ -801,6 +913,10 @@ export function createViewerPipelines(viewportState) {
   let _columnGeneration = 0;
   let _columnTextureCache = null;
   let _columnQuadCompositor = null;
+  let _columnLiveTexture = null;
+  let _columnLiveLoopId = 0;
+  let _columnHasLive = false;
+  let _columnRenderInFlight = false;
   let _columnCompositeFbo = null;
   const _columnCanvas = document.getElementById('manhwa-filter-canvas');
   if (_columnCanvas) {
@@ -871,6 +987,17 @@ export function createViewerPipelines(viewportState) {
       cancelAnimationFrame(_columnRafId);
       _columnRafId = 0;
     }
+    if (_columnLiveLoopId) {
+      cancelAnimationFrame(_columnLiveLoopId);
+      _columnLiveLoopId = 0;
+    }
+    _columnHasLive = false;
+    _cachedDrawsScratch.length = 0;
+    _liveDrawsScratch.length = 0;
+    if (_columnLiveTexture && _columnPipeline?.gl) {
+      _columnPipeline.gl.deleteTexture(_columnLiveTexture);
+    }
+    _columnLiveTexture = null;
     if (_columnCompositeFbo && _columnPipeline?.gl) {
       const gl = _columnPipeline.gl;
       if (_columnCompositeFbo.tex) gl.deleteTexture(_columnCompositeFbo.tex);
@@ -950,10 +1077,44 @@ export function createViewerPipelines(viewportState) {
       if (!Core.getState()?.manhwaEnabled) return;
       if (!_columnPipeline) return;
       _renderColumn();
+      _syncColumnLiveLoop();
     });
   }
 
+  /** Run a continuous rAF loop while any visible slot is live (video, animated,
+   * SVG). The loop re-renders the full column each frame so live frames stay
+   * current under the filter. Stops itself when no live draws remain. */
+  function _syncColumnLiveLoop() {
+    if (!_columnHasLive) {
+      if (_columnLiveLoopId) {
+        cancelAnimationFrame(_columnLiveLoopId);
+        _columnLiveLoopId = 0;
+      }
+      return;
+    }
+    if (_columnLiveLoopId) return;
+    function tick() {
+      _columnLiveLoopId = 0;
+      if (!Core.getState()?.manhwaEnabled || !_columnPipeline || !_columnHasLive) return;
+      _renderColumn();
+      if (_columnHasLive) {
+        _columnLiveLoopId = requestAnimationFrame(tick);
+      }
+    }
+    _columnLiveLoopId = requestAnimationFrame(tick);
+  }
+
   async function _renderColumn() {
+    if (_columnRenderInFlight) return;
+    _columnRenderInFlight = true;
+    try {
+      await _renderColumnInner();
+    } finally {
+      _columnRenderInFlight = false;
+    }
+  }
+
+  async function _renderColumnInner() {
     const state = Core.getState();
     if (!state?.manhwaEnabled || !_columnPipeline || !_columnFilter) return;
     const gen = _columnGeneration;
@@ -995,25 +1156,48 @@ export function createViewerPipelines(viewportState) {
     const gl = _columnPipeline.gl;
     if (!gl || !_columnQuadCompositor || !_columnTextureCache) return;
 
-    const validDraws = [];
+    // Partition draws into cached (still raster/SVG) and live (video).
+    _cachedDrawsScratch.length = 0;
+    _liveDrawsScratch.length = 0;
+    let hasLive = false;
     for (const draw of drawList) {
       const node = snap.nodes.get(draw.imgIdx);
-      if (!node || node.tagName === 'VIDEO') continue;
-      const src = node.currentSrc || node.src;
-      if (!src) continue;
-      validDraws.push({ draw, node, src });
-    }
-    if (validDraws.length === 0) return;
-
-    const missing = validDraws.some(({ src }) => !_columnTextureCache.has(src));
-    if (missing) {
-      try {
-        await Promise.all(validDraws.map(({ src }) => _columnTextureCache.getOrCreate(src)));
-      } catch (e) {
-        console.warn('Failed to load textures for column composite', e);
+      if (!node) continue;
+      const isLive = snap.liveSlots?.has(draw.imgIdx);
+      if (isLive) {
+        _liveDrawsScratch.push({ draw, node });
+        hasLive = true;
+      } else {
+        const src = node.currentSrc || node.src;
+        if (src) {
+          const item = snap.items ? snap.items[draw.imgIdx] : null;
+          const isSvg = isSvgSource(src, item);
+          _cachedDrawsScratch.push({ draw, node, src, isSvg });
+        }
       }
-      if (gen !== _columnGeneration || !Core.getState()?.manhwaEnabled || !_columnPipeline) {
-        return;
+    }
+    _columnHasLive = hasLive;
+    if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0) return;
+
+    // Load missing cached textures.
+    if (_cachedDrawsScratch.length > 0) {
+      const missing = _cachedDrawsScratch.filter(({ src }) => !_columnTextureCache.has(src));
+      if (missing.length > 0) {
+        try {
+          await Promise.all(missing.map(async ({ src, isSvg }) => {
+            if (_columnTextureCache.has(src)) return;
+            if (isSvg) {
+              await _columnTextureCache.getOrCreate(src, loadSvgCanvas);
+            } else {
+              await _columnTextureCache.getOrCreate(src);
+            }
+          }));
+        } catch (e) {
+          console.warn('Failed to load textures for column composite', e);
+        }
+        if (gen !== _columnGeneration || !Core.getState()?.manhwaEnabled || !_columnPipeline) {
+          return;
+        }
       }
     }
 
@@ -1037,45 +1221,46 @@ export function createViewerPipelines(viewportState) {
     const flipY = isDirectScreen ? 1.0 : -1.0;
 
     let painted = 0;
-    for (const { draw, node, src } of validDraws) {
+
+    // Draw cached (still) slots from texture cache.
+    for (const { draw, node, src } of _cachedDrawsScratch) {
       const texEntry = _columnTextureCache.get(src);
       if (!texEntry || !texEntry.texture) continue;
-
+      const nodeW = texEntry.width || node.naturalWidth || 0;
+      const nodeH = texEntry.height || node.naturalHeight || 0;
       const item = snap.items ? snap.items[draw.imgIdx] : null;
-      const itemW = (item && (item.naturalWidth ?? item.width)) || 0;
-      const itemH = (item && (item.naturalHeight ?? item.height)) || 0;
-      const nodeW = node.naturalWidth || texEntry.width || 0;
-      const nodeH = node.naturalHeight || texEntry.height || 0;
-      if (!nodeW || !nodeH) continue;
+      if (_drawSlotQuad(_columnQuadCompositor, texEntry.texture, draw, item, nodeW, nodeH, vpW, vpH, flipY, sampler)) {
+        painted++;
+      }
+    }
 
-      const sr = draw.sourceRect || {};
-      const kx = itemW > 0 ? nodeW / itemW : 1;
-      const ky = itemH > 0 ? nodeH / itemH : 1;
-      const sx = Math.max(0, (sr.x ?? sr.sx ?? 0) * kx);
-      const sy = Math.max(0, (sr.y ?? sr.sy ?? 0) * ky);
-      const sw = Math.min(nodeW - sx, (sr.width ?? sr.sw ?? nodeW) * kx);
-      const sh = Math.min(nodeH - sy, (sr.height ?? sr.sh ?? nodeH) * ky);
-      if (sw <= 0 || sh <= 0) continue;
+    // Draw live (video) slots from element upload.
+    for (const { draw, node } of _liveDrawsScratch) {
+      const isVideo = node.tagName === 'VIDEO';
+      const nodeW = isVideo ? node.videoWidth : (node.naturalWidth || 0);
+      const nodeH = isVideo ? node.videoHeight : (node.naturalHeight || 0);
+      if (nodeW <= 0 || nodeH <= 0) continue;
+      if (isVideo && node.readyState < 2) continue;
 
-      const dr = draw.destRect || {};
-      const dx = dr.x ?? dr.dx ?? 0;
-      const dy = dr.y ?? dr.dy ?? 0;
-      const dw = dr.width ?? dr.dw ?? 0;
-      const dh = dr.height ?? dr.dh ?? 0;
-      if (dw <= 0 || dh <= 0) continue;
-
-      const sourceUV = {
-        u0: sx / nodeW,
-        v0: sy / nodeH,
-        u1: (sx + sw) / nodeW,
-        v1: (sy + sh) / nodeH,
-      };
-
-      const destRect = { x: dx, y: dy, width: dw, height: dh };
-      const sourceSize = { w: nodeW, h: nodeH };
-
-      const ok = _columnQuadCompositor.drawQuad(texEntry.texture, destRect, sourceUV, vpW, vpH, flipY, sampler, sourceSize);
-      if (ok) painted++;
+      if (!_columnLiveTexture) {
+        _columnLiveTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, _columnLiveTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      } else {
+        gl.bindTexture(gl.TEXTURE_2D, _columnLiveTexture);
+      }
+      try {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, node);
+      } catch {
+        continue;
+      }
+      const item = snap.items ? snap.items[draw.imgIdx] : null;
+      if (_drawSlotQuad(_columnQuadCompositor, _columnLiveTexture, draw, item, nodeW, nodeH, vpW, vpH, flipY, sampler)) {
+        painted++;
+      }
     }
 
     if (painted === 0) return;

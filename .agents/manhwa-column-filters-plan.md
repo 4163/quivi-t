@@ -95,10 +95,10 @@ Validation note. Keeps canvas ownership in `viewerPipelines.js` and slot ownersh
 
 Goal is video, animated raster, and SVG slots that keep moving while the column filter is on.
 
-- [ ] In `src/js/viewer/manhwaStrip.js:680`, extend the window change path so the column pipeline learns when a visible slot is video, animated, or SVG without exposing decode internals. Mounted video nodes already attach audio through `manhwaStrip.js:1179`.
-- [ ] In `src/js/viewer/viewerPipelines.js`, draw video slots from the live slot element each frame. Draw animated slots from their current decoded frame. Draw SVG slots from the mounted node so the existing 2048 cap in `manhwaStrip.js:580` keeps working. Do not refetch URLs inside the frame loop.
-- [ ] In `src/js/viewer/viewerPipelines.js`, gate the rAF loop like the legacy pump gate in `viewerPipelines.js:332`. Run only when manhwa is active and filter or lanczos needs WebGL. Stop the loop and zero the staging canvas on teardown.
-- [ ] Accept when a video gallery plays under each filter in manhwa with audio pill intact, an animated WebP gallery animates under a filter, an SVG gallery paints within its cap, and CPU and memory stay flat while scrolling a mixed chapter.
+- [ ] In `src/js/viewer/manhwaStrip.js`, extend the window change path so the column pipeline tracks live slots (`video`). Video slots are added to `_liveSlots` on mount in `_claimSlot` and remapped across list growth in `admitPendingEntry`. Static SVGs and rasters are cached in `_columnTextureCache` using direct element uploads. Raster animations under the column filter remain deferred until a WebCodecs decoder path lands.
+- [x] In `src/js/viewer/viewerPipelines.js:998`, `_renderColumn` partitions draws into cached (still raster/SVG via texture cache) and live (video via reusable `_columnLiveTexture`). Extracted `_drawSlotQuad` helper shared by both paths with scratch buffers.
+- [x] In `src/js/viewer/viewerPipelines.js:958`, `_syncColumnLiveLoop` gates a continuous rAF loop. Runs only when `_columnHasLive` is true (set by `_renderColumn` each frame from `snap.liveSlots`). Stops itself when no live draws remain or when manhwa/filter is off. Teardown cancels the loop and deletes the live texture.
+- [ ] Accept when a video gallery plays under each filter in manhwa with audio pill intact, an SVG gallery paints within its cap, and CPU and memory stay flat while scrolling a mixed chapter.
 
 Validation note. Heavy per frame work stays in the pipeline owner. Strip stays a DOM and layout owner. No archive, protocol, or config internals move files.
 

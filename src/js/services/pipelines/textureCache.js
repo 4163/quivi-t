@@ -36,7 +36,13 @@ export function uploadTexture(gl, imageSource) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageSource);
+  try {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageSource);
+  } catch (err) {
+    console.warn('[uploadTexture] gl.texImage2D failed:', err);
+    gl.deleteTexture(tex);
+    return null;
+  }
   return tex;
 }
 
@@ -186,6 +192,8 @@ export class TextureCache {
         if (typeof imageSource.close === 'function') {
           imageSource.close();
         }
+
+        if (this.gl && !texture) return null;
 
         return this.put(src, texture, width, height);
       } finally {

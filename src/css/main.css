@@ -2246,7 +2246,8 @@ body.is-importing-url .header-cell:hover {
 }
 
 /* While the column canvas paints, hide raw slot media.
-   Visibility keeps slot layout so scroll offsets stay valid. */
+   Visibility keeps slot layout so scroll offsets stay valid. Video.play()
+   advances frames regardless of visibility for the live texImage2D path. */
 #viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>img,
 #viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>video {
   visibility: hidden;

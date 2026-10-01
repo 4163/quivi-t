@@ -77,7 +77,7 @@ let _topSpacer = null;
 let _bottomSpacer = null;
 
 /** Filtered strip entries: { listIndex, entry, imgIdx, kind, naturalWidth, naturalHeight, decoded }[].
- * kind is 'image' or 'video'. Videos hold rows like images do; video nodes
+ * kind is 'image', 'video', or 'svg'. Videos hold rows like images do; video nodes
  * mount into their slots once the video slice lands. */
 let _imageIndex = [];
 
@@ -89,6 +89,11 @@ const _slots = new Map();
 
 /** Map from imgIdx → DOM img node for currently mounted items. */
 const _mounted = new Map();
+
+/** Mounted slots that need per-frame rendering under the column filter:
+ * video (always). The column pipeline reads this through getManhwaColumnSnapshot()
+ * to decide cached vs live texture upload. */
+const _liveSlots = new Set();
 
 /** Map from imgIdx → off-DOM Image currently decoding ahead of the window. */
 const _prefetching = new Map();
@@ -193,6 +198,11 @@ function _isPendingEntry(entry) {
   return false;
 }
 
+function _isSvgEntry(entry) {
+  const name = entry?.name || entry?.path || '';
+  return /\.svg($|[?#])/i.test(name);
+}
+
 function _buildImageIndex(list) {
   const result = [];
   _listToImgIdx.clear();
@@ -204,7 +214,7 @@ function _buildImageIndex(list) {
         listIndex: i,
         entry,
         imgIdx,
-        kind: FsUtils.isVideoEntry(entry) ? 'video' : 'image',
+        kind: FsUtils.isVideoEntry(entry) ? 'video' : _isSvgEntry(entry) ? 'svg' : 'image',
         naturalWidth: 0,
         naturalHeight: 0,
         decoded: false,
@@ -224,6 +234,7 @@ function _setSlotDimensions(slot, width, height) {
 function _acquireNode() {
   if (_freePool.length > 0) return _freePool.pop();
   const img = document.createElement('img');
+  img.crossOrigin = 'anonymous';
   img.decoding = 'async';
   img.draggable = false;
   img.alt = '';
@@ -245,6 +256,7 @@ function _releaseNode(img) {
 function _acquireVideoNode() {
   if (_freeVideoPool.length > 0) return _freeVideoPool.pop();
   const video = document.createElement('video');
+  video.crossOrigin = 'anonymous';
   video.loop = true;
   video.muted = true;
   video.playsInline = true;
@@ -730,6 +742,7 @@ function _updateWindow() {
     if (imgIdx < startIndex || imgIdx > endIndex) {
       if (_mountInFlight === imgIdx) _mountInFlight = -1;
       _mounted.delete(imgIdx);
+      _liveSlots.delete(imgIdx);
       _detachStripNode(node);
       _releaseStripNode(node);
     }
@@ -967,6 +980,7 @@ function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, v
       continue;
     }
     const pre = new Image();
+    pre.crossOrigin = 'anonymous';
     pre.decoding = 'async';
     _prefetching.set(i, pre);
     pre.onload = async () => {
@@ -1177,6 +1191,7 @@ function _claimSlot(imgIdx, item, slot, node) {
     node.preload = 'auto';
     node.play().catch(() => {});
     ManhwaAudio.attach(imgIdx, item, slot, node);
+    _liveSlots.add(imgIdx);
   }
   _mounted.set(imgIdx, node);
   if (item?.kind === 'video' && node.readyState < 2) {
@@ -1279,6 +1294,7 @@ function _advanceMountQueue() {
       return;
     }
     const pre = new Image();
+    pre.crossOrigin = 'anonymous';
     pre.decoding = 'async';
 
     const drop = () => {
@@ -2016,6 +2032,7 @@ function _clearCaches() {
     _releaseStripNode(node);
   }
   _mounted.clear();
+  _liveSlots.clear();
 
   for (const [, node] of _prefetchedImages) {
     _releaseStripNode(node);
@@ -2376,6 +2393,18 @@ function _admitCompleted(destPath) {
       _releaseNode(img);
     }
   }
+  // Remap live slots to match new imgIdx
+  const newLiveSlots = new Set();
+  for (const oldIdx of _liveSlots) {
+    const img = _mounted.get(oldIdx);
+    if (!img) continue;
+    const li = Number(img.dataset.listIndex);
+    const ni = Number.isFinite(li) ? _listToImgIdx.get(li) : undefined;
+    if (ni !== undefined) newLiveSlots.add(ni);
+  }
+  _liveSlots.clear();
+  for (const ni of newLiveSlots) _liveSlots.add(ni);
+
   _mounted.clear();
   for (const [k, v] of newMounted) _mounted.set(k, v);
 
@@ -2470,7 +2499,8 @@ export function getManhwaColumnSnapshot() {
     totalHeight: _layout.totalHeight,
     columnWidth: _layout.columnWidth || _layout.widestWidth || 0,
     items: _imageIndex,
-    nodes: new Map(_mounted),
+    nodes: _mounted,
+    liveSlots: _liveSlots,
   };
 }
 
