@@ -91,14 +91,10 @@ export const ACTION_REGISTRY = [
     run: (ctx) => ctx.Core.setScalingMode('bilinear', { persist: true })
   },
   { id: 'cmd-scale-lanczos', label: 'Lanczos', defaultBinds: [], category: 'View',
-    run: (ctx) => {
-      if (!ctx.Core.getState?.()?.manhwaEnabled) {
-        ctx.Core.setScalingMode('lanczos', { persist: true });
-      }
-    }
+    run: (ctx) => ctx.Core.setScalingMode('lanczos', { persist: true })
   },
   { id: 'cmd-filter-off', label: 'Filter: Off', defaultBinds: [], category: 'View',
-    run: (ctx) => { if (!ctx.Core.getState?.()?.manhwaEnabled) ctx.Core.setActiveFilter(null); }
+    run: (ctx) => ctx.Core.setActiveFilter(null)
   },
   ...FILTERS.map(f => ({
     id: f.actionId,
@@ -106,7 +102,6 @@ export const ACTION_REGISTRY = [
     defaultBinds: [],
     category: 'View',
     run: (ctx) => {
-      if (ctx.Core.getState?.()?.manhwaEnabled) return;
       const state = ctx.Core.getState();
       const current = activeFilterId(state.config?.frontend_data || {});
       ctx.Core.setActiveFilter(current === f.id ? null : f.id);
@@ -115,7 +110,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
-      const modes = state.manhwaEnabled ? ['none', 'bilinear'] : ['none', 'bilinear', 'lanczos'];
+      const modes = ['none', 'bilinear', 'lanczos'];
       const current = state.scalingMode;
       const idx = modes.indexOf(current);
       const next = idx > 0 ? modes[idx - 1] : modes[modes.length - 1];
@@ -125,7 +120,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-cycle-scaling', label: 'Scale: Next', defaultBinds: ']', category: 'View',
     run: (ctx) => {
       const state = ctx.Core.getState();
-      const modes = state.manhwaEnabled ? ['none', 'bilinear'] : ['none', 'bilinear', 'lanczos'];
+      const modes = ['none', 'bilinear', 'lanczos'];
       const current = state.scalingMode;
       const idx = modes.indexOf(current);
       const next = modes[(idx + 1) % modes.length];

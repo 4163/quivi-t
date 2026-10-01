@@ -208,12 +208,12 @@ describe('Actions registry and keybindings', () => {
       await dispatch('cmd-flip-vertical', null, fakeCtx);
       assert.deepEqual(flipCalls, ['x', 'y']);
 
-      // Fit modes work in manhwa mode; lanczos and filters remain guarded
+      // Fit modes, filters, and lanczos work in manhwa mode; rotation remains guarded
       let fitCalled = [];
-      let filterCalled = false;
+      let filterCalled = [];
       let scalingSet = null;
       fakeCtx.Core.setFitMode = (m) => { fitCalled.push(m); };
-      fakeCtx.Core.setActiveFilter = () => { filterCalled = true; };
+      fakeCtx.Core.setActiveFilter = (f) => { filterCalled.push(f); };
       fakeCtx.Core.setScalingMode = (m) => { scalingSet = m; };
 
       await dispatch('cmd-fit-width', null, fakeCtx);
@@ -222,12 +222,16 @@ describe('Actions registry and keybindings', () => {
 
       await dispatch('cmd-filter-off', null, fakeCtx);
       await dispatch('cmd-toggle-anime4k-filter', null, fakeCtx);
-      assert.equal(filterCalled, false);
+      assert.deepEqual(filterCalled, [null, 'anime4k']);
 
       await dispatch('cmd-scale-lanczos', null, fakeCtx);
-      assert.equal(scalingSet, null);
+      assert.equal(scalingSet, 'lanczos');
 
       fakeCtx.Core.getState = () => ({ manhwaEnabled: true, scalingMode: 'bilinear' });
+      await dispatch('cmd-cycle-scaling', null, fakeCtx);
+      assert.equal(scalingSet, 'lanczos');
+
+      fakeCtx.Core.getState = () => ({ manhwaEnabled: true, scalingMode: 'lanczos' });
       await dispatch('cmd-cycle-scaling', null, fakeCtx);
       assert.equal(scalingSet, 'none');
 

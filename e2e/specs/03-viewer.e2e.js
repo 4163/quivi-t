@@ -3,7 +3,7 @@ import menubarPage from '../pageobjects/menubar.page.js';
 import viewerPage from '../pageobjects/viewer.page.js';
 import statusbarPage from '../pageobjects/statusbar.page.js';
 import { fixtures } from '../helpers/fixtures.js';
-import { Key, shift } from '../helpers/keyboard.js';
+import { Key, shift, ctrl } from '../helpers/keyboard.js';
 
 describe('03 - Viewport & Viewer Controls', () => {
   before(async () => {
@@ -137,8 +137,8 @@ describe('03 - Viewport & Viewer Controls', () => {
   });
 
   it('toggles manhwa continuous strip view and updates viewport state', async () => {
-    // Toggle manhwa mode on using shortcut 'm'
-    await browser.keys(['m']);
+    // Toggle manhwa mode on using shortcut 'Ctrl+m'
+    await ctrl('m');
     await browser.waitUntil(
       async () => await viewerPage.isManhwaActive(),
       { timeout: 5000, timeoutMsg: 'Viewport did not gain manhwa-active class' }
@@ -155,7 +155,7 @@ describe('03 - Viewport & Viewer Controls', () => {
     expect(await bottomSpacer.isExisting()).toBe(true);
 
     // Toggle manhwa mode off
-    await browser.keys(['m']);
+    await ctrl('m');
     await browser.waitUntil(
       async () => !(await viewerPage.isManhwaActive()),
       { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class' }

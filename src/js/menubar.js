@@ -716,16 +716,9 @@ export function syncViewMenu(state) {
     manhwaEl.classList.toggle('checked', manhwaOn);
   }
 
-  const manhwaNote = 'Applies to single image view (Manhwa mode is 1:1 column)';
-  _setMenuItemDisabled('cmd-scale-lanczos', manhwaOn, manhwaNote);
-
-  _setMenuItemDisabled('cmd-filter-off', manhwaOn, manhwaNote);
-  for (const f of FILTERS) {
-    _setMenuItemDisabled(f.actionId, manhwaOn, manhwaNote);
-  }
-
+  const manhwaRotationNote = 'Rotation is disabled in Manhwa view';
   for (const id of ['cmd-rotate-cw', 'cmd-rotate-ccw']) {
-    _setMenuItemDisabled(id, manhwaOn, manhwaNote);
+    _setMenuItemDisabled(id, manhwaOn, manhwaRotationNote);
   }
 
   const spreadEnabled = !!(state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? (state.spreadMode && state.spreadMode !== 'off'));
