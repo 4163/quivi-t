@@ -144,14 +144,17 @@ export function createGlRuntime(canvas) {
     }
   }
 
+  let _ownsSourceTexture = false;
+
   function updateSource(canvasOrImage) {
     if (!_active || !_gl) return;
     
     const sourceIdentity = 'live_pump';
     
     if (_texSrc !== sourceIdentity || !_sourceTexture) {
-      if (_sourceTexture) _gl.deleteTexture(_sourceTexture);
+      if (_ownsSourceTexture && _sourceTexture) _gl.deleteTexture(_sourceTexture);
       _sourceTexture = _gl.createTexture();
+      _ownsSourceTexture = true;
       _gl.bindTexture(_gl.TEXTURE_2D, _sourceTexture);
       _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, _gl.LINEAR);
       _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, _gl.LINEAR);
@@ -169,60 +172,10 @@ export function createGlRuntime(canvas) {
     }
   }
 
-  async function render(imgElement, geometry, skipUpload = false) {
-    if (!_active || !_gl || _programs.length === 0) return null;
-
-    const nw = imgElement.naturalWidth || imgElement.videoWidth || imgElement.width;
-    const nh = imgElement.naturalHeight || imgElement.videoHeight || imgElement.height;
-    if (nw <= 0 || nh <= 0) return null;
-    
-    const token = _cancelToken;
-
-    if (!skipUpload) {
-      let cleanImg;
-      try {
-        cleanImg = await getCleanImage(imgElement.src);
-      } catch { return null; }
-      if (!_active || token !== _cancelToken || !cleanImg) return null;
-      
-      // Support both HTMLImageElement (naturalWidth) and ImageBitmap (width)
-      const cleanW = cleanImg.naturalWidth || cleanImg.width;
-      const cleanH = cleanImg.naturalHeight || cleanImg.height;
-      if (!cleanW || cleanW <= 0 || !cleanH || cleanH <= 0) return null;
-
-      const sourceIdentity = imgElement.src + '|' + nw + '|' + nh;
-
-      if (_texSrc !== sourceIdentity || !_sourceTexture) {
-        if (_sourceTexture) _gl.deleteTexture(_sourceTexture);
-        _sourceTexture = _gl.createTexture();
-        _gl.bindTexture(_gl.TEXTURE_2D, _sourceTexture);
-        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, _gl.LINEAR);
-        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, _gl.LINEAR);
-        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, _gl.CLAMP_TO_EDGE);
-        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, _gl.CLAMP_TO_EDGE);
-        try {
-          _gl.texImage2D(_gl.TEXTURE_2D, 0, _gl.RGBA, _gl.RGBA, _gl.UNSIGNED_BYTE, cleanImg);
-        } catch (e) {
-          console.warn('WebGL texImage2D failed', e);
-          return null;
-        }
-        _texSrc = sourceIdentity;
-      }
-    }
-
-    const vpW = geometry.viewport.clientWidth;
-    const vpH = geometry.viewport.clientHeight;
-
-    if (canvas.width !== vpW || canvas.height !== vpH) {
-      canvas.width = vpW;
-      canvas.height = vpH;
-      canvas.style.removeProperty('width');
-      canvas.style.removeProperty('height');
-    }
-
-    const { scale, tx, ty, rotation, flipX, flipY } = geometry;
-    const geomExt = { nw, nh, scale, tx, ty, rotation: rotation || 0, flipX: flipX || 1, flipY: flipY || 1 };
-    const vpExt = { width: vpW, height: vpH };
+  function _executePasses(geomExt, vpExt) {
+    const vpW = vpExt.width;
+    const vpH = vpExt.height;
+    const { nw, nh, scale, tx, ty } = geomExt;
 
     _gl.bindBuffer(_gl.ARRAY_BUFFER, posBuffer);
 
@@ -240,7 +193,7 @@ export function createGlRuntime(canvas) {
       console.warn(`[WebGL] Missing texture input "${input}"`);
       return null;
     }
-    
+
     for (let i = 0; i < _programs.length; i++) {
       const p = _programs[i];
       const isLast = i === _programs.length - 1;
@@ -322,10 +275,102 @@ export function createGlRuntime(canvas) {
     return true;
   }
 
+  async function render(imgElement, geometry, skipUpload = false) {
+    if (!_active || !_gl || _programs.length === 0) return null;
+
+    const nw = imgElement.naturalWidth || imgElement.videoWidth || imgElement.width;
+    const nh = imgElement.naturalHeight || imgElement.videoHeight || imgElement.height;
+    if (nw <= 0 || nh <= 0) return null;
+
+    const token = _cancelToken;
+
+    if (!skipUpload) {
+      let cleanImg;
+      try {
+        cleanImg = await getCleanImage(imgElement.src);
+      } catch { return null; }
+      if (!_active || token !== _cancelToken || !cleanImg) return null;
+
+      // Support both HTMLImageElement (naturalWidth) and ImageBitmap (width)
+      const cleanW = cleanImg.naturalWidth || cleanImg.width;
+      const cleanH = cleanImg.naturalHeight || cleanImg.height;
+      if (!cleanW || cleanW <= 0 || !cleanH || cleanH <= 0) return null;
+
+      const sourceIdentity = imgElement.src + '|' + nw + '|' + nh;
+
+      if (_texSrc !== sourceIdentity || !_sourceTexture) {
+        if (_ownsSourceTexture && _sourceTexture) _gl.deleteTexture(_sourceTexture);
+        _sourceTexture = _gl.createTexture();
+        _ownsSourceTexture = true;
+        _gl.bindTexture(_gl.TEXTURE_2D, _sourceTexture);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, _gl.LINEAR);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, _gl.LINEAR);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, _gl.CLAMP_TO_EDGE);
+        _gl.texParameteri(_gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, _gl.CLAMP_TO_EDGE);
+        try {
+          _gl.texImage2D(_gl.TEXTURE_2D, 0, _gl.RGBA, _gl.RGBA, _gl.UNSIGNED_BYTE, cleanImg);
+        } catch (e) {
+          console.warn('WebGL texImage2D failed', e);
+          return null;
+        }
+        _texSrc = sourceIdentity;
+      }
+    }
+
+    const vpW = geometry.viewport.clientWidth;
+    const vpH = geometry.viewport.clientHeight;
+
+    if (canvas.width !== vpW || canvas.height !== vpH) {
+      canvas.width = vpW;
+      canvas.height = vpH;
+      canvas.style.removeProperty('width');
+      canvas.style.removeProperty('height');
+    }
+
+    const { scale, tx, ty, rotation, flipX, flipY } = geometry;
+    const geomExt = { nw, nh, scale, tx, ty, rotation: rotation || 0, flipX: flipX || 1, flipY: flipY || 1 };
+    const vpExt = { width: vpW, height: vpH };
+
+    return _executePasses(geomExt, vpExt);
+  }
+
+  function renderFromTexture(texture, geometry, sourceWidth = 0, sourceHeight = 0) {
+    if (!_active || !_gl || _programs.length === 0 || !texture) return null;
+
+    const vpW = geometry.viewport?.clientWidth ?? canvas.width;
+    const vpH = geometry.viewport?.clientHeight ?? canvas.height;
+    if (vpW <= 0 || vpH <= 0) return null;
+
+    const nw = sourceWidth > 0 ? sourceWidth : vpW;
+    const nh = sourceHeight > 0 ? sourceHeight : vpH;
+
+    if (canvas.width !== vpW || canvas.height !== vpH) {
+      canvas.width = vpW;
+      canvas.height = vpH;
+      canvas.style.removeProperty('width');
+      canvas.style.removeProperty('height');
+    }
+
+    if (_ownsSourceTexture && _sourceTexture && _sourceTexture !== texture) {
+      _gl.deleteTexture(_sourceTexture);
+    }
+    _ownsSourceTexture = false;
+    _sourceTexture = texture;
+    _texSrc = 'external_texture';
+
+    const { scale = 1, tx = 0, ty = 0, rotation = 0, flipX = 1, flipY = 1 } = geometry || {};
+    const geomExt = { nw, nh, scale, tx, ty, rotation: rotation || 0, flipX: flipX || 1, flipY: flipY || 1 };
+    const vpExt = { width: vpW, height: vpH };
+
+    return _executePasses(geomExt, vpExt);
+  }
+
   return {
     type: 'webgl',
+    gl: _gl,
     setFilter,
     render,
+    renderFromTexture,
     updateSource,
     cancel() {
       _cancelToken++;
@@ -336,7 +381,8 @@ export function createGlRuntime(canvas) {
       if (_gl) {
         _gl.clearColor(0, 0, 0, 0);
         _gl.clear(_gl.COLOR_BUFFER_BIT);
-        if (_sourceTexture) _gl.deleteTexture(_sourceTexture);
+        if (_ownsSourceTexture && _sourceTexture) _gl.deleteTexture(_sourceTexture);
+        _sourceTexture = null;
         _programs.forEach(p => _gl.deleteProgram(p.program));
         clearFbos();
         _gl.deleteBuffer(posBuffer);

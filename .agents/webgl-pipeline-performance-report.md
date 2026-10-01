@@ -179,18 +179,19 @@ Adopting this architecture improves the single-image viewport while preserving e
 - [x] Accept when tests pass and both modules have zero DOM references.
 
 ### Phase 2. WebGL multi-quad composition in manhwa view
-- [ ] In `src/js/viewer/viewerPipelines.js`, replace `_renderColumn()`'s 2D canvas blitting with `QuadCompositor` rendering into `compositeFBO`.
-- [ ] Remove `_columnStaging`, `_columnStagingCtx`, and `_columnBitmapCache`.
-- [ ] Map `computeColumnComposite()` outputs directly to texture UVs.
-- [ ] Feed `compositeFBO.texture` into `glRuntime.renderFromTexture()`.
-- [ ] Remove the 80 ms debounce from `_requestColumnRender()` on scroll ticks, allowing quad rendering to run on `requestAnimationFrame`.
-- [ ] Accept when manhwa scrolling with filters enabled runs at display refresh rate without dropped frames, and CPU memory usage remains stable.
+- [x] In `src/js/viewer/viewerPipelines.js`, replace `_renderColumn()`'s 2D canvas blitting with `QuadCompositor` rendering into `compositeFBO`.
+- [x] Remove `_columnStaging`, `_columnStagingCtx`, and `_columnBitmapCache`.
+- [x] Map `computeColumnComposite()` outputs directly to texture UVs.
+- [x] Feed `compositeFBO.texture` into `glRuntime.renderFromTexture()`.
+- [x] Remove the 80 ms debounce from `_requestColumnRender()` on scroll ticks, allowing quad rendering to run on `requestAnimationFrame`.
+- [x] Implement 36-tap Lanczos sinc reconstruction in `QuadCompositor` with direct canvas sizing in `_renderColumn()`.
+- [x] Accept when manhwa scrolling with filters enabled runs at display refresh rate without dropped frames, and CPU memory usage remains stable.
 
 ### Phase 3. Real-time scroll synchronization
-- [ ] Synchronize `#manhwa-filter-canvas` layout with `#viewport`.
-- [ ] Ensure raw slots are hidden cleanly without breaking layout metrics.
-- [ ] Verify that pan and zoom adjustments update the composite FBO immediately on every frame.
-- [ ] Accept when no visual freezing or position snapping occurs during active mouse wheel or drag scrolling.
+- [x] Synchronize `#manhwa-filter-canvas` layout with `#viewport`.
+- [x] Ensure raw slots are hidden cleanly without breaking layout metrics.
+- [x] Verify that pan and zoom adjustments update the composite FBO immediately on every frame.
+- [x] Accept when no visual freezing or position snapping occurs during active mouse wheel or drag scrolling.
 
 ### Phase 4. Unified single-image pipeline and legacy alignment
 - [x] Retain Pica for legacy still images, applying the targeted CSS/pan fix so `.viewer-img` stays visible underneath during active pan to eliminate blank margins.

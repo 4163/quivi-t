@@ -257,9 +257,9 @@ describe('QuadCompositor pipeline module', () => {
       const compositor = createQuadCompositor(gl);
 
       assert.ok(compositor.gl);
-      assert.equal(gl.createdPrograms.length, 1);
-      assert.equal(gl.createdShaders.length, 2);
-      assert.equal(gl.deletedShaders.length, 2, 'Shaders should be deleted after linking');
+      assert.equal(gl.createdPrograms.length, 2, 'Should create bilinear and lanczos programs');
+      assert.equal(gl.createdShaders.length, 4);
+      assert.equal(gl.deletedShaders.length, 4, 'Shaders should be deleted after linking');
       assert.equal(gl.createdBuffers.length, 1);
     });
 
@@ -315,6 +315,27 @@ describe('QuadCompositor pipeline module', () => {
       assert.equal(gl.calls[0].uniforms.get('u_flipY'), -1.0);
     });
 
+    it('drawQuad with sampler = "lanczos" sets u_sourceSize uniform', () => {
+      const gl = createMockGl();
+      const compositor = new QuadCompositor(gl);
+      const texture = { id: 102 };
+
+      const ok = compositor.drawQuad(
+        texture,
+        { x: 0, y: 0, width: 200, height: 200 },
+        { u0: 0, v0: 0, u1: 1, v1: 1 },
+        1920,
+        1080,
+        1.0,
+        'lanczos',
+        { w: 800, h: 600 }
+      );
+
+      assert.equal(ok, true);
+      assert.equal(gl.calls.length, 1);
+      assert.deepEqual(gl.calls[0].uniforms.get('u_sourceSize'), [800, 600]);
+    });
+
     it('returns false and ignores draw calls for invalid viewport dimensions', () => {
       const gl = createMockGl();
       const compositor = new QuadCompositor(gl);
@@ -329,7 +350,7 @@ describe('QuadCompositor pipeline module', () => {
       compositor.dispose();
 
       assert.equal(gl.deletedBuffers.length, 1);
-      assert.equal(gl.deletedPrograms.length, 1);
+      assert.equal(gl.deletedPrograms.length, 2, 'Should delete both bilinear and lanczos programs');
       assert.equal(compositor.gl, null);
 
       // Subsequent draws return false

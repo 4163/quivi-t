@@ -5,7 +5,8 @@ import { filter as lanczosWebGlModule } from '../services/scaling/lanczosWebGL.j
 import { createGlRuntime } from '../services/pipelines/glRuntime.js';
 import { activeFilterId } from '../services/registry.js';
 import { getFilterModule } from '../services/filterModules.js';
-import { getCleanImageCrop } from '../shared/blobImage.js';
+import { createTextureCache } from '../services/pipelines/textureCache.js';
+import { createQuadCompositor } from '../services/pipelines/quadCompositor.js';
 
 const SVG_ANIMATED_MAX_EDGE = 512;
 const SVG_STATIC_MAX_EDGE = 2048;
@@ -743,32 +744,22 @@ export function createViewerPipelines(viewportState) {
     });
   }
 
-  // --- Manhwa column pipeline: one WebGL pass over the visible window ---
-  // Filter patterns stay continuous across slot seams because the shader
-  // runs once over the whole composite, never per slot. No pica here: the
-  // column scrolls, so it follows the live path like animated and video.
-  // Staging reads through clean bitmap crops because quivit:// and asset://
-  // sources taint canvas and WebGL contexts (see shared/blobImage.js).
-  const COLUMN_RENDER_DEBOUNCE_MS = 80;
-  const COLUMN_BITMAP_CACHE_CAPACITY = 12;
-  // Temporary slice 3 diagnosis. Removed before signoff.
-  const COLUMN_DEBUG = true;
-  function _columnLog(...args) {
-    if (COLUMN_DEBUG) console.log('[column]', ...args);
-  }
-
+  // --- Manhwa column pipeline: textured quad composition into FBO ---
+  // Renders visible slot quads into an offscreen FBO at viewport resolution
+  // using bilinear hardware sampling, then runs the active post-processing
+  // filter shader once over that composite texture. Textures are managed by
+  // TextureCache with LRU VRAM budgeting.
   let _columnSourceProvider = null;
   let _columnPipeline = null;
   let _columnFilter = null;
   let _columnAnime4kVariant = null;
   let _columnScaling = null;
   let _columnVisible = false;
-  let _columnTimer = 0;
+  let _columnRafId = 0;
   let _columnGeneration = 0;
-  let _columnPending = false;
-  const _columnStaging = document.createElement('canvas');
-  let _columnStagingCtx = null;
-  const _columnBitmapCache = new Map();
+  let _columnTextureCache = null;
+  let _columnQuadCompositor = null;
+  let _columnCompositeFbo = null;
   const _columnCanvas = document.getElementById('manhwa-filter-canvas');
   if (_columnCanvas) {
     _columnCanvas.addEventListener('webglcontextlost', (e) => {
@@ -787,14 +778,12 @@ export function createViewerPipelines(viewportState) {
     if (!state) return null;
     const fd = state.config?.frontend_data;
     if (!fd) return null;
-    // The column is one raster, so the per-slot SVG policy does not apply.
     return activeFilterId(fd);
   }
 
   function _columnNeedsWebGL(state) {
     if (!state) return false;
     if (_resolveColumnFilter(state) !== null) return true;
-    // The column counts as one raster: lanczos always goes through WebGL.
     return state.scalingMode === 'lanczos';
   }
 
@@ -803,6 +792,7 @@ export function createViewerPipelines(viewportState) {
     _columnCanvas.removeAttribute('data-render-ready');
     const gl = _columnCanvas.getContext('webgl2');
     if (gl) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
     } else {
@@ -810,27 +800,57 @@ export function createViewerPipelines(viewportState) {
     }
   }
 
-  function _clearColumnBitmapCache() {
-    for (const bmp of _columnBitmapCache.values()) {
-      if (bmp && bmp.close) bmp.close();
+  function _ensureColumnCompositeFbo(gl, width, height) {
+    if (!_columnCompositeFbo || _columnCompositeFbo.width !== width || _columnCompositeFbo.height !== height) {
+      if (_columnCompositeFbo) {
+        if (_columnCompositeFbo.tex) gl.deleteTexture(_columnCompositeFbo.tex);
+        if (_columnCompositeFbo.fbo) gl.deleteFramebuffer(_columnCompositeFbo.fbo);
+      }
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+
+      _columnCompositeFbo = { fbo, tex, width, height };
     }
-    _columnBitmapCache.clear();
+    return _columnCompositeFbo;
   }
 
   function _teardownColumn() {
     _columnGeneration++;
-    if (_columnTimer) { clearTimeout(_columnTimer); _columnTimer = 0; }
-    _columnPending = false;
-    _clearColumnBitmapCache();
-    if (_columnStaging) { _columnStaging.width = 0; _columnStaging.height = 0; }
-    _columnStagingCtx = null;
+    if (_columnRafId) {
+      cancelAnimationFrame(_columnRafId);
+      _columnRafId = 0;
+    }
+    if (_columnCompositeFbo && _columnPipeline?.gl) {
+      const gl = _columnPipeline.gl;
+      if (_columnCompositeFbo.tex) gl.deleteTexture(_columnCompositeFbo.tex);
+      if (_columnCompositeFbo.fbo) gl.deleteFramebuffer(_columnCompositeFbo.fbo);
+    }
+    _columnCompositeFbo = null;
     _teardownColumnCanvas();
-    if (_columnPipeline) { _columnPipeline.dispose(); _columnPipeline = null; }
+    if (_columnQuadCompositor) {
+      _columnQuadCompositor.dispose();
+      _columnQuadCompositor = null;
+    }
+    if (_columnTextureCache) {
+      _columnTextureCache.dispose();
+      _columnTextureCache = null;
+    }
+    if (_columnPipeline) {
+      _columnPipeline.dispose();
+      _columnPipeline = null;
+    }
     if (_columnVisible) {
       _columnVisible = false;
       const vp = document.getElementById('viewport');
-      // Clear only the flag the column set. Legacy repaints right after on
-      // the m->l path and sets its own flag when its filter is active.
       if (vp && _columnFilter && vp.getAttribute('data-filter') === _columnFilter) {
         vp.removeAttribute('data-filter');
       }
@@ -842,12 +862,10 @@ export function createViewerPipelines(viewportState) {
 
   function _syncColumnPipeline(state) {
     if (!state || !state.manhwaEnabled || !_columnCanvas) {
-      _columnLog('sync skip', { hasState: !!state, manhwa: state?.manhwaEnabled, hasCanvas: !!_columnCanvas });
       _teardownColumn();
       return;
     }
     const needs = _columnNeedsWebGL(state);
-    _columnLog('sync', { scaling: state.scalingMode, needs });
     if (!needs) {
       _teardownColumn();
       return;
@@ -858,6 +876,15 @@ export function createViewerPipelines(viewportState) {
     const wantFilter = filter !== null ? filter : 'lanczos';
     if (!_columnPipeline) {
       _columnPipeline = createGlRuntime(_columnCanvas);
+    }
+    const gl = _columnPipeline.gl;
+    if (gl) {
+      if (!_columnQuadCompositor) {
+        _columnQuadCompositor = createQuadCompositor(gl);
+      }
+      if (!_columnTextureCache) {
+        _columnTextureCache = createTextureCache(gl, { maxBytes: 128 * 1024 * 1024 });
+      }
     }
     if (_columnPipeline.filter !== wantFilter || variant !== _columnAnime4kVariant) {
       if (wantFilter === 'lanczos') {
@@ -870,69 +897,38 @@ export function createViewerPipelines(viewportState) {
     }
     _columnFilter = wantFilter;
     _columnScaling = scaling;
-    _columnLog('pipeline ready', { wantFilter, variant });
   }
 
   function _requestColumnRender() {
     const st = Core.getState();
     if (!st?.manhwaEnabled || !_columnPipeline) return;
-    if (_columnTimer || _columnPending) {
-      _columnLog('request skip', { timer: !!_columnTimer, pending: _columnPending });
-      return;
-    }
-    _columnLog('request scheduled');
-    _columnTimer = setTimeout(() => {
-      _columnTimer = 0;
+    if (_columnRafId) return;
+    _columnRafId = requestAnimationFrame(() => {
+      _columnRafId = 0;
       if (!Core.getState()?.manhwaEnabled) return;
       if (!_columnPipeline) return;
-      _columnPending = true;
       _renderColumn();
-    }, COLUMN_RENDER_DEBOUNCE_MS);
-  }
-
-  async function _columnBitmapFor(src, sx, sy, sw, sh) {
-    const key = `${src}|${sx}|${sy}|${sw}|${sh}`;
-    const hit = _columnBitmapCache.get(key);
-    if (hit) return hit;
-    let bmp = null;
-    try {
-      bmp = await getCleanImageCrop(src, sx, sy, sw, sh);
-    } catch {
-      return null;
-    }
-    if (!bmp) return null;
-    _columnBitmapCache.set(key, bmp);
-    if (_columnBitmapCache.size > COLUMN_BITMAP_CACHE_CAPACITY) {
-      const oldest = _columnBitmapCache.keys().next().value;
-      const old = _columnBitmapCache.get(oldest);
-      _columnBitmapCache.delete(oldest);
-      if (old && old.close) old.close();
-    }
-    return bmp;
+    });
   }
 
   async function _renderColumn() {
-    _columnPending = false;
     const state = Core.getState();
-    _columnLog('render entry', {
-      manhwa: !!state?.manhwaEnabled,
-      hasPipeline: !!_columnPipeline,
-      filter: _columnFilter,
-      vpW: document.getElementById('viewport')?.clientWidth,
-      vpH: document.getElementById('viewport')?.clientHeight,
-    });
-    if (!state?.manhwaEnabled) return;
-    if (!_columnPipeline || !_columnFilter) return;
+    if (!state?.manhwaEnabled || !_columnPipeline || !_columnFilter) return;
     const gen = _columnGeneration;
     const vp = document.getElementById('viewport');
     const vpW = vp?.clientWidth || 0;
     const vpH = vp?.clientHeight || 0;
     if (vpW <= 0 || vpH <= 0) return;
+
+    if (_columnCanvas && (_columnCanvas.width !== vpW || _columnCanvas.height !== vpH)) {
+      _columnCanvas.width = vpW;
+      _columnCanvas.height = vpH;
+      _columnCanvas.style.removeProperty('width');
+      _columnCanvas.style.removeProperty('height');
+    }
+
     const snap = _columnSourceProvider ? _columnSourceProvider() : null;
     if (!snap || !snap.offsets || snap.offsets.length === 0) {
-      _columnLog('render abort', { hasProvider: !!_columnSourceProvider, hasSnap: !!snap, offsets: snap?.offsets?.length });
-      // No content under a live frame means the list emptied. Drop the
-      // stale frame so raw slots, not a frozen composite, show.
       if (_columnVisible) _teardownColumn();
       return;
     }
@@ -952,85 +948,115 @@ export function createViewerPipelines(viewportState) {
       overscan: 0,
       items: snap.items,
     });
-    if (!drawList || drawList.length === 0) {
-      _columnLog('render abort', { draws: 0, vpW, vpH, scale, ty });
-      return;
-    }
-    _columnLog('composite ready', {
-      draws: drawList.length,
-      nodes: snap.nodes.size,
-      firstSrc: (() => {
-        const n0 = snap.nodes.get(drawList[0]?.imgIdx);
-        return (n0?.currentSrc || n0?.src || '').slice(0, 80);
-      })(),
-    });
+    if (!drawList || drawList.length === 0) return;
 
-    if (_columnStaging.width !== vpW) _columnStaging.width = vpW;
-    if (_columnStaging.height !== vpH) _columnStaging.height = vpH;
-    if (!_columnStagingCtx) _columnStagingCtx = _columnStaging.getContext('2d');
-    const ctx = _columnStagingCtx;
-    // Lanczos reconstructs from box-sampled staging. Filters expect scaled input.
-    ctx.imageSmoothingEnabled = _columnFilter !== 'lanczos';
-    ctx.imageSmoothingQuality = 'high';
-    ctx.clearRect(0, 0, vpW, vpH);
+    const gl = _columnPipeline.gl;
+    if (!gl || !_columnQuadCompositor || !_columnTextureCache) return;
 
-    let painted = 0;
+    const validDraws = [];
     for (const draw of drawList) {
-      if (gen !== _columnGeneration) return;
       const node = snap.nodes.get(draw.imgIdx);
-      if (!node) continue;
-      // Slice 3 covers stills. Video rows land in slice 4 with a live loop.
-      if (node.tagName === 'VIDEO') continue;
+      if (!node || node.tagName === 'VIDEO') continue;
       const src = node.currentSrc || node.src;
       if (!src) continue;
+      validDraws.push({ draw, node, src });
+    }
+    if (validDraws.length === 0) return;
+
+    const missing = validDraws.some(({ src }) => !_columnTextureCache.has(src));
+    if (missing) {
+      try {
+        await Promise.all(validDraws.map(({ src }) => _columnTextureCache.getOrCreate(src)));
+      } catch (e) {
+        console.warn('Failed to load textures for column composite', e);
+      }
+      if (gen !== _columnGeneration || !Core.getState()?.manhwaEnabled || !_columnPipeline) {
+        return;
+      }
+    }
+
+    const isDirectScreen = _columnFilter === 'lanczos';
+    const sampler = _columnScaling === 'lanczos' ? 'lanczos' : 'bilinear';
+
+    let compositeFbo = null;
+    if (isDirectScreen) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, vpW, vpH);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    } else {
+      compositeFbo = _ensureColumnCompositeFbo(gl, vpW, vpH);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, compositeFbo.fbo);
+      gl.viewport(0, 0, vpW, vpH);
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+
+    const flipY = isDirectScreen ? 1.0 : -1.0;
+
+    let painted = 0;
+    for (const { draw, node, src } of validDraws) {
+      const texEntry = _columnTextureCache.get(src);
+      if (!texEntry || !texEntry.texture) continue;
+
       const item = snap.items ? snap.items[draw.imgIdx] : null;
       const itemW = (item && (item.naturalWidth ?? item.width)) || 0;
       const itemH = (item && (item.naturalHeight ?? item.height)) || 0;
-      const nodeW = node.naturalWidth || 0;
-      const nodeH = node.naturalHeight || 0;
+      const nodeW = node.naturalWidth || texEntry.width || 0;
+      const nodeH = node.naturalHeight || texEntry.height || 0;
       if (!nodeW || !nodeH) continue;
+
       const sr = draw.sourceRect || {};
-      // Map item pixels to decoded bitmap pixels when they differ.
       const kx = itemW > 0 ? nodeW / itemW : 1;
       const ky = itemH > 0 ? nodeH / itemH : 1;
-      const sx = Math.max(0, Math.round((sr.x ?? sr.sx ?? 0) * kx));
-      const sy = Math.max(0, Math.round((sr.y ?? sr.sy ?? 0) * ky));
-      const sw = Math.min(nodeW - sx, Math.round((sr.width ?? sr.sw ?? nodeW) * kx));
-      const sh = Math.min(nodeH - sy, Math.round((sr.height ?? sr.sh ?? nodeH) * ky));
+      const sx = Math.max(0, (sr.x ?? sr.sx ?? 0) * kx);
+      const sy = Math.max(0, (sr.y ?? sr.sy ?? 0) * ky);
+      const sw = Math.min(nodeW - sx, (sr.width ?? sr.sw ?? nodeW) * kx);
+      const sh = Math.min(nodeH - sy, (sr.height ?? sr.sh ?? nodeH) * ky);
       if (sw <= 0 || sh <= 0) continue;
+
       const dr = draw.destRect || {};
-      const dx = Math.round(dr.x ?? dr.dx ?? 0);
-      const dy = Math.round(dr.y ?? dr.dy ?? 0);
-      const dw = Math.round(dr.width ?? dr.dw ?? 0);
-      const dh = Math.round(dr.height ?? dr.dh ?? 0);
+      const dx = dr.x ?? dr.dx ?? 0;
+      const dy = dr.y ?? dr.dy ?? 0;
+      const dw = dr.width ?? dr.dw ?? 0;
+      const dh = dr.height ?? dr.dh ?? 0;
       if (dw <= 0 || dh <= 0) continue;
-      const bmp = await _columnBitmapFor(src, sx, sy, sw, sh);
-      if (gen !== _columnGeneration) return;
-      if (!bmp) continue;
-      try {
-        ctx.drawImage(bmp, dx, dy, dw, dh);
-        painted++;
-      } catch {
-        continue;
-      }
+
+      const sourceUV = {
+        u0: sx / nodeW,
+        v0: sy / nodeH,
+        u1: (sx + sw) / nodeW,
+        v1: (sy + sh) / nodeH,
+      };
+
+      const destRect = { x: dx, y: dy, width: dw, height: dh };
+      const sourceSize = { w: nodeW, h: nodeH };
+
+      const ok = _columnQuadCompositor.drawQuad(texEntry.texture, destRect, sourceUV, vpW, vpH, flipY, sampler, sourceSize);
+      if (ok) painted++;
     }
-    if (painted === 0) {
-      _columnLog('render abort', { painted: 0, draws: drawList.length, nodes: snap.nodes.size });
-      return;
+
+    if (painted === 0) return;
+    if (gen !== _columnGeneration) return;
+
+    let rendered = false;
+    if (isDirectScreen) {
+      rendered = true;
+    } else if (compositeFbo) {
+      const geom = {
+        scale: 1,
+        tx: 0,
+        ty: 0,
+        rotation: 0,
+        flipX: 1,
+        flipY: 1,
+        viewport: { clientWidth: vpW, clientHeight: vpH },
+      };
+      rendered = _columnPipeline.renderFromTexture(compositeFbo.tex, geom, vpW, vpH);
     }
     if (gen !== _columnGeneration) return;
 
-    _columnPipeline.updateSource(_columnStaging);
-    // Staging already holds the transformed composite, so identity geometry
-    // keeps filter phase continuous down the column instead of per slot.
-    const geom = {
-      scale: 1, tx: 0, ty: 0, rotation: 0, flipX: 1, flipY: 1,
-      viewport: { clientWidth: vpW, clientHeight: vpH },
-    };
-    const ok = await _columnPipeline.render(_columnStaging, geom, true);
-    if (gen !== _columnGeneration) return;
-    _columnLog('render done', { ok, painted });
-    if (ok && _columnCanvas) {
+    if (rendered && _columnCanvas) {
       _columnCanvas.setAttribute('data-render-ready', 'true');
       if (vp) vp.setAttribute('data-filter', _columnFilter);
       _columnVisible = true;
