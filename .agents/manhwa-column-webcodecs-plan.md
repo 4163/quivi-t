@@ -65,18 +65,20 @@ Goal is replacing the single global `_columnLiveTexture` with a bounded per-slot
 
 ## Slice 4B. Animation classification and live slot registration in manhwa strip
 
+**Status:** `[x]` Done. `_liveTypes` map with async `checkIsAnimated` classification, evict/clear/remap, `liveTypes` in snapshot. `node --check` clean, `npm run mocha` 298 passing, `git diff --check` clean. Runtime confirmed by user.
+
 Goal is identifying animated rasters and animated SVGs in the manhwa strip and registering them in `_liveSlots` and the column snapshot.
 
-- [ ] In `src/js/viewer/manhwaStrip.js:96`, add `const _liveTypes = new Map();` mapping `imgIdx` to `'video' | 'raster' | 'svg'`.
-- [ ] In `src/js/viewer/manhwaStrip.js:1175`, in `_claimSlot`:
+- [x] In `src/js/viewer/manhwaStrip.js:96`, add `const _liveTypes = new Map();` mapping `imgIdx` to `'video' | 'raster' | 'svg'`.
+- [x] In `src/js/viewer/manhwaStrip.js:1175`, in `_claimSlot`:
   - When `item.kind === 'video'`, set `_liveTypes.set(imgIdx, 'video')` and `_liveSlots.add(imgIdx)`.
   - When `item.kind === 'svg'`, check `Core.checkIsAnimated(item.entry.name || item.entry.path, state.archivePath)`. If animated, set `_liveTypes.set(imgIdx, 'svg')` and `_liveSlots.add(imgIdx)`.
   - When `item.kind === 'image'`, check if extension is `gif`, `webp`, `png`, `apng`, or `avif`. Query `Core.checkIsAnimated`. If `animStatus.is_animated` is true, set `_liveTypes.set(imgIdx, 'raster')` and `_liveSlots.add(imgIdx)`.
-- [ ] In `src/js/viewer/manhwaStrip.js:745`, on slot eviction, clean both `_liveSlots.delete(imgIdx)` and `_liveTypes.delete(imgIdx)`.
-- [ ] In `src/js/viewer/manhwaStrip.js:2035`, in `_deactivate`, clear `_liveTypes.clear()`.
-- [ ] In `src/js/viewer/manhwaStrip.js:2405`, in `_admitCompleted`, remap `_liveTypes` alongside `_liveSlots`.
-- [ ] In `src/js/viewer/manhwaStrip.js:2500`, include `liveTypes: _liveTypes` in the return object of `getManhwaColumnSnapshot()`.
-- [ ] Accept when inspecting `snap.liveSlots` and `snap.liveTypes` in a mixed chapter containing GIF, APNG, animated SVG, and video correctly marks all moving slots as live.
+- [x] In `src/js/viewer/manhwaStrip.js:745`, on slot eviction, clean both `_liveSlots.delete(imgIdx)` and `_liveTypes.delete(imgIdx)`.
+- [x] In `src/js/viewer/manhwaStrip.js:2035`, in `_deactivate`, clear `_liveTypes.clear()`.
+- [x] In `src/js/viewer/manhwaStrip.js:2405`, in `_admitCompleted`, remap `_liveTypes` alongside `_liveSlots`.
+- [x] In `src/js/viewer/manhwaStrip.js:2500`, include `liveTypes: _liveTypes` in the return object of `getManhwaColumnSnapshot()`.
+- [x] Accept when inspecting `snap.liveSlots` and `snap.liveTypes` in a mixed chapter containing GIF, APNG, animated SVG, and video correctly marks all moving slots as live.
 
 ---
 

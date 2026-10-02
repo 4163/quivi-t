@@ -95,6 +95,10 @@ const _mounted = new Map();
  * to decide cached vs live texture upload. */
 const _liveSlots = new Set();
 
+/** Map from imgIdx to live kind: 'video' | 'raster' | 'svg'.
+ * Mirrors _liveSlots for animated entries discovered via checkIsAnimated. */
+const _liveTypes = new Map();
+
 /** Map from imgIdx → off-DOM Image currently decoding ahead of the window. */
 const _prefetching = new Map();
 
@@ -201,6 +205,43 @@ function _isPendingEntry(entry) {
 function _isSvgEntry(entry) {
   const name = entry?.name || entry?.path || '';
   return /\.svg($|[?#])/i.test(name);
+}
+
+/** Raster extensions that can carry animation. APNG rides on .png. */
+function _isAnimCandidateExt(name) {
+  return /\.(gif|webp|png|apng|avif)($|[?#])/i.test(name || '');
+}
+
+function _animArgsFor(entry) {
+  const st = Core.getState() || {};
+  const mode = st.mode ?? _lastMode;
+  const archivePath = st.archivePath ?? _lastArchivePath;
+  if (mode === 'archive' && archivePath) {
+    return { pathArg: entry.name || entry.path, archiveArg: archivePath };
+  }
+  return { pathArg: entry.path, archiveArg: null };
+}
+
+/** Async animation probe for a freshly claimed slot. Fire-and-forget:
+ * the slot mounts as still, then joins _liveSlots when IPC confirms motion.
+ * Stale probes (rebuild, evict, deactivate) exit without touching state. */
+function _classifyAnimatedSlot(imgIdx, item) {
+  if (!item?.entry) return;
+  const kind = item.kind;
+  if (kind !== 'svg' && kind !== 'image') return;
+  if (kind === 'image' && !_isAnimCandidateExt(item.entry.name || item.entry.path)) return;
+  const { pathArg, archiveArg } = _animArgsFor(item.entry);
+  if (!pathArg) return;
+  const wantType = kind === 'svg' ? 'svg' : 'raster';
+  Core.checkIsAnimated(pathArg, archiveArg).then((animStatus) => {
+    if (!_active) return;
+    if (_imageIndex[imgIdx] !== item) return;
+    if (!_mounted.has(imgIdx)) return;
+    if (!animStatus?.is_animated) return;
+    _liveTypes.set(imgIdx, wantType);
+    _liveSlots.add(imgIdx);
+    _onSlotMounted?.(imgIdx);
+  }).catch(() => {});
 }
 
 function _buildImageIndex(list) {
@@ -743,6 +784,7 @@ function _updateWindow() {
       if (_mountInFlight === imgIdx) _mountInFlight = -1;
       _mounted.delete(imgIdx);
       _liveSlots.delete(imgIdx);
+      _liveTypes.delete(imgIdx);
       _detachStripNode(node);
       _releaseStripNode(node);
     }
@@ -1192,7 +1234,10 @@ function _claimSlot(imgIdx, item, slot, node) {
     node.preload = 'auto';
     node.play().catch(() => {});
     ManhwaAudio.attach(imgIdx, item, slot, node);
+    _liveTypes.set(imgIdx, 'video');
     _liveSlots.add(imgIdx);
+  } else if (item?.kind === 'svg' || item?.kind === 'image') {
+    _classifyAnimatedSlot(imgIdx, item);
   }
   _mounted.set(imgIdx, node);
   if (item?.kind === 'video' && node.readyState < 2) {
@@ -2034,6 +2079,7 @@ function _clearCaches() {
   }
   _mounted.clear();
   _liveSlots.clear();
+  _liveTypes.clear();
 
   for (const [, node] of _prefetchedImages) {
     _releaseStripNode(node);
@@ -2407,6 +2453,16 @@ function _admitCompleted(destPath) {
   }
   _liveSlots.clear();
   for (const ni of newLiveSlots) _liveSlots.add(ni);
+  const newLiveTypes = new Map();
+  for (const [oldIdx, type] of _liveTypes) {
+    const img = _mounted.get(oldIdx);
+    if (!img) continue;
+    const li = Number(img.dataset.listIndex);
+    const ni = Number.isFinite(li) ? _listToImgIdx.get(li) : undefined;
+    if (ni !== undefined) newLiveTypes.set(ni, type);
+  }
+  _liveTypes.clear();
+  for (const [k, v] of newLiveTypes) _liveTypes.set(k, v);
 
   _mounted.clear();
   for (const [k, v] of newMounted) _mounted.set(k, v);
@@ -2508,6 +2564,7 @@ export function getManhwaColumnSnapshot() {
     items: _imageIndex,
     nodes: _mounted,
     liveSlots: _liveSlots,
+    liveTypes: _liveTypes,
   };
 }
 

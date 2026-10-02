@@ -2267,7 +2267,6 @@ body.is-importing-url .header-cell:hover {
   left: 0;
   bottom: auto;
   transform-origin: 0 0;
-  will-change: transform;
 }
 
 /* While the column canvas paints, hide raw slot media.
