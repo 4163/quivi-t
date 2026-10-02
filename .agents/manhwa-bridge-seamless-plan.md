@@ -35,6 +35,18 @@ Validation comparison performed against .agents/AGENTS.md and .agents/skills/val
    - *Problem:* Inactive empty spans `.status-spread` and `.status-manhwa` produced extra 12px flex gaps between the held/latched scroll modifier indicator and the dimensions readout. Scaling and filter states were not displayed in the status bar.
    - *Resolution:* Added `.status-spread:empty, .status-manhwa:empty { display: none; }` and `.status-manhwa.hold-flicker-hidden { visibility: hidden; }` to maintain fixed layout width during hold without creating phantom gaps when inactive. Added `status-scaling` and `status-filter` elements in the required order: `status-zoom` · `status-fit` · `status-scaling` · `status-filter`. Gated `#manhwa-indicator` overlay in `syncManhwaIndicator` strictly to `isStatusBarHidden` so it does not flicker in viewport when the status bar is visible in windowed mode.
 
+4. **Top-down sequential loading restored (`src/js/viewer/manhwaStrip.js:1119-1135`)**
+   - *Problem:* Distance-based sorting from anchor (`distA - distB`) caused images to load outwards from the center instead of natural reading order.
+   - *Resolution:* Restored top-down sequential loading (`a.imgIdx - b.imgIdx`). Reversed sorting (`b.imgIdx - a.imgIdx`) is restricted strictly to scrolling up or when positioned at the very bottom. Bridge stability remains fully guaranteed by Slice 2 (`if (!isAnchor) return;`).
+
+5. **Edge highlight latching for zoom reset and height fits (`src/js/viewer/manhwaStrip.js:1553, 1840-1880`)**
+   - *Problem:* While fit-width, fit-width-if-larger, and fit-none latched to the top or bottom when the first or last item was highlighted, zoom reset (`X`), fit-height, and height-if-larger did not latch consistently.
+   - *Resolution:* Added `height` and `height-if-larger` to `LATCH_FIT_MODES`, and added `_firstLastEdge()` inspection in `resetZoom()`. If the top image is highlighted, it pins to top (`alignTop = true`); if the bottom image is highlighted, it pins to bottom (`alignTop = false`). In the middle of the strip, it preserves the current anchor position.
+
+6. **Dynamic heartbeat anchor tracking and Shift+WASD navigation (`src/js/viewer/manhwaStrip.js:748-761, 918-936, 1517-1533, 1774-1855, 2030-2037`)**
+   - *Problem:* In fit-height, height-if-larger, window, and window-if-larger, multiple images fit in the viewport simultaneously. While panning, `primaryImgIdx` was retained as the anchor as long as it was visible (`primaryImgIdx >= visStart && primaryImgIdx <= visEnd`). Because `primaryImgIdx` remained in the visible window for many scrolled images (or continuously if the whole chapter fit), `newAnchor` never updated, and the 150ms heartbeat never synced selection changes to Core during scrolling. Additionally, during `Shift+wasd` navigation or `PageUp`/`PageDown` (`pageStrip`), `_syncAnchorToCore` was deferred solely to `_scheduleSettle` (100ms debounce), so rapid repeated keypresses repeatedly cleared the timer, leaving the main highlight (`.selected`) behind on the initial file. Furthermore, `_visibleDecided` held `_anchorImgIdx` when incoming slots had not finished off-DOM decode, and `_syncAnchorToCore` did not sync Core if `liveIndex !== anchorItem.listIndex` while `anchorChanged` was false.
+   - *Resolution:* Gated `primaryImgIdx` anchor retention strictly to non-panning states (`!panning && primaryImgIdx !== undefined ...`), allowing anchor derivation to track viewport center via `findAnchorIndex(_layout.offsets, centerColY)` during active user panning. Bypassed `_visibleDecided` gating during active user motion (`panning || _visibleDecided(...)`), ensuring navigation immediately lands on the center candidate even before off-DOM decode completes. Called `_syncAnchorToCore()` synchronously inside `pageStrip()`, `alignListItemTop()`, `alignListItemBottom()`, and `centerListItem()`, updating Core and dispatching `quivit-manhwa-settle` on every step. Expanded `_syncAnchorToCore()` to sync whenever `selectionNeedsSync` (`anchorItem.listIndex !== liveIndex`), keeping Core and the file list in lockstep.
+
 ---
 
 ## Slice 1. Anchor-first mount queue ordering in `manhwaStrip.js`
@@ -114,23 +126,23 @@ Validation note. `viewportState` and `viewerMath.js` remain the single source of
 
 Verify full pipeline cleanliness, clean up temporary diagnostic files, and confirm zero blackouts across all fit modes.
 
-- [ ] In `e2e/replay-diagnostics/base.js`, incorporate the viewport bounding-box overlap check so baseline diagnostics accurately detect off-screen slot masking.
-- [ ] Run `npm run diagnose -- --clean` to remove `e2e/replay-diagnostics/investigation.js`.
+- [x] In `e2e/replay-diagnostics/base.js`, incorporate the viewport bounding-box overlap check so baseline diagnostics accurately detect off-screen slot masking.
+- [x] Run `npm run diagnose -- --clean` to remove `e2e/replay-diagnostics/investigation.js`.
 - [ ] Run `npm run diagnose -- manhwa-bridge-l2m` on both `vlcsnap-2026-09-09-00h25m15s806.png` and `vlcsnap-2026-09-09-00h18m51s698.png`.
 - [ ] Verify telemetry report:
   - Total blackout frames: 0
   - Total anomalies: 0
   - Total jank frames: 0
-- [ ] Run targeted tests: `npm run mocha` (all 253+ unit tests passing).
-- [ ] Run git diff hygiene check: `git diff --check`.
+- [x] Run targeted tests: `npm run mocha` (all 303 unit tests passing).
+- [x] Run git diff hygiene check: `git diff --check`.
 
 ---
 
 ## Verification checklist
 
-- [ ] `node --check src/js/viewer/manhwaStrip.js`
-- [ ] `node --check src/js/viewer/viewer.js`
-- [ ] `node --check src/js/viewer/viewerRender.js`
-- [ ] `npm run mocha`
+- [x] `node --check src/js/viewer/manhwaStrip.js`
+- [x] `node --check src/js/viewer/viewer.js`
+- [x] `node --check src/js/viewer/viewerRender.js`
+- [x] `npm run mocha`
 - [ ] `npm run diagnose -- manhwa-bridge-l2m`
-- [ ] `git diff --check`
+- [x] `git diff --check`

@@ -745,7 +745,9 @@ function _updateWindow() {
   const isFirstBuild = _lastTy === null;
   const deltaTy = isFirstBuild ? 0 : ty - _lastTy;
   _lastTy = ty;
-  if (deltaTy !== 0 && _viewportProgram === 0) {
+
+  const isScaleChange = _lastScale !== null && Math.abs(scale - _lastScale) > 1e-9;
+  if (deltaTy !== 0 && _viewportProgram === 0 && !isScaleChange) {
     _lastPanAt = performance.now();
     _anchorHoldover = null;
   }
@@ -755,7 +757,7 @@ function _updateWindow() {
 
   // Zooming in reframes the window: warm both sides regardless of direction.
   const zoomedIn = _lastScale !== null && scale > _lastScale + 1e-9;
-  if (_lastScale !== null && Math.abs(scale - _lastScale) > 1e-9) {
+  if (isScaleChange) {
     _lastZoomAt = performance.now();
   }
   _lastScale = scale;
@@ -916,18 +918,24 @@ function _updateWindow() {
       if (visStart !== -1 && visEnd !== -1) {
         // When the primary selection is visible in the window, hold it
         // during zoom or mode toggles instead of drifting to column center.
+        // During user panning, the anchor must dynamically track viewport
+        // center so the heartbeat follows the scrolled position.
         const primaryImgIdx = _listToImgIdx.get(Core.getState()?.index);
-        if (primaryImgIdx !== undefined && primaryImgIdx >= visStart && primaryImgIdx <= visEnd) {
+        const panning = _viewportProgram === 0 && !isScaleChange && (performance.now() - _lastPanAt < 150 || deltaTy !== 0);
+        if (!panning && primaryImgIdx !== undefined && primaryImgIdx >= visStart && primaryImgIdx <= visEnd) {
           newAnchor = primaryImgIdx;
         } else if (visStart === visEnd) {
           newAnchor = visStart;
-        } else if (_visibleDecided(visStart, visEnd)) {
-          const candidate = findAnchorIndex(_layout.offsets, centerColY);
-          newAnchor = Math.max(visStart, Math.min(visEnd, candidate));
         } else {
-          // Estimate-built layout has no trustworthy center. Hold the anchor
-          // instead of committing the middle file on the next settle.
-          newAnchor = _anchorImgIdx;
+          const candidate = findAnchorIndex(_layout.offsets, centerColY);
+          const boundedCandidate = Math.max(visStart, Math.min(visEnd, candidate));
+          if (panning || _visibleDecided(visStart, boundedCandidate)) {
+            newAnchor = boundedCandidate;
+          } else {
+            // Estimate-built layout has no trustworthy center. Hold the anchor
+            // instead of committing the middle file on the next settle.
+            newAnchor = _anchorImgIdx;
+          }
         }
       }
     } else {
@@ -1116,21 +1124,23 @@ function _warmBackendAhead(state, startIndex, endIndex, direction) {
   FsUtils.prefetchArchiveEntries(state.archivePath, names);
 }
 
-/** Sort queue entries. When idle (direction 0), prioritize items closest
- * to the anchor so the visible row decodes first. In motion, sort in
- * travel direction (top-first scrolling down, bottom-first scrolling up). */
+/** Sort queue entries top-first (ascending index).
+ * The only exceptions are when scrolling up (direction < 0) or when on the
+ * very bottom, which sort bottom-first so items fill from the bottom. */
 function _sortMountQueue(anchor, direction) {
-  if (direction === 0) {
-    _mountQueue.sort((a, b) => {
-      const distA = Math.abs(a.imgIdx - anchor);
-      const distB = Math.abs(b.imgIdx - anchor);
-      return distA !== distB ? distA - distB : a.imgIdx - b.imgIdx;
-    });
+  const scale = _viewportState?.getScale() || 1;
+  const colH = (_layout.totalHeight || 0) * scale;
+  const vpH = _viewport?.clientHeight || 800;
+  const maxTy = Math.abs(colH - vpH) / 2;
+  const curTy = _viewportState?.getTy() || 0;
+  const isBottomPinned = colH > vpH && curTy <= -maxTy + 0.5;
+  const atBottom = _imageIndex.length > 1 && (anchor === _imageIndex.length - 1 || isBottomPinned);
+
+  if (direction < 0 || (direction === 0 && atBottom)) {
+    _mountQueue.sort((a, b) => b.imgIdx - a.imgIdx);
     return;
   }
-  _mountQueue.sort((a, b) =>
-    direction < 0 ? b.imgIdx - a.imgIdx : a.imgIdx - b.imgIdx
-  );
+  _mountQueue.sort((a, b) => a.imgIdx - b.imgIdx);
 }
 
 /** Coalesce decode-driven corrections into one layout pass per frame.
@@ -1507,15 +1517,16 @@ function _syncAnchorToCore() {
   }
   const visSig = startIndex === -1 ? '' : `${startIndex}-${endIndex}`;
   const anchorChanged = anchorItem.listIndex !== _lastSyncedListIndex;
+  const selectionNeedsSync = anchorItem.listIndex !== liveIndex;
   const visChanged = visSig !== _lastVisSig;
   _lastSyncedListIndex = anchorItem.listIndex;
   _lastVisSig = visSig;
-  if (!hadHoldover && !anchorChanged && !visChanged) return;
+  if (!hadHoldover && !anchorChanged && !selectionNeedsSync && !visChanged) return;
   // Never drag Core back onto a nearby row while an unmapped entry
   // (folder edge) stays deliberately highlighted. A cleared selection
   // (-1) is not deliberate: moving the strip reselects like legacy nav.
   const liveMapped = _listToImgIdx.has(liveIndex);
-  if ((anchorChanged || hadHoldover) && (liveMapped || liveIndex < 0)) {
+  if ((anchorChanged || selectionNeedsSync || hadHoldover) && (liveMapped || liveIndex < 0)) {
     _anchorUpdateInProgress = true;
     Core.selectIndex(anchorItem.listIndex);
     _anchorUpdateInProgress = false;
@@ -1548,7 +1559,7 @@ export function getVisibleImageIndices() {
 }
 
 /** Fit modes that latch to top or bottom when a column end is highlighted. */
-const LATCH_FIT_MODES = ['none', 'width', 'width-if-larger', 'window', 'window-if-larger'];
+const LATCH_FIT_MODES = ['none', 'width', 'width-if-larger', 'height', 'height-if-larger', 'window', 'window-if-larger'];
 const STRIP_TOP_ALIGN_FITS = ['width', 'width-if-larger'];
 
 /** Height-family fits clamp to the active image on entry instead of fitting
@@ -1764,72 +1775,90 @@ export function alignListItemTop(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
-  _anchorImgIdx = mapped;
-  _anchorHoldover = mapped;
-  _anchorHoldoverAlignTop = true;
-  const scale = _viewportState.getScale() || 1;
-  _anchorHoldoverScale = scale;
+  _viewportProgram++;
+  try {
+    _anchorImgIdx = mapped;
+    _anchorHoldover = mapped;
+    _anchorHoldoverAlignTop = true;
+    const scale = _viewportState.getScale() || 1;
+    _anchorHoldoverScale = scale;
 
-  _topAlignColumnY(_layout.offsets[mapped].top);
+    _topAlignColumnY(_layout.offsets[mapped].top);
 
-  _strip.style.transform = _viewportState.getTransform();
-  _updateGrillAngles();
-  _updateWindow();
-  _scheduleSettle();
-  return true;
+    _strip.style.transform = _viewportState.getTransform();
+    _updateGrillAngles();
+    _updateWindow();
+    _syncAnchorToCore();
+    _scheduleSettle();
+    return true;
+  } finally {
+    _viewportProgram--;
+  }
 }
 
 export function alignListItemBottom(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
-  _anchorImgIdx = mapped;
-  _anchorHoldover = mapped;
-  _anchorHoldoverAlignTop = false;
-  const scale = _viewportState.getScale() || 1;
-  _anchorHoldoverScale = scale;
+  _viewportProgram++;
+  try {
+    _anchorImgIdx = mapped;
+    _anchorHoldover = mapped;
+    _anchorHoldoverAlignTop = false;
+    const scale = _viewportState.getScale() || 1;
+    _anchorHoldoverScale = scale;
 
-  _bottomAlignColumnY(_layout.offsets[mapped].bottom);
+    _bottomAlignColumnY(_layout.offsets[mapped].bottom);
 
-  _strip.style.transform = _viewportState.getTransform();
-  _updateGrillAngles();
-  _updateWindow();
-  _scheduleSettle();
-  return true;
+    _strip.style.transform = _viewportState.getTransform();
+    _updateGrillAngles();
+    _updateWindow();
+    _syncAnchorToCore();
+    _scheduleSettle();
+    return true;
+  } finally {
+    _viewportProgram--;
+  }
 }
 
 export function centerListItem(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
-  _anchorImgIdx = mapped;
-  _anchorHoldover = mapped;
-  _anchorHoldoverAlignTop = false;
-  const scale = _viewportState.getScale() || 1;
-  _anchorHoldoverScale = scale;
+  _viewportProgram++;
+  try {
+    _anchorImgIdx = mapped;
+    _anchorHoldover = mapped;
+    _anchorHoldoverAlignTop = false;
+    const scale = _viewportState.getScale() || 1;
+    _anchorHoldoverScale = scale;
 
-  const colH = (_layout.totalHeight || 0) * scale;
-  const vh = _viewport?.clientHeight || 800;
-  const curTx = _viewportState.getTx();
-  if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
-    const targetTy = -Math.abs(colH - vh) / 2;
-    _lastTy = targetTy;
-    _lastAnchorTy = targetTy;
-    _viewportState.panTo(curTx, targetTy);
-  } else if (colH <= vh) {
-    const targetTy = Math.abs(colH - vh) / 2;
-    _lastTy = targetTy;
-    _lastAnchorTy = targetTy;
-    _viewportState.panTo(curTx, targetTy);
-  } else if (_layout.offsets[mapped]) {
-    _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
+    const colH = (_layout.totalHeight || 0) * scale;
+    const vh = _viewport?.clientHeight || 800;
+    const curTx = _viewportState.getTx();
+    if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
+      const targetTy = -Math.abs(colH - vh) / 2;
+      _lastTy = targetTy;
+      _lastAnchorTy = targetTy;
+      _viewportState.panTo(curTx, targetTy);
+    } else if (colH <= vh) {
+      const targetTy = Math.abs(colH - vh) / 2;
+      _lastTy = targetTy;
+      _lastAnchorTy = targetTy;
+      _viewportState.panTo(curTx, targetTy);
+    } else if (_layout.offsets[mapped]) {
+      _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
+    }
+
+    _strip.style.transform = _viewportState.getTransform();
+    _updateGrillAngles();
+    _updateWindow();
+    _syncAnchorToCore();
+    _scheduleSettle();
+    return true;
+  } finally {
+    _viewportProgram--;
   }
-
-  _strip.style.transform = _viewportState.getTransform();
-  _updateGrillAngles();
-  _updateWindow();
-  _scheduleSettle();
-  return true;
 }
 
 /** Zoom to exactScale while keeping the current anchor and Y position.
@@ -1842,8 +1871,30 @@ export function resetZoom(exactScale) {
     const vw = _viewport.clientWidth || 800;
     const vh = _viewport.clientHeight || 800;
 
-    _anchorHoldover = _anchorImgIdx >= 0 ? _anchorImgIdx : null;
+    let targetImgIdx = null;
+    let alignTop = _anchorHoldoverAlignTop;
+
+    const edge = _firstLastEdge();
+    if (edge === 'first' && _layout.offsets[0]) {
+      targetImgIdx = 0;
+      alignTop = true;
+    } else if (edge === 'last' && _layout.offsets[_imageIndex.length - 1]) {
+      targetImgIdx = _imageIndex.length - 1;
+      alignTop = false;
+    }
+
+    const anchorIdx = targetImgIdx !== null ? targetImgIdx : (_anchorImgIdx >= 0 ? _anchorImgIdx : null);
+    _anchorHoldover = anchorIdx;
     _anchorHoldoverScale = exactScale;
+    _anchorHoldoverAlignTop = !!alignTop;
+    if (targetImgIdx !== null) {
+      _anchorImgIdx = targetImgIdx;
+      if (_imageIndex[targetImgIdx]) {
+        _anchorUpdateInProgress = true;
+        Core.selectIndex(_imageIndex[targetImgIdx].listIndex);
+        _anchorUpdateInProgress = false;
+      }
+    }
 
     _viewportState.zoomTo(exactScale, vw / 2, vh / 2);
 
@@ -1869,6 +1920,9 @@ export function resetZoom(exactScale) {
     _strip.style.setProperty('--zoom-scale', exactScale);
     _updateGrillAngles();
     _updateWindow();
+    if (targetImgIdx !== null) {
+      _syncAnchorToCore();
+    }
     _scheduleSettle();
   } finally {
     _viewportProgram--;
@@ -1982,6 +2036,7 @@ export function pageStrip(direction, pageMultiplier = 1) {
   _viewportState.panTo(_viewportState.getTx(), targetTy);
   _strip.style.transform = _viewportState.getTransform();
   _updateWindow();
+  _syncAnchorToCore();
   _scheduleSettle();
   return true;
 }
