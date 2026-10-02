@@ -962,5 +962,33 @@ describe('viewerMath', () => {
       assert.ok(withOverscan.drawList[0].destRect.dy <= withoutOverscan.drawList[0].destRect.dy);
       assert.ok(withOverscan.drawList[0].destRect.dh >= withoutOverscan.drawList[0].destRect.dh);
     });
+
+    it('keeps continuous offsets for mixed still and animated chapters', () => {
+      const items = [
+        { naturalWidth: 800, naturalHeight: 1200 },
+        { naturalWidth: 800, naturalHeight: 600 },
+        { naturalWidth: 800, naturalHeight: 1000 },
+        { naturalWidth: 800, naturalHeight: 1500 },
+      ];
+      const layout = computeColumnOffsets(items, 1, 1);
+      assert.deepEqual(layout.offsets.map((o) => o.top), [0, 1199, 1798, 2797]);
+      const res = computeColumnComposite({
+        offsets: layout.offsets,
+        totalHeight: layout.totalHeight,
+        columnWidth: layout.columnWidth,
+        viewportWidth: 800,
+        viewportHeight: 800,
+        scale: 1,
+        ty: 0,
+        items,
+      });
+      assert.ok(res.drawList.length > 0);
+      for (let i = 1; i < res.drawList.length; i++) {
+        const prev = res.drawList[i - 1];
+        const cur = res.drawList[i];
+        assert.equal(cur.imgIdx, prev.imgIdx + 1);
+        assert.ok(Math.abs((prev.destRect.dy + prev.destRect.dh) - cur.destRect.dy) <= 1);
+      }
+    });
   });
 });

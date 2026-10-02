@@ -79,7 +79,11 @@ describe('Diagnostics system contract integrity', () => {
       // viewerPipelines must manage canvas elements and render-ready data attributes
       assert.ok(viewerPipelines.includes('viewer-lanczos-canvas'), 'viewerPipelines.js must reference viewer-lanczos-canvas');
       assert.ok(viewerPipelines.includes('viewer-filter-canvas'), 'viewerPipelines.js must reference viewer-filter-canvas');
+      assert.ok(viewerPipelines.includes('manhwa-filter-canvas'), 'viewerPipelines.js must reference manhwa-filter-canvas');
+      assert.ok(indexHtml.includes('id="manhwa-filter-canvas"'), 'index.html must define id="manhwa-filter-canvas"');
+      assert.ok(indexHtml.includes('id="manhwa-svg-pump-layer"'), 'index.html must define id="manhwa-svg-pump-layer"');
       assert.ok(viewerPipelines.includes('data-render-ready'), 'viewerPipelines.js must track data-render-ready');
+      assert.ok(viewerPipelines.includes('data-filter'), 'viewerPipelines.js must track data-filter for column composite');
     });
   });
 

@@ -321,6 +321,10 @@
            painted by the column pipeline in viewerPipelines.js. -->
       <canvas id="manhwa-filter-canvas"></canvas>
 
+      <!-- Manhwa SVG pump layer. Holds blob-backed pump images so SMIL
+           keeps advancing while the column pipeline samples them. -->
+      <div id="manhwa-svg-pump-layer" aria-hidden="true"></div>
+
       <!-- Manhwa audio overlay for per-slot volume pills. Stacks above the
            filter canvas so controls remain accessible during WebGL filtering. -->
       <div id="manhwa-audio-overlay"></div>

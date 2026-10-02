@@ -7,7 +7,7 @@ import { activeFilterId } from '../services/registry.js';
 import { getFilterModule } from '../services/filterModules.js';
 import { createTextureCache, uploadTexture } from '../services/pipelines/textureCache.js';
 import { createQuadCompositor } from '../services/pipelines/quadCompositor.js';
-import { prepareSvgForCanvas } from '../shared/svgUtils.js';
+import { prepareSvgForCanvas, resolveSvgDimensions } from '../shared/svgUtils.js';
 
 const SVG_ANIMATED_MAX_EDGE = 1080;
 const SVG_STATIC_MAX_EDGE = 2048;
@@ -18,6 +18,13 @@ const _scratchDest = { x: 0, y: 0, width: 0, height: 0 };
 const _scratchSize = { w: 0, h: 0 };
 const _cachedDrawsScratch = [];
 const _liveDrawsScratch = [];
+const _rasterCandidatesScratch = [];
+const _svgCandidatesScratch = [];
+const _activeRastersScratch = [];
+const _activeSvgsScratch = [];
+const _failedRastersScratch = [];
+const _scratchActiveIdx = new Set();
+const _scratchStaleIdx = [];
 
 function _drawSlotQuad(compositor, texture, draw, item, nodeW, nodeH, vpW, vpH, flipY, sampler) {
   if (!nodeW || !nodeH) return false;
@@ -90,32 +97,12 @@ async function loadSvgCanvas(src) {
         }
       });
 
-      let w = img.naturalWidth || 0;
-      let h = img.naturalHeight || 0;
-      const isBrowserDefault = (w === 150 && h === 150) || (w === 300 && h === 150);
-      if (w <= 0 || h <= 0 || isBrowserDefault) {
-        const vb = cleanSvg.match(/viewBox=["']\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)["']/i);
-        if (vb) {
-          const vbW = parseFloat(vb[3]);
-          const vbH = parseFloat(vb[4]);
-          if (vbW > 0 && vbH > 0) {
-            w = Math.round(vbW);
-            h = Math.round(vbH);
-          } else {
-            w = 1000;
-            h = 1000;
-          }
-        } else {
-          w = 1000;
-          h = 1000;
-        }
-      }
-      const maxEdge = SVG_STATIC_MAX_EDGE;
-      if (w > maxEdge || h > maxEdge) {
-        const s = Math.min(maxEdge / w, maxEdge / h);
-        w = Math.max(1, Math.round(w * s));
-        h = Math.max(1, Math.round(h * s));
-      }
+      const { width: w, height: h } = resolveSvgDimensions(
+        img.naturalWidth,
+        img.naturalHeight,
+        cleanSvg,
+        SVG_STATIC_MAX_EDGE
+      );
 
       img.width = w;
       img.height = h;
@@ -182,6 +169,15 @@ export function createViewerPipelines(viewportState) {
     return el?.tagName === 'VIDEO';
   }
 
+  // Pool sources can be blob URLs that hide the real extension, so the
+  // state entry and filename back up the src check for SVG detection.
+  function _isActiveSvg(state) {
+    if (isSvgSource(_activeSource?.src)) return true;
+    const entry = state?.list?.[state?.index];
+    const name = entry?.name || entry?.path || state?.filename || '';
+    return /\.svg($|[?#])/i.test(name || '');
+  }
+
   function _resolveActiveFilter(state) {
     if (!state) return null;
     const fd = state.config?.frontend_data;
@@ -189,7 +185,7 @@ export function createViewerPipelines(viewportState) {
     const active = activeFilterId(fd);
     // Anime4K does not support SVGs; silently fall back to no filter.
     // The UI intentionally ignores this fallback to keep the user's selection checked (intended UX).
-    if (active === 'anime4k' && isSvgSource(_activeSource?.src)) return null;
+    if (active === 'anime4k' && _isActiveSvg(state)) return null;
     return active;
   }
 
@@ -238,7 +234,7 @@ export function createViewerPipelines(viewportState) {
     const live = Core.getState();
     const isVideo = isVideoSource(_activeSource);
     const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : !!live?.isAnimated;
-    const isSvg = isSvgSource(_activeSource?.src);
+    const isSvg = _isActiveSvg(live);
     const isMoving = isAnimated || isVideo;
     const scaling = getEffectiveScaling(live?.scalingMode, isMoving, isSvg);
 
@@ -339,7 +335,7 @@ export function createViewerPipelines(viewportState) {
   }
 
   async function _applyTransform() {
-    if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated || isVideoSource(_activeSource) || isSvgSource(_activeSource?.src)) return;
+    if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated || isVideoSource(_activeSource) || _isActiveSvg(Core.getState())) return;
     if (!_activeSource || !_activeSource.complete || _activeSource.naturalWidth <= 0 || _activeSource.naturalHeight <= 0) return;
     
     const src = _activeSource.currentSrc || _activeSource.src;
@@ -393,7 +389,7 @@ export function createViewerPipelines(viewportState) {
     const live = Core.getState();
     const isVideo = isVideoSource(_activeSource);
     const liveAnimated = !!live?.isAnimated || isVideo;
-    const isSvg = isSvgSource(_activeSource?.src);
+    const isSvg = _isActiveSvg(live);
     const scaling = getEffectiveScaling(live?.scalingMode, liveAnimated, isSvg);
     
     let activeFilter = _resolveActiveFilter(live);
@@ -508,7 +504,7 @@ export function createViewerPipelines(viewportState) {
     const live = Core.getState();
     const isVideo = isVideoSource(_activeSource);
     const isAnimated = !!live?.isAnimated;
-    const isSvg = isSvgSource(_activeSource?.src);
+    const isSvg = _isActiveSvg(live);
     const isMoving = isAnimated || isVideo;
     const scaling = getEffectiveScaling(live?.scalingMode, isMoving, isSvg);
     const activeFilter = _resolveActiveFilter(live);
@@ -917,7 +913,7 @@ export function createViewerPipelines(viewportState) {
     const newFilter = _resolveActiveFilter(state);
     const isVideo = isVideoSource(_activeSource);
     const newIsAnimated = !!state.isAnimated;
-    const newIsSvg = _activeSource?.src?.toLowerCase().includes('.svg') ?? false;
+    const newIsSvg = _isActiveSvg(state);
     const newScaling = getEffectiveScaling(state.scalingMode, newIsAnimated || isVideo, newIsSvg);
     const newVariant = newFilter === 'anime4k' ? state?.config?.frontend_data?.filter_options?.anime4k?.variant : null;
     
@@ -977,6 +973,10 @@ export function createViewerPipelines(viewportState) {
   const _columnAnimPending = new Set();
   /** imgIdx that proved single-frame. Skips decoder retry, uses static cache. */
   const _columnAnimStatic = new Set();
+  /** Map from imgIdx to live SVG session { img, blobUrl, staging, stagingCtx, src, width, height }. */
+  const _columnSvgSessions = new Map();
+  /** imgIdx with SVG fetch in flight. Prevents fetch storms. */
+  const _columnSvgPending = new Set();
   /** Viewport geometry of the previous column pass. Detects pan/zoom renders. */
   const _columnLastGeom = { scale: 0, tx: 0, ty: 0, vpW: 0, vpH: 0 };
   let _columnLiveLoopId = 0;
@@ -993,11 +993,15 @@ export function createViewerPipelines(viewportState) {
       if (_columnPipeline) { _columnPipeline.dispose(); _columnPipeline = null; }
       _columnFilter = null;
       _columnLiveTextures.clear();
-      for (const imgIdx of Array.from(_columnAnimSessions.keys())) {
-        _closeColumnAnimSession(imgIdx);
-      }
+      _scratchStaleIdx.length = 0;
+      for (const imgIdx of _columnAnimSessions.keys()) _scratchStaleIdx.push(imgIdx);
+      for (let i = 0; i < _scratchStaleIdx.length; i++) _closeColumnAnimSession(_scratchStaleIdx[i]);
       _columnAnimPending.clear();
       _columnAnimStatic.clear();
+      _scratchStaleIdx.length = 0;
+      for (const imgIdx of _columnSvgSessions.keys()) _scratchStaleIdx.push(imgIdx);
+      for (let i = 0; i < _scratchStaleIdx.length; i++) _closeColumnSvgSession(_scratchStaleIdx[i]);
+      _columnSvgPending.clear();
       _syncColumnPipeline(Core.getState());
       _requestColumnRender();
     });
@@ -1074,14 +1078,196 @@ export function createViewerPipelines(viewportState) {
   }
 
   function _pruneColumnAnimSessions(liveSlots, liveTypes) {
-    for (const imgIdx of Array.from(_columnAnimSessions.keys())) {
+    _scratchStaleIdx.length = 0;
+    for (const imgIdx of _columnAnimSessions.keys()) {
       if (!liveSlots?.has(imgIdx) || liveTypes?.get(imgIdx) !== 'raster') {
-        _closeColumnAnimSession(imgIdx);
+        _scratchStaleIdx.push(imgIdx);
       }
     }
-    for (const imgIdx of Array.from(_columnAnimStatic)) {
-      if (!liveSlots?.has(imgIdx)) _columnAnimStatic.delete(imgIdx);
+    for (let i = 0; i < _scratchStaleIdx.length; i++) {
+      _closeColumnAnimSession(_scratchStaleIdx[i]);
     }
+    _scratchStaleIdx.length = 0;
+    for (const imgIdx of _columnAnimStatic) {
+      if (!liveSlots?.has(imgIdx)) _scratchStaleIdx.push(imgIdx);
+    }
+    for (let i = 0; i < _scratchStaleIdx.length; i++) {
+      _columnAnimStatic.delete(_scratchStaleIdx[i]);
+    }
+  }
+
+  function _closeColumnSvgSession(imgIdx) {
+    const session = _columnSvgSessions.get(imgIdx);
+    if (session) {
+      if (session.blobUrl) {
+        try {
+          URL.revokeObjectURL(session.blobUrl);
+        } catch {
+          // Already revoked.
+        }
+      }
+      try {
+        session.img?.remove();
+      } catch {
+        // Already removed.
+      }
+      if (session.staging) {
+        session.staging.width = 0;
+        session.staging.height = 0;
+      }
+      _columnSvgSessions.delete(imgIdx);
+    }
+    _columnSvgPending.delete(imgIdx);
+  }
+
+  // SVGs are ignored under lanczos and anime4k: those slots keep native
+  // DOM rendering while the column canvas leaves their region clear.
+  function _columnSvgBypassed() {
+    return _columnFilter === 'lanczos' || _columnFilter === 'anime4k';
+  }
+
+  function _pruneColumnSvgSessions(liveSlots, liveTypes) {
+    _scratchStaleIdx.length = 0;
+    for (const imgIdx of _columnSvgSessions.keys()) {
+      if (!liveSlots?.has(imgIdx) || liveTypes?.get(imgIdx) !== 'svg') {
+        _scratchStaleIdx.push(imgIdx);
+      }
+    }
+    for (let i = 0; i < _scratchStaleIdx.length; i++) {
+      _closeColumnSvgSession(_scratchStaleIdx[i]);
+    }
+  }
+
+  // Establishes an SVG pump session off the render path. Fetches the source,
+  // sanitizes it, and holds a blob-backed Image plus a capped 2D staging
+  // canvas. Renders sample the Image each frame so SMIL keeps moving.
+  function _launchColumnSvgSession(imgIdx, item, src, gen) {
+    if (_columnSvgSessions.has(imgIdx) || _columnSvgPending.has(imgIdx)) return;
+    _columnSvgPending.add(imgIdx);
+    (async () => {
+      let blobUrl = null;
+      let pumpImg = null;
+      const discardPumpImg = () => {
+        if (!pumpImg) return;
+        try {
+          pumpImg.remove();
+        } catch {
+          // Already removed.
+        }
+        pumpImg = null;
+      };
+      const done = (session) => {
+        _columnSvgPending.delete(imgIdx);
+        if (gen !== _columnGeneration || !Core.getState()?.manhwaEnabled) {
+          const urlToRevoke = session?.blobUrl || blobUrl;
+          if (urlToRevoke) {
+            try {
+              URL.revokeObjectURL(urlToRevoke);
+            } catch {
+              // Already revoked.
+            }
+          }
+          discardPumpImg();
+          try {
+            session?.img?.remove();
+          } catch {
+            // Already removed.
+          }
+          return;
+        }
+        if (!session) {
+          discardPumpImg();
+          return;
+        }
+        _columnSvgSessions.set(imgIdx, session);
+        _requestColumnRender();
+      };
+      try {
+        const resp = await fetch(src);
+        if (!resp.ok) {
+          done(null);
+          return;
+        }
+        if (gen !== _columnGeneration) {
+          done(null);
+          return;
+        }
+        const text = await resp.text();
+        const cleanSvg = prepareSvgForCanvas(text);
+        if (!cleanSvg) {
+          done(null);
+          return;
+        }
+        const blob = new Blob([cleanSvg], { type: 'image/svg+xml' });
+        blobUrl = URL.createObjectURL(blob);
+        pumpImg = new Image();
+        pumpImg.crossOrigin = 'anonymous';
+        // The pump image stays in the render tree so SMIL keeps advancing.
+        // Detached images can stall on the first frame.
+        const pumpLayer = document.getElementById('manhwa-svg-pump-layer');
+        if (pumpLayer) pumpLayer.appendChild(pumpImg);
+        pumpImg.src = blobUrl;
+        try {
+          await new Promise((resolve, reject) => {
+            if (pumpImg.complete && pumpImg.naturalWidth) resolve();
+            else {
+              pumpImg.onload = resolve;
+              pumpImg.onerror = reject;
+            }
+          });
+        } catch {
+          try {
+            URL.revokeObjectURL(blobUrl);
+          } catch {
+            // Already revoked.
+          }
+          discardPumpImg();
+          done(null);
+          return;
+        }
+        if (gen !== _columnGeneration) {
+          try {
+            URL.revokeObjectURL(blobUrl);
+          } catch {
+            // Already revoked.
+          }
+          discardPumpImg();
+          done(null);
+          return;
+        }
+        const { width: w, height: h } = resolveSvgDimensions(
+          pumpImg.naturalWidth,
+          pumpImg.naturalHeight,
+          cleanSvg,
+          SVG_ANIMATED_MAX_EDGE
+        );
+        const staging = document.createElement('canvas');
+        staging.width = w;
+        staging.height = h;
+        const stagingCtx = staging.getContext('2d');
+        if (!stagingCtx) {
+          try {
+            URL.revokeObjectURL(blobUrl);
+          } catch {
+            // Already revoked.
+          }
+          discardPumpImg();
+          done(null);
+          return;
+        }
+        done({ img: pumpImg, blobUrl, staging, stagingCtx, src, width: w, height: h });
+      } catch {
+        if (blobUrl) {
+          try {
+            URL.revokeObjectURL(blobUrl);
+          } catch {
+            // Already revoked.
+          }
+        }
+        discardPumpImg();
+        done(null);
+      }
+    })();
   }
 
   function _ensureColumnLiveTexture(gl, imgIdx, w, h) {
@@ -1234,11 +1420,15 @@ export function createViewerPipelines(viewportState) {
     _columnHasLive = false;
     _cachedDrawsScratch.length = 0;
     _liveDrawsScratch.length = 0;
-    for (const imgIdx of Array.from(_columnAnimSessions.keys())) {
-      _closeColumnAnimSession(imgIdx);
-    }
+    _scratchStaleIdx.length = 0;
+    for (const imgIdx of _columnAnimSessions.keys()) _scratchStaleIdx.push(imgIdx);
+    for (let i = 0; i < _scratchStaleIdx.length; i++) _closeColumnAnimSession(_scratchStaleIdx[i]);
     _columnAnimPending.clear();
     _columnAnimStatic.clear();
+    _scratchStaleIdx.length = 0;
+    for (const imgIdx of _columnSvgSessions.keys()) _scratchStaleIdx.push(imgIdx);
+    for (let i = 0; i < _scratchStaleIdx.length; i++) _closeColumnSvgSession(_scratchStaleIdx[i]);
+    _columnSvgPending.clear();
     _columnLastGeom.scale = 0;
     _columnLastGeom.tx = 0;
     _columnLastGeom.ty = 0;
@@ -1428,12 +1618,24 @@ export function createViewerPipelines(viewportState) {
       }
     }
     _pruneColumnAnimSessions(snap.liveSlots, snap.liveTypes);
+    _pruneColumnSvgSessions(snap.liveSlots, snap.liveTypes);
 
-    // Partition draws into cached (still raster/SVG) and live (video, svg element, animated raster).
+    // Partition draws into cached stills, live videos, live SVG pumps, and live rasters.
     _cachedDrawsScratch.length = 0;
     _liveDrawsScratch.length = 0;
-    const rasterCandidates = [];
+    _rasterCandidatesScratch.length = 0;
+    _svgCandidatesScratch.length = 0;
+    _activeRastersScratch.length = 0;
+    _activeSvgsScratch.length = 0;
+    _failedRastersScratch.length = 0;
     let hasLive = false;
+    const svgBypassed = _columnSvgBypassed();
+    if (svgBypassed) {
+      _scratchStaleIdx.length = 0;
+      for (const imgIdx of _columnSvgSessions.keys()) _scratchStaleIdx.push(imgIdx);
+      for (let i = 0; i < _scratchStaleIdx.length; i++) _closeColumnSvgSession(_scratchStaleIdx[i]);
+      _columnSvgPending.clear();
+    }
     for (const draw of drawList) {
       const node = snap.nodes.get(draw.imgIdx);
       if (!node) continue;
@@ -1443,6 +1645,8 @@ export function createViewerPipelines(viewportState) {
         if (src) {
           const item = snap.items ? snap.items[draw.imgIdx] : null;
           const isSvg = isSvgSource(src, item);
+          // Ignored SVGs keep native DOM rendering; the canvas stays clear.
+          if (isSvg && svgBypassed) continue;
           _cachedDrawsScratch.push({ draw, node, src, isSvg });
         }
         continue;
@@ -1452,7 +1656,14 @@ export function createViewerPipelines(viewportState) {
         const src = node.currentSrc || node.src;
         if (!src) continue;
         const item = snap.items ? snap.items[draw.imgIdx] : null;
-        rasterCandidates.push({ draw, node, src, item });
+        _rasterCandidatesScratch.push({ draw, node, src, item });
+        continue;
+      }
+      if (liveType === 'svg') {
+        const src = node.currentSrc || node.src;
+        if (!src) continue;
+        const item = snap.items ? snap.items[draw.imgIdx] : null;
+        _svgCandidatesScratch.push({ draw, node, src, item });
         continue;
       }
       _liveDrawsScratch.push({ draw, node });
@@ -1462,17 +1673,16 @@ export function createViewerPipelines(viewportState) {
     // Snapshot carries no anchor index, so center proximity is the stand-in.
     // Sessions establish off-path (see _launchColumnAnimSession); this pass
     // only uses sessions that already exist. Anything else paints static.
-    const activeRasters = [];
-    rasterCandidates.sort((a, b) => {
+    _rasterCandidatesScratch.sort((a, b) => {
       const aRect = a.draw.destRect || {};
       const bRect = b.draw.destRect || {};
       const aCy = (aRect.y ?? aRect.dy ?? 0) + ((aRect.height ?? aRect.dh ?? 0) / 2);
       const bCy = (bRect.y ?? bRect.dy ?? 0) + ((bRect.height ?? bRect.dh ?? 0) / 2);
       return Math.abs(aCy - vpH / 2) - Math.abs(bCy - vpH / 2);
     });
-    for (let i = 0; i < rasterCandidates.length; i++) {
-      const cand = rasterCandidates[i];
-      if (activeRasters.length >= MAX_CONCURRENT_LIVE_ANIMATED || _columnAnimStatic.has(cand.draw.imgIdx)) {
+    for (let i = 0; i < _rasterCandidatesScratch.length; i++) {
+      const cand = _rasterCandidatesScratch[i];
+      if (_activeRastersScratch.length >= MAX_CONCURRENT_LIVE_ANIMATED || _columnAnimStatic.has(cand.draw.imgIdx)) {
         _cachedDrawsScratch.push({ draw: cand.draw, node: cand.node, src: cand.src, isSvg: false });
         continue;
       }
@@ -1487,27 +1697,68 @@ export function createViewerPipelines(viewportState) {
         if (src) _cachedDrawsScratch.push({ draw: cand.draw, node: cand.node, src, isSvg: false });
         continue;
       }
-      activeRasters.push({ ...cand, session: ready });
+      cand.session = ready;
+      _activeRastersScratch.push(cand);
       hasLive = true;
     }
     // Sessions exist only for the active window. Anything else closes so at
     // most 3 decoders stay open and scrolled-out slots release theirs.
     if (_columnAnimSessions.size > 0) {
-      const activeIdx = new Set(activeRasters.map((r) => r.draw.imgIdx));
-      for (const imgIdx of Array.from(_columnAnimSessions.keys())) {
-        if (!activeIdx.has(imgIdx)) _closeColumnAnimSession(imgIdx);
+      _scratchActiveIdx.clear();
+      for (let i = 0; i < _activeRastersScratch.length; i++) {
+        _scratchActiveIdx.add(_activeRastersScratch[i].draw.imgIdx);
+      }
+      _scratchStaleIdx.length = 0;
+      for (const imgIdx of _columnAnimSessions.keys()) {
+        if (!_scratchActiveIdx.has(imgIdx)) _scratchStaleIdx.push(imgIdx);
+      }
+      for (let i = 0; i < _scratchStaleIdx.length; i++) {
+        _closeColumnAnimSession(_scratchStaleIdx[i]);
+      }
+    }
+    // SVG pump sessions establish off-path through blob URLs so the staging
+    // canvas never sees a tainted quivit:// source. Missing sessions paint
+    // their static frame until the pump is ready. Ignored SVGs (lanczos,
+    // anime4k) skip the column entirely and keep native DOM rendering.
+    if (!svgBypassed) {
+      for (let i = 0; i < _svgCandidatesScratch.length; i++) {
+        const cand = _svgCandidatesScratch[i];
+        const session = _columnSvgSessions.get(cand.draw.imgIdx);
+        if (session && session.src !== cand.src) _closeColumnSvgSession(cand.draw.imgIdx);
+        const ready = _columnSvgSessions.get(cand.draw.imgIdx);
+        if (!ready) {
+          _launchColumnSvgSession(cand.draw.imgIdx, cand.item, cand.src, gen);
+          const src = cand.node.currentSrc || cand.node.src;
+          if (src) _cachedDrawsScratch.push({ draw: cand.draw, node: cand.node, src, isSvg: true });
+          continue;
+        }
+        cand.session = ready;
+        _activeSvgsScratch.push(cand);
+        hasLive = true;
+      }
+    }
+    if (_columnSvgSessions.size > 0) {
+      _scratchActiveIdx.clear();
+      for (let i = 0; i < _activeSvgsScratch.length; i++) {
+        _scratchActiveIdx.add(_activeSvgsScratch[i].draw.imgIdx);
+      }
+      _scratchStaleIdx.length = 0;
+      for (const imgIdx of _columnSvgSessions.keys()) {
+        if (!_scratchActiveIdx.has(imgIdx)) _scratchStaleIdx.push(imgIdx);
+      }
+      for (let i = 0; i < _scratchStaleIdx.length; i++) {
+        _closeColumnSvgSession(_scratchStaleIdx[i]);
       }
     }
     _columnHasLive = hasLive;
-    if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && activeRasters.length === 0) return;
+    if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && _activeRastersScratch.length === 0 && _activeSvgsScratch.length === 0) return;
 
     // Decode raster frames before touching GL. An await after the visible
     // canvas is cleared lets the browser composite a blank frame in
     // direct-screen (lanczos-only) mode. Filtered modes draw offscreen,
     // which is why they never flickered.
     const columnNow = performance.now();
-    const failedRasters = [];
-    for (const r of activeRasters) {
+    for (const r of _activeRastersScratch) {
       r.pendingVf = null;
       r.wantIndex = undefined;
       r.wantLoop = undefined;
@@ -1557,10 +1808,10 @@ export function createViewerPipelines(viewportState) {
         const result = await s.decoder.decode({ frameIndex: target });
         r.pendingVf = result.image;
       } catch {
-        failedRasters.push(r);
+        _failedRastersScratch.push(r);
       }
       if (gen !== _columnGeneration) {
-        for (const fr of activeRasters) {
+        for (const fr of _activeRastersScratch) {
           if (fr.pendingVf) {
             try {
               fr.pendingVf.close();
@@ -1574,15 +1825,19 @@ export function createViewerPipelines(viewportState) {
       }
     }
     // Failed decodes fall back to their static frame this pass.
-    if (failedRasters.length > 0) {
-      const failedIdx = new Set(failedRasters.map((r) => r.draw.imgIdx));
-      for (const r of failedRasters) {
+    if (_failedRastersScratch.length > 0) {
+      _scratchActiveIdx.clear();
+      for (let i = 0; i < _failedRastersScratch.length; i++) {
+        const r = _failedRastersScratch[i];
+        _scratchActiveIdx.add(r.draw.imgIdx);
         _cachedDrawsScratch.push({ draw: r.draw, node: r.node, src: r.src, isSvg: false });
       }
-      for (let i = activeRasters.length - 1; i >= 0; i--) {
-        if (failedIdx.has(activeRasters[i].draw.imgIdx)) activeRasters.splice(i, 1);
+      for (let i = _activeRastersScratch.length - 1; i >= 0; i--) {
+        if (_scratchActiveIdx.has(_activeRastersScratch[i].draw.imgIdx)) {
+          _activeRastersScratch.splice(i, 1);
+        }
       }
-      if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && activeRasters.length === 0) return;
+      if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && _activeRastersScratch.length === 0 && _activeSvgsScratch.length === 0) return;
     }
 
     // Load missing cached textures.
@@ -1608,7 +1863,9 @@ export function createViewerPipelines(viewportState) {
     }
 
     const isDirectScreen = _columnFilter === 'lanczos';
-    const sampler = _columnScaling === 'lanczos' ? 'lanczos' : 'bilinear';
+    // One scaler only: a real filter owns resampling, so the composite base
+    // stays bilinear. Lanczos applies solely in lanczos-only direct mode.
+    const sampler = isDirectScreen && _columnScaling === 'lanczos' ? 'lanczos' : 'bilinear';
 
     let compositeFbo = null;
     if (isDirectScreen) {
@@ -1640,7 +1897,7 @@ export function createViewerPipelines(viewportState) {
       }
     }
 
-    // Draw live (video, svg element) slots from element upload.
+    // Draw live video slots from element upload.
     for (const { draw, node } of _liveDrawsScratch) {
       const isVideo = node.tagName === 'VIDEO';
       const nodeW = isVideo ? node.videoWidth : (node.naturalWidth || 0);
@@ -1660,9 +1917,32 @@ export function createViewerPipelines(viewportState) {
       }
     }
 
+    // Draw live SVG slots from blob-backed staging canvas. Sampling the pump
+    // Image each pass keeps SMIL moving without tainting the canvas.
+    for (const r of _activeSvgsScratch) {
+      const session = r.session;
+      if (!session?.stagingCtx || !session?.staging) continue;
+      if (session.width <= 0 || session.height <= 0) continue;
+      try {
+        session.stagingCtx.clearRect(0, 0, session.width, session.height);
+        session.stagingCtx.drawImage(session.img, 0, 0, session.width, session.height);
+      } catch {
+        continue;
+      }
+      const entry = _ensureColumnLiveTexture(gl, r.draw.imgIdx, session.width, session.height);
+      try {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, session.staging);
+      } catch {
+        continue;
+      }
+      if (_drawSlotQuad(_columnQuadCompositor, entry.texture, r.draw, r.item, session.width, session.height, vpW, vpH, flipY, sampler)) {
+        painted++;
+      }
+    }
+
     // Upload pre-decoded raster frames. No awaits past this point, so the
     // cleared frame always fills before present.
-    for (const r of activeRasters) {
+    for (const r of _activeRastersScratch) {
       const s = r.session;
       if (r.pendingVf) {
         const vf = r.pendingVf;

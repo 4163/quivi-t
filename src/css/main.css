@@ -2277,6 +2277,31 @@ body.is-importing-url .header-cell:hover {
   visibility: hidden;
 }
 
+/* SVGs are ignored under lanczos and anime4k: the slot keeps its native
+   animated rendering while the column canvas leaves that region clear. */
+#viewport.manhwa-active[data-filter="lanczos"] #manhwa-strip .manhwa-slot[data-kind="svg"]>img,
+#viewport.manhwa-active[data-filter="anime4k"] #manhwa-strip .manhwa-slot[data-kind="svg"]>img {
+  visibility: visible;
+}
+
+/* SVG pump layer: blob-backed images stay in the render tree so SMIL
+   advances, but never intercept input or paint visibly. */
+#manhwa-svg-pump-layer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.001;
+}
+
+#manhwa-svg-pump-layer img {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
 /* Percentage-sized SVGs need concrete dimensions in the shrink-wrap wrapper. */
 .viewer-img[data-svg-bounds] {
   width: var(--svg-base-w);

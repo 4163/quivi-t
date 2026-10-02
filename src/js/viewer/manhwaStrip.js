@@ -470,6 +470,7 @@ function _acquireSlotNode(item, total) {
   slot.className = 'manhwa-slot';
   slot.dataset.imgIdx = String(item.imgIdx);
   slot.dataset.listIndex = String(item.listIndex);
+  slot.dataset.kind = item.kind || 'image';
   _setSlotDimensions(slot, item.naturalWidth, item.naturalHeight);
   if (item.decoded) {
     slot.dataset.ready = 'true';
@@ -489,6 +490,7 @@ function _releaseSlotNode(slot) {
   if (Number.isFinite(releasedIdx)) ManhwaAudio.detach(releasedIdx, { reset: true });
   slot.removeAttribute('data-img-idx');
   slot.removeAttribute('data-list-index');
+  slot.removeAttribute('data-kind');
   delete slot.dataset.ready;
   slot.style.removeProperty('--slot-width');
   slot.style.removeProperty('--slot-height');
@@ -2417,6 +2419,7 @@ function _admitCompleted(destPath) {
     const ni = Number.isFinite(li) ? _listToImgIdx.get(li) : undefined;
     if (ni !== undefined) {
       slot.dataset.imgIdx = String(ni);
+      slot.dataset.kind = _imageIndex[ni]?.kind || 'image';
       if (_imageIndex.length > 1) {
         slot.style.setProperty('--slot-backdrop-bg', computeSlotHue(ni, _imageIndex.length));
       }

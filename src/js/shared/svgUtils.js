@@ -71,3 +71,44 @@ export function prepareSvgForCanvas(text) {
   }
   return out;
 }
+
+/**
+ * Resolves natural or viewBox dimensions for an SVG image, scaling down
+ * by maxEdge when specified while maintaining aspect ratio. Falls back
+ * to 1000x1000 if dimensions are unspecified or equal Chromium defaults (150x150, 300x150).
+ * @param {number} naturalWidth
+ * @param {number} naturalHeight
+ * @param {string} svgText
+ * @param {number} [maxEdge]
+ * @returns {{ width: number, height: number }}
+ */
+export function resolveSvgDimensions(naturalWidth, naturalHeight, svgText, maxEdge = 0) {
+  let w = naturalWidth || 0;
+  let h = naturalHeight || 0;
+  const isBrowserDefault = (w === 150 && h === 150) || (w === 300 && h === 150);
+  if (w <= 0 || h <= 0 || isBrowserDefault) {
+    const vb = typeof svgText === 'string'
+      ? svgText.match(/viewBox=["']\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)["']/i)
+      : null;
+    if (vb) {
+      const vbW = parseFloat(vb[3]);
+      const vbH = parseFloat(vb[4]);
+      if (vbW > 0 && vbH > 0) {
+        w = Math.round(vbW);
+        h = Math.round(vbH);
+      } else {
+        w = 1000;
+        h = 1000;
+      }
+    } else {
+      w = 1000;
+      h = 1000;
+    }
+  }
+  if (maxEdge > 0 && (w > maxEdge || h > maxEdge)) {
+    const s = Math.min(maxEdge / w, maxEdge / h);
+    w = Math.max(1, Math.round(w * s));
+    h = Math.max(1, Math.round(h * s));
+  }
+  return { width: w, height: h };
+}
