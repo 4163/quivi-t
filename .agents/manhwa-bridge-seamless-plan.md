@@ -95,14 +95,14 @@ Validation note. Keeps single-image pool and bridge layer ownership strictly in 
 
 ## Slice 4. Positional stability on `l -> m` toggle
 
-**Status:** `[ ]` Pending.
+**Status:** `[x]` Done 2026-10-02. Mode toggle on active image (`!entry`) centers the anchor slot vertically when slot visual height <= vh, eliminating the 51px coordinate jump in `width` and `width-if-larger` fits. Fresh open (`entry`) top-aligns on chapter start (`primary === 0`). Anchor slot raster dimensions are pre-seeded from Core into `_imageIndex` before initial layout calculation, eliminating post-mount recalculation staircase jitter. Default shortcut for manhwa toggle updated to `m`, and `m` unassigned from audio mute. 303 mocha tests passing, `node --check` and `git diff --check` clean.
 
 Eliminate the 51px coordinate jump in `width` and `width-if-larger` fit modes by preserving the centered vertical coordinate during mode toggles.
 
-- [ ] In `src/js/viewer/manhwaStrip.js:2304`, distinguish between a mode toggle on an existing active image vs a fresh chapter/first-image open.
-- [ ] When toggling from single-image view into manhwa view, center the anchor slot vertically in the viewport (matching single-image centering) instead of forcing a top-align snap. Top-alignment applies only when opening at chapter start (`primary === 0`).
-- [ ] In `src/js/viewer/manhwaStrip.js:1649-1660`, pre-seed `_imageIndex[_anchorImgIdx]` with known raster dimensions from Core before initial layout calculation, eliminating post-mount height recalculations and layout staircase jitter.
-- [ ] Accept when toggling `l -> m` under `width` and `width-if-larger` shows zero pixel displacement between the bridge image and the mounted manhwa slot.
+- [x] In `src/js/viewer/manhwaStrip.js:2304`, distinguish between a mode toggle on an existing active image vs a fresh chapter/first-image open.
+- [x] When toggling from single-image view into manhwa view, center the anchor slot vertically in the viewport (matching single-image centering) instead of forcing a top-align snap. Top-alignment applies only when opening at chapter start (`primary === 0`).
+- [x] In `src/js/viewer/manhwaStrip.js:1649-1660`, pre-seed `_imageIndex[_anchorImgIdx]` with known raster dimensions from Core before initial layout calculation, eliminating post-mount height recalculations and layout staircase jitter.
+- [x] Accept when toggling `l -> m` under `width` and `width-if-larger` shows zero pixel displacement between the bridge image and the mounted manhwa slot.
 
 Validation note. `viewportState` and `viewerMath.js` remain the single source of truth for fit and pan math. No duplicate geometry calculations in UI files.
 

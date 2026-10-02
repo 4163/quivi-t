@@ -1658,6 +1658,21 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   let rawSumH = 0;
   let itemCount = _imageIndex.length;
   const anchorIdxForEntry = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
+  if (anchorIdxForEntry >= 0 && _imageIndex[anchorIdxForEntry]) {
+    const item = _imageIndex[anchorIdxForEntry];
+    if (!item.naturalWidth || !item.naturalHeight) {
+      const coreState = Core.getState();
+      const knownW = coreState?.naturalWidth || (_viewportState?.getNaturalW?.() || 0);
+      const knownH = coreState?.naturalHeight || (_viewportState?.getNaturalH?.() || 0);
+      if (knownW > 0 && knownH > 0) {
+        item.naturalWidth = knownW;
+        item.naturalHeight = knownH;
+        item.decoded = true;
+        if (!_estWidth) _estWidth = knownW;
+        _updateLayout();
+      }
+    }
+  }
   const activeItem = (entry && ENTRY_ACTIVE_FITS.includes(fitMode)) ? _imageIndex[anchorIdxForEntry] : null;
   if (activeItem) {
     maxW = activeItem.naturalWidth || DEFAULT_ESTIMATED_WIDTH;
@@ -1680,6 +1695,13 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   });
 
   const anchorIdx = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
+  if (!entry && alignTop && anchorIdx >= 0 && _layout.offsets[anchorIdx]) {
+    const slotH = _layout.offsets[anchorIdx].height * targetScale;
+    if (slotH <= vh) {
+      alignTop = false;
+    }
+  }
+
   _anchorHoldover = anchorIdx >= 0 ? anchorIdx : null;
   _anchorHoldoverScale = targetScale;
   _anchorHoldoverAlignTop = !!alignTop;
@@ -1705,14 +1727,14 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
         _viewportState.panTo(0, _lastTy);
       }
     } else {
-      if (targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
+      if (entry && targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
         _bottomAlignColumnY(_layout.offsets[targetImgIdx].bottom, 0);
+      } else if (_layout.offsets[targetImgIdx]) {
+        _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
       } else if (colH <= vh + 0.5) {
         _lastTy = Math.abs(colH - vh) / 2;
         _lastAnchorTy = _lastTy;
         _viewportState.panTo(0, _lastTy);
-      } else if (_layout.offsets[targetImgIdx]) {
-        _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
       }
     }
   } else if (colH <= vh + 0.5) {
@@ -2301,9 +2323,20 @@ function _onStateChange(state) {
       // Anchor file is gone: reopen from the surviving selection below.
     }
 
-    _updateLayout();
-
     _anchorImgIdx = _resolveOpenAnchor(state);
+
+    const knownW = state.naturalWidth || (_viewportState?.getNaturalW?.() || 0);
+    const knownH = state.naturalHeight || (_viewportState?.getNaturalH?.() || 0);
+    if (_anchorImgIdx >= 0 && _imageIndex[_anchorImgIdx] && knownW > 0 && knownH > 0) {
+      const anchorItem = _imageIndex[_anchorImgIdx];
+      anchorItem.naturalWidth = knownW;
+      anchorItem.naturalHeight = knownH;
+      anchorItem.decoded = true;
+      _estWidth = knownW;
+    }
+
+    _initEstimatedDimensions();
+    _updateLayout();
 
     _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
     _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
@@ -2313,7 +2346,8 @@ function _onStateChange(state) {
       _applyFitMode(_lastFitMode);
       return;
     }
-    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), true);
+    const openAtStart = _anchorImgIdx === 0;
+    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && openAtStart, true);
     _armEntryRefresh(true);
 
     _updateWindow();

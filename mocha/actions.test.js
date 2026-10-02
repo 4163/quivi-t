@@ -63,11 +63,11 @@ describe('Actions registry and keybindings', () => {
       assert.equal(normalizeCombo('mouseforward'), 'MouseForward');
     });
 
-    it('binds mute to m and manhwa to Ctrl+m with no default conflicts', () => {
+    it('binds manhwa to m with no default conflicts and leaves audio mute unassigned', () => {
       const byId = Object.fromEntries(ACTION_REGISTRY.map((a) => [a.id, a]));
       const asArray = (binds) => Array.isArray(binds) ? binds : [binds];
-      assert.deepEqual(asArray(byId['cmd-toggle-audio'].defaultBinds), ['m']);
-      assert.deepEqual(asArray(byId['cmd-toggle-manhwa'].defaultBinds), ['Ctrl+m']);
+      assert.deepEqual(asArray(byId['cmd-toggle-audio'].defaultBinds), []);
+      assert.deepEqual(asArray(byId['cmd-toggle-manhwa'].defaultBinds), ['m']);
 
       const seen = new Map();
       for (const action of ACTION_REGISTRY) {

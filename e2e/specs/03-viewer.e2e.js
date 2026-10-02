@@ -137,8 +137,8 @@ describe('03 - Viewport & Viewer Controls', () => {
   });
 
   it('toggles manhwa continuous strip view and updates viewport state', async () => {
-    // Toggle manhwa mode on using shortcut 'Ctrl+m'
-    await ctrl('m');
+    // Toggle manhwa mode on using shortcut 'm'
+    await browser.keys(['m']);
     await browser.waitUntil(
       async () => await viewerPage.isManhwaActive(),
       { timeout: 5000, timeoutMsg: 'Viewport did not gain manhwa-active class' }
@@ -155,7 +155,7 @@ describe('03 - Viewport & Viewer Controls', () => {
     expect(await bottomSpacer.isExisting()).toBe(true);
 
     // Toggle manhwa mode off
-    await ctrl('m');
+    await browser.keys(['m']);
     await browser.waitUntil(
       async () => !(await viewerPage.isManhwaActive()),
       { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class' }

@@ -110,10 +110,10 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-toggle-transparent', label: 'Toggle Opaque Canvas', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.toggleTransparentBg()
   },
-  { id: 'cmd-toggle-manhwa', label: 'Toggle Manhwa View', defaultBinds: 'Ctrl+m', category: 'View',
+  { id: 'cmd-toggle-manhwa', label: 'Toggle Manhwa View', defaultBinds: 'm', category: 'View',
     run: (ctx) => ctx.Core.toggleManhwaMode({ persist: true })
   },
-  { id: 'cmd-toggle-audio', label: 'Mute Viewer Audio', defaultBinds: 'm', category: 'View',
+  { id: 'cmd-toggle-audio', label: 'Mute Viewer Audio', defaultBinds: [], category: 'View',
     run: (ctx) => {
       if (ctx.Core.getState?.()?.manhwaEnabled) ctx.ManhwaAudio?.toggleStripMute(ctx.getStripAnchorImgIdx?.());
       else ctx.ViewerAudio?.toggleAudioMute();
