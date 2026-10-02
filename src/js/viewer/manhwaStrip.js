@@ -879,7 +879,11 @@ function _updateWindow() {
   // queue back to top-first mid-travel.
   _mountQueue = _mountQueue.filter((e) => !_mounted.has(e.imgIdx));
   for (const e of newQueueEntries) _mountQueue.push(e);
-  if (prefetchDir !== 0) _sortMountQueue(anchor, prefetchDir);
+  if (prefetchDir !== 0) {
+    _sortMountQueue(anchor, prefetchDir);
+  } else if (newQueueEntries.length > 0) {
+    _sortMountQueue(anchor, 0);
+  }
   _advanceMountQueue();
 
   // Prefetch always runs, including the first build: the mount loop above
@@ -1114,9 +1118,18 @@ function _warmBackendAhead(state, startIndex, endIndex, direction) {
   FsUtils.prefetchArchiveEntries(state.archivePath, names);
 }
 
-/** Sort queue entries top-first (ascending index). When scrolling up,
- * reverse to bottom-first so items fill in the direction of travel. */
-function _sortMountQueue(_anchor, direction) {
+/** Sort queue entries. When idle (direction 0), prioritize items closest
+ * to the anchor so the visible row decodes first. In motion, sort in
+ * travel direction (top-first scrolling down, bottom-first scrolling up). */
+function _sortMountQueue(anchor, direction) {
+  if (direction === 0) {
+    _mountQueue.sort((a, b) => {
+      const distA = Math.abs(a.imgIdx - anchor);
+      const distB = Math.abs(b.imgIdx - anchor);
+      return distA !== distB ? distA - distB : a.imgIdx - b.imgIdx;
+    });
+    return;
+  }
   _mountQueue.sort((a, b) =>
     direction < 0 ? b.imgIdx - a.imgIdx : a.imgIdx - b.imgIdx
   );
