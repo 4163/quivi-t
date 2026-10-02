@@ -82,8 +82,14 @@ describe('Diagnostics system contract integrity', () => {
       assert.ok(viewerPipelines.includes('manhwa-filter-canvas'), 'viewerPipelines.js must reference manhwa-filter-canvas');
       assert.ok(indexHtml.includes('id="manhwa-filter-canvas"'), 'index.html must define id="manhwa-filter-canvas"');
       assert.ok(indexHtml.includes('id="manhwa-svg-pump-layer"'), 'index.html must define id="manhwa-svg-pump-layer"');
+      assert.ok(indexHtml.includes('id="manhwa-audio-overlay"'), 'index.html must define id="manhwa-audio-overlay"');
       assert.ok(viewerPipelines.includes('data-render-ready'), 'viewerPipelines.js must track data-render-ready');
       assert.ok(viewerPipelines.includes('data-filter'), 'viewerPipelines.js must track data-filter for column composite');
+
+      // manhwaStrip must manage strip scaling and slot dataset attributes
+      assert.ok(manhwaStrip.includes('dataset.scaling'), 'manhwaStrip.js must manage dataset.scaling');
+      assert.ok(manhwaStrip.includes('dataset.ready'), 'manhwaStrip.js must manage dataset.ready');
+      assert.ok(manhwaStrip.includes('dataset.imgIdx'), 'manhwaStrip.js must manage dataset.imgIdx');
     });
   });
 

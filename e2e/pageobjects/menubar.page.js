@@ -79,6 +79,32 @@ class MenubarPage extends Page {
       if (el) el.click();
     }, targetId);
   }
+
+  async selectFilter(filterName) {
+    let targetId;
+    if (filterName === 'anime4k') targetId = 'cmd-toggle-anime4k-filter';
+    else if (filterName === 'crt') targetId = 'cmd-toggle-crt-filter';
+    else if (filterName === 'phosphor') targetId = 'cmd-toggle-phosphor-filter';
+    else if (filterName === 'scanlines') targetId = 'cmd-toggle-scanlines-filter';
+    else targetId = 'cmd-filter-off';
+
+    await browser.execute((id) => {
+      const el = document.getElementById(id);
+      if (el) el.click();
+    }, targetId);
+  }
+
+  async selectScaling(scalingName) {
+    let targetId;
+    if (scalingName === 'lanczos') targetId = 'cmd-scale-lanczos';
+    else if (scalingName === 'none') targetId = 'cmd-scale-none';
+    else targetId = 'cmd-scale-bilinear';
+
+    await browser.execute((id) => {
+      const el = document.getElementById(id);
+      if (el) el.click();
+    }, targetId);
+  }
 }
 
 export default new MenubarPage();

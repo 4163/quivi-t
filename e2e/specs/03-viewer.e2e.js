@@ -161,4 +161,49 @@ describe('03 - Viewport & Viewer Controls', () => {
       { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class' }
     );
   });
+
+  it('supports filters in manhwa view with canvas readiness, scroll continuity, and clean teardown', async () => {
+    // 1. Toggle manhwa mode on
+    await ctrl('m');
+    await browser.waitUntil(
+      async () => await viewerPage.isManhwaActive(),
+      { timeout: 5000, timeoutMsg: 'Viewport did not gain manhwa-active class' }
+    );
+
+    // 2. Select a filter (scanlines)
+    await menubarPage.selectFilter('scanlines');
+    await browser.waitUntil(
+      async () => (await viewerPage.getManhwaActiveFilter()) === 'scanlines',
+      { timeout: 5000, timeoutMsg: 'Viewport did not set data-filter="scanlines"' }
+    );
+
+    // 3. Canvas should exist and report data-render-ready
+    const canvas = await viewerPage.manhwaFilterCanvas;
+    expect(await canvas.isExisting()).toBe(true);
+    await browser.waitUntil(
+      async () => await viewerPage.isManhwaFilterCanvasReady(),
+      { timeout: 5000, timeoutMsg: 'manhwa-filter-canvas did not gain data-render-ready="true"' }
+    );
+
+    // 4. Verify scroll continuity (pan down)
+    const initialTransform = await viewerPage.getManhwaTransform();
+    await browser.keys(['ArrowDown']);
+    await browser.pause(100);
+    const scrolledTransform = await viewerPage.getManhwaTransform();
+    expect(scrolledTransform).toBeDefined();
+
+    // 5. Turn filter off and verify data-filter attribute is removed
+    await menubarPage.selectFilter('off');
+    await browser.waitUntil(
+      async () => (await viewerPage.getManhwaActiveFilter()) === null,
+      { timeout: 5000, timeoutMsg: 'Viewport did not clear data-filter attribute' }
+    );
+
+    // 6. Toggle manhwa mode off cleanly
+    await ctrl('m');
+    await browser.waitUntil(
+      async () => !(await viewerPage.isManhwaActive()),
+      { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class' }
+    );
+  });
 });

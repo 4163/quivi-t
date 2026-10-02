@@ -208,13 +208,13 @@ describe('Actions registry and keybindings', () => {
       await dispatch('cmd-flip-vertical', null, fakeCtx);
       assert.deepEqual(flipCalls, ['x', 'y']);
 
-      // Fit modes, filters, and lanczos work in manhwa mode; rotation remains guarded
+      // Fit modes, filters, and scalers work in manhwa mode; rotation remains guarded
       let fitCalled = [];
       let filterCalled = [];
-      let scalingSet = null;
+      let scalingCalls = [];
       fakeCtx.Core.setFitMode = (m) => { fitCalled.push(m); };
       fakeCtx.Core.setActiveFilter = (f) => { filterCalled.push(f); };
-      fakeCtx.Core.setScalingMode = (m) => { scalingSet = m; };
+      fakeCtx.Core.setScalingMode = (m) => { scalingCalls.push(m); };
 
       await dispatch('cmd-fit-width', null, fakeCtx);
       await dispatch('cmd-fit-none', null, fakeCtx);
@@ -222,10 +222,15 @@ describe('Actions registry and keybindings', () => {
 
       await dispatch('cmd-filter-off', null, fakeCtx);
       await dispatch('cmd-toggle-anime4k-filter', null, fakeCtx);
-      assert.deepEqual(filterCalled, [null, 'anime4k']);
+      await dispatch('cmd-toggle-crt-filter', null, fakeCtx);
+      await dispatch('cmd-toggle-phosphor-filter', null, fakeCtx);
+      await dispatch('cmd-toggle-scanlines-filter', null, fakeCtx);
+      assert.deepEqual(filterCalled, [null, 'anime4k', 'crt', 'phosphor', 'scanlines']);
 
       await dispatch('cmd-scale-lanczos', null, fakeCtx);
-      assert.equal(scalingSet, 'lanczos');
+      await dispatch('cmd-scale-none', null, fakeCtx);
+      await dispatch('cmd-scale-bilinear', null, fakeCtx);
+      assert.deepEqual(scalingCalls, ['lanczos', 'none', 'bilinear']);
     });
 
     it('routes to standard handlers when manhwa is inactive', async () => {

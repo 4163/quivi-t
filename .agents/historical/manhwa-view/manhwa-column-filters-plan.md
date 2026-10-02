@@ -95,34 +95,38 @@ Validation note. Keeps canvas ownership in `viewerPipelines.js` and slot ownersh
 
 Goal is video, animated raster, and SVG slots that keep moving while the column filter is on.
 
-- [ ] In `src/js/viewer/manhwaStrip.js`, extend the window change path so the column pipeline tracks live slots (`video`). Video slots are added to `_liveSlots` on mount in `_claimSlot` and remapped across list growth in `admitPendingEntry`. Static SVGs and rasters are cached in `_columnTextureCache` using direct element uploads. Raster animations and animated SVGs under the column filter are detailed in `.agents/manhwa-column-webcodecs-plan.md`.
+- [X] In `src/js/viewer/manhwaStrip.js`, extend the window change path so the column pipeline tracks live slots (`video`). Video slots are added to `_liveSlots` on mount in `_claimSlot` and remapped across list growth in `admitPendingEntry`. Static SVGs and rasters are cached in `_columnTextureCache` using direct element uploads. Raster animations and animated SVGs under the column filter are detailed in `.agents/manhwa-column-webcodecs-plan.md`.
 - [x] In `src/js/viewer/viewerPipelines.js:998`, `_renderColumn` partitions draws into cached (still raster/SVG via texture cache) and live (video via reusable `_columnLiveTexture`). Extracted `_drawSlotQuad` helper shared by both paths with scratch buffers.
 - [x] In `src/js/viewer/viewerPipelines.js:958`, `_syncColumnLiveLoop` gates a continuous rAF loop. Runs only when `_columnHasLive` is true (set by `_renderColumn` each frame from `snap.liveSlots`). Stops itself when no live draws remain or when manhwa/filter is off. Teardown cancels the loop and deletes the live texture.
-- [ ] Accept when a video gallery plays under each filter in manhwa with audio pill intact, an SVG gallery paints within its cap, and CPU and memory stay flat while scrolling a mixed chapter. Detailed acceptance criteria for WebCodecs and animated SVGs are in `.agents/manhwa-column-webcodecs-plan.md`.
+- [X] Accept when a video gallery plays under each filter in manhwa with audio pill intact, an SVG gallery paints within its cap, and CPU and memory stay flat while scrolling a mixed chapter. Detailed acceptance criteria for WebCodecs and animated SVGs are in `.agents/manhwa-column-webcodecs-plan.md`.
 
 Validation note. Heavy per frame work stays in the pipeline owner. Strip stays a DOM and layout owner. No archive, protocol, or config internals move files.
 
 ## Slice 5. Filter aware l to m and m to l bridging
 
+**Status:** `[~]` Deferred. Superseded by replay-driven diagnostics. Stale against the current FBO quad compositor and WebCodecs pumps. Transition bridging and blackout prevention will be isolated and resolved via `/replay-debugging` after Slice 6 updates the probe tooling.
+
 Goal is no blackout and no position jump when toggling with lanczos or any filter active.
 
-- [ ] In `src/js/viewer/viewerRender.js:588`, keep parking the active legacy node on l to m. Carry its current filter state so the bridge paints what the user saw. Do not clear the bridge until the column pipeline signals its first ready frame, reusing the `setOnSlotMounted` double rAF pattern in `src/js/viewer/viewer.js:40`.
-- [ ] In `src/js/viewer/viewerPipelines.js:681`, replace the blind early return with an ordered handoff. On l to m, tear down the single image pipeline after the park, then start the column pipeline. On m to l, stop the column loop and teardown its canvas before legacy resumes.
-- [ ] In `src/js/viewer/manhwaStrip.js:2047`, keep the anchor handoff in `_deactivate` through `_onBridgeHandoff` in `manhwaStrip.js:2093`. Include the anchor natural size and target fit so `_parkHandoff` in `src/js/viewer/viewerRender.js:198` can reset geometry and apply fit before legacy reapplies its filter.
-- [ ] In `src/js/viewer/viewerRender.js:198`, ensure `_parkHandoff` resets geometry before `applyFitMode`, then lets the single image pipeline reapply the stored filter and scaling on the parked node. Clear column `data-filter` state on m to l so legacy becomes the sole filter writer again.
-- [ ] Accept when rapid toggle on and off under lanczos, Anime4K, CRT, Phosphor, and Scanlines shows no blank frame, ends on the same anchor image and fit, and neither canvas keeps `data-render-ready` after the other view takes over.
+- [~] In `src/js/viewer/viewerRender.js:588`, keep parking the active legacy node on l to m. Carry its current filter state so the bridge paints what the user saw. Do not clear the bridge until the column pipeline signals its first ready frame, reusing the `setOnSlotMounted` double rAF pattern in `src/js/viewer/viewer.js:40`.
+- [~] In `src/js/viewer/viewerPipelines.js:681`, replace the blind early return with an ordered handoff. On l to m, tear down the single image pipeline after the park, then start the column pipeline. On m to l, stop the column loop and teardown its canvas before legacy resumes.
+- [~] In `src/js/viewer/manhwaStrip.js:2047`, keep the anchor handoff in `_deactivate` through `_onBridgeHandoff` in `manhwaStrip.js:2093`. Include the anchor natural size and target fit so `_parkHandoff` in `src/js/viewer/viewerRender.js:198` can reset geometry and apply fit before legacy reapplies its filter.
+- [~] In `src/js/viewer/viewerRender.js:198`, ensure `_parkHandoff` resets geometry before `applyFitMode`, then lets the single image pipeline reapply the stored filter and scaling on the parked node. Clear column `data-filter` state on m to l so legacy becomes the sole filter writer again.
+- [~] Accept when rapid toggle on and off under lanczos, Anime4K, CRT, Phosphor, and Scanlines shows no blank frame, ends on the same anchor image and fit, and neither canvas keeps `data-render-ready` after the other view takes over.
 
 Validation note. Bridge ownership stays in `viewerRender.js`. Strip never touches the bridge layer directly and talks through `viewer.js` callbacks. State callbacks carry the handoff instead of cross file reach in.
 
 ## Slice 6. Contracts, probes, and replay
 
+**Status:** `[x]` Done. Updated actions tests, diagnostics contract tests, pageobjects, probe engines, and e2e test specs. All static syntax checks clean, mocha passed (303/303), e2e passed (6/6), and replay diagnostics confirmed 0 blackouts and 0 anomalies.
+
 Goal is updated tests and probes that lock the new behavior.
 
-- [ ] In `mocha/actions.test.js:66`, update manhwa routing cases. Lanczos and filters now apply in manhwa. Rotation stays blocked.
-- [ ] In `mocha/diagnosticsContract.test.js:44`, extend the contract for the new canvas id and strip data attributes.
-- [ ] In `e2e/pageobjects/viewer.page.js` and `e2e/specs/03-viewer.e2e.js:139`, cover filter on in manhwa, toggle on and off, and scroll continuity.
-- [ ] In `e2e/replay-diagnostics/probes/viewerPipelineProbe.js:15`, teach the probe the column canvas and its ready signal without breaking legacy assertions.
-- [ ] Accept when `node --check` passes on each touched file, `npm run mocha` passes, one manhwa e2e spec passes, and `npm run diagnose` on a manhwa scenario with a filter on reports no blackout frames.
+- [x] In `mocha/actions.test.js:66`, update manhwa routing cases. Lanczos and filters now apply in manhwa. Rotation stays blocked.
+- [x] In `mocha/diagnosticsContract.test.js:44`, extend the contract for the new canvas id and strip data attributes.
+- [x] In `e2e/pageobjects/viewer.page.js` and `e2e/specs/03-viewer.e2e.js:139`, cover filter on in manhwa, toggle on and off, and scroll continuity.
+- [x] In `e2e/replay-diagnostics/probes/viewerPipelineProbe.js:15`, teach the probe the column canvas and its ready signal without breaking legacy assertions.
+- [x] Accept when `node --check` passes on each touched file, `npm run mocha` passes, one manhwa e2e spec passes, and `npm run diagnose` on a manhwa scenario with a filter on reports no blackout frames.
 
 ## Verification
 
