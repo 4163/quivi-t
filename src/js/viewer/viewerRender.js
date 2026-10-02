@@ -540,7 +540,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   }
 
   function clearDisplayedImage(preserveBridge = false) {
-    if (!preserveBridge) _cancelRetiringNode();
+    if (!preserveBridge && _retiringNode?.dataset?.borrowedBridge !== 'true') _cancelRetiringNode();
     _stopLoadingAnimation();
     _activeTargetSrc = null;
     _hideVideo();
@@ -593,6 +593,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   Core.onStateChange((state) => {
     // Strip owns its own images; skip single-image pipeline when active.
     if (state.manhwaEnabled) {
+      const isArch = state.mode === 'archive';
+      _lastRenderedArchivePath = isArch ? state.archivePath : null;
       if (img && img.src && img.classList.contains('active')) {
         _parkNodeInBridge(img, null, false);
         clearDisplayedImage(true);
@@ -611,7 +613,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     const exitedArchive = !isArchive && _lastRenderedArchivePath !== null;
 
     if (archiveChanged || exitedArchive) {
-      clearDisplayedImage();
+      clearDisplayedImage(_retiringNode?.dataset?.borrowedBridge === 'true');
     }
     _lastRenderedArchivePath = currentArchivePath;
 

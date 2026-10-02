@@ -79,15 +79,15 @@ Validation note. Preserves single-concern ownership: `viewer.js` coordinates lif
 
 ## Slice 3. Reliable anchor handoff on `m -> l` deactivation
 
-**Status:** `[ ]` Pending.
+**Status:** `[x]` Done 2026-10-02. `_deactivate()` strictly resolves `anchorIdx` without fallback to arbitrary mounted slots, providing valid raster dimensions to `_parkHandoff`. `viewerRender.js` syncs `_lastRenderedArchivePath` and preserves borrowed handoff bridge in `clearDisplayedImage` until `_activatePoolNode` completes. Manual runtime verification confirmed 0 blackout frames on deactivation, fast toggling, and archives. 303 mocha tests passing, `node --check` and `git diff --check` clean.
 
 Guarantee that toggling from manhwa back to legacy single-image mode always hands off the correct anchor image to `#viewer-bridge-layer`, eliminating the 7-frame blackout.
 
-- [ ] In `src/js/viewer/manhwaStrip.js:2118-2160`, ensure `_deactivate()` only hands off an element if it matches `anchorIdx`. Never fall back to an arbitrary off-screen slot (`_mounted.values().next()?.value`) that displays a different file.
-- [ ] If `_mounted.get(anchorIdx)` is not yet attached, check `_prefetchedImages.get(anchorIdx)` or completed `_prefetching.get(anchorIdx)`.
-- [ ] Ensure `_onBridgeHandoff(anchorNode, natW, natH, targetFit)` is called with valid raster dimensions so `_parkHandoff` in `viewerRender.js` computes exact legacy fit geometry.
-- [ ] In `src/js/viewer/viewerRender.js:595-605`, ensure that when entering legacy mode from manhwa, any parked handoff bridge is preserved until legacy `_activatePoolNode` completes.
-- [ ] Accept when toggling `m -> l` immediately after startup or fast toggle displays the bridge continuously with 0 blackout frames.
+- [x] In `src/js/viewer/manhwaStrip.js:2128-2165`, ensure `_deactivate()` only hands off an element if it matches `anchorIdx`. Never fall back to an arbitrary off-screen slot (`_mounted.values().next()?.value`) that displays a different file.
+- [x] If `_mounted.get(anchorIdx)` is not yet attached, check `_prefetchedImages.get(anchorIdx)` or completed `_prefetching.get(anchorIdx)`.
+- [x] Ensure `_onBridgeHandoff(anchorNode, natW, natH, targetFit)` is called with valid raster dimensions so `_parkHandoff` in `viewerRender.js` computes exact legacy fit geometry.
+- [x] In `src/js/viewer/viewerRender.js:542-616`, ensure that when entering legacy mode from manhwa, any parked handoff bridge is preserved until legacy `_activatePoolNode` completes.
+- [x] Accept when toggling `m -> l` immediately after startup or fast toggle displays the bridge continuously with 0 blackout frames.
 
 Validation note. Keeps single-image pool and bridge layer ownership strictly in `viewerRender.js`.
 

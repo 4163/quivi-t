@@ -2126,19 +2126,20 @@ function _deactivate() {
   _resetMountQueue();
   _active = false;
 
-  const anchorIdx = _anchorImgIdx >= 0 ? _anchorImgIdx : 0;
-  let anchorNode = _mounted.get(anchorIdx) || _mounted.values().next()?.value;
+  const primaryImgIdx = _listToImgIdx.get(Core.getState()?.index);
+  const anchorIdx = (_anchorImgIdx >= 0 ? _anchorImgIdx : (primaryImgIdx !== undefined ? primaryImgIdx : 0));
+  let anchorNode = _mounted.get(anchorIdx);
   let anchorSource = '_mounted';
 
   // Fall back to prefetched or completed prefetching entries when no node
   // has finished the sequential queue yet (fast toggle-off). _probeDims
   // covers completed images and metadata-ready videos alike.
   if (!anchorNode) {
-    anchorNode = _prefetchedImages.get(anchorIdx) || _prefetchedImages.values().next()?.value;
+    anchorNode = _prefetchedImages.get(anchorIdx);
     if (anchorNode) {
       anchorSource = '_prefetchedImages';
     } else {
-      const pre = _prefetching.get(anchorIdx) || _prefetching.values().next()?.value;
+      const pre = _prefetching.get(anchorIdx);
       if (pre && _probeDims(pre)) {
         anchorNode = pre;
         anchorSource = '_prefetching';
@@ -2149,8 +2150,8 @@ function _deactivate() {
   const anchorItem = _imageIndex[anchorIdx];
   const nodeW = anchorNode?.naturalWidth || anchorNode?.videoWidth || 0;
   const nodeH = anchorNode?.naturalHeight || anchorNode?.videoHeight || 0;
-  const natW = nodeW || anchorItem?.naturalWidth || 0;
-  const natH = nodeH || anchorItem?.naturalHeight || 0;
+  const natW = nodeW || anchorItem?.naturalWidth || Core.getState()?.naturalWidth || 0;
+  const natH = nodeH || anchorItem?.naturalHeight || Core.getState()?.naturalHeight || 0;
 
   if (anchorNode && anchorNode.src && natW > 0 && natH > 0) {
     const sourceMap = anchorSource === '_mounted'
