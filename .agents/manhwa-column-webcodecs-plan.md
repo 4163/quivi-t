@@ -84,18 +84,20 @@ Goal is identifying animated rasters and animated SVGs in the manhwa strip and r
 
 ## Slice 4C. WebCodecs ImageDecoder column pump for animated rasters
 
+**Status:** `[x]` Done. Bounded (3) per-slot `ImageDecoder` sessions with `texSubImage2D` upload, `VideoFrame` close in `finally`, pre-clear decode, loop counts honored, pan holds frames. `node --check` clean, `npm run mocha` 298 passing, `git diff --check` clean. Runtime confirmed by user. Deviations: priority by viewport-center proximity (snapshot carries no anchor index); sessions establish off the render path with static fallback (inline establishment stalled pan frames); legacy pump re-reads `loopCount` fresh (captured copy stayed stale past the async correction).
+
 Goal is continuous frame decoding and rendering for visible animated rasters in the manhwa column WebGL pipeline.
 
-- [ ] In `src/js/viewer/viewerPipelines.js`, define constants and state:
+- [x] In `src/js/viewer/viewerPipelines.js`, define constants and state:
   - `const MAX_CONCURRENT_LIVE_ANIMATED = 3;`
   - `const _columnAnimSessions = new Map();`
-- [ ] In `src/js/viewer/viewerPipelines.js`, create helper `_getOrCreateAnimSession(imgIdx, item, src)`:
+- [x] In `src/js/viewer/viewerPipelines.js`, create helper `_getOrCreateAnimSession(imgIdx, item, src)`:
   - Detect MIME type: `.webp` -> `image/webp`, `.png`/`.apng` -> `image/png`, `.avif` -> `image/avif`, default `image/gif`.
   - Fetch `src`, instantiate `new ImageDecoder({ data: resp.body, type: contentType })`, await `decoder.completed`.
   - Guard against slot eviction while awaiting. If discarded, call `decoder.close()`.
   - Extract `track = decoder.tracks.selectedTrack`, check `track.frameCount > 1`.
   - Return session object `{ decoder, frameCount, loopCount, currentLoop: 1, frameIndex: 0, frameDurationMs: 100, lastTime: performance.now(), currentVf: null }`.
-- [ ] In `src/js/viewer/viewerPipelines.js:1163`, during `_renderColumnInner`:
+- [x] In `src/js/viewer/viewerPipelines.js:1163`, during `_renderColumnInner`:
   - Calculate distance from `draw.imgIdx` to anchor `_anchorImgIdx`. Sort live animated candidates by proximity.
   - Active sessions are maintained for the top 3 visible animated slots. Excess visible animated slots fall back to `_cachedDrawsScratch` using their static frame.
   - For each active session, advance `frameIndex` based on `performance.now() - session.lastTime` and `session.frameDurationMs`.
@@ -103,9 +105,9 @@ Goal is continuous frame decoding and rendering for visible animated rasters in 
   - Update `session.frameDurationMs = Math.max(10, (vf.duration || 100000) / 1000)`.
   - Upload `vf` to that slot's texture in `_columnLiveTextures` via `gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, vf)`.
   - Call `vf.close()` immediately in a `finally` block.
-- [ ] In `src/js/viewer/viewerPipelines.js:984`, in `_teardownColumn`, close all active decoders via `session.decoder.close()` and clear `_columnAnimSessions`.
-- [ ] In `src/js/viewer/viewerPipelines.js:1160`, clean up sessions for slots that scrolled out of view.
-- [ ] Accept when an animated GIF, animated WebP, and APNG scroll through the manhwa column under Anime4K and Lanczos, animating smoothly at their native frame rates without freezing.
+- [x] In `src/js/viewer/viewerPipelines.js:984`, in `_teardownColumn`, close all active decoders via `session.decoder.close()` and clear `_columnAnimSessions`.
+- [x] In `src/js/viewer/viewerPipelines.js:1160`, clean up sessions for slots that scrolled out of view.
+- [x] Accept when an animated GIF, animated WebP, and APNG scroll through the manhwa column under Anime4K and Lanczos, animating smoothly at their native frame rates without freezing.
 
 ---
 

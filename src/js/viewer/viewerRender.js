@@ -393,6 +393,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     el.addEventListener('load', () => {
       if (el !== img) return;
       if (!el.src) return;
+      if (el.classList.contains('active')) return;
       _stopLoadingAnimation();
       el.classList.add('active');
       _syncActiveImage(el, Core.getState().filename, Core.getState());

@@ -153,6 +153,7 @@ export function createViewerPipelines(viewportState) {
   let _livePumpImg = null;
   let _livePumpBlobUrl = null;
   let _livePumpLastDrawnFrameIndex = -1;
+  let _livePumpGen = 0;
   let _videoReadyListener = null;
   const _liveStagingCanvas = document.createElement('canvas');
 
@@ -448,7 +449,21 @@ export function createViewerPipelines(viewportState) {
   let _videoTimeListener = null;
   let _videoElAttached = null;
 
+  // Loop flags land async after pump start and getState returns a copy,
+  // so a captured loopCount stays stale. Prefer the live value when it
+  // still describes the pumping file.
+  function _readLiveLoopCount(live) {
+    try {
+      const now = Core.getState();
+      if (now && now.src && live?.src && now.src === live.src) return now.loopCount || 0;
+    } catch {
+      // Fall through to the captured value.
+    }
+    return live?.loopCount || 0;
+  }
+
   function _stopLivePump() {
+    _livePumpGen++;
     if (_visibilityListener) {
       document.removeEventListener('visibilitychange', _visibilityListener);
       _visibilityListener = null;
@@ -467,7 +482,13 @@ export function createViewerPipelines(viewportState) {
       _livePumpRaf = null;
     }
     if (_livePumpImg) {
-      if (_livePumpImg.close) _livePumpImg.close();
+      if (_livePumpImg.close) {
+        try {
+          _livePumpImg.close();
+        } catch {
+          // Already closed.
+        }
+      }
       if (_livePumpImg.tagName === 'IMG') _livePumpImg.classList.add('hidden');
       _livePumpImg = null;
     }
@@ -499,9 +520,10 @@ export function createViewerPipelines(viewportState) {
     }
 
     const currentSrc = _activeSource.dataset?.vidSrc || _activeSource.getAttribute('src') || _activeSource.src || '';
-    if (_livePumpSrc === currentSrc && _livePumpRaf) return;
+    if (_livePumpSrc === currentSrc) return;
 
     _stopLivePump();
+    const gen = ++_livePumpGen;
     _livePumpSrc = currentSrc;
     _livePumpLastDrawnFrameIndex = -1;
 
@@ -515,7 +537,7 @@ export function createViewerPipelines(viewportState) {
       let lastFilter = pipeline?.filter;
 
       function renderFrame() {
-        if (_livePumpSrc !== currentSrc || _activeSource !== videoEl) return;
+        if (gen !== _livePumpGen || _livePumpSrc !== currentSrc || _activeSource !== videoEl) return;
         if (!pipeline || pipeline.type !== 'webgl') return;
 
         const vw = videoEl.videoWidth;
@@ -537,10 +559,10 @@ export function createViewerPipelines(viewportState) {
       }
 
       function startVideoLoop() {
-        if (_livePumpSrc !== currentSrc) return;
+        if (gen !== _livePumpGen || _livePumpSrc !== currentSrc) return;
 
         function pumpTickVideo() {
-          if (_livePumpSrc !== currentSrc || _activeSource !== videoEl) return;
+          if (gen !== _livePumpGen || _livePumpSrc !== currentSrc || _activeSource !== videoEl) return;
 
           if (videoEl.readyState >= 2 && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
             const currentTime = videoEl.currentTime;
@@ -574,6 +596,7 @@ export function createViewerPipelines(viewportState) {
       } else {
         _videoReadyListener = () => {
           _videoReadyListener = null;
+          if (gen !== _livePumpGen || _livePumpSrc !== currentSrc) return;
           startVideoLoop();
         };
         videoEl.addEventListener('canplay', _videoReadyListener, { once: true });
@@ -588,13 +611,14 @@ export function createViewerPipelines(viewportState) {
       let svgText = '';
       try {
         const resp = await fetch(currentSrc);
-        if (_livePumpSrc !== currentSrc) return;
+        if (gen !== _livePumpGen || _livePumpSrc !== currentSrc) return;
         svgText = await resp.text();
       } catch (e) {
         console.warn('[pump] Failed to fetch SVG:', e);
+        _stopLivePump();
         return;
       }
-      if (_livePumpSrc !== currentSrc) return;
+      if (gen !== _livePumpGen || _livePumpSrc !== currentSrc) return;
 
       const cleanSvg = prepareSvgForCanvas(svgText);
       const blob = new Blob([cleanSvg], { type: 'image/svg+xml' });
@@ -613,9 +637,10 @@ export function createViewerPipelines(viewportState) {
       } catch (err) {
         console.warn('[pump] Failed to load SVG image:', err);
         liveImg.classList.add('hidden');
+        _stopLivePump();
         return;
       }
-      if (_livePumpSrc !== currentSrc) {
+      if (gen !== _livePumpGen || _livePumpSrc !== currentSrc) {
         liveImg.classList.add('hidden');
         return;
       }
@@ -630,7 +655,7 @@ export function createViewerPipelines(viewportState) {
       const maxEdge = isAnimated ? SVG_ANIMATED_MAX_EDGE : SVG_STATIC_MAX_EDGE;
 
       function pumpTickSvg() {
-        if (_livePumpSrc !== currentSrc) return;
+        if (gen !== _livePumpGen || _livePumpSrc !== currentSrc) return;
 
         const vp = document.getElementById('viewport');
         const vpW = vp?.clientWidth || 1024;
@@ -707,13 +732,20 @@ export function createViewerPipelines(viewportState) {
     // --- Raster WebCodecs Pump (GIF/APNG/WebP/AVIF) ---
     if (typeof ImageDecoder === 'undefined') {
       _lastIsAnimated = false;
+      _stopLivePump();
       _scheduleTransform();
       _triggerRender();
       return;
     }
 
-    const resp = await fetch(currentSrc);
-    if (_livePumpSrc !== currentSrc) return;
+    let resp;
+    try {
+      resp = await fetch(currentSrc);
+    } catch {
+      _stopLivePump();
+      return;
+    }
+    if (gen !== _livePumpGen || _livePumpSrc !== currentSrc) return;
     const ext = currentSrc.split('.').pop().toLowerCase().split('?')[0];
     let contentType = 'image/gif';
     if (ext === 'webp') contentType = 'image/webp';
@@ -727,17 +759,30 @@ export function createViewerPipelines(viewportState) {
     } catch (e) {
       console.warn('[pump] ImageDecoder failed:', e.message);
       _lastIsAnimated = false;
+      _stopLivePump();
       _scheduleTransform();
       _triggerRender();
       return;
     }
-    if (_livePumpSrc !== currentSrc) { decoder.close(); return; }
+    if (gen !== _livePumpGen || _livePumpSrc !== currentSrc) {
+      try {
+        decoder.close();
+      } catch {
+        // Already closed.
+      }
+      return;
+    }
 
     const track = decoder.tracks.selectedTrack;
     const frameCount = track.frameCount;
     if (frameCount < 2) { 
-      decoder.close();
+      try {
+        decoder.close();
+      } catch {
+        // Already closed.
+      }
       _lastIsAnimated = false;
+      _stopLivePump();
       _scheduleTransform();
       _triggerRender();
       return; 
@@ -758,7 +803,7 @@ export function createViewerPipelines(viewportState) {
     document.addEventListener('visibilitychange', _visibilityListener);
 
     async function pumpTick() {
-      if (_livePumpSrc !== currentSrc) return;
+      if (gen !== _livePumpGen || _livePumpSrc !== currentSrc) return;
 
       const now = performance.now();
       let elapsed = now - lastFrameTime;
@@ -769,10 +814,13 @@ export function createViewerPipelines(viewportState) {
       }
 
       let frameChanged = false;
+      // loopCount arrives async after pump start (getState returns a copy),
+      // so read it fresh or a play-once GIF loops forever on first visit.
+      const loopCount = _readLiveLoopCount(live);
       while (elapsed >= frameDurationMs) {
         if (frameIndex < frameCount - 1) {
           frameIndex++;
-        } else if (live.loopCount === 0 || currentLoopIteration < live.loopCount) {
+        } else if (loopCount === 0 || currentLoopIteration < loopCount) {
           frameIndex = 0;
           currentLoopIteration++;
         } else {
@@ -794,7 +842,14 @@ export function createViewerPipelines(viewportState) {
         // If decoding fails (e.g. decoder closed or corrupt frame), stop the pump.
         return;
       }
-      if (_livePumpSrc !== currentSrc) { vf.close(); return; }
+      if (gen !== _livePumpGen || _livePumpSrc !== currentSrc) {
+        try {
+          vf.close();
+        } catch {
+          // Already closed.
+        }
+        return;
+      }
 
       const geom = viewportState.getGeometry();
       const geomHash = `${geom.scale}_${geom.tx}_${geom.ty}_${geom.rotation}_${geom.flipX}_${geom.flipY}`;
@@ -914,6 +969,16 @@ export function createViewerPipelines(viewportState) {
   let _columnTextureCache = null;
   let _columnQuadCompositor = null;
   const _columnLiveTextures = new Map();
+  /** Max animated raster slots decoding concurrently. Excess falls back to static. */
+  const MAX_CONCURRENT_LIVE_ANIMATED = 3;
+  /** Map from imgIdx to live raster session { decoder, frameCount, loopCount, currentLoop, frameIndex, frameDurationMs, lastTime, src, needsUpload }. */
+  const _columnAnimSessions = new Map();
+  /** imgIdx with decoder creation in flight. Prevents fetch storms. */
+  const _columnAnimPending = new Set();
+  /** imgIdx that proved single-frame. Skips decoder retry, uses static cache. */
+  const _columnAnimStatic = new Set();
+  /** Viewport geometry of the previous column pass. Detects pan/zoom renders. */
+  const _columnLastGeom = { scale: 0, tx: 0, ty: 0, vpW: 0, vpH: 0 };
   let _columnLiveLoopId = 0;
   let _columnHasLive = false;
   let _columnRenderInFlight = false;
@@ -928,6 +993,11 @@ export function createViewerPipelines(viewportState) {
       if (_columnPipeline) { _columnPipeline.dispose(); _columnPipeline = null; }
       _columnFilter = null;
       _columnLiveTextures.clear();
+      for (const imgIdx of Array.from(_columnAnimSessions.keys())) {
+        _closeColumnAnimSession(imgIdx);
+      }
+      _columnAnimPending.clear();
+      _columnAnimStatic.clear();
       _syncColumnPipeline(Core.getState());
       _requestColumnRender();
     });
@@ -982,6 +1052,175 @@ export function createViewerPipelines(viewportState) {
     return _columnCompositeFbo;
   }
 
+  function _columnAnimMimeFor(src, item) {
+    const name = (item?.entry?.name || item?.entry?.path || src || '').toLowerCase().split('?')[0];
+    if (name.endsWith('.webp')) return 'image/webp';
+    if (name.endsWith('.png') || name.endsWith('.apng')) return 'image/png';
+    if (name.endsWith('.avif')) return 'image/avif';
+    return 'image/gif';
+  }
+
+  function _closeColumnAnimSession(imgIdx) {
+    const session = _columnAnimSessions.get(imgIdx);
+    if (session) {
+      try {
+        session.decoder?.close();
+      } catch {
+        // Already closed.
+      }
+      _columnAnimSessions.delete(imgIdx);
+    }
+    _columnAnimPending.delete(imgIdx);
+  }
+
+  function _pruneColumnAnimSessions(liveSlots, liveTypes) {
+    for (const imgIdx of Array.from(_columnAnimSessions.keys())) {
+      if (!liveSlots?.has(imgIdx) || liveTypes?.get(imgIdx) !== 'raster') {
+        _closeColumnAnimSession(imgIdx);
+      }
+    }
+    for (const imgIdx of Array.from(_columnAnimStatic)) {
+      if (!liveSlots?.has(imgIdx)) _columnAnimStatic.delete(imgIdx);
+    }
+  }
+
+  function _ensureColumnLiveTexture(gl, imgIdx, w, h) {
+    let entry = _columnLiveTextures.get(imgIdx);
+    if (!entry) {
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      entry = { texture: tex, width: w, height: h };
+      _columnLiveTextures.set(imgIdx, entry);
+      return entry;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+    if (entry.width !== w || entry.height !== h) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      entry.width = w;
+      entry.height = h;
+    }
+    return entry;
+  }
+
+  // Establishes a raster session off the render path. Renders never await
+  // this: establishment costs a fetch plus a full header parse, which stalls
+  // pan frames behind the gesture. Callers paint the static frame meanwhile;
+  // completion kicks a fresh render through the live session.
+  function _launchColumnAnimSession(imgIdx, item, src, gen) {
+    if (_columnAnimSessions.has(imgIdx) || _columnAnimPending.has(imgIdx)) return;
+    if (_columnAnimStatic.has(imgIdx)) return;
+    if (typeof ImageDecoder === 'undefined') {
+      _columnAnimStatic.add(imgIdx);
+      return;
+    }
+    _columnAnimPending.add(imgIdx);
+    (async () => {
+      let decoder = null;
+      const done = (session) => {
+        _columnAnimPending.delete(imgIdx);
+        if (gen !== _columnGeneration || !Core.getState()?.manhwaEnabled) {
+          if (session) {
+            try {
+              session.decoder?.close();
+            } catch {
+              // Already closed.
+            }
+          }
+          return;
+        }
+        if (!session) {
+          _columnAnimStatic.add(imgIdx);
+          return;
+        }
+        _columnAnimSessions.set(imgIdx, session);
+        _requestColumnRender();
+      };
+      try {
+        const resp = await fetch(src);
+        if (!resp.ok) {
+          done(null);
+          return;
+        }
+        if (gen !== _columnGeneration) {
+          done(null);
+          return;
+        }
+        const contentType = _columnAnimMimeFor(src, item);
+        decoder = new ImageDecoder({ data: resp.body, type: contentType });
+        await decoder.completed;
+        if (gen !== _columnGeneration) {
+          try {
+            decoder.close();
+          } catch {
+            // Already closed.
+          }
+          done(null);
+          return;
+        }
+        const track = decoder.tracks?.selectedTrack;
+        const frameCount = track?.frameCount || 0;
+        if (frameCount < 2) {
+          try {
+            decoder.close();
+          } catch {
+            // Already closed.
+          }
+          done(null);
+          return;
+        }
+        let loopCount = 0;
+        try {
+          const st = Core.getState() || {};
+          const isArchive = st.mode === 'archive' && st.archivePath;
+          const pathArg = isArchive
+            ? (item?.entry?.name || item?.entry?.path)
+            : (item?.entry?.path || item?.entry?.name);
+          const archiveArg = isArchive ? st.archivePath : null;
+          if (pathArg) {
+            const status = await Core.checkIsAnimated(pathArg, archiveArg);
+            if (gen !== _columnGeneration) {
+              try {
+                decoder.close();
+              } catch {
+                // Already closed.
+              }
+              done(null);
+              return;
+            }
+            loopCount = status?.loop_count || 0;
+          }
+        } catch {
+          loopCount = 0;
+        }
+        done({
+          decoder,
+          frameCount,
+          loopCount,
+          currentLoop: 1,
+          frameIndex: 0,
+          frameDurationMs: 100,
+          lastTime: performance.now(),
+          src,
+          needsUpload: true,
+        });
+      } catch {
+        if (decoder) {
+          try {
+            decoder.close();
+          } catch {
+            // Already closed.
+          }
+        }
+        done(null);
+      }
+    })();
+  }
+
   function _teardownColumn() {
     _columnGeneration++;
     if (_columnRafId) {
@@ -995,6 +1234,16 @@ export function createViewerPipelines(viewportState) {
     _columnHasLive = false;
     _cachedDrawsScratch.length = 0;
     _liveDrawsScratch.length = 0;
+    for (const imgIdx of Array.from(_columnAnimSessions.keys())) {
+      _closeColumnAnimSession(imgIdx);
+    }
+    _columnAnimPending.clear();
+    _columnAnimStatic.clear();
+    _columnLastGeom.scale = 0;
+    _columnLastGeom.tx = 0;
+    _columnLastGeom.ty = 0;
+    _columnLastGeom.vpW = 0;
+    _columnLastGeom.vpH = 0;
     if (_columnPipeline?.gl) {
       const gl = _columnPipeline.gl;
       for (const entry of _columnLiveTextures.values()) {
@@ -1143,6 +1392,15 @@ export function createViewerPipelines(viewportState) {
     const scale = viewportState.getScale() || 1;
     const tx = viewportState.getTx() || 0;
     const ty = viewportState.getTy() || 0;
+    // A pan/zoom render must track the gesture, not the animation clock.
+    // Decoding here stalls the frame behind the finger and reads as ghosting.
+    const viewportMoved = _columnLastGeom.scale !== scale || _columnLastGeom.tx !== tx ||
+      _columnLastGeom.ty !== ty || _columnLastGeom.vpW !== vpW || _columnLastGeom.vpH !== vpH;
+    _columnLastGeom.scale = scale;
+    _columnLastGeom.tx = tx;
+    _columnLastGeom.ty = ty;
+    _columnLastGeom.vpW = vpW;
+    _columnLastGeom.vpH = vpH;
     const { drawList } = computeColumnComposite({
       offsets: snap.offsets,
       totalHeight: snap.totalHeight,
@@ -1169,29 +1427,163 @@ export function createViewerPipelines(viewportState) {
         }
       }
     }
+    _pruneColumnAnimSessions(snap.liveSlots, snap.liveTypes);
 
-    // Partition draws into cached (still raster/SVG) and live (video).
+    // Partition draws into cached (still raster/SVG) and live (video, svg element, animated raster).
     _cachedDrawsScratch.length = 0;
     _liveDrawsScratch.length = 0;
+    const rasterCandidates = [];
     let hasLive = false;
     for (const draw of drawList) {
       const node = snap.nodes.get(draw.imgIdx);
       if (!node) continue;
       const isLive = snap.liveSlots?.has(draw.imgIdx);
-      if (isLive) {
-        _liveDrawsScratch.push({ draw, node });
-        hasLive = true;
-      } else {
+      if (!isLive) {
         const src = node.currentSrc || node.src;
         if (src) {
           const item = snap.items ? snap.items[draw.imgIdx] : null;
           const isSvg = isSvgSource(src, item);
           _cachedDrawsScratch.push({ draw, node, src, isSvg });
         }
+        continue;
+      }
+      const liveType = snap.liveTypes?.get(draw.imgIdx);
+      if (liveType === 'raster') {
+        const src = node.currentSrc || node.src;
+        if (!src) continue;
+        const item = snap.items ? snap.items[draw.imgIdx] : null;
+        rasterCandidates.push({ draw, node, src, item });
+        continue;
+      }
+      _liveDrawsScratch.push({ draw, node });
+      hasLive = true;
+    }
+    // Bounded animated raster sessions closest to the viewport center first.
+    // Snapshot carries no anchor index, so center proximity is the stand-in.
+    // Sessions establish off-path (see _launchColumnAnimSession); this pass
+    // only uses sessions that already exist. Anything else paints static.
+    const activeRasters = [];
+    rasterCandidates.sort((a, b) => {
+      const aRect = a.draw.destRect || {};
+      const bRect = b.draw.destRect || {};
+      const aCy = (aRect.y ?? aRect.dy ?? 0) + ((aRect.height ?? aRect.dh ?? 0) / 2);
+      const bCy = (bRect.y ?? bRect.dy ?? 0) + ((bRect.height ?? bRect.dh ?? 0) / 2);
+      return Math.abs(aCy - vpH / 2) - Math.abs(bCy - vpH / 2);
+    });
+    for (let i = 0; i < rasterCandidates.length; i++) {
+      const cand = rasterCandidates[i];
+      if (activeRasters.length >= MAX_CONCURRENT_LIVE_ANIMATED || _columnAnimStatic.has(cand.draw.imgIdx)) {
+        _cachedDrawsScratch.push({ draw: cand.draw, node: cand.node, src: cand.src, isSvg: false });
+        continue;
+      }
+      const session = _columnAnimSessions.get(cand.draw.imgIdx);
+      if (session && session.src !== cand.src) _closeColumnAnimSession(cand.draw.imgIdx);
+      const ready = _columnAnimSessions.get(cand.draw.imgIdx);
+      if (!ready) {
+        if (_columnAnimSessions.size + _columnAnimPending.size < MAX_CONCURRENT_LIVE_ANIMATED) {
+          _launchColumnAnimSession(cand.draw.imgIdx, cand.item, cand.src, gen);
+        }
+        const src = cand.node.currentSrc || cand.node.src;
+        if (src) _cachedDrawsScratch.push({ draw: cand.draw, node: cand.node, src, isSvg: false });
+        continue;
+      }
+      activeRasters.push({ ...cand, session: ready });
+      hasLive = true;
+    }
+    // Sessions exist only for the active window. Anything else closes so at
+    // most 3 decoders stay open and scrolled-out slots release theirs.
+    if (_columnAnimSessions.size > 0) {
+      const activeIdx = new Set(activeRasters.map((r) => r.draw.imgIdx));
+      for (const imgIdx of Array.from(_columnAnimSessions.keys())) {
+        if (!activeIdx.has(imgIdx)) _closeColumnAnimSession(imgIdx);
       }
     }
     _columnHasLive = hasLive;
-    if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0) return;
+    if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && activeRasters.length === 0) return;
+
+    // Decode raster frames before touching GL. An await after the visible
+    // canvas is cleared lets the browser composite a blank frame in
+    // direct-screen (lanczos-only) mode. Filtered modes draw offscreen,
+    // which is why they never flickered.
+    const columnNow = performance.now();
+    const failedRasters = [];
+    for (const r of activeRasters) {
+      r.pendingVf = null;
+      r.wantIndex = undefined;
+      r.wantLoop = undefined;
+      r.advanceMs = 0;
+      const s = r.session;
+      let need = s.needsUpload;
+      if (!need && !_columnLiveTextures.has(r.draw.imgIdx)) need = true;
+      if (!need && viewportMoved) {
+        // Hold the current frame while panning so the slot tracks the
+        // gesture. The clock follows wall time, so settle resumes at the
+        // correct frame with no catch-up burst.
+        s.lastTime = columnNow;
+        continue;
+      }
+      if (!need) {
+        const dur = Math.max(10, s.frameDurationMs);
+        const elapsed = columnNow - s.lastTime;
+        if (elapsed < dur) continue;
+        let steps = Math.floor(elapsed / dur);
+        if (steps < 1) steps = 1;
+        if (steps > 4) steps = 4;
+        let idx = s.frameIndex;
+        let loop = s.currentLoop;
+        let advanced = 0;
+        for (let k = 0; k < steps; k++) {
+          if (idx < s.frameCount - 1) {
+            idx++;
+            advanced++;
+          } else if (s.loopCount === 0 || loop < s.loopCount) {
+            idx = 0;
+            loop++;
+            advanced++;
+          } else {
+            break;
+          }
+        }
+        if (advanced === 0) {
+          s.lastTime = columnNow;
+          continue;
+        }
+        r.wantIndex = idx;
+        r.wantLoop = loop;
+        r.advanceMs = advanced * dur;
+      }
+      try {
+        const target = r.wantIndex !== undefined ? r.wantIndex : s.frameIndex;
+        const result = await s.decoder.decode({ frameIndex: target });
+        r.pendingVf = result.image;
+      } catch {
+        failedRasters.push(r);
+      }
+      if (gen !== _columnGeneration) {
+        for (const fr of activeRasters) {
+          if (fr.pendingVf) {
+            try {
+              fr.pendingVf.close();
+            } catch {
+              // Already closed.
+            }
+            fr.pendingVf = null;
+          }
+        }
+        return;
+      }
+    }
+    // Failed decodes fall back to their static frame this pass.
+    if (failedRasters.length > 0) {
+      const failedIdx = new Set(failedRasters.map((r) => r.draw.imgIdx));
+      for (const r of failedRasters) {
+        _cachedDrawsScratch.push({ draw: r.draw, node: r.node, src: r.src, isSvg: false });
+      }
+      for (let i = activeRasters.length - 1; i >= 0; i--) {
+        if (failedIdx.has(activeRasters[i].draw.imgIdx)) activeRasters.splice(i, 1);
+      }
+      if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && activeRasters.length === 0) return;
+    }
 
     // Load missing cached textures.
     if (_cachedDrawsScratch.length > 0) {
@@ -1248,7 +1640,7 @@ export function createViewerPipelines(viewportState) {
       }
     }
 
-    // Draw live (video) slots from element upload.
+    // Draw live (video, svg element) slots from element upload.
     for (const { draw, node } of _liveDrawsScratch) {
       const isVideo = node.tagName === 'VIDEO';
       const nodeW = isVideo ? node.videoWidth : (node.naturalWidth || 0);
@@ -1256,25 +1648,7 @@ export function createViewerPipelines(viewportState) {
       if (nodeW <= 0 || nodeH <= 0) continue;
       if (isVideo && node.readyState < 2) continue;
 
-      let entry = _columnLiveTextures.get(draw.imgIdx);
-      if (!entry) {
-        const tex = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, nodeW, nodeH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-        entry = { texture: tex, width: nodeW, height: nodeH };
-        _columnLiveTextures.set(draw.imgIdx, entry);
-      } else {
-        gl.bindTexture(gl.TEXTURE_2D, entry.texture);
-        if (entry.width !== nodeW || entry.height !== nodeH) {
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, nodeW, nodeH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-          entry.width = nodeW;
-          entry.height = nodeH;
-        }
-      }
+      const entry = _ensureColumnLiveTexture(gl, draw.imgIdx, nodeW, nodeH);
       try {
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, node);
       } catch {
@@ -1282,6 +1656,45 @@ export function createViewerPipelines(viewportState) {
       }
       const item = snap.items ? snap.items[draw.imgIdx] : null;
       if (_drawSlotQuad(_columnQuadCompositor, entry.texture, draw, item, nodeW, nodeH, vpW, vpH, flipY, sampler)) {
+        painted++;
+      }
+    }
+
+    // Upload pre-decoded raster frames. No awaits past this point, so the
+    // cleared frame always fills before present.
+    for (const r of activeRasters) {
+      const s = r.session;
+      if (r.pendingVf) {
+        const vf = r.pendingVf;
+        r.pendingVf = null;
+        try {
+          const w = vf.displayWidth || vf.codedWidth || r.node.naturalWidth || 0;
+          const h = vf.displayHeight || vf.codedHeight || r.node.naturalHeight || 0;
+          if (w <= 0 || h <= 0) continue;
+          const entry = _ensureColumnLiveTexture(gl, r.draw.imgIdx, w, h);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, vf);
+          if (r.wantIndex !== undefined) {
+            s.frameIndex = r.wantIndex;
+            s.currentLoop = r.wantLoop ?? s.currentLoop;
+            s.lastTime += r.advanceMs;
+          } else {
+            s.lastTime = columnNow;
+          }
+          s.frameDurationMs = Math.max(10, (vf.duration || 100000) / 1000);
+          s.needsUpload = false;
+        } catch {
+          continue;
+        } finally {
+          try {
+            vf.close();
+          } catch {
+            // Already closed.
+          }
+        }
+      }
+      const liveEntry = _columnLiveTextures.get(r.draw.imgIdx);
+      if (!liveEntry) continue;
+      if (_drawSlotQuad(_columnQuadCompositor, liveEntry.texture, r.draw, r.item, liveEntry.width, liveEntry.height, vpW, vpH, flipY, sampler)) {
         painted++;
       }
     }

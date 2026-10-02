@@ -1,0 +1,16 @@
+{
+  "name": "manhwa-gif-bridge",
+  "recordedAt": "2026-10-02T10:00:00.000Z",
+  "initialPath": "test-files/gif/no_loop.gif",
+  "initialState": {
+    "filename": "no_loop.gif",
+    "manhwa": true,
+    "pipeline": {
+      "filter": "phosphor",
+      "scaling": "bilinear"
+    }
+  },
+  "actions": [
+    "cmd-toggle-manhwa"
+  ]
+}
