@@ -107,26 +107,6 @@ export const ACTION_REGISTRY = [
       ctx.Core.setActiveFilter(current === f.id ? null : f.id);
     }
   })),
-  { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
-    run: (ctx) => {
-      const state = ctx.Core.getState();
-      const modes = ['none', 'bilinear', 'lanczos'];
-      const current = state.scalingMode;
-      const idx = modes.indexOf(current);
-      const next = idx > 0 ? modes[idx - 1] : modes[modes.length - 1];
-      ctx.Core.setScalingMode(next, { persist: true });
-    }
-  },
-  { id: 'cmd-cycle-scaling', label: 'Scale: Next', defaultBinds: ']', category: 'View',
-    run: (ctx) => {
-      const state = ctx.Core.getState();
-      const modes = ['none', 'bilinear', 'lanczos'];
-      const current = state.scalingMode;
-      const idx = modes.indexOf(current);
-      const next = modes[(idx + 1) % modes.length];
-      ctx.Core.setScalingMode(next, { persist: true });
-    }
-  },
   { id: 'cmd-toggle-transparent', label: 'Toggle Opaque Canvas', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.toggleTransparentBg()
   },
@@ -271,7 +251,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-refresh', label: 'Refresh', defaultBinds: ['6', 'Ctrl+r'], category: 'File Operations',
     run: (ctx) => ctx.FsUtils.refresh()
   },
-  { id: 'cmd-toggle-file-list-view-mode', label: 'Toggle Thumbnail / List View', defaultBinds: [], category: 'File Operations',
+  { id: 'cmd-toggle-file-list-view-mode', label: 'Toggle Thumbnail / List View', defaultBinds: 't', category: 'File Operations',
     run: (ctx) => ctx.Core.toggleFileListViewMode({ persist: true })
   },
   { id: 'cmd-open-explorer', label: 'Show in Explorer', defaultBinds: [], category: 'File Operations',

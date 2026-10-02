@@ -226,18 +226,6 @@ describe('Actions registry and keybindings', () => {
 
       await dispatch('cmd-scale-lanczos', null, fakeCtx);
       assert.equal(scalingSet, 'lanczos');
-
-      fakeCtx.Core.getState = () => ({ manhwaEnabled: true, scalingMode: 'bilinear' });
-      await dispatch('cmd-cycle-scaling', null, fakeCtx);
-      assert.equal(scalingSet, 'lanczos');
-
-      fakeCtx.Core.getState = () => ({ manhwaEnabled: true, scalingMode: 'lanczos' });
-      await dispatch('cmd-cycle-scaling', null, fakeCtx);
-      assert.equal(scalingSet, 'none');
-
-      fakeCtx.Core.getState = () => ({ manhwaEnabled: true, scalingMode: 'none' });
-      await dispatch('cmd-cycle-scaling', null, fakeCtx);
-      assert.equal(scalingSet, 'bilinear');
     });
 
     it('routes to standard handlers when manhwa is inactive', async () => {
