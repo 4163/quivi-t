@@ -2382,13 +2382,24 @@ body.is-importing-url .header-cell:hover {
 .status-index,
 .status-zoom,
 .status-fit,
+.status-scaling,
+.status-filter,
 .status-version {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
+.status-spread:empty,
+.status-manhwa:empty {
+  display: none;
+}
+
 .status-version {
   color: var(--text-dim);
+}
+
+.status-manhwa.hold-flicker-hidden {
+  visibility: hidden;
 }
 
 .status-spread:not(:empty)::before,
@@ -2417,6 +2428,18 @@ body.is-importing-url .header-cell:hover {
 }
 
 .status-fit::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--border);
+}
+
+.status-scaling::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--border);
+}
+
+.status-filter::before {
   content: '·';
   margin-right: 12px;
   color: var(--border);

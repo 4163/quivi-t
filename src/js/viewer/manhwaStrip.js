@@ -240,7 +240,7 @@ function _classifyAnimatedSlot(imgIdx, item) {
     if (!animStatus?.is_animated) return;
     _liveTypes.set(imgIdx, wantType);
     _liveSlots.add(imgIdx);
-    _onSlotMounted?.(imgIdx);
+    _onSlotMounted?.(imgIdx, imgIdx === _anchorImgIdx);
   }).catch(() => {});
 }
 
@@ -908,18 +908,16 @@ function _updateWindow() {
   const anchorViewChanged = _lastAnchorTy === null || _lastAnchorScale === null || _lastAnchorVph === null ||
     ty !== _lastAnchorTy || scale !== _lastAnchorScale || vpH !== _lastAnchorVph;
   let newAnchor = -1;
-  if (_anchorHoldover !== null && scale === _anchorHoldoverScale && _layout.offsets[_anchorHoldover]) {
+  if (_anchorHoldover !== null && Math.abs(scale - _anchorHoldoverScale) < 1e-4 && _layout.offsets[_anchorHoldover]) {
     newAnchor = _anchorHoldover;
   } else {
     if (_anchorHoldover !== null) _anchorHoldover = null;
     if (anchorViewChanged) {
       if (visStart !== -1 && visEnd !== -1) {
-        // When the primary selection sits at a column edge and is still
-        // visible, hold that edge during zoom instead of drifting to center.
+        // When the primary selection is visible in the window, hold it
+        // during zoom or mode toggles instead of drifting to column center.
         const primaryImgIdx = _listToImgIdx.get(Core.getState()?.index);
-        const last = _imageIndex.length - 1;
-        if (primaryImgIdx !== undefined && (primaryImgIdx === 0 || primaryImgIdx === last) &&
-            primaryImgIdx >= visStart && primaryImgIdx <= visEnd) {
+        if (primaryImgIdx !== undefined && primaryImgIdx >= visStart && primaryImgIdx <= visEnd) {
           newAnchor = primaryImgIdx;
         } else if (visStart === visEnd) {
           newAnchor = visStart;
@@ -1260,12 +1258,12 @@ function _claimSlot(imgIdx, item, slot, node) {
     // until this slot has a real frame, or an error decides it never will.
     // A handed-off node skips: the m->l bridge owns its own retirement.
     const release = () => {
-      if (node.dataset.borrowedBridge !== 'true') _onSlotMounted?.(imgIdx);
+      if (node.dataset.borrowedBridge !== 'true') _onSlotMounted?.(imgIdx, imgIdx === _anchorImgIdx);
     };
     node.addEventListener('loadeddata', release, { once: true });
     node.addEventListener('error', release, { once: true });
   } else {
-    _onSlotMounted?.(imgIdx);
+    _onSlotMounted?.(imgIdx, imgIdx === _anchorImgIdx);
   }
 }
 

@@ -21,6 +21,22 @@ Validation comparison performed against .agents/AGENTS.md and .agents/skills/val
 
 ---
 
+## Deviations and UX refinements
+
+1. **Visible anchor retention during zoom and mode toggles (`src/js/viewer/manhwaStrip.js:910-935`)**
+   - *Problem:* `_updateWindow()` dropped `_anchorHoldover` on float scale delta and only held the primary selection if it was at index 0 or `total - 1`. If `centerColY` was at column center (when `ty` was near 0), it drifted to center index.
+   - *Resolution:* Allowed holding any visible `primaryImgIdx` in `[visStart, visEnd]` across zoom/toggle, using float tolerance `Math.abs(scale - _anchorHoldoverScale) < 1e-4`. Eliminates anchor jump to folder center during rapid toggling.
+
+2. **Hold-to-flicker key repeat UX (`src/js/shortcuts.js:242-290, 360-375`)**
+   - *Problem:* Holding down `Ctrl+M` fired key-repeat toggle events, thrashing layout and re-anchoring rapidly.
+   - *Resolution:* Initial keydown toggles the viewer once. Subsequent key-repeats (`e.repeat === true`) keep the viewer image static at the first change state, flickers the indicator via `Statusbar.syncManhwaIndicator(mockState, { preserveSpace: true })` and `syncViewMenu(mockState)`, and commits the landed state on `keyup` or `clearHeldKeys()`.
+
+3. **Status bar indicator ordering and flex gap cleanup (`src/index.html`, `src/css/main.css`, `src/js/menubar/statusbar.js`)**
+   - *Problem:* Inactive empty spans `.status-spread` and `.status-manhwa` produced extra 12px flex gaps between the held/latched scroll modifier indicator and the dimensions readout. Scaling and filter states were not displayed in the status bar.
+   - *Resolution:* Added `.status-spread:empty, .status-manhwa:empty { display: none; }` and `.status-manhwa.hold-flicker-hidden { visibility: hidden; }` to maintain fixed layout width during hold without creating phantom gaps when inactive. Added `status-scaling` and `status-filter` elements in the required order: `status-zoom` · `status-fit` · `status-scaling` · `status-filter`. Gated `#manhwa-indicator` overlay in `syncManhwaIndicator` strictly to `isStatusBarHidden` so it does not flicker in viewport when the status bar is visible in windowed mode.
+
+---
+
 ## Slice 1. Anchor-first mount queue ordering in `manhwaStrip.js`
 
 **Status:** `[x]` Done 2026-10-02. When `prefetchDir === 0`, `_updateWindow` and `_sortMountQueue` sort entries by distance to `anchor`. Runtime telemetry confirmed slot 64 mounts alone ahead of buffer slots (Step 1 frame 9, Step 6 frame 11), resolving the initial 7-frame blackout. 303 mocha tests passing, `node --check` clean.
@@ -38,12 +54,12 @@ Validation note. Keeps sequential worker off-DOM decode intact without blocking 
 
 ## Slice 2. Anchor-guarded bridge release in `viewer.js`
 
-**Status:** `[ ]` Pending.
+**Status:** `[x]` Done 2026-10-02. `_claimSlot()` passes `(imgIdx, imgIdx === _anchorImgIdx)` to `_onSlotMounted`. `viewer.js` validates `if (!isAnchor) return;` before scheduling bridge retirement via `_doubleRaf`. 14-step replay telemetry confirmed 0 blackout frames, 0 anomalies, 0 jank. 303 mocha tests passing, `node --check` and `git diff --check` clean.
 
 Guard bridge retirement so that `#viewer-bridge-layer` only releases when the target anchor slot itself mounts into the DOM, ignoring off-screen buffer slots.
 
-- [ ] In `src/js/viewer/manhwaStrip.js`, export a helper or pass the active anchor column index with `_onSlotMounted(imgIdx, isAnchor)`.
-- [ ] In `src/js/viewer/viewer.js:41-50`, update `setOnSlotMounted((imgIdx, isAnchor) => ...)` to verify whether the mounted slot matches the active anchor:
+- [x] In `src/js/viewer/manhwaStrip.js`, export a helper or pass the active anchor column index with `_onSlotMounted(imgIdx, isAnchor)`.
+- [x] In `src/js/viewer/viewer.js:41-50`, update `setOnSlotMounted((imgIdx, isAnchor) => ...)` to verify whether the mounted slot matches the active anchor:
   ```javascript
   setOnSlotMounted((imgIdx, isAnchor) => {
     pipelines.notifyColumnChanged();
@@ -55,7 +71,7 @@ Guard bridge retirement so that `#viewer-bridge-layer` only releases when the ta
     });
   });
   ```
-- [ ] Accept when off-screen buffer slots (`anchor - 1`, `anchor + 1`) mounting do not trigger `renderer.releaseBridge()`. The bridge stays visible until the anchor slot is mounted.
+- [x] Accept when off-screen buffer slots (`anchor - 1`, `anchor + 1`) mounting do not trigger `renderer.releaseBridge()`. The bridge stays visible until the anchor slot is mounted.
 
 Validation note. Preserves single-concern ownership: `viewer.js` coordinates lifecycle handoffs; `manhwaStrip.js` notifies via callback without reach-in.
 

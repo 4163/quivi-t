@@ -38,9 +38,10 @@ function _doubleRaf(fn) {
   requestAnimationFrame(() => requestAnimationFrame(fn));
 }
 
-setOnSlotMounted(() => {
+setOnSlotMounted((imgIdx, isAnchor) => {
   pipelines.notifyColumnChanged();
   if (!isManhwaStripActive() || !renderer.isBridgeActive()) return;
+  if (!isAnchor) return;
   _doubleRaf(() => {
     // A toggle-off inside these two frames must not spend a stale release
     // on the fresh m->l bridge. The fallback timer owns that retirement.

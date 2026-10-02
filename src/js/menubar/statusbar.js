@@ -1,5 +1,7 @@
 import { FsUtils } from '../fsUtils.js';
 import { Core } from '../core.js';
+import { activeFilterId, FILTER_BY_ID } from '../services/registry.js';
+import { getEffectiveScaling } from '../services/viewerMath.js';
 
 const FIT_LABELS = Object.freeze({
   'window': 'Window',
@@ -15,12 +17,21 @@ const FIT_TITLES = Object.freeze({
   'window': 'Scale to fit entirely within the viewport, stretching small images',
   'window-if-larger': 'Shrink to fit the viewport, but never enlarge small images'
 });
+
+const SCALING_LABELS = Object.freeze({
+  'none': 'Pixelated',
+  'bilinear': 'Bilinear',
+  'lanczos': 'Lanczos'
+});
+
 let statusbar;
 let statusName;
 let statusDims;
 let statusIndex;
 let statusZoom;
 let statusFit;
+let statusScaling;
+let statusFilter;
 let statusScrollZoom;
 let statusSpread;
 let spreadIndicator;
@@ -41,6 +52,8 @@ export const Statusbar = {
     statusIndex = document.querySelector('.status-index');
     statusZoom = document.querySelector('.status-zoom');
     statusFit = document.querySelector('.status-fit');
+    statusScaling = document.querySelector('.status-scaling');
+    statusFilter = document.querySelector('.status-filter');
     statusScrollZoom = document.querySelector('.status-scroll-zoom');
     statusSpread = document.querySelector('.status-spread');
     spreadIndicator = document.getElementById('spread-indicator');
@@ -48,6 +61,7 @@ export const Statusbar = {
     manhwaIndicator = document.getElementById('manhwa-indicator');
     this.syncSpreadIndicator(Core.getState());
     this.syncManhwaIndicator(Core.getState());
+    this.update(Core.getState());
 
     if (typeof window !== 'undefined' && window.addEventListener) {
       window.addEventListener('quivit-download-complete', () => {
@@ -120,14 +134,38 @@ export const Statusbar = {
     }
   },
 
-  syncManhwaIndicator(state) {
+  syncManhwaIndicator(state, options = {}) {
     if (!statusManhwa && !manhwaIndicator) return;
     const s = state || Core.getState();
     const manhwaEnabled = !!(s.manhwaEnabled ?? s.config?.frontend_data?.manhwa_enabled);
     const isManhwaActive = manhwaEnabled && s.mode !== 'empty' && (!s.list || s.list.length > 0);
-    const manhwaText = isManhwaActive ? '[Manhwa View]' : '';
     const isStatusBarHidden = !statusbar || statusbar.classList.contains('hidden');
 
+    if (options.preserveSpace) {
+      if (isStatusBarHidden) {
+        if (statusManhwa && statusManhwa.textContent !== '') {
+          statusManhwa.textContent = '';
+        }
+        if (manhwaIndicator) {
+          manhwaIndicator.textContent = isManhwaActive ? '[Manhwa View]' : '';
+        }
+      } else {
+        if (statusManhwa) {
+          statusManhwa.textContent = '[Manhwa View]';
+          statusManhwa.classList.toggle('hold-flicker-hidden', !isManhwaActive);
+        }
+        if (manhwaIndicator && manhwaIndicator.textContent !== '') {
+          manhwaIndicator.textContent = '';
+        }
+      }
+      return;
+    }
+
+    if (statusManhwa) {
+      statusManhwa.classList.remove('hold-flicker-hidden');
+    }
+
+    const manhwaText = isManhwaActive ? '[Manhwa View]' : '';
     if (isStatusBarHidden) {
       if (manhwaIndicator && manhwaIndicator.textContent !== manhwaText) {
         manhwaIndicator.textContent = manhwaText;
@@ -168,6 +206,27 @@ export const Statusbar = {
       if (statusFit.textContent !== text) {
         statusFit.textContent = text;
         statusFit.title = FIT_TITLES[mode] || '';
+      }
+    }
+
+    if (statusScaling) {
+      const isAnimated = !!state.isAnimated;
+      const rawScaling = state.scalingMode ?? state.config?.frontend_data?.scaling_mode ?? 'bilinear';
+      const effective = getEffectiveScaling(rawScaling, isAnimated, false);
+      const label = SCALING_LABELS[effective] || SCALING_LABELS[rawScaling] || 'Bilinear';
+      const text = `Scale: ${label}`;
+      if (statusScaling.textContent !== text) {
+        statusScaling.textContent = text;
+      }
+    }
+
+    if (statusFilter) {
+      const fid = activeFilterId(state.config?.frontend_data || {});
+      const filterObj = fid ? FILTER_BY_ID.get(fid) : null;
+      const label = filterObj ? filterObj.label : 'Off';
+      const text = `Filter: ${label}`;
+      if (statusFilter.textContent !== text) {
+        statusFilter.textContent = text;
       }
     }
 
