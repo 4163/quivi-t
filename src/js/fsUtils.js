@@ -177,6 +177,10 @@ export const FsUtils = {
     }
   },
 
+  getUnlockedPassword(archivePath) {
+    return _unlockedArchivePasswords.get(archivePath) ?? null;
+  },
+
   revokeIfObjectURL(src) {
     if (src && src.startsWith('blob:')) URL.revokeObjectURL(src);
   },

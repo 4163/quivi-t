@@ -472,3 +472,4 @@ fn spawn_temp_extractor(
 }
 
 pub(crate) use encoding::decode_cjk_name;
+pub(crate) use zip::open_zip_archive;

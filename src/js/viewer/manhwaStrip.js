@@ -58,14 +58,45 @@ const DEFAULT_ESTIMATED_HEIGHT = 1200;
 const DEFAULT_ESTIMATED_WIDTH = 800;
 
 /**
- * Adaptive width estimate. First decoded raster width wins, capped at the
- * default so an outlier never inflates the column. Reset per column build.
- * Heights keep the fixed default: width errors only move the box sideways,
- * height errors shift the view.
+ * Backend-reported max width across the container. Updated by the
+ * manhwa-max-width event from the Rust header sweep. Before any report
+ * arrives, undecoded items fall back to DEFAULT_ESTIMATED_WIDTH.
+ * SVG and ICO dimensions are frontend-handled (special processing).
  */
-let _estWidth = null;
+let _backendMaxWidth = null;
+let _scanContainerKey = null;
 function _widthEstimate() {
-  return _estWidth || DEFAULT_ESTIMATED_WIDTH;
+  return _backendMaxWidth || DEFAULT_ESTIMATED_WIDTH;
+}
+
+function _fireScan() {
+  const isArchive = _lastMode === 'archive';
+  const container = isArchive ? _lastArchivePath : _lastDirectory;
+  if (!container) return;
+  _scanContainerKey = container;
+  const password = isArchive ? FsUtils.getUnlockedPassword?.(container) ?? null : null;
+  window.__TAURI__?.core?.invoke('scan_container_max_width', {
+    container,
+    isArchive,
+    password,
+  }).catch(() => {});
+}
+
+function _onMaxWidthReport(container, maxWidth) {
+  if (!_active || container !== _scanContainerKey || maxWidth <= 0) return;
+  if (_backendMaxWidth !== null && maxWidth <= _backendMaxWidth) return;
+  _backendMaxWidth = maxWidth;
+  for (let i = 0; i < _imageIndex.length; i++) {
+    const item = _imageIndex[i];
+    if (item.decoded) continue;
+    const name = item.entry?.name || item.entry?.path || '';
+    if (/\.svg($|[?#])/i.test(name) || FsUtils.isIco(name)) continue;
+    item.naturalWidth = _backendMaxWidth;
+    const slot = _slots.get(i);
+    if (slot) _setSlotDimensions(slot, _backendMaxWidth);
+  }
+  if (_entryRefreshArmed) _entryRefreshPending = true;
+  _requestLayout();
 }
 
 let _viewport = null;
@@ -647,20 +678,16 @@ function _onItemDecoded(imgIdx, nw, nh) {
   item.naturalHeight = nh;
   item.decoded = true;
 
-  // First decoded raster width becomes the estimate for the rest. Uniform
-  // directories converge at once; the default cap keeps outliers harmless.
-  if (wasEstimated && !isSvg && _estWidth === null && nw > 0) {
-    _estWidth = Math.min(nw, DEFAULT_ESTIMATED_WIDTH);
+  if (wasEstimated && !isSvg && !isIco && _backendMaxWidth === null && nw > 0) {
+    _backendMaxWidth = Math.min(nw, DEFAULT_ESTIMATED_WIDTH);
     for (let i = 0; i < _imageIndex.length; i++) {
       const other = _imageIndex[i];
       if (other.decoded || i === imgIdx) continue;
-      const otherSvg = /\.svg($|[?#])/i.test(other.entry?.name || other.entry?.path || '');
-      if (otherSvg) continue;
-      other.naturalWidth = _estWidth;
+      const name = other.entry?.name || other.entry?.path || '';
+      if (/\.svg($|[?#])/i.test(name) || FsUtils.isIco(name)) continue;
+      other.naturalWidth = _backendMaxWidth;
       const otherSlot = _slots.get(i);
-      if (otherSlot) {
-        _setSlotDimensions(otherSlot, _estWidth);
-      }
+      if (otherSlot) _setSlotDimensions(otherSlot, _backendMaxWidth);
     }
     if (_entryRefreshArmed) _entryRefreshPending = true;
   }
@@ -1679,7 +1706,7 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
         item.naturalWidth = knownW;
         item.naturalHeight = knownH;
         item.decoded = true;
-        if (!_estWidth) _estWidth = knownW;
+
         _updateLayout();
       }
     }
@@ -2105,7 +2132,8 @@ function _activate(state) {
 
   const isLocked = state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect';
   _imageIndex = isLocked ? [] : _buildImageIndex(state.list || []);
-  _estWidth = null;
+  _backendMaxWidth = null;
+  _scanContainerKey = null;
   _lastList = state.list;
   _lastMode = state.mode;
   _lastArchivePath = state.archivePath;
@@ -2138,7 +2166,6 @@ function _activate(state) {
     anchorItem.naturalWidth = knownW;
     anchorItem.naturalHeight = knownH;
     anchorItem.decoded = true;
-    _estWidth = knownW;
   }
 
   _initEstimatedDimensions();
@@ -2157,6 +2184,7 @@ function _activate(state) {
   _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode));
   _armEntryRefresh(false);
 
+  _fireScan();
   _updateWindow();
   _scheduleSettle();
 }
@@ -2278,6 +2306,9 @@ function _deactivate() {
   _layout = { widestWidth: 0, columnWidth: 0, totalHeight: 0, offsets: [] };
   _lastList = null;
   _lastArchiveEncryption = null;
+  _backendMaxWidth = null;
+  _scanContainerKey = null;
+  window.__TAURI__?.core?.invoke('cancel_width_scan').catch(() => {});
 }
 
 function _onStateChange(state) {
@@ -2314,7 +2345,7 @@ function _onStateChange(state) {
     const preserveView = !containerChanged && _anchorImgIdx >= 0;
     const holdTop = preserveView ? _layout.offsets[_anchorImgIdx]?.top || 0 : 0;
     const holdListIndex = preserveView ? _imageIndex[_anchorImgIdx]?.listIndex : undefined;
-    const holdEstWidth = _estWidth;
+    const holdBackendMaxW = _backendMaxWidth;
     // Same-container reload: carried dims keep slots exact so the refresh
     // remounts without replaying the estimate staircase.
     const carryDims = !containerChanged
@@ -2334,7 +2365,7 @@ function _onStateChange(state) {
         }
       }
     }
-    _estWidth = preserveView ? holdEstWidth : null;
+    _backendMaxWidth = preserveView ? holdBackendMaxW : null;
     _lastList = state.list;
     _lastMode = state.mode;
     _lastArchivePath = state.archivePath;
@@ -2387,7 +2418,6 @@ function _onStateChange(state) {
       anchorItem.naturalWidth = knownW;
       anchorItem.naturalHeight = knownH;
       anchorItem.decoded = true;
-      _estWidth = knownW;
     }
 
     _initEstimatedDimensions();
@@ -2405,6 +2435,7 @@ function _onStateChange(state) {
     _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && openAtStart, true);
     _armEntryRefresh(true);
 
+    _fireScan();
     _updateWindow();
     _scheduleSettle();
     return;
@@ -2637,6 +2668,13 @@ export function initManhwaStrip(viewportState) {
   });
 
   Core.onStateChange(_onStateChange);
+
+  if (window.__TAURI__?.event?.listen) {
+    window.__TAURI__.event.listen('manhwa-max-width', (event) => {
+      const { container, max_width } = event.payload || {};
+      _onMaxWidthReport(container, max_width);
+    });
+  }
 
   window.addEventListener('quivit-download-complete', (e) => {
     _admitCompleted(e.detail?.destPath);
