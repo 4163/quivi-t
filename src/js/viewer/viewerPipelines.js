@@ -1986,6 +1986,11 @@ export function createViewerPipelines(viewportState) {
     if (isDirectScreen) {
       rendered = true;
     } else if (compositeFbo) {
+      // Sampling stays identity: the composite already holds the
+      // panned/zoomed viewport view. The subject rect only pins filter
+      // effect coordinates (e.g. the CRT frame) to column content.
+      const colW = snap.columnWidth || 0;
+      const colH = snap.totalHeight || 0;
       const geom = {
         scale: 1,
         tx: 0,
@@ -1995,6 +2000,16 @@ export function createViewerPipelines(viewportState) {
         flipY: 1,
         viewport: { clientWidth: vpW, clientHeight: vpH },
       };
+      if (colW > 0 && colH > 0) {
+        const colVisualW = colW * scale;
+        const colVisualH = colH * scale;
+        geom.subjectRect = {
+          left: vpW / 2 + tx - colVisualW / 2,
+          top: vpH / 2 + ty - colVisualH / 2,
+          width: colVisualW,
+          height: colVisualH,
+        };
+      }
       rendered = _columnPipeline.renderFromTexture(compositeFbo.tex, geom, vpW, vpH);
     }
     if (gen !== _columnGeneration) return;

@@ -360,6 +360,12 @@ export function createGlRuntime(canvas) {
 
     const { scale = 1, tx = 0, ty = 0, rotation = 0, flipX = 1, flipY = 1 } = geometry || {};
     const geomExt = { nw, nh, scale, tx, ty, rotation: rotation || 0, flipX: flipX || 1, flipY: flipY || 1 };
+    // Optional effect-space rect (screen px) for filters whose visuals must
+    // follow subject content rather than the viewport. Sampling stays on the
+    // geometry above; only filters that read subjectRect are affected.
+    if (geometry && geometry.subjectRect) {
+      geomExt.subjectRect = geometry.subjectRect;
+    }
     const vpExt = { width: vpW, height: vpH };
 
     return _executePasses(geomExt, vpExt);
