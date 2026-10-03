@@ -1,0 +1,31 @@
+{
+  "name": "manhwa-directory-entry-fits",
+  "initialPath": "test-files",
+  "initialState": {
+    "index": 0,
+    "manhwa": true
+  },
+  "actions": [
+    "cmd-fit-none",
+    { "action": "jump-to-index", "index": 9, "name": "내 최애는 막차를 탄다 - ch. 75" },
+    { "action": "jump-to-index", "index": 0, "name": ".." },
+    "cmd-fit-width",
+    { "action": "jump-to-index", "index": 9, "name": "내 최애는 막차를 탄다 - ch. 75" },
+    { "action": "jump-to-index", "index": 0, "name": ".." },
+    "cmd-fit-width-if-larger",
+    { "action": "jump-to-index", "index": 9, "name": "내 최애는 막차를 탄다 - ch. 75" },
+    { "action": "jump-to-index", "index": 0, "name": ".." },
+    "cmd-fit-height",
+    { "action": "jump-to-index", "index": 9, "name": "내 최애는 막차를 탄다 - ch. 75" },
+    { "action": "jump-to-index", "index": 0, "name": ".." },
+    "cmd-fit-height-if-larger",
+    { "action": "jump-to-index", "index": 9, "name": "내 최애는 막차를 탄다 - ch. 75" },
+    { "action": "jump-to-index", "index": 0, "name": ".." },
+    "cmd-fit-best",
+    { "action": "jump-to-index", "index": 9, "name": "내 최애는 막차를 탄다 - ch. 75" },
+    { "action": "jump-to-index", "index": 0, "name": ".." },
+    "cmd-fit-window-if-larger",
+    { "action": "jump-to-index", "index": 9, "name": "내 최애는 막차를 탄다 - ch. 75" },
+    { "action": "jump-to-index", "index": 0, "name": ".." }
+  ]
+}
