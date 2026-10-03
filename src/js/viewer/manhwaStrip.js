@@ -1781,7 +1781,13 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
     }
   }
 
-  _anchorHoldover = anchorIdx >= 0 ? anchorIdx : null;
+  // Normal width/1:1 fit press while reading mid-column: keep the vertical
+  // row, center horizontally, and hold no anchor so later layout passes do
+  // not re-pin toward a slot center.
+  const preserveReadingRow = !entry && targetImgIdx === null &&
+    ['width', 'width-if-larger', 'none'].includes(fitMode) &&
+    _firstLastEdge() === 'neither';
+  _anchorHoldover = preserveReadingRow ? null : (anchorIdx >= 0 ? anchorIdx : null);
   _anchorHoldoverScale = targetScale;
   _anchorHoldoverAlignTop = !!alignTop;
   if (targetImgIdx !== null) {
@@ -1793,6 +1799,8 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
     }
   }
 
+  const preScale = _viewportState.getScale() || 1;
+  const centerColY = (_layout.totalHeight || 0) / 2 - (_viewportState.getTy() || 0) / preScale;
   _viewportState.zoomTo(targetScale, vw / 2, vh / 2);
   const colH = (_layout.totalHeight || 0) * targetScale;
 
@@ -1820,6 +1828,10 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
     _lastTy = Math.abs(colH - vh) / 2;
     _lastAnchorTy = _lastTy;
     _viewportState.panTo(0, _lastTy);
+  } else if (preserveReadingRow) {
+    _viewportState.panTo(0, (_layout.totalHeight / 2 - centerColY) * targetScale);
+    _lastTy = _viewportState.getTy();
+    _lastAnchorTy = _lastTy;
   } else {
     _lastTy = _viewportState.getTy();
     _lastAnchorTy = _lastTy;
@@ -1943,6 +1955,32 @@ export function resetZoom(exactScale) {
     let alignTop = _anchorHoldoverAlignTop;
 
     const edge = _firstLastEdge();
+    if (edge === 'neither') {
+      // Normal reading: keep the column content under the viewport center
+      // fixed across the scale change. Raw ty is scale-relative and clamps
+      // wildly on far zoom jumps, so anchor in column coordinates instead.
+      // No holdover, no Core selection change, no slot re-pinning.
+      const holdScale = _viewportState.getScale() || 1;
+      const holdTx = _viewportState.getTx();
+      const holdCenterY = (_layout.totalHeight || 0) / 2 - (_viewportState.getTy() || 0) / holdScale;
+      _anchorHoldover = null;
+      _viewportState.resetZoomOnly(exactScale);
+      const settledScale = _viewportState.getScale() || 1;
+      const resetColH = (_layout.totalHeight || 0) * settledScale;
+      if (resetColH <= vh + 0.5) {
+        _viewportState.panTo(holdTx, Math.abs(resetColH - vh) / 2);
+      } else {
+        _viewportState.panTo(holdTx, (_layout.totalHeight / 2 - holdCenterY) * settledScale);
+      }
+      _lastTy = _viewportState.getTy();
+      _lastAnchorTy = _lastTy;
+      _strip.style.transform = _viewportState.getTransform();
+      _strip.style.setProperty('--zoom-scale', exactScale);
+      _updateGrillAngles();
+      _updateWindow();
+      _scheduleSettle();
+      return true;
+    }
     if (edge === 'first' && _layout.offsets[0]) {
       targetImgIdx = 0;
       alignTop = true;
