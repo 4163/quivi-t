@@ -95,7 +95,15 @@ function _onMaxWidthReport(container, maxWidth) {
     const slot = _slots.get(i);
     if (slot) _setSlotDimensions(slot, _backendMaxWidth);
   }
-  if (_entryRefreshArmed) _entryRefreshPending = true;
+  if (_entryRefreshArmed) {
+    const fit = Core.getState()?.fitMode || _lastFitMode;
+    if (['width', 'width-if-larger', 'window', 'window-if-larger'].includes(fit)) {
+      // Width sweep changes column width. Flush path re-resolves scale
+      // through _resolveStripFitScale, covering Behavior 1 and Behavior 2
+      // width inheritance. Height-only fits skip: scaleY is width independent.
+      _entryRefreshPending = true;
+    }
+  }
   _requestLayout();
 }
 
@@ -689,7 +697,7 @@ function _onItemDecoded(imgIdx, nw, nh) {
       const otherSlot = _slots.get(i);
       if (otherSlot) _setSlotDimensions(otherSlot, _backendMaxWidth);
     }
-    if (_entryRefreshArmed) _entryRefreshPending = true;
+    if (_entryRefreshArmed && performance.now() - _lastPanAt >= 150) _entryRefreshPending = true;
   }
 
   if (wasEstimated && isIco && nh > 0) {
@@ -718,8 +726,21 @@ function _onItemDecoded(imgIdx, nw, nh) {
     if (isIco && (Core.getState()?.fitMode || _lastFitMode) !== 'none') {
       _fitRefreshPending = true;
     }
-    if (_entryRefreshArmed && !_entryRefreshEntry) {
-      _entryRefreshPending = true;
+    if (_entryRefreshArmed) {
+      const activelyPanning = performance.now() - _lastPanAt < 150;
+      if (!activelyPanning) {
+        if (_entryRefreshEntry) {
+          const fit = Core.getState()?.fitMode || _lastFitMode;
+          if (imgIdx === 0) {
+            _entryRefreshPending = true;
+          } else if (!ENTRY_ACTIVE_FITS.includes(fit) && fit !== 'none' && nw > oldW && nw >= (_layout.widestWidth || 0)) {
+            _entryRefreshPending = true;
+          }
+        } else {
+          const widensColumn = nw > oldW && nw >= (_layout.widestWidth || 0);
+          if (widensColumn || nh !== oldH) _entryRefreshPending = true;
+        }
+      }
     }
     _requestLayout();
   }
@@ -1193,7 +1214,7 @@ function _requestLayout() {
     _updateLayout(anchorToHold, oldAnchorTop);
     if (_fitRefreshPending) {
       _fitRefreshPending = false;
-      const fitRefreshEntry = _entryRefreshEntry;
+      const fitRefreshEntry = _entryRefreshEntry && _entryAnchorImgIdx === _anchorImgIdx;
       _disarmEntryRefresh();
       _applyFitMode(Core.getState()?.fitMode || _lastFitMode, _anchorImgIdx, _anchorHoldoverAlignTop, fitRefreshEntry);
       return;
@@ -1205,8 +1226,11 @@ function _requestLayout() {
       _disarmEntryRefresh();
       if (quiet && fit && fit !== 'none') {
         _applyFitMode(fit, _anchorImgIdx, _anchorHoldoverAlignTop, replayEntry);
-        if (!replayEntry && _imageIndex.some((it) => !it.decoded)) {
-          _armEntryRefresh(false);
+        const targetDecided = replayEntry
+          ? (_imageIndex[_anchorImgIdx]?.decoded === true)
+          : !_imageIndex.some((it) => !it.decoded);
+        if (!targetDecided && performance.now() - _lastPanAt >= 150) {
+          _armEntryRefresh(replayEntry);
         }
         return;
       }
@@ -1593,19 +1617,57 @@ const STRIP_TOP_ALIGN_FITS = ['width', 'width-if-larger'];
  * the whole column. The user looks at one image when the strip opens. */
 const ENTRY_ACTIVE_FITS = ['height', 'height-if-larger', 'window', 'window-if-larger'];
 
+/** Centralize directory entry fit scale resolution.
+ * Behavior 2 (first-image entry) sizes height/window families against the
+ * first image; width/none always use the whole column (Behavior 1).
+ * Callers keep viewport pan and alignment separate. */
+function _resolveStripFitScale(fitMode, isEntryFirstImage, anchorIdx) {
+  const vw = _viewport?.clientWidth || 800;
+  const vh = _viewport?.clientHeight || 800;
+  let maxW;
+  let rawSumH;
+  let itemCount;
+  const idx = (anchorIdx !== null && anchorIdx !== undefined) ? anchorIdx : 0;
+  if (isEntryFirstImage && ENTRY_ACTIVE_FITS.includes(fitMode)) {
+    const item = _imageIndex[idx] || _imageIndex[0];
+    maxW = item?.naturalWidth || _widthEstimate();
+    rawSumH = item?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT;
+    itemCount = 1;
+  } else {
+    maxW = (_layout.widestWidth && _layout.widestWidth > 0) ? _layout.widestWidth : _widthEstimate();
+    rawSumH = 0;
+    for (let i = 0; i < _imageIndex.length; i++) {
+      const item = _imageIndex[i];
+      rawSumH += typeof item === 'number' ? item : ((item && (item.naturalHeight ?? item.height)) || DEFAULT_ESTIMATED_HEIGHT);
+    }
+    itemCount = _imageIndex.length;
+  }
+  return computeStripFitScale({
+    fitMode,
+    vw,
+    vh,
+    maxW,
+    rawSumH,
+    itemCount,
+  });
+}
+
 function _disarmEntryRefresh() {
   _entryRefreshArmed = false;
   _entryRefreshArmedAt = 0;
   _entryRefreshPending = false;
-  _entryRefreshEntry = false;
 }
 
 /** Arm the one-shot entry refit after an entry fit. Timestamped after the
  * entry zoom and pan so their own view changes never trip the quiet guard.
- * Directory opens arm fresh-open semantics, toggles arm legacy replay. */
+ * Directory opens arm fresh-open semantics, toggles arm legacy replay.
+ * The entry flag and anchor stay sticky past disarm so late ICO-dimension
+ * refits replay the fit that established the current scale. */
+let _entryAnchorImgIdx = null;
 function _armEntryRefresh(entry) {
   _entryRefreshPending = false;
   _entryRefreshEntry = !!entry;
+  _entryAnchorImgIdx = _anchorImgIdx;
   if (!_active || !_lastFitMode || _lastFitMode === 'none') {
     _entryRefreshArmed = false;
     return;
@@ -1692,9 +1754,6 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   const vw = _viewport.clientWidth || 800;
   const vh = _viewport.clientHeight || 800;
 
-  let maxW = (_layout.widestWidth && _layout.widestWidth > 0) ? _layout.widestWidth : DEFAULT_ESTIMATED_WIDTH;
-  let rawSumH = 0;
-  let itemCount = _imageIndex.length;
   const anchorIdxForEntry = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
   if (anchorIdxForEntry >= 0 && _imageIndex[anchorIdxForEntry]) {
     const item = _imageIndex[anchorIdxForEntry];
@@ -1711,26 +1770,8 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
       }
     }
   }
-  const activeItem = (entry && ENTRY_ACTIVE_FITS.includes(fitMode)) ? _imageIndex[anchorIdxForEntry] : null;
-  if (activeItem) {
-    maxW = activeItem.naturalWidth || DEFAULT_ESTIMATED_WIDTH;
-    rawSumH = activeItem.naturalHeight || DEFAULT_ESTIMATED_HEIGHT;
-    itemCount = 1;
-  } else {
-    for (let i = 0; i < _imageIndex.length; i++) {
-      const item = _imageIndex[i];
-      rawSumH += typeof item === 'number' ? item : ((item && (item.naturalHeight ?? item.height)) || DEFAULT_ESTIMATED_HEIGHT);
-    }
-  }
 
-  const targetScale = computeStripFitScale({
-    fitMode,
-    vw,
-    vh,
-    maxW,
-    rawSumH,
-    itemCount,
-  });
+  const targetScale = _resolveStripFitScale(fitMode, entry, anchorIdxForEntry);
 
   const anchorIdx = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
   if (!entry && alignTop && anchorIdx >= 0 && _layout.offsets[anchorIdx]) {
@@ -2175,14 +2216,15 @@ function _activate(state) {
   _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
   if (_anchorImgIdx < 0) {
     // No mapped selection: the overlay stays up. Scale still applies so a
-    // later pick aligns correctly; nothing mounts or syncs until then.
-    _applyFitMode(_lastFitMode);
-    return;
+    // later pick aligns correctly; scan, window, and settle still run.
+    _applyFitMode(_lastFitMode, null, false, false);
+    _armEntryRefresh(false);
+  } else {
+    // Toggling the view on keeps legacy whole-column fits. Fresh-open
+    // semantics belong to directory opens in _onStateChange below.
+    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), false);
+    _armEntryRefresh(false);
   }
-  // Toggling the view on keeps legacy whole-column fits. Fresh-open
-  // semantics belong to directory opens in _onStateChange below.
-  _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode));
-  _armEntryRefresh(false);
 
   _fireScan();
   _updateWindow();
@@ -2411,29 +2453,23 @@ function _onStateChange(state) {
 
     _anchorImgIdx = _resolveOpenAnchor(state);
 
-    const knownW = state.naturalWidth || (_viewportState?.getNaturalW?.() || 0);
-    const knownH = state.naturalHeight || (_viewportState?.getNaturalH?.() || 0);
-    if (_anchorImgIdx >= 0 && _imageIndex[_anchorImgIdx] && knownW > 0 && knownH > 0) {
-      const anchorItem = _imageIndex[_anchorImgIdx];
-      anchorItem.naturalWidth = knownW;
-      anchorItem.naturalHeight = knownH;
-      anchorItem.decoded = true;
-    }
-
     _initEstimatedDimensions();
     _updateLayout();
 
     _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
     _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
     if (_anchorImgIdx < 0) {
-      // No image selection: the overlay stays up. Scale still applies so a
-      // later pick aligns correctly; nothing mounts or syncs until then.
-      _applyFitMode(_lastFitMode);
-      return;
+      // Behavior 1 entry: no image selection, whole-column fit. The overlay
+      // stays up, but scan, window, and settle still run.
+      _applyFitMode(_lastFitMode, null, false, false);
+      _armEntryRefresh(false);
+    } else {
+      const openFirst = state.config?.frontend_data?.open_first_image === true;
+      const openAtStart = _anchorImgIdx === 0;
+      const isFirstImageEntry = openAtStart && openFirst;
+      _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && openAtStart, isFirstImageEntry);
+      _armEntryRefresh(isFirstImageEntry);
     }
-    const openAtStart = _anchorImgIdx === 0;
-    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && openAtStart, true);
-    _armEntryRefresh(true);
 
     _fireScan();
     _updateWindow();
