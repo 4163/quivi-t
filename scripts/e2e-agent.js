@@ -1,5 +1,5 @@
-// Agent-friendly e2e wrapper: cleans stale processes, fails fast when
-// elevated, runs the suite with output to a file, enforces a timeout with
+// Agent-friendly e2e wrapper: cleans stale processes, relaunches de-elevated
+// when elevated, runs the suite with output to a file, enforces a timeout with
 // full cleanup, and prints a short summary. Exit codes: 0 pass, 1 tests
 // failed, 2 infrastructure (elevated shell, leftover lock, timeout).
 // Extra flags (--split, --layout, --timeout, --replay) are consumed here;
@@ -89,9 +89,24 @@ for (let i = 0; i < rawArgs.length; i++) {
   }
 }
 
+const childArgs = replay ? ['e2e/replay-diagnostics/cli.js'] : ['scripts/e2e.js'];
+if (layout && !replay) {
+  childArgs.push('--layout', layout);
+}
+childArgs.push(...passthrough);
+
 if (isElevated()) {
-  console.error(ELEVATED_MESSAGE);
-  process.exit(2);
+  if (process.env.E2E_NO_DEELEVATE || process.env.E2E_DEELEVATED) {
+    console.error(ELEVATED_MESSAGE);
+    process.exit(2);
+  }
+  console.error('[e2e-agent] elevated shell; relaunching de-elevated...');
+  const res = spawnSync(
+    'python',
+    ['scripts/e2e-de_elevated.py', '--cwd', repoRoot, '--', 'node', 'scripts/e2e-agent.js', ...rawArgs],
+    { cwd: repoRoot, stdio: 'inherit', shell: false, timeout: timeoutMs + 60000 }
+  );
+  process.exit(res.status ?? 2);
 }
 
 killStale();
@@ -105,12 +120,6 @@ const logDir = path.join(repoRoot, 'e2e', '.agent-logs');
 mkdirSync(logDir, { recursive: true });
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const logPath = path.join(logDir, `e2e-agent-${stamp}.log`);
-
-const childArgs = replay ? ['e2e/replay-diagnostics/cli.js'] : ['scripts/e2e.js'];
-if (layout && !replay) {
-  childArgs.push('--layout', layout);
-}
-childArgs.push(...passthrough);
 
 const res = spawnSync('node', childArgs, {
   cwd: repoRoot,

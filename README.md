@@ -234,13 +234,13 @@ Tests and syntax checks:
 npm run mocha                                              # Frontend unit tests
 npm run e2e                                                # End-to-end tests (portable layout)
 npm run e2e -- --split                                     # End-to-end tests (split layout)
-npm run e2e -- --agent --spec e2e/specs/01-startup.e2e.js  # Agent runner (cleanup, logging, etc.)
+npm run e2e -- --agent --spec e2e/specs/01-startup.e2e.js  # Agent runner (de-elevated relaunch)
 cargo test --manifest-path src-tauri/Cargo.toml            # Rust tests
 cd src-tauri && cargo check                                # Rust compile check
 node --check src/js/main/main.js                           # Syntax-check a JS file
 ```
 
-Run E2E tests in a non-elevated terminal. WebView2 remote debugging cannot attach under Administrator.
+Run E2E tests in a non-elevated terminal with `--agent`. WebView2 remote debugging cannot attach under Administrator.
 
 ### Action recorder and replay diagnostics
 
@@ -313,19 +313,11 @@ QuiviT/
 │  ├─ scenarios/                  # Saved recordings
 │  └─ specs/                      # End-to-end test scripts
 ├─ mocha/                         # Frontend unit tests, outside src/
-│  ├─ actions.test.js             # Shortcuts and commands
-│  ├─ cache.test.js               # Size-capped caches
-│  ├─ core.test.js                # App state changes
-│  ├─ diagnosticsContract.test.js # Recording and probe contracts
-│  ├─ metadata.test.js            # Comic and gallery metadata
-│  ├─ sorting.test.js             # Sort order and saved items grouping
-│  ├─ urlLoader.test.js           # URL import rules
-│  ├─ urlLoaderFlows.test.js      # URL import flows
-│  └─ viewerMath.test.js          # Zoom, pan, fit, and spread
 ├─ scripts/                       # Dev and test runner scripts
 │  ├─ dev.js                      # npm run dev with isolated config
 │  ├─ e2e.js                      # npm run e2e with layout selection
-│  └─ e2e-agent.js                # npm run e2e with --agent cleanup
+│  ├─ e2e-agent.js                # npm run e2e with --agent, runs de-elevated
+│  └─ e2e-de_elevated.py          # Relaunch the suite de-elevated
 ├─ extractors/ (orphan branch)    # Site support, fetched while the app runs
 ├─ src/
 │  ├─ index.html                  # Main window

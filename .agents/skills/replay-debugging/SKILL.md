@@ -36,7 +36,7 @@ If an existing report already exists, inspect the latest metrics without launchi
 npm run diagnose -- --inspect [scenario]
 ```
 
-If the runner reports an elevated shell, retry the run non-elevated with `--agent`.
+If the runner reports an elevated shell, retry the run with `--agent`, which relaunches de-elevated automatically.
 
 ### 2. Analyze the anomaly report
 
