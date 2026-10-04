@@ -763,94 +763,122 @@ export function initReplayDiagnostics() {
   });
 
   // =========================================================================
-  // 5. MANHWA GHOST PROBE (investigation only)
-  // Flags the WebGL column canvas staying visible while the strip has no
-  // decoded image for the current directory. Under phosphor the DOM slots
-  // are hidden by design, so decoded-ness (complete + naturalWidth) is the
-  // signal, not visibility. A ghost frame is canvas-visible with zero
-  // decoded strip images after a container switch.
+  // 5. M-TO-L BRIDGE PROBE (investigation only)
+  // Catches the manhwa-column teardown to legacy-filter-canvas handoff.
+  // Logs per-frame paintability of both canvases plus bridge/active image
+  // decode state, and flags any frame where nothing can paint.
   // =========================================================================
-  let _ghostCore = null;
-  let _ghostStepDir = null;
+  let _mlPrevColReady = null;
+  let _mlPrevLegReady = null;
+  let _mlTearT = null;
+  let _mlObserverOn = false;
 
-  function _ghostLoadCore() {
-    if (_ghostCore) return Promise.resolve(_ghostCore);
-    return import('/js/core.js').then((m) => {
-      _ghostCore = m.Core || null;
-      return _ghostCore;
-    }).catch(() => null);
-  }
-
-  function _ghostSig() {
-    const strip = document.getElementById('manhwa-strip');
-    const imgs = Array.from(strip?.querySelectorAll('.manhwa-slot img') || []);
-    const decoded = imgs.filter((im) => im && im.complete && im.naturalWidth > 0);
-    const slots = imgs.slice(0, 3).map((im) => ({
-      colIdx: im.dataset?.imgIdx ?? null,
-      nw: im.naturalWidth || 0,
-      complete: !!im.complete,
-      srcTail: (im.getAttribute('src') || im.src || '').split('/').pop()?.slice(0, 40) || null,
-    }));
-    const canvas = document.getElementById('manhwa-filter-canvas');
-    const ready = canvas?.getAttribute('data-render-ready') === 'true';
-    const op = canvas ? parseFloat(window.getComputedStyle(canvas).opacity) || 0 : 0;
-    const r = canvas ? canvas.getBoundingClientRect() : null;
-    const canvasVisible = !!(canvas && ready && op > 0 && r && r.width > 0 && r.height > 0);
-    let dir = null;
-    let listLength = null;
-    try {
-      const st = _ghostCore?.getState?.();
-      if (st) {
-        dir = st.directory || st.archivePath || '';
-        listLength = st.list?.length ?? 0;
-      }
-    } catch { /* state not ready */ }
+  function _mlImgSig(img) {
+    if (!img) return null;
+    let op = 0;
+    try { op = parseFloat(window.getComputedStyle(img).opacity) || 0; } catch { op = 0; }
+    const r = img.getBoundingClientRect ? img.getBoundingClientRect() : null;
     return {
-      dir,
-      listLength,
-      slotCount: imgs.length,
-      decodedCount: decoded.length,
-      slots,
-      canvasReady: ready,
-      canvasOpacity: op,
-      canvasVisible,
-      filter: document.getElementById('viewport')?.getAttribute('data-filter') || null,
+      complete: !!img.complete,
+      nw: img.naturalWidth || 0,
+      nh: img.naturalHeight || 0,
+      op,
+      w: r ? Math.round(r.width) : 0,
+      srcTail: ((img.getAttribute && img.getAttribute('src')) || img.src || '').split('/').pop()?.slice(0, 24) || null,
     };
   }
 
-  registerProbe('manhwa-ghost', {
+  function _mlCanvasSig(id) {
+    const c = document.getElementById(id);
+    if (!c) return { exists: false };
+    let op = 0;
+    try { op = parseFloat(window.getComputedStyle(c).opacity) || 0; } catch { op = 0; }
+    const r = c.getBoundingClientRect ? c.getBoundingClientRect() : null;
+    return {
+      exists: true,
+      ready: c.getAttribute('data-render-ready') === 'true',
+      op,
+      w: r ? Math.round(r.width) : 0,
+      h: r ? Math.round(r.height) : 0,
+    };
+  }
+
+  registerProbe('ml-bridge', {
     onStepStart() {
-      _ghostLoadCore().then(() => {
-        try {
-          const st = _ghostCore?.getState?.();
-          _ghostStepDir = st ? (st.directory || st.archivePath || '') : null;
-        } catch { _ghostStepDir = null; }
-        recordEvent('ghost', 'step-start', _ghostSig());
+      _mlPrevColReady = null;
+      _mlPrevLegReady = null;
+      _mlTearT = null;
+      const vp = document.getElementById('viewport');
+      recordEvent('ml', 'step-start', {
+        manhwa: vp?.classList.contains('manhwa-active') || false,
+        col: _mlCanvasSig('manhwa-filter-canvas'),
+        leg: _mlCanvasSig('viewer-filter-canvas'),
       });
-    },
-    onStepStop() {
-      try {
-        const sig = _ghostSig();
-        recordAnomaly('ghost-step-summary', { ...sig, stepDir: _ghostStepDir });
-      } catch (err) {
-        recordAnomaly('ghost-probe-error', { message: String(err) });
+      if (!_mlObserverOn && typeof MutationObserver !== 'undefined' && vp) {
+        _mlObserverOn = true;
+        const obs = new MutationObserver((mutations) => {
+          for (const m of mutations) {
+            if (m.type !== 'attributes' || m.attributeName !== 'data-render-ready') continue;
+            const id = m.target.id || m.target.className || '?';
+            if (id !== 'manhwa-filter-canvas' && id !== 'viewer-filter-canvas') continue;
+            const wrap = document.getElementById('viewer-img-wrapper');
+            const bridge = wrap?.querySelector('.viewer-img.bridge') || document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge');
+            const active = wrap?.querySelector('.viewer-img.active');
+            recordEvent('ml', 'canvas-flip', {
+              canvasId: id,
+              ready: m.target.getAttribute('data-render-ready') === 'true',
+              manhwa: document.getElementById('viewport')?.classList.contains('manhwa-active') || false,
+              bridge: _mlImgSig(bridge),
+              active: _mlImgSig(active),
+            });
+          }
+        });
+        obs.observe(vp, { attributes: true, subtree: true, attributeFilter: ['data-render-ready'] });
       }
     },
     checkFrame(frameCtx) {
-      const viewport = document.getElementById('viewport');
-      if (!viewport?.classList.contains('manhwa-active')) return null;
-      const sig = _ghostSig();
-      if (sig.canvasVisible && sig.decodedCount === 0) {
+      const vp = document.getElementById('viewport');
+      const col = _mlCanvasSig('manhwa-filter-canvas');
+      const leg = _mlCanvasSig('viewer-filter-canvas');
+      const wrap = document.getElementById('viewer-img-wrapper');
+      const bridge = wrap?.querySelector('.viewer-img.bridge') || document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge');
+      const active = wrap?.querySelector('.viewer-img.active');
+      const b = _mlImgSig(bridge);
+      const a = _mlImgSig(active);
+
+      if (_mlPrevColReady === true && col.ready === false) {
+        _mlTearT = frameCtx.relMs;
+        recordEvent('ml', 'column-torn-down', { t: frameCtx.relMs, leg, bridge: b, active: a });
+      }
+      if (_mlPrevLegReady === false && leg.ready === true && _mlTearT !== null) {
+        recordAnomaly('ml-handoff', {
+          tearT: _mlTearT,
+          paintT: frameCtx.relMs,
+          gapMs: parseFloat((frameCtx.relMs - _mlTearT).toFixed(1)),
+          bridge: b,
+          active: a,
+        });
+        _mlTearT = null;
+      }
+      _mlPrevColReady = col.ready;
+      _mlPrevLegReady = leg.ready;
+
+      const colPaintable = col.exists && col.ready && col.op > 0 && col.w > 0;
+      const legPaintable = leg.exists && leg.ready && leg.op > 0 && leg.w > 0;
+      const imgPaintable = (s) => !!(s && s.complete && s.nw > 0 && s.op > 0 && s.w > 0);
+      const strip = document.getElementById('manhwa-strip');
+      const simgs = Array.from(strip?.querySelectorAll('.manhwa-slot img') || []);
+      const stripDecoded = simgs.filter((im) => im && im.complete && im.naturalWidth > 0).length;
+      if (!colPaintable && !legPaintable && !imgPaintable(b) && !imgPaintable(a) && stripDecoded === 0) {
         return {
-          type: 'ghost-frame',
+          type: 'ml-blank',
           t: frameCtx.relMs,
-          dir: sig.dir,
-          listLength: sig.listLength,
-          slotCount: sig.slotCount,
-          decodedCount: sig.decodedCount,
-          slots: sig.slots,
-          canvasReady: sig.canvasReady,
-          filter: sig.filter,
+          manhwa: vp?.classList.contains('manhwa-active') || false,
+          colReady: col.ready,
+          legReady: leg.ready,
+          bridge: b,
+          active: a,
+          stripDecoded,
         };
       }
       return null;

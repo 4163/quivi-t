@@ -1,0 +1,18 @@
+{
+  "name": "legacy-to-manhwa-crt",
+  "initialPath": "test-files/내 최애는 막차를 탄다 - ch. 75",
+  "initialState": {
+    "index": 64,
+    "manhwa": false,
+    "pipeline": {
+      "filter": "crt",
+      "fitMode": "width-if-larger",
+      "scaling": "bilinear"
+    }
+  },
+  "actions": [
+    "cmd-fit-width-if-larger",
+    "cmd-fit-width-if-larger",
+    "cmd-toggle-manhwa"
+  ]
+}

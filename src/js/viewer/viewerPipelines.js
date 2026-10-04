@@ -886,10 +886,19 @@ export function createViewerPipelines(viewportState) {
   }
 
   Core.onStateChange((state) => {
+    const enteringManhwa = !!state.manhwaEnabled && !_columnWasManhwa;
+    _columnWasManhwa = !!state.manhwaEnabled;
     if (state.manhwaEnabled) {
       // Legacy pipeline parks. The column pipeline takes over from here.
       _cancelRender();
       _stopLivePump();
+      if (enteringManhwa) {
+        // Drop the stale legacy marker. It would hide the parked bridge
+        // and the mounting slots while the column has not painted yet,
+        // blanking the whole viewport. The first column paint re-sets it.
+        const vp = document.getElementById('viewport');
+        if (vp && vp.hasAttribute('data-filter')) vp.removeAttribute('data-filter');
+      }
       const containerKey = _columnKeyFor(state);
       const containerChanged = _columnContainerKey !== null && containerKey !== _columnContainerKey;
       if (containerChanged) {
@@ -985,6 +994,9 @@ export function createViewerPipelines(viewportState) {
    * frame so the previous folder never lingers as a ghost while the strip
    * rebuilds behind the width gate. */
   let _columnContainerKey = null;
+  /** Previous notify's manhwa state. Detects the legacy-to-manhwa edge so
+   * entry work runs once instead of on every notify while active. */
+  let _columnWasManhwa = false;
 
   function _columnKeyFor(state) {
     if (!state) return null;
