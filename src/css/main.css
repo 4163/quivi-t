@@ -1720,6 +1720,13 @@ li:hover>.favorite-remove,
   display: none;
 }
 
+/* Entry warmup: keep the legacy filtered frame up until the column paints.
+ * Opacity still follows data-render-ready, so a never-painted canvas stays
+ * invisible and only a real frame bridges the swap. */
+#viewport.manhwa-active.manhwa-warmup #viewer-filter-canvas {
+  display: block;
+}
+
 #viewport:not(.manhwa-active) #manhwa-indicator {
   display: none;
 }

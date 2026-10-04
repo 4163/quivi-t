@@ -898,6 +898,10 @@ export function createViewerPipelines(viewportState) {
         // blanking the whole viewport. The first column paint re-sets it.
         const vp = document.getElementById('viewport');
         if (vp && vp.hasAttribute('data-filter')) vp.removeAttribute('data-filter');
+        // Bridge the filtered frame: keep the legacy canvas up until the
+        // column paints. Opacity still follows data-render-ready, so this
+        // is a no-op when the legacy canvas never painted.
+        if (vp) vp.classList.add('manhwa-warmup');
       }
       const containerKey = _columnKeyFor(state);
       const containerChanged = _columnContainerKey !== null && containerKey !== _columnContainerKey;
@@ -910,6 +914,10 @@ export function createViewerPipelines(viewportState) {
       }
       _columnContainerKey = containerKey;
       _syncColumnPipeline(state);
+      if (!_columnPipeline) {
+        // No WebGL column (filter off, bilinear): nothing to wait for.
+        document.getElementById('viewport')?.classList.remove('manhwa-warmup');
+      }
       if (containerChanged && _columnFilter) {
         // Teardown cleared the marker. Keep slots hidden behind the blank
         // canvas until the new column paints.
@@ -1450,6 +1458,7 @@ export function createViewerPipelines(viewportState) {
 
   function _teardownColumn() {
     _columnGeneration++;
+    document.getElementById('viewport')?.classList.remove('manhwa-warmup');
     if (_columnRafId) {
       cancelAnimationFrame(_columnRafId);
       _columnRafId = 0;
@@ -2058,6 +2067,7 @@ export function createViewerPipelines(viewportState) {
     if (rendered && _columnCanvas) {
       _columnCanvas.setAttribute('data-render-ready', 'true');
       if (vp) vp.setAttribute('data-filter', _columnFilter);
+      if (vp) vp.classList.remove('manhwa-warmup');
       _columnVisible = true;
     }
   }

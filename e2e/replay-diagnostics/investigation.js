@@ -792,22 +792,39 @@ export function initReplayDiagnostics() {
     const c = document.getElementById(id);
     if (!c) return { exists: false };
     let op = 0;
-    try { op = parseFloat(window.getComputedStyle(c).opacity) || 0; } catch { op = 0; }
+    let display = '?';
+    try {
+      const cs = window.getComputedStyle(c);
+      op = parseFloat(cs.opacity) || 0;
+      display = cs.display || '?';
+    } catch { op = 0; }
     const r = c.getBoundingClientRect ? c.getBoundingClientRect() : null;
+    const ready = c.getAttribute('data-render-ready') === 'true';
+    const w = r ? Math.round(r.width) : 0;
+    const h = r ? Math.round(r.height) : 0;
     return {
       exists: true,
-      ready: c.getAttribute('data-render-ready') === 'true',
+      ready,
       op,
-      w: r ? Math.round(r.width) : 0,
-      h: r ? Math.round(r.height) : 0,
+      display,
+      w,
+      h,
+      shown: ready && op > 0 && display !== 'none' && w > 0 && h > 0,
     };
   }
+
+  // First/last timestamp of the unfiltered middle window per step, where
+  // the legacy GL canvas is already hidden but the column has not painted.
+  let _glGapStart = null;
+  let _glGapEnd = null;
 
   registerProbe('ml-bridge', {
     onStepStart() {
       _mlPrevColReady = null;
       _mlPrevLegReady = null;
       _mlTearT = null;
+      _glGapStart = null;
+      _glGapEnd = null;
       const vp = document.getElementById('viewport');
       recordEvent('ml', 'step-start', {
         manhwa: vp?.classList.contains('manhwa-active') || false,
@@ -869,6 +886,33 @@ export function initReplayDiagnostics() {
       const strip = document.getElementById('manhwa-strip');
       const simgs = Array.from(strip?.querySelectorAll('.manhwa-slot img') || []);
       const stripDecoded = simgs.filter((im) => im && im.complete && im.naturalWidth > 0).length;
+      const inManhwa = vp?.classList.contains('manhwa-active') || false;
+
+      // Unfiltered middle window: legacy GL hidden, column not up, but
+      // unfiltered DOM content (bridge or mounting slots) is on screen.
+      // This is the stretch a WebGL bridge would keep filtered.
+      const domCover = imgPaintable(b) || imgPaintable(a) || stripDecoded > 0;
+      if (inManhwa && !col.shown && !leg.shown && domCover) {
+        if (_glGapStart === null) {
+          _glGapStart = frameCtx.relMs;
+          recordEvent('ml', 'gl-gap-start', {
+            t: frameCtx.relMs,
+            legDisplay: leg.display,
+            legReady: leg.ready,
+            bridge: b,
+            stripDecoded,
+          });
+        }
+        _glGapEnd = frameCtx.relMs;
+      } else if (_glGapStart !== null && (col.shown || !inManhwa)) {
+        recordAnomaly('gl-gap', {
+          startT: _glGapStart,
+          endT: frameCtx.relMs,
+          spanMs: parseFloat((frameCtx.relMs - _glGapStart).toFixed(1)),
+        });
+        _glGapStart = null;
+        _glGapEnd = null;
+      }
       if (!colPaintable && !legPaintable && !imgPaintable(b) && !imgPaintable(a) && stripDecoded === 0) {
         return {
           type: 'ml-blank',
@@ -882,6 +926,13 @@ export function initReplayDiagnostics() {
         };
       }
       return null;
+    },
+    onStepStop() {
+      if (_glGapStart !== null) {
+        recordAnomaly('gl-gap-open', { startT: _glGapStart, lastT: _glGapEnd });
+        _glGapStart = null;
+        _glGapEnd = null;
+      }
     },
   });
 
