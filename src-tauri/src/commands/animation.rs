@@ -94,10 +94,26 @@ fn emit_max_width(app: &tauri::AppHandle, container: &str, w: u32) {
     );
 }
 
+/// Terminal sweep signal carrying the final max (possibly 0). Stale
+/// generations stay silent; every other exit path reports so the frontend
+/// never waits on a finished sweep.
+fn emit_scan_done(app: &tauri::AppHandle, container: &str, max_w: u32, gen: u64) {
+    if SCAN_GENERATION.load(Ordering::Relaxed) != gen {
+        return;
+    }
+    let _ = app.emit(
+        "manhwa-max-width",
+        serde_json::json!({ "container": container, "max_width": max_w, "done": true }),
+    );
+}
+
 fn scan_directory_widths(dir: &str, app: &tauri::AppHandle, max_w: &mut u32, gen: u64) {
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
-        Err(_) => return,
+        Err(_) => {
+            emit_scan_done(app, dir, *max_w, gen);
+            return;
+        }
     };
     for entry in entries.flatten() {
         if SCAN_GENERATION.load(Ordering::Relaxed) != gen {
@@ -134,6 +150,7 @@ fn scan_directory_widths(dir: &str, app: &tauri::AppHandle, max_w: &mut u32, gen
             }
         }
     }
+    emit_scan_done(app, dir, *max_w, gen);
 }
 
 fn scan_archive_widths(
@@ -160,7 +177,10 @@ fn scan_zip_archive_widths(
 ) {
     let mut archive = match crate::archives::open_zip_archive(archive_path) {
         Ok(a) => a,
-        Err(_) => return,
+        Err(_) => {
+            emit_scan_done(app, archive_path, *max_w, gen);
+            return;
+        }
     };
     let count = archive.len();
     for i in 0..count {
@@ -210,6 +230,7 @@ fn scan_zip_archive_widths(
             }
         }
     }
+    emit_scan_done(app, archive_path, *max_w, gen);
 }
 
 fn scan_temp_archive_widths(
@@ -237,7 +258,10 @@ fn scan_temp_archive_widths(
 
     let (temp_dir, notify) = match extraction_state {
         Some(s) => s,
-        None => return,
+        None => {
+            emit_scan_done(app, archive_path, *max_w, gen);
+            return;
+        }
     };
 
     let (lock, cvar) = &*notify;
@@ -304,4 +328,5 @@ fn scan_temp_archive_widths(
             }
         }
     }
+    emit_scan_done(app, archive_path, *max_w, gen);
 }

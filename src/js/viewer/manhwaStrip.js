@@ -51,23 +51,29 @@ const PREFETCH_CONCURRENT_MAX = 2;
  * this interval keeps the panel following mid-hold; settle still commits. */
 const STRIP_SYNC_HEARTBEAT_MS = 150;
 
-/** Initial estimated height for images before decode. */
+/** Initial estimated height for images before decode. Widths are never
+ * estimated: they resolve from first reported dims (decode or sweep). */
 const DEFAULT_ESTIMATED_HEIGHT = 1200;
 
-/** Initial estimated width for images before decode. */
-const DEFAULT_ESTIMATED_WIDTH = 800;
-
 /**
- * Backend-reported max width across the container. Updated by the
- * manhwa-max-width event from the Rust header sweep. Before any report
- * arrives, undecoded items fall back to DEFAULT_ESTIMATED_WIDTH.
- * SVG and ICO dimensions are frontend-handled (special processing).
+ * Widest width observed for the current container. Fed by the backend
+ * header sweep and the decode pipeline alike; backend reports always win
+ * by overwrite. Reset on every container change, never reused.
+ * SVG measured dims feed it; ICO spritesheet dims stay out.
  */
-let _backendMaxWidth = null;
+let _trackedMaxWidth = null;
 let _scanContainerKey = null;
 function _widthEstimate() {
-  return _backendMaxWidth || DEFAULT_ESTIMATED_WIDTH;
+  return _trackedMaxWidth || 0;
 }
+
+/** First-paint gate: entry layout waits for first reported dims so the
+ * column never paints from a guess. Opens on first decode, first sweep
+ * report, sweep completion, or timeout, whichever lands first. */
+const WIDTH_GATE_TIMEOUT_MS = 2000;
+let _widthGateKey = null;
+let _widthGateTimer = 0;
+let _widthGateToggle = false;
 
 function _fireScan() {
   const isArchive = _lastMode === 'archive';
@@ -82,20 +88,24 @@ function _fireScan() {
   }).catch(() => {});
 }
 
-function _onMaxWidthReport(container, maxWidth) {
-  if (!_active || container !== _scanContainerKey || maxWidth <= 0) return;
-  if (_backendMaxWidth !== null && maxWidth <= _backendMaxWidth) return;
-  _backendMaxWidth = maxWidth;
-  for (let i = 0; i < _imageIndex.length; i++) {
-    const item = _imageIndex[i];
-    if (item.decoded) continue;
-    const name = item.entry?.name || item.entry?.path || '';
-    if (/\.svg($|[?#])/i.test(name) || FsUtils.isIco(name)) continue;
-    item.naturalWidth = _backendMaxWidth;
-    const slot = _slots.get(i);
-    if (slot) _setSlotDimensions(slot, _backendMaxWidth);
+function _onMaxWidthReport(container, maxWidth, done = false) {
+  if (!_active || container !== _scanContainerKey) return;
+  if (maxWidth <= 0 && !done) return;
+  let grew = false;
+  if (maxWidth > 0 && maxWidth > (_trackedMaxWidth || 0)) {
+    _trackedMaxWidth = maxWidth;
+    for (let i = 0; i < _imageIndex.length; i++) {
+      const item = _imageIndex[i];
+      if (item.decoded) continue;
+      const name = item.entry?.name || item.entry?.path || '';
+      if (/\.svg($|[?#])/i.test(name) || FsUtils.isIco(name)) continue;
+      item.naturalWidth = _trackedMaxWidth;
+      const slot = _slots.get(i);
+      if (slot) _setSlotDimensions(slot, _trackedMaxWidth);
+    }
+    grew = true;
   }
-  if (_entryRefreshArmed) {
+  if (_entryRefreshArmed && grew) {
     const fit = Core.getState()?.fitMode || _lastFitMode;
     if (['width', 'width-if-larger', 'window', 'window-if-larger'].includes(fit)) {
       // Width sweep changes column width. Flush path re-resolves scale
@@ -104,7 +114,121 @@ function _onMaxWidthReport(container, maxWidth) {
       _entryRefreshPending = true;
     }
   }
+  _maybeOpenWidthGate();
   _requestLayout();
+}
+
+/** Open the first-paint width gate when first dims are in. The gate fires
+ * once per container entry, on the first backend report, sweep completion,
+ * decoded item, or timeout, whichever lands first. */
+function _maybeOpenWidthGate() {
+  if (_widthGateKey === null || !_active) return;
+  const wasToggle = _widthGateToggle;
+  _widthGateKey = null;
+  _widthGateToggle = false;
+  if (_widthGateTimer) {
+    clearTimeout(_widthGateTimer);
+    _widthGateTimer = 0;
+  }
+  _finishContainerEntry(wasToggle);
+}
+
+function _clearWidthGate() {
+  _widthGateKey = null;
+  _widthGateToggle = false;
+  if (_widthGateTimer) {
+    clearTimeout(_widthGateTimer);
+    _widthGateTimer = 0;
+  }
+}
+
+/** Hold first paint until first reported dims land. Runs immediately when
+ * dims are already known (carried, hydrated, or empty index); otherwise
+ * waits for the first decode, sweep report, sweep completion, or timeout. */
+function _openWidthGate(isToggle = false) {
+  _clearWidthGate();
+  if (_imageIndex.length === 0 || _imageIndex.some((it) => it.decoded)) {
+    _finishContainerEntry(isToggle);
+    return;
+  }
+  const st = Core.getState();
+  _widthGateKey = st.mode === 'archive' ? (st.archivePath || '') : (st.directory || '');
+  _widthGateToggle = isToggle;
+  _probeGateDims();
+  _widthGateTimer = setTimeout(() => {
+    _widthGateKey = null;
+    _widthGateTimer = 0;
+    const wasToggle = _widthGateToggle;
+    _widthGateToggle = false;
+    _finishContainerEntry(wasToggle);
+  }, WIDTH_GATE_TIMEOUT_MS);
+}
+
+/** Upfront decode of the entry target so first paint resolves from real
+ * dims. Stale probes (rebuilt index) no-op; failures leave the gate to
+ * the sweep, completion, or timeout. */
+function _probeGateDims() {
+  const imgIdx = _anchorImgIdx >= 0 ? _anchorImgIdx : 0;
+  const item = _imageIndex[imgIdx];
+  if (!item || item.decoded) return;
+  let src = null;
+  try {
+    src = _buildSrc(item.entry, Core.getState());
+  } catch {
+    src = null;
+  }
+  if (!src) return;
+  const done = (w, h) => {
+    if (_imageIndex[imgIdx] !== item || w <= 0 || h <= 0) return;
+    _onItemDecoded(imgIdx, w, h);
+  };
+  if (item.kind === 'video') {
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.muted = true;
+    probe.crossOrigin = 'anonymous';
+    probe.onloadedmetadata = () => done(probe.videoWidth || 0, probe.videoHeight || 0);
+    probe.onerror = () => {};
+    probe.src = src;
+    return;
+  }
+  const probe = new Image();
+  probe.crossOrigin = 'anonymous';
+  probe.decoding = 'async';
+  probe.onload = () => done(probe.naturalWidth || 0, probe.naturalHeight || 0);
+  probe.onerror = () => {};
+  probe.src = src;
+}
+
+/** Complete a gated container entry once first dims are in. Re-resolves
+ * the anchor so mid-gate navigation is honored, then runs the standard
+ * entry sequence against observed widths. Toggles keep legacy fits. */
+function _finishContainerEntry(isToggle = false) {
+  if (!_active) return;
+  _anchorImgIdx = _resolveOpenAnchor(Core.getState());
+  _initEstimatedDimensions();
+  _updateLayout();
+
+  if (_anchorImgIdx < 0) {
+    // Behavior 1 entry: no image selection, whole-column fit. The overlay
+    // stays up, but scan, window, and settle still run.
+    _applyFitMode(_lastFitMode, null, false, false);
+    _armEntryRefresh(false);
+  } else if (isToggle) {
+    // Toggling the view on keeps legacy whole-column fits. Fresh-open
+    // semantics belong to directory opens below.
+    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), false);
+    _armEntryRefresh(false);
+  } else {
+    const openFirst = Core.getState()?.config?.frontend_data?.open_first_image === true;
+    const openAtStart = _anchorImgIdx === 0;
+    const isFirstImageEntry = openAtStart && openFirst;
+    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && openAtStart, isFirstImageEntry);
+    _armEntryRefresh(isFirstImageEntry);
+  }
+
+  _updateWindow();
+  _scheduleSettle();
 }
 
 let _viewport = null;
@@ -395,7 +519,7 @@ function _handleStripImgError(event) {
   if (!Number.isFinite(imgIdx)) return;
   const item = _imageIndex[imgIdx];
   // No failure UI by policy.
-  _onItemDecoded(imgIdx, item?.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
+  _onItemDecoded(imgIdx, item?.naturalWidth || _widthEstimate(), item?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
   if (_mountInFlight === imgIdx) {
     _mountInFlight = -1;
     _advanceMountQueue();
@@ -420,7 +544,7 @@ function _handleStripVideoError(event) {
   if (!Number.isFinite(imgIdx)) return;
   const item = _imageIndex[imgIdx];
   // No failure UI by policy.
-  _onItemDecoded(imgIdx, item?.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
+  _onItemDecoded(imgIdx, item?.naturalWidth || _widthEstimate(), item?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
   if (_mountInFlight === imgIdx) {
     _mountInFlight = -1;
     _advanceMountQueue();
@@ -686,16 +810,19 @@ function _onItemDecoded(imgIdx, nw, nh) {
   item.naturalHeight = nh;
   item.decoded = true;
 
-  if (wasEstimated && !isSvg && !isIco && _backendMaxWidth === null && nw > 0) {
-    _backendMaxWidth = Math.min(nw, DEFAULT_ESTIMATED_WIDTH);
+  // Running container max: any observed width beats the record so the
+  // column only ever grows from real data. ICO spritesheet dims stay out;
+  // measured svg dims count. Backend reports overwrite via the same rule.
+  if (!isIco && nw > 0 && nw > (_trackedMaxWidth || 0)) {
+    _trackedMaxWidth = nw;
     for (let i = 0; i < _imageIndex.length; i++) {
       const other = _imageIndex[i];
       if (other.decoded || i === imgIdx) continue;
       const name = other.entry?.name || other.entry?.path || '';
       if (/\.svg($|[?#])/i.test(name) || FsUtils.isIco(name)) continue;
-      other.naturalWidth = _backendMaxWidth;
+      other.naturalWidth = _trackedMaxWidth;
       const otherSlot = _slots.get(i);
-      if (otherSlot) _setSlotDimensions(otherSlot, _backendMaxWidth);
+      if (otherSlot) _setSlotDimensions(otherSlot, _trackedMaxWidth);
     }
     if (_entryRefreshArmed && performance.now() - _lastPanAt >= 150) _entryRefreshPending = true;
   }
@@ -742,6 +869,7 @@ function _onItemDecoded(imgIdx, nw, nh) {
         }
       }
     }
+    _maybeOpenWidthGate();
     _requestLayout();
   }
 }
@@ -1332,7 +1460,7 @@ function _claimSlot(imgIdx, item, slot, node) {
  * The slot is sized before the node enters DOM, same as the happy path. */
 function _mountFailed(imgIdx, item, slot, img) {
   // No failure UI by policy: the slot keeps its estimate and stays imageless.
-  _onItemDecoded(imgIdx, item.naturalWidth || DEFAULT_ESTIMATED_WIDTH, item.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
+  _onItemDecoded(imgIdx, item.naturalWidth || _widthEstimate(), item.naturalHeight || DEFAULT_ESTIMATED_HEIGHT);
   _claimSlot(imgIdx, item, slot, img);
 }
 
@@ -1718,6 +1846,9 @@ let _lastAnchorVph = null;
 
 function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = false) {
   if (!_active || !_viewportState || !_viewport || _imageIndex.length === 0) return;
+  // Gated entry: fits wait for first reported dims. The gate finish runs
+  // the entry fit itself once widths are real.
+  if (_widthGateKey !== null) return;
   _viewportProgram++;
   try {
   if (!entry) _disarmEntryRefresh();
@@ -2211,7 +2342,7 @@ function _activate(state) {
 
   const isLocked = state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect';
   _imageIndex = isLocked ? [] : _buildImageIndex(state.list || []);
-  _backendMaxWidth = null;
+  _trackedMaxWidth = null;
   _scanContainerKey = null;
   _lastList = state.list;
   _lastMode = state.mode;
@@ -2247,26 +2378,10 @@ function _activate(state) {
     anchorItem.decoded = true;
   }
 
-  _initEstimatedDimensions();
-  _updateLayout();
-
   _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
   _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
-  if (_anchorImgIdx < 0) {
-    // No mapped selection: the overlay stays up. Scale still applies so a
-    // later pick aligns correctly; scan, window, and settle still run.
-    _applyFitMode(_lastFitMode, null, false, false);
-    _armEntryRefresh(false);
-  } else {
-    // Toggling the view on keeps legacy whole-column fits. Fresh-open
-    // semantics belong to directory opens in _onStateChange below.
-    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), false);
-    _armEntryRefresh(false);
-  }
-
   _fireScan();
-  _updateWindow();
-  _scheduleSettle();
+  _openWidthGate(true);
 }
 
 function _clearCaches() {
@@ -2364,6 +2479,7 @@ function _deactivate() {
   _lastFitModeGen = -1;
   _fitRefreshPending = false;
   _disarmEntryRefresh();
+  _clearWidthGate();
   _anchorHoldover = null;
   _anchorHoldoverAlignTop = true;
   _lastAnchorTy = null;
@@ -2386,7 +2502,7 @@ function _deactivate() {
   _layout = { widestWidth: 0, columnWidth: 0, totalHeight: 0, offsets: [] };
   _lastList = null;
   _lastArchiveEncryption = null;
-  _backendMaxWidth = null;
+  _trackedMaxWidth = null;
   _scanContainerKey = null;
   window.__TAURI__?.core?.invoke('cancel_width_scan').catch(() => {});
 }
@@ -2425,7 +2541,7 @@ function _onStateChange(state) {
     const preserveView = !containerChanged && _anchorImgIdx >= 0;
     const holdTop = preserveView ? _layout.offsets[_anchorImgIdx]?.top || 0 : 0;
     const holdListIndex = preserveView ? _imageIndex[_anchorImgIdx]?.listIndex : undefined;
-    const holdBackendMaxW = _backendMaxWidth;
+    const holdTrackedMaxW = _trackedMaxWidth;
     // Same-container reload: carried dims keep slots exact so the refresh
     // remounts without replaying the estimate staircase.
     const carryDims = !containerChanged
@@ -2445,7 +2561,7 @@ function _onStateChange(state) {
         }
       }
     }
-    _backendMaxWidth = preserveView ? holdBackendMaxW : null;
+    _trackedMaxWidth = preserveView ? holdTrackedMaxW : null;
     _lastList = state.list;
     _lastMode = state.mode;
     _lastArchivePath = state.archivePath;
@@ -2491,27 +2607,10 @@ function _onStateChange(state) {
 
     _anchorImgIdx = _resolveOpenAnchor(state);
 
-    _initEstimatedDimensions();
-    _updateLayout();
-
     _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
     _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
-    if (_anchorImgIdx < 0) {
-      // Behavior 1 entry: no image selection, whole-column fit. The overlay
-      // stays up, but scan, window, and settle still run.
-      _applyFitMode(_lastFitMode, null, false, false);
-      _armEntryRefresh(false);
-    } else {
-      const openFirst = state.config?.frontend_data?.open_first_image === true;
-      const openAtStart = _anchorImgIdx === 0;
-      const isFirstImageEntry = openAtStart && openFirst;
-      _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && openAtStart, isFirstImageEntry);
-      _armEntryRefresh(isFirstImageEntry);
-    }
-
     _fireScan();
-    _updateWindow();
-    _scheduleSettle();
+    _openWidthGate();
     return;
   }
 
@@ -2745,8 +2844,8 @@ export function initManhwaStrip(viewportState) {
 
   if (window.__TAURI__?.event?.listen) {
     window.__TAURI__.event.listen('manhwa-max-width', (event) => {
-      const { container, max_width } = event.payload || {};
-      _onMaxWidthReport(container, max_width);
+      const { container, max_width, done } = event.payload || {};
+      _onMaxWidthReport(container, max_width, done === true);
     });
   }
 

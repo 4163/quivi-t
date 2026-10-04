@@ -861,6 +861,7 @@ export function initReplayDiagnostics() {
     const vw = viewport?.clientWidth || 800;
     const vh = viewport?.clientHeight || 800;
     const actual = parseFloat(stripEl?.style.getPropertyValue('--zoom-scale')) || null;
+    const stripWidth = parseFloat(stripEl?.style.getPropertyValue('--strip-width')) || 0;
     const snap = (typeof strip.getManhwaColumnSnapshot === 'function')
       ? strip.getManhwaColumnSnapshot()
       : null;
@@ -879,6 +880,7 @@ export function initReplayDiagnostics() {
       vw,
       vh,
       actualScale: actual,
+      stripWidth,
       overlayHint: overlayUp,
     };
     if (_entryFitPrevDir !== null && out.dir !== _entryFitPrevDir) out.dirChanged = true;
@@ -894,13 +896,16 @@ export function initReplayDiagnostics() {
     out.totalH = snap.totalHeight || 0;
     let rawSumH = 0;
     let maxW = 0;
+    let maxDecodedW = 0;
     for (const it of items) {
       const w = it.naturalWidth || 800;
       const h = it.naturalHeight || 1200;
       if (w > maxW) maxW = w;
       rawSumH += h;
+      if (it.decoded && it.naturalWidth > maxDecodedW) maxDecodedW = it.naturalWidth;
     }
     out.maxW = maxW;
+    out.maxDecodedW = maxDecodedW;
     out.rawSumH = rawSumH;
     const fit = st.fitMode || 'none';
     const n = items.length;
@@ -941,6 +946,11 @@ export function initReplayDiagnostics() {
         recordAnomaly('entryfit-snapshot', snap);
         if (snap.dirChanged && snap.actualScale !== null && !snap.matchesSpec) {
           recordAnomaly('entryfit-spec-mismatch', snap);
+        }
+        // Truth check: the column backdrop must never be narrower than a
+        // decoded image. A narrower strip means a guessed width survived.
+        if (snap.maxDecodedW > 0 && snap.stripWidth < snap.maxDecodedW - 1) {
+          recordAnomaly('entryfit-width-truth-mismatch', snap);
         }
       } catch (err) {
         recordAnomaly('entryfit-probe-error', { message: String(err) });
