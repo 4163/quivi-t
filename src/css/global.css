@@ -27,6 +27,13 @@
   --grill-lines: rgba(20, 90, 75, 0.65);
   --grill-border: rgba(20, 90, 75, 0.7);
 
+  /* Syntax highlighting tokens */
+  --syn-comment: #767676;
+  --syn-keyword: #8a3bb8;
+  --syn-string: #2e7d32;
+  --syn-number: #b45309;
+  --syn-function: #0277bd;
+
   /* Viewport / checkerboard */
   --checker-a: #c8c8c8;
   --checker-b: #b8b8b8;
@@ -103,6 +110,13 @@
     --grill-bg: rgba(20, 60, 50, 0.75);
     --grill-lines: rgba(60, 200, 170, 0.6);
     --grill-border: rgba(60, 200, 170, 0.6);
+
+    /* Syntax highlighting tokens */
+    --syn-comment: #8a8a8a;
+    --syn-keyword: #c678dd;
+    --syn-string: #98c379;
+    --syn-number: #e5c07b;
+    --syn-function: #61afef;
   }
 
   /* Format icon filters stay with the theme palette to keep dark mode rules together. */
@@ -136,6 +150,13 @@
   --grill-bg: rgba(20, 60, 50, 0.75);
   --grill-lines: rgba(60, 200, 170, 0.6);
   --grill-border: rgba(60, 200, 170, 0.6);
+
+  /* Syntax highlighting tokens */
+  --syn-comment: #8a8a8a;
+  --syn-keyword: #c678dd;
+  --syn-string: #98c379;
+  --syn-number: #e5c07b;
+  --syn-function: #61afef;
 }
 
 :root[data-theme="dark"] .assoc-mascot-svg,

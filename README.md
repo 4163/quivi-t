@@ -292,6 +292,7 @@ For automated iterative probing, see [`.agents/skills/replay-debugging/SKILL.md`
 | **Character Encoding** | [`chardetng`](https://crates.io/crates/chardetng) / [`encoding_rs`](https://crates.io/crates/encoding_rs) | Shift-JIS, GBK, EUC-KR, and Big5 names in ZIP and TAR |
 | **Image Processing** | [`image`](https://crates.io/crates/image) | ICO spritesheets, and descrambling for protected gallery images |
 | **SVG Sanitization** | [DOMPurify](https://github.com/cure53/DOMPurify) | Cleans an imported SVG before saving it |
+| **Syntax Highlighting** | [Prism.js](https://prismjs.com) | Live CSS syntax highlighting in Options |
 | **Windows APIs** | [`windows`](https://crates.io/crates/windows) / [`winreg`](https://crates.io/crates/winreg) | Icons, thumbnails, file attributes, associations, and matching a temp extract back to its archive |
 | **Sorting** | [`natord`](https://crates.io/crates/natord) | Natural sort, so 2 comes before 10 |
 | **File Watching** | [`notify`](https://crates.io/crates/notify) | Refresh when a folder changes |
@@ -387,6 +388,7 @@ QuiviT/
 │     │  └─ windowFit.js          # Size Options and Archive Info to their content
 │     ├─ vendors/
 │     │  ├─ pica.js               # Lanczos resizer
+│     │  ├─ prism.min.js          # CSS syntax highlighter
 │     │  └─ purify.min.js         # SVG cleanup
 │     └─ viewer/
 │        ├─ viewer.js             # Viewer entry

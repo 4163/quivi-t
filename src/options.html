@@ -572,7 +572,9 @@
         <button id="btn-export-css">Export .css</button>
         <button id="btn-save-apply-css">Apply</button>
       </div>
-      <textarea id="opt-custom-css" rows="12" spellcheck="false" placeholder="/* Example custom theme */
+      <div class="custom-css-editor">
+        <pre id="opt-custom-css-highlight" aria-hidden="true"><code class="language-css"></code></pre>
+        <textarea id="opt-custom-css" rows="12" spellcheck="false" placeholder="/* Example custom theme */
 html {
   font-size: 20px;
 }
@@ -610,6 +612,7 @@ html {
 ̶*̶ ̶{̶
 ̶ ̶ ̶d̶i̶s̶p̶l̶a̶y̶:̶ ̶n̶o̶n̶e̶ ̶!̶i̶m̶p̶o̶r̶t̶a̶n̶t̶;̶
 ̶}̶"></textarea>
+      </div>
     </div>
   </div>
 
@@ -631,6 +634,7 @@ html {
     <button id="btn-save-options" class="primary">Save</button>
   </div>
 
+  <script src="/js/vendors/prism.min.js"></script>
   <script type="module" src="/js/options/options.js"></script>
   <div id="measure-probe" class="measure-probe" aria-hidden="true"></div>
   <script type="module" src="/js/shellBackground.js"></script>

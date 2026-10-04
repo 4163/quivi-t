@@ -41,7 +41,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - Theme/CSS live previews are ephemeral until Options Apply. They must not persist to `localStorage` while previewing.
 
 **CSS:**
-- `global.css`: tokens, resets, shared rules. Loaded by every HTML page.
+- `global.css`: tokens (including `--syn-*` syntax tokens), resets, shared rules. Loaded by every HTML page.
 - `main.css` / `options.css` / `metadata.css`: that window's layout only. Consume tokens; do not redeclare them.
 - `themes/`: bundled example themes (`matcha-latte.css`, `sage-mint.css`).
 - Menubar flyout submenu positioning uses CSS custom properties (`--submenu-top`, `--submenu-left`, `--submenu-max-height`) on host elements, not inline style assignments.
@@ -64,7 +64,8 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `shellBackground.js`: mirrors `--surface` onto the native window.
 - `main/main.js`: thin bootstrap + init + slim state fan-out. Does not render the file panel or write the statusbar.
 - `main/fullscreen.js`, `dropzone.js`, `lifecycle.js`, `metadataBadge.js`, `passwordOverlay.js`, `urlOverlay.js`: those surfaces only. `urlOverlay.js` owns `#url-overlay`.
-- `options/options.js`: Options orchestration. Reflects active override folders. `keybindUi.js`: capture UI. `associationsUi.js`: file-type associations.
+- `options/options.js`: Options orchestration. Reflects active override folders. Owns the synchronized `.custom-css-editor` overlay with Prism live highlighting. `keybindUi.js`: capture UI. `associationsUi.js`: file-type associations.
+- `vendors/`: bundled zero-install vendor libraries: `pica.js` (Lanczos image resizer), `purify.min.js` (DOMPurify SVG cleanup in `urlLoader.js`), and `prism.min.js` (Prism Core and CSS grammar for syntax highlighting in `options/options.js`).
 
 **Windows:**
 - Three HTML entry points: `index.html`, `options.html`, `metadata.html`.

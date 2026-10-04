@@ -9,9 +9,6 @@
 ### View, Rendering & Window Enhancements (Visuals/Features)
 - **Emergency Boss Key:** Add an "Emergency Button" to hide the application into the system tray, with a configurable keybind.
 
-### CSS, Styling & Code Structure (Refactoring)
-- **Syntax Highlighting:** Add syntax highlighting to the Custom CSS field in Customization using an available font (fonts that have syntax highlighting) or a small library.
-
 ### Supported Formats & Advanced Icons (Complex)
 - **Advanced .ico Processing:** Improve .ico processing/rendering following "performance-first". Change the .ico processing and rendering spec.
 

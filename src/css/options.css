@@ -240,6 +240,137 @@ textarea:focus {
   border-color: var(--accent);
 }
 
+/* Custom CSS Editor with Syntax Highlighting Overlay */
+.custom-css-editor {
+  position: relative;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.custom-css-editor pre,
+.custom-css-editor textarea {
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: var(--fs-13);
+  line-height: 1.5;
+  letter-spacing: 0;
+  tab-size: 2;
+  -moz-tab-size: 2;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-word;
+  box-sizing: border-box;
+  padding: 8px;
+  margin: 0;
+  width: 100%;
+  border-radius: 4px;
+}
+
+.custom-css-editor textarea {
+  position: relative;
+  display: block;
+  z-index: 1;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  border: 1px solid var(--border);
+  resize: vertical;
+  min-height: 140px;
+  outline: none;
+  transition: border-color 0.15s;
+  overflow-y: scroll;
+}
+
+.custom-css-editor textarea:focus {
+  border-color: var(--accent);
+}
+
+.custom-css-editor textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.custom-css-editor textarea::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: transparent;
+}
+
+.custom-css-editor pre {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  background: var(--field-bg);
+  color: var(--text);
+  pointer-events: none;
+  border: 1px solid transparent;
+  overflow-y: scroll;
+  scrollbar-color: transparent transparent;
+}
+
+.custom-css-editor pre::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+
+.custom-css-editor pre::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.custom-css-editor pre code {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  tab-size: inherit;
+  white-space: inherit;
+  word-break: inherit;
+}
+
+/* Syntax tokens mapped to theme custom properties */
+.custom-css-editor .token.comment {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+
+.custom-css-editor .token.selector {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.custom-css-editor .token.property {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.custom-css-editor .token.punctuation {
+  color: var(--text-muted);
+}
+
+.custom-css-editor .token.atrule,
+.custom-css-editor .token.keyword {
+  color: var(--syn-keyword);
+}
+
+.custom-css-editor .token.string,
+.custom-css-editor .token.url {
+  color: var(--syn-string);
+}
+
+.custom-css-editor .token.number,
+.custom-css-editor .token.unit {
+  color: var(--syn-number);
+}
+
+.custom-css-editor .token.function {
+  color: var(--syn-function);
+}
+
+.custom-css-editor .token.important {
+  color: var(--danger);
+  font-weight: bold;
+}
+
 .flex-row input[type="text"],
 .flex-row input[type="number"] {
   flex: 1;

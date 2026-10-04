@@ -198,6 +198,7 @@ async function init() {
     
     const customCss = config.frontend_data.custom_css || '';
     document.getElementById('opt-custom-css').value = customCss;
+    window.syncCustomCssHighlight?.();
     applyCustomCss(customCss);
     
     // Anime4K UI
@@ -364,6 +365,54 @@ if (optionsWindow?.onCloseRequested) {
   });
 }
 
+// Custom CSS Editor Highlighting
+function initCustomCssEditor() {
+  const textarea = document.getElementById('opt-custom-css');
+  const highlightCode = document.querySelector('#opt-custom-css-highlight code');
+  const highlightPre = document.getElementById('opt-custom-css-highlight');
+  if (!textarea || !highlightCode || !highlightPre) return;
+
+  function syncHighlight() {
+    let text = textarea.value || '';
+    if (text.endsWith('\n')) {
+      text += ' ';
+    }
+    if (window.Prism && window.Prism.languages?.css) {
+      highlightCode.innerHTML = window.Prism.highlight(text, window.Prism.languages.css, 'css');
+    } else {
+      highlightCode.textContent = text;
+    }
+  }
+
+  function syncScroll() {
+    highlightPre.scrollTop = textarea.scrollTop;
+    highlightPre.scrollLeft = textarea.scrollLeft;
+  }
+
+  textarea.addEventListener('input', syncHighlight);
+  textarea.addEventListener('scroll', syncScroll);
+
+  textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      textarea.setRangeText('  ', start, end, 'end');
+      syncHighlight();
+    }
+  });
+
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => syncScroll());
+    ro.observe(textarea);
+  }
+
+  window.syncCustomCssHighlight = syncHighlight;
+  syncHighlight();
+}
+
+initCustomCssEditor();
+
 // Import and export CSS.
 document.getElementById('btn-import-css').addEventListener('click', async () => {
   if (!open) return;
@@ -375,6 +424,7 @@ document.getElementById('btn-import-css').addEventListener('click', async () => 
     try {
       const content = await invoke('read_text_file', { path });
       document.getElementById('opt-custom-css').value = content;
+      window.syncCustomCssHighlight?.();
       showStatus('CSS imported.');
     } catch (err) {
       console.error('Failed to import CSS:', err);
