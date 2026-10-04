@@ -46,7 +46,6 @@ e2e/scenarios/last-recording.json
 e2e/scenarios/mangadex-*.json
 # Bridge scenarios that test transitions with specific local video files
 e2e/scenarios/manhwa-video-bridge.json
-e2e/scenarios/manhwa-bridge-l2m.json
 # Replay diagnostic reports (generated on each diagnose, contain local absolute paths)
 # Note: e2e/replay-diagnostics/investigation.js is intentionally tracked to support multi-session investigations across commits
 e2e/replay-diagnostics/reports/
