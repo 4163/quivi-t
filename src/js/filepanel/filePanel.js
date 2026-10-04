@@ -504,8 +504,10 @@ function _pathsEqual(a, b) {
   return a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase();
 }
 
-const EMPTY_BOX_HTML = '<span class="lib-remove-box"></span>';
-const CLOSE_X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+const MARU_O_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle></svg>';
+const EMPTY_BOX_HTML = MARU_O_SVG;
+const CLOSE_X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="m15 9-6 6"></path><path d="m9 9 6 6"></path></svg>';
+const FAVORITE_REMOVE_X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>';
 
 function openSavedPath(path) {
   focusMainListOnNextRender = true;
@@ -632,7 +634,7 @@ function buildSavedEntry(item, { onRemove, onOpen, onHighlight, listUl, removeCl
   removeBtn.className = removeClass;
   removeBtn.title = removeTitle;
   removeBtn.tabIndex = -1;
-  removeBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+  removeBtn.innerHTML = FAVORITE_REMOVE_X_SVG;
   removeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     onRemove(item);

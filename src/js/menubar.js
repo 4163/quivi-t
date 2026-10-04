@@ -433,6 +433,8 @@ function bindMenus() {
   });
 }
 
+const REMOVE_X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>';
+
 export function renderFavoritesMenu() {
   const dropdown = document.getElementById('favorites-menu-dropdown');
   if (!dropdown) return;
@@ -466,7 +468,7 @@ export function renderFavoritesMenu() {
       delBtn.className = 'loadout-remove-btn';
       delBtn.title = 'Delete list';
       delBtn.tabIndex = -1;
-      delBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+      delBtn.innerHTML = REMOVE_X_SVG;
       li.appendChild(delBtn);
     }
 
