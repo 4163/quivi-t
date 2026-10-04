@@ -233,12 +233,15 @@ pub fn get_shell_thumbnail_png(path: &str, size: u32) -> Result<Option<Vec<u8>>,
             chunk[2] = b;
         }
 
-        // Detect black matte: if the source has transparency but the Shell
-        // thumbnail is fully opaque, it was composited onto a black background.
+        // Detect black matte: the Shell sometimes composites transparent
+        // sources onto a black background, producing a fully opaque thumbnail
+        // with black where transparency was. Reject only when the border
+        // pixels confirm the matte, so RGBA images with no actual transparency
+        // (common in manga scans) keep their shell thumbnails.
         let ext_str = ext.as_ref().unwrap();
         if source_has_transparency(path, ext_str) {
             let has_alpha = pixels.chunks_exact(4).any(|px| px[3] < 255);
-            if !has_alpha {
+            if !has_alpha && has_black_matte_border(&pixels, width, height) {
                 return Ok(None);
             }
         }
@@ -257,6 +260,46 @@ pub fn get_shell_thumbnail_png(path: &str, size: u32) -> Result<Option<Vec<u8>>,
 
         Ok(Some(buf.into_inner()))
     }
+}
+
+/// Samples the outer pixel ring of the thumbnail for pure-black pixels.
+/// A genuine black matte produces solid black (0,0,0) at edges where
+/// transparency was composited. Returns true when >40% of border pixels
+/// are pure black, which reliably separates mattes from naturally opaque
+/// images (manga pages, photos) that have colored or white edges.
+#[cfg(windows)]
+fn has_black_matte_border(pixels: &[u8], width: u32, height: u32) -> bool {
+    if width < 2 || height < 2 {
+        return false;
+    }
+    let w = width as usize;
+    let h = height as usize;
+    let stride = w * 4;
+    let mut black = 0u32;
+    let mut total = 0u32;
+
+    // Top and bottom rows
+    for x in 0..w {
+        for &y in &[0, h - 1] {
+            let off = y * stride + x * 4;
+            total += 1;
+            if pixels[off] == 0 && pixels[off + 1] == 0 && pixels[off + 2] == 0 {
+                black += 1;
+            }
+        }
+    }
+    // Left and right columns (skip corners already counted)
+    for y in 1..h - 1 {
+        for &x in &[0, w - 1] {
+            let off = y * stride + x * 4;
+            total += 1;
+            if pixels[off] == 0 && pixels[off + 1] == 0 && pixels[off + 2] == 0 {
+                black += 1;
+            }
+        }
+    }
+
+    total > 0 && black * 100 / total > 40
 }
 
 /// Returns true if the source image file contains transparency data.

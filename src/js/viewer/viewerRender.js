@@ -1,12 +1,13 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
-import { thumbnailCache } from '../filepanel/filePanel.js';
+import { getCachedArchiveBlob, hasCachedArchiveBlob } from '../services/archiveImageCache.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 const PRELOAD_HALF = 1;
 const VIEWER_IMAGE_POOL_CAPACITY = 4;
 const TARGET_LOAD_DEBOUNCE_MS = 45;
 const VIDEO_READY_TIMEOUT_MS = 2000;
+const BRIDGE_FALLBACK_MS = 1200;
 const LOADING_LABEL = 'Loading...';
 
 export function createViewerRenderer(viewportState, onActiveImageChanged = () => {}) {
@@ -55,6 +56,23 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   let _loadingDots = 0;
   let _retiringNode = null;
   let _retireRaf = null;
+  let _bridgeFallbackTimer = null;
+
+  function _clearBridgeFallback() {
+    if (_bridgeFallbackTimer) {
+      clearTimeout(_bridgeFallbackTimer);
+      _bridgeFallbackTimer = null;
+    }
+  }
+
+  function _scheduleRetireRaf(callback) {
+    _retireRaf = requestAnimationFrame(() => {
+      _retireRaf = requestAnimationFrame(() => {
+        callback();
+        _retireRaf = null;
+      });
+    });
+  }
   let _lastRenderedIsAnimated = false;
   let _lastRenderedArchivePath = null;
   let _activeVideoSrc = null;
@@ -134,30 +152,62 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     }, 120);
   }
 
-  function _parkNodeInBridge(node) {
-    const frozen = viewportState.getGeometry ? viewportState.getGeometry() : null;
+  function _parkNodeInBridge(node, explicitGeometry = null, autoRetire = true) {
+    if (!node) return;
+    const frozen = explicitGeometry || (viewportState.getGeometry ? viewportState.getGeometry() : null);
     _cancelRetiringNode();
     if (node.tagName === 'VIDEO') node.pause();
     node.classList.remove('active');
-    if (frozen && bridgeLayer) {
-      node.style.setProperty('--bridge-tx', `${frozen.tx}px`);
-      node.style.setProperty('--bridge-ty', `${frozen.ty}px`);
-      node.style.setProperty('--bridge-rot', `${frozen.rotation}deg`);
-      node.style.setProperty('--bridge-sx', `${frozen.flipX * frozen.scale}`);
-      node.style.setProperty('--bridge-sy', `${frozen.flipY * frozen.scale}`);
+    if (bridgeLayer) {
+      if (frozen) {
+        const rot = frozen.rotation || 0;
+        const flipX = frozen.flipX !== undefined ? frozen.flipX : 1;
+        const flipY = frozen.flipY !== undefined ? frozen.flipY : 1;
+        const scale = frozen.scale !== undefined ? frozen.scale : 1;
+        const sx = frozen.sx !== undefined ? frozen.sx : (flipX * scale);
+        const sy = frozen.sy !== undefined ? frozen.sy : (flipY * scale);
+        node.style.setProperty('--bridge-tx', `${frozen.tx || 0}px`);
+        node.style.setProperty('--bridge-ty', `${frozen.ty || 0}px`);
+        node.style.setProperty('--bridge-rot', `${rot}deg`);
+        node.style.setProperty('--bridge-sx', `${sx}`);
+        node.style.setProperty('--bridge-sy', `${sy}`);
+      }
       bridgeLayer.appendChild(node);
     }
+    node.classList.add('viewer-img');
     node.classList.add('bridge');
     _retiringNode = node;
-    _retireRaf = requestAnimationFrame(() => {
-      _retireRaf = requestAnimationFrame(() => {
+    if (autoRetire) {
+      _scheduleRetireRaf(() => {
         if (_retiringNode === node) {
           _releaseBridgeNode(node);
           _retiringNode = null;
         }
-        _retireRaf = null;
       });
-    });
+    } else {
+      _clearBridgeFallback();
+      _bridgeFallbackTimer = setTimeout(() => {
+        if (_retiringNode === node) {
+          _releaseBridgeNode(node);
+          _retiringNode = null;
+        }
+      }, BRIDGE_FALLBACK_MS);
+    }
+  }
+
+  function _parkHandoff(node, natW, natH, fitMode) {
+    if (!node || !natW || !natH) return;
+    const liveState = Core.getState();
+    const mode = fitMode || liveState.fitMode || 'window';
+    const spreadEnabled = liveState.spreadEnabled ?? liveState.config?.frontend_data?.spread_enabled ?? true;
+    const spreadDirection = liveState.spreadDirection ?? liveState.config?.frontend_data?.spread_direction ?? 'rtl';
+    viewportState.setSpreadEnabled(spreadEnabled);
+    viewportState.setSpreadDirection(spreadDirection);
+    viewportState.setSpreadStep(liveState.spreadStep || 1);
+    viewportState.resetGeometry();
+    viewportState.applyFitMode(mode, natW, natH);
+    const geom = viewportState.getGeometry ? viewportState.getGeometry() : null;
+    _parkNodeInBridge(node, geom, false);
   }
 
   function _swapInVideo(incoming, state) {
@@ -208,6 +258,9 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _clearVideoPreload();
     _pendingVideoEl = null;
     for (const el of videoEls) {
+      // A node parked in the bridge keeps its frozen frame. It was already
+      // paused at park time and rejoins the pool on bridge release.
+      if (el === _retiringNode) continue;
       el.pause();
       el.classList.remove('active');
       el.removeAttribute('src');
@@ -228,12 +281,24 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     node.style.removeProperty('--bridge-rot');
     node.style.removeProperty('--bridge-sx');
     node.style.removeProperty('--bridge-sy');
-    if (imgWrapper && node.parentElement !== imgWrapper && !node.classList.contains('is-placeholder')) {
+    if (node.dataset?.borrowedBridge === 'true') {
+      node.remove();
+    } else if (imgWrapper && node.parentElement !== imgWrapper && !node.classList.contains('is-placeholder')) {
       imgWrapper.appendChild(node);
+      const poolSrc = node.dataset?.poolSrc;
+      if (!poolSrc || _activeNodes.get(poolSrc) !== node) {
+        node.removeAttribute('src');
+        node.removeAttribute('data-pool-src');
+        node.removeAttribute('data-played');
+        node.classList.remove('active');
+        if (!_freeNodes.includes(node)) _freeNodes.push(node);
+        while (_freeNodes.length > VIEWER_IMAGE_POOL_CAPACITY) _freeNodes.pop()?.remove();
+      }
     }
   }
 
   function _cancelRetiringNode() {
+    _clearBridgeFallback();
     if (_retireRaf) {
       cancelAnimationFrame(_retireRaf);
       _retireRaf = null;
@@ -328,6 +393,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     el.addEventListener('load', () => {
       if (el !== img) return;
       if (!el.src) return;
+      if (el.classList.contains('active')) return;
       _stopLoadingAnimation();
       el.classList.add('active');
       _syncActiveImage(el, Core.getState().filename, Core.getState());
@@ -366,7 +432,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       el.removeAttribute('src');
       el.removeAttribute('data-pool-src');
       el.removeAttribute('data-played');
-      el.removeAttribute('data-scaling');
       el.classList.remove('active');
       _releaseBridgeNode(el);
       if (el === img) {
@@ -400,6 +465,15 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   function _activatePoolNode(el, filename, state) {
     if (img && img !== el) {
       _parkNodeInBridge(img);
+    } else if (_retiringNode && _retiringNode !== el) {
+      _clearBridgeFallback();
+      if (_retireRaf) cancelAnimationFrame(_retireRaf);
+      const retiring = _retiringNode;
+      _scheduleRetireRaf(() => {
+        if (_retiringNode === retiring) {
+          _cancelRetiringNode();
+        }
+      });
     }
 
     img = el;
@@ -441,11 +515,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     srcs.forEach((src, index) => {
       const timer = setTimeout(() => {
         if (generation !== _poolGeneration) return;
-        // Reuse blob URL from file-panel thumbnail cache for archive entries.
+        // Reuse blob URL from archive image cache for archive entries.
         // Avoids redundant quivit:// fetch for neighbors (next/prev) when thumb already loaded.
         let actualSrc = src;
-        const cached = thumbnailCache.get(src);
-        if (typeof cached === 'string' && cached.startsWith('blob:')) actualSrc = cached;
+        const cached = getCachedArchiveBlob(src);
+        if (cached) actualSrc = cached;
         const preloader = new Image();
         preloader.decoding = 'async';
         preloader.crossOrigin = 'anonymous';
@@ -465,8 +539,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     });
   }
 
-  function clearDisplayedImage() {
-    _cancelRetiringNode();
+  function clearDisplayedImage(preserveBridge = false) {
+    if (!preserveBridge && _retiringNode?.dataset?.borrowedBridge !== 'true') _cancelRetiringNode();
     _stopLoadingAnimation();
     _activeTargetSrc = null;
     _hideVideo();
@@ -474,7 +548,14 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _activationGeneration += 1;
     _clearTargetLoadTimer();
     _clearScheduledPreloads();
-    for (const src of _activeNodes.keys()) _recyclePoolNode(src);
+    for (const src of Array.from(_activeNodes.keys())) {
+      const el = _activeNodes.get(src);
+      if (preserveBridge && el === _retiringNode) {
+        _activeNodes.delete(src);
+        continue;
+      }
+      _recyclePoolNode(src);
+    }
     img = null;
     onActiveImageChanged(null);
   }
@@ -490,7 +571,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _pendingVideoEl = null;
     });
 
-    window.addEventListener('quivit-download-complete', (e) => {
+    window.addEventListener('quivit-download-complete', async (e) => {
       const destPath = e.detail?.destPath;
       if (!destPath) return;
       const state = Core.getState();
@@ -500,19 +581,39 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         _forceReloadTarget = true;
         _reloadTimestamp = Date.now();
         _activeTargetSrc = null;
-        Core.setState({ fitModeGen: (state.fitModeGen || 0) + 1 });
+        const update = { fitModeGen: (state.fitModeGen || 0) + 1 };
+        if (!state.src) {
+          update.src = await FsUtils.buildFileSrc(targetPath);
+        }
+        Core.setState(update);
       }
     });
   }
 
   Core.onStateChange((state) => {
+    // Strip owns its own images; skip single-image pipeline when active.
+    if (state.manhwaEnabled) {
+      const isArch = state.mode === 'archive';
+      _lastRenderedArchivePath = isArch ? state.archivePath : null;
+      if (img && img.src && img.classList.contains('active')) {
+        _parkNodeInBridge(img, null, false);
+        clearDisplayedImage(true);
+      } else if (_activeMedia === 'video' && _activeVideoEl && _activeVideoEl.classList.contains('active')) {
+        _parkNodeInBridge(_activeVideoEl, null, false);
+        clearDisplayedImage(true);
+      } else if (!_retiringNode) {
+        clearDisplayedImage(false);
+      }
+      return;
+    }
+
     const isArchive = state.mode === 'archive';
     const currentArchivePath = isArchive ? state.archivePath : null;
     const archiveChanged = isArchive && currentArchivePath !== _lastRenderedArchivePath;
     const exitedArchive = !isArchive && _lastRenderedArchivePath !== null;
 
     if (archiveChanged || exitedArchive) {
-      clearDisplayedImage();
+      clearDisplayedImage(_retiringNode?.dataset?.borrowedBridge === 'true');
     }
     _lastRenderedArchivePath = currentArchivePath;
 
@@ -617,7 +718,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       if (activeEl) activeEl.alt = LOADING_LABEL;
 
       const isAlreadyLoaded = !isReload && activeEl && activeEl.complete && activeEl.naturalWidth > 0;
-      const isCacheWarm = !isAlreadyLoaded && thumbnailCache.has(state.src);
+      const isCacheWarm = !isAlreadyLoaded && hasCachedArchiveBlob(state.src);
       if (!isAlreadyLoaded && !isCacheWarm) {
         _startLoadingAnimation(activeEl);
       }
@@ -645,8 +746,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
           } else if (state.isAnimated) {
             newSrc = state.src.includes('?') ? `${state.src}&_reset=${Date.now()}` : `${state.src}?_reset=${Date.now()}`;
           } else {
-            const cached = thumbnailCache.get(state.src);
-            if (typeof cached === 'string' && cached.startsWith('blob:')) {
+            const cached = getCachedArchiveBlob(state.src);
+            if (cached) {
               newSrc = cached;
             }
           }
@@ -748,4 +849,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       Statusbar.setZoom(viewportState.getScale());
     }
   });
+
+  return {
+    parkHandoff: (node, natW, natH, fitMode) => _parkHandoff(node, natW, natH, fitMode),
+    releaseBridge: () => _cancelRetiringNode(),
+    isBridgeActive: () => !!_retiringNode,
+  };
 }

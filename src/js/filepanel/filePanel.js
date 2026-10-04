@@ -25,6 +25,7 @@ import {
 } from './libraryStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
+import { ensureArchiveBlob, hasCachedArchiveBlob, clearArchiveBlobCache } from '../services/archiveImageCache.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
 import {
   setVisibleRange as setDownloadVisibleRange,
@@ -41,125 +42,34 @@ import {
   isLibraryLocationError
 } from '../urlLoader.js';
 
-let _activeViewerKey = null;
-let _activeViewerBlob = null;
-let _archiveBlobBytes = 0;
-const _archiveBlobSizes = new Map();
-
-export const ARCHIVE_BLOB_CACHE_CAPACITY = 8;
-export const ARCHIVE_BLOB_CACHE_MAX_BYTES = 24 * 1024 * 1024;
-export const ARCHIVE_BLOB_CACHE_ENTRY_MAX_BYTES = 4 * 1024 * 1024;
-
-function _forgetArchiveBlobSize(key) {
-  const size = _archiveBlobSizes.get(key);
-  if (!size) return;
-  _archiveBlobBytes = Math.max(0, _archiveBlobBytes - size);
-  _archiveBlobSizes.delete(key);
-}
-
-function _rememberArchiveBlobSize(key, size) {
-  _forgetArchiveBlobSize(key);
-  if (!size) return;
-  _archiveBlobSizes.set(key, size);
-  _archiveBlobBytes += size;
-}
-
-function _trimArchiveBlobCache() {
-  while (_archiveBlobSizes.size > ARCHIVE_BLOB_CACHE_CAPACITY || _archiveBlobBytes > ARCHIVE_BLOB_CACHE_MAX_BYTES) {
-    let evicted = false;
-    for (const key of thumbnailCache.keys()) {
-      if (_archiveBlobSizes.has(key)) {
-        thumbnailCache.delete(key);
-        evicted = true;
-        break;
-      }
-    }
-    if (!evicted) break;
-  }
-}
-
-function _revokeBlobEntry(key, value) {
+function _revokeBlobEntry(_key, value) {
   if (typeof value === 'string' && value.startsWith('blob:')) {
-    _forgetArchiveBlobSize(key);
-    const activeSrc = Core?.getState()?.src;
-    if (activeSrc && (key === activeSrc || value === activeSrc)) {
-      if (_activeViewerBlob && _activeViewerBlob !== value) {
-        URL.revokeObjectURL(_activeViewerBlob);
-      }
-      _activeViewerKey = key;
-      _activeViewerBlob = value;
-      return;
-    }
     URL.revokeObjectURL(value);
   }
 }
 
 // Bounded in-memory thumbnail cache: covers ~14 full screens (1080p) or typical volume chapters.
-// Revokes blob URLs on capacity eviction, key replacement, and clear to prevent blob storage leaks.
 export const THUMB_CACHE_CAPACITY = 250;
-export const thumbnailCache = new BoundedMap(THUMB_CACHE_CAPACITY, _revokeBlobEntry);
+const thumbnailCache = new BoundedMap(THUMB_CACHE_CAPACITY, _revokeBlobEntry);
 
-let _archiveBlobGeneration = 0;
-let _archiveBlobAbortController = null;
+let _isManhwaActive = () => false;
+let _getVisibleImageIndices = () => [];
+let _alignListItemTop = null;
+let _alignListItemBottom = null;
+let _pageStrip = null;
 
-// Archive blob deduplication: viewer and nearby thumbnails share the same quivit:// fetch.
-// Only one fetch per src, prioritized for viewer. Archive only. Disk thumbs are shell 96px, different URL.
-const _archiveBlobPromises = new Map();
-export function ensureArchiveBlob(src) {
-  if (!src || !src.includes('/archive/')) return Promise.resolve(null);
-  const cached = thumbnailCache.get(src);
-  if (typeof cached === 'string' && cached.startsWith('blob:')) return Promise.resolve(cached);
-  if (_archiveBlobPromises.has(src)) return _archiveBlobPromises.get(src);
+function _firstImageIndex(list) {
+  if (!list || !list.length) return -1;
+  const idx = FsUtils.firstImageIndex(list);
+  return (idx >= 0 && FsUtils.isImageEntry(list[idx]) && !FsUtils.isVideoEntry(list[idx])) ? idx : -1;
+}
 
-  const gen = _archiveBlobGeneration;
-  let signal;
-  if (typeof AbortController !== 'undefined') {
-    if (!_archiveBlobAbortController) _archiveBlobAbortController = new AbortController();
-    signal = _archiveBlobAbortController.signal;
+function _lastImageIndex(list) {
+  if (!list || !list.length) return -1;
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (FsUtils.isImageEntry(list[i]) && !FsUtils.isVideoEntry(list[i])) return i;
   }
-
-  let p;
-  p = fetch(src, signal ? { signal } : {}).then(r => r.blob()).then(blob => {
-    if (gen !== _archiveBlobGeneration) {
-      _archiveBlobPromises.delete(src);
-      return null;
-    }
-    if (blob.size > ARCHIVE_BLOB_CACHE_ENTRY_MAX_BYTES) {
-      _archiveBlobPromises.delete(src);
-      return null;
-    }
-    const existing = thumbnailCache.get(src);
-    if (typeof existing === 'string' && existing.startsWith('blob:')) {
-      _archiveBlobPromises.delete(src);
-      return existing;
-    }
-    if (thumbnailCache.has(src)) {
-      // Thumbnail already set to true/retain while fetch was in flight, do not overwrite warm flag
-      _archiveBlobPromises.delete(src);
-      return null;
-    }
-    const blobUrl = URL.createObjectURL(blob);
-    if (gen !== _archiveBlobGeneration) {
-      URL.revokeObjectURL(blobUrl);
-      _archiveBlobPromises.delete(src);
-      return null;
-    }
-    thumbnailCache.set(src, blobUrl);
-    _rememberArchiveBlobSize(src, blob.size);
-    _trimArchiveBlobCache();
-    _archiveBlobPromises.delete(src);
-    return blobUrl;
-  }).catch((err) => {
-    if (gen !== _archiveBlobGeneration || err?.name === 'AbortError') {
-      _archiveBlobPromises.delete(src);
-      return null;
-    }
-    if (!thumbnailCache.has(src)) thumbnailCache.set(src, true);
-    _archiveBlobPromises.delete(src);
-    return null;
-  });
-  _archiveBlobPromises.set(src, p);
-  return p;
+  return -1;
 }
 
 export const FAVORITES_CACHE_CAPACITY = 250;
@@ -225,6 +135,7 @@ let columnResizeMoved = false;
 let lastRenderedList = null;
 let lastDownloadOrderList = null;
 let lastScrolledIndex = -1;
+let lastScrolledSig = '';
 let lastClickTime = 0;
 let lastClickIndex = -1;
 let pendingClickIndex = -1;
@@ -304,6 +215,7 @@ let lastRenderedIndex = -1;
 let lastRenderedViewMode = null;
 let lastRenderedVisible = null;
 let lastRenderedDirectory = null;
+let lastRenderedManhwa = null;
 
 // Favorites
 let favoritesExpanded = false;
@@ -1603,9 +1515,13 @@ function wireRowListeners(li) {
     if (failedItem?.path && retryGalleryDownload(failedItem.path)) {
       return;
     }
+    if (Core.getState().manhwaEnabled && _isManhwaActive()) {
+      _alignListItemTop?.(index);
+    }
     if (Core.getState().index !== index) {
       Core.selectIndex(index);
     }
+    updateSelection(index, false, true);
     const now = Date.now();
     if (lastClickIndex === index && (now - lastClickTime < 400)) {
       panelKeyboardActive = true;
@@ -1886,7 +1802,7 @@ function updateEntry(li, item, index) {
               if (!Number.isFinite(currentIdx) || currentIdx !== index) return;
               // Yield if viewer is still loading the active image (archive blob not yet ready)
               const viewerSrc = Core.getState().src;
-              const viewerBlobPending = viewerSrc && viewerSrc.includes('/archive/') && !thumbnailCache.has(viewerSrc);
+              const viewerBlobPending = viewerSrc && viewerSrc.includes('/archive/') && !hasCachedArchiveBlob(viewerSrc);
               if (viewerBlobPending) {
                 // Retry after viewer blob settles
                 setTimeout(() => {
@@ -1921,7 +1837,7 @@ function renderVisibleSlice() {
       li.style.display = 'none';
       li.style.top = '';
       li.dataset.index = '';
-      li.classList.remove('selected');
+      li.classList.remove('selected', 'in-view');
       const img = li._slots?.thumbImg;
       if (img) {
         delete img.dataset.pendingSrc;
@@ -1986,7 +1902,7 @@ function renderVisibleSlice() {
       li.style.display = 'none';
       li.style.top = '';
       li.dataset.index = '';
-      li.classList.remove('selected');
+      li.classList.remove('selected', 'in-view');
       const img = li._slots?.thumbImg;
       if (img) {
         delete img.dataset.pendingSrc;
@@ -2016,6 +1932,8 @@ function renderVisibleSlice() {
   }
 
   // Phase 2: Allocate or update only rows not already rendered
+  const visibleIndices = stripVisibleIndices(state.list, state.index, state.manhwaEnabled);
+
   for (let i = startIndex; i < endIndex; i++) {
     let li = activeRows.get(i);
     if (!li) {
@@ -2024,6 +1942,11 @@ function renderVisibleSlice() {
       activeRows.set(i, li);
     }
     li.classList.toggle('selected', i === state.index);
+    if (visibleIndices) {
+      li.classList.toggle('in-view', visibleIndices.has(i) && i !== state.index);
+    } else {
+      li.classList.remove('in-view');
+    }
   }
 }
 
@@ -2036,6 +1959,8 @@ function onScrollSettle() {
 function commitPendingThumbnails() {
   const activeIdx = Core.getState().index;
   const isThumbnailView = Core.getState().fileListViewMode === 'thumbnail';
+  const isManhwa = Core.getState().manhwaEnabled && _isManhwaActive();
+  const visibleIndices = isManhwa ? new Set(_getVisibleImageIndices()) : null;
 
   // Filter to rows within viewport (constrained URLs only), sort by: active first, then scroll direction
   const ordered = Array.from(activeRows.values()).filter(li => {
@@ -2050,6 +1975,12 @@ function commitPendingThumbnails() {
     const bi = parseInt(b.dataset.index, 10);
     if (ai === activeIdx) return -1;
     if (bi === activeIdx) return 1;
+    if (visibleIndices) {
+      const aInView = visibleIndices.has(ai);
+      const bInView = visibleIndices.has(bi);
+      if (aInView && !bInView) return -1;
+      if (!aInView && bInView) return 1;
+    }
     // Load in scroll direction: down (+1) loads ascending, up (-1) loads descending
     return scrollDirection >= 0 ? ai - bi : bi - ai;
   });
@@ -2090,7 +2021,7 @@ function commitPendingThumbnails() {
             if (currentIdx !== idx) return;
             if (img.getAttribute('src') === pendingSrc) return;
             const viewerSrc = Core.getState().src;
-            const viewerBlobPending = viewerSrc && viewerSrc.includes('/archive/') && !thumbnailCache.has(viewerSrc);
+            const viewerBlobPending = viewerSrc && viewerSrc.includes('/archive/') && !hasCachedArchiveBlob(viewerSrc);
             if (viewerBlobPending) {
               setTimeout(() => {
                 if (parseInt(li.dataset.index, 10) === idx && img.getAttribute('src') !== pendingSrc) {
@@ -2115,6 +2046,19 @@ function commitPendingThumbnails() {
   }
 }
 
+/** Strip secondary highlights follow the viewport. When the selected entry
+ * is anything but a strip row (folder, parent, non-image file), the
+ * viewport shows the drop overlay instead of the strip, so no row counts
+ * as in view. Keys off the passed mode flag rather than live strip activity
+ * so toggle-off repaints correctly regardless of listener order; the index
+ * query itself tolerates an inactive strip. */
+function stripVisibleIndices(list, index, manhwaOn) {
+  if (!manhwaOn || index < 0) return null;
+  const entry = list?.[index];
+  if (entry && !FsUtils.isImageEntry(entry)) return null;
+  return new Set(_getVisibleImageIndices());
+}
+
 function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) {
   if (!lastRenderedList) return;
 
@@ -2123,22 +2067,62 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
     (document.activeElement && fileListUl.contains(document.activeElement)) ||
     (isDefaultFocus && Core.getState().fileListVisible);
 
+  const visibleIndices = stripVisibleIndices(lastRenderedList, selectedIndex, Core.getState().manhwaEnabled);
+  const visibleListIndices = visibleIndices ? Array.from(visibleIndices) : null;
+
+  const hasVisible = visibleListIndices && visibleListIndices.length > 0;
+  const minActiveIdx = hasVisible
+    ? Math.min(selectedIndex >= 0 ? selectedIndex : Infinity, ...visibleListIndices)
+    : selectedIndex;
+  const maxActiveIdx = hasVisible
+    ? Math.max(selectedIndex >= 0 ? selectedIndex : -Infinity, ...visibleListIndices)
+    : selectedIndex;
+
+  const currentScrollSig = `${selectedIndex}:${minActiveIdx}:${maxActiveIdx}`;
+
   let didScroll = false;
-  if (selectedIndex >= 0 && selectedIndex < lastRenderedList.length) {
-    if (selectedIndex !== lastScrolledIndex) {
+  if (minActiveIdx >= 0 && maxActiveIdx < lastRenderedList.length && ROW_HEIGHT > 0) {
+    if (currentScrollSig !== lastScrolledSig) {
+      lastScrolledSig = currentScrollSig;
       lastScrolledIndex = selectedIndex;
-      const itemTop = selectedIndex * ROW_HEIGHT;
-      const itemBottom = itemTop + ROW_HEIGHT;
+
       const viewTop = fileListUl.scrollTop;
       const clientH = fileListUl.clientHeight || 600;
       const viewBottom = viewTop + clientH;
 
-      if (itemTop < viewTop) {
-        fileListUl.scrollTop = itemTop;
-        didScroll = true;
-      } else if (itemBottom > viewBottom) {
-        fileListUl.scrollTop = itemBottom - clientH;
-        didScroll = true;
+      const selectedTop = selectedIndex * ROW_HEIGHT;
+      const selectedBottom = selectedTop + ROW_HEIGHT;
+
+      const rangeTop = minActiveIdx * ROW_HEIGHT;
+      const rangeBottom = (maxActiveIdx + 1) * ROW_HEIGHT;
+
+      const minScrollForSelected = selectedIndex >= 0 ? selectedBottom - clientH : -Infinity;
+      const maxScrollForSelected = selectedIndex >= 0 ? selectedTop : Infinity;
+
+      if (selectedTop < viewTop) {
+        const target = Math.max(0, Math.max(rangeTop, minScrollForSelected));
+        if (target < viewTop) {
+          fileListUl.scrollTop = target;
+          didScroll = true;
+        }
+      } else if (selectedBottom > viewBottom) {
+        const target = Math.max(0, Math.min(rangeBottom - clientH, maxScrollForSelected));
+        if (target > viewTop) {
+          fileListUl.scrollTop = target;
+          didScroll = true;
+        }
+      } else if (rangeBottom > viewBottom) {
+        const target = Math.max(0, Math.min(rangeBottom - clientH, maxScrollForSelected));
+        if (target > viewTop) {
+          fileListUl.scrollTop = target;
+          didScroll = true;
+        }
+      } else if (rangeTop < viewTop) {
+        const target = Math.max(0, Math.max(rangeTop, minScrollForSelected));
+        if (target < viewTop) {
+          fileListUl.scrollTop = target;
+          didScroll = true;
+        }
       }
     }
   }
@@ -2149,6 +2133,11 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
     // Surgical update: directly update .selected on active elements without re-rendering
     for (const [idx, li] of activeRows) {
       li.classList.toggle('selected', idx === selectedIndex);
+      if (visibleIndices) {
+        li.classList.toggle('in-view', visibleIndices.has(idx) && idx !== selectedIndex);
+      } else {
+        li.classList.remove('in-view');
+      }
     }
   }
 
@@ -2162,12 +2151,7 @@ function setRefreshingVisual(active) {
   clearTimeout(refreshPulseTimer);
 
   if (active) {
-    _archiveBlobGeneration++;
-    if (_archiveBlobAbortController) {
-      _archiveBlobAbortController.abort();
-      _archiveBlobAbortController = null;
-    }
-    _archiveBlobPromises.clear();
+    clearArchiveBlobCache();
     thumbnailCache.clear();
     thumbRefreshTimestamp = Date.now();
     refreshStartTime = performance.now();
@@ -2200,20 +2184,6 @@ function setRefreshingVisual(active) {
 export function renderFilePanel(state) {
   if (!filePanel) return;
 
-  if (_activeViewerBlob && state.src !== _activeViewerKey && state.src !== _activeViewerBlob) {
-    let stillInCache = false;
-    for (const val of thumbnailCache.values()) {
-      if (val === _activeViewerBlob) {
-        stillInCache = true;
-        break;
-      }
-    }
-    if (!stillInCache) {
-      URL.revokeObjectURL(_activeViewerBlob);
-      _activeViewerBlob = null;
-      _activeViewerKey = null;
-    }
-  }
 
   filePanel.classList.toggle('hidden', !state.fileListVisible);
   if (!state.fileListVisible) return;
@@ -2247,13 +2217,16 @@ export function renderFilePanel(state) {
 
   const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
 
-  // Deduplication guard: if file list state has not changed, exit early
+  // Deduplication guard: if file list state has not changed, exit early.
+  // Manhwa mode is a token: toggling it changes no list, index, or view
+  // mode, but must still repaint to drop secondary highlights.
   if (
     lastRenderedList === state.list &&
     lastRenderedIndex === state.index &&
     lastRenderedViewMode === viewMode &&
     lastRenderedVisible === state.fileListVisible &&
-    lastRenderedDirectory === currentDir
+    lastRenderedDirectory === currentDir &&
+    lastRenderedManhwa === state.manhwaEnabled
   ) {
     return;
   }
@@ -2302,6 +2275,7 @@ export function renderFilePanel(state) {
     lastRenderedViewMode = viewMode;
     lastRenderedVisible = state.fileListVisible;
     lastRenderedDirectory = currentDir;
+    lastRenderedManhwa = state.manhwaEnabled;
     updateSelection(state.index, forceFocus, wasFocused);
     return;
   }
@@ -2311,7 +2285,9 @@ export function renderFilePanel(state) {
   lastRenderedViewMode = viewMode;
   lastRenderedVisible = state.fileListVisible;
   lastRenderedDirectory = currentDir;
+  lastRenderedManhwa = state.manhwaEnabled;
   lastScrolledIndex = -1;
+  lastScrolledSig = '';
   lastClickTime = 0;
   lastClickIndex = -1;
   isScrolling = false;
@@ -2347,6 +2323,11 @@ function isPointerOverActiveViewport() {
 
 export function initFilePanel(deps) {
   ({ filePanel, breadcrumbEl, fileListUl, resizeHandle } = deps);
+  if (deps.isManhwaActive) _isManhwaActive = deps.isManhwaActive;
+  if (deps.getVisibleImageIndices) _getVisibleImageIndices = deps.getVisibleImageIndices;
+  if (deps.alignListItemTop) _alignListItemTop = deps.alignListItemTop;
+  if (deps.alignListItemBottom) _alignListItemBottom = deps.alignListItemBottom;
+  if (deps.pageStrip) _pageStrip = deps.pageStrip;
 
   ensureSpacer();
 
@@ -2559,44 +2540,63 @@ export function initFilePanel(deps) {
       return;
     }
 
+    const isManhwa = Core.getState().manhwaEnabled && _isManhwaActive();
     let targetIdx = null;
     switch (e.key) {
-      case 'ArrowDown':
+      case 'ArrowDown': {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        targetIdx = state.index === -1 ? 0 : Math.min(state.index + 1, list.length - 1);
+        const lastImg = isManhwa ? _lastImageIndex(list) : (list.length - 1);
+        const maxBound = lastImg !== -1 ? lastImg : (list.length - 1);
+        targetIdx = state.index === -1 ? (isManhwa ? _firstImageIndex(list) : 0) : Math.min(state.index + 1, maxBound);
         break;
-      case 'ArrowUp':
+      }
+      case 'ArrowUp': {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        targetIdx = state.index === -1 ? list.length - 1 : Math.max(state.index - 1, 0);
+        const firstImg = isManhwa ? _firstImageIndex(list) : 0;
+        const minBound = firstImg !== -1 ? firstImg : 0;
+        targetIdx = state.index === -1 ? (isManhwa ? _lastImageIndex(list) : list.length - 1) : Math.max(state.index - 1, minBound);
         break;
+      }
       case 'PageDown':
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
+        if (isManhwa) {
+          _pageStrip?.(1, 2);
+          break;
+        }
         targetIdx = Math.min((state.index === -1 ? 0 : state.index) + 10, list.length - 1);
         break;
       case 'PageUp':
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
+        if (isManhwa) {
+          _pageStrip?.(-1, 2);
+          break;
+        }
         targetIdx = Math.max((state.index === -1 ? 0 : state.index) - 10, 0);
         break;
-      case 'Home':
+      case 'Home': {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        targetIdx = 0;
+        const firstImg = isManhwa ? _firstImageIndex(list) : 0;
+        targetIdx = firstImg !== -1 ? firstImg : 0;
         break;
-      case 'End':
+      }
+      case 'End': {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        targetIdx = list.length - 1;
+        const lastImg = isManhwa ? _lastImageIndex(list) : (list.length - 1);
+        targetIdx = lastImg !== -1 ? lastImg : (list.length - 1);
         break;
+      }
       case 'Enter': {
         if (state.index < 0 || state.index >= list.length) {
           break;
@@ -2640,6 +2640,15 @@ export function initFilePanel(deps) {
     }
 
     if (targetIdx !== null && targetIdx !== state.index) {
+      if (Core.getState().manhwaEnabled && _isManhwaActive()) {
+        const lastImg = _lastImageIndex(list);
+        const firstImg = _firstImageIndex(list);
+        if (targetIdx === lastImg && lastImg !== firstImg) {
+          _alignListItemBottom?.(targetIdx);
+        } else {
+          _alignListItemTop?.(targetIdx);
+        }
+      }
       Core.selectIndex(targetIdx);
       updateSelection(targetIdx, true, true);
     }
@@ -2726,6 +2735,12 @@ export function initFilePanel(deps) {
       document.body.classList.toggle('resizing-col', false);
     }
   });
+
+  window.addEventListener('quivit-manhwa-settle', () => {
+    if (Core.getState().fileListVisible && _isManhwaActive()) {
+      updateSelection(Core.getState().index);
+    }
+  });
 }
 
 export function focusFileList() {
@@ -2736,6 +2751,13 @@ export function focusFileList() {
 
 export function isFileListFocused() {
   return !!(fileListUl && document.activeElement && fileListUl.contains(document.activeElement));
+}
+
+/** Scroll the list to the very top so `..` is visible. Panel stays the sole
+ * owner of its scroll; other modules call this instead of touching the UL. */
+export function revealListTop() {
+  if (!fileListUl) return;
+  fileListUl.scrollTop = 0;
 }
 
 export function getFileListViewportRange() {

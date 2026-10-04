@@ -332,8 +332,59 @@ export function initReplayDiagnostics() {
   let _viewerProbeInitialized = false;
   let _hadVisibleContentAtStart = false;
   let _hasRenderedContent = false;
+  let _lastStripTy = null;
+
+  function _getStripMetrics() {
+    const strip = document.getElementById('manhwa-strip');
+    if (!strip) return null;
+    const transform = strip.style.transform || '';
+    let ty = 0;
+    const match = transform.match(/translate(?:3d)?\([^,]+,\s*([^,)]+)/);
+    if (match) ty = parseFloat(match[1]);
+
+    const zoomScale = parseFloat(strip.style.getPropertyValue('--zoom-scale')) || 1;
+    const mountedSlots = strip.querySelectorAll('.manhwa-slot').length;
+    const topSpacer = document.getElementById('manhwa-strip-spacer-top');
+    const bottomSpacer = document.getElementById('manhwa-strip-spacer-bottom');
+    const spacerTop = topSpacer ? parseFloat(topSpacer.style.getPropertyValue('--strip-spacer-top')) || 0 : 0;
+    const spacerBottom = bottomSpacer ? parseFloat(bottomSpacer.style.getPropertyValue('--strip-spacer-bottom')) || 0 : 0;
+
+    return {
+      ty,
+      zoomScale,
+      mountedSlotCount: mountedSlots,
+      spacerTop,
+      spacerBottom,
+    };
+  }
 
   function _isViewerContentVisible() {
+    const viewport = document.getElementById('viewport');
+    if (viewport?.classList.contains('manhwa-active')) {
+      const manhwaCanvas = document.getElementById('manhwa-filter-canvas');
+      const hasFilter = viewport.hasAttribute('data-filter');
+      if (hasFilter && manhwaCanvas) {
+        const ready = manhwaCanvas.getAttribute('data-render-ready') === 'true';
+        const opacity = parseFloat(window.getComputedStyle(manhwaCanvas).opacity) || 0;
+        if (ready && opacity > 0) return true;
+      }
+
+      const strip = document.getElementById('manhwa-strip');
+      const mountedImg = strip?.querySelector('.manhwa-slot img');
+      if (mountedImg && mountedImg.complete && mountedImg.naturalWidth > 0) {
+        if (!hasFilter || window.getComputedStyle(mountedImg).visibility !== 'hidden') {
+          return true;
+        }
+      }
+
+      const mountedVideo = strip?.querySelector('.manhwa-slot video');
+      if (mountedVideo && mountedVideo.readyState >= 2 && mountedVideo.videoWidth > 0) {
+        if (!hasFilter || window.getComputedStyle(mountedVideo).visibility !== 'hidden') {
+          return true;
+        }
+      }
+    }
+
     const imgWrapper = document.getElementById('viewer-img-wrapper');
     const activeImg = imgWrapper?.querySelector('.viewer-img.active');
     const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge') ?? imgWrapper?.querySelector('.viewer-img.bridge');
@@ -341,6 +392,7 @@ export function initReplayDiagnostics() {
     const bridgeVideo = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-video.bridge') ?? imgWrapper?.querySelector('.viewer-video.bridge');
     const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
     const filterCanvas = document.getElementById('viewer-filter-canvas');
+    const manhwaCanvas = document.getElementById('manhwa-filter-canvas');
 
     const activeOpacity = activeImg ? parseFloat(window.getComputedStyle(activeImg).opacity) : 0;
     const bridgeOpacity = bridgeImg ? parseFloat(window.getComputedStyle(bridgeImg).opacity) : 0;
@@ -348,15 +400,17 @@ export function initReplayDiagnostics() {
     const bridgeVideoOpacity = bridgeVideo ? parseFloat(window.getComputedStyle(bridgeVideo).opacity) : 0;
     const lanczosOpacity = lanczosCanvas ? parseFloat(window.getComputedStyle(lanczosCanvas).opacity) : 0;
     const filterOpacity = filterCanvas ? parseFloat(window.getComputedStyle(filterCanvas).opacity) : 0;
+    const manhwaOpacity = manhwaCanvas ? parseFloat(window.getComputedStyle(manhwaCanvas).opacity) : 0;
 
     const lanczosReady = lanczosCanvas?.getAttribute('data-render-ready') === 'true';
     const filterReady = filterCanvas?.getAttribute('data-render-ready') === 'true';
+    const manhwaReady = manhwaCanvas?.getAttribute('data-render-ready') === 'true';
 
     const hasActive = !!(activeImg && activeOpacity > 0 && activeImg.complete && activeImg.naturalWidth > 0);
     const hasBridge = !!(bridgeImg && bridgeOpacity > 0 && bridgeImg.naturalWidth > 0);
     const hasActiveVideo = !!(activeVideo && activeVideoOpacity > 0 && activeVideo.readyState >= 2 && activeVideo.videoWidth > 0);
     const hasBridgeVideo = !!(bridgeVideo && bridgeVideoOpacity > 0 && bridgeVideo.readyState >= 2);
-    const hasCanvas = (lanczosReady && lanczosOpacity > 0) || (filterReady && filterOpacity > 0);
+    const hasCanvas = (lanczosReady && lanczosOpacity > 0) || (filterReady && filterOpacity > 0) || (manhwaReady && manhwaOpacity > 0);
 
     return hasActive || hasBridge || hasActiveVideo || hasBridgeVideo || hasCanvas;
   }
@@ -462,49 +516,173 @@ export function initReplayDiagnostics() {
   registerProbe('viewer-pipeline', {
     onStepStart() {
       _initViewerProbe();
+      _lastStripTy = null;
       _hadVisibleContentAtStart = _isViewerContentVisible();
       _hasRenderedContent = _hadVisibleContentAtStart;
+      const strip = _getStripMetrics();
+      if (strip) {
+        recordEvent('viewer', 'strip-metrics', strip);
+      }
+    },
+    onStepStop() {
+      const strip = _getStripMetrics();
+      if (strip) {
+        recordEvent('viewer', 'strip-state', strip);
+      }
     },
     checkFrame(frameCtx) {
+      const viewport = document.getElementById('viewport');
+      if (viewport?.classList.contains('manhwa-active')) {
+        const strip = _getStripMetrics();
+        if (strip && _lastStripTy !== null) {
+          if (Math.abs(strip.ty - _lastStripTy) > 40000) {
+            return {
+              type: 'ty-teleport',
+              t: frameCtx.relMs,
+              prevTy: _lastStripTy,
+              currTy: strip.ty,
+              delta: Math.abs(strip.ty - _lastStripTy),
+            };
+          }
+        }
+        if (strip) _lastStripTy = strip.ty;
+      }
+
       const statusbarFilename = document.querySelector('#statusbar .status-filename, #statusbar .filename')?.textContent?.trim() || '';
       if (statusbarFilename === '..' || statusbarFilename.endsWith('/') || statusbarFilename.endsWith('\\')) {
         return null;
       }
 
-      const isVisible = _isViewerContentVisible();
-      if (isVisible) {
-        _hasRenderedContent = true;
+      const vp = document.getElementById('viewport');
+      const vpRect = vp ? vp.getBoundingClientRect() : null;
+      function intersectsVp(r) {
+        if (!r || !vpRect) return false;
+        const overlapH = Math.max(0, Math.min(r.bottom, vpRect.bottom) - Math.max(r.top, vpRect.top));
+        const overlapW = Math.max(0, Math.min(r.right, vpRect.right) - Math.max(r.left, vpRect.left));
+        return overlapH >= 50 && overlapW >= 50;
       }
 
-      const isBlackout = !isVisible && (_hadVisibleContentAtStart || _hasRenderedContent);
-      if (!isBlackout) return null;
+      // Check real visual visibility on screen via getBoundingClientRect & computed style
+      const bridgeEl = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge, .viewer-video.bridge');
+      const bRect = bridgeEl ? bridgeEl.getBoundingClientRect() : null;
+      const bCs = bridgeEl ? window.getComputedStyle(bridgeEl) : null;
+      const bridgeVisible = !!(
+        bridgeEl &&
+        bRect && bRect.width > 0 && bRect.height > 0 && intersectsVp(bRect) &&
+        bCs && bCs.display !== 'none' && bCs.visibility !== 'hidden' && parseFloat(bCs.opacity) > 0 &&
+        (bridgeEl.naturalWidth > 0 || bridgeEl.videoWidth > 0 || bridgeEl.readyState >= 2)
+      );
+
+      const strip = document.getElementById('manhwa-strip');
+      const mountedImgs = Array.from(strip?.querySelectorAll('.manhwa-slot img') || []);
+      const visibleStripImg = mountedImgs.find((sImg) => {
+        if (!sImg || !sImg.complete || sImg.naturalWidth <= 0) return false;
+        const sr = sImg.getBoundingClientRect();
+        const sc = window.getComputedStyle(sImg);
+        return sr.width > 0 && sr.height > 0 && intersectsVp(sr) &&
+          sc.display !== 'none' && sc.visibility !== 'hidden' && parseFloat(sc.opacity) > 0;
+      });
+      const stripImgVisible = !!visibleStripImg;
+      const sRect = visibleStripImg ? visibleStripImg.getBoundingClientRect() : (mountedImgs[0] ? mountedImgs[0].getBoundingClientRect() : null);
+      const stripImg = visibleStripImg || mountedImgs[0] || null;
+
+      const mountedVideos = Array.from(strip?.querySelectorAll('.manhwa-slot video') || []);
+      const visibleStripVideo = mountedVideos.find((sVid) => {
+        if (!sVid || sVid.readyState < 2 || sVid.videoWidth <= 0) return false;
+        const sr = sVid.getBoundingClientRect();
+        const sc = window.getComputedStyle(sVid);
+        return sr.width > 0 && sr.height > 0 && intersectsVp(sr) &&
+          sc.display !== 'none' && sc.visibility !== 'hidden' && parseFloat(sc.opacity) > 0;
+      });
+      const stripVideoVisible = !!visibleStripVideo;
 
       const imgWrapper = document.getElementById('viewer-img-wrapper');
       const activeImg = imgWrapper?.querySelector('.viewer-img.active');
-      const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge') ?? imgWrapper?.querySelector('.viewer-img.bridge');
+      const aRect = activeImg ? activeImg.getBoundingClientRect() : null;
+      const aCs = activeImg ? window.getComputedStyle(activeImg) : null;
+      const activeImgVisible = !!(
+        activeImg && activeImg.complete && activeImg.naturalWidth > 0 &&
+        aRect && aRect.width > 0 && aRect.height > 0 && intersectsVp(aRect) &&
+        aCs && aCs.display !== 'none' && aCs.visibility !== 'hidden' && parseFloat(aCs.opacity) > 0
+      );
+
       const activeVideo = imgWrapper?.querySelector('.viewer-video.active');
-      const bridgeVideo = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-video.bridge') ?? imgWrapper?.querySelector('.viewer-video.bridge');
-      const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
+      const avRect = activeVideo ? activeVideo.getBoundingClientRect() : null;
+      const avCs = activeVideo ? window.getComputedStyle(activeVideo) : null;
+      const activeVideoVisible = !!(
+        activeVideo && activeVideo.readyState >= 2 && activeVideo.videoWidth > 0 &&
+        avRect && avRect.width > 0 && avRect.height > 0 && intersectsVp(avRect) &&
+        avCs && avCs.display !== 'none' && avCs.visibility !== 'hidden' && parseFloat(avCs.opacity) > 0
+      );
+
+      const manhwaCanvas = document.getElementById('manhwa-filter-canvas');
+      const mcRect = manhwaCanvas ? manhwaCanvas.getBoundingClientRect() : null;
+      const mcCs = manhwaCanvas ? window.getComputedStyle(manhwaCanvas) : null;
+      const manhwaCanvasVisible = !!(
+        manhwaCanvas && manhwaCanvas.getAttribute('data-render-ready') === 'true' &&
+        mcRect && mcRect.width > 0 && mcRect.height > 0 && intersectsVp(mcRect) &&
+        mcCs && mcCs.display !== 'none' && mcCs.visibility !== 'hidden' && parseFloat(mcCs.opacity) > 0
+      );
+
       const filterCanvas = document.getElementById('viewer-filter-canvas');
+      const fcRect = filterCanvas ? filterCanvas.getBoundingClientRect() : null;
+      const fcCs = filterCanvas ? window.getComputedStyle(filterCanvas) : null;
+      const filterCanvasVisible = !!(
+        filterCanvas && filterCanvas.getAttribute('data-render-ready') === 'true' &&
+        fcRect && fcRect.width > 0 && fcRect.height > 0 && intersectsVp(fcRect) &&
+        fcCs && fcCs.display !== 'none' && fcCs.visibility !== 'hidden' && parseFloat(fcCs.opacity) > 0
+      );
+
+      const anyVisible = bridgeVisible || stripImgVisible || stripVideoVisible || activeImgVisible || activeVideoVisible || manhwaCanvasVisible || filterCanvasVisible;
+
+      // Log frame-detail for the first 12 frames of each step
+      if (frameCtx.frameCount <= 12 || !anyVisible) {
+        recordEvent('viewer', 'frame-detail', {
+          frameCount: frameCtx.frameCount,
+          t: frameCtx.relMs,
+          viewportManhwa: viewport?.classList.contains('manhwa-active') || false,
+          bridgeVisible,
+          bridgeRect: bRect ? { w: Math.round(bRect.width), h: Math.round(bRect.height), top: Math.round(bRect.top), left: Math.round(bRect.left) } : null,
+          bridgeProps: bridgeEl ? {
+            tx: bridgeEl.style.getPropertyValue('--bridge-tx'),
+            ty: bridgeEl.style.getPropertyValue('--bridge-ty'),
+            sx: bridgeEl.style.getPropertyValue('--bridge-sx'),
+            sy: bridgeEl.style.getPropertyValue('--bridge-sy'),
+          } : null,
+          stripImgVisible,
+          stripImgRect: sRect ? { w: Math.round(sRect.width), h: Math.round(sRect.height), top: Math.round(sRect.top), left: Math.round(sRect.left) } : null,
+          mountedSlots: mountedImgs.map((img) => ({
+            colIdx: img.dataset.imgIdx,
+            top: Math.round(img.getBoundingClientRect().top),
+            bottom: Math.round(img.getBoundingClientRect().bottom),
+            nw: img.naturalWidth,
+          })),
+          activeImgVisible,
+          activeImgRect: aRect ? { w: Math.round(aRect.width), h: Math.round(aRect.height) } : null,
+          anyVisible,
+        });
+      }
+
+      if (anyVisible) {
+        _hasRenderedContent = true;
+      }
+
+      const isBlackout = !anyVisible && (_hadVisibleContentAtStart || _hasRenderedContent);
+      if (!isBlackout) return null;
 
       return {
         type: 'blackout',
         t: frameCtx.relMs,
-        activeSrc: activeImg?.getAttribute('src') || activeImg?.src || null,
-        activeComplete: activeImg?.complete || false,
-        activeNaturalWidth: activeImg?.naturalWidth || 0,
-        activeOpacity: activeImg ? parseFloat(window.getComputedStyle(activeImg).opacity) : 0,
-        bridgeSrc: bridgeImg?.getAttribute('src') || bridgeImg?.src || null,
-        bridgeOpacity: bridgeImg ? parseFloat(window.getComputedStyle(bridgeImg).opacity) : 0,
-        activeVideoSrc: activeVideo?.dataset?.vidSrc || activeVideo?.getAttribute('src') || activeVideo?.src || null,
-        activeVideoReadyState: activeVideo?.readyState || 0,
-        activeVideoOpacity: activeVideo ? parseFloat(window.getComputedStyle(activeVideo).opacity) : 0,
-        bridgeVideoSrc: bridgeVideo?.dataset?.vidSrc || bridgeVideo?.getAttribute('src') || bridgeVideo?.src || null,
-        bridgeVideoOpacity: bridgeVideo ? parseFloat(window.getComputedStyle(bridgeVideo).opacity) : 0,
-        lanczosReady: lanczosCanvas?.getAttribute('data-render-ready') === 'true',
-        lanczosOpacity: lanczosCanvas ? parseFloat(window.getComputedStyle(lanczosCanvas).opacity) : 0,
-        filterReady: filterCanvas?.getAttribute('data-render-ready') === 'true',
-        filterOpacity: filterCanvas ? parseFloat(window.getComputedStyle(filterCanvas).opacity) : 0,
+        viewportManhwa: viewport?.classList.contains('manhwa-active') || false,
+        bridgeVisible,
+        bridgeTag: bridgeEl?.tagName || null,
+        bridgeSrc: bridgeEl?.getAttribute('src') || bridgeEl?.src || null,
+        bridgeRect: bRect ? { w: Math.round(bRect.width), h: Math.round(bRect.height), top: Math.round(bRect.top), left: Math.round(bRect.left) } : null,
+        stripImgVisible,
+        stripMounted: strip?.querySelectorAll('.manhwa-slot').length || 0,
+        stripImgSrc: stripImg?.getAttribute('src') || stripImg?.src || null,
+        activeImgVisible,
+        activeWrapperDisplay: imgWrapper ? window.getComputedStyle(imgWrapper).display : null,
       };
     },
   });

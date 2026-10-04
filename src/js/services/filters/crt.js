@@ -85,17 +85,29 @@ export const filter = {
         const vpH = viewport.height;
 
         const isRotated = Math.abs(Math.round(rotation / 90)) % 2 === 1;
-        const visualW = (isRotated ? nh : nw) * scale;
-        const visualH = (isRotated ? nw : nh) * scale;
+        // A subject rect (e.g. the manhwa column) pins the CRT frame to
+        // subject content. Without one, fall back to the legacy derivation
+        // from image dims and pan, which hugs viewport-filling images.
+        const subject = geometry.subjectRect;
+        let visualW, visualH, left, top;
+        if (subject && subject.width > 0 && subject.height > 0) {
+          visualW = subject.width;
+          visualH = subject.height;
+          left = subject.left;
+          top = subject.top;
+        } else {
+          visualW = (isRotated ? nh : nw) * scale;
+          visualH = (isRotated ? nw : nh) * scale;
+          const cx = vpW / 2 + tx;
+          const cy = vpH / 2 + ty;
+          left = cx - visualW / 2;
+          top = cy - visualH / 2;
+        }
         
         const clampX = visualW >= vpW - 1 ? 1 : 0;
         const clampY = visualH >= vpH - 1 ? 1 : 0;
         gl.uniform2f(loc.clamp, clampX, clampY);
 
-        const cx = vpW / 2 + tx;
-        const cy = vpH / 2 + ty;
-        const left = cx - visualW / 2;
-        const top = cy - visualH / 2;
         gl.uniform4f(loc.visualRect, left / vpW, top / vpH, visualW / vpW, visualH / vpH);
       }
     }

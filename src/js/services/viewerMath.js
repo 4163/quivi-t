@@ -1,9 +1,376 @@
 import { DEFAULT_FIT_MODE } from '../keybinds.js';
+export { computeSlotHue } from './keybindDomain.js';
 
 export function checkIsSpread(w, h) {
   if (!w || !h) return false;
   return (w / h) >= 1.2;
 }
+
+/**
+ * Map a fit mode to a CSS width for the manhwa strip.
+ * Width-based and window modes fill the viewport width.
+ * 'none' returns null (natural width, no CSS override).
+ * The zoom factor scales the result.
+ */
+export function computeStripWidth(fitMode, viewportWidth, zoom = 1) {
+  if (!viewportWidth || viewportWidth <= 0) return null;
+  switch (fitMode) {
+    case 'none':
+      return null;
+    case 'width':
+    case 'width-if-larger':
+    case 'height':
+    case 'height-if-larger':
+    case 'window':
+    case 'window-if-larger':
+    default:
+      return viewportWidth * zoom;
+  }
+}
+
+/**
+ * Compute column layout and per-item offsets from natural dimensions.
+ * Column width fits the widest known item times zoom.
+ * Per-item offsets derive from heights at that width.
+ * seamOverlapPx subtracts the CSS inter-slot overlap per boundary so the
+ * offsets match rendered positions (each slot after the first shifts up).
+ */
+export function computeColumnOffsets(items = [], zoom = 1, seamOverlapPx = 0) {
+  if (!Array.isArray(items)) {
+    return { widestWidth: 0, columnWidth: 0, totalHeight: 0, offsets: [] };
+  }
+
+  const seam = Math.max(0, seamOverlapPx);
+  let widestWidth = 0;
+  const offsets = [];
+  let currentTop = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const w = typeof item === 'number' ? 0 : ((item && (item.naturalWidth ?? item.width)) || 0);
+    if (w > widestWidth) widestWidth = w;
+    const rawH = typeof item === 'number' ? item : ((item && (item.naturalHeight ?? item.height)) || 0);
+    const h = rawH * zoom;
+    const top = currentTop - i * seam;
+    offsets.push({
+      top,
+      height: h,
+      bottom: top + h,
+    });
+    currentTop += h;
+  }
+
+  const columnWidth = widestWidth * zoom;
+
+  return {
+    widestWidth,
+    columnWidth,
+    totalHeight: items.length > 0 ? currentTop - (items.length - 1) * seam : 0,
+    offsets,
+  };
+}
+
+export const computeColumnLayout = computeColumnOffsets;
+
+/**
+ * Inter-slot overlap in unzoomed px for a given zoom scale.
+ * Mirrors the strip CSS rule `margin-top: min(-1px, calc(-1px / zoom))`:
+ * one layout px at or above 100%, growing below so the visual overlap
+ * stays one screen px. Offsets must use this or pins drift on zoom-out.
+ */
+export function seamOverlapForScale(scale) {
+  const s = scale || 1;
+  return s >= 1 ? 1 : 1 / s;
+}
+
+/**
+ * Find index of item containing centerColY.
+ * Clamps to 0 or last index when outside bounds.
+ */
+export function findAnchorIndex(offsets, centerColY) {
+  if (!Array.isArray(offsets) || offsets.length === 0) return -1;
+  if (centerColY <= offsets[0].top) return 0;
+  const last = offsets.length - 1;
+  if (centerColY >= offsets[last].bottom) return last;
+
+  let lo = 0;
+  let hi = last;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const item = offsets[mid];
+    const visualBottom = (mid < last) ? offsets[mid + 1].top : item.bottom;
+    if (centerColY < item.top) {
+      hi = mid - 1;
+    } else if (centerColY >= visualBottom) {
+      lo = mid + 1;
+    } else {
+      return mid;
+    }
+  }
+  return Math.max(0, Math.min(last, lo));
+}
+
+/**
+ * Compute index range [startIndex, endIndex] of items overlapping [windowTopY, windowBottomY].
+ * Uses visual slot boundaries so seam-overlapped preceding slots do not leak into the active range.
+ * Returns { startIndex: -1, endIndex: -1 } when no items overlap.
+ */
+export function computeWindowRange(offsets, windowTopY, windowBottomY) {
+  if (!Array.isArray(offsets) || offsets.length === 0) {
+    return { startIndex: -1, endIndex: -1 };
+  }
+  const n = offsets.length;
+  const lastBottom = offsets[n - 1].bottom;
+  if (windowBottomY <= offsets[0].top || windowTopY >= lastBottom) {
+    return { startIndex: -1, endIndex: -1 };
+  }
+
+  const EPSILON = 1e-4;
+  const visualBottomAt = (i) => (i < n - 1 ? offsets[i + 1].top : offsets[i].bottom);
+
+  let lo = 0;
+  let hi = n - 1;
+  let startIndex = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (visualBottomAt(mid) - windowTopY > EPSILON) {
+      startIndex = mid;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  if (startIndex === -1) {
+    return { startIndex: -1, endIndex: -1 };
+  }
+
+  lo = startIndex;
+  hi = n - 1;
+  let firstBeyond = n;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (offsets[mid].top >= windowBottomY - EPSILON) {
+      firstBeyond = mid;
+      hi = mid - 1;
+    } else {
+      lo = mid + 1;
+    }
+  }
+  const endIndex = firstBeyond - 1;
+  if (endIndex < startIndex) {
+    return { startIndex: -1, endIndex: -1 };
+  }
+
+  return { startIndex, endIndex };
+}
+
+/**
+ * Answer which column end is highlighted: primary image index, visible
+ * image-index range, and total count in. Returns 'first', 'last', 'both',
+ * or 'neither'. Both ends highlighted means keep position.
+ */
+export function firstLastHighlight({ primary = -1, visStart = -1, visEnd = -1, total = 0 } = {}) {
+  if (!total || total <= 1) return 'neither';
+  const last = total - 1;
+  // Primary selection outranks everything: a selected end clamps even when
+  // the whole column is visible. Secondaries only decide below this.
+  const firstHit = (primary === 0) || (visStart !== -1 && visStart <= 0 && visEnd >= 0);
+  const lastHit = (primary === last) || (visStart !== -1 && visStart <= last && visEnd >= last);
+  if (firstHit && lastHit) {
+    if (primary !== -1) {
+      return (last - primary) < (primary - 0) ? 'last' : 'first';
+    }
+    return 'first';
+  }
+  if (firstHit) return 'first';
+  if (lastHit) return 'last';
+  return 'neither';
+}
+
+/**
+ * Compute the vertical pan (ty) so that a slot top lands at the viewport top.
+ * When the column is shorter than the viewport, pins to the top of the column.
+ * When the column is taller, clamps between the top pin and bottom pin.
+ */
+export function computeTopAlignTy({ slotTop = 0, totalHeight = 0, scale = 1, viewportHeight = 800 } = {}) {
+  const colVisualH = totalHeight * scale;
+  if (colVisualH <= viewportHeight) {
+    return -(colVisualH - viewportHeight) / 2;
+  }
+  const maxTy = (colVisualH - viewportHeight) / 2;
+  const minTy = -maxTy;
+  const rawTy = (totalHeight / 2 - slotTop) * scale - viewportHeight / 2;
+  return Math.max(minTy, Math.min(maxTy, rawTy));
+}
+
+/**
+ * Compute the vertical pan (ty) so that a slot bottom lands at the viewport bottom.
+ * When the column is shorter than the viewport, moves up towards viewport top.
+ * When the column is taller, clamps between the top pin and bottom pin.
+ */
+export function computeBottomAlignTy({ slotBottom = 0, totalHeight = 0, scale = 1, viewportHeight = 800 } = {}) {
+  const colVisualH = totalHeight * scale;
+  if (colVisualH <= viewportHeight) {
+    return (colVisualH - viewportHeight) / 2;
+  }
+  const maxTy = (colVisualH - viewportHeight) / 2;
+  const minTy = -maxTy;
+  const rawTy = (totalHeight / 2 - slotBottom) * scale + viewportHeight / 2;
+  return Math.max(minTy, Math.min(maxTy, rawTy));
+}
+
+/**
+ * Map visible strip offsets to a viewport-sized composite draw list.
+ * Inputs:
+ *   offsets: Array of { top, height, bottom } from computeColumnOffsets (or layout result)
+ *   viewportWidth, viewportHeight: size of the composite canvas
+ *   scale: zoom factor (default 1)
+ *   ty: vertical pan translation (default 0)
+ *   tx: horizontal pan translation (default 0)
+ *   overscan: extra margin in px beyond the viewport (default 0)
+ *   totalHeight: total column height (optional, inferred from offsets)
+ *   columnWidth: unscaled column width (optional, inferred from offsets/items)
+ *   items: optional natural items array [{ width, height, naturalWidth, naturalHeight }]
+ *
+ * Output:
+ *   drawList: Array of { imgIdx, sourceRect, destRect, unclippedDestRect }
+ *   columnYOrigin: column Y coordinate corresponding to composite Y = 0
+ *   startIndex, endIndex: indices of visible slots
+ */
+export function computeColumnComposite(options = {}, ...rest) {
+  let offsets, totalHeight, columnWidth, widestWidth, viewportWidth, viewportHeight, scale, ty, tx, overscan, items;
+  if (options && typeof options === 'object' && !Array.isArray(options)) {
+    ({
+      offsets,
+      totalHeight,
+      columnWidth,
+      widestWidth,
+      viewportWidth = 0,
+      viewportHeight = 0,
+      scale = 1,
+      ty = 0,
+      tx = 0,
+      overscan = 0,
+      items
+    } = options);
+  } else {
+    offsets = options;
+    [viewportWidth = 0, viewportHeight = 0, scale = 1, ty = 0, overscan = 0, totalHeight, columnWidth, tx = 0, items] = rest;
+  }
+
+  const offsetsList = Array.isArray(offsets) ? offsets : (offsets?.offsets || []);
+  const n = offsetsList.length;
+  if (n === 0) {
+    return {
+      drawList: [],
+      draws: [],
+      columnYOrigin: 0,
+      startIndex: -1,
+      endIndex: -1
+    };
+  }
+
+  const s = scale || 1;
+  const vpw = Math.max(0, viewportWidth);
+  const vph = Math.max(0, viewportHeight);
+  const totalH = totalHeight ?? offsets?.totalHeight ?? offsetsList[n - 1].bottom;
+  const colW = columnWidth ?? offsets?.columnWidth ?? offsets?.widestWidth ?? 0;
+
+  const norm0 = (v) => (v === 0 ? 0 : v);
+  const columnYOrigin = norm0((totalH / 2) - ((vph / 2 + ty) / s));
+
+  // Visible window in column coordinates (extended by overscan)
+  const windowTopY = (totalH / 2) - ((vph / 2 + ty + overscan) / s);
+  const windowBottomY = (totalH / 2) - ((ty - vph / 2 - overscan) / s);
+
+  const { startIndex, endIndex } = computeWindowRange(offsetsList, windowTopY, windowBottomY);
+  if (startIndex === -1 || endIndex === -1) {
+    return {
+      drawList: [],
+      draws: [],
+      columnYOrigin,
+      startIndex: -1,
+      endIndex: -1
+    };
+  }
+
+  const clipTop = overscan ? -overscan : 0;
+  const clipBottom = vph + overscan;
+  const drawList = [];
+
+  for (let i = startIndex; i <= endIndex; i++) {
+    const off = offsetsList[i];
+    const item = items && items[i];
+    const itemW = (item && (item.naturalWidth ?? item.width)) || off.width || colW || vpw;
+    const itemH = (item && (item.naturalHeight ?? item.height)) || off.height;
+
+    // Center slot horizontally within column if column width exceeds item width
+    const slotX = colW > itemW ? (colW - itemW) / 2 : 0;
+    const destX = norm0((vpw / 2) + tx + (slotX - colW / 2) * s);
+    const destW = norm0(itemW * s);
+
+    // Unclipped vertical destination on viewport
+    const destY = norm0((vph / 2) + ty + (off.top - totalH / 2) * s);
+    const destH = norm0(off.height * s);
+
+    // Clip to visible window
+    const clippedDestY = norm0(Math.max(clipTop, destY));
+    const clippedDestBottom = norm0(Math.min(clipBottom, destY + destH));
+    if (clippedDestBottom <= clippedDestY) continue;
+
+    const clippedDestH = norm0(clippedDestBottom - clippedDestY);
+    const topDeltaScreen = norm0(clippedDestY - destY);
+    const sy = norm0(topDeltaScreen / s);
+    const sh = norm0(clippedDestH / s);
+    const sx = 0;
+    const sw = itemW;
+
+    drawList.push({
+      imgIdx: i,
+      sourceRect: {
+        x: sx,
+        y: sy,
+        width: sw,
+        height: sh,
+        sx,
+        sy,
+        sw,
+        sh
+      },
+      destRect: {
+        x: destX,
+        y: clippedDestY,
+        width: destW,
+        height: clippedDestH,
+        dx: destX,
+        dy: clippedDestY,
+        dw: destW,
+        dh: clippedDestH
+      },
+      unclippedDestRect: {
+        x: destX,
+        y: destY,
+        width: destW,
+        height: destH,
+        dx: destX,
+        dy: destY,
+        dw: destW,
+        dh: destH
+      }
+    });
+  }
+
+  return {
+    drawList,
+    draws: drawList,
+    columnYOrigin,
+    startIndex,
+    endIndex
+  };
+}
+
+export const computeColumnDrawList = computeColumnComposite;
+
 
 export function createViewportState({ getViewport = () => ({ clientWidth: 1000, clientHeight: 800, left: 0, top: 0 }) } = {}) {
   let _scale = 1;
@@ -49,9 +416,10 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     const { width, height } = _visualSize();
     const maxX = Math.abs(width - vp.clientWidth) / 2;
     const maxY = Math.abs(height - vp.clientHeight) / 2;
+    const minY = -maxY;
 
     _tx = maxX === 0 ? 0 : Math.min(maxX, Math.max(-maxX, _tx));
-    _ty = maxY === 0 ? 0 : Math.min(maxY, Math.max(-maxY, _ty));
+    _ty = maxY === 0 ? 0 : Math.min(maxY, Math.max(minY, _ty));
   }
 
   function applyFitMode(mode, naturalW, naturalH, clientW, clientH) {
@@ -92,24 +460,22 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
       default: _scale = Math.min(scaleX, scaleY, 1); break;
     }
 
-    if (_currentFitMode !== 'none') {
-      if (['width', 'width-if-larger'].includes(_currentFitMode)) {
-        const { width, height } = _visualSize();
-        _ty = height > vh ? (height - vh) / 2 : 0;
-        if (isSpread && width > vw) {
-          const maxX = (width - vw) / 2;
-          if (_spreadDirection === 'rtl') {
-            _tx = _spreadStep === 1 ? -maxX : maxX;
-          } else {
-            _tx = _spreadStep === 1 ? maxX : -maxX;
-          }
+    if (['width', 'width-if-larger'].includes(_currentFitMode)) {
+      const { width, height } = _visualSize();
+      _ty = height > vh ? (height - vh) / 2 : 0;
+      if (isSpread && width > vw) {
+        const maxX = (width - vw) / 2;
+        if (_spreadDirection === 'rtl') {
+          _tx = _spreadStep === 1 ? -maxX : maxX;
         } else {
-          _tx = 0;
+          _tx = _spreadStep === 1 ? maxX : -maxX;
         }
       } else {
         _tx = 0;
-        _ty = 0;
       }
+    } else {
+      _tx = 0;
+      _ty = 0;
     }
     _clampPan();
     notify();
@@ -160,6 +526,13 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     zoomTo(_scale * (1 + delta * 0.12), cx, cy);
   }
 
+  function resetZoomOnly(exactScale) {
+    _userTransformed = true;
+    _scale = Math.min(32, Math.max(0.05, exactScale));
+    _clampPan();
+    notify();
+  }
+
   function panBy(dx, dy) {
     _userTransformed = true;
     _tx += dx;
@@ -169,11 +542,16 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
   }
 
   function panTo(tx, ty) {
+    const prevTransformed = _userTransformed;
     _userTransformed = true;
+    const prevTx = _tx;
+    const prevTy = _ty;
     _tx = tx;
     _ty = ty;
     _clampPan();
-    notify();
+    if (!prevTransformed || _tx !== prevTx || _ty !== prevTy) {
+      notify();
+    }
   }
 
   function rotate(deltaDegrees) {
@@ -264,6 +642,15 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     return inverted ? '45deg' : '-45deg';
   }
 
+  function setDimensions(naturalW, naturalH, nextTx, nextTy) {
+    if (naturalW !== undefined) _naturalW = naturalW;
+    if (naturalH !== undefined) _naturalH = naturalH;
+    if (nextTx !== undefined) _tx = nextTx;
+    if (nextTy !== undefined) _ty = nextTy;
+    _clampPan();
+    notify();
+  }
+
   return {
     subscribe: (fn) => listeners.push(fn),
     getTransform: () => `translate(calc(-50% + ${_tx}px), calc(-50% + ${_ty}px)) rotate(${_rotation}deg) scale(${_flipX * _scale}, ${_flipY * _scale})`,
@@ -289,8 +676,10 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     handleViewportResize,
     resetGeometry,
     applyFitMode,
+    setDimensions,
     zoomTo,
     zoomAt,
+    resetZoomOnly,
     panBy,
     panTo,
     rotate,
@@ -330,3 +719,58 @@ export function invertViewport(px, py, geom, naturalW, naturalH) {
     y: ly + (naturalH / 2)
   };
 }
+
+/**
+ * Compute the zoom scale for a given fit mode in manhwa strip view.
+ * Accounts for CSS inter-slot seam overlaps (which expand to 1/scale at zoom < 1)
+ * so height and window fit modes match the viewport without bottom gaps.
+ */
+export function computeStripFitScale({
+  fitMode = 'none',
+  vw = 800,
+  vh = 800,
+  maxW = 1000,
+  rawSumH = 0,
+  itemCount = 0,
+}) {
+  const numSeams = Math.max(0, itemCount - 1);
+  const scaleX = maxW > 0 ? vw / maxW : 1;
+
+  let scaleY = 1;
+  if (rawSumH > 0) {
+    if (rawSumH - numSeams <= vh) {
+      scaleY = (rawSumH - numSeams > 0) ? (vh / (rawSumH - numSeams)) : 1;
+    } else {
+      scaleY = (vh + numSeams) / rawSumH;
+    }
+  }
+
+  let targetScale = 1;
+  switch (fitMode) {
+    case 'none':
+      targetScale = 1;
+      break;
+    case 'width':
+      targetScale = scaleX;
+      break;
+    case 'width-if-larger':
+      targetScale = Math.min(scaleX, 1);
+      break;
+    case 'height':
+      targetScale = scaleY;
+      break;
+    case 'height-if-larger':
+      targetScale = Math.min(scaleY, 1);
+      break;
+    case 'window':
+      targetScale = Math.min(scaleX, scaleY);
+      break;
+    case 'window-if-larger':
+    default:
+      targetScale = Math.min(scaleX, scaleY, 1);
+      break;
+  }
+
+  return Math.min(32, Math.max(0.05, targetScale));
+}
+

@@ -1,0 +1,20 @@
+{
+  "name": "canvas-ahead",
+  "recordedAt": "2026-09-15T02:10:00.000Z",
+  "initialPath": "test-files/BDレーベル.bmp",
+  "initialState": {
+    "filename": "BDレーベル.bmp",
+    "pipeline": {
+      "filter": "crt",
+      "fitMode": "height-if-larger",
+      "scaling": "bilinear",
+      "opaqueCanvas": true
+    }
+  },
+  "actions": [
+    "cmd-prev",
+    "cmd-next",
+    "cmd-prev",
+    "cmd-next"
+  ]
+}

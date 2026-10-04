@@ -51,9 +51,10 @@ pub fn prefetch_archive_entries(
         return Ok(());
     }
 
-    let mut cache = state.write().map_err(|e| e.to_string())?;
     for entry_name in entries {
-        let _ = cache.read_entry_bytes(&archive_path, &entry_name);
+        if let Ok(mut cache) = state.write() {
+            let _ = cache.read_entry_bytes(&archive_path, &entry_name);
+        }
     }
 
     Ok(())

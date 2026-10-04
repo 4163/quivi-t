@@ -1,345 +1,471 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="QuiviT, standalone image and comic viewer." />
-    <title>QuiviT</title>
-    <link rel="stylesheet" href="/css/global.css" />
-    <link rel="stylesheet" href="/css/main.css" />
-    <!-- Apply theme and custom CSS after all stylesheets so the injected
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="QuiviT, standalone image and comic viewer." />
+  <title>QuiviT</title>
+  <link rel="stylesheet" href="/css/global.css" />
+  <link rel="stylesheet" href="/css/main.css" />
+  <!-- Apply theme and custom CSS after all stylesheets so the injected
          #custom-css style lands last and wins the cascade (inline scripts
          block parsing, so this still runs before first paint). -->
-    <script src="/js/shared/themePrePaint.js"></script>
-    <style id="custom-css"></style>
-  </head>
+  <script src="/js/shared/themePrePaint.js"></script>
+  <style id="custom-css"></style>
+</head>
 
-  <body>
+<body>
 
-    <!-- Menu bar -->
-    <nav id="menubar" role="menubar">
+  <!-- Menu bar -->
+  <nav id="menubar" role="menubar">
 
-      <div class="menu-item" id="menu-file">
-        <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">File</button>
-        <ul class="menu-dropdown" role="menu">
-          <li role="menuitem" id="cmd-open-dir" tabindex="0">Open directory...<span class="shortcut">Ctrl+O</span></li>
-          <li role="menuitem" id="cmd-open-file" tabindex="0">Open file / archive...<span class="shortcut"></span></li>
-          <li role="menuitem" id="cmd-use-url" tabindex="0" title="Load images / galleries from supported sites">Open URL...<span class="shortcut">Ctrl+I</span></li>
-          <li class="separator"></li>
-          <li role="menuitem" id="cmd-options" tabindex="0">Options<span class="shortcut">5</span></li>
-          <li class="separator"></li>
-          <li role="menuitem" id="cmd-quit" tabindex="0">Quit</li>
-        </ul>
+    <div class="menu-item" id="menu-file">
+      <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">File</button>
+      <ul class="menu-dropdown" role="menu">
+        <li role="menuitem" id="cmd-open-dir" tabindex="0">Open directory...<span class="shortcut">Ctrl+O</span></li>
+        <li role="menuitem" id="cmd-open-file" tabindex="0">Open file / archive...<span class="shortcut"></span></li>
+        <li role="menuitem" id="cmd-use-url" tabindex="0" title="Load images / galleries from supported sites">Open
+          URL...<span class="shortcut">Ctrl+I</span></li>
+        <li class="separator"></li>
+        <li role="menuitem" id="cmd-options" tabindex="0">Options<span class="shortcut">5</span></li>
+        <li class="separator"></li>
+        <li role="menuitem" id="cmd-quit" tabindex="0">Quit</li>
+      </ul>
+    </div>
+
+    <div class="menu-item" id="menu-folder">
+      <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Folder</button>
+      <ul class="menu-dropdown" role="menu">
+        <li role="menuitem" id="cmd-history-back" tabindex="0">Back<span class="shortcut">Alt+A</span></li>
+        <li role="menuitem" id="cmd-history-forward" tabindex="0">Forward<span class="shortcut">Alt+D</span></li>
+        <li class="separator"></li>
+        <li role="menuitem" id="cmd-next" tabindex="0">Select / Open next<span class="shortcut">Shift+S</span></li>
+        <li role="menuitem" id="cmd-prev" tabindex="0">Select / Open previous<span class="shortcut">Shift+W</span></li>
+        <li role="menuitem" id="cmd-open-next-container" tabindex="0">Open next directory<span
+            class="shortcut">Ctrl+X</span></li>
+        <li role="menuitem" id="cmd-open-prev-container" tabindex="0">Open previous directory<span
+            class="shortcut">Ctrl+Z</span></li>
+        <li class="separator"></li>
+        <li role="menuitem" id="cmd-parent" tabindex="0">Open parent<span class="shortcut">Backspace</span></li>
+        <li role="menuitem" id="cmd-refresh" tabindex="0">Refresh<span class="shortcut">6</span></li>
+      </ul>
+    </div>
+
+    <div class="menu-item" id="menu-view">
+      <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">View</button>
+      <ul class="menu-dropdown" role="menu">
+        <li role="menuitem" id="cmd-zoom-in" tabindex="0">Zoom in<span class="shortcut">C</span></li>
+        <li role="menuitem" id="cmd-zoom-out" tabindex="0">Zoom out<span class="shortcut">Z</span></li>
+        <li role="menuitem" id="cmd-zoom-100" tabindex="0">Zoom 100%<span class="shortcut">X</span></li>
+        <li class="separator"></li>
+        <li role="menuitem" id="cmd-fit-none" tabindex="0" title="Display at original size (1:1 pixels)">Fit: None<span
+            class="shortcut">R</span></li>
+        <li role="menuitem" id="cmd-fit-width" tabindex="0"
+          title="Scale to fill viewport width, stretching small images">Fit width<span class="shortcut">Shift+Q</span>
+        </li>
+        <li role="menuitem" id="cmd-fit-height" tabindex="0"
+          title="Scale to fill viewport height, stretching small images">Fit height<span class="shortcut">Shift+E</span>
+        </li>
+        <li role="menuitem" id="cmd-fit-best" tabindex="0"
+          title="Scale to fit entirely within the viewport, stretching small images">Fit window<span
+            class="shortcut">Shift+F</span></li>
+        <li class="separator"></li>
+        <li role="menuitem" id="cmd-fit-width-if-larger" tabindex="0"
+          title="Shrink to viewport width, but never enlarge small images">Fit width if larger<span
+            class="shortcut">Q</span></li>
+        <li role="menuitem" id="cmd-fit-height-if-larger" tabindex="0"
+          title="Shrink to viewport height, but never enlarge small images">Fit height if larger<span
+            class="shortcut">E</span></li>
+        <li role="menuitem" id="cmd-fit-window-if-larger" tabindex="0"
+          title="Shrink to fit the viewport, but never enlarge small images">Fit window if larger<span
+            class="shortcut">F</span></li>
+        <li class="separator"></li>
+        <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
+          <span>Scale: <span id="scaling-current-label">Bilinear</span></span><span class="submenu-arrow">›</span>
+          <ul class="menu-dropdown submenu" role="menu">
+            <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none">
+              Pixelated<span class="shortcut"></span></li>
+            <li role="menuitem" id="cmd-scale-bilinear" tabindex="0" data-scaling="bilinear">Bilinear<span class="shortcut"></span></li>
+            <li role="menuitem" id="cmd-scale-lanczos" tabindex="0" data-scaling="lanczos">Lanczos<span class="shortcut"></span></li>
+          </ul>
+        </li>
+        <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
+          <span>Filter: <span id="filter-current-label">Off</span></span><span class="submenu-arrow">›</span>
+          <ul class="menu-dropdown submenu" role="menu">
+            <li role="menuitem" id="cmd-filter-off" tabindex="0" data-checked="false">Off<span class="shortcut"></span>
+            </li>
+            <li role="menuitem" id="cmd-toggle-anime4k-filter" tabindex="0" data-checked="false">Anime4K<span
+                class="shortcut"></span></li>
+            <li role="menuitem" id="cmd-toggle-scanlines-filter" tabindex="0" data-checked="false"
+              title="Straight scanlines, no curvature (Geom-inspired)">Scanlines<span class="shortcut"></span></li>
+            <li role="menuitem" id="cmd-toggle-phosphor-filter" tabindex="0" data-checked="false">Phosphor<span
+                class="shortcut"></span></li>
+            <li role="menuitem" id="cmd-toggle-crt-filter" tabindex="0" data-checked="false">Retro CRT<span
+                class="shortcut"></span></li>
+          </ul>
+        </li>
+        <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
+          <span>Rotate &amp; Flip</span><span class="submenu-arrow">›</span>
+          <ul class="menu-dropdown submenu" role="menu">
+            <li role="menuitem" id="cmd-rotate-cw" tabindex="0">Rotate clockwise<span class="shortcut">H</span></li>
+            <li role="menuitem" id="cmd-rotate-ccw" tabindex="0">Rotate counterclockwise<span class="shortcut">G</span>
+            </li>
+            <li class="separator"></li>
+            <li role="menuitem" id="cmd-flip-horizontal" tabindex="0">Flip horizontal<span class="shortcut">V</span>
+            </li>
+            <li role="menuitem" id="cmd-flip-vertical" tabindex="0">Flip vertical<span class="shortcut">B</span></li>
+          </ul>
+        </li>
+        <li class="separator"></li>
+        <li role="menuitem" id="cmd-fullscreen" tabindex="0">Fullscreen<span class="shortcut">4</span></li>
+        <li role="menuitem" id="cmd-toggle-transparent" tabindex="0" data-checked="false"
+          title="Render an opaque backdrop behind transparent images to see image bounds">
+          Opaque Canvas<span class="shortcut"></span>
+        </li>
+        <li role="menuitem" id="cmd-toggle-manhwa" tabindex="0" data-checked="false"
+          title="Vertical strip reading mode for long-strip comics">
+          Manhwa View<span class="shortcut">m</span>
+        </li>
+        <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
+          <span>Spread View: <span id="spread-current-label">Off</span></span><span class="submenu-arrow">›</span>
+          <ul class="menu-dropdown submenu" role="menu">
+            <li role="menuitem" id="cmd-spread-off" tabindex="0" title="Disable spread view">Off<span
+                class="shortcut"></span></li>
+            <li role="menuitem" id="cmd-spread-direction-rtl" tabindex="0" title="Right to left reading order (Manga)">
+              Right to Left (RTL)<span class="shortcut"></span></li>
+            <li role="menuitem" id="cmd-spread-direction-ltr" tabindex="0"
+              title="Left to right reading order (Western)">Left to Right (LTR)<span class="shortcut"></span></li>
+          </ul>
+        </li>
+        <li class="separator"></li>
+        <li role="menuitem" id="cmd-toggle-filelist" tabindex="0">File list<span class="shortcut">1</span></li>
+        <li role="menuitem" id="cmd-toggle-menubar" tabindex="0">Menu bar<span class="shortcut">2</span></li>
+        <li role="menuitem" id="cmd-toggle-statusbar" tabindex="0">Status bar<span class="shortcut">3</span></li>
+      </ul>
+    </div>
+
+    <div class="menu-item" id="menu-favorites">
+      <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Favorites</button>
+      <ul class="menu-dropdown" role="menu" id="favorites-menu-dropdown"></ul>
+    </div>
+
+    <div class="menubar-spacer" data-tauri-drag-region></div>
+    <button id="cmd-github" class="menu-link" type="button" title="Open GitHub repository">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor"
+          d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.36 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-.88-.01-1.73-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.93.86.09-.67.35-1.12.64-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.04 1.03-2.76-.1-.26-.45-1.31.1-2.72 0 0 .84-.28 2.75 1.05A9.28 9.28 0 0 1 12 6.96c.85 0 1.7.12 2.5.34 1.9-1.33 2.74-1.05 2.74-1.05.55 1.41.2 2.46.1 2.72.64.72 1.03 1.64 1.03 2.76 0 3.94-2.34 4.81-4.57 5.07.36.32.68.95.68 1.92 0 1.38-.01 2.5-.01 2.84 0 .27.18.59.69.49A10.18 10.18 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z" />
+      </svg>
+      GitHub
+    </button>
+  </nav>
+
+  <!-- Workspace (file panel + viewport) -->
+  <div id="workspace">
+
+    <!-- File list panel -->
+    <aside id="file-panel" aria-label="File list">
+      <div id="file-panel-header-top">
+        <div id="file-panel-breadcrumb" aria-label="Current location" title=""></div>
+      </div>
+      <div id="file-panel-favorites" class="collapsed is-empty">
+        <div id="file-panel-favorites-header" tabindex="0">
+          <span class="panel-header-title">Favorites</span><span class="toggle-icon">▼</span>
+        </div>
+        <ul id="favorites-list" role="listbox" aria-label="Favorites"></ul>
+      </div>
+      <div id="file-panel-library" class="is-empty"></div>
+      <div id="file-panel-header">
+        <div class="header-cell col-name" data-sort="name" tabindex="0">
+          Name <span class="sort-icon"></span>
+          <div class="col-resizer"></div>
+        </div>
+        <div class="header-cell col-ext" data-sort="ext" tabindex="0">
+          Ext <span class="sort-icon"></span>
+          <div class="col-resizer"></div>
+        </div>
+        <div class="header-cell col-date" data-sort="date" tabindex="0">
+          Modified <span class="sort-icon"></span>
+          <div class="col-resizer"></div>
+        </div>
+      </div>
+      <ul id="file-list" role="listbox" aria-label="Images in current directory" tabindex="-1">
+        <!-- Sentinel: invisible layout probe for row height measurement and pool cloning -->
+        <li id="file-list-sentinel" aria-hidden="true">
+          <span class="item-name"><span class="item-label">&nbsp;</span></span>
+          <span class="item-ext">&nbsp;</span>
+          <span class="item-date">&nbsp;</span>
+        </li>
+        <li id="file-list-thumbnail-sentinel" class="thumbnail-sentinel" aria-hidden="true">
+          <div class="item-thumbnail-wrapper"></div>
+          <div class="item-thumbnail-info">
+            <span class="item-thumbnail-title">&nbsp;</span>
+            <span class="item-thumbnail-meta">&nbsp;</span>
+          </div>
+        </li>
+        <div class="scroll-spacer" aria-hidden="true"></div>
+      </ul>
+      <div class="file-panel-actions">
+        <button id="btn-toggle-view-mode" class="icon-btn" title="Toggle Thumbnail View"
+          aria-label="Toggle Thumbnail View">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+        </button>
+        <button id="cmd-open-explorer" class="icon-btn" title="Open in File Explorer">
+          <svg id="cmd-file" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+        </button>
+        <button id="cmd-open-folder" class="icon-btn" title="Open Folder">
+          <svg id="cmd-folder" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </button>
+        <button id="btn-favorite-current" class="icon-btn" title="Add to Favorites" aria-label="Toggle Favorite"
+          disabled tabindex="-1">
+          <svg id="star" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon
+              points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+            </polygon>
+          </svg>
+        </button>
+        <button id="status-metadata-badge" class="icon-btn" title="Archive Info" aria-label="Show archive info">
+          <svg id="i-icon" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none"
+            stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+        </button>
+      </div>
+      <!-- Panel resize handle -->
+      <div id="panel-resize-handle" title="Drag to resize"></div>
+    </aside>
+
+    <!-- Viewer viewport -->
+    <div id="viewport">
+      <!-- Overlay indicator for spread mode when statusbar is hidden (unstyled) -->
+      <div id="spread-indicator" class="spread-indicator"></div>
+      <div id="manhwa-indicator" class="manhwa-indicator"></div>
+
+      <!-- Drop overlay, shown when no image is loaded -->
+      <div id="drop-overlay" class="active">
+        <div class="drop-hint overlay-prompt">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <p>Drop files here, or click to open a folder</p>
+          <span>Images, archives, and folders are supported</span>
+        </div>
       </div>
 
-      <div class="menu-item" id="menu-folder">
-        <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Folder</button>
-        <ul class="menu-dropdown" role="menu">
-          <li role="menuitem" id="cmd-history-back" tabindex="0">Back<span class="shortcut">Alt+A</span></li>
-          <li role="menuitem" id="cmd-history-forward" tabindex="0">Forward<span class="shortcut">Alt+D</span></li>
-          <li class="separator"></li>
-          <li role="menuitem" id="cmd-next" tabindex="0">Select / Open next<span class="shortcut">Shift+S</span></li>
-          <li role="menuitem" id="cmd-prev" tabindex="0">Select / Open previous<span class="shortcut">Shift+W</span></li>
-          <li role="menuitem" id="cmd-open-next-container" tabindex="0">Open next directory<span class="shortcut">Ctrl+X</span></li>
-          <li role="menuitem" id="cmd-open-prev-container" tabindex="0">Open previous directory<span class="shortcut">Ctrl+Z</span></li>
-          <li class="separator"></li>
-          <li role="menuitem" id="cmd-parent" tabindex="0">Open parent<span class="shortcut">Backspace</span></li>
-          <li role="menuitem" id="cmd-refresh" tabindex="0">Refresh<span class="shortcut">6</span></li>
-        </ul>
+      <!-- Password overlay for encrypted archives -->
+      <div id="password-overlay">
+        <form class="password-prompt overlay-prompt" autocomplete="off">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <p>This archive is password-protected</p>
+          <div class="password-field overlay-field">
+            <input type="password" id="password-input" placeholder="Enter password" spellcheck="false"
+              autocomplete="off" size="1">
+            <button type="submit">Unlock</button>
+          </div>
+          <span class="password-error overlay-error"></span>
+        </form>
       </div>
 
-      <div class="menu-item" id="menu-view">
-        <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">View</button>
-        <ul class="menu-dropdown" role="menu">
-          <li role="menuitem" id="cmd-zoom-in" tabindex="0">Zoom in<span class="shortcut">C</span></li>
-          <li role="menuitem" id="cmd-zoom-out" tabindex="0">Zoom out<span class="shortcut">Z</span></li>
-          <li role="menuitem" id="cmd-zoom-100" tabindex="0">Zoom 100%<span class="shortcut">X</span></li>
-          <li class="separator"></li>
-          <li role="menuitem" id="cmd-fit-none" tabindex="0" title="Display at original size (1:1 pixels)">Fit: None<span class="shortcut">R</span></li>
-          <li role="menuitem" id="cmd-fit-width" tabindex="0" title="Scale to fill viewport width, stretching small images">Fit width<span class="shortcut">Shift+Q</span></li>
-          <li role="menuitem" id="cmd-fit-height" tabindex="0" title="Scale to fill viewport height, stretching small images">Fit height<span class="shortcut">Shift+E</span></li>
-          <li role="menuitem" id="cmd-fit-best" tabindex="0" title="Scale to fit entirely within the viewport, stretching small images">Fit window<span class="shortcut">Shift+F</span></li>
-          <li class="separator"></li>
-          <li role="menuitem" id="cmd-fit-width-if-larger" tabindex="0" title="Shrink to viewport width, but never enlarge small images">Fit width if larger<span class="shortcut">Q</span></li>
-          <li role="menuitem" id="cmd-fit-height-if-larger" tabindex="0" title="Shrink to viewport height, but never enlarge small images">Fit height if larger<span class="shortcut">E</span></li>
-          <li role="menuitem" id="cmd-fit-window-if-larger" tabindex="0" title="Shrink to fit the viewport, but never enlarge small images">Fit window if larger<span class="shortcut">F</span></li>
-          <li class="separator"></li>
-          <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
-            <span>Scaling: <span id="scaling-current-label">Bilinear</span></span><span class="submenu-arrow">›</span>
-            <ul class="menu-dropdown submenu" role="menu">
-              <li role="menuitem" id="cmd-scale-none" tabindex="0" data-scaling="none" title="Cycle modes with ] / [">Pixelated<span class="shortcut"></span></li>
-              <li role="menuitem" id="cmd-scale-bilinear" tabindex="0" data-scaling="bilinear" title="Cycle modes with ] / [">Bilinear<span class="shortcut"></span></li>
-              <li role="menuitem" id="cmd-scale-lanczos" tabindex="0" data-scaling="lanczos" title="Cycle modes with ] / [">Lanczos<span class="shortcut"></span></li>
-            </ul>
-          </li>
-          <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
-            <span>Filter: <span id="filter-current-label">Off</span></span><span class="submenu-arrow">›</span>
-            <ul class="menu-dropdown submenu" role="menu">
-              <li role="menuitem" id="cmd-filter-off" tabindex="0" data-checked="false">Off<span class="shortcut"></span></li>
-              <li role="menuitem" id="cmd-toggle-anime4k-filter" tabindex="0" data-checked="false">Anime4K<span class="shortcut"></span></li>
-              <li role="menuitem" id="cmd-toggle-scanlines-filter" tabindex="0" data-checked="false" title="Straight scanlines, no curvature (Geom-inspired)">Scanlines<span class="shortcut"></span></li>
-              <li role="menuitem" id="cmd-toggle-phosphor-filter" tabindex="0" data-checked="false">Phosphor<span class="shortcut"></span></li>
-              <li role="menuitem" id="cmd-toggle-crt-filter" tabindex="0" data-checked="false">Retro CRT<span class="shortcut"></span></li>
-            </ul>
-          </li>
-          <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
-            <span>Rotate &amp; Flip</span><span class="submenu-arrow">›</span>
-            <ul class="menu-dropdown submenu" role="menu">
-              <li role="menuitem" id="cmd-rotate-cw" tabindex="0">Rotate clockwise<span class="shortcut">H</span></li>
-              <li role="menuitem" id="cmd-rotate-ccw" tabindex="0">Rotate counterclockwise<span class="shortcut">G</span></li>
-              <li class="separator"></li>
-              <li role="menuitem" id="cmd-flip-horizontal" tabindex="0">Flip horizontal<span class="shortcut">V</span></li>
-              <li role="menuitem" id="cmd-flip-vertical" tabindex="0">Flip vertical<span class="shortcut">B</span></li>
-            </ul>
-          </li>
-          <li class="separator"></li>
-          <li role="menuitem" id="cmd-fullscreen" tabindex="0">Fullscreen<span class="shortcut">4</span></li>
-          <li role="menuitem" id="cmd-toggle-transparent" tabindex="0" data-checked="false" title="Render an opaque backdrop behind transparent images to see image bounds">
-            Opaque Canvas<span class="shortcut"></span>
-          </li>
-          <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
-            <span>Spread View: <span id="spread-current-label">Off</span></span><span class="submenu-arrow">›</span>
-            <ul class="menu-dropdown submenu" role="menu">
-              <li role="menuitem" id="cmd-spread-off" tabindex="0" title="Disable spread view">Off<span class="shortcut"></span></li>
-              <li role="menuitem" id="cmd-spread-direction-rtl" tabindex="0" title="Right to left reading order (Manga)">Right to Left (RTL)<span class="shortcut"></span></li>
-              <li role="menuitem" id="cmd-spread-direction-ltr" tabindex="0" title="Left to right reading order (Western)">Left to Right (LTR)<span class="shortcut"></span></li>
-            </ul>
-          </li>
-          <li class="separator"></li>
-          <li role="menuitem" id="cmd-toggle-filelist" tabindex="0">File list<span class="shortcut">1</span></li>
-          <li role="menuitem" id="cmd-toggle-menubar" tabindex="0">Menu bar<span class="shortcut">2</span></li>
-          <li role="menuitem" id="cmd-toggle-statusbar" tabindex="0">Status bar<span class="shortcut">3</span></li>
-        </ul>
+      <!-- URL overlay for remote galleries -->
+      <div id="url-overlay">
+        <form class="url-prompt overlay-prompt" autocomplete="off">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="2" y1="12" x2="22" y2="12" />
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+          <p>Enter URL</p>
+          <div class="url-field overlay-field" data-placeholder="mangadex.org/title/*/bakemonogatari">
+            <input type="text" id="url-input" placeholder="mangadex.org/title/*/bakemonogatari" spellcheck="false"
+              autocomplete="off" size="1">
+            <button type="submit">Import</button>
+          </div>
+          <span class="url-error overlay-error"></span>
+        </form>
       </div>
 
-      <div class="menu-item" id="menu-favorites">
-        <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Favorites</button>
-        <ul class="menu-dropdown" role="menu" id="favorites-menu-dropdown"></ul>
+      <!-- Manhwa vertical strip, hidden until manhwa-active is set on #viewport -->
+      <div id="manhwa-strip">
+        <div id="manhwa-slot-grill"></div>
+        <div id="manhwa-strip-spacer-top"></div>
+        <div id="manhwa-strip-spacer-bottom"></div>
       </div>
 
-      <div class="menubar-spacer" data-tauri-drag-region></div>
-      <button id="cmd-github" class="menu-link" type="button" title="Open GitHub repository">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path fill="currentColor" d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.36 6.84 9.72.5.1.68-.22.68-.49 0-.24-.01-.88-.01-1.73-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.93.86.09-.67.35-1.12.64-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.04 1.03-2.76-.1-.26-.45-1.31.1-2.72 0 0 .84-.28 2.75 1.05A9.28 9.28 0 0 1 12 6.96c.85 0 1.7.12 2.5.34 1.9-1.33 2.74-1.05 2.74-1.05.55 1.41.2 2.46.1 2.72.64.72 1.03 1.64 1.03 2.76 0 3.94-2.34 4.81-4.57 5.07.36.32.68.95.68 1.92 0 1.38-.01 2.5-.01 2.84 0 .27.18.59.69.49A10.18 10.18 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z"/>
-        </svg>
-        GitHub
-      </button>
-    </nav>
+      <!-- Manhwa column filter output. One canvas for the whole column,
+           painted by the column pipeline in viewerPipelines.js. -->
+      <canvas id="manhwa-filter-canvas"></canvas>
 
-    <!-- Workspace (file panel + viewport) -->
-    <div id="workspace">
+      <!-- Manhwa SVG pump layer. Holds blob-backed pump images so SMIL
+           keeps advancing while the column pipeline samples them. -->
+      <div id="manhwa-svg-pump-layer" aria-hidden="true"></div>
 
-      <!-- File list panel -->
-      <aside id="file-panel" aria-label="File list">
-        <div id="file-panel-header-top">
-          <div id="file-panel-breadcrumb" aria-label="Current location" title=""></div>
-        </div>
-        <div id="file-panel-favorites" class="collapsed is-empty">
-          <div id="file-panel-favorites-header" tabindex="0">
-            <span class="panel-header-title">Favorites</span><span class="toggle-icon">▼</span>
-          </div>
-          <ul id="favorites-list" role="listbox" aria-label="Favorites"></ul>
-        </div>
-        <div id="file-panel-library" class="is-empty"></div>
-        <div id="file-panel-header">
-          <div class="header-cell col-name" data-sort="name" tabindex="0">
-            Name <span class="sort-icon"></span>
-            <div class="col-resizer"></div>
-          </div>
-          <div class="header-cell col-ext" data-sort="ext" tabindex="0">
-            Ext <span class="sort-icon"></span>
-            <div class="col-resizer"></div>
-          </div>
-          <div class="header-cell col-date" data-sort="date" tabindex="0">
-            Modified <span class="sort-icon"></span>
-            <div class="col-resizer"></div>
-          </div>
-        </div>
-        <ul id="file-list" role="listbox" aria-label="Images in current directory" tabindex="-1">
-          <!-- Sentinel: invisible layout probe for row height measurement and pool cloning -->
-          <li id="file-list-sentinel" aria-hidden="true">
-            <span class="item-name"><span class="item-label">&nbsp;</span></span>
-            <span class="item-ext">&nbsp;</span>
-            <span class="item-date">&nbsp;</span>
-          </li>
-          <li id="file-list-thumbnail-sentinel" class="thumbnail-sentinel" aria-hidden="true">
-            <div class="item-thumbnail-wrapper"></div>
-            <div class="item-thumbnail-info">
-              <span class="item-thumbnail-title">&nbsp;</span>
-              <span class="item-thumbnail-meta">&nbsp;</span>
-            </div>
-          </li>
-          <div class="scroll-spacer" aria-hidden="true"></div>
-        </ul>
-        <div class="file-panel-actions">
-          <button id="btn-toggle-view-mode" class="icon-btn" title="Toggle Thumbnail View" aria-label="Toggle Thumbnail View">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="7" height="7"></rect>
-              <rect x="14" y="3" width="7" height="7"></rect>
-              <rect x="14" y="14" width="7" height="7"></rect>
-              <rect x="3" y="14" width="7" height="7"></rect>
-            </svg>
-          </button>
-          <button id="cmd-open-explorer" class="icon-btn" title="Open in File Explorer">
-            <svg id="cmd-file" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-          </button>
-          <button id="cmd-open-folder" class="icon-btn" title="Open Folder">
-            <svg id="cmd-folder" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-          </button>
-          <button id="btn-favorite-current" class="icon-btn" title="Add to Favorites" aria-label="Toggle Favorite" disabled tabindex="-1">
-            <svg id="star" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-          </button>
-          <button id="status-metadata-badge" class="icon-btn" title="Archive Info" aria-label="Show archive info">
-            <svg id="i-icon" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          </button>
-        </div>
-        <!-- Panel resize handle -->
-        <div id="panel-resize-handle" title="Drag to resize"></div>
-      </aside>
+      <!-- Manhwa audio overlay for per-slot volume pills. Stacks above the
+           filter canvas so controls remain accessible during WebGL filtering. -->
+      <div id="manhwa-audio-overlay"></div>
 
-      <!-- Viewer viewport -->
-      <div id="viewport">
-        <!-- Overlay indicator for spread mode when statusbar is hidden (unstyled) -->
-        <div id="spread-indicator" class="spread-indicator"></div>
-
-        <!-- Drop overlay, shown when no image is loaded -->
-        <div id="drop-overlay" class="active">
-          <div class="drop-hint overlay-prompt">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            <p>Drop files here, or click to open a folder</p>
-            <span>Images, archives, and folders are supported</span>
-          </div>
-        </div>
-
-        <!-- Password overlay for encrypted archives -->
-        <div id="password-overlay">
-          <form class="password-prompt overlay-prompt" autocomplete="off">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            <p>This archive is password-protected</p>
-            <div class="password-field overlay-field">
-              <input type="password" id="password-input" placeholder="Enter password" spellcheck="false" autocomplete="off" size="1">
-              <button type="submit">Unlock</button>
-            </div>
-            <span class="password-error overlay-error"></span>
-          </form>
-        </div>
-
-        <!-- URL overlay for remote galleries -->
-        <div id="url-overlay">
-          <form class="url-prompt overlay-prompt" autocomplete="off">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="2" y1="12" x2="22" y2="12"/>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-            </svg>
-            <p>Enter URL</p>
-            <div class="url-field overlay-field" data-placeholder="mangadex.org/title/*/bakemonogatari">
-              <input type="text" id="url-input" placeholder="mangadex.org/title/*/bakemonogatari" spellcheck="false" autocomplete="off" size="1">
-              <button type="submit">Import</button>
-            </div>
-            <span class="url-error overlay-error"></span>
-          </form>
-        </div>
-
-        <!-- Image wrapper. It contains the image, grill, and border.
+      <!-- Image wrapper. It contains the image, grill, and border.
              The wrapper is the transformed element. CSS handles the sizing. -->
-        <div id="viewer-img-wrapper">
-          <img id="viewer-loading-frame" class="viewer-img is-placeholder" decoding="async" alt="Loading..." draggable="false">
-          <div id="img-grill"></div>
-          <div id="img-grill-border"></div>
-          <img class="viewer-img" decoding="async" alt="" draggable="false">
-          <img class="viewer-img" decoding="async" alt="" draggable="false">
-          <video id="viewer-video" class="viewer-video" loop muted playsinline preload="auto" crossorigin="anonymous"></video>
-          <video id="viewer-video-b" class="viewer-video" loop muted playsinline preload="auto" crossorigin="anonymous"></video>
-          <canvas id="viewer-lanczos-canvas"></canvas>
-        </div>
+      <div id="viewer-img-wrapper">
+        <img id="viewer-loading-frame" class="viewer-img is-placeholder" decoding="async" alt="Loading..."
+          draggable="false">
+        <div id="img-grill"></div>
+        <div id="img-grill-border"></div>
+        <img class="viewer-img" decoding="async" alt="" draggable="false">
+        <img class="viewer-img" decoding="async" alt="" draggable="false">
+        <video id="viewer-video" class="viewer-video" loop muted playsinline preload="auto"
+          crossorigin="anonymous"></video>
+        <video id="viewer-video-b" class="viewer-video" loop muted playsinline preload="auto"
+          crossorigin="anonymous"></video>
+        <canvas id="viewer-lanczos-canvas"></canvas>
+      </div>
 
-        <!-- Bridge layer. Retiring image parks here for two frames so it keeps
+      <!-- Bridge layer. Retiring image parks here for two frames so it keeps
              the pre-navigation transform instead of inheriting the incoming
              image wrapper scale. -->
-        <div id="viewer-bridge-layer"></div>
-        
-        <img id="viewer-svg-pump" class="svg-pump-live hidden">
-        <canvas id="viewer-filter-canvas"></canvas>
-        <audio id="viewer-audio" loop preload="auto"></audio>
+      <div id="viewer-bridge-layer"></div>
 
-        <!-- Fixed audio control pill in bottom-left of viewport -->
-        <div class="audio-control-container">
-          <button id="btn-audio-toggle" class="icon-btn" aria-label="No Audio" disabled tabindex="-1">
-            <svg class="audio-icon audio-icon-volume-off" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M16 9a5 5 0 0 1 .95 2.293"></path>
-              <path d="M19.364 5.636a9 9 0 0 1 1.889 9.96"></path>
-              <path d="m2 2 20 20"></path>
-              <path d="m7 7-.587.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298V11"></path>
-              <path d="M9.828 4.172A.686.686 0 0 1 11 4.657v.686"></path>
-            </svg>
-            <svg class="audio-icon audio-icon-volume-x" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <img id="viewer-svg-pump" class="svg-pump-live hidden">
+      <canvas id="viewer-filter-canvas"></canvas>
+      <audio id="viewer-audio" loop preload="auto"></audio>
+
+      <!-- Fixed audio control pill in bottom-left of viewport -->
+      <div class="audio-control-container">
+        <button id="btn-audio-toggle" class="icon-btn" aria-label="No Audio" disabled tabindex="-1">
+          <svg class="audio-icon audio-icon-volume-off" viewBox="0 0 24 24" width="14" height="14" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M16 9a5 5 0 0 1 .95 2.293"></path>
+            <path d="M19.364 5.636a9 9 0 0 1 1.889 9.96"></path>
+            <path d="m2 2 20 20"></path>
+            <path
+              d="m7 7-.587.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298V11">
+            </path>
+            <path d="M9.828 4.172A.686.686 0 0 1 11 4.657v.686"></path>
+          </svg>
+          <svg class="audio-icon audio-icon-volume-x" viewBox="0 0 24 24" width="14" height="14" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <line x1="22" y1="9" x2="16" y2="15"></line>
+            <line x1="16" y1="9" x2="22" y2="15"></line>
+          </svg>
+          <svg class="audio-icon audio-icon-volume" viewBox="0 0 24 24" width="14" height="14" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          </svg>
+          <svg class="audio-icon audio-icon-volume-1" viewBox="0 0 24 24" width="14" height="14" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+          <svg class="audio-icon audio-icon-volume-2" viewBox="0 0 24 24" width="14" height="14" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+          </svg>
+        </button>
+        <div id="audio-volume-popover" class="volume-popover is-disabled">
+          <input type="range" id="audio-volume-slider" min="0" max="1" step="0.05" value="0.5" aria-label="Volume">
+        </div>
+      </div>
+
+      <!-- Per slot volume pill template for manhwa strip videos. Cloned once
+           per sounding video slot; the strip audio coordinator owns it. -->
+      <template id="manhwa-volume-template">
+        <div class="manhwa-volume">
+          <button class="manhwa-volume-toggle icon-btn" aria-label="Mute Audio">
+            <svg class="mvol-icon mvol-x" viewBox="0 0 24 24" width="14" height="14" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
               <line x1="22" y1="9" x2="16" y2="15"></line>
               <line x1="16" y1="9" x2="22" y2="15"></line>
             </svg>
-            <svg class="audio-icon audio-icon-volume" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg class="mvol-icon mvol-base" viewBox="0 0 24 24" width="14" height="14" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
             </svg>
-            <svg class="audio-icon audio-icon-volume-1" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg class="mvol-icon mvol-1" viewBox="0 0 24 24" width="14" height="14" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
               <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
             </svg>
-            <svg class="audio-icon audio-icon-volume-2" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg class="mvol-icon mvol-2" viewBox="0 0 24 24" width="14" height="14" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
               <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
               <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
             </svg>
           </button>
-          <div id="audio-volume-popover" class="volume-popover is-disabled">
-            <input type="range" id="audio-volume-slider" min="0" max="1" step="0.05" value="0.5" aria-label="Volume">
+          <div class="manhwa-volume-popover">
+            <input type="range" class="manhwa-volume-slider" min="0" max="1" step="0.05" value="0.5" aria-label="Volume">
           </div>
         </div>
+      </template>
 
-      </div>
-
-      <!-- Fullscreen exit hint, Boss key / Esc -->
-      <div id="fullscreen-exit-hint" role="status" aria-live="polite">
-        <span>Press and hold</span>
-        <kbd id="fullscreen-exit-key">Esc</kbd>
-        <span>to exit full screen</span>
-      </div>
-      
-      <!-- Fullscreen exit top region -->
-      <div id="fullscreen-exit-region" aria-hidden="true">
-        <button id="fullscreen-exit-btn" type="button" tabindex="-1" disabled aria-label="Exit full screen">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-          </svg>
-        </button>
-      </div>
     </div>
 
-    <!-- Status bar -->
-    <footer id="statusbar" class="hidden" aria-live="polite">
-      <span class="status-filename"></span>
-      <span class="status-scroll-zoom"></span>
-      <span class="status-spread"></span>
-      <span class="status-dims">Loading...</span>
-      <span class="status-index">Loading...</span>
-      <span class="status-zoom">Loading...</span>
-      <span class="status-fit">Loading...</span>
-      <span class="status-version">v1.0.0</span>
-    </footer>
+    <!-- Fullscreen exit hint, Boss key / Esc -->
+    <div id="fullscreen-exit-hint" role="status" aria-live="polite">
+      <span>Press and hold</span>
+      <kbd id="fullscreen-exit-key">Esc</kbd>
+      <span>to exit full screen</span>
+    </div>
 
-    <!-- Scripts, decoupled load order -->
-    <div id="measure-probe" class="measure-probe" aria-hidden="true"></div>
-    <script src="js/vendors/pica.js"></script>
-    <script src="js/vendors/purify.min.js"></script>
-    <script type="module" src="/js/shellBackground.js"></script>
-    <script type="module" src="/js/main/main.js"></script>
-  </body>
+    <!-- Fullscreen exit top region -->
+    <div id="fullscreen-exit-region" aria-hidden="true">
+      <button id="fullscreen-exit-btn" type="button" tabindex="-1" disabled aria-label="Exit full screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <footer id="statusbar" class="hidden" aria-live="polite">
+    <span class="status-filename"></span>
+    <span class="status-scroll-zoom"></span>
+    <span class="status-spread"></span>
+    <span class="status-manhwa"></span>
+    <span class="status-dims">Loading...</span>
+    <span class="status-index">Loading...</span>
+    <span class="status-zoom">Loading...</span>
+    <span class="status-fit">Loading...</span>
+    <span class="status-scaling">Loading...</span>
+    <span class="status-filter">Loading...</span>
+    <span class="status-version">v1.0.0</span>
+  </footer>
+
+  <!-- Scripts, decoupled load order -->
+  <div id="measure-probe" class="measure-probe" aria-hidden="true"></div>
+  <script src="js/vendors/pica.js"></script>
+  <script src="js/vendors/purify.min.js"></script>
+  <script type="module" src="/js/shellBackground.js"></script>
+  <script type="module" src="/js/main/main.js"></script>
+</body>
+
 </html>

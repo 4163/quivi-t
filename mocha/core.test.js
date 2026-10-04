@@ -19,6 +19,7 @@ const {
   DEFAULT_SPREAD_MODE,
   DEFAULT_FIT_MODE,
   DEFAULT_FILE_LIST_VIEW_MODE,
+  DEFAULT_MANHWA_ENABLED,
   mergeConfig
 } = await import('../src/js/keybinds.js');
 
@@ -29,10 +30,15 @@ describe('Core state machine', () => {
       assert.equal(DEFAULT_SPREAD_MODE, 'off');
       assert.equal(DEFAULT_FIT_MODE, 'height-if-larger');
       assert.equal(DEFAULT_FILE_LIST_VIEW_MODE, 'list');
+      assert.equal(DEFAULT_MANHWA_ENABLED, false);
 
       const merged = mergeConfig({});
       assert.equal(merged.frontend_data.spread_enabled, false);
       assert.equal(merged.frontend_data.file_list_view_mode, 'list');
+      assert.equal(merged.frontend_data.manhwa_enabled, false);
+
+      const mergedWithManhwa = mergeConfig({ frontend_data: { manhwa_enabled: true } });
+      assert.equal(mergedWithManhwa.frontend_data.manhwa_enabled, true);
     });
 
     it('notifies subscribers on state change', () => {
@@ -97,6 +103,54 @@ describe('Core state machine', () => {
 
       Core.toggleSpreadMode('rtl');
       assert.equal(Core.getState().spreadEnabled, false);
+    });
+  });
+
+  describe('manhwa view state and toggling', () => {
+    it('toggles manhwa mode and updates state and config', () => {
+      Core.setManhwaMode(false);
+      assert.equal(Core.getState().manhwaEnabled, false);
+
+      let notified = false;
+      Core.onStateChange(() => {
+        notified = true;
+      });
+
+      Core.toggleManhwaMode();
+      assert.equal(Core.getState().manhwaEnabled, true);
+      assert.equal(Core.getState().config.frontend_data.manhwa_enabled, true);
+      assert.equal(notified, true);
+
+      notified = false;
+      Core.toggleManhwaMode();
+      assert.equal(Core.getState().manhwaEnabled, false);
+      assert.equal(Core.getState().config.frontend_data.manhwa_enabled, false);
+      assert.equal(notified, true);
+
+      Core.setManhwaMode(true);
+      assert.equal(Core.getState().manhwaEnabled, true);
+      assert.equal(Core.getState().config.frontend_data.manhwa_enabled, true);
+
+      Core.setManhwaMode(false);
+      assert.equal(Core.getState().manhwaEnabled, false);
+      assert.equal(Core.getState().config.frontend_data.manhwa_enabled, false);
+    });
+
+    it('mutually excludes manhwa mode and spread mode', () => {
+      Core.setSpreadEnabled(true);
+      assert.equal(Core.getState().spreadEnabled, true);
+
+      Core.setManhwaMode(true);
+      assert.equal(Core.getState().manhwaEnabled, true);
+      assert.equal(Core.getState().spreadEnabled, false);
+
+      Core.setSpreadEnabled(true);
+      assert.equal(Core.getState().spreadEnabled, true);
+      assert.equal(Core.getState().manhwaEnabled, false);
+
+      // Clean up
+      Core.setSpreadEnabled(false);
+      Core.setManhwaMode(false);
     });
   });
 
@@ -176,6 +230,27 @@ describe('Core state machine', () => {
       assert.equal(Core.getState().spreadStep, 1);
       Core.navigate(1);
       assert.equal(Core.getState().index, 2);
+    });
+  });
+
+  describe('cleared selection navigation', () => {
+    const dummyList = [
+      { name: '01.png', path: '/manga/01.png' },
+      { name: '02.png', path: '/manga/02.png' },
+      { name: '03.png', path: '/manga/03.png' },
+      { name: '04.png', path: '/manga/04.png' }
+    ];
+
+    it('restarts at the last item moving backward from cleared selection', () => {
+      Core.setState({ list: dummyList, index: -1 });
+      Core.navigate(-1);
+      assert.equal(Core.getState().index, 3);
+    });
+
+    it('restarts at the first item moving forward from cleared selection', () => {
+      Core.setState({ list: dummyList, index: -1 });
+      Core.navigate(1);
+      assert.equal(Core.getState().index, 0);
     });
   });
 

@@ -177,6 +177,10 @@ export const FsUtils = {
     }
   },
 
+  getUnlockedPassword(archivePath) {
+    return _unlockedArchivePasswords.get(archivePath) ?? null;
+  },
+
   revokeIfObjectURL(src) {
     if (src && src.startsWith('blob:')) URL.revokeObjectURL(src);
   },
@@ -1137,5 +1141,13 @@ export const FsUtils = {
         }).catch(err => console.warn('[Prefetch] Error:', err));
       }, 75);
     }
-  }
+  },
+
+  prefetchArchiveEntries(archivePath, entryNames) {
+    if (!archivePath || !entryNames || entryNames.length === 0 || !window.__TAURI__) return;
+    invoke('prefetch_archive_entries', {
+      archivePath,
+      entries: entryNames,
+    }).catch(err => console.warn('[Prefetch] Error:', err));
+  },
 };

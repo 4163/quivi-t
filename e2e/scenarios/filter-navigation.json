@@ -1,0 +1,20 @@
+{
+  "name": "filter-navigation",
+  "recordedAt": "2026-09-15T05:50:00.000Z",
+  "initialPath": "test-files/export_1785518878919.png",
+  "initialState": {
+    "filename": "export_1785518878919.png",
+    "pipeline": {
+      "filter": "crt",
+      "fitMode": "height-if-larger",
+      "scaling": "bilinear"
+    }
+  },
+  "actions": [
+    "cmd-next",
+    "cmd-next",
+    "cmd-next",
+    "cmd-prev",
+    "cmd-prev"
+  ]
+}

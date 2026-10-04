@@ -2,7 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '../..');
@@ -170,6 +170,19 @@ async function main() {
     } else {
       console.log('[DIAGNOSTICS] Using existing investigation copy: e2e/replay-diagnostics/investigation.js');
     }
+  }
+
+  // Agent mode: same replay with stale-process cleanup, log file, timeout,
+  // and a short summary. Non-browser commands above already returned, so this
+  // only wraps real runs. The flag is stripped so the trip back ends here.
+  if (args.includes('--agent')) {
+    const agentArgs = args.filter((a) => a !== '--agent');
+    const res = spawnSync('node', ['scripts/e2e-agent.js', '--replay', ...agentArgs], {
+      cwd: rootDir,
+      stdio: 'inherit',
+      shell: true,
+    });
+    process.exit(res.status ?? 1);
   }
 
   let scenario = 'last-recording';

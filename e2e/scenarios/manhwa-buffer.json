@@ -1,0 +1,1 @@
+{"name": "manhwa-buffer", "initialPath": "test-files/_archives/zip.zip", "initialState": {"index": 0, "manhwa": true}, "actions": ["cmd-next", "cmd-next", "cmd-next", "cmd-next", "cmd-next", "cmd-next", "cmd-next", "cmd-next", "cmd-next", "cmd-next"]}

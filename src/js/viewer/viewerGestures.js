@@ -1,7 +1,6 @@
 import { Core } from '../core.js';
 import { activeKeys } from '../shortcuts.js';
 import { MOUSE_BUTTON_NAMES } from '../services/keyCombo.js';
-
 export function createViewerGestures(viewportState) {
   let _isPanning = false;
   let _panStartX = 0;
@@ -148,12 +147,18 @@ export function createViewerGestures(viewportState) {
     return _panButtonsDown.size > 0 || _keyPanHeld(null);
   }
 
+  let _lastPanX = 0;
+  let _lastPanY = 0;
+
   function _startPan(clientX, clientY) {
     _isPanning = true;
+    _lastPanX = clientX;
+    _lastPanY = clientY;
     _panStartX = clientX;
     _panStartY = clientY;
     _panOriginTx = viewportState.getTx();
     _panOriginTy = viewportState.getTy();
+    _lastPollPos = null;
     document.body.classList.toggle('cursor-move', true);
     if (_keyPanHeld(null)) _startCursorPoll();
   }
@@ -171,6 +176,7 @@ export function createViewerGestures(viewportState) {
   let _cursorPolling = false;
   let _cursorPollTimer = null;
   let _cursorPollInFlight = false;
+  let _lastPollPos = null;
   let _winClientOriginX = 0;
   let _winClientOriginY = 0;
   let _winScaleFactor = 1;
@@ -216,6 +222,7 @@ export function createViewerGestures(viewportState) {
 
   function _stopCursorPoll() {
     _cursorPolling = false;
+    _lastPollPos = null;
     if (_cursorPollTimer) {
       clearInterval(_cursorPollTimer);
       _cursorPollTimer = null;
@@ -231,18 +238,40 @@ export function createViewerGestures(viewportState) {
     _cursorPollInFlight = true;
     try {
       const pos = await window.__TAURI__.window.cursorPosition();
+      if (!_cursorPolling) {
+        _cursorPollInFlight = false;
+        return;
+      }
       const { x, y } = _cursorToClient(pos);
-      _updatePan(x, y);
+      const isInside = (x >= 0 && x <= window.innerWidth && y >= 0 && y <= window.innerHeight);
+
+      if (isInside) {
+        // While inside window bounds, DOM mousemove is the authoritative writer.
+        _lastPollPos = pos;
+      } else if (_isPanning) {
+        // Outside window: track relative delta to continue pan without origin mismatch.
+        if (_lastPollPos) {
+          const dx = (pos.x - _lastPollPos.x) / _winScaleFactor;
+          const dy = (pos.y - _lastPollPos.y) / _winScaleFactor;
+          if (dx !== 0 || dy !== 0) {
+            viewportState.panBy(dx, dy);
+          }
+        }
+        _lastPollPos = pos;
+      }
     } catch {}
     _cursorPollInFlight = false;
   }
 
   function _updatePan(clientX, clientY) {
     if (!_isPanning) return;
-    viewportState.panTo(
-      _panOriginTx + (clientX - _panStartX),
-      _panOriginTy + (clientY - _panStartY)
-    );
+    const dx = clientX - _lastPanX;
+    const dy = clientY - _lastPanY;
+    _lastPanX = clientX;
+    _lastPanY = clientY;
+    if (dx !== 0 || dy !== 0) {
+      viewportState.panBy(dx, dy);
+    }
   }
 
   function _onMouseDown(e) {
@@ -281,6 +310,8 @@ export function createViewerGestures(viewportState) {
   const viewport = document.getElementById('viewport');
   if (viewport) {
     viewport.addEventListener('mousedown', (e) => {
+      _lastMouseX = e.clientX;
+      _lastMouseY = e.clientY;
       _showCursor();
       _armIdleCursorTimer();
       _onMouseDown(e);
@@ -288,11 +319,15 @@ export function createViewerGestures(viewportState) {
     viewport.addEventListener('contextmenu', (e) => {
       if (_panMouseButtons.has(2)) e.preventDefault();
     });
-    viewport.addEventListener('mouseenter', () => {
+    viewport.addEventListener('mouseenter', (e) => {
+      _lastMouseX = e.clientX;
+      _lastMouseY = e.clientY;
       _showCursor();
       _armIdleCursorTimer();
     });
-    viewport.addEventListener('pointermove', () => {
+    viewport.addEventListener('pointermove', (e) => {
+      _lastMouseX = e.clientX;
+      _lastMouseY = e.clientY;
       _showCursor();
       _armIdleCursorTimer();
     });
@@ -313,6 +348,7 @@ export function createViewerGestures(viewportState) {
   window.addEventListener('keydown', (e) => {
     if (e.repeat) return;
     setTimeout(() => {
+      if (Core.getState().manhwaEnabled) return;
       if (!_isMouseOverViewportNow()) return;
       if (!_isPanning && _panButtonsDown.size === 0 && _keyPanHeld(null)) {
         _startPan(_lastMouseX, _lastMouseY);

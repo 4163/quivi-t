@@ -653,6 +653,24 @@ const FILTER_LABELS = {
   'crt': 'Retro CRT'
 };
 
+function _setMenuItemDisabled(id, disabled, note = '') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('muted', disabled);
+  el.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+  if (disabled) {
+    if (!el.dataset.origTitle && el.title) {
+      el.dataset.origTitle = el.title;
+    }
+    el.title = note;
+  } else {
+    if (el.dataset.origTitle !== undefined) {
+      el.title = el.dataset.origTitle;
+      delete el.dataset.origTitle;
+    }
+  }
+}
+
 export function syncViewMenu(state) {
   const isAnimated = !!state.isAnimated;
   // The renderer silently falls back to Bilinear for SVGs.
@@ -690,6 +708,17 @@ export function syncViewMenu(state) {
     const el = document.getElementById(s.actionId);
     if (!el) continue;
     el.classList.toggle('checked', displayScaling === s.id);
+  }
+
+  const manhwaOn = !!(state.manhwaEnabled ?? state.config?.frontend_data?.manhwa_enabled);
+  const manhwaEl = document.getElementById('cmd-toggle-manhwa');
+  if (manhwaEl) {
+    manhwaEl.classList.toggle('checked', manhwaOn);
+  }
+
+  const manhwaRotationNote = 'Rotation is disabled in Manhwa view';
+  for (const id of ['cmd-rotate-cw', 'cmd-rotate-ccw']) {
+    _setMenuItemDisabled(id, manhwaOn, manhwaRotationNote);
   }
 
   const spreadEnabled = !!(state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? (state.spreadMode && state.spreadMode !== 'off'));

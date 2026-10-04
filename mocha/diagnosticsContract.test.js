@@ -41,21 +41,34 @@ describe('Diagnostics system contract integrity', () => {
     const indexHtmlPath = path.join(projectRoot, 'src', 'index.html');
     const viewerRenderPath = path.join(projectRoot, 'src', 'js', 'viewer', 'viewerRender.js');
     const viewerPipelinesPath = path.join(projectRoot, 'src', 'js', 'viewer', 'viewerPipelines.js');
+    const manhwaStripPath = path.join(projectRoot, 'src', 'js', 'viewer', 'manhwaStrip.js');
 
     it('validates critical DOM IDs and classes queried by viewerPipelineProbe', () => {
       assert.ok(fs.existsSync(indexHtmlPath), 'src/index.html must exist');
       assert.ok(fs.existsSync(viewerRenderPath), 'viewerRender.js must exist');
       assert.ok(fs.existsSync(viewerPipelinesPath), 'viewerPipelines.js must exist');
+      assert.ok(fs.existsSync(manhwaStripPath), 'manhwaStrip.js must exist');
 
       const indexHtml = fs.readFileSync(indexHtmlPath, 'utf-8');
       const viewerRender = fs.readFileSync(viewerRenderPath, 'utf-8');
       const viewerPipelines = fs.readFileSync(viewerPipelinesPath, 'utf-8');
+      const manhwaStrip = fs.readFileSync(manhwaStripPath, 'utf-8');
 
       // #viewer-img-wrapper, #statusbar, and video pool elements must exist in index.html
       assert.ok(indexHtml.includes('id="viewer-img-wrapper"'), 'index.html must define id="viewer-img-wrapper"');
       assert.ok(indexHtml.includes('id="statusbar"'), 'index.html must define id="statusbar"');
       assert.ok(indexHtml.includes('id="viewer-video"'), 'index.html must define id="viewer-video"');
       assert.ok(indexHtml.includes('id="viewer-video-b"'), 'index.html must define id="viewer-video-b"');
+
+      // #manhwa-strip and spacers must exist in index.html
+      assert.ok(indexHtml.includes('id="manhwa-strip"'), 'index.html must define id="manhwa-strip"');
+      assert.ok(indexHtml.includes('id="manhwa-strip-spacer-top"'), 'index.html must define id="manhwa-strip-spacer-top"');
+      assert.ok(indexHtml.includes('id="manhwa-strip-spacer-bottom"'), 'index.html must define id="manhwa-strip-spacer-bottom"');
+
+      // manhwaStrip must manage strip, spacers, and slot classes
+      assert.ok(manhwaStrip.includes('manhwa-strip-spacer-top'), 'manhwaStrip.js must reference manhwa-strip-spacer-top');
+      assert.ok(manhwaStrip.includes('manhwa-strip-spacer-bottom'), 'manhwaStrip.js must reference manhwa-strip-spacer-bottom');
+      assert.ok(manhwaStrip.includes('manhwa-slot'), 'manhwaStrip.js must reference manhwa-slot class');
 
       // viewerRender must use viewer-img and viewer-video classes, plus active / bridge pool roles
       assert.ok(viewerRender.includes('viewer-img'), 'viewerRender.js must reference viewer-img class');
@@ -66,7 +79,17 @@ describe('Diagnostics system contract integrity', () => {
       // viewerPipelines must manage canvas elements and render-ready data attributes
       assert.ok(viewerPipelines.includes('viewer-lanczos-canvas'), 'viewerPipelines.js must reference viewer-lanczos-canvas');
       assert.ok(viewerPipelines.includes('viewer-filter-canvas'), 'viewerPipelines.js must reference viewer-filter-canvas');
+      assert.ok(viewerPipelines.includes('manhwa-filter-canvas'), 'viewerPipelines.js must reference manhwa-filter-canvas');
+      assert.ok(indexHtml.includes('id="manhwa-filter-canvas"'), 'index.html must define id="manhwa-filter-canvas"');
+      assert.ok(indexHtml.includes('id="manhwa-svg-pump-layer"'), 'index.html must define id="manhwa-svg-pump-layer"');
+      assert.ok(indexHtml.includes('id="manhwa-audio-overlay"'), 'index.html must define id="manhwa-audio-overlay"');
       assert.ok(viewerPipelines.includes('data-render-ready'), 'viewerPipelines.js must track data-render-ready');
+      assert.ok(viewerPipelines.includes('data-filter'), 'viewerPipelines.js must track data-filter for column composite');
+
+      // manhwaStrip must manage strip scaling and slot dataset attributes
+      assert.ok(manhwaStrip.includes('dataset.scaling'), 'manhwaStrip.js must manage dataset.scaling');
+      assert.ok(manhwaStrip.includes('dataset.ready'), 'manhwaStrip.js must manage dataset.ready');
+      assert.ok(manhwaStrip.includes('dataset.imgIdx'), 'manhwaStrip.js must manage dataset.imgIdx');
     });
   });
 

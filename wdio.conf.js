@@ -51,8 +51,10 @@ export const config = {
   ],
   logLevel: 'info',
   waitforTimeout: 10000,
-  connectionRetryTimeout: 120000,
-  connectionRetryCount: 3,
+  // Low retry on purpose: a healthy run never retries, and a failing attach
+  // never recovers, so fail in seconds instead of minutes.
+  connectionRetryTimeout: 5000,
+  connectionRetryCount: 1,
   services: [
     [
       'tauri',
@@ -71,6 +73,26 @@ export const config = {
     timeout: 60000,
   },
   onPrepare: () => {
+    // Fail fast when elevated: under a High/System integrity tree WebView2
+    // never opens the DevTools port, so every run dies in DevToolsActivePort
+    // timeouts. Re-run from a non-elevated shell instead of waiting it out.
+    // Set E2E_ALLOW_ELEVATED=1 to bypass on exotic CI setups.
+    // process.exit (not throw): a hook throw only logs and keeps going.
+    if (process.platform === 'win32' && !process.env.E2E_ALLOW_ELEVATED) {
+      let elevated = false;
+      try {
+        const groups = spawnSync('whoami', ['/groups'], { encoding: 'utf8' }).stdout || '';
+        elevated = groups.includes('S-1-16-12288') || groups.includes('S-1-16-16384');
+      } catch {
+        // Fail open when the check itself cannot run.
+      }
+      if (elevated) {
+        console.error(
+          'E2E runs under an elevated shell. WebView2 remote debugging does not attach there; re-run from a non-elevated terminal. Agents: add --agent for process cleanup, log files, and timeout handling.'
+        );
+        process.exit(2);
+      }
+    }
     const targetDir = path.resolve(__dirname, 'src-tauri/target/debug');
     const binaryPath = path.join(targetDir, 'tauri-app.exe');
     // Record/replay runs reuse the persistent profile so diagnose replays the
@@ -148,6 +170,7 @@ export const config = {
           delete cfg.frontend_data.last_active_image;
           delete cfg.frontend_data.scroll_zoom_latched;
           delete cfg.frontend_data.e2e_suite;
+          delete cfg.frontend_data.manhwa_enabled;
           cfg.frontend_data.remember_last_image = false;
         }
         fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));

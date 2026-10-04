@@ -10,6 +10,16 @@ export const ACTION_REGISTRY = [
     run: (ctx) => {
       if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(1);
       else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(1);
+      else if (ctx.Core.getState().manhwaEnabled) {
+        if (ctx.pageStrip) {
+          ctx.pageStrip(1);
+        } else if (ctx.navigateManhwa) {
+          ctx.navigateManhwa(1);
+        } else {
+          ctx.Core.navigate(1);
+          (ctx.alignListItemTop || ctx.centerListItem)?.(ctx.Core.getState().index);
+        }
+      }
       else ctx.Core.navigate(1);
     }
   },
@@ -17,6 +27,16 @@ export const ACTION_REGISTRY = [
     run: (ctx) => {
       if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(-1);
       else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(-1);
+      else if (ctx.Core.getState().manhwaEnabled) {
+        if (ctx.pageStrip) {
+          ctx.pageStrip(-1);
+        } else if (ctx.navigateManhwa) {
+          ctx.navigateManhwa(-1);
+        } else {
+          ctx.Core.navigate(-1);
+          (ctx.alignListItemTop || ctx.centerListItem)?.(ctx.Core.getState().index);
+        }
+      }
       else ctx.Core.navigate(-1);
     }
   },
@@ -71,9 +91,7 @@ export const ACTION_REGISTRY = [
     run: (ctx) => ctx.Core.setScalingMode('bilinear', { persist: true })
   },
   { id: 'cmd-scale-lanczos', label: 'Lanczos', defaultBinds: [], category: 'View',
-    run: (ctx) => {
-      ctx.Core.setScalingMode('lanczos', { persist: true });
-    }
+    run: (ctx) => ctx.Core.setScalingMode('lanczos', { persist: true })
   },
   { id: 'cmd-filter-off', label: 'Filter: Off', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.setActiveFilter(null)
@@ -89,31 +107,17 @@ export const ACTION_REGISTRY = [
       ctx.Core.setActiveFilter(current === f.id ? null : f.id);
     }
   })),
-  { id: 'cmd-cycle-scaling-back', label: 'Scale: Previous', defaultBinds: '[', category: 'View',
-    run: (ctx) => {
-      const state = ctx.Core.getState();
-      const modes = ['none', 'bilinear', 'lanczos'];
-      const current = state.scalingMode;
-      const idx = modes.indexOf(current);
-      const next = idx > 0 ? modes[idx - 1] : modes[modes.length - 1];
-      ctx.Core.setScalingMode(next, { persist: true });
-    }
-  },
-  { id: 'cmd-cycle-scaling', label: 'Scale: Next', defaultBinds: ']', category: 'View',
-    run: (ctx) => {
-      const state = ctx.Core.getState();
-      const modes = ['none', 'bilinear', 'lanczos'];
-      const current = state.scalingMode;
-      const idx = modes.indexOf(current);
-      const next = modes[(idx + 1) % modes.length];
-      ctx.Core.setScalingMode(next, { persist: true });
-    }
-  },
   { id: 'cmd-toggle-transparent', label: 'Toggle Opaque Canvas', defaultBinds: [], category: 'View',
     run: (ctx) => ctx.Core.toggleTransparentBg()
   },
-  { id: 'cmd-toggle-audio', label: 'Mute Viewer Audio', defaultBinds: 'm', category: 'View',
-    run: (ctx) => ctx.ViewerAudio?.toggleAudioMute()
+  { id: 'cmd-toggle-manhwa', label: 'Toggle Manhwa View', defaultBinds: 'm', category: 'View',
+    run: (ctx) => ctx.Core.toggleManhwaMode({ persist: true })
+  },
+  { id: 'cmd-toggle-audio', label: 'Mute Viewer Audio', defaultBinds: [], category: 'View',
+    run: (ctx) => {
+      if (ctx.Core.getState?.()?.manhwaEnabled) ctx.ManhwaAudio?.toggleStripMute(ctx.getStripAnchorImgIdx?.());
+      else ctx.ViewerAudio?.toggleAudioMute();
+    }
   },
   { id: 'cmd-spread-off', label: 'Spread Off', defaultBinds: [], category: 'Spread View',
     run: (ctx) => ctx.Core.setSpreadMode('off', { persist: true })
@@ -173,10 +177,10 @@ export const ACTION_REGISTRY = [
 
   // Rotation
   { id: 'cmd-rotate-ccw', label: 'Rotate Counterclockwise', defaultBinds: 'g', category: 'Rotation',
-    run: (ctx) => ctx.Viewer.rotate(-90)
+    run: (ctx) => { if (!ctx.Core.getState().manhwaEnabled) ctx.Viewer.rotate(-90); }
   },
   { id: 'cmd-rotate-cw', label: 'Rotate Clockwise', defaultBinds: 'h', category: 'Rotation',
-    run: (ctx) => ctx.Viewer.rotate(90)
+    run: (ctx) => { if (!ctx.Core.getState().manhwaEnabled) ctx.Viewer.rotate(90); }
   },
   { id: 'cmd-flip-horizontal', label: 'Flip Horizontal', defaultBinds: 'v', category: 'Rotation',
     run: (ctx) => ctx.Viewer.flipHorizontal()
@@ -247,7 +251,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-refresh', label: 'Refresh', defaultBinds: ['6', 'Ctrl+r'], category: 'File Operations',
     run: (ctx) => ctx.FsUtils.refresh()
   },
-  { id: 'cmd-toggle-file-list-view-mode', label: 'Toggle Thumbnail / List View', defaultBinds: [], category: 'File Operations',
+  { id: 'cmd-toggle-file-list-view-mode', label: 'Toggle Thumbnail / List View', defaultBinds: 't', category: 'File Operations',
     run: (ctx) => ctx.Core.toggleFileListViewMode({ persist: true })
   },
   { id: 'cmd-open-explorer', label: 'Show in Explorer', defaultBinds: [], category: 'File Operations',

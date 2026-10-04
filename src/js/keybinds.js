@@ -26,6 +26,7 @@ export const DEFAULT_SPREAD_ENABLED = false;
 export const DEFAULT_SPREAD_DIRECTION = 'rtl';
 export const DEFAULT_SPREAD_MODE = 'off';
 export const DEFAULT_FILE_LIST_VIEW_MODE = 'list';
+export const DEFAULT_MANHWA_ENABLED = false;
 
 
 // persistence: frontend_data is merged here with normalized defaults. Preference
@@ -62,6 +63,7 @@ export function mergeConfig(loaded) {
         ? fd.spread_enabled === true
         : (fd.spread_mode !== undefined ? fd.spread_mode !== 'off' : DEFAULT_SPREAD_ENABLED),
       spread_direction: fd.spread_direction === 'ltr' || fd.spread_mode === 'ltr' ? 'ltr' : DEFAULT_SPREAD_DIRECTION,
+      manhwa_enabled: fd.manhwa_enabled === true,
       keyboard_pan_step: typeof fd.keyboard_pan_step === 'number' ? fd.keyboard_pan_step : DEFAULT_KEYBOARD_PAN_STEP,
       wheel_pan_step: typeof fd.wheel_pan_step === 'number' ? fd.wheel_pan_step : DEFAULT_WHEEL_PAN_STEP,
       hide_cursor_delay_sec: typeof fd.hide_cursor_delay_sec === 'number' ? fd.hide_cursor_delay_sec : DEFAULT_HIDE_CURSOR_DELAY_SEC,

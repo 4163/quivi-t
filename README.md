@@ -23,8 +23,8 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Favorites**: Save images, folders and archives into named favorite lists for future use.
 - **Web Import**: Import manga and galleries from supported sites for offline reading (see [Supported sites](#supported-sites)).
 - **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Mod`+wheel. Cursor auto-hides after inactivity over the viewport.
-- **Manga Spread Mode**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
-- **Scaling**: Choose from Pixelated, Bilinear, and Lanczos scaling.
+- **Manga Spread**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
+- **Scale**: Choose from Pixelated, Bilinear, and Lanczos scale.
 - **Filters**: WebGL filters for Anime4K (Mode A Fast/HQ), CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or Scanlines.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
 - **Persistent State**: Persists favorites lists, URL Library content and location, single-instance handoff, optional auto-open behavior, and the last opened image.
@@ -71,7 +71,7 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Fit width / height if larger | `Q` / `E` |
 | Fit window if larger | `F` |
 | Mute viewer audio | `M` |
-| **Scaling Method** | |
+| **Scale Method** | |
 | Scale: Previous / Next | `[` / `]` |
 | **Zoom** | |
 | Zoom in / out | `C` / `Z` |
@@ -160,7 +160,7 @@ See the [Releases](../../releases) page for version history and release notes.
 What QuiviT ships with. The id in backticks is the value stored in config.
 
 - **Fit mode.** `height-if-larger`. Portrait pages always starts at the top of the viewport, to preserve top-down manga reading. Smaller images stays centered.
-- **Scaling.** `bilinear`. Scaling is ignored for vector images. `Lanczos` uses the `pica` vendor for still images, and WebGL for videos and animated images.
+- **Scale.** `bilinear`. Scale is ignored for vector images. `Lanczos` uses the `pica` vendor for still images, and WebGL for videos and animated images.
 - **Filters.** `Off`. Filters are also ignored for vector images. Vectors (SVG) are drawn as a bitmap, static ones capped at 2048px, while animated ones are capped at 512px.
 - **Anime4K.** `fast` (upstream Mode A Fast). The visual difference between Mode A and HQ is insignificant, but can still be configured. **Options → General → Filters**.
 - **Scroll-wheel modifier.** `hold`. Hold `Ctrl` and scroll to zoom. `toggle` latches `Ctrl`. The status bar shows the latch, or which modifier keys are held.
@@ -185,7 +185,7 @@ QuiviT keeps its own data in three places. Imported galleries sit in a fourth fo
 
 **Config files.** By default these live in `C:\Users\<user>\AppData\Roaming\com.x4163.quivit`:
 
-- `quivit_config.json`: preferences. theme, keybinds, fit and scaling, sort, spread, library location, and the rest of options.
+- `quivit_config.json`: preferences. theme, keybinds, fit and scale, sort, spread, library location, and the rest of options.
 - `quivit_state.json`: last opened path, last image, and whether scroll-zoom is latched.
 - `quivit_directory_sort.json`: sort column and direction for each folder.
 - `quivit_favorites.json`: favorites lists, items, and section collapse.
@@ -223,21 +223,24 @@ Clicking **Apply** registers QuiviT for the formats you selected. If changes doe
 
 ```bash
 npm install
-npm run tauri dev     # Historical; bypasses isolation and touches roaming data
-npm run dev           # Launch with isolated settings (.dev-config)
-npm run dev:portable  # Forces portable mode (single-file layout) in .dev-config, regardless of frontend config state
+npm run tauri dev          # Historical; bypasses isolation and touches roaming data
+npm run dev                # Launch with isolated settings (.dev-config)
+npm run dev -- --portable  # Portable mode (single-file layout), regardless of frontend config state
 ```
 
 Tests and syntax checks:
 
 ```bash
-npm run mocha                                    # Frontend unit tests
-npm run e2e                                      # Desktop end-to-end tests (portable layout)
-npm run e2e:split                                # Desktop end-to-end tests (split layout)
-cargo test --manifest-path src-tauri/Cargo.toml  # Rust tests
-cd src-tauri && cargo check                      # Rust compile check
-node --check src/js/main/main.js                 # Syntax-check a JS file
+npm run mocha                                              # Frontend unit tests
+npm run e2e                                                # End-to-end tests (portable layout)
+npm run e2e -- --split                                     # End-to-end tests (split layout)
+npm run e2e -- --agent --spec e2e/specs/01-startup.e2e.js  # Agent runner (de-elevated relaunch)
+cargo test --manifest-path src-tauri/Cargo.toml            # Rust tests
+cd src-tauri && cargo check                                # Rust compile check
+node --check src/js/main/main.js                           # Syntax-check a JS file
 ```
+
+Run E2E tests in a non-elevated terminal with `--agent`. WebView2 remote debugging cannot attach under Administrator.
 
 ### Action recorder and replay diagnostics
 
@@ -277,7 +280,7 @@ For automated iterative probing, see [`.agents/skills/replay-debugging/SKILL.md`
 | **Replay Diagnostics** | [WebdriverIO](https://webdriver.io) / In-Browser Probes | Replays a recording and checks frames, WebGL, and IPC timing |
 | **Animated Decode** | WebCodecs [`ImageDecoder`](https://developer.mozilla.org/en-US/docs/Web/API/ImageDecoder) | GIF, WebP, APNG, and AVIF playback under filters |
 | **Video Playback** | HTML5 [`<video>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video) / [`<audio>`](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/audio) | MP4 playback, filters, and soundtrack detection |
-| **Lanczos Scaling** | [`pica`](https://www.npmjs.com/package/pica) | Lanczos resize for still images, off the UI thread |
+| **Lanczos Scale** | [`pica`](https://www.npmjs.com/package/pica) | Lanczos resize for still images, off the UI thread |
 | **WebGL Filters** | [WebGL2](https://developer.mozilla.org/en-US/docs/Web/API/WebGL2RenderingContext) | Anime4K, CRT, Phosphor, Scanlines, and animated Lanczos |
 | **Archives (ZIP/CBZ)** | [`zip`](https://crates.io/crates/zip) | Read ZIP entries, including passwords |
 | **Archives (RAR/CBR)** | [`unrar`](https://crates.io/crates/unrar) | Read RAR entries, including passwords |
@@ -310,18 +313,11 @@ QuiviT/
 │  ├─ scenarios/                  # Saved recordings
 │  └─ specs/                      # End-to-end test scripts
 ├─ mocha/                         # Frontend unit tests, outside src/
-│  ├─ actions.test.js             # Shortcuts and commands
-│  ├─ cache.test.js               # Size-capped caches
-│  ├─ core.test.js                # App state changes
-│  ├─ diagnosticsContract.test.js # Recording and probe contracts
-│  ├─ metadata.test.js            # Comic and gallery metadata
-│  ├─ sorting.test.js             # Sort order and saved items grouping
-│  ├─ urlLoader.test.js           # URL import rules
-│  ├─ urlLoaderFlows.test.js      # URL import flows
-│  └─ viewerMath.test.js          # Zoom, pan, fit, and spread
 ├─ scripts/                       # Dev and test runner scripts
 │  ├─ dev.js                      # npm run dev with isolated config
-│  └─ e2e.js                      # npm run e2e with layout selection
+│  ├─ e2e.js                      # npm run e2e with layout selection
+│  ├─ e2e-agent.js                # npm run e2e with --agent, runs de-elevated
+│  └─ e2e-de_elevated.py          # Relaunch the suite de-elevated
 ├─ extractors/ (orphan branch)    # Site support, fetched while the app runs
 ├─ src/
 │  ├─ index.html                  # Main window
@@ -372,7 +368,7 @@ QuiviT/
 │     │  ├─ keyCombo.js           # Shortcut parsing
 │     │  ├─ keybindDomain.js      # Shortcut conflicts
 │     │  ├─ metadataFiles.js      # Which metadata file wins
-│     │  ├─ registry.js           # Filter and scaling choices
+│     │  ├─ registry.js           # Filter and scale choices
 │     │  ├─ sorting.js            # Sort comparison and saved items grouping
 │     │  ├─ viewerMath.js         # Zoom, pan, and fit math
 │     │  ├─ filters/              # Filter definitions
@@ -415,7 +411,7 @@ QuiviT/
 │  └─ tauri.conf.json
 ├─ themes/                        # Example themes shipped with the app
 ├─ package.json
-└─ README.md
+└─ README.md                      # End-user features and maintainer documentation
 ```
 
 ## Attributions

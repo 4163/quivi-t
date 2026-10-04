@@ -4,7 +4,7 @@
 
 import { formatKeysCombo, findAction, rebuildBindMap, normalizeCombo, formatKeyName, normalizeList, isModifierKey } from './services/keyCombo.js';
 import { Statusbar } from './menubar/statusbar.js';
-import { closeMenus } from './menubar.js';
+import { closeMenus, syncViewMenu } from './menubar.js';
 export const activeKeys = new Set();
 export const activeButtons = new Set();
 
@@ -242,6 +242,24 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     return true;
   }
 
+  let _holdToggleAction = null;
+  let _holdPendingState = null;
+
+  function _commitHoldToggle() {
+    if (_holdToggleAction === 'cmd-toggle-manhwa') {
+      const targetState = _holdPendingState;
+      _holdToggleAction = null;
+      _holdPendingState = null;
+      const currentReal = !!(Core.getState().manhwaEnabled ?? Core.getState().config?.frontend_data?.manhwa_enabled);
+      if (targetState !== null && targetState !== currentReal) {
+        Core.setManhwaMode(targetState, { persist: true });
+      } else {
+        Statusbar.syncManhwaIndicator(Core.getState());
+        syncViewMenu(Core.getState());
+      }
+    }
+  }
+
   const handleShortcut = (e) => {
     // Ignore bare modifiers for dispatch
     if (e.type === 'keydown' && isModifierKey(e.key)) return;
@@ -253,6 +271,24 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
 
     const actionId = findAction(Core.getState().config, formatKeysCombo(activeKeys, activeButtons));
     if (!actionId) return;
+
+    if (actionId === 'cmd-toggle-manhwa') {
+      if (e.repeat) {
+        e.preventDefault();
+        _holdPendingState = !_holdPendingState;
+        const mockState = { ...Core.getState(), manhwaEnabled: _holdPendingState };
+        Statusbar.syncManhwaIndicator(mockState, { preserveSpace: true });
+        syncViewMenu(mockState);
+        return;
+      }
+      _holdToggleAction = actionId;
+      _holdPendingState = !(Core.getState().manhwaEnabled ?? Core.getState().config?.frontend_data?.manhwa_enabled);
+    } else if (e.repeat && (actionId.startsWith('cmd-toggle-') || actionId.startsWith('cmd-spread-direction-'))) {
+      // Other mode toggles must not auto-repeat on key-hold, keeping the initial mode
+      // static without thrashing layout or re-anchoring.
+      e.preventDefault();
+      return;
+    }
 
     e.preventDefault();
     closeMenus();
@@ -325,6 +361,7 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   });
 
   function clearHeldKeys() {
+    _commitHoldToggle();
     activeKeys.clear();
     activeButtons.clear();
     _updateScrollIndicator(Core.getState().config);
@@ -334,6 +371,9 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     if (isInteractiveKeyTarget(e)) {
       clearHeldKeys();
       return;
+    }
+    if (_holdToggleAction) {
+      _commitHoldToggle();
     }
     const config = Core.getState().config;
     if (_cachedToggleKeys.includes(e.key)) {

@@ -136,7 +136,9 @@ pub fn run() {
         remove_directory,
         read_library_tree,
         cancel_download,
-        verify_image_magic
+        verify_image_magic,
+        scan_container_max_width,
+        cancel_width_scan
     ]);
 
     crate::protocol::register_quivit_protocol(builder)

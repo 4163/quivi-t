@@ -16,7 +16,8 @@ import {
   focusFileList,
   isFileListFocused,
   getFileListViewportRange,
-  clearLibraryPathCaches
+  clearLibraryPathCaches,
+  revealListTop
 } from '../filepanel/filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from '../shortcuts.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
@@ -37,6 +38,21 @@ import { initPasswordOverlay } from './passwordOverlay.js';
 import { initUrlOverlay } from './urlOverlay.js';
 import { UrlLoader } from '../urlLoader.js';
 import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
+import { ManhwaAudio } from '../viewer/manhwaAudio.js';
+import {
+  initManhwaStrip,
+  isManhwaStripActive,
+  alignListItemTop,
+  alignListItemBottom,
+  getFirstImageIndex,
+  getLastImageIndex,
+  navigateManhwa,
+  pageStrip,
+  setRevealListTop,
+  getVisibleImageIndices,
+  isListIndexMapped,
+  getAnchorImgIdx
+} from '../viewer/manhwaStrip.js';
 
 // Reset the options tab on startup so each session starts on General.
 localStorage.removeItem('options-active-tab');
@@ -51,6 +67,40 @@ window.addEventListener('keydown', (e) => {
   // Home/End jumps across tabbable controls.
   handleTabJump(e);
 });
+
+// Manhwa strip owns Home/End/PageUp/PageDown at any focus (except text
+// inputs) so panel legacy keys never divert them to '..' or row jumps.
+// Capture phase plus stopPropagation preempts the file-list handler.
+window.addEventListener('keydown', (e) => {
+  if (!isManhwaStripActive()) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  if (e.ctrlKey || e.altKey) return;
+
+  let handled = false;
+  if (e.key === 'Home') {
+    const firstIdx = getFirstImageIndex();
+    if (firstIdx !== -1) {
+      Core.selectIndex(firstIdx);
+      handled = alignListItemTop(firstIdx);
+    }
+  } else if (e.key === 'End') {
+    const lastIdx = getLastImageIndex();
+    if (lastIdx !== -1) {
+      Core.selectIndex(lastIdx);
+      handled = alignListItemBottom(lastIdx);
+    }
+  } else if (e.key === 'PageUp') {
+    handled = pageStrip(-1, 2);
+  } else if (e.key === 'PageDown') {
+    handled = pageStrip(1, 2);
+  }
+
+  if (handled) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, true);
 
 const dropOverlay = document.getElementById('drop-overlay');
 const passwordOverlay = document.getElementById('password-overlay');
@@ -105,10 +155,16 @@ const actionCtx = {
   get toggleFullscreen() { return toggleFullscreen; },
   get UrlLoader() { return UrlLoader; },
   get ViewerAudio() { return ViewerAudio; },
+  get ManhwaAudio() { return ManhwaAudio; },
+  getStripAnchorImgIdx: () => getAnchorImgIdx(),
   isFavoritesFocused: () => !!document.activeElement?.closest('#favorites-list'),
   isLibraryFocused: () => !!document.activeElement?.closest('#file-panel-library, .library-provider-list'),
   get keyboardPanStep() { return keyboardPanStep; },
-  get wheelPanStep() { return wheelPanStep; }
+  get wheelPanStep() { return wheelPanStep; },
+  get centerListItem() { return centerListItem; },
+  get alignListItemBottom() { return alignListItemBottom; },
+  get navigateManhwa() { return navigateManhwa; },
+  get pageStrip() { return pageStrip; }
 };
 
 function bindMenuCommands() {
@@ -151,10 +207,16 @@ Core.onStateChange((state) => {
     dropOverlay.classList.add('active');
     viewport.classList.add('empty');
     statusbar.classList.add('hidden');
+    document.getElementById('img-grill')?.classList.remove('active');
+    document.getElementById('img-grill-border')?.classList.remove('active');
+    document.getElementById('manhwa-strip')?.classList.remove('grill-active');
     return;
   }
 
-  if (!state.src) {
+  // A selection with no strip row behaves like a folder: the overlay
+  // covers the viewport. Mapped rows (images and videos alike) clear it.
+  const stripUnmappedSelected = isManhwaStripActive() && state.index >= 0 && !isListIndexMapped(state.index);
+  if (!state.src || stripUnmappedSelected) {
     dropOverlay.classList.toggle('active', !isPasswordBlocked);
     viewport.classList.add('empty');
   } else {
@@ -169,10 +231,13 @@ Core.onStateChange((state) => {
     const isTransparent = !!state.config.frontend_data.transparent_bg;
     const grillEl = document.getElementById('img-grill');
     const grillBorderEl = document.getElementById('img-grill-border');
+    const stripEl = document.getElementById('manhwa-strip');
     const toggleEl = document.getElementById('cmd-toggle-transparent');
     
-    if (grillEl) grillEl.classList.toggle('active', !isTransparent);
-    if (grillBorderEl) grillBorderEl.classList.toggle('active', !isTransparent);
+    const showSingleGrill = !isTransparent && !!state.src;
+    if (grillEl) grillEl.classList.toggle('active', showSingleGrill);
+    if (grillBorderEl) grillBorderEl.classList.toggle('active', showSingleGrill);
+    if (stripEl) stripEl.classList.toggle('grill-active', !isTransparent && isManhwaStripActive() && (state.list?.length || 0) > 0);
     if (toggleEl) {
       toggleEl.classList.toggle('checked', !isTransparent);
     }
@@ -192,7 +257,21 @@ window.addEventListener('quivit-history-changed', () => {
 // Initialization.
 Statusbar.init();
 initFullscreen();
-initFilePanel({ filePanel, breadcrumbEl: filePanelBreadcrumb, fileListUl, resizeHandle, Core, FsUtils });
+initFilePanel({
+  filePanel,
+  breadcrumbEl: filePanelBreadcrumb,
+  fileListUl,
+  resizeHandle,
+  Core,
+  FsUtils,
+  isManhwaActive: isManhwaStripActive,
+  getVisibleImageIndices,
+  alignListItemTop,
+  alignListItemBottom,
+  pageStrip
+});
+initManhwaStrip();
+setRevealListTop(revealListTop);
 initMenuBar();
 bindMenuCommands();
 initDropZone({ dropOverlay, FsUtils });

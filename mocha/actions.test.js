@@ -62,6 +62,23 @@ describe('Actions registry and keybindings', () => {
       assert.equal(normalizeCombo('mouseback'), 'MouseBack');
       assert.equal(normalizeCombo('mouseforward'), 'MouseForward');
     });
+
+    it('binds manhwa to m with no default conflicts and leaves audio mute unassigned', () => {
+      const byId = Object.fromEntries(ACTION_REGISTRY.map((a) => [a.id, a]));
+      const asArray = (binds) => Array.isArray(binds) ? binds : [binds];
+      assert.deepEqual(asArray(byId['cmd-toggle-audio'].defaultBinds), []);
+      assert.deepEqual(asArray(byId['cmd-toggle-manhwa'].defaultBinds), ['m']);
+
+      const seen = new Map();
+      for (const action of ACTION_REGISTRY) {
+        const binds = Array.isArray(action.defaultBinds) ? action.defaultBinds : [action.defaultBinds];
+        for (const bind of binds) {
+          const norm = normalizeCombo(bind);
+          assert.ok(!seen.has(norm), `Default bind conflict: ${norm} on ${action.id} and ${seen.get(norm)}`);
+          seen.set(norm, action.id);
+        }
+      }
+    });
   });
 
   describe('dispatch function', () => {
@@ -86,6 +103,162 @@ describe('Actions registry and keybindings', () => {
       await assert.doesNotReject(async () => {
         await dispatch('cmd-nonexistent-action-id', null, {});
       });
+    });
+
+    it('routes audio toggle to the strip coordinator when manhwa is active', async () => {
+      let stripAnchor = null;
+      let legacyMuted = false;
+      const fakeCtx = {
+        Core: { getState: () => ({ manhwaEnabled: true }) },
+        getStripAnchorImgIdx: () => 4,
+        ManhwaAudio: { toggleStripMute: (anchor) => { stripAnchor = anchor; } },
+        ViewerAudio: { toggleAudioMute: () => { legacyMuted = true; } }
+      };
+
+      await dispatch('cmd-toggle-audio', null, fakeCtx);
+      assert.equal(stripAnchor, 4);
+      assert.equal(legacyMuted, false);
+
+      fakeCtx.Core = { getState: () => ({ manhwaEnabled: false }) };
+      await dispatch('cmd-toggle-audio', null, fakeCtx);
+      assert.equal(legacyMuted, true);
+    });
+
+    it('routes navigation to navigateManhwa and pan/zoom to Viewer when manhwa is active', async () => {
+      let manhwaNavDelta = 0;
+      let coreNavigated = 0;
+      let panCalls = [];
+      let zoomCalls = [];
+      let rotateCalled = false;
+      let flipCalls = [];
+
+      const fakeCtx = {
+        Core: {
+          getState: () => ({ manhwaEnabled: true }),
+          navigate: (d) => { coreNavigated += d; }
+        },
+        keyboardPanStep: 72,
+        navigateManhwa: (delta) => { manhwaNavDelta += delta; },
+        Viewer: {
+          panBy: (dx, dy) => { panCalls.push({ dx, dy }); },
+          zoomAt: (d, x, y) => { zoomCalls.push({ d, x, y }); },
+          zoomCenter: (d) => { zoomCalls.push({ d }); },
+          setZoom: (z) => { zoomCalls.push({ z }); },
+          rotate: () => { rotateCalled = true; },
+          flipHorizontal: () => { flipCalls.push('x'); },
+          flipVertical: () => { flipCalls.push('y'); }
+        }
+      };
+
+      let pageStripDelta = 0;
+      fakeCtx.pageStrip = (dir) => { pageStripDelta += dir; };
+
+      // cmd-next / cmd-prev page the strip like PageDown / PageUp
+      await dispatch('cmd-next', null, fakeCtx);
+      assert.equal(pageStripDelta, 1);
+
+      await dispatch('cmd-prev', null, fakeCtx);
+      assert.equal(pageStripDelta, 0);
+
+      // Fallback with navigateManhwa
+      delete fakeCtx.pageStrip;
+      await dispatch('cmd-next', null, fakeCtx);
+      assert.equal(manhwaNavDelta, 1);
+
+      await dispatch('cmd-prev', null, fakeCtx);
+      assert.equal(manhwaNavDelta, 0);
+
+      // Fallback without navigateManhwa calls Core.navigate and centerListItem / alignListItemTop
+      delete fakeCtx.navigateManhwa;
+      let centeredIdx = -1;
+      fakeCtx.centerListItem = (idx) => { centeredIdx = idx; };
+      fakeCtx.Core.getState = () => ({ manhwaEnabled: true, index: 3 });
+      await dispatch('cmd-next', null, fakeCtx);
+      assert.equal(coreNavigated, 1);
+      assert.equal(centeredIdx, 3);
+
+      let alignedIdx = -1;
+      fakeCtx.alignListItemTop = (idx) => { alignedIdx = idx; };
+      await dispatch('cmd-next', null, fakeCtx);
+      assert.equal(alignedIdx, 3);
+
+      // Pan keys move pixels via Viewer.panBy
+      await dispatch('cmd-pan-up', null, fakeCtx);
+      await dispatch('cmd-pan-down', null, fakeCtx);
+      await dispatch('cmd-pan-left', null, fakeCtx);
+      await dispatch('cmd-pan-right', null, fakeCtx);
+      assert.equal(panCalls.length, 4);
+      assert.deepEqual(panCalls[0], { dx: 0, dy: 72 });
+      assert.deepEqual(panCalls[1], { dx: 0, dy: -72 });
+      assert.deepEqual(panCalls[2], { dx: 72, dy: 0 });
+      assert.deepEqual(panCalls[3], { dx: -72, dy: 0 });
+
+      // Zoom keys call Viewer zoom
+      await dispatch('cmd-zoom-in', null, fakeCtx);
+      await dispatch('cmd-zoom-out', null, fakeCtx);
+      await dispatch('cmd-zoom-100', null, fakeCtx);
+      assert.equal(zoomCalls.length, 3);
+
+      // Rotation is guarded, but flips are unforwarded in manhwa mode
+      await dispatch('cmd-rotate-ccw', null, fakeCtx);
+      await dispatch('cmd-rotate-cw', null, fakeCtx);
+      assert.equal(rotateCalled, false);
+
+      await dispatch('cmd-flip-horizontal', null, fakeCtx);
+      await dispatch('cmd-flip-vertical', null, fakeCtx);
+      assert.deepEqual(flipCalls, ['x', 'y']);
+
+      // Fit modes, filters, and scalers work in manhwa mode; rotation remains guarded
+      let fitCalled = [];
+      let filterCalled = [];
+      let scalingCalls = [];
+      fakeCtx.Core.setFitMode = (m) => { fitCalled.push(m); };
+      fakeCtx.Core.setActiveFilter = (f) => { filterCalled.push(f); };
+      fakeCtx.Core.setScalingMode = (m) => { scalingCalls.push(m); };
+
+      await dispatch('cmd-fit-width', null, fakeCtx);
+      await dispatch('cmd-fit-none', null, fakeCtx);
+      assert.deepEqual(fitCalled, ['width', 'none']);
+
+      await dispatch('cmd-filter-off', null, fakeCtx);
+      await dispatch('cmd-toggle-anime4k-filter', null, fakeCtx);
+      await dispatch('cmd-toggle-crt-filter', null, fakeCtx);
+      await dispatch('cmd-toggle-phosphor-filter', null, fakeCtx);
+      await dispatch('cmd-toggle-scanlines-filter', null, fakeCtx);
+      assert.deepEqual(filterCalled, [null, 'anime4k', 'crt', 'phosphor', 'scanlines']);
+
+      await dispatch('cmd-scale-lanczos', null, fakeCtx);
+      await dispatch('cmd-scale-none', null, fakeCtx);
+      await dispatch('cmd-scale-bilinear', null, fakeCtx);
+      assert.deepEqual(scalingCalls, ['lanczos', 'none', 'bilinear']);
+    });
+
+    it('routes to standard handlers when manhwa is inactive', async () => {
+      let coreNavigated = 0;
+      let panByDeltas = [];
+
+      const fakeCtx = {
+        Core: {
+          getState: () => ({ manhwaEnabled: false }),
+          navigate: (d) => { coreNavigated += d; }
+        },
+        keyboardPanStep: 50,
+        Viewer: {
+          panBy: (dx, dy) => { panByDeltas.push({ dx, dy }); }
+        }
+      };
+
+      await dispatch('cmd-next', null, fakeCtx);
+      assert.equal(coreNavigated, 1);
+
+      await dispatch('cmd-prev', null, fakeCtx);
+      assert.equal(coreNavigated, 0);
+
+      await dispatch('cmd-pan-up', null, fakeCtx);
+      assert.deepEqual(panByDeltas.pop(), { dx: 0, dy: 50 });
+
+      await dispatch('cmd-pan-down', null, fakeCtx);
+      assert.deepEqual(panByDeltas.pop(), { dx: 0, dy: -50 });
     });
   });
 });

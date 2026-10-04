@@ -49,6 +49,7 @@ class MenubarPage extends Page {
   get cmdToggleMenubar() { return $('#cmd-toggle-menubar'); }
   get cmdToggleStatusbar() { return $('#cmd-toggle-statusbar'); }
   get cmdFullscreen() { return $('#cmd-fullscreen'); }
+  get cmdToggleManhwa() { return $('#cmd-toggle-manhwa'); }
 
   async openFileMenu() {
     await this.fileTrigger.click();
@@ -72,6 +73,32 @@ class MenubarPage extends Page {
     if (mode === 'rtl') targetId = 'cmd-spread-direction-rtl';
     else if (mode === 'ltr') targetId = 'cmd-spread-direction-ltr';
     else targetId = 'cmd-spread-off';
+
+    await browser.execute((id) => {
+      const el = document.getElementById(id);
+      if (el) el.click();
+    }, targetId);
+  }
+
+  async selectFilter(filterName) {
+    let targetId;
+    if (filterName === 'anime4k') targetId = 'cmd-toggle-anime4k-filter';
+    else if (filterName === 'crt') targetId = 'cmd-toggle-crt-filter';
+    else if (filterName === 'phosphor') targetId = 'cmd-toggle-phosphor-filter';
+    else if (filterName === 'scanlines') targetId = 'cmd-toggle-scanlines-filter';
+    else targetId = 'cmd-filter-off';
+
+    await browser.execute((id) => {
+      const el = document.getElementById(id);
+      if (el) el.click();
+    }, targetId);
+  }
+
+  async selectScaling(scalingName) {
+    let targetId;
+    if (scalingName === 'lanczos') targetId = 'cmd-scale-lanczos';
+    else if (scalingName === 'none') targetId = 'cmd-scale-none';
+    else targetId = 'cmd-scale-bilinear';
 
     await browser.execute((id) => {
       const el = document.getElementById(id);

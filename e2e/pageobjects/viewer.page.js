@@ -8,6 +8,38 @@ class ViewerPage extends Page {
   get images() { return $$('#viewer-img-wrapper img.viewer-img'); }
   get lanczosCanvas() { return $('#viewer-lanczos-canvas'); }
   get filterCanvas() { return $('#viewer-filter-canvas'); }
+  get manhwaStrip() { return $('#manhwa-strip'); }
+  get manhwaSlots() { return $$('#manhwa-strip .manhwa-slot'); }
+  get manhwaTopSpacer() { return $('#manhwa-strip-spacer-top'); }
+  get manhwaBottomSpacer() { return $('#manhwa-strip-spacer-bottom'); }
+  get manhwaFilterCanvas() { return $('#manhwa-filter-canvas'); }
+  get manhwaSvgPumpLayer() { return $('#manhwa-svg-pump-layer'); }
+  get manhwaAudioOverlay() { return $('#manhwa-audio-overlay'); }
+
+  async isManhwaActive() {
+    const vp = await this.viewport;
+    if (!(await vp.isExisting())) return false;
+    const classes = await vp.getAttribute('class');
+    return classes.includes('manhwa-active');
+  }
+
+  async isManhwaFilterCanvasReady() {
+    const canvas = await this.manhwaFilterCanvas;
+    if (!(await canvas.isExisting())) return false;
+    const ready = await canvas.getAttribute('data-render-ready');
+    return ready === 'true';
+  }
+
+  async getManhwaActiveFilter() {
+    const vp = await this.viewport;
+    if (!(await vp.isExisting())) return null;
+    return vp.getAttribute('data-filter');
+  }
+
+  async getManhwaTransform() {
+    const strip = await this.manhwaStrip;
+    return strip.getCSSProperty('transform');
+  }
 
   async isDropOverlayVisible() {
     const overlay = await this.dropOverlay;

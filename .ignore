@@ -1,0 +1,4 @@
+# Re-allow .agents/ for opencode @ autocomplete (ripgrep skips dot-directories by default)
+# Note: .gitignore remains source of truth for git; this only affects file scan
+!.agents/
+!.agents/**

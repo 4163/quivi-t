@@ -36,6 +36,8 @@ If an existing report already exists, inspect the latest metrics without launchi
 npm run diagnose -- --inspect [scenario]
 ```
 
+If the runner reports an elevated shell, retry the run with `--agent`, which relaunches de-elevated automatically.
+
 ### 2. Analyze the anomaly report
 
 Open `e2e/replay-diagnostics/reports/<scenario>-report.json`. Locate the earliest step reporting anomalies or blackout frames around the user's reported symptom.

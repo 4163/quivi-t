@@ -1,0 +1,21 @@
+{
+  "name": "zoom-bridge-stale-size",
+  "initialPath": "test-files/내 최애는 막차를 탄다 - ch. 75",
+  "initialState": {
+    "index": 64,
+    "manhwa": false,
+    "pipeline": {
+      "filter": "phosphor",
+      "fitMode": "width-if-larger",
+      "scaling": "bilinear"
+    }
+  },
+  "actions": [
+    "cmd-zoom-in",
+    "cmd-zoom-in",
+    "cmd-zoom-in",
+    "cmd-zoom-in",
+    "cmd-toggle-manhwa",
+    "cmd-toggle-manhwa"
+  ]
+}

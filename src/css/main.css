@@ -3,9 +3,18 @@ body {
   display: flex;
   flex-direction: column;
 }
-body.cursor-move { cursor: move !important; }
-body.resizing-panel { cursor: ew-resize !important; }
-body.resizing-col { cursor: col-resize !important; }
+
+body.cursor-move {
+  cursor: move !important;
+}
+
+body.resizing-panel {
+  cursor: ew-resize !important;
+}
+
+body.resizing-col {
+  cursor: col-resize !important;
+}
 
 .offscreen-measure {
   position: absolute !important;
@@ -98,7 +107,8 @@ body.resizing-col { cursor: col-resize !important; }
   max-height: calc(100vh - var(--fs-28) - 8px);
   overflow-y: auto;
   overflow-x: hidden;
-  direction: rtl; /* Left scrollbar */
+  direction: rtl;
+  /* Left scrollbar */
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
   background: var(--menu-bg);
@@ -109,11 +119,12 @@ body.resizing-col { cursor: col-resize !important; }
   z-index: 200;
 }
 
-.menu-dropdown > * {
-  direction: ltr; /* Restore content direction */
+.menu-dropdown>* {
+  direction: ltr;
+  /* Restore content direction */
 }
 
-.menu-item.open > .menu-dropdown {
+.menu-item.open>.menu-dropdown {
   display: block;
 }
 
@@ -146,9 +157,9 @@ body.resizing-col { cursor: col-resize !important; }
   opacity: 0.7;
 }
 
-.menu-dropdown li.has-submenu:hover > .submenu-arrow,
-.menu-dropdown li.has-submenu:focus-visible > .submenu-arrow,
-.menu-dropdown li.has-submenu.open > .submenu-arrow {
+.menu-dropdown li.has-submenu:hover>.submenu-arrow,
+.menu-dropdown li.has-submenu:focus-visible>.submenu-arrow,
+.menu-dropdown li.has-submenu.open>.submenu-arrow {
   color: inherit;
   opacity: 1;
 }
@@ -178,33 +189,34 @@ body.resizing-col { cursor: col-resize !important; }
 }
 
 .menu-dropdown .submenu[data-side="right"] {
-  box-shadow: 2px 2px 8px rgba(0,0,0,0.18);
+  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.18);
   clip-path: inset(-8px -8px -8px 0);
 }
 
 .menu-dropdown .submenu[data-side="left"] {
-  box-shadow: -2px 2px 8px rgba(0,0,0,0.18);
+  box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.18);
   clip-path: inset(-8px 0 -8px -8px);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .menu-dropdown .submenu[data-side="right"] {
-    box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
   }
+
   :root:not([data-theme="light"]) .menu-dropdown .submenu[data-side="left"] {
-    box-shadow: -2px 2px 10px rgba(0,0,0,0.5);
+    box-shadow: -2px 2px 10px rgba(0, 0, 0, 0.5);
   }
 }
 
 :root[data-theme="dark"] .menu-dropdown .submenu[data-side="right"] {
-  box-shadow: 2px 2px 10px rgba(0,0,0,0.5);
+  box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
 }
 
 :root[data-theme="dark"] .menu-dropdown .submenu[data-side="left"] {
-  box-shadow: -2px 2px 10px rgba(0,0,0,0.5);
+  box-shadow: -2px 2px 10px rgba(0, 0, 0, 0.5);
 }
 
-.menu-dropdown li.has-submenu.open > .submenu {
+.menu-dropdown li.has-submenu.open>.submenu {
   display: block;
 }
 
@@ -214,12 +226,12 @@ body.resizing-col { cursor: col-resize !important; }
 }
 
 /* Keep sibling hover clear while moving to a submenu. */
-.menu-dropdown.submenu-aiming > li[role="menuitem"]:not(.open):hover {
+.menu-dropdown.submenu-aiming>li[role="menuitem"]:not(.open):hover {
   background: transparent;
   color: var(--text);
 }
 
-.menu-dropdown.submenu-aiming > li[role="menuitem"]:not(.open):hover > .shortcut {
+.menu-dropdown.submenu-aiming>li[role="menuitem"]:not(.open):hover>.shortcut {
   color: var(--text);
   opacity: 0.65;
 }
@@ -249,14 +261,14 @@ body.resizing-col { cursor: col-resize !important; }
   color: var(--text-muted);
 }
 
-.menu-dropdown li[role="menuitem"]:hover > .shortcut,
-.menu-dropdown li[role="menuitem"]:focus-visible > .shortcut {
+.menu-dropdown li[role="menuitem"]:hover>.shortcut,
+.menu-dropdown li[role="menuitem"]:focus-visible>.shortcut {
   color: #fff;
   opacity: 1;
 }
 
-.menu-dropdown li[role="menuitem"].muted:hover > .shortcut,
-.menu-dropdown li[role="menuitem"].muted:focus-visible > .shortcut {
+.menu-dropdown li[role="menuitem"].muted:hover>.shortcut,
+.menu-dropdown li[role="menuitem"].muted:focus-visible>.shortcut {
   color: var(--text);
   opacity: 0.35;
 }
@@ -386,7 +398,8 @@ body.resizing-col { cursor: col-resize !important; }
 #workspace {
   display: flex;
   flex: 1;
-  min-height: 0; /* Allow inner scrollers to shrink */
+  min-height: 0;
+  /* Allow inner scrollers to shrink */
   overflow: hidden;
 }
 
@@ -527,13 +540,13 @@ body.resizing-col { cursor: col-resize !important; }
   height: var(--fs-12);
 }
 
-li:hover > .favorite-remove,
-#favorites-list li:focus > .favorite-remove,
-#favorites-list li:focus-within > .favorite-remove {
+li:hover>.favorite-remove,
+#favorites-list li:focus>.favorite-remove,
+#favorites-list li:focus-within>.favorite-remove {
   opacity: 1;
 }
 
-#favorites-list li.selected > .favorite-remove {
+#favorites-list li.selected>.favorite-remove {
   opacity: 1;
 }
 
@@ -643,10 +656,10 @@ li:hover > .favorite-remove,
   height: var(--fs-12);
 }
 
-.library-provider-list li:hover > .lib-remove,
-.library-provider-list li:focus > .lib-remove,
-.library-provider-list li:focus-within > .lib-remove,
-.library-provider-list li.selected > .lib-remove {
+.library-provider-list li:hover>.lib-remove,
+.library-provider-list li:focus>.lib-remove,
+.library-provider-list li:focus-within>.lib-remove,
+.library-provider-list li.selected>.lib-remove {
   opacity: 1;
 }
 
@@ -772,8 +785,9 @@ li:hover > .favorite-remove,
   pointer-events: none;
 }
 
-/* When the spread indicator is also visible, stack above it. */
-#viewport:has(#spread-indicator:not(:empty)) .audio-control-container {
+/* When the spread or manhwa indicator is also visible, stack above it. */
+#viewport:has(#spread-indicator:not(:empty)) .audio-control-container,
+#viewport:has(#manhwa-indicator:not(:empty)) .audio-control-container {
   bottom: 38px;
 }
 
@@ -876,6 +890,125 @@ li:hover > .favorite-remove,
   margin-top: calc((3px - min(var(--fs-11), 12px)) / 2);
 }
 
+/* Per slot volume pill for manhwa strip videos. Bottom left of its slot,
+   same visual language as the viewport audio pill. JS toggles is-visible
+   and data-state only; hover and transitions live here. */
+.manhwa-volume {
+  display: none;
+  align-items: center;
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 2;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 4px;
+  padding: 2px;
+  pointer-events: auto;
+  opacity: 1;
+  transition: opacity 0.15s linear;
+}
+
+.manhwa-volume.is-visible {
+  display: flex;
+}
+
+#viewport.cursor-hidden .manhwa-volume {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.manhwa-volume-toggle {
+  position: relative;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+
+.manhwa-volume-toggle .mvol-icon {
+  display: none;
+  width: var(--fs-16);
+  height: var(--fs-16);
+}
+
+.manhwa-volume-toggle[data-state="muted"] .mvol-x {
+  display: block;
+}
+
+.manhwa-volume-toggle[data-state="zero"] .mvol-base {
+  display: block;
+}
+
+.manhwa-volume-toggle[data-state="low"] .mvol-1 {
+  display: block;
+}
+
+.manhwa-volume-toggle[data-state="high"] .mvol-2 {
+  display: block;
+}
+
+.manhwa-volume-popover {
+  display: flex;
+  align-items: center;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: max-width 0.18s ease, opacity 0.12s ease, padding 0.18s ease;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.manhwa-volume:hover .manhwa-volume-popover,
+.manhwa-volume:focus-within .manhwa-volume-popover {
+  max-width: calc(var(--fs-16) * 5 + 8px);
+  opacity: 1;
+  pointer-events: auto;
+  padding: 0 6px 0 2px;
+}
+
+.manhwa-volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: calc(var(--fs-16) * 5);
+  height: var(--fs-11);
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  display: block;
+}
+
+.manhwa-volume-slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.manhwa-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: min(var(--fs-11), 12px);
+  height: min(var(--fs-11), 12px);
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  margin-top: calc((3px - min(var(--fs-11), 12px)) / 2);
+}
+
+/* Slider outlines clip inside the overflow popovers, so ring the pill
+   instead. :has with focus-visible keeps mouse clicks ring free. */
+.audio-control-container:has(:focus-visible),
+.manhwa-volume:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
 #file-panel-header {
   display: grid;
   grid-template-columns: var(--col-name-w) var(--col-ext-w) var(--col-date-w);
@@ -888,7 +1021,7 @@ li:hover > .favorite-remove,
   flex-shrink: 0;
 }
 
-#file-panel-header > div {
+#file-panel-header>div {
   padding-top: 2.15625px;
   padding-bottom: 2.15625px;
 }
@@ -905,7 +1038,7 @@ li:hover > .favorite-remove,
   user-select: none;
 }
 
-.header-cell > span:first-child,
+.header-cell>span:first-child,
 .header-cell .sort-icon {
   flex-shrink: 0;
 }
@@ -925,7 +1058,8 @@ li:hover > .favorite-remove,
   z-index: 2;
 }
 
-.col-resizer:hover, .col-resizer.dragging {
+.col-resizer:hover,
+.col-resizer.dragging {
   background: var(--drag-resize);
 }
 
@@ -935,8 +1069,15 @@ li:hover > .favorite-remove,
   opacity: 0.5;
 }
 
-.col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.col-date { font-size: var(--fs-10); }
+.col-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-date {
+  font-size: var(--fs-10);
+}
 
 #file-list {
   flex: 1;
@@ -975,6 +1116,7 @@ li:hover > .favorite-remove,
 #file-list {
   outline: none;
 }
+
 #file-list:focus,
 #file-list:focus-visible {
   outline: none;
@@ -1039,10 +1181,12 @@ li:hover > .favorite-remove,
     transform: scaleX(0);
     opacity: 0.9;
   }
+
   50% {
     transform: scaleX(1);
     opacity: 1;
   }
+
   100% {
     transform: scaleX(1);
     opacity: 0;
@@ -1061,10 +1205,12 @@ li:hover > .favorite-remove,
     opacity: 1;
     filter: brightness(1);
   }
+
   25% {
     opacity: 0.3;
     filter: brightness(1.2);
   }
+
   100% {
     opacity: 1;
     filter: brightness(1);
@@ -1079,9 +1225,11 @@ li:hover > .favorite-remove,
   0% {
     opacity: 1;
   }
+
   25% {
     opacity: 0.45;
   }
+
   100% {
     opacity: 1;
   }
@@ -1100,31 +1248,107 @@ li:hover > .favorite-remove,
   color: var(--selected-text);
 }
 
+#file-list li.in-view:not(.selected),
+#favorites-list li.in-view:not(.selected),
+.library-provider-list li.in-view:not(.selected) {
+  background: color-mix(in srgb, var(--selected-bg) 40%, transparent);
+}
+
 /* The list owns keyboard focus. */
 #file-list li,
 #favorites-list li,
-.library-provider-list li { outline: none; }
+.library-provider-list li {
+  outline: none;
+}
 
-#file-list .item-name, #favorites-list .item-name, .library-provider-list .item-name { min-width: 0; overflow: hidden; padding-left: 8px; display: flex; align-items: center; gap: 4px; white-space: nowrap; flex-wrap: nowrap; }
-.library-provider-list .item-name { padding-left: calc(8px + var(--library-indent, 0px)); }
-#file-list .item-name > svg, #favorites-list .item-name > svg, .library-provider-list .item-name > svg,
-#file-list .item-name > img, #favorites-list .item-name > img, .library-provider-list .item-name > img,
-#file-list .item-icon-svg, #file-list .item-icon-svg > svg { width: var(--fs-14); height: var(--fs-14); flex: 0 0 var(--fs-14); object-fit: contain; }
-#file-list .is-hidden-entry .item-name > svg,
-#favorites-list .is-hidden-entry .item-name > svg,
-.library-provider-list .is-hidden-entry .item-name > svg,
-#file-list .is-hidden-entry .item-name > img,
-#favorites-list .is-hidden-entry .item-name > img,
+#file-list .item-name,
+#favorites-list .item-name,
+.library-provider-list .item-name {
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+}
+
+.library-provider-list .item-name {
+  padding-left: calc(8px + var(--library-indent, 0px));
+}
+
+#file-list .item-name>svg,
+#favorites-list .item-name>svg,
+.library-provider-list .item-name>svg,
+#file-list .item-name>img,
+#favorites-list .item-name>img,
+.library-provider-list .item-name>img,
+#file-list .item-icon-svg,
+#file-list .item-icon-svg>svg {
+  width: var(--fs-14);
+  height: var(--fs-14);
+  flex: 0 0 var(--fs-14);
+  object-fit: contain;
+}
+
+#file-list .is-hidden-entry .item-name>svg,
+#favorites-list .is-hidden-entry .item-name>svg,
+.library-provider-list .is-hidden-entry .item-name>svg,
+#file-list .is-hidden-entry .item-name>img,
+#favorites-list .is-hidden-entry .item-name>img,
 #file-list .is-hidden-entry .item-icon-svg,
 #favorites-list .is-hidden-entry .item-icon-svg,
-.library-provider-list .is-hidden-entry .item-icon-svg { opacity: 0.65; }
-#file-list .is-pending-download { opacity: 0.65; }
-#file-list .is-download-error { color: var(--danger); }
+.library-provider-list .is-hidden-entry .item-icon-svg {
+  opacity: 0.65;
+}
+
+#file-list .is-pending-download {
+  opacity: 0.65;
+}
+
+#file-list .is-download-error {
+  color: var(--danger);
+}
+
 #file-list .is-download-error .item-ext,
-#file-list .is-download-error .item-thumbnail-meta { color: var(--danger); }
-#file-list .item-label, #favorites-list .item-label, .library-provider-list .item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-#file-list .item-ext, #favorites-list .item-ext, .library-provider-list .item-ext  { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); padding-left: 8px; flex-shrink: 0; }
-#file-list .item-date, #favorites-list .item-date, .library-provider-list .item-date { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-10); color: var(--text-dim); padding-left: 8px; }
+#file-list .is-download-error .item-thumbnail-meta {
+  color: var(--danger);
+}
+
+#file-list .item-label,
+#favorites-list .item-label,
+.library-provider-list .item-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+#file-list .item-ext,
+#favorites-list .item-ext,
+.library-provider-list .item-ext {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  padding-left: 8px;
+  flex-shrink: 0;
+}
+
+#file-list .item-date,
+#favorites-list .item-date,
+.library-provider-list .item-date {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-10);
+  color: var(--text-dim);
+  padding-left: 8px;
+}
 
 /* Thumbnail view */
 #file-panel.view-mode-thumbnail {
@@ -1228,9 +1452,9 @@ li:hover > .favorite-remove,
   display: block;
 }
 
-#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-img.is-loaded + .item-thumbnail-placeholder,
-#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-img.is-loaded + .item-thumbnail-placeholder,
-#file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-img.is-loaded + .item-thumbnail-placeholder {
+#file-panel.view-mode-thumbnail #file-list li .item-thumbnail-img.is-loaded+.item-thumbnail-placeholder,
+#file-panel.view-mode-thumbnail #favorites-list li .item-thumbnail-img.is-loaded+.item-thumbnail-placeholder,
+#file-panel.view-mode-thumbnail .library-provider-list li .item-thumbnail-img.is-loaded+.item-thumbnail-placeholder {
   display: none !important;
 }
 
@@ -1333,6 +1557,182 @@ li:hover > .favorite-remove,
 /* Empty viewport */
 #viewport.empty {
   background: var(--bg);
+}
+
+/* Manhwa strip */
+#manhwa-strip {
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: center center;
+  transform: translate(-50%, -50%);
+  flex-direction: column;
+  align-items: center;
+  width: var(--strip-width, max-content);
+  overflow: hidden;
+  pointer-events: none;
+  padding: 0;
+  margin: 0;
+}
+
+#viewport.manhwa-active #manhwa-strip {
+  display: flex;
+  z-index: 0;
+}
+
+#manhwa-strip>* {
+  flex-shrink: 0;
+}
+
+#manhwa-strip-spacer-top,
+#manhwa-strip-spacer-bottom {
+  width: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  flex-shrink: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+#manhwa-strip-spacer-top {
+  height: var(--strip-spacer-top, 0px);
+}
+
+#manhwa-strip-spacer-bottom {
+  height: var(--strip-spacer-bottom, 0px);
+}
+
+.manhwa-slot {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  flex-shrink: 0;
+  width: var(--slot-width, 100%);
+  height: var(--slot-height, auto);
+  position: relative;
+  padding: 0;
+  margin: 0;
+}
+
+/* Overlap adjacent slots by at least 1 device pixel to close compositor subpixel seams. */
+.manhwa-slot+.manhwa-slot {
+  margin-top: min(-1px, calc(-1px / var(--zoom-scale, 1)));
+}
+
+
+/* Group grill bed for the mounted slots. One absolutely positioned layer spans
+   the visible range, so no painted surface ever spans the whole column on long
+   chapters. JS moves it with custom properties only. */
+#manhwa-slot-grill {
+  display: none;
+  position: absolute;
+  top: var(--slot-grill-top, 0px);
+  left: 0;
+  right: 0;
+  height: var(--slot-grill-height, 0px);
+  pointer-events: none;
+  background-color: var(--grill-bg);
+  background-image: linear-gradient(var(--grill-angle, -45deg),
+      transparent 0,
+      transparent calc(25% - var(--grill-thickness-pct) / 2),
+      var(--grill-lines) 0,
+      var(--grill-lines) calc(25% + var(--grill-thickness-pct) / 2),
+      transparent 0,
+      transparent calc(75% - var(--grill-thickness-pct) / 2),
+      var(--grill-lines) 0,
+      var(--grill-lines) calc(75% + var(--grill-thickness-pct) / 2),
+      transparent 0,
+      transparent 100%);
+  background-size: calc(var(--grill-spacing) / var(--zoom-scale, 1)) calc(var(--grill-spacing) / var(--zoom-scale, 1));
+  background-repeat: repeat;
+  box-shadow: inset 0 0 0 calc(var(--grill-thickness-px) * 1px / var(--zoom-scale, 1)) var(--grill-border);
+}
+
+#manhwa-strip.grill-active #manhwa-slot-grill {
+  display: block;
+}
+
+/* Individual slot backdrop tint with mirrored diagonal lines. */
+.manhwa-slot-backdrop {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  background-color: var(--slot-backdrop-bg, transparent);
+  background-image: linear-gradient(var(--slot-backdrop-angle, 45deg),
+      transparent 0,
+      transparent calc(25% - var(--grill-thickness-pct) / 2),
+      var(--grill-lines) 0,
+      var(--grill-lines) calc(25% + var(--grill-thickness-pct) / 2),
+      transparent 0,
+      transparent calc(75% - var(--grill-thickness-pct) / 2),
+      var(--grill-lines) 0,
+      var(--grill-lines) calc(75% + var(--grill-thickness-pct) / 2),
+      transparent 0,
+      transparent 100%);
+  background-size: calc(var(--grill-spacing) / var(--zoom-scale, 1)) calc(var(--grill-spacing) / var(--zoom-scale, 1));
+  background-repeat: repeat;
+  box-shadow: inset 0 0 0 calc(var(--grill-thickness-px) * 1px / var(--zoom-scale, 1)) var(--grill-border);
+  opacity: 0.35;
+}
+
+#manhwa-strip.grill-active .manhwa-slot[data-ready] .manhwa-slot-backdrop {
+  display: block;
+}
+
+#manhwa-strip>img,
+.manhwa-slot>img,
+.manhwa-slot>video {
+  display: block;
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  width: auto;
+  max-width: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#manhwa-strip[data-scaling="none"] img,
+#manhwa-strip[data-scaling="none"] .manhwa-slot>video {
+  image-rendering: pixelated;
+}
+
+#manhwa-strip[data-scaling="bilinear"] img,
+#manhwa-strip[data-scaling="lanczos"] img,
+#manhwa-strip[data-scaling="bilinear"] .manhwa-slot>video,
+#manhwa-strip[data-scaling="lanczos"] .manhwa-slot>video {
+  image-rendering: auto;
+}
+
+/* Hide single-image viewer elements while the strip is active */
+#viewport.manhwa-active #viewer-img-wrapper,
+#viewport.manhwa-active #viewer-lanczos-canvas,
+#viewport.manhwa-active #viewer-filter-canvas,
+#viewport.manhwa-active #viewer-svg-pump,
+#viewport.manhwa-active #spread-indicator {
+  display: none;
+}
+
+/* Entry warmup: keep the legacy filtered frame up until the column paints.
+ * Opacity still follows data-render-ready, so a never-painted canvas stays
+ * invisible and only a real frame bridges the swap. */
+#viewport.manhwa-active.manhwa-warmup #viewer-filter-canvas {
+  display: block;
+}
+
+#viewport:not(.manhwa-active) #manhwa-indicator {
+  display: none;
+}
+
+#viewport.manhwa-active .audio-control-container {
+  display: none;
 }
 
 #viewport.cursor-hidden,
@@ -1440,7 +1840,9 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 
 /* Viewport overlays */
 
-#drop-overlay, #password-overlay, #url-overlay {
+#drop-overlay,
+#password-overlay,
+#url-overlay {
   position: absolute;
   inset: 0;
   display: grid;
@@ -1485,7 +1887,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   opacity: 0.55;
 }
 
-.overlay-prompt > p {
+.overlay-prompt>p {
   font-size: var(--fs-15);
   font-weight: 500;
   text-align: center;
@@ -1592,8 +1994,15 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   .overlay-prompt {
     padding-inline: 26px;
   }
-  .overlay-prompt > p { display: none; }
-  .drop-hint > span { display: none; }
+
+  .overlay-prompt>p {
+    display: none;
+  }
+
+  .drop-hint>span {
+    display: none;
+  }
+
   .overlay-field {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
@@ -1609,7 +2018,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
   cursor: pointer;
 }
 
-.drop-hint > span {
+.drop-hint>span {
   font-size: var(--fs-12);
   opacity: 0.5;
   letter-spacing: 0.04em;
@@ -1632,7 +2041,7 @@ body.fullscreen-active #fullscreen-exit-btn:focus-visible {
 
 /* Password and URL errors */
 
-:is(#password-overlay, #url-overlay).error > .overlay-prompt {
+:is(#password-overlay, #url-overlay).error>.overlay-prompt {
   border-color: var(--danger);
 }
 
@@ -1668,12 +2077,14 @@ body.is-importing-url .header-cell:hover {
 
 
 
-/* Spread indicator when the status bar is hidden. */
-#spread-indicator:empty {
+/* Spread and manhwa indicators when the status bar is hidden. */
+#spread-indicator:empty,
+#manhwa-indicator:empty {
   display: none;
 }
 
-#spread-indicator {
+#spread-indicator,
+#manhwa-indicator {
   position: absolute;
   bottom: 10px;
   left: 10px;
@@ -1757,12 +2168,12 @@ body.is-importing-url .header-cell:hover {
   pointer-events: none;
 }
 
-.viewer-img[data-scaling="none"] {
+#viewport[data-scaling="none"] .viewer-img {
   image-rendering: pixelated;
 }
 
-.viewer-img[data-scaling="bilinear"],
-.viewer-img[data-scaling="lanczos"] {
+#viewport[data-scaling="bilinear"] .viewer-img,
+#viewport[data-scaling="lanczos"] .viewer-img {
   image-rendering: auto;
 }
 
@@ -1793,6 +2204,8 @@ body.is-importing-url .header-cell:hover {
   width: var(--crop-w);
   height: var(--crop-h);
   opacity: 0;
+  z-index: 2;
+  pointer-events: none;
 }
 
 #viewer-lanczos-canvas[data-render-ready="true"] {
@@ -1817,13 +2230,83 @@ body.is-importing-url .header-cell:hover {
 
 #viewport[data-filter] #viewer-img-wrapper .viewer-img,
 #viewport[data-filter] #viewer-img-wrapper .viewer-video,
-#viewer-img-wrapper:has(#viewer-lanczos-canvas[data-render-ready="true"]) .viewer-img,
-#viewer-img-wrapper:has(#viewer-lanczos-canvas[data-render-ready="true"]) .viewer-video,
 #viewport[data-filter] #viewer-bridge-layer .viewer-img,
-#viewport[data-filter] #viewer-bridge-layer .viewer-video,
-#viewport:has(#viewer-lanczos-canvas[data-render-ready="true"]) #viewer-bridge-layer .viewer-img,
-#viewport:has(#viewer-lanczos-canvas[data-render-ready="true"]) #viewer-bridge-layer .viewer-video {
+#viewport[data-filter] #viewer-bridge-layer .viewer-video {
   opacity: 0 !important;
+}
+
+/* Manhwa column filter canvas: one output for the whole column. */
+#manhwa-filter-canvas {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: auto;
+  pointer-events: none;
+  opacity: 0;
+  display: none;
+  z-index: 1;
+}
+
+#viewport.manhwa-active #manhwa-filter-canvas[data-render-ready="true"] {
+  display: block;
+  opacity: 1;
+}
+
+/* Manhwa audio overlay: host for per-slot volume pills. Sits above the
+   filter canvas so pills remain accessible when WebGL filters are active. */
+#manhwa-audio-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  overflow: hidden;
+}
+
+#viewport.manhwa-active #manhwa-audio-overlay {
+  display: block;
+}
+
+#manhwa-audio-overlay .manhwa-volume {
+  top: 0;
+  left: 0;
+  bottom: auto;
+  transform-origin: 0 0;
+}
+
+/* While the column canvas paints, hide raw slot media.
+   Visibility keeps slot layout so scroll offsets stay valid. Video.play()
+   advances frames regardless of visibility for the live texImage2D path. */
+#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>img,
+#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>video {
+  visibility: hidden;
+}
+
+/* SVGs are ignored under lanczos and anime4k: the slot keeps its native
+   animated rendering while the column canvas leaves that region clear. */
+#viewport.manhwa-active[data-filter="lanczos"] #manhwa-strip .manhwa-slot[data-kind="svg"]>img,
+#viewport.manhwa-active[data-filter="anime4k"] #manhwa-strip .manhwa-slot[data-kind="svg"]>img {
+  visibility: visible;
+}
+
+/* SVG pump layer: blob-backed images stay in the render tree so SMIL
+   advances, but never intercept input or paint visibly. */
+#manhwa-svg-pump-layer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.001;
+}
+
+#manhwa-svg-pump-layer img {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
 }
 
 /* Percentage-sized SVGs need concrete dimensions in the shrink-wrap wrapper. */
@@ -1842,16 +2325,16 @@ body.is-importing-url .header-cell:hover {
   background-color: var(--grill-bg);
   /* Mixed pixel and percentage stops keep stripe widths steady. */
   background-image: linear-gradient(var(--grill-angle, -45deg),
-    transparent 0,
-    transparent calc(25% - var(--grill-thickness-pct) / 2),
-    var(--grill-lines) 0,
-    var(--grill-lines) calc(25% + var(--grill-thickness-pct) / 2),
-    transparent 0,
-    transparent calc(75% - var(--grill-thickness-pct) / 2),
-    var(--grill-lines) 0,
-    var(--grill-lines) calc(75% + var(--grill-thickness-pct) / 2),
-    transparent 0,
-    transparent 100%);
+      transparent 0,
+      transparent calc(25% - var(--grill-thickness-pct) / 2),
+      var(--grill-lines) 0,
+      var(--grill-lines) calc(25% + var(--grill-thickness-pct) / 2),
+      transparent 0,
+      transparent calc(75% - var(--grill-thickness-pct) / 2),
+      var(--grill-lines) 0,
+      var(--grill-lines) calc(75% + var(--grill-thickness-pct) / 2),
+      transparent 0,
+      transparent 100%);
   background-size: calc(var(--grill-spacing) / var(--zoom-scale, 1)) calc(var(--grill-spacing) / var(--zoom-scale, 1));
   background-repeat: repeat;
 }
@@ -1887,7 +2370,9 @@ body.is-importing-url .header-cell:hover {
   color: var(--text-muted);
 }
 
-#statusbar.hidden { display: none; }
+#statusbar.hidden {
+  display: none;
+}
 
 .status-filename {
   flex: 1;
@@ -1899,25 +2384,79 @@ body.is-importing-url .header-cell:hover {
 }
 
 .status-spread,
+.status-manhwa,
 .status-dims,
 .status-index,
 .status-zoom,
 .status-fit,
+.status-scaling,
+.status-filter,
 .status-version {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
+}
+
+.status-spread:empty,
+.status-manhwa:empty {
+  display: none;
 }
 
 .status-version {
   color: var(--text-dim);
 }
 
-.status-spread:not(:empty)::before { content: '·'; margin-right: 12px; color: var(--border); }
-.status-dims::before  { content: '·'; margin-right: 12px; color: var(--border); }
-.status-index::before { content: '·'; margin-right: 12px; color: var(--border); }
-.status-zoom::before  { content: '·'; margin-right: 12px; color: var(--border); }
-.status-fit::before     { content: '·'; margin-right: 12px; color: var(--border); }
-.status-version::before { content: '·'; margin-right: 12px; color: var(--border); }
+.status-manhwa.hold-flicker-hidden {
+  visibility: hidden;
+}
+
+.status-spread:not(:empty)::before,
+.status-manhwa:not(:empty)::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--border);
+}
+
+.status-dims::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--border);
+}
+
+.status-index::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--border);
+}
+
+.status-zoom::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--border);
+}
+
+.status-fit::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--border);
+}
+
+.status-scaling::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--border);
+}
+
+.status-filter::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--border);
+}
+
+.status-version::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--border);
+}
 
 /* Scroll-zoom indicator */
 .status-scroll-zoom {

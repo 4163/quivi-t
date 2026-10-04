@@ -5,10 +5,13 @@ class StatusbarPage extends Page {
   get filename() { return $('#statusbar .status-filename'); }
   get scrollZoom() { return $('#statusbar .status-scroll-zoom'); }
   get spread() { return $('#statusbar .status-spread'); }
+  get manhwa() { return $('#statusbar .status-manhwa'); }
   get dims() { return $('#statusbar .status-dims'); }
   get index() { return $('#statusbar .status-index'); }
   get zoom() { return $('#statusbar .status-zoom'); }
   get fit() { return $('#statusbar .status-fit'); }
+  get scaling() { return $('#statusbar .status-scaling'); }
+  get filter() { return $('#statusbar .status-filter'); }
   get version() { return $('#statusbar .status-version'); }
 
   async isVisible() {
@@ -36,6 +39,18 @@ class StatusbarPage extends Page {
 
   async getFitText() {
     return this.fit.getText();
+  }
+
+  async getScalingText() {
+    return this.scaling.getText();
+  }
+
+  async getFilterText() {
+    return this.filter.getText();
+  }
+
+  async getManhwaText() {
+    return this.manhwa.getText();
   }
 }
 

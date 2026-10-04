@@ -274,6 +274,12 @@ impl ArchiveCache {
             .unwrap_or(false)
     }
 
+    pub(crate) fn get_archive_password(&self, archive_path: &str) -> Option<String> {
+        self.archives
+            .get(archive_path)
+            .and_then(|s| s.password.clone())
+    }
+
     pub(crate) fn get_zip_entry(
         &self,
         archive_path: &str,

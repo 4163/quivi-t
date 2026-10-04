@@ -155,4 +155,53 @@ describe('05 - Persistence & User Preferences', () => {
       { timeout: 6000, timeoutMsg: 'Cleared favorites were not persisted to config file' }
     );
   });
+
+  it('persists manhwa mode switch to config file', async () => {
+    // Factory default is manhwa mode disabled
+    expect(await viewerPage.isManhwaActive()).toBe(false);
+
+    // Toggle manhwa mode on using shortcut 'm'
+    await browser.keys(['m']);
+    await browser.waitUntil(
+      async () => await viewerPage.isManhwaActive(),
+      { timeout: 5000, timeoutMsg: 'Viewport did not gain manhwa-active class' }
+    );
+
+    // Verify manhwa mode persists to config on disk (accounting for 1500ms debounce)
+    await browser.waitUntil(
+      () => {
+        if (!fs.existsSync(configPath)) return false;
+        try {
+          const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          return cfg.frontend_data?.manhwa_enabled === true;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 6000, timeoutMsg: 'Config file did not persist manhwa_enabled: true to disk' }
+    );
+
+    // Allow config-changed watcher event to settle before the next toggle
+    await browser.pause(1000);
+
+    // Toggle back to disabled
+    await browser.keys(['m']);
+    await browser.waitUntil(
+      async () => !(await viewerPage.isManhwaActive()),
+      { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class' }
+    );
+
+    await browser.waitUntil(
+      () => {
+        if (!fs.existsSync(configPath)) return false;
+        try {
+          const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          return cfg.frontend_data?.manhwa_enabled === false;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 6000, timeoutMsg: 'Config file did not persist manhwa_enabled: false to disk' }
+    );
+  });
 });

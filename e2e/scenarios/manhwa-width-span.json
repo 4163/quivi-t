@@ -1,0 +1,19 @@
+{
+  "name": "manhwa-width-span",
+  "initialPath": "test-files/_archives/zip.zip",
+  "initialState": {
+    "index": 0
+  },
+  "actions": [
+    "cmd-toggle-manhwa",
+    "cmd-fit-width",
+    "cmd-zoom-in",
+    "cmd-pan-right",
+    "cmd-pan-right",
+    "cmd-pan-left",
+    "cmd-pan-left",
+    "cmd-fit-width-if-larger",
+    "cmd-zoom-100",
+    "cmd-toggle-manhwa"
+  ]
+}

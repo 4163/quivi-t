@@ -3,7 +3,7 @@ import menubarPage from '../pageobjects/menubar.page.js';
 import viewerPage from '../pageobjects/viewer.page.js';
 import statusbarPage from '../pageobjects/statusbar.page.js';
 import { fixtures } from '../helpers/fixtures.js';
-import { Key, shift } from '../helpers/keyboard.js';
+import { Key, shift, ctrl } from '../helpers/keyboard.js';
 
 describe('03 - Viewport & Viewer Controls', () => {
   before(async () => {
@@ -134,5 +134,76 @@ describe('03 - Viewport & Viewer Controls', () => {
 
     // Disable spread mode
     await menubarPage.selectSpreadMode('off');
+  });
+
+  it('toggles manhwa continuous strip view and updates viewport state', async () => {
+    // Toggle manhwa mode on using shortcut 'm'
+    await browser.keys(['m']);
+    await browser.waitUntil(
+      async () => await viewerPage.isManhwaActive(),
+      { timeout: 5000, timeoutMsg: 'Viewport did not gain manhwa-active class' }
+    );
+
+    // Manhwa strip should be present and active
+    const strip = await viewerPage.manhwaStrip;
+    expect(await strip.isExisting()).toBe(true);
+
+    // Verify top and bottom spacers exist
+    const topSpacer = await viewerPage.manhwaTopSpacer;
+    const bottomSpacer = await viewerPage.manhwaBottomSpacer;
+    expect(await topSpacer.isExisting()).toBe(true);
+    expect(await bottomSpacer.isExisting()).toBe(true);
+
+    // Toggle manhwa mode off
+    await browser.keys(['m']);
+    await browser.waitUntil(
+      async () => !(await viewerPage.isManhwaActive()),
+      { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class' }
+    );
+  });
+
+  it('supports filters in manhwa view with canvas readiness, scroll continuity, and clean teardown', async () => {
+    // 1. Toggle manhwa mode on
+    await browser.keys(['m']);
+    await browser.waitUntil(
+      async () => await viewerPage.isManhwaActive(),
+      { timeout: 5000, timeoutMsg: 'Viewport did not gain manhwa-active class' }
+    );
+
+    // 2. Select a filter (scanlines)
+    await menubarPage.selectFilter('scanlines');
+    await browser.waitUntil(
+      async () => (await viewerPage.getManhwaActiveFilter()) === 'scanlines',
+      { timeout: 5000, timeoutMsg: 'Viewport did not set data-filter="scanlines"' }
+    );
+
+    // 3. Canvas should exist and report data-render-ready
+    const canvas = await viewerPage.manhwaFilterCanvas;
+    expect(await canvas.isExisting()).toBe(true);
+    await browser.waitUntil(
+      async () => await viewerPage.isManhwaFilterCanvasReady(),
+      { timeout: 5000, timeoutMsg: 'manhwa-filter-canvas did not gain data-render-ready="true"' }
+    );
+
+    // 4. Verify scroll continuity (pan down)
+    const initialTransform = await viewerPage.getManhwaTransform();
+    await browser.keys(['ArrowDown']);
+    await browser.pause(100);
+    const scrolledTransform = await viewerPage.getManhwaTransform();
+    expect(scrolledTransform).toBeDefined();
+
+    // 5. Turn filter off and verify data-filter attribute is removed
+    await menubarPage.selectFilter('off');
+    await browser.waitUntil(
+      async () => (await viewerPage.getManhwaActiveFilter()) === null,
+      { timeout: 5000, timeoutMsg: 'Viewport did not clear data-filter attribute' }
+    );
+
+    // 6. Toggle manhwa mode off cleanly
+    await browser.keys(['m']);
+    await browser.waitUntil(
+      async () => !(await viewerPage.isManhwaActive()),
+      { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class' }
+    );
   });
 });
