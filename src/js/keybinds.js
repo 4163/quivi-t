@@ -24,7 +24,6 @@ export const DEFAULT_FIT_MODE = 'height-if-larger';
 export const DEFAULT_SCALING_MODE = 'bilinear';
 export const DEFAULT_SPREAD_ENABLED = false;
 export const DEFAULT_SPREAD_DIRECTION = 'rtl';
-export const DEFAULT_SPREAD_MODE = 'off';
 export const DEFAULT_FILE_LIST_VIEW_MODE = 'list';
 export const DEFAULT_MANHWA_ENABLED = false;
 
@@ -59,10 +58,8 @@ export function mergeConfig(loaded) {
       scroll_zoom_latched: fd.scroll_zoom_latched === true,
       fit_mode: fd.fit_mode || DEFAULT_FIT_MODE,
       scaling_mode: fd.scaling_mode || DEFAULT_SCALING_MODE,
-      spread_enabled: fd.spread_enabled !== undefined
-        ? fd.spread_enabled === true
-        : (fd.spread_mode !== undefined ? fd.spread_mode !== 'off' : DEFAULT_SPREAD_ENABLED),
-      spread_direction: fd.spread_direction === 'ltr' || fd.spread_mode === 'ltr' ? 'ltr' : DEFAULT_SPREAD_DIRECTION,
+      spread_enabled: fd.spread_enabled !== undefined ? fd.spread_enabled === true : DEFAULT_SPREAD_ENABLED,
+      spread_direction: fd.spread_direction === 'ltr' ? 'ltr' : DEFAULT_SPREAD_DIRECTION,
       manhwa_enabled: fd.manhwa_enabled === true,
       keyboard_pan_step: typeof fd.keyboard_pan_step === 'number' ? fd.keyboard_pan_step : DEFAULT_KEYBOARD_PAN_STEP,
       wheel_pan_step: typeof fd.wheel_pan_step === 'number' ? fd.wheel_pan_step : DEFAULT_WHEEL_PAN_STEP,

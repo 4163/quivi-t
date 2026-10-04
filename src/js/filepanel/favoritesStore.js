@@ -29,18 +29,10 @@ export function getNextLoadoutName(state, excludeName = '') {
 }
 
 function normalizeFavorites(raw) {
-  if (!raw || typeof raw !== 'object') {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return {
       active: DEFAULT_LOADOUT_NAME,
       loadouts: [{ name: DEFAULT_LOADOUT_NAME, items: [] }]
-    };
-  }
-
-  // Handle legacy array if present.
-  if (Array.isArray(raw)) {
-    return {
-      active: DEFAULT_LOADOUT_NAME,
-      loadouts: [{ name: DEFAULT_LOADOUT_NAME, items: groupSavedItems(raw) }]
     };
   }
 
@@ -48,11 +40,10 @@ function normalizeFavorites(raw) {
   if (loadouts.length === 0) {
     loadouts = [{ name: DEFAULT_LOADOUT_NAME, items: [] }];
   } else {
-    // Sanitize each loadout, migrate legacy 'Default' name, and ensure uniqueness.
+    // Sanitize each loadout and ensure uniqueness.
     const seenNames = new Set();
     loadouts = loadouts.map(l => {
-      let name = (typeof l?.name === 'string' && l.name.trim()) ? l.name.trim() : DEFAULT_LOADOUT_NAME;
-      if (name.toLowerCase() === 'default') name = DEFAULT_LOADOUT_NAME;
+      const name = (typeof l?.name === 'string' && l.name.trim()) ? l.name.trim() : DEFAULT_LOADOUT_NAME;
       let uniqueName = name;
       let n = 2;
       while (seenNames.has(uniqueName.toLowerCase())) {
@@ -67,7 +58,6 @@ function normalizeFavorites(raw) {
   }
 
   let active = (typeof raw.active === 'string' && raw.active.trim()) ? raw.active.trim() : loadouts[0].name;
-  if (active.toLowerCase() === 'default') active = DEFAULT_LOADOUT_NAME;
   if (!loadouts.some(l => l.name === active)) {
     active = loadouts[0].name;
   }

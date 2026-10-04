@@ -36,7 +36,7 @@
  *   ephemeral within a session     -> in-memory state (or cleared localStorage)
  */
 
-import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_DIRECTION, DEFAULT_SPREAD_MODE, DEFAULT_FILE_LIST_VIEW_MODE, DEFAULT_MANHWA_ENABLED, mergeConfig } from './keybinds.js';
+import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_DIRECTION, DEFAULT_FILE_LIST_VIEW_MODE, DEFAULT_MANHWA_ENABLED, mergeConfig } from './keybinds.js';
 import { FsUtils } from './fsUtils.js';
 import { BoundedMap } from './services/cache.js';
 
@@ -593,11 +593,6 @@ export const Core = {
       
       const oldShowHidden = _state.config?.frontend_data?.show_hidden;
       _state.config = mergeConfig(loaded);
-      
-      // Drop the legacy per-folder map in favor of a single last-active pair
-      if (_state.config.frontend_data.last_active_images !== undefined) {
-        delete _state.config.frontend_data.last_active_images;
-      }
       
       const newFitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
       if (_state.fitMode !== newFitMode) {

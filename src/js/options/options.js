@@ -447,7 +447,6 @@ function buildConfigFromForm(baseConfig) {
   // Spread View settings are controlled via the View menu; preserve them across Options saves.
   newConfig.frontend_data.spread_enabled = baseConfig.frontend_data?.spread_enabled ?? DEFAULT_SPREAD_ENABLED;
   newConfig.frontend_data.spread_direction = baseConfig.frontend_data?.spread_direction || 'rtl';
-  newConfig.frontend_data.spread_mode = newConfig.frontend_data.spread_enabled ? newConfig.frontend_data.spread_direction : 'off';
   // Manhwa View is controlled via the View menu; preserve it across Options saves.
   newConfig.frontend_data.manhwa_enabled = baseConfig.frontend_data?.manhwa_enabled === true;
   // Preserve filter options which are mutated in memory directly.

@@ -2121,7 +2121,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
 
   const galleryPath = [libraryDir, providerDir, ...result.gallery.relativePath].join('\\');
 
-  await ensureGalleryOwnership(galleryPath, result.gallery, url);
+  await ensureGalleryOwnership(galleryPath, result.gallery);
 
   // Write gallery.json sidecar first so the directory is recognized as a gallery immediately
   const sidecar = {
@@ -2224,7 +2224,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
   return { galleryPath, result, targetName };
 }
 
-async function ensureGalleryOwnership(galleryPath, gallery, sourceUrl) {
+async function ensureGalleryOwnership(galleryPath, gallery) {
   if (typeof window === 'undefined' || !window.__TAURI__) return;
   try {
     const content = await window.__TAURI__.core.invoke('read_text_file', {
@@ -2232,9 +2232,7 @@ async function ensureGalleryOwnership(galleryPath, gallery, sourceUrl) {
     });
     const existing = JSON.parse(content);
     const existingId = existing?.gallery?.id;
-    const sameLegacyGallery = !existingId
-      && normalizeUrl(existing?.url || '') === normalizeUrl(sourceUrl);
-    if (existingId !== gallery.id && !sameLegacyGallery) {
+    if (existingId !== gallery.id) {
       throw new Error(`Library path is already used by another gallery: ${gallery.relativePath.join(' / ')}`);
     }
   } catch (err) {

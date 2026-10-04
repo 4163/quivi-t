@@ -201,6 +201,7 @@ function bindMenus() {
     });
 
     trigger.addEventListener('keydown', (e) => {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
         e.preventDefault();
         e.stopPropagation();
@@ -335,7 +336,7 @@ function bindMenus() {
       item.addEventListener('keydown', (e) => {
         const parentSubmenu = item.closest('.submenu');
 
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
           e.stopPropagation();
           if (isSubmenuTrigger) {
@@ -573,7 +574,7 @@ function bindFavoritesDropdown() {
       return;
     }
 
-    if (e.key === 'Enter' || e.key === ' ') {
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'Enter' || e.key === ' ')) {
       const row = e.target.closest('.loadout-item');
       if (row?.dataset?.loadoutName) {
         e.preventDefault();
@@ -721,7 +722,7 @@ export function syncViewMenu(state) {
     _setMenuItemDisabled(id, manhwaOn, manhwaRotationNote);
   }
 
-  const spreadEnabled = !!(state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled ?? (state.spreadMode && state.spreadMode !== 'off'));
+  const spreadEnabled = !!(state.spreadEnabled ?? state.config?.frontend_data?.spread_enabled);
   const spreadDirection = state.spreadDirection ?? state.config?.frontend_data?.spread_direction ?? 'rtl';
 
   const spreadLabelEl = document.getElementById('spread-current-label');

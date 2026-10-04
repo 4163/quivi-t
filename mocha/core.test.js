@@ -16,7 +16,6 @@ if (typeof window === 'undefined') {
 const { Core, resolveStartupTarget } = await import('../src/js/core.js');
 const {
   DEFAULT_SPREAD_ENABLED,
-  DEFAULT_SPREAD_MODE,
   DEFAULT_FIT_MODE,
   DEFAULT_FILE_LIST_VIEW_MODE,
   DEFAULT_MANHWA_ENABLED,
@@ -27,7 +26,6 @@ describe('Core state machine', () => {
   describe('default state and configuration merging', () => {
     it('initializes with default spread and fit settings', () => {
       assert.equal(DEFAULT_SPREAD_ENABLED, false);
-      assert.equal(DEFAULT_SPREAD_MODE, 'off');
       assert.equal(DEFAULT_FIT_MODE, 'height-if-larger');
       assert.equal(DEFAULT_FILE_LIST_VIEW_MODE, 'list');
       assert.equal(DEFAULT_MANHWA_ENABLED, false);
