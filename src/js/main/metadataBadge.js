@@ -103,7 +103,7 @@ export function initMetadataBadge({ Core, FsUtils, badgeEl }) {
   if (_badgeEl) {
     _badgeEl.addEventListener('click', () => openMetadataWindow());
     _badgeEl.addEventListener('keydown', (e) => { 
-      if (e.key === 'Enter' || e.key === ' ') { 
+      if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'Enter' || e.key === ' ')) { 
         e.preventDefault(); 
         openMetadataWindow(); 
       } 

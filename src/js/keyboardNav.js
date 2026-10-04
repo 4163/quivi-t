@@ -54,6 +54,7 @@ export function makeListNavigable(elements, options = {}) {
   const arr = Array.from(elements);
   arr.forEach((el, index) => {
     el.addEventListener('keydown', (e) => {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
       let dir = null;
 
       if (horizontal && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
@@ -91,6 +92,7 @@ export function makeContainerNavigable(containerEl, itemSelector, options = {}) 
   } = options;
 
   containerEl.addEventListener('keydown', (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
     const items = Array.from(containerEl.querySelectorAll(itemSelector));
     if (!items.length) return;
 

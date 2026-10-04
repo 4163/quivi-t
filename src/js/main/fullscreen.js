@@ -231,7 +231,7 @@ export function initFullscreen() {
       toggleFullscreen();
     });
     fullscreenExitBtn.addEventListener('keydown', (e) => {
-      if (!fullscreenActive || (e.key !== 'Enter' && e.key !== ' ')) return;
+      if (!fullscreenActive || e.altKey || e.ctrlKey || e.metaKey || (e.key !== 'Enter' && e.key !== ' ')) return;
       e.preventDefault();
       hideFullscreenExitButton();
       toggleFullscreen();

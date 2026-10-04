@@ -90,7 +90,7 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Toggle file list | `1` |
 | Toggle menu bar | `2` |
 | Toggle status bar | `3` |
-| Fullscreen | `4` / `Alt+Enter` |
+| Fullscreen | `4` / `Alt+Enter` / `F11` |
 | Exit fullscreen (Hold) | `Escape` |
 | Toggle thumbnail / list view | `T` |
 | **File operations** | |

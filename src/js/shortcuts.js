@@ -84,6 +84,13 @@ function _getToggleEventKeys(config) {
   return zoomMods.map(m => _TOKEN_TO_EVENT_KEY[m]).filter(Boolean);
 }
 
+function syncModifierKeys(e) {
+  if (e.ctrlKey) activeKeys.add('control'); else if (e.key !== 'Control') activeKeys.delete('control');
+  if (e.altKey) activeKeys.add('alt'); else if (e.key !== 'Alt') activeKeys.delete('alt');
+  if (e.shiftKey) activeKeys.add('shift'); else if (e.key !== 'Shift') activeKeys.delete('shift');
+  if (e.metaKey) activeKeys.add('meta'); else if (e.key !== 'Meta') activeKeys.delete('meta');
+}
+
 // The status bar reports the active scroll-wheel modifier. Hold mode shows a
 // held bound modifier. Toggle mode shows the zoom latch or a held pan modifier.
 // The modes are mutually exclusive. Skip DOM work when the output is unchanged.
@@ -98,22 +105,20 @@ function _updateScrollIndicator(config) {
       text = 'Scroll Zoom: Toggled';
       latched = true;
     } else {
-      // Without the latch, only held pan modifiers affect the wheel.
+      // Without the latch, held pan modifiers and modifier keys affect the indicator.
       const toggleTokens = getScrollModifierKeys(config, _SCROLL_ZOOM_IDS);
-      const mods = getScrollModifierKeys(config, _SCROLL_PAN_IDS)
-        .filter(m => !toggleTokens.includes(m))
-        .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
+      const effectiveToggle = toggleTokens.length > 0 ? toggleTokens : ['Ctrl'];
+      const mods = ['Ctrl', 'Alt', 'Shift']
+        .filter(m => !effectiveToggle.includes(m))
+        .filter(m => activeKeys.has(_MODIFIER_LOWER[m]));
       held = mods.length > 0;
       if (held) text = `${mods.join('+')}: Held`;
     }
   } else {
-    // Show held modifiers only when their combo has a scroll action.
-    const mods = getScrollModifierKeys(config)
-      .filter(m => activeKeys.has(_MODIFIER_LOWER[m] ?? m.toLowerCase()));
-    if (mods.length > 0 && findAction(config, [...mods, 'ScrollUp'].join('+'))) {
-      held = true;
-      text = `${mods.join('+')}: Held`;
-    }
+    const mods = ['Ctrl', 'Alt', 'Shift']
+      .filter(m => activeKeys.has(_MODIFIER_LOWER[m]));
+    held = mods.length > 0;
+    if (held) text = `${mods.join('+')}: Held`;
   }
 
   Statusbar.setScrollIndicatorState(text, held, latched);
@@ -196,7 +201,7 @@ function isInteractiveKeyTarget(e) {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
   if (target.isContentEditable) return true;
   if (tag === 'BUTTON' || target.closest?.('button')) {
-    return e.key === ' ' || e.key === 'Enter';
+    return !e.altKey && !e.ctrlKey && !e.metaKey && (e.key === ' ' || e.key === 'Enter');
   }
   return false;
 }
@@ -302,13 +307,14 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
     if (document.body?.classList?.contains('is-importing-url')) {
       return;
     }
+    syncModifierKeys(e);
     if (isInteractiveKeyTarget(e)) {
       return;
     }
 
     const config = Core.getState().config;
 
-    if (e.key === 'Enter' && (!document.activeElement || document.activeElement === document.body)) {
+    if (e.key === 'Enter' && !e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && (!document.activeElement || document.activeElement === document.body)) {
       const state = Core.getState();
       if (state.fileListVisible) {
         const fileListUl = document.getElementById('file-list');
@@ -368,6 +374,8 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   }
 
   window.addEventListener('keyup', (e) => {
+    activeKeys.delete(e.key.toLowerCase());
+    syncModifierKeys(e);
     if (isInteractiveKeyTarget(e)) {
       clearHeldKeys();
       return;
@@ -388,7 +396,6 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
       _toggleKeyDown = false;
       _toggleChordBroken = false;
     }
-    activeKeys.delete(e.key.toLowerCase());
     if (isModifierKey(e.key)) _updateScrollIndicator(config);
   });
 

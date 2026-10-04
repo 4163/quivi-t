@@ -1316,7 +1316,7 @@ export async function renderLibrary() {
 
     provHeader.addEventListener('click', toggleProv);
     provHeader.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+      if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'Enter' || e.key === ' ')) {
         e.preventDefault();
         toggleProv();
       }
@@ -2403,7 +2403,7 @@ export function initFilePanel(deps) {
   if (favoritesHeaderEl) {
     favoritesHeaderEl.addEventListener('click', toggleFavoritesExpanded);
     favoritesHeaderEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFavoritesExpanded(); }
+      if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleFavoritesExpanded(); }
     });
   }
 
@@ -2547,6 +2547,8 @@ export function initFilePanel(deps) {
 
   // File-list keyboard navigation for virtualized list.
   fileListUl.addEventListener('keydown', (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+
     const state = Core.getState();
     const list = state.list;
     if (!list || !list.length) return;
@@ -2695,7 +2697,7 @@ export function initFilePanel(deps) {
       updateSortIcons();
     });
     cell.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+      if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'Enter' || e.key === ' ')) {
         e.preventDefault();
         cell.click();
       }

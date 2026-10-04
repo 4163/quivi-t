@@ -208,7 +208,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-toggle-statusbar', label: 'Toggle Status Bar', defaultBinds: '3', category: 'Window & UI',
     run: (ctx) => ctx.Chrome.toggleStatusBar()
   },
-  { id: 'cmd-fullscreen', label: 'Toggle Fullscreen', defaultBinds: ['4', 'Alt+Enter'], category: 'Window & UI',
+  { id: 'cmd-fullscreen', label: 'Toggle Fullscreen', defaultBinds: ['4', 'Alt+Enter', 'F11'], category: 'Window & UI',
     run: (ctx) => ctx.toggleFullscreen()
   },
   { id: 'cmd-toggle-cursor-autohide', label: 'Toggle Cursor Auto-Hide', defaultBinds: [], category: 'Window & UI',
