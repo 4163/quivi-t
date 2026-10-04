@@ -21,25 +21,27 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Archives**: Read compressed files directly as folders, including password-protected archives and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
 - **Favorites**: Save images, folders and archives into named favorite lists for future use.
-- **Web Import**: Import manga and galleries from supported sites for offline reading (see [Supported sites](#supported-sites)).
-- **Viewer Controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Mod`+wheel. Cursor auto-hides after inactivity over the viewport.
-- **Manga Spread**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
+- **Web import**: Import manga and galleries from supported sites for offline reading (see [Supported sites](#supported-sites)).
+- **Viewer controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Mod`+wheel. Cursor auto-hides after inactivity over the viewport.
+- **Manga spread**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
+- **Manhwa view**: Continuous vertical strip reading mode for webtoons and long-strip comics.
+- **Opaque backdrop**: Render an opaque backdrop behind transparent images to show media dimension bounds.
 - **Scale**: Choose from Pixelated, Bilinear, and Lanczos scale.
 - **Filters**: WebGL filters for Anime4K (Mode A Fast/HQ), CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or Scanlines.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
-- **Persistent State**: Persists favorites lists, URL Library content and location, single-instance handoff, optional auto-open behavior, and the last opened image.
-- **Windows Integration**: Drag and drop supported files to open them. Register file associations per-user for Windows Default Apps. Native window dragging supports PowerToys FancyZones snapping.
+- **Persistent state**: Persists favorites lists, URL Library content and location, single-instance handoff, optional auto-open behavior, and the last opened image.
+- **Windows integration**: Drag and drop supported files to open them. Register file associations per-user for Windows Default Apps. Native window dragging supports PowerToys FancyZones snapping.
 - **Configuration**: Choose roaming user config or portable config stored next to the executable, and move the shared URL Library to an existing empty folder.
-- **Custom Theming**: Inject and live-reload custom CSS rules, with native light/dark mode support.
-- **ICO Spritesheets**: Render multi-frame `.ico` files as generated spritesheets.
-- **File Panel**: Switchable list and thumbnail view modes with virtualized card grid layout, Favorites, and provider-organized URL Library galleries.
+- **Custom theming**: Inject and live-reload custom CSS rules, with native light/dark mode support.
+- **ICO spritesheets**: Render multi-frame `.ico` files as generated spritesheets.
+- **File panel**: Switchable list and thumbnail view modes with virtualized card grid layout, Favorites, and provider-organized URL Library galleries.
 - **Performance**: Fast O(1) virtualized rendering handles folders and archives with thousands of items instantly. Caching native shell icons and thumbnails eliminates UI pop-in.
 
 > QuiviT is strictly an image/manga reader for the time being. Zero-flicker navigation, WebGL shader filtering (including Lanczos) are already implemented and optimized for video formats, but general local video playback is intentionally deferred. Video playback is currently only enabled for galleries from provider-specific sites.
 
 ## Supported sites
 
-Import a URL via **File → Open URL...**.
+Import a URL via **File → Open URL...**
 
 - **Direct images.** Any direct image links.
 - **Imgur.** Supports MP4 videos, galleries, direct image/video links.
@@ -49,7 +51,7 @@ Import a URL via **File → Open URL...**.
 
 [Contribute](#web-imports) to add support for other sites.
 
-## Shortcuts & Controls
+## Shortcuts & controls
 
 The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`), native mouse inputs (`MouseMiddle`, `MouseForward`), double-click gestures (`DoubleClick`), and scroll-wheel capture with modifiers (`Ctrl+ScrollUp`). All keybinds can be configured dynamically in the Options menu with built-in conflict highlighting.
 
@@ -70,9 +72,7 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Fit window | `Shift+F` |
 | Fit width / height if larger | `Q` / `E` |
 | Fit window if larger | `F` |
-| Mute viewer audio | `M` |
-| **Scale Method** | |
-| Scale: Previous / Next | `[` / `]` |
+| Toggle manhwa view | `M` |
 | **Zoom** | |
 | Zoom in / out | `C` / `Z` |
 | Zoom in / out (Scroll) | `Ctrl+ScrollUp` / `Ctrl+ScrollDown` |
@@ -92,9 +92,10 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Toggle status bar | `3` |
 | Fullscreen | `4` / `Alt+Enter` |
 | Exit fullscreen (Hold) | `Escape` |
-| **File Operations** | |
+| Toggle thumbnail / list view | `T` |
+| **File operations** | |
 | Open directory | `Ctrl+O` |
-| Open File / Archive | `Ctrl+Shift+O` |
+| Open file / archive | `Ctrl+Shift+O` |
 | Open URL | `Ctrl+I` |
 | Refresh | `6` / `Ctrl+R` |
 
@@ -155,14 +156,15 @@ See the [Releases](../../releases) page for version history and release notes.
 
 ## Documentation
 
-### System Defaults
+### System defaults
 
 What QuiviT ships with. The id in backticks is the value stored in config.
 
 - **Fit mode.** `height-if-larger`. Portrait pages always starts at the top of the viewport, to preserve top-down manga reading. Smaller images stays centered.
 - **Scale.** `bilinear`. Scale is ignored for vector images. `Lanczos` uses the `pica` vendor for still images, and WebGL for videos and animated images.
-- **Filters.** `Off`. Filters are also ignored for vector images. Vectors (SVG) are drawn as a bitmap, static ones capped at 2048px, while animated ones are capped at 512px.
+- **Filters.** `Off`. Filters are also ignored for vector images. Vectors (SVG) are drawn as a bitmap, static ones capped at 2048px, while animated ones are capped at 1080px.
 - **Anime4K.** `fast` (upstream Mode A Fast). The visual difference between Mode A and HQ is insignificant, but can still be configured. **Options → General → Filters**.
+- **Opaque backdrop.** `Disabled`. While in manhwa view, the main backdrop matches the widest media in the container, while individual slots have their own backdrops with differing tint colors.
 - **Scroll-wheel modifier.** `hold`. Hold `Ctrl` and scroll to zoom. `toggle` latches `Ctrl`. The status bar shows the latch, or which modifier keys are held.
 - **Pan steps.** Keyboard `72px` per step, wheel `120px` per step. **Options → General → Panning**.
 - **Cursor auto-hide.** `2` seconds with no movement over the viewport. `0` disables auto-hide. **Options → General → Viewport**.
@@ -175,17 +177,18 @@ What QuiviT ships with. The id in backticks is the value stored in config.
 - **Missing path.** A  missing path, folder or archive, or deleted directories while the app is open, falls the user back to the nearest existing ancestor, or the Drives view at the root.
 - **Single instance.** `Enabled`. Paths passed via command line, Explorer, or archives open in the active window session. To launch separate windows instead, toggle **Options → General → Allow only one QuiviT instance** and restart the app.
 - **Default sort.** `name`, ascending. Per-directory sort is kept for 100 folders, oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort`.
-- **Video audio.** A video with audio starts muted at 50% volume. Volume and unmute states are session only.
+- **Manhwa view.** `Disabled`. `Select / open next/previous` navigation steps via the visible viewport pages, while `PageUp` and `PageDown` double that. Keyboard navigation is strictly locked to media items, so folders and archives are not selectable via keyboard. Transform rotation is disabled to preserve vertical column reading order and prevent layout distortion.
+- **Video audio.** `Muted` at 50% volume. Volume and unmute states are session only. In manhwa view, each video has an individual audio pill; only one slot can be unmuted at a time, and scrolling a video off-screen mutes it.
 - **Thumbnails.** Static images load concurrently from the 96x96 OS thumbnail cache. While archive thumbnails, and animated images decode at full-size, one at a time for the visible rows. The file list performance drops significantly for such cases, so maybe don't use thumbnail view if the performance hinders navigation.
 - **Image swap.** The previous image stays up while the next loads, then the swap waits `45ms` after navigation settles. That avoids a blank frame when WebView2 decodes a large `<img>`. The delay is a Tauri and WebView2 tradeoff, for the time being it stays but hopefully it can be cut down further in the future.
 
-### Configuration & Persistence
+### Configuration & persistence
 
 QuiviT keeps its own data in three places. Imported galleries sit in a fourth folder, under local app data.
 
 **Config files.** By default these live in `C:\Users\<user>\AppData\Roaming\com.x4163.quivit`:
 
-- `quivit_config.json`: preferences. theme, keybinds, fit and scale, sort, spread, library location, and the rest of options.
+- `quivit_config.json`: preferences. theme, keybinds, fit and scale, sort, spread, manhwa view, library location, and the rest of options.
 - `quivit_state.json`: last opened path, last image, and whether scroll-zoom is latched.
 - `quivit_directory_sort.json`: sort column and direction for each folder.
 - `quivit_favorites.json`: favorites lists, items, and section collapse.
@@ -204,20 +207,20 @@ QuiviT keeps its own data in three places. Imported galleries sit in a fourth fo
 Module map: [`.agents/architecture-state.md`](.agents/architecture-state.md).
 Development guidelines: [`.agents/AGENTS.md`](.agents/AGENTS.md).
 
-### Web Imports
+### Web imports
 
 Imports galleries and images from supported websites directly into the local Library.
 
 QuiviT checks the [`extractors`](https://github.com/4163/quivi-t/tree/extractors) branch for website support at runtime, caching modules under `%LOCALAPPDATA%\QuiviT\extractor-cache` for offline use. That registry lists supported sites and authoring documentation.
 
-### File Associations (Windows)
+### File associations (Windows)
 
 **Options → File Types** lists the image and archive formats QuiviT can open. Check the ones you want and apply.
 
 Clicking **Apply** registers QuiviT for the formats you selected. If changes does not reflect on Windows, right-click the specific file and choose **Open with**, and pick QuiviT. Or use the **Windows Defaults Settings** button, and choose specific file formats via **Choose default apps by file type**.
 
 
-## Development & Installation
+## Development & installation
 
 **Prerequisites:** [Node.js](https://nodejs.org/) and [Rust](https://www.rust-lang.org/) (Cargo).
 
@@ -297,7 +300,7 @@ For automated iterative probing, see [`.agents/skills/replay-debugging/SKILL.md`
 | **Hashing** | [`md5`](https://crates.io/crates/md5) | Stable names for temporary extract folders |
 | **Data URIs** | [`base64`](https://crates.io/crates/base64) | Encodes generated images for the UI |
 
-## Project Structure
+## Project structure
 
 ```text
 QuiviT/
@@ -363,6 +366,7 @@ QuiviT/
 │     │  └─ associationsUi.js     # File type checkboxes
 │     ├─ services/
 │     │  ├─ actions.js            # Named commands
+│     │  ├─ archiveImageCache.js  # Archive image blob cache
 │     │  ├─ cache.js              # Size-capped maps
 │     │  ├─ filterModules.js      # Loads a filter
 │     │  ├─ keyCombo.js           # Shortcut parsing
@@ -375,10 +379,11 @@ QuiviT/
 │     │  ├─ pipelines/            # WebGL
 │     │  └─ scaling/              # Lanczos
 │     ├─ shared/
-│     │  ├─ theme.js              # Apply theme and custom CSS
-│     │  ├─ themePrePaint.js      # Theme before the first paint
 │     │  ├─ blobImage.js          # Shared decoded images
 │     │  ├─ configPreview.js      # Options preview and the CSS emergency reset
+│     │  ├─ svgUtils.js           # SVG entity expansion and canvas sanitization
+│     │  ├─ theme.js              # Apply theme and custom CSS
+│     │  ├─ themePrePaint.js      # Theme before the first paint
 │     │  └─ windowFit.js          # Size Options and Archive Info to their content
 │     ├─ vendors/
 │     │  ├─ pica.js               # Lanczos resizer
@@ -388,7 +393,9 @@ QuiviT/
 │        ├─ viewerRender.js       # Image and video elements
 │        ├─ viewerPipelines.js    # Filters on the viewer
 │        ├─ viewerGestures.js     # Pan drag
-│        └─ viewerAudio.js        # Mute and volume
+│        ├─ viewerAudio.js        # Mute and volume
+│        ├─ manhwaStrip.js        # Continuous vertical strip reader
+│        └─ manhwaAudio.js        # Per-slot video volume and audio controls
 ├─ src-tauri/
 │  ├─ capabilities/
 │  │  └─ default.json             # What each window is allowed to do
