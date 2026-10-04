@@ -164,7 +164,7 @@ describe('03 - Viewport & Viewer Controls', () => {
 
   it('supports filters in manhwa view with canvas readiness, scroll continuity, and clean teardown', async () => {
     // 1. Toggle manhwa mode on
-    await ctrl('m');
+    await browser.keys(['m']);
     await browser.waitUntil(
       async () => await viewerPage.isManhwaActive(),
       { timeout: 5000, timeoutMsg: 'Viewport did not gain manhwa-active class' }
@@ -200,7 +200,7 @@ describe('03 - Viewport & Viewer Controls', () => {
     );
 
     // 6. Toggle manhwa mode off cleanly
-    await ctrl('m');
+    await browser.keys(['m']);
     await browser.waitUntil(
       async () => !(await viewerPage.isManhwaActive()),
       { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class' }
