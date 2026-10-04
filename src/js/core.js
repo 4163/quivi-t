@@ -80,6 +80,9 @@ const _state = {
   /** True if container was loaded via sibling (next/prev folder) navigation */
   isSiblingNavigation: false,
 
+  /** True if container open explicitly targeted a specific file or entry */
+  hasTargetEntry: false,
+
   /** True if the current image is an animated format */
   isAnimated: false,
 
@@ -208,6 +211,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   _state.naturalWidth = 0;
   _state.naturalHeight = 0;
   _state.isSiblingNavigation = false;
+  _state.hasTargetEntry = false;
 
   let newSrc = '';
   if (file.is_dir || file.is_parent || FsUtils.isArchiveEntry(file) || !FsUtils.isImageEntry(file)) {

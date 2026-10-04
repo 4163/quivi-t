@@ -482,6 +482,7 @@ export const FsUtils = {
 
     const state = Core.getState();
     let index = 0;
+    let hasTargetEntry = false;
     if (options.preserveFilename && (state.filename || state.index >= 0)) {
       const targetName = state.list?.[state.index]?.name || cleanEntryName(state.filename);
       const found = files.findIndex(f => f.name === targetName || f.name === state.filename);
@@ -515,7 +516,7 @@ export const FsUtils = {
         preferredIndex = files.findIndex(f => f.name === result.target_filename || f.name === cleanResult);
       }
 
-      const hasTargetEntry = preferredIndex !== -1;
+      hasTargetEntry = preferredIndex !== -1 && !files[preferredIndex]?.is_dir;
 
       if (preferredIndex === -1 && options.preferInitial) {
         const offset = result.parent_directory ? 1 : 0;
@@ -591,6 +592,7 @@ export const FsUtils = {
       isAnimated,
       loopCount,
       isSiblingNavigation: !!options.isSiblingNavigation,
+      hasTargetEntry,
     });
     recordNavigation(options.previousEntry, Core.getState(), options);
 
@@ -678,6 +680,7 @@ export const FsUtils = {
       }
 
       let index = 0;
+      let hasTargetEntry = false;
       const fd = state.config?.frontend_data || {};
       let preferredIndex = -1;
 
@@ -696,6 +699,8 @@ export const FsUtils = {
         const targetPath = fd.last_active_image.path;
         preferredIndex = files.findIndex(f => f.path === targetPath);
       }
+
+      hasTargetEntry = preferredIndex !== -1 && !files[preferredIndex]?.is_dir;
 
       if (options.isRefresh && preferredIndex === -1 && state.list && state.index >= 0) {
         index = findNearestSurvivingIndex(state.list, state.index, files);
@@ -733,6 +738,7 @@ export const FsUtils = {
         isAnimated: initialAnimated,
         loopCount: 0,
         isSiblingNavigation: !!options.isSiblingNavigation,
+        hasTargetEntry,
       });
       recordNavigation(options.previousEntry, Core.getState(), options);
       if (!_isCurrentGeneration(options.generation)) return;

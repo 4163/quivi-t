@@ -220,11 +220,19 @@ function _finishContainerEntry(isToggle = false) {
     _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), false);
     _armEntryRefresh(false);
   } else {
-    const openFirst = Core.getState()?.config?.frontend_data?.open_first_image === true;
+    const state = Core.getState();
+    const openFirst = state?.config?.frontend_data?.open_first_image === true;
     const openAtStart = _anchorImgIdx === 0;
-    const isFirstImageEntry = openAtStart && openFirst;
-    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && openAtStart, isFirstImageEntry);
-    _armEntryRefresh(isFirstImageEntry);
+    const isTargetEntry = !!state?.hasTargetEntry;
+    const isEntryActiveImage = isTargetEntry || (openAtStart && openFirst);
+
+    _applyFitMode(
+      _lastFitMode,
+      _anchorImgIdx,
+      STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && (openAtStart || isTargetEntry),
+      isEntryActiveImage
+    );
+    _armEntryRefresh(isEntryActiveImage);
   }
 
   _updateWindow();
@@ -858,7 +866,8 @@ function _onItemDecoded(imgIdx, nw, nh) {
       if (!activelyPanning) {
         if (_entryRefreshEntry) {
           const fit = Core.getState()?.fitMode || _lastFitMode;
-          if (imgIdx === 0) {
+          const targetAnchor = _entryAnchorImgIdx !== null ? _entryAnchorImgIdx : 0;
+          if (imgIdx === targetAnchor) {
             _entryRefreshPending = true;
           } else if (!ENTRY_ACTIVE_FITS.includes(fit) && fit !== 'none' && nw > oldW && nw >= (_layout.widestWidth || 0)) {
             _entryRefreshPending = true;
@@ -1746,17 +1755,17 @@ const STRIP_TOP_ALIGN_FITS = ['width', 'width-if-larger'];
 const ENTRY_ACTIVE_FITS = ['height', 'height-if-larger', 'window', 'window-if-larger'];
 
 /** Centralize directory entry fit scale resolution.
- * Behavior 2 (first-image entry) sizes height/window families against the
- * first image; width/none always use the whole column (Behavior 1).
+ * Behavior 2 (active item entry) sizes height/window families against the
+ * targeted image; width/none always use the whole column (Behavior 1).
  * Callers keep viewport pan and alignment separate. */
-function _resolveStripFitScale(fitMode, isEntryFirstImage, anchorIdx) {
+function _resolveStripFitScale(fitMode, isEntryActiveImage, anchorIdx) {
   const vw = _viewport?.clientWidth || 800;
   const vh = _viewport?.clientHeight || 800;
   let maxW;
   let rawSumH;
   let itemCount;
   const idx = (anchorIdx !== null && anchorIdx !== undefined) ? anchorIdx : 0;
-  if (isEntryFirstImage && ENTRY_ACTIVE_FITS.includes(fitMode)) {
+  if (isEntryActiveImage && ENTRY_ACTIVE_FITS.includes(fitMode)) {
     const item = _imageIndex[idx] || _imageIndex[0];
     maxW = item?.naturalWidth || _widthEstimate();
     rawSumH = item?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT;
