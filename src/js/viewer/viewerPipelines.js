@@ -887,6 +887,7 @@ export function createViewerPipelines(viewportState) {
 
   Core.onStateChange((state) => {
     const enteringManhwa = !!state.manhwaEnabled && !_columnWasManhwa;
+    const exitingManhwa = !state.manhwaEnabled && _columnWasManhwa;
     _columnWasManhwa = !!state.manhwaEnabled;
     if (state.manhwaEnabled) {
       // Legacy pipeline parks. The column pipeline takes over from here.
@@ -928,6 +929,9 @@ export function createViewerPipelines(viewportState) {
       }
       _requestColumnRender();
       return;
+    }
+    if (exitingManhwa) {
+      _teardownWebglCanvas();
     }
     _columnContainerKey = null;
 
@@ -2068,6 +2072,7 @@ export function createViewerPipelines(viewportState) {
       _columnCanvas.setAttribute('data-render-ready', 'true');
       if (vp) vp.setAttribute('data-filter', _columnFilter);
       if (vp) vp.classList.remove('manhwa-warmup');
+      _teardownWebglCanvas();
       _columnVisible = true;
     }
   }
