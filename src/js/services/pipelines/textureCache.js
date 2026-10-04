@@ -71,6 +71,7 @@ export class TextureCache {
     this._entries = new Map();
     this._totalBytes = 0;
     this._pending = new Map();
+    this._pinnedKeys = null;
   }
 
   get totalBytes() {
@@ -83,6 +84,14 @@ export class TextureCache {
 
   setContext(gl) {
     this.gl = gl;
+  }
+
+  /**
+   * Designates a set of keys protected from eviction during subsequent insertions.
+   * @param {Set<string>|null} keys
+   */
+  setPinnedKeys(keys) {
+    this._pinnedKeys = keys && keys.size > 0 ? keys : null;
   }
 
   has(key) {
@@ -114,6 +123,7 @@ export class TextureCache {
 
   /**
    * Inserts or updates an entry, evicting LRU items to satisfy maxBytes.
+   * Entries present in _pinnedKeys are exempt from eviction.
    * @param {string} key
    * @param {WebGLTexture} texture
    * @param {number} width
@@ -140,7 +150,18 @@ export class TextureCache {
        (this.maxEntries > 0 && this._entries.size >= this.maxEntries)) &&
       this._entries.size > 0
     ) {
-      const oldestKey = this._entries.keys().next().value;
+      let oldestKey = null;
+      if (this._pinnedKeys) {
+        for (const k of this._entries.keys()) {
+          if (!this._pinnedKeys.has(k)) {
+            oldestKey = k;
+            break;
+          }
+        }
+      } else {
+        oldestKey = this._entries.keys().next().value;
+      }
+      if (!oldestKey) break;
       this.delete(oldestKey);
     }
 

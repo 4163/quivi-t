@@ -33,8 +33,8 @@ const STRIP_BEHIND_COUNT = 1;
  * [anchor - BEHIND, anchor + AHEAD] unmounts. */
 const STRIP_AHEAD_COUNT = 1;
 
-/** Max completed off-DOM prefetched images retained in memory. Strict 1. */
-const PREFETCH_CACHE_CAPACITY = 1;
+/** Max completed off-DOM prefetched images retained in memory. Sized to hold both ahead and behind targets without ping-pong eviction. */
+const PREFETCH_CACHE_CAPACITY = 4;
 
 /** Items preloaded beyond the mount window, in pan direction. Strict 1. */
 const PREFETCH_AHEAD_COUNT = 1;

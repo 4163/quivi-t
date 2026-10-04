@@ -12,6 +12,7 @@ import { prepareSvgForCanvas, resolveSvgDimensions } from '../shared/svgUtils.js
 const SVG_ANIMATED_MAX_EDGE = 1080;
 const SVG_STATIC_MAX_EDGE = 2048;
 const VIEWER_IMAGE_POOL_CAPACITY = 4;
+const COLUMN_TEXTURE_CACHE_BYTES = 128 * 1024 * 1024; // 128 MB
 
 const _scratchUV = { u0: 0, v0: 0, u1: 1, v1: 1 };
 const _scratchDest = { x: 0, y: 0, width: 0, height: 0 };
@@ -25,6 +26,7 @@ const _activeSvgsScratch = [];
 const _failedRastersScratch = [];
 const _scratchActiveIdx = new Set();
 const _scratchStaleIdx = [];
+const _scratchVisibleKeys = new Set();
 
 function _drawSlotQuad(compositor, texture, draw, item, nodeW, nodeH, vpW, vpH, flipY, sampler) {
   if (!nodeW || !nodeH) return false;
@@ -1549,7 +1551,7 @@ export function createViewerPipelines(viewportState) {
         _columnQuadCompositor = createQuadCompositor(gl);
       }
       if (!_columnTextureCache) {
-        _columnTextureCache = createTextureCache(gl, { maxBytes: 128 * 1024 * 1024 });
+        _columnTextureCache = createTextureCache(gl, { maxBytes: COLUMN_TEXTURE_CACHE_BYTES });
       }
     }
     if (_columnPipeline.filter !== wantFilter || variant !== _columnAnime4kVariant) {
@@ -1894,8 +1896,14 @@ export function createViewerPipelines(viewportState) {
       if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && _activeRastersScratch.length === 0 && _activeSvgsScratch.length === 0) return;
     }
 
-    // Load missing cached textures.
+    // Load missing cached textures after pinning visible window slots.
     if (_cachedDrawsScratch.length > 0) {
+      _scratchVisibleKeys.clear();
+      for (let i = 0; i < _cachedDrawsScratch.length; i++) {
+        _scratchVisibleKeys.add(_cachedDrawsScratch[i].src);
+      }
+      _columnTextureCache.setPinnedKeys(_scratchVisibleKeys);
+
       const missing = _cachedDrawsScratch.filter(({ src }) => !_columnTextureCache.has(src));
       if (missing.length > 0) {
         try {
