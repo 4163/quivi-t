@@ -1873,9 +1873,15 @@ function renderVisibleSlice() {
     scrollSpacer.style.height = totalHeight;
   }
 
-  const scrollTop = fileListUl.scrollTop;
   const clientH = fileListUl.clientHeight || 600;
-  const rawStart = Math.floor(scrollTop / ROW_HEIGHT);
+  const maxScroll = Math.max(0, total * ROW_HEIGHT - clientH);
+  let scrollTop = fileListUl.scrollTop;
+  if (scrollTop > maxScroll) {
+    fileListUl.scrollTop = maxScroll;
+    scrollTop = maxScroll;
+  }
+
+  const rawStart = Math.min(Math.max(0, total - 1), Math.floor(scrollTop / ROW_HEIGHT));
   const visibleCount = Math.ceil(clientH / ROW_HEIGHT);
   const startIndex = Math.max(0, rawStart - OVERSCAN);
   const endIndex = Math.min(total, rawStart + visibleCount + OVERSCAN);
@@ -2130,6 +2136,9 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
   if (didScroll) {
     renderVisibleSlice();
   } else {
+    if (activeRows.size === 0 && lastRenderedList.length > 0) {
+      renderVisibleSlice();
+    }
     // Surgical update: directly update .selected on active elements without re-rendering
     for (const [idx, li] of activeRows) {
       li.classList.toggle('selected', idx === selectedIndex);
@@ -2278,6 +2287,12 @@ export function renderFilePanel(state) {
     lastRenderedManhwa = state.manhwaEnabled;
     updateSelection(state.index, forceFocus, wasFocused);
     return;
+  }
+
+  const dirChanged = currentDir !== lastRenderedDirectory;
+  if (dirChanged && fileListUl) {
+    fileListUl.scrollTop = 0;
+    lastScrollTop = 0;
   }
 
   lastRenderedList = state.list;
