@@ -642,9 +642,9 @@ const FIT_LABELS = {
   'width': 'Width',
   'height': 'Height',
   'window': 'Window',
-  'width-if-larger': 'Width if larger',
-  'height-if-larger': 'Height if larger',
-  'window-if-larger': 'Window if larger'
+  'width-if-larger': 'Width if Larger',
+  'height-if-larger': 'Height if Larger',
+  'window-if-larger': 'Window if Larger'
 };
 
 const FILTER_LABELS = {
