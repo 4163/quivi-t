@@ -890,10 +890,29 @@ export function createViewerPipelines(viewportState) {
       // Legacy pipeline parks. The column pipeline takes over from here.
       _cancelRender();
       _stopLivePump();
+      const containerKey = _columnKeyFor(state);
+      const containerChanged = _columnContainerKey !== null && containerKey !== _columnContainerKey;
+      if (containerChanged) {
+        // Directory/archive switch: drop the previous column frame now.
+        // The strip rebuilds behind the width gate while the canvas would
+        // otherwise keep showing the old folder as a ghost until the first
+        // new paint lands. Generation bump also aborts in-flight renders.
+        _teardownColumn();
+      }
+      _columnContainerKey = containerKey;
       _syncColumnPipeline(state);
+      if (containerChanged && _columnFilter) {
+        // Teardown cleared the marker. Keep slots hidden behind the blank
+        // canvas until the new column paints.
+        const vp = document.getElementById('viewport');
+        if (vp && vp.getAttribute('data-filter') !== _columnFilter) {
+          vp.setAttribute('data-filter', _columnFilter);
+        }
+      }
       _requestColumnRender();
       return;
     }
+    _columnContainerKey = null;
 
     if (_columnPipeline || _columnVisible) {
       const hadFrame = _columnVisible;
@@ -962,6 +981,16 @@ export function createViewerPipelines(viewportState) {
   let _columnVisible = false;
   let _columnRafId = 0;
   let _columnGeneration = 0;
+  /** Container the column canvas was painted for. A switch drops the old
+   * frame so the previous folder never lingers as a ghost while the strip
+   * rebuilds behind the width gate. */
+  let _columnContainerKey = null;
+
+  function _columnKeyFor(state) {
+    if (!state) return null;
+    const container = state.mode === 'archive' ? (state.archivePath || '') : (state.directory || '');
+    return `${state.mode || ''}|${container}|${state.archiveEncryption || ''}`;
+  }
   let _columnTextureCache = null;
   let _columnQuadCompositor = null;
   const _columnLiveTextures = new Map();

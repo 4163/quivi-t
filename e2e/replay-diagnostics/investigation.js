@@ -763,201 +763,99 @@ export function initReplayDiagnostics() {
   });
 
   // =========================================================================
-  // 5. MANHWA ENTRY-FIT PROBE (investigation only, never delete this file)
-  // Captures per-step directory-entry fit state: anchor, open_first_image,
-  // actual strip scale vs spec-expected Behavior 1 / Behavior 2 scales.
+  // 5. MANHWA GHOST PROBE (investigation only)
+  // Flags the WebGL column canvas staying visible while the strip has no
+  // decoded image for the current directory. Under phosphor the DOM slots
+  // are hidden by design, so decoded-ness (complete + naturalWidth) is the
+  // signal, not visibility. A ghost frame is canvas-visible with zero
+  // decoded strip images after a container switch.
   // =========================================================================
-  let _entryFitPrevDir = null;
-  let _entryFitMods = null;
+  let _ghostCore = null;
+  let _ghostStepDir = null;
 
-  // NOTE: stopStep() sets _activeMonitoring=false BEFORE onStepStop probes
-  // run, so recordEvent() is silently dropped there. Snapshots below use
-  // recordAnomaly() (unguarded) and onStepStop stays fully synchronous:
-  // async work started in onStepStart resolves during the step pause and
-  // only fills the module cache.
-  let _entryFitSelectWrapped = false;
-  let _entryFitScaleObserved = false;
-  let _entryFitLastScale = null;
-
-  function _entryFitStack() {
-    const lines = (new Error().stack || '').split('\n').slice(2, 8)
-      .map((l) => l.trim().replace(/^at\s+/, ''))
-      .filter((l) => /manhwaStrip|core\.js|filePanel|actions\.js/i.test(l));
-    return lines.length > 0 ? lines : ['(outside known modules)'];
+  function _ghostLoadCore() {
+    if (_ghostCore) return Promise.resolve(_ghostCore);
+    return import('/js/core.js').then((m) => {
+      _ghostCore = m.Core || null;
+      return _ghostCore;
+    }).catch(() => null);
   }
 
-  function _observeEntryFitScale() {
-    if (_entryFitScaleObserved) return;
+  function _ghostSig() {
     const strip = document.getElementById('manhwa-strip');
-    if (!strip || typeof MutationObserver === 'undefined') return;
-    _entryFitScaleObserved = true;
-    _entryFitLastScale = strip.style.getPropertyValue('--zoom-scale') || null;
-    const obs = new MutationObserver(() => {
-      let cur = null;
-      try {
-        cur = strip.style.getPropertyValue('--zoom-scale') || null;
-      } catch { return; }
-      if (cur !== _entryFitLastScale) {
-        _entryFitLastScale = cur;
-        recordEvent('entryfit', 'scale-change', { scale: cur, stack: _entryFitStack() });
+    const imgs = Array.from(strip?.querySelectorAll('.manhwa-slot img') || []);
+    const decoded = imgs.filter((im) => im && im.complete && im.naturalWidth > 0);
+    const slots = imgs.slice(0, 3).map((im) => ({
+      colIdx: im.dataset?.imgIdx ?? null,
+      nw: im.naturalWidth || 0,
+      complete: !!im.complete,
+      srcTail: (im.getAttribute('src') || im.src || '').split('/').pop()?.slice(0, 40) || null,
+    }));
+    const canvas = document.getElementById('manhwa-filter-canvas');
+    const ready = canvas?.getAttribute('data-render-ready') === 'true';
+    const op = canvas ? parseFloat(window.getComputedStyle(canvas).opacity) || 0 : 0;
+    const r = canvas ? canvas.getBoundingClientRect() : null;
+    const canvasVisible = !!(canvas && ready && op > 0 && r && r.width > 0 && r.height > 0);
+    let dir = null;
+    let listLength = null;
+    try {
+      const st = _ghostCore?.getState?.();
+      if (st) {
+        dir = st.directory || st.archivePath || '';
+        listLength = st.list?.length ?? 0;
       }
-    });
-    obs.observe(strip, { attributes: true, attributeFilter: ['style'] });
-  }
-
-  function _wrapEntryFitSelect(core) {
-    if (_entryFitSelectWrapped) return;
-    _entryFitSelectWrapped = true;
-    _observeEntryFitScale();
-    const stackOf = () => {
-      const lines = (new Error().stack || '').split('\n').slice(2, 8)
-        .map((l) => l.trim().replace(/^at\s+/, ''))
-        .filter((l) => /manhwaStrip|core\.js|filePanel|actions\.js/i.test(l));
-      return lines.length > 0 ? lines : ['(outside known modules)'];
+    } catch { /* state not ready */ }
+    return {
+      dir,
+      listLength,
+      slotCount: imgs.length,
+      decodedCount: decoded.length,
+      slots,
+      canvasReady: ready,
+      canvasOpacity: op,
+      canvasVisible,
+      filter: document.getElementById('viewport')?.getAttribute('data-filter') || null,
     };
-    if (typeof core.selectIndex === 'function') {
-      const orig = core.selectIndex.bind(core);
-      core.selectIndex = function (idx) {
-        recordEvent('entryfit', 'select-call', { index: idx, stack: stackOf() });
-        return orig(idx);
-      };
-    }
-    if (typeof core.jumpToIndex === 'function') {
-      const orig = core.jumpToIndex.bind(core);
-      core.jumpToIndex = function (idx) {
-        recordEvent('entryfit', 'jump-call', { index: idx, stack: stackOf() });
-        return orig(idx);
-      };
-    }
   }
 
-  function _loadEntryFitMods() {
-    if (_entryFitMods) {
-      if (_entryFitMods.core) _wrapEntryFitSelect(_entryFitMods.core);
-      return Promise.resolve(_entryFitMods);
-    }
-    return Promise.all([
-      import('/js/viewer/manhwaStrip.js'),
-      import('/js/services/viewerMath.js'),
-      import('/js/core.js'),
-    ]).then(([strip, math, core]) => {
-      _entryFitMods = { strip, math, core: core.Core };
-      _wrapEntryFitSelect(_entryFitMods.core);
-      return _entryFitMods;
-    }).catch((err) => {
-      recordAnomaly('entryfit-import-fail', { message: String(err) });
-      return null;
-    });
-  }
-
-  const ENTRY_ACTIVE_FITS = ['height', 'height-if-larger', 'window', 'window-if-larger'];
-  const WIDTH_FITS = ['width', 'width-if-larger', 'window', 'window-if-larger'];
-
-  function _entryFitSnapshot(mods) {
-    const { strip, math, core } = mods;
-    const st = core.getState();
-    const viewport = document.getElementById('viewport');
-    const stripEl = document.getElementById('manhwa-strip');
-    const vw = viewport?.clientWidth || 800;
-    const vh = viewport?.clientHeight || 800;
-    const actual = parseFloat(stripEl?.style.getPropertyValue('--zoom-scale')) || null;
-    const stripWidth = parseFloat(stripEl?.style.getPropertyValue('--strip-width')) || 0;
-    const snap = (typeof strip.getManhwaColumnSnapshot === 'function')
-      ? strip.getManhwaColumnSnapshot()
-      : null;
-    const overlayUp = !!document.getElementById('drop-overlay')?.checkVisibility?.()
-      || (document.getElementById('drop-overlay')?.style.display !== 'none'
-        && !!document.querySelector('#viewport:not(.manhwa-active)'));
-    const out = {
-      dir: st.directory || st.archivePath || '',
-      dirChanged: false,
-      fitMode: st.fitMode,
-      index: st.index,
-      filename: st.filename,
-      openFirst: st.config?.frontend_data?.open_first_image === true,
-      manhwaActive: viewport?.classList.contains('manhwa-active') || false,
-      anchor: (typeof strip.getAnchorImgIdx === 'function') ? strip.getAnchorImgIdx() : null,
-      vw,
-      vh,
-      actualScale: actual,
-      stripWidth,
-      overlayHint: overlayUp,
-    };
-    if (_entryFitPrevDir !== null && out.dir !== _entryFitPrevDir) out.dirChanged = true;
-    _entryFitPrevDir = out.dir;
-    if (!snap || !snap.items || snap.items.length === 0) {
-      out.items = 0;
-      return out;
-    }
-    const items = snap.items;
-    out.items = items.length;
-    out.decoded = items.filter((it) => it.decoded).length;
-    out.columnW = snap.columnWidth || 0;
-    out.totalH = snap.totalHeight || 0;
-    let rawSumH = 0;
-    let maxW = 0;
-    let maxDecodedW = 0;
-    for (const it of items) {
-      const w = it.naturalWidth || 800;
-      const h = it.naturalHeight || 1200;
-      if (w > maxW) maxW = w;
-      rawSumH += h;
-      if (it.decoded && it.naturalWidth > maxDecodedW) maxDecodedW = it.naturalWidth;
-    }
-    out.maxW = maxW;
-    out.maxDecodedW = maxDecodedW;
-    out.rawSumH = rawSumH;
-    const fit = st.fitMode || 'none';
-    const n = items.length;
-    const expB1 = math.computeStripFitScale({ fitMode: fit, vw, vh, maxW, rawSumH, itemCount: n });
-    out.expectedB1 = expB1;
-    let expB2 = expB1;
-    if (ENTRY_ACTIVE_FITS.includes(fit)) {
-      const first = items[0] || {};
-      expB2 = math.computeStripFitScale({
-        fitMode: fit,
-        vw,
-        vh,
-        maxW: first.naturalWidth || 800,
-        rawSumH: first.naturalHeight || 1200,
-        itemCount: 1,
-      });
-    }
-    out.expectedB2 = expB2;
-    const isFirstEntry = out.openFirst && out.anchor === 0;
-    out.isFirstEntry = isFirstEntry;
-    out.specExpected = (isFirstEntry && ENTRY_ACTIVE_FITS.includes(fit)) ? expB2 : expB1;
-    out.matchesB1 = actual !== null && Math.abs(actual - expB1) < 1e-9;
-    out.matchesB2 = actual !== null && Math.abs(actual - expB2) < 1e-9;
-    out.matchesSpec = actual !== null && Math.abs(actual - out.specExpected) < 0.005;
-    const first3 = items.slice(0, 3).map((it) => `${it.naturalWidth || '?'}x${it.naturalHeight || '?'}${it.decoded ? '' : '(est)'}`);
-    out.firstDims = first3;
-    return out;
-  }
-
-  registerProbe('manhwa-entry-fit', {
+  registerProbe('manhwa-ghost', {
     onStepStart() {
-      _loadEntryFitMods();
+      _ghostLoadCore().then(() => {
+        try {
+          const st = _ghostCore?.getState?.();
+          _ghostStepDir = st ? (st.directory || st.archivePath || '') : null;
+        } catch { _ghostStepDir = null; }
+        recordEvent('ghost', 'step-start', _ghostSig());
+      });
     },
     onStepStop() {
-      if (!_entryFitMods) return;
       try {
-        const snap = _entryFitSnapshot(_entryFitMods);
-        recordAnomaly('entryfit-snapshot', snap);
-        if (snap.dirChanged && snap.actualScale !== null && !snap.matchesSpec) {
-          recordAnomaly('entryfit-spec-mismatch', snap);
-        }
-        // Truth check: the column backdrop must never be narrower than a
-        // decoded image. A narrower strip means a guessed width survived.
-        if (snap.maxDecodedW > 0 && snap.stripWidth < snap.maxDecodedW - 1) {
-          recordAnomaly('entryfit-width-truth-mismatch', snap);
-        }
+        const sig = _ghostSig();
+        recordAnomaly('ghost-step-summary', { ...sig, stepDir: _ghostStepDir });
       } catch (err) {
-        recordAnomaly('entryfit-probe-error', { message: String(err) });
+        recordAnomaly('ghost-probe-error', { message: String(err) });
       }
     },
+    checkFrame(frameCtx) {
+      const viewport = document.getElementById('viewport');
+      if (!viewport?.classList.contains('manhwa-active')) return null;
+      const sig = _ghostSig();
+      if (sig.canvasVisible && sig.decodedCount === 0) {
+        return {
+          type: 'ghost-frame',
+          t: frameCtx.relMs,
+          dir: sig.dir,
+          listLength: sig.listLength,
+          slotCount: sig.slotCount,
+          decodedCount: sig.decodedCount,
+          slots: sig.slots,
+          canvasReady: sig.canvasReady,
+          filter: sig.filter,
+        };
+      }
+      return null;
+    },
   });
-
 
   return engine;
 }

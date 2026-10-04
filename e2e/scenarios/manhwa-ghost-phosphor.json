@@ -1,0 +1,19 @@
+{
+  "name": "manhwa-ghost-phosphor",
+  "initialPath": "test-files",
+  "initialState": {
+    "index": 0,
+    "manhwa": true,
+    "pipeline": {
+      "filter": "phosphor",
+      "fitMode": "height-if-larger",
+      "scaling": "bilinear"
+    }
+  },
+  "actions": [
+    "cmd-fit-height-if-larger",
+    { "action": "jump-to-index", "index": 9, "name": "내 최애는 막차를 탄다 - ch. 75" },
+    "cmd-fit-height-if-larger",
+    { "action": "jump-to-index", "index": 0, "name": ".." }
+  ]
+}
