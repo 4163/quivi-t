@@ -177,7 +177,7 @@ What QuiviT ships with. The id in backticks is the value stored in config.
 - **Missing path.** A  missing path, folder or archive, or deleted directories while the app is open, falls the user back to the nearest existing ancestor, or the Drives view at the root.
 - **Single instance.** `Enabled`. Paths passed via command line, Explorer, or archives open in the active window session. To launch separate windows instead, toggle **Options → General → Allow only one QuiviT instance** and restart the app.
 - **Default sort.** `name`, ascending. Per-directory sort is kept for 100 folders, oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort`.
-- **Manhwa view.** `Disabled`. `Select / open next/previous` navigation steps via the visible viewport pages, while `PageUp` and `PageDown` double that. Keyboard navigation is strictly locked to media items, so folders and archives are not selectable via keyboard. Transform rotation is disabled to preserve vertical column reading order and prevent layout distortion.
+- **Manhwa view.** `Disabled`. **Folder → Select / open next/previous** navigation steps via the visible viewport pages, while `PageUp` and `PageDown` double that. Keyboard navigation is strictly locked to media items, so folders and archives are not selectable via keyboard. Transform rotation is disabled to preserve vertical column reading order and prevent layout distortion.
 - **Video audio.** `Muted` at 50% volume. Volume and unmute states are session only. In manhwa view, each video has an individual audio pill; only one slot can be unmuted at a time, and scrolling a video off-screen mutes it.
 - **Thumbnails.** Static images load concurrently from the 96x96 OS thumbnail cache. While archive thumbnails, and animated images decode at full-size, one at a time for the visible rows. The file list performance drops significantly for such cases, so maybe don't use thumbnail view if the performance hinders navigation.
 - **Image swap.** The previous image stays up while the next loads, then the swap waits `45ms` after navigation settles. That avoids a blank frame when WebView2 decodes a large `<img>`. The delay is a Tauri and WebView2 tradeoff, for the time being it stays but hopefully it can be cut down further in the future.
@@ -217,7 +217,7 @@ QuiviT checks the [`extractors`](https://github.com/4163/quivi-t/tree/extractors
 
 **Options → File Types** lists the image and archive formats QuiviT can open. Check the ones you want and apply.
 
-Clicking **Apply** registers QuiviT for the formats you selected. If changes does not reflect on Windows, right-click the specific file and choose **Open with**, and pick QuiviT. Or use the **Windows Defaults Settings** button, and choose specific file formats via **Choose default apps by file type**.
+Clicking **Apply** registers QuiviT for the formats you selected. If changes do not reflect on Windows, right-click the specific file and choose **Open with**, and pick QuiviT. Or use the **Windows Defaults Settings** button, and choose specific file formats via **Choose default apps by file type**.
 
 
 ## Development & installation
