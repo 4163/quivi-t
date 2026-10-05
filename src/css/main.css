@@ -406,10 +406,10 @@ body.resizing-col {
 .loadout-add-btn {
   background: transparent;
   border: none;
-  color: inherit;
-  opacity: 0.6;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 0;
+  padding: 4px 1px;
+  border-radius: 4px;
   line-height: 1;
   display: flex;
   align-items: center;
@@ -424,7 +424,8 @@ body.resizing-col {
 
 .loadout-add-btn:hover,
 .loadout-add-btn:focus {
-  opacity: 1;
+  background: var(--hover-bg);
+  color: var(--text);
 }
 
 /* Menubar Imports providers. Same row rhythm as favorites loadouts. */
