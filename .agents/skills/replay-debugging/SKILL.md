@@ -94,24 +94,24 @@ Isolate scenario-specific probes in an investigation copy rather than editing `b
 Once the diagnostic loop isolates the issue, do not edit production files and do not draft code solutions. Stop and report the diagnosis to the user using this format:
 
 ```markdown
-### Diagnostic Report: [Scenario Name]
+### Diagnostic report: [Scenario Name]
 
-#### 1. Primary Root Cause
-- **Failing Component**: `file:line` reference
-- **Mechanism**: Description of the race condition, timing boundary, or state inconsistency
-- **Why Existing Logic Failed**: Specific reason the current safeguard or lifecycle did not protect the frame
+#### 1. Primary root cause
+- **Failing component.** `file:line` reference
+- **Mechanism.** Description of the race condition, timing boundary, or state inconsistency
+- **Why existing logic failed.** Specific reason the current safeguard or lifecycle did not protect the frame
 
-#### 2. Timeline Evidence
-- **Step**: Step index and action ID
-- **Timestamp**: Exact relative offset in milliseconds
-- **Captured Telemetry**: State diff, element classes, canvas readiness, or frame blackout details
+#### 2. Timeline evidence
+- **Step.** Step index and action ID
+- **Timestamp.** Exact relative offset in milliseconds
+- **Captured telemetry.** State diff, element classes, canvas readiness, or frame blackout details
 
-#### 3. Non-Specified Anomalies Flagged
+#### 3. Non-specified anomalies flagged
 - List any other unexpected errors, jank frames (>50ms), or protocol delays caught during the run that were not part of the initial issue description. If none, state: "None. All other steps executed within frame budgets."
 
-#### 4. Architectural Boundaries and Discussion Points
+#### 4. Architectural boundaries and discussion points
 - Note the module ownership and lifecycle boundaries involved.
-- List architectural constraints from [.agents/AGENTS.md](../AGENTS.md) that apply to this surface.
+- Check them against the agent guidelines and list the constraints that apply to this surface.
 - Highlight trade-offs or open questions for user discussion.
 ```
 
@@ -120,8 +120,6 @@ Do not generate speculative diffs or code solutions in this report. Stop here an
 ### 6. Planning and discussion
 
 Do not modify production code under `src/` or `src-tauri/` during this workflow. The user will review the diagnostic report, lead discussion on the findings, and approve any subsequent planning.
-
-When moving to implementation after user approval, refer directly to [.agents/AGENTS.md](../AGENTS.md) for architectural rules, module ownership, HTML-first rendering, CSS source of truth, and performance standards rather than relying on paraphrased guidelines.
 
 ### 7. Clean up and verify
 
@@ -133,4 +131,4 @@ When moving to implementation after user approval, refer directly to [.agents/AG
    ```bash
    npm run diagnose -- <scenario>
    ```
-3. Run targeted tests as prescribed by [.agents/AGENTS.md](../AGENTS.md): `npm test` for frontend state and math, `cargo check --tests` and `cargo test <filter>` for backend contracts.
+3. Run targeted tests: `npm test` for frontend state and math, `cargo check --tests` and `cargo test <filter>` for backend contracts.

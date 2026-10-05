@@ -8,7 +8,7 @@ argument-hint: "<refactor or restructuring summary>"
 
 Use this skill when explicitly requested by the user to update the architecture state after a refactor or system behavior change. This keeps the architectural map synced with the codebase.
 
-Read and follow `.agents/skills/unslop/SKILL.md` for all written output.
+Read and follow the writing guidelines for all written output.
 
 ## Scope
 

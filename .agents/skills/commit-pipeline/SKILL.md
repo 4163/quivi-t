@@ -12,7 +12,7 @@ Use this skill when the user asks to run, emulate, update, or follow the reposit
 
 Never modify the working tree while running the commit pipeline. Do not edit, create, or delete files. The permitted Git operations are staging and unstaging (including partial staging via hunks/patching), committing, and pushing. Do not rewrite history or create unnecessary micro-commits.
 
-If invoked by the pipeline script itself (indicated by the `[COMMIT_PIPELINE]` marking, `Follow the workflow in '.../SKILL.md'`, or `User-provided context` in the prompt), do not attempt to run `commit-pipeline.py` or `Makefile` commit shortcuts (like `make push`). Instead, execute raw `git` commands directly to complete the workflow.
+If invoked by the pipeline script itself, or skill was explicitly called, do not attempt to run `commit-pipeline.py` or `Makefile` commit shortcuts (like `make push`). Instead, execute raw `git` commands directly to complete the workflow.
 
 This constraint applies to the pipeline run itself. It does not forbid editing this skill when the user explicitly asks to update the pipeline.
 
@@ -52,4 +52,4 @@ Write pull request descriptions from the branch diff against base (`git log <bas
 When asked to generate or format a commit message or a pull request description:
 
 - Serve the header/title and the body in individual copy-able code blocks (one ` ```text ` block for the header/title, and one for the body).
-- Follow `.agents/skills/unslop/SKILL.md`: use active voice, plain speech, and avoid em dashes or puffery.
+- Follow the writing guidelines: use active voice, plain speech, and avoid em dashes or puffery.

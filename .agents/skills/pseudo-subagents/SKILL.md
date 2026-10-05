@@ -1,6 +1,6 @@
 ---
 name: pseudo-subagents
-description: "Trigger ONLY when the user explicitly asks to 'emulate' subagents, use 'pseudo-subagents', or specifically requests shelling out to the opencode CLI. Do not trigger for general subagent requests, as the harness may have native subagent tooling."
+description: "Trigger ONLY when the user explicitly asks to 'emulate' subagents, use 'pseudo-subagents', or specifically requests shelling out to an external CLI. Do not trigger for general subagent requests, as the harness may have native subagent tooling."
 argument-hint: "<research targets or parallel subtasks>"
 ---
 
@@ -21,10 +21,11 @@ Use this skill to perform concurrent, deep factual research without polluting th
 ## How to prompt
 
 When crafting the `<prompt>` for the subagent, follow these guidelines to get the best results:
-1. **Be specific about boundaries.** Tell the subagent exactly which files or directories to read (for example, "Thoroughly read `core.js` and `actions.js`.").
-2. **Demand factual mapping.** Instruct the subagent to trace, map, or analyze rather than solve (for example, "Map out the state mutation pipeline. Do not suggest fixes.").
-3. **Specify the exact output path.** Explicitly tell the subagent where to write the file so you can read it later (for example, "Write your findings directly to `.agents/scratch/state_machine.md`.").
-4. **Avoid conversational fluff.** The subagent is headless and one-shot; give it raw, actionable, and comprehensive instructions.
+1. **Ground in docs first.** Tell the subagent to familiarize at docs level before anything else.
+2. **Be specific about boundaries.** Tell the subagent exactly which files or directories to read (for example, "Thoroughly read `core.js` and `actions.js`.").
+3. **Demand factual mapping.** Instruct the subagent to trace, map, or analyze rather than solve (for example, "Map out the state mutation pipeline. Do not suggest fixes.").
+4. **Specify the exact output path.** Explicitly tell the subagent where to write the file so you can read it later (for example, "Write your findings directly to `.agents/scratch/state_machine.md`.").
+5. **Avoid conversational fluff.** The subagent is headless and one-shot; give it raw, actionable, and comprehensive instructions.
 
 ## Command template
 

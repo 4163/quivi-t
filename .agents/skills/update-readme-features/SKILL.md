@@ -8,7 +8,7 @@ argument-hint: "<new feature or modified behavior>"
 
 Run this skill when explicitly requested by the user to update the user-facing feature lists and shortcut tables after a new feature is added or existing behavior is modified.
 
-Read and apply `.agents/skills/unslop/SKILL.md` to all edits. Keep the writing concise, factual, and aligned with the existing documentation style.
+Read and apply the writing guidelines to all edits. Keep the writing concise, factual, and aligned with the existing documentation style.
 
 ## Scope
 
