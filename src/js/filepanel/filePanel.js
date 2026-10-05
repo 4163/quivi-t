@@ -515,7 +515,47 @@ const EMPTY_BOX_HTML = MARU_O_SVG;
 const CLOSE_X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="m15 9-6 6"></path><path d="m9 9 6 6"></path></svg>';
 const FAVORITE_REMOVE_X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>';
 
+function findOpenFavoriteIndex(path) {
+  const state = Core.getState();
+  const list = state?.list;
+  if (!Array.isArray(list) || typeof path !== 'string' || !path) return -1;
+  if (path.includes('|')) {
+    if (state.mode !== 'archive') return -1;
+    const sep = path.indexOf('|');
+    if (!_pathsEqual(path.slice(0, sep), state.archivePath)) return -1;
+    return list.findIndex(e => _pathsEqual(e.path, path));
+  }
+  if (state.mode === 'archive') return -1;
+  return list.findIndex(e => _pathsEqual(e.path, path));
+}
+
+// Same-container favorite picks skip the directory reload. The reload path
+// resolves through preserveView in the strip and never moves the viewport,
+// so an explicit jump must select and align directly like main-list clicks.
+function tryJumpToOpenEntry(path) {
+  const idx = findOpenFavoriteIndex(path);
+  if (idx < 0) return false;
+  const state = Core.getState();
+  const entry = state.list[idx];
+  if (!entry || entry.is_parent || entry.is_dir || FsUtils.isArchiveEntry(entry)) return false;
+  focusMainListOnNextRender = true;
+  if (state.manhwaEnabled && _isManhwaActive?.()) {
+    if (idx === _lastImageIndex(state.list) && _alignListItemBottom) {
+      _alignListItemBottom(idx);
+    } else {
+      _alignListItemTop?.(idx);
+    }
+  }
+  if (Core.getState().index !== idx) {
+    Core.selectIndex(idx);
+  } else {
+    updateSelection(idx, false, true);
+  }
+  return true;
+}
+
 function openSavedPath(path) {
+  if (tryJumpToOpenEntry(path)) return;
   focusMainListOnNextRender = true;
   if (FsUtils) {
     FsUtils.loadFile(path).catch(err => {
@@ -804,6 +844,36 @@ function toggleFavoritesExpanded() {
   if (favoritesExpanded) renderFavorites();
 }
 
+function favoritesInViewPaths(state) {
+  if (!state?.manhwaEnabled || (state.index ?? -1) < 0) return null;
+  const entry = state.list?.[state.index];
+  if (entry && !FsUtils.isImageEntry(entry)) return null;
+  let visible = [];
+  try {
+    visible = _getVisibleImageIndices() || [];
+  } catch {
+    return null;
+  }
+  const paths = new Set();
+  for (const i of visible) {
+    const p = state.list?.[i]?.path;
+    if (p) paths.add(p.replace(/\\/g, '/').toLowerCase());
+  }
+  return paths;
+}
+
+function applyFavoritesInView(inViewPaths) {
+  if (!favoritesListUl) return;
+  for (const li of favoritesListUl.children) {
+    if (li.classList.contains('selected')) {
+      li.classList.remove('in-view');
+      continue;
+    }
+    const key = (li.dataset.path || '').replace(/\\/g, '/').toLowerCase();
+    li.classList.toggle('in-view', !!inViewPaths && key !== '' && inViewPaths.has(key));
+  }
+}
+
 function updateFavoritesSelection(state) {
   if (!favoritesListUl || !state) return;
   const containerPath = state.mode === 'archive' ? state.archivePath : state.directory;
@@ -818,6 +888,7 @@ function updateFavoritesSelection(state) {
     );
     li.classList.toggle('selected', isSelected);
   }
+  applyFavoritesInView(favoritesInViewPaths(state));
 }
 
 function highlightFavoriteByPath(path) {
@@ -830,6 +901,7 @@ function highlightFavoriteByPath(path) {
   for (const li of favoritesListUl.children) {
     li.classList.toggle('selected', _pathsEqual(li.dataset.path, path));
   }
+  if (Core) applyFavoritesInView(favoritesInViewPaths(Core.getState()));
 }
 
 export function getHighlightedFavorite() {
@@ -2804,6 +2876,7 @@ export function initFilePanel(deps) {
   window.addEventListener('quivit-manhwa-settle', () => {
     if (Core.getState().fileListVisible && _isManhwaActive()) {
       updateSelection(Core.getState().index);
+      updateFavoritesSelection(Core.getState());
     }
   });
 }
