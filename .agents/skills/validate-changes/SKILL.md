@@ -8,9 +8,9 @@ argument-hint: "<target file, diff, commit range, branch, or working tree>"
 
 Use this skill to run a strict compliance check of code changes against the repository's architectural standards (`.agents/AGENTS.md`). This acts as an adversarial review to catch regressions, drift, or violations before a branch is considered done.
 
-## Important Constraint
+## Important constraint
 
-**Reporting Only:** This skill is strictly an adversarial review tool. Do NOT attempt to automatically fix the violations you find. Your goal is solely to identify issues and report them to the user. 
+**Reporting only.** This skill is strictly an adversarial review tool. Do NOT attempt to automatically fix the violations you find. Your goal is solely to identify issues and report them to the user.
 
 ## Workflow
 
@@ -20,14 +20,14 @@ Use this skill to run a strict compliance check of code changes against the repo
    - **Working tree.** Run `git diff` or `git diff --cached`.
    If the diff is large, focus on core logic, architecture boundaries, UI lifecycles, and performance.
 
-2. **Review Against `.agents/AGENTS.md`:**
+2. **Review against `.agents/AGENTS.md`:**
     Read and cross-reference the changes specifically against the guidelines in `.agents/AGENTS.md`. Pay special attention to:
-    - **Code Guidelines:** Are we using flat control flow and early returns? Are hot paths caching aggressively? Are there any dynamic evaluations where O(1) lookups could be used? Are background threads used correctly for blocking tasks?
-    - **HTML-First Rendering:** Are we relying on static markup? Are we toggling visibility via CSS classes instead of `createElement` / `innerHTML`? Are nodes being recycled?
-    - **CSS Source of Truth:** Is JS setting intrinsic visual values inline (e.g., `width`, `color`, `display`) instead of relying on CSS custom properties or classes?
-    - **JS Module Ownership:** Do UI modules only subscribe to pure state modules (not the reverse)? Are modules using state callbacks instead of cross-module reach-in?
-    - **Rust Encapsulation:** Are facade methods used instead of public field reach-in? Is there exactly one concern per module? Is test visibility restricted correctly using `#[path]`?
-    - **Diagnostics & Telemetry Integrity:** Did changes alter viewer DOM classes or elements queried by probes in `e2e/replay-diagnostics/probes/viewerPipelineProbe.js`? Did action ID updates preserve scenario contracts in `e2e/scenarios/`? If `investigation.js` is present, is its override intentional across sessions?
+    - **Code guidelines:** Are we using flat control flow and early returns? Are hot paths caching aggressively? Are there any dynamic evaluations where O(1) lookups could be used? Are background threads used correctly for blocking tasks?
+    - **HTML-first rendering:** Are we relying on static markup? Are we toggling visibility via CSS classes instead of `createElement` / `innerHTML`? Are nodes being recycled?
+    - **CSS source of truth:** Is JS setting intrinsic visual values inline (e.g., `width`, `color`, `display`) instead of relying on CSS custom properties or classes?
+    - **JS module ownership:** Do UI modules only subscribe to pure state modules (not the reverse)? Are modules using state callbacks instead of cross-module reach-in?
+    - **Rust encapsulation:** Are facade methods used instead of public field reach-in? Is there exactly one concern per module? Is test visibility restricted correctly using `#[path]`?
+    - **Diagnostics and telemetry integrity:** Did changes alter viewer DOM classes or elements queried by probes in `e2e/replay-diagnostics/probes/viewerPipelineProbe.js`? Did action ID updates preserve scenario contracts in `e2e/scenarios/`? If `investigation.js` is present, is its override intentional across sessions?
     - **Redundant code and shared helpers:** Did the diff inline repeated lines of code for identical operations across callsites instead of using or extracting an intuitive shared helper? Did it miss an existing helper that already does the job?
     - **Stale code and references:** Are there unused imports, dead functions, orphaned files, outdated comments, or stale paths that point to moved or renamed modules? Does the diff leave behind code that is no longer reachable? Use grep for old names, check imports, and verify every moved file has its callers updated.
 
@@ -36,16 +36,16 @@ Use this skill to run a strict compliance check of code changes against the repo
     - `[Warning]`: Architectural drift, premature abstractions, duplicated logic, or hot-path allocations.
     - `[Nit]`: Dead code, unused imports, stale comments, or minor hygiene issues.
 
-3. **Synthesize the Verdict:**
+3. **Synthesize the verdict:**
    Output your findings in a structured Markdown format for the user:
 
     ```markdown
-    ## Validation Report
+    ## Validation report
     
     **Target:** (e.g., Working tree, staged changes, or branch name)
     **Summary:** (A high-level 1-2 sentence description of what the diff accomplishes)
     
-    ### AGENTS.md Violations
+    ### AGENTS.md violations
     (List blocking issues, architectural drift, or rule violations found during the review. If none, explicitly state "None".)
     - [File:Line] [Blocking|Warning|Nit] Describe the violation and which AGENTS.md rule it breaks.
     
