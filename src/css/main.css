@@ -427,6 +427,27 @@ body.resizing-col {
   opacity: 1;
 }
 
+/* Menubar Imports providers. Same row rhythm as favorites loadouts. */
+.menu-dropdown li[role="menuitem"].import-provider-item {
+  padding: 2px 8px 2px 24px;
+  gap: 6px;
+  position: relative;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.import-provider-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#menu-imports[hidden] {
+  display: none;
+}
+
 /* Workspace */
 #workspace {
   display: flex;

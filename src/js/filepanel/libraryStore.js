@@ -29,11 +29,11 @@ export function getLibraryTree() {
 
 export function hasLibraryEntries(tree = _libraryTreeCache) {
   if (!Array.isArray(tree) || tree.length === 0) return false;
-  return tree.some((provider) => hasNodes(provider.nodes));
+  return tree.some((provider) => hasProviderNodes(provider));
 }
 
-function hasNodes(nodes) {
-  return Array.isArray(nodes) && nodes.length > 0;
+export function hasProviderNodes(provider) {
+  return Array.isArray(provider?.nodes) && provider.nodes.length > 0;
 }
 
 export async function deleteLibraryEntry(path) {
@@ -103,17 +103,101 @@ export function saveProviderOrder(order) {
   } catch {}
 }
 
+const ACTIVE_PROVIDER_KEY = 'quivit_library_active_provider';
+const ACTIVE_EXPLICIT_KEY = 'quivit_library_active_explicit';
+
+// Direct image and video links import under this provider. It stays pinned
+// above All in the Imports menu even before its first import lands.
+export const MISC_PROVIDER = 'Misc';
+
+export function getActiveProvider() {
+  try {
+    const raw = localStorage.getItem(ACTIVE_PROVIDER_KEY);
+    if (typeof raw !== 'string') return null;
+    const name = raw.trim();
+    return name ? name : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setActiveProvider(nameOrNull, options = {}) {
+  const next = (typeof nameOrNull === 'string' && nameOrNull.trim())
+    ? nameOrNull.trim()
+    : null;
+  try {
+    if (next === null) {
+      localStorage.removeItem(ACTIVE_PROVIDER_KEY);
+    } else {
+      localStorage.setItem(ACTIVE_PROVIDER_KEY, next);
+    }
+    // Menu clicks latch explicitly. Auto-activate never sets this, so the
+    // first import keeps following what was imported until the user picks.
+    if (options.explicit === true) {
+      localStorage.setItem(ACTIVE_EXPLICIT_KEY, 'true');
+    }
+  } catch {}
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('quivit-library-active-changed', { detail: { active: next } }));
+  }
+  return next;
+}
+
+export function hasExplicitActiveChoice() {
+  try {
+    return localStorage.getItem(ACTIVE_EXPLICIT_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function clearExplicitActiveChoice() {
+  try {
+    localStorage.removeItem(ACTIVE_EXPLICIT_KEY);
+  } catch {}
+}
+
+// Resolves the stored filter against the live tree. When the active
+// provider is gone, heals to the nearest neighbor in the previous order
+// (next first, then previous, tab-close style) and persists it, so the
+// view follows the list instead of dropping to All. Pass the stored
+// order captured before orderProviders prunes it.
+export function resolveActiveProvider(tree = _libraryTreeCache, prevOrder = null) {
+  const active = getActiveProvider();
+  if (!active || !Array.isArray(tree)) return null;
+  const present = tree.filter((p) => p?.name && hasProviderNodes(p));
+  if (present.some((p) => p.name === active)) return active;
+  const order = Array.isArray(prevOrder) && prevOrder.length > 0
+    ? prevOrder
+    : present.map((p) => p.name);
+  let next = null;
+  const at = order.indexOf(active);
+  if (at !== -1) {
+    for (let i = at + 1; i < order.length && !next; i++) {
+      if (present.some((p) => p.name === order[i])) next = order[i];
+    }
+    for (let i = at - 1; i >= 0 && !next; i--) {
+      if (present.some((p) => p.name === order[i])) next = order[i];
+    }
+  }
+  if (!next && present.length > 0) next = present[0].name;
+  setActiveProvider(next);
+  return next;
+}
+
 export function orderProviders(tree = _libraryTreeCache) {
   if (!Array.isArray(tree)) return [];
   const stored = getProviderOrder();
-  const present = new Set(tree.map((p) => p?.name).filter(Boolean));
+  // Only providers holding imports keep rank. Emptied dirs drop out, so a
+  // re-import appends newest instead of reclaiming its old slot.
+  const present = new Set(tree.filter((p) => hasProviderNodes(p)).map((p) => p?.name).filter(Boolean));
   const kept = stored.filter((name) => present.has(name));
   for (const provider of tree) {
-    if (provider?.name && !kept.includes(provider.name)) {
+    if (provider?.name && hasProviderNodes(provider) && !kept.includes(provider.name)) {
       kept.push(provider.name);
     }
   }
   saveProviderOrder(kept);
   const rank = new Map(kept.map((name, index) => [name, index]));
-  return [...tree].sort((a, b) => (rank.get(a?.name) ?? -1) - (rank.get(b?.name) ?? -1));
+  return [...tree].sort((a, b) => (rank.get(a?.name) ?? Infinity) - (rank.get(b?.name) ?? Infinity));
 }

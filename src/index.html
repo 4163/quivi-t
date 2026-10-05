@@ -162,6 +162,17 @@
       </ul>
     </div>
 
+    <div class="menu-item" id="menu-imports" hidden>
+      <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Imports</button>
+      <ul class="menu-dropdown" role="menu" id="imports-menu-dropdown">
+        <template id="import-provider-row-template">
+          <li role="menuitem" class="import-provider-item" tabindex="0"><span class="import-provider-label"></span></li>
+        </template>
+        <li class="separator" aria-hidden="true"></li>
+        <li role="menuitem" id="import-provider-all" tabindex="0">All</li>
+      </ul>
+    </div>
+
     <div class="menubar-spacer" data-tauri-drag-region></div>
     <button id="cmd-github" class="menu-link" type="button" title="Open GitHub repository">
       <svg viewBox="0 0 24 24" aria-hidden="true">

@@ -17,11 +17,17 @@ import {
 } from './favoritesStore.js';
 import {
   fetchLibraryTree,
+  getLibraryTree,
   hasLibraryEntries,
+  getActiveProvider,
   deleteLibraryEntry,
   getProviderCollapsed,
   saveProviderCollapsed,
-  orderProviders
+  orderProviders,
+  getProviderOrder,
+  resolveActiveProvider,
+  clearExplicitActiveChoice,
+  MISC_PROVIDER
 } from './libraryStore.js';
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
@@ -1048,28 +1054,6 @@ function buildLibraryEntry(item, depth = 0) {
         }
       }
 
-      // Optimistic paint: detach the row in this frame. When it was the last
-      // row of its provider section, detach the header plus list too so the
-      // dropdown disappears with the deletion instead of waiting for the
-      // backend. renderLibrary() reconciles once the recycle resolves.
-      const parentUl = li.parentNode;
-      const nextSibling = li.nextSibling;
-      li.remove();
-      const sectionAnchor = parentUl ? parentUl.nextSibling : null;
-      let detachedHeader = null;
-      if (parentUl && !parentUl.querySelector('li')) {
-        const maybeHeader = parentUl.previousElementSibling;
-        if (maybeHeader && maybeHeader.classList && maybeHeader.classList.contains('library-provider-header')) {
-          detachedHeader = maybeHeader;
-          detachedHeader.remove();
-        }
-        parentUl.remove();
-      }
-      const hadEmptyClass = libraryPanelEl.classList.contains('is-empty');
-      if (!libraryPanelEl.querySelector('.library-provider-list li')) {
-        libraryPanelEl.classList.add('is-empty');
-      }
-
       if (targetDir) {
         for (const key of Array.from(thumbnailCache.keys())) {
           const k = String(key).replace(/\\/g, '/').toLowerCase();
@@ -1081,6 +1065,51 @@ function buildLibraryEntry(item, depth = 0) {
 
       if (FsUtils?.registerPendingDeletion) {
         FsUtils.registerPendingDeletion(item.path);
+      }
+
+      // Optimistic paint: detach the row in this frame. When it was the last
+      // row of its provider section, detach the header plus list too so the
+      // dropdown disappears with the deletion instead of waiting for the
+      // backend. When filtered to an active provider that will heal to a
+      // neighbor, keep the container alive and render the neighbor immediately
+      // without setting is-empty, preventing empty-panel collapse and layout shift.
+      const parentUl = li.parentNode;
+      const nextSibling = li.nextSibling;
+      let sectionAnchor = null;
+      let detachedHeader = null;
+      const hadEmptyClass = libraryPanelEl.classList.contains('is-empty');
+
+      const isLastInProvider = parentUl && parentUl.querySelectorAll('li').length <= 1;
+      const activeFilter = getActiveProvider();
+      const treeCached = getLibraryTree();
+      const hasOtherProviders = Boolean(
+        activeFilter &&
+        isLastInProvider &&
+        Array.isArray(treeCached) &&
+        treeCached.some(
+          p => p?.name !== activeFilter &&
+               Array.isArray(p?.nodes) &&
+               p.nodes.some(n => !FsUtils.isPendingDeletion(n?.path))
+        )
+      );
+
+      li.remove();
+
+      if (hasOtherProviders) {
+        renderLibrary().catch((err) => console.error('[FilePanel] Immediate neighbor render failed:', err));
+      } else {
+        sectionAnchor = parentUl ? parentUl.nextSibling : null;
+        if (parentUl && !parentUl.querySelector('li')) {
+          const maybeHeader = parentUl.previousElementSibling;
+          if (maybeHeader && maybeHeader.classList && maybeHeader.classList.contains('library-provider-header')) {
+            detachedHeader = maybeHeader;
+            detachedHeader.remove();
+          }
+          parentUl.remove();
+        }
+        if (!libraryPanelEl.querySelector('.library-provider-list li')) {
+          libraryPanelEl.classList.add('is-empty');
+        }
       }
 
       // Optimistic file list pruning: if already viewing the parent directory,
@@ -1241,14 +1270,31 @@ export async function renderLibrary() {
     fetchLibraryTree(),
     fetchManifest().catch(() => null)
   ]);
-  const tree = orderProviders(treeRaw);
-
-  // Exclude tombstoned paths so watcher-triggered rebuilds during an
-  // in-flight recycle don't flash deleted items back into the sidebar.
-  if (FsUtils.hasPendingDeletions()) {
-    for (const provider of tree) {
-      if (!provider.nodes) continue;
+  // Exclude tombstoned paths so in-flight deletions do not consider deleted
+  // items when ordering providers or resolving the active provider.
+  if (FsUtils?.hasPendingDeletions && FsUtils.hasPendingDeletions()) {
+    for (const provider of treeRaw) {
+      if (!provider?.nodes) continue;
       provider.nodes = provider.nodes.filter(n => !FsUtils.isPendingDeletion(n.path));
+    }
+  }
+
+  // Capture before orderProviders prunes the stored list, so a deleted
+  // active provider can heal to its neighbor.
+  const prevOrder = getProviderOrder();
+  const ordered = orderProviders(treeRaw);
+  // An emptied Library resets from scratch: the next import behaves like
+  // the first instead of sticking to a latched All.
+  if (!hasLibraryEntries(ordered)) clearExplicitActiveChoice();
+  const activeFilter = resolveActiveProvider(ordered, prevOrder);
+  const tree = activeFilter ? ordered.filter((p) => p?.name === activeFilter) : ordered;
+  // Misc sits first in the panel, on top of the imports and under
+  // Favorites. The menu keeps it pinned last instead.
+  if (!activeFilter) {
+    const miscIdx = tree.findIndex((p) => p?.name === MISC_PROVIDER);
+    if (miscIdx > 0) {
+      const [misc] = tree.splice(miscIdx, 1);
+      tree.unshift(misc);
     }
   }
 
@@ -2474,6 +2520,10 @@ export function initFilePanel(deps) {
   renderLibrary();
 
   window.addEventListener('quivit-library-updated', () => {
+    renderLibrary();
+  });
+
+  window.addEventListener('quivit-library-active-changed', () => {
     renderLibrary();
   });
 

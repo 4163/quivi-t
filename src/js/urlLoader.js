@@ -30,6 +30,18 @@
 import { BoundedMap } from './services/cache.js';
 import { applySort } from './services/sorting.js';
 import { DirectoryPrefs } from './directoryPrefs.js';
+import { getActiveProvider, setActiveProvider, hasExplicitActiveChoice } from './filepanel/libraryStore.js';
+
+function _autoActivateImportProvider(providerDir) {
+  if (!providerDir || typeof providerDir !== 'string') return;
+  try {
+    const current = getActiveProvider();
+    // All latches only on an explicit click. Until then every import takes
+    // the filter, including the first one.
+    if (current === null && hasExplicitActiveChoice()) return;
+    if (current !== providerDir) setActiveProvider(providerDir);
+  } catch {}
+}
 
 const EXTRACTOR_MODULE_CACHE_CAPACITY = 20;
 export const EXTRACTOR_MANIFEST_VERSION = 1;
@@ -1789,6 +1801,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
         dir: providerPath,
         filenames: [targetFilename]
       }).catch(() => {});
+      _autoActivateImportProvider(providerDir);
       window.dispatchEvent(new CustomEvent('quivit-library-updated'));
 
       const rootInfo = {
@@ -1969,6 +1982,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     // Shape cleanup runs behind the return; a prune failure must not fail
     // the series import. Cover bytes stay queue-owned on visit, so two
     // writers never race on one file.
+    _autoActivateImportProvider(providerDir);
     const bgProviderPath = providerPath;
     const bgResult = result;
     (async () => {
@@ -2104,6 +2118,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       _startGalleryQueue(existingPath, downloadItems, { initialTarget });
     }
 
+    _autoActivateImportProvider(providerDir);
     window.dispatchEvent(new CustomEvent('quivit-library-updated'));
 
     // Shape cleanup runs behind the return; a prune failure must not fail
@@ -2208,6 +2223,7 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
     _activeGalleryItems = downloadItems;
   }
 
+  _autoActivateImportProvider(providerDir);
   window.dispatchEvent(new CustomEvent('quivit-library-updated'));
 
   // Shape cleanup runs behind the return; a prune failure must not fail

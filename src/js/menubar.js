@@ -14,11 +14,25 @@ import {
   renameLoadout,
   deleteLoadout
 } from './filepanel/favoritesStore.js';
+import {
+  fetchLibraryTree,
+  hasLibraryEntries,
+  hasProviderNodes,
+  orderProviders,
+  getProviderOrder,
+  setActiveProvider,
+  resolveActiveProvider,
+  MISC_PROVIDER
+} from './filepanel/libraryStore.js';
+import { fetchManifest } from './urlLoader.js';
+import { FsUtils } from './fsUtils.js';
 
 export function initMenuBar() {
   bindMenus();
   bindFavoritesDropdown();
   renderFavoritesMenu();
+  bindImportsDropdown();
+  renderImportsMenu();
 }
 
 const AIM_DELAY = 120;
@@ -187,6 +201,7 @@ function bindMenus() {
       } else {
         closeMenus();
         if (menu.id === 'menu-favorites') renderFavoritesMenu();
+        if (menu.id === 'menu-imports') renderImportsMenu();
         menu.classList.add('open');
         activeMenu = menu;
       }
@@ -196,6 +211,7 @@ function bindMenus() {
       if (!activeMenu || activeMenu === menu) return;
       closeMenus();
       if (menu.id === 'menu-favorites') renderFavoritesMenu();
+      if (menu.id === 'menu-imports') renderImportsMenu();
       menu.classList.add('open');
       activeMenu = menu;
     });
@@ -207,6 +223,7 @@ function bindMenus() {
         e.stopPropagation();
         closeMenus();
         if (menu.id === 'menu-favorites') renderFavoritesMenu();
+        if (menu.id === 'menu-imports') renderImportsMenu();
         menu.classList.add('open');
         activeMenu = menu;
         // Focus the first dropdown item.
@@ -223,7 +240,8 @@ function bindMenus() {
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         e.preventDefault();
         e.stopPropagation();
-        const triggers = Array.from(document.querySelectorAll('#menubar .menu-trigger'));
+        const triggers = Array.from(document.querySelectorAll('#menubar .menu-trigger'))
+          .filter((t) => !t.closest('.menu-item')?.hidden);
         const idx = triggers.indexOf(trigger);
         if (idx !== -1) {
           let nextIdx = e.key === 'ArrowRight' ? idx + 1 : idx - 1;
@@ -247,7 +265,10 @@ function bindMenus() {
   window.addEventListener('resize', closeMenus);
 
   // Keyboard and click support for dropdown lists and submenus.
+  // The Imports dropdown owns its rows (dynamic providers plus static All),
+  // so generic per-item binding skips it to keep one owner per surface.
   document.querySelectorAll('.menu-dropdown').forEach(dropdown => {
+    if (dropdown.id === 'imports-menu-dropdown') return;
     dropdown.addEventListener('mousemove', (e) => {
       const prevX = aimState.mouseLoc.x;
       const prevY = aimState.mouseLoc.y;
@@ -610,6 +631,135 @@ function bindFavoritesDropdown() {
 
   window.addEventListener('quivit-favorites-changed', renderFavoritesMenu);
   window.addEventListener('quivit-config-loaded', renderFavoritesMenu);
+}
+
+export async function renderImportsMenu() {
+  const dropdown = document.getElementById('imports-menu-dropdown');
+  const rowTemplate = document.getElementById('import-provider-row-template');
+  const menuItem = document.getElementById('menu-imports');
+  if (!dropdown || !rowTemplate) return;
+
+  let treeRaw = [];
+  let manifest = null;
+  try {
+    [treeRaw, manifest] = await Promise.all([
+      fetchLibraryTree().catch(() => []),
+      fetchManifest().catch(() => null)
+    ]);
+  } catch {
+    treeRaw = [];
+  }
+  if (FsUtils?.hasPendingDeletions && FsUtils.hasPendingDeletions()) {
+    for (const provider of treeRaw) {
+      if (!provider?.nodes) continue;
+      provider.nodes = provider.nodes.filter(n => !FsUtils.isPendingDeletion(n.path));
+    }
+  }
+  const prevOrder = getProviderOrder();
+  const tree = orderProviders(Array.isArray(treeRaw) ? treeRaw : []);
+  const hasAny = hasLibraryEntries(tree);
+  // Only providers holding actual imports render. Stale provider dirs with
+  // no galleries stay out. Misc renders on the same terms, pinned last.
+  const miscEntry = tree.find((p) => p?.name === MISC_PROVIDER && hasProviderNodes(p));
+  const providerRows = tree.filter((p) => p?.name && p.name !== MISC_PROVIDER && hasProviderNodes(p));
+  if (miscEntry) providerRows.push(miscEntry);
+  const resolved = resolveActiveProvider(tree, prevOrder);
+
+  const displayNames = manifest
+    ? new Map((manifest.extractors || []).map((e) => [e.libraryPath, e.name]))
+    : null;
+
+  const separator = dropdown.querySelector(':scope > .separator');
+  const anchor = separator || dropdown.querySelector(':scope > #import-provider-all');
+  const rows = Array.from(dropdown.children).filter((el) => el.classList?.contains('import-provider-item'));
+
+  providerRows.forEach((provider, i) => {
+    if (!provider?.name) return;
+    let li = rows[i];
+    if (!li) {
+      li = rowTemplate.content.firstElementChild.cloneNode(true);
+      dropdown.insertBefore(li, anchor);
+    }
+    li.dataset.provider = provider.name;
+    li.classList.toggle('checked', resolved === provider.name);
+    if (resolved === provider.name) {
+      li.setAttribute('aria-current', 'true');
+    } else {
+      li.removeAttribute('aria-current');
+    }
+    const label = li.querySelector('.import-provider-label');
+    if (label) label.textContent = (displayNames && displayNames.get(provider.name)) || provider.name;
+  });
+
+  for (let i = rows.length - 1; i >= providerRows.length; i--) {
+    rows[i].remove();
+  }
+
+  // No imports, no tab. The menu appears with the first import instead
+  // of sitting empty with muted rows.
+  if (menuItem) menuItem.hidden = !hasAny;
+
+  const allRow = document.getElementById('import-provider-all');
+  if (allRow) {
+    allRow.classList.toggle('checked', resolved === null);
+  }
+}
+
+function bindImportsDropdown() {
+  const dropdown = document.getElementById('imports-menu-dropdown');
+  if (!dropdown) return;
+
+  dropdown.addEventListener('click', (e) => {
+    const allRow = e.target.closest('#import-provider-all');
+    if (allRow) {
+      e.stopPropagation();
+      setActiveProvider(null, { explicit: true });
+      renderImportsMenu();
+      return;
+    }
+    const row = e.target.closest('.import-provider-item');
+    if (row?.dataset?.provider) {
+      e.stopPropagation();
+      setActiveProvider(row.dataset.provider, { explicit: true });
+      renderImportsMenu();
+    }
+  });
+
+  dropdown.addEventListener('keydown', (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const row = e.target.closest('li[role="menuitem"]');
+    if (!row) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (row.id === 'import-provider-all') {
+        setActiveProvider(null, { explicit: true });
+      } else if (row.dataset?.provider) {
+        setActiveProvider(row.dataset.provider, { explicit: true });
+      }
+      renderImportsMenu();
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      const items = Array.from(dropdown.querySelectorAll('li[role="menuitem"]'));
+      const idx = items.indexOf(row);
+      if (idx !== -1) {
+        const nextIdx = e.key === 'ArrowDown'
+          ? (idx + 1) % items.length
+          : (idx - 1 + items.length) % items.length;
+        items[nextIdx].focus();
+      }
+    }
+  });
+
+  window.addEventListener('quivit-library-active-changed', renderImportsMenu);
+  window.addEventListener('quivit-library-updated', renderImportsMenu);
+  window.addEventListener('quivit-config-loaded', renderImportsMenu);
+  if (window.__TAURI__?.event?.listen) {
+    window.__TAURI__.event.listen('library-changed', () => {
+      renderImportsMenu();
+    }).catch(() => {});
+  }
 }
 
 const FIT_MODE_MAP = {
