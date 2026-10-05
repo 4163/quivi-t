@@ -147,7 +147,19 @@
 
     <div class="menu-item" id="menu-favorites">
       <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Favorites</button>
-      <ul class="menu-dropdown" role="menu" id="favorites-menu-dropdown"></ul>
+      <ul class="menu-dropdown" role="menu" id="favorites-menu-dropdown">
+        <template id="loadout-row-template">
+          <li role="menuitem" class="loadout-item" tabindex="0">
+            <input type="text" class="loadout-name-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" title="Click to rename" />
+            <button type="button" class="loadout-remove-btn" title="Delete list" tabindex="-1"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+          </li>
+        </template>
+        <li class="separator" aria-hidden="true"></li>
+        <li class="loadout-new-container" role="none">
+          <input type="text" id="input-new-loadout" class="loadout-new-input" placeholder="New favorites list..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          <button type="button" class="loadout-add-btn" title="Add list" tabindex="-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg></button>
+        </li>
+      </ul>
     </div>
 
     <div class="menubar-spacer" data-tauri-drag-region></div>

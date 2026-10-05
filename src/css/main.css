@@ -325,7 +325,6 @@ body.resizing-col {
   box-shadow: 0 0 0 1px var(--accent);
 }
 
-.loadout-item:not(:has(.loadout-remove-btn)) .loadout-name-input,
 .loadout-item.single .loadout-name-input {
   max-width: 166px;
 }
@@ -345,6 +344,11 @@ body.resizing-col {
   margin-left: auto;
 }
 
+/* Remove button lives in the row template, so hide it instead of detaching it. */
+.loadout-remove-btn[hidden] {
+  display: none;
+}
+
 .loadout-remove-btn svg {
   width: var(--fs-12);
   height: var(--fs-12);
@@ -361,6 +365,9 @@ body.resizing-col {
 }
 
 .loadout-new-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 4px 8px;
   white-space: nowrap;
   flex-wrap: nowrap;
@@ -368,7 +375,8 @@ body.resizing-col {
 }
 
 .loadout-new-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   box-sizing: border-box;
   background: var(--surface-alt);
   border: 1px solid var(--border);
@@ -392,6 +400,31 @@ body.resizing-col {
 .loadout-new-input::placeholder {
   color: var(--text-muted);
   opacity: 0.7;
+}
+
+/* Add button on the new-list row. Always visible, unlike the row remove buttons. */
+.loadout-add-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.loadout-add-btn svg {
+  width: var(--fs-14);
+  height: var(--fs-14);
+}
+
+.loadout-add-btn:hover,
+.loadout-add-btn:focus {
+  opacity: 1;
 }
 
 /* Workspace */
@@ -1026,8 +1059,10 @@ li:hover>.favorite-remove,
   border-top: 1px solid var(--border);
 }
 
-/* Same gate for the top bar divider. */
-#file-panel:has(#file-panel-breadcrumb[title]:not([title=""])) #file-panel-header-top {
+/* Same gate for the top bar divider, skipped while favorites is empty. The
+   unset rule above already drops that line so it does not stack with the
+   column header border below it. */
+#file-panel:has(#file-panel-breadcrumb[title]:not([title=""])):not(:has(#file-panel-favorites.is-empty)) #file-panel-header-top {
   border-bottom: 1px solid var(--border);
 }
 

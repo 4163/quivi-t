@@ -433,68 +433,50 @@ function bindMenus() {
   });
 }
 
-const REMOVE_X_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>';
+function submitNewLoadout(newInput) {
+  if (!newInput) return;
+  const val = newInput.value.trim();
+  const created = createLoadout(val);
+  if (created?.name) {
+    setActiveLoadout(created.name);
+  }
+  newInput.value = '';
+  renderFavoritesMenu();
+  newInput.focus();
+}
 
 export function renderFavoritesMenu() {
   const dropdown = document.getElementById('favorites-menu-dropdown');
-  if (!dropdown) return;
+  const rowTemplate = document.getElementById('loadout-row-template');
+  if (!dropdown || !rowTemplate) return;
 
   const state = getFavoritesState();
   const isSingle = state.loadouts.length <= 1;
-  dropdown.innerHTML = '';
+  const separator = dropdown.querySelector(':scope > .separator');
+  const anchor = separator || dropdown.querySelector(':scope > .loadout-new-container');
+  const rows = Array.from(dropdown.children).filter(el => el.classList?.contains('loadout-item'));
 
-  state.loadouts.forEach(loadout => {
-    const li = document.createElement('li');
-    li.setAttribute('role', 'menuitem');
-    li.className = 'loadout-item' + (loadout.name === state.active ? ' checked' : '') + (isSingle ? ' single' : '');
-    li.tabIndex = 0;
-    li.dataset.loadoutName = loadout.name;
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'loadout-name-input';
-    input.value = loadout.name;
-    input.size = Math.max(1, loadout.name.length);
-    input.autocomplete = 'off';
-    input.setAttribute('autocorrect', 'off');
-    input.setAttribute('autocapitalize', 'off');
-    input.spellcheck = false;
-    input.title = 'Click to rename';
-    li.appendChild(input);
-
-    if (state.loadouts.length > 1) {
-      const delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'loadout-remove-btn';
-      delBtn.title = 'Delete list';
-      delBtn.tabIndex = -1;
-      delBtn.innerHTML = REMOVE_X_SVG;
-      li.appendChild(delBtn);
+  state.loadouts.forEach((loadout, i) => {
+    let li = rows[i];
+    if (!li) {
+      li = rowTemplate.content.firstElementChild.cloneNode(true);
+      dropdown.insertBefore(li, anchor);
     }
-
-    dropdown.appendChild(li);
+    li.dataset.loadoutName = loadout.name;
+    li.classList.toggle('checked', loadout.name === state.active);
+    li.classList.toggle('single', isSingle);
+    const input = li.querySelector('.loadout-name-input');
+    if (input && document.activeElement !== input) {
+      input.value = loadout.name;
+      input.size = Math.max(1, loadout.name.length);
+    }
+    const delBtn = li.querySelector('.loadout-remove-btn');
+    if (delBtn) delBtn.hidden = isSingle;
   });
 
-  const sep = document.createElement('li');
-  sep.className = 'separator';
-  dropdown.appendChild(sep);
-
-  const newLi = document.createElement('li');
-  newLi.className = 'loadout-new-container';
-  newLi.setAttribute('role', 'none');
-
-  const newInput = document.createElement('input');
-  newInput.type = 'text';
-  newInput.id = 'input-new-loadout';
-  newInput.className = 'loadout-new-input';
-  newInput.placeholder = 'New favorites list...';
-  newInput.autocomplete = 'off';
-  newInput.setAttribute('autocorrect', 'off');
-  newInput.setAttribute('autocapitalize', 'off');
-  newInput.spellcheck = false;
-  newLi.appendChild(newInput);
-
-  dropdown.appendChild(newLi);
+  for (let i = rows.length - 1; i >= state.loadouts.length; i--) {
+    rows[i].remove();
+  }
 }
 
 function bindFavoritesDropdown() {
@@ -517,6 +499,15 @@ function bindFavoritesDropdown() {
         deleteLoadout(row.dataset.loadoutName);
         renderFavoritesMenu();
       }
+      return;
+    }
+
+    const addBtn = e.target.closest('.loadout-add-btn');
+    if (addBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      const container = addBtn.closest('.loadout-new-container');
+      submitNewLoadout(container?.querySelector('.loadout-new-input'));
       return;
     }
 
@@ -560,15 +551,7 @@ function bindFavoritesDropdown() {
       e.stopPropagation();
       if (e.key === 'Enter') {
         e.preventDefault();
-        const val = newInput.value.trim();
-        const created = createLoadout(val);
-        newInput.value = '';
-        if (created?.name) {
-          setActiveLoadout(created.name);
-        }
-        renderFavoritesMenu();
-        const createdInput = document.getElementById('input-new-loadout');
-        if (createdInput) createdInput.focus();
+        submitNewLoadout(newInput);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         closeMenus();
