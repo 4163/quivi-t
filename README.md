@@ -196,11 +196,11 @@ QuiviT keeps its own data in three places. Imported galleries sit in a fourth fo
 
 **Options → Save config data locally** turns on portable mode. QuiviT writes one `quivit_config.json` beside the exe, which moves the current roaming settings into it. In the portable file, the `hidden` flag hides the file using the Windows hidden attribute: `true`. QuiviT applies that attribute on every launch, so it should only be edited while the app is not running.
 
-**WebView2 localStorage.** A mirror of the theme and custom CSS, so the first paint can use them before the config files load to prevent LCP issues. It also holds Library collapse and provider order, cached file icons, the active Options tab, and the short-lived Archive Info handoff. The Options tab (and similar none persistent items) should be cleared on each launch.
+**WebView2 localStorage.** Caches the theme and custom CSS to style the window before config files load. It also stores shell icon caches and transient UI view state, such as panel arrangements and temporary inter-window handoffs.
 
-**In memory, until quit.** The Back/Forward list, unlocked archive passwords, per-file mute and volume, and the archive pages currently held open. A theme or CSS preview in Options stays on screen until you **Apply**.
+**In memory, until quit.** Session-only state, including navigation history, unlocked archive sessions, runtime media controls, and unapplied settings previews.
 
-**Imports.** **File → Open URL** saves galleries under `%LOCALAPPDATA%\QuiviT\library`. **Options → General → Library location** moves that folder. Pick an empty writable folder and QuiviT copies the current library into it.
+**Imports.** Web media and galleries downloaded via **File → Open URL** save under `%LOCALAPPDATA%\QuiviT\library` by default. Relocate the Library to any empty writable folder through **Options → General → Library location**.
 
 ### Architecture
 
