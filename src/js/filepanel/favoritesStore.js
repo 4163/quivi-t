@@ -13,19 +13,46 @@ window.addEventListener('quivit-config-loaded', () => {
   configLoaded = true;
 });
 
-export const DEFAULT_LOADOUT_NAME = 'Favorites 1';
+export const DEFAULT_LOADOUT_NAME = 'Favorites';
 
-export function getNextLoadoutName(state, excludeName = '') {
-  const existingNames = new Set(
+export const DEFAULT_LOADOUT_NAMES = ['Favorites', 'Bookmarks', 'Pins', 'Saved', 'Starred', '栞🔖'];
+
+function collectLowerNames(state, excludeName = '') {
+  const excluded = (excludeName || '').toLowerCase();
+  return new Set(
     (state?.loadouts || [])
-      .filter(l => typeof l?.name === 'string' && l.name.toLowerCase() !== (excludeName || '').toLowerCase())
+      .filter(l => typeof l?.name === 'string' && l.name.toLowerCase() !== excluded)
       .map(l => l.name.toLowerCase())
   );
-  let n = 1;
-  while (existingNames.has(`favorites ${n}`)) {
+}
+
+function makeUniqueLoadoutName(base, existingLower) {
+  if (!existingLower.has(base.toLowerCase())) return base;
+  let n = 2;
+  while (existingLower.has(`${base.toLowerCase()} (${n})`)) {
     n++;
   }
-  return `Favorites ${n}`;
+  return `${base} (${n})`;
+}
+
+export function getNextLoadoutName(state, excludeName = '') {
+  const existingNames = collectLowerNames(state, excludeName);
+  for (const candidate of DEFAULT_LOADOUT_NAMES) {
+    if (!existingNames.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+  }
+  let n = 2;
+  while (n < 10000) {
+    for (const candidate of DEFAULT_LOADOUT_NAMES) {
+      const numbered = `${candidate} (${n})`;
+      if (!existingNames.has(numbered.toLowerCase())) {
+        return numbered;
+      }
+    }
+    n++;
+  }
+  return makeUniqueLoadoutName(DEFAULT_LOADOUT_NAME, existingNames);
 }
 
 function normalizeFavorites(raw) {
@@ -104,12 +131,9 @@ export function setActiveLoadout(name) {
 export function createLoadout(name) {
   const state = getFavoritesState();
   const trimmed = (name || '').trim();
-  const finalName = trimmed || getNextLoadoutName(state);
+  const baseName = trimmed || getNextLoadoutName(state);
 
-  const existing = state.loadouts.find(l => l.name.toLowerCase() === finalName.toLowerCase());
-  if (existing) {
-    return existing;
-  }
+  const finalName = makeUniqueLoadoutName(baseName, collectLowerNames(state));
   const newLoadout = { name: finalName, items: [] };
   state.loadouts.push(newLoadout);
   saveFavorites(state);
@@ -122,16 +146,18 @@ export function renameLoadout(oldName, newName) {
   if (!loadout) return false;
 
   const trimmed = (newName || '').trim();
-  const targetName = trimmed || getNextLoadoutName(state, oldName);
+  const baseName = trimmed || getNextLoadoutName(state, oldName);
 
-  if (targetName === oldName) {
+  if (baseName === oldName) {
     return true;
   }
 
-  const existingIdx = state.loadouts.findIndex(
-    l => l !== loadout && l.name.toLowerCase() === targetName.toLowerCase()
+  const othersLower = new Set(
+    state.loadouts
+      .filter(l => l !== loadout && typeof l?.name === 'string')
+      .map(l => l.name.toLowerCase())
   );
-  if (existingIdx !== -1) return false; // Name conflict
+  const targetName = makeUniqueLoadoutName(baseName, othersLower);
 
   loadout.name = targetName;
   if (state.active === oldName) {

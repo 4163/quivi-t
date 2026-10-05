@@ -714,8 +714,6 @@ function renderFavorites(options = {}) {
   if (!favoritesListUl) return;
   const favs = getActiveFavorites();
   const loadoutName = getActiveLoadoutName();
-  const favState = getFavoritesState();
-  const hasMultipleOrCustom = (favState.loadouts?.length || 0) > 1 || (loadoutName && loadoutName !== DEFAULT_LOADOUT_NAME);
 
   if (options?.expandFavorites || (currentFavoriteLoadout !== null && currentFavoriteLoadout !== loadoutName)) {
     favoritesExpanded = true;
@@ -731,9 +729,7 @@ function renderFavorites(options = {}) {
 
   if (favoritesHeaderEl) {
     favoritesHeaderEl.classList.toggle('hidden', isEmpty);
-    const titleText = (loadoutName && hasMultipleOrCustom)
-      ? `Favorites (${loadoutName})`
-      : 'Favorites';
+    const titleText = loadoutName || DEFAULT_LOADOUT_NAME;
     let titleSpan = favoritesHeaderEl.querySelector('.panel-header-title');
     if (!titleSpan) {
       titleSpan = document.createElement('span');
