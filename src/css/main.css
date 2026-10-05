@@ -427,7 +427,6 @@ body.resizing-col {
   align-items: center;
   gap: 4px;
   padding-right: 4px;
-  border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
 
@@ -575,7 +574,6 @@ li:hover>.favorite-remove,
   flex-wrap: nowrap;
   overflow: hidden;
   min-width: 0;
-  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border-light);
   background: var(--surface-alt);
   font-size: var(--fs-11);
@@ -1014,11 +1012,23 @@ li:hover>.favorite-remove,
   grid-template-columns: var(--col-name-w) var(--col-ext-w) var(--col-date-w);
   align-items: stretch;
   background: var(--surface-alt);
-  border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border-light);
   font-size: var(--fs-11);
   color: var(--text-muted);
   flex-shrink: 0;
+}
+
+/* Dividers wait for path. Breadcrumb ships with empty title and renderBreadcrumb
+   fills it once the path resolves, so gate the borders on it to keep first
+   paint from stacking them. */
+#file-panel:has(#file-panel-breadcrumb[title]:not([title=""])) #file-panel-header,
+#file-panel:has(#file-panel-breadcrumb[title]:not([title=""])) .library-provider-header {
+  border-top: 1px solid var(--border);
+}
+
+/* Same gate for the top bar divider. */
+#file-panel:has(#file-panel-breadcrumb[title]:not([title=""])) #file-panel-header-top {
+  border-bottom: 1px solid var(--border);
 }
 
 #file-panel-header>div {
