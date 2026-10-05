@@ -2,16 +2,6 @@
 
 Coding standards, architecture rules, and agent workflow for QuiviT.
 
-## Agent behavior
-- Read every rule and referenced skill before starting work. Confirm adherence to the user.
-- Keep responses concise and focused on the task.
-- Follow existing code style and formatting for each directory and its associated files.
-- Avoid using browser automation/browser subagent, use mocha when possible, or use e2e for any complex frontend problems that requires debugging.
-- Run e2e through `npm run e2e -- --spec <file>`. Re-run via `--agent` to de-elevate, which includes process cleanup and log capture, only if it reports an elevated shell.
-- For writing work, read `.agents/skills/unslop/SKILL.md` and follow it even if the harness does not auto-load always-active skills. This applies to docs, prompts, comments, and user-facing copy.
-- Verify using `.agents/skills/verify-implementation/SKILL.md` when finishing a slice or when asked to "verify".
-- Validate using `.agents/skills/validate-changes/SKILL.md` when explicitly asked to "validate" code. Do not confuse "verify" (tests and docs) with "validate" (architecture review).
-
 ## Code guidelines
 - **Self-documenting code.** Write code that reads clearly on its own. Use descriptive names and flat control flow (early returns over multi-layer nesting). Keep comments minimal and concise. Reserve them for *why*, non-obvious constraints, and maintained module invariants. A short local heading is fine when a file needs to explain an ownership, lifecycle, or persistence rule. Do not add commentary that merely narrates the code.
 - **Performance first.** Avoid dynamic evaluations and allocations in hot paths. Cache aggressively.
@@ -26,12 +16,22 @@ Coding standards, architecture rules, and agent workflow for QuiviT.
 - **Work in logical slices.** Prioritize small, precise code changes rather than big blocks to prevent tooling and scope failures, especially during large refactors. Be surgical!
 - **YAGNI.** Do not add abstractions, features, or complexity without a clear need.
 
+## Agent behavior
+- Read every rule and referenced skill before starting work. Confirm adherence to the user.
+- Keep responses concise and focused on the task.
+- Follow existing code style and formatting for each directory and its associated files.
+- Avoid using browser automation/browser subagent, use mocha when possible, or use e2e for any complex frontend problems that requires debugging.
+- Run e2e through `npm run e2e -- --spec <file>`. Re-run via `--agent` to de-elevate, which includes process cleanup and log capture, only if it reports an elevated shell.
+- For writing work, read `.agents/skills/unslop/SKILL.md` and follow it even if the harness does not auto-load always-active skills. This applies to docs, prompts, comments, and user-facing copy.
+- Verify using `.agents/skills/verify-implementation/SKILL.md` when finishing a slice or when asked to "verify".
+- Validate using `.agents/skills/validate-changes/SKILL.md` when explicitly asked to "validate" code. Do not confuse "verify" (tests and docs) with "validate" (architecture review).
+
 ### Guardrails
 - **No automated git commits.** Never execute git commit commands or automate commits unless explicitly instructed. The user handles all commits manually or through the commit pipeline.
 - **Blast radius.** When modifying core cross-cutting surfaces (IPC, configs, cross-window state, protocol URLs, or archives), stop and prove you haven't broken downstream consumers. Do not rely on speculation or writeups. Use the `.agents/skills/blast-radius/SKILL.md` workflow to execute actual checks and confirm safety.
 - **Targeted testing via blast radius.** Do not run the full `cargo test` suite on minor or localized changes. Full suite runs incur high linker and archive extraction overhead (30+ seconds). Derive targeted test commands directly from the diff's blast radius (e.g., `npm test` for pure frontend math/state, `cargo test format_tests` or `cargo test <filter>` for backend). Use `cargo check --tests` during iteration to validate types and test signatures in 2 to 4 seconds. Reserve full suite runs for final slice verification.
 - **Validate before presenting.** Every implementation plan, report, analysis, and roadmap must be compared against `.agents/skills/validate-changes/SKILL.md` rules before presenting it to the user. This applies to agent messages, artifacts, and any document written under `.agents/`. The message, artifact, or document must state at the top that this validation comparison was performed.
-- **Agent-facing plans.** For any implementation plan written under `.agents/`, treat it as a continuation doc that a cold agent on a different harness can pick up from a dirty tree without a handoff. Use ordered checklists with file:line references, accept criteria per item, and `[x]`/`[ ]` state. Lock definitions and deviation rules at the top so the plan does not drift across sessions.
+- **Agent-facing plans.** For any implementation plan written under `.agents/`, treat it as a continuation doc that a cold agent on a different harness can pick up from a dirty tree without a handoff. Use ordered checklists with file:line references, accept criteria per item, and `[x]`/`[ ]`/`[~]` state. Lock definitions and deviation rules at the top so the plan does not drift across sessions.
 - **No test harness creation during implementation.** Do not create new test suites or test harnesses while implementation work is in progress. Manual runtime tests carry higher value because test harnesses written against incomplete code are fragile and waste implementation time. Edit existing tests only when a code change breaks them (blast radius). However, using cargo, e2e, or mocha to debug the implementation work that is currently being done is allowed.
 - **No documentation editing during implementation.** Never edit architecture tracking or user-facing feature docs while code changes are in progress. Updating files governed by `.agents/skills/update-architecture-state/SKILL.md` or `.agents/skills/update-readme-features/SKILL.md` mid-implementation leads to speculative feature dumps and stale docs. Run those skills only when explicitly asked.
 - **No premature finalization.** Never declare work done, implemented, or complete until the user explicitly says so. Do not write completion summaries or treat a slice as finished on your own.
