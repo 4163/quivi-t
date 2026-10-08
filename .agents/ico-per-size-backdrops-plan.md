@@ -91,13 +91,14 @@ Validation note. HTML first rendering plus CSS source of truth. No `createElemen
 
 ## Slice 4. Legacy row render plus fit
 
-**Status:** `[x]` Done. Runtime items 1, 2, and 4 pass in legacy.
+**Status:** `[x]` Done. Runtime items 1, 2, and 4 pass in legacy. Fit repeat fix user-confirmed 2026-10-08.
 
 Goal is same look as today with separate boxes and backdrops.
 
 - [x] In `src/js/viewer/viewerRender.js:17-40,735-831`, build one `.ico-container` with N `.ico-size` cells for ICO state. Fit plus zoom transform the row as one unit using total dims. Each cell keeps its own width and height from IPC.
 - [x] In `src/js/viewer/viewerRender.js:757-764`, fix the dead `.ico` suffix check for array src so decode gating follows the same path as other raster images.
-- [x] Accept when a 4 size ICO shows left to right largest first, vertically centered, each cell with its own backdrop tint and mirrored angle, fit modes frame the whole row, and tiny sizes stay tiny.
+- [x] In `src/js/viewer/viewerRender.js:522-529,707-720`, gate ICO same-row refit on `fitModeGen` and skip `Core.setImageDimensions` when total dims match. Fit presses apply once and later notifies hold pan and zoom.
+- [x] Accept when a 4 size ICO shows left to right largest first, vertically centered, each cell with its own backdrop tint and mirrored angle, fit modes frame the whole row, and tiny sizes stay tiny. Accept when a fit press on an ICO row applies once with no delayed re-apply.
 
 Validation note. The file that paints the surface owns it. Bootstrap and state machine stay thin.
 
@@ -138,11 +139,11 @@ Validation note. Same fallback rule as slice 5. Record any fallback here.
 
 ## Slice 8. Verification and handoff
 
-**Status:** `[~]` Partial. Static checks green, runtime items 1-4 and 6 pass, item 5 left open.
+**Status:** `[~]` Partial. Static checks green, runtime items 1-4 and 6 pass plus ICO fit repeat fix, item 5 left open.
 
 Goal is proof before signoff, no docs edits in this slice.
 
-- [x] Run `node --check` on each touched JS file, `cargo check --tests --manifest-path src-tauri/Cargo.toml`, `npm test`, plus `npm run mocha`.
+- [x] Run `node --check` on each touched JS file, `cargo check --tests --manifest-path src-tauri/Cargo.toml`, `npm test`, plus `npm run mocha`. `npm run mocha` passes with 305 tests after the fit repeat fix.
 - [ ] Run one viewer e2e spec through `npm run e2e -- --spec <file>`, de-elevated rerun only if it reports an elevated shell.
 - [x] Confirm `e2e/replay-diagnostics/probes/viewerPipelineProbe.js` selectors still match and `e2e/scenarios/` contracts still dispatch.
 - [x] Manual pass: disk ICO, archive ICO, transparent on and off, manhwa scroll plus resize. Each filter in legacy plus restart persistence stay open with item 5.

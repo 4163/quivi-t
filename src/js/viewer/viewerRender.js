@@ -522,7 +522,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     const total = FsUtils.icoSourcesTotal(sizes);
     const tw = total ? total.width : sizes[0].width;
     const th = total ? total.height : sizes[0].height;
-    Core.setImageDimensions(tw, th);
+    const liveDims = Core.getState();
+    if (liveDims.naturalWidth !== tw || liveDims.naturalHeight !== th) {
+      Core.setImageDimensions(tw, th);
+    }
     viewportState.applyFitMode(state.fitMode, tw, th);
     imgWrapper.style.setProperty('--grill-angle', viewportState.getGrillAngle());
     Statusbar.setImage({ filename: state.filename || '', dims: `${tw} × ${th}`, zoom: viewportState.getScale() });
@@ -704,15 +707,19 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       const sameRow = _activeTargetSrc === state.src && document.getElementById('viewer-ico-row')?.firstChild;
       _activeTargetSrc = state.src;
       _forceReloadTarget = false;
+      const fitChanged = _lastFitModeGen !== state.fitModeGen;
       if (sameRow) {
-        const total = FsUtils.icoSourcesTotal(state.src);
-        const tw = total ? total.width : state.src[0].width;
-        const th = total ? total.height : state.src[0].height;
-        viewportState.applyFitMode(state.fitMode, tw, th);
+        if (fitChanged) {
+          const total = FsUtils.icoSourcesTotal(state.src);
+          const tw = total ? total.width : state.src[0].width;
+          const th = total ? total.height : state.src[0].height;
+          viewportState.applyFitMode(state.fitMode, tw, th);
+          _lastFitModeGen = state.fitModeGen;
+        }
       } else {
+        _lastFitModeGen = state.fitModeGen;
         _renderIcoRow(state.src, state);
       }
-      _lastFitModeGen = state.fitModeGen;
       return;
     }
     _clearIcoRow();
