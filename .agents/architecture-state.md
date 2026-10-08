@@ -70,7 +70,8 @@ If the tree looks the same and ownership did not change, leave this file alone.
 **Windows:**
 - Three HTML entry points: `index.html`, `options.html`, `metadata.html`.
 - Main window is built in Rust. Size constants live in `windows.rs`; JS caps in `shared/windowFit.js` must stay in sync.
-- Options/metadata open hidden, measure, `fit_*_window`, then show.
+- Options/metadata open hidden, measure, `fit_*_window`, then show. `open_options` and `open_metadata_window` show an existing-but-hidden window instead of ignoring it.
+- `windows.rs` owns the `main-tray` icon and the window visibility commands (`show_window`, `hide_to_tray`, `show_from_tray`). Hiding covers main plus any open secondary; restore re-shows them, then main.
 
 **Rust:**
 - `lib.rs` & `main.rs`: bootstrap, config watcher, and main-window build.
@@ -83,7 +84,7 @@ If the tree looks the same and ownership did not change, leave this file alone.
 - `commands/archives.rs`: `list_archive` accepts `password: Option<String>`; archive lifecycle commands are `drop_all_archives_cache` and `resolve_archive_temp_origin`.
 - `archives/` & `formats.rs`: archive readers + `ArchiveCache` (two-archive sliding buffer), format/animation registry, ISOBMFF box parser for MP4 audio detection and dimensions, and uncompressed header dimension reading.
 - `protocol.rs`: `quivit://` handler. Routes: `/archive/` (entry data, `no-store`, concurrent read path for unencrypted ZIP entries), `/thumb/` (96×96 shell thumbnails), `/icon/` (shell icons, `?size=large` for 32×32). `asset://` for direct file access.
-- `platform/`: `icons.rs` (shell icons), `thumbnails.rs` (96×96 `IShellItemImageFactory` with black matte border detection), `temp_archive.rs` (external archiver temp origin resolution), `attributes.rs` (dotfile visibility), `dialog.rs` (native folder picker with Library virtual folder resolution). `windows.rs`: window lifecycle and size constants.
+- `platform/`: `icons.rs` (shell icons), `thumbnails.rs` (96×96 `IShellItemImageFactory` with black matte border detection), `temp_archive.rs` (external archiver temp origin resolution), `attributes.rs` (dotfile visibility), `dialog.rs` (native folder picker with Library virtual folder resolution). `windows.rs`: window lifecycle, tray icon with hide/show commands, and size constants.
 - `ico.rs`: ICO spritesheets.
 - `models.rs`: IPC structs. `FileEntry.size: u64`, `ArchiveEncryptionStatus`, `ArchiveReadResult.encryption`, `TempArchiveOrigin`, `LibraryNode`, `LibraryProviderEntry`, `DirectoryMetadataResult`, and `ActiveConfigInfo`.
 - `utils.rs`: Base64 and URL encoding helpers.

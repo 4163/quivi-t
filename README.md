@@ -91,6 +91,7 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Toggle menu bar | `2` |
 | Toggle status bar | `3` |
 | Fullscreen | `4` / `Alt+Enter` / `F11` |
+| Hide to tray | `Ctrl+Shift+H` |
 | Exit fullscreen (Hold) | `Escape` |
 | Toggle thumbnail / list view | `T` |
 | **File operations** | |
@@ -176,6 +177,7 @@ What QuiviT ships with. The id in backticks is the value stored in config.
 - **Library deletion.** Deleting a Library folder or image from the file panel sends it to the Recycle Bin rather than permanently deleting them.
 - **Missing path.** A  missing path, folder or archive, or deleted directories while the app is open, falls the user back to the nearest existing ancestor, or the Drives view at the root.
 - **Single instance.** `Enabled`. Paths passed via command line, Explorer, or archives open in the active window session. To launch separate windows instead, toggle **Options → General → Allow only one QuiviT instance** and restart the app.
+- **Hide to tray.** `Ctrl+Shift+H` or **View → Hide to tray** hides every open window and leaves a tray icon. Tray Show or left-click restores all hidden windows, Quit exits.
 - **Default sort.** `name`, ascending. Per-directory sort is kept for 100 folders, oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort`.
 - **Manhwa view.** `Disabled`. **Folder → Select / open next/previous** navigation steps via the visible viewport pages, while `PageUp` and `PageDown` double that. Keyboard navigation is strictly locked to media items, so folders and archives are not selectable via keyboard. Transform rotation is disabled to preserve vertical column reading order and prevent layout distortion.
 - **Video audio.** `Muted` at 50% volume. Volume and unmute states are session only. In manhwa view, each video has an individual audio pill; only one slot can be unmuted at a time, and scrolling a video off-screen mutes it.
