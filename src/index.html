@@ -358,6 +358,7 @@
           draggable="false">
         <div id="img-grill"></div>
         <div id="img-grill-border"></div>
+        <div id="viewer-ico-row"></div>
         <img class="viewer-img" decoding="async" alt="" draggable="false">
         <img class="viewer-img" decoding="async" alt="" draggable="false">
         <video id="viewer-video" class="viewer-video" loop muted playsinline preload="auto"
@@ -373,6 +374,12 @@
       <div id="viewer-bridge-layer"></div>
 
       <img id="viewer-svg-pump" class="svg-pump-live hidden">
+      <template id="ico-size-template">
+        <div class="ico-size">
+          <div class="ico-size-backdrop"></div>
+          <img decoding="async" alt="" draggable="false">
+        </div>
+      </template>
       <canvas id="viewer-filter-canvas"></canvas>
       <audio id="viewer-audio" loop preload="auto"></audio>
 
