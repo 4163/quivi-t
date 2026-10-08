@@ -70,7 +70,7 @@ function isSvgSource(src, item = null) {
     const name = item.entry.name || item.entry.path || '';
     if (/\.svg($|[?#])/i.test(name)) return true;
   }
-  if (!src) return false;
+  if (!src || typeof src !== 'string') return false;
   try {
     const url = new URL(src);
     return url.pathname.toLowerCase().endsWith('.svg');
@@ -126,6 +126,7 @@ async function loadSvgCanvas(src) {
 
 export function createViewerPipelines(viewportState) {
   let _activeSource = null;
+  let _activeIcoRow = false;
   let pipeline = null;
   let _singleTextureCache = null;
   let _lastScalingMode = Core.getState().scalingMode;
@@ -165,6 +166,14 @@ export function createViewerPipelines(viewportState) {
       _triggerRender();
       _syncLivePump();
     });
+  }
+
+  function _isIcoNode(el) {
+    try {
+      return !!(el && el.closest && el.closest('.ico-container'));
+    } catch {
+      return false;
+    }
   }
 
   function isVideoSource(el) {
@@ -237,14 +246,19 @@ export function createViewerPipelines(viewportState) {
     const isVideo = isVideoSource(_activeSource);
     const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : !!live?.isAnimated;
     const isSvg = _isActiveSvg(live);
+    const isIcoRow = _activeIcoRow || _isIcoNode(_activeSource);
     const isMoving = isAnimated || isVideo;
     const scaling = getEffectiveScaling(live?.scalingMode, isMoving, isSvg);
 
     const activeFilter = incomingFilter !== undefined ? incomingFilter : _resolveActiveFilter(live);
     
     const useWebGlForLanczos = scaling === 'lanczos' && isMoving && !isSvg && activeFilter === null;
-    const usesWebgl = activeFilter !== null || useWebGlForLanczos;
-    const usesLanczos = scaling === 'lanczos' && !usesWebgl;
+    let usesWebgl = activeFilter !== null || useWebGlForLanczos;
+    let usesLanczos = scaling === 'lanczos' && !usesWebgl;
+    if (isIcoRow) {
+      usesWebgl = false;
+      usesLanczos = false;
+    }
     
     const viewportNode = document.getElementById('viewport');
     if (viewportNode) {
@@ -337,6 +351,7 @@ export function createViewerPipelines(viewportState) {
   }
 
   async function _applyTransform() {
+    if (_activeIcoRow || _isIcoNode(_activeSource)) return;
     if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated || isVideoSource(_activeSource) || _isActiveSvg(Core.getState())) return;
     if (!_activeSource || !_activeSource.complete || _activeSource.naturalWidth <= 0 || _activeSource.naturalHeight <= 0) return;
     
@@ -388,6 +403,7 @@ export function createViewerPipelines(viewportState) {
   }
 
   function _triggerRender() {
+    if (_activeIcoRow || _isIcoNode(_activeSource)) return;
     const live = Core.getState();
     const isVideo = isVideoSource(_activeSource);
     const liveAnimated = !!live?.isAnimated || isVideo;
@@ -1695,6 +1711,10 @@ export function createViewerPipelines(viewportState) {
     for (const draw of drawList) {
       const node = snap.nodes.get(draw.imgIdx);
       if (!node) continue;
+      if (_isIcoNode(node)) continue;
+      const item = snap.items ? snap.items[draw.imgIdx] : null;
+      const entryName = item?.entry?.name || item?.entry?.path || '';
+      if (entryName && entryName.toLowerCase().endsWith('.ico')) continue;
       const isLive = snap.liveSlots?.has(draw.imgIdx);
       if (!isLive) {
         const src = node.currentSrc || node.src;
@@ -2088,6 +2108,17 @@ export function createViewerPipelines(viewportState) {
   return {
     setSource(img) {
       if (Core.getState()?.manhwaEnabled) return;
+      _activeIcoRow = _isIcoNode(img);
+      if (_activeIcoRow) {
+        _activeSource = img;
+        if (lanczosCanvas) lanczosCanvas.removeAttribute('data-render-ready');
+        _cancelRender();
+        _teardownWebglCanvas();
+        _stopLivePump();
+        const vp = document.getElementById('viewport');
+        if (vp) vp.removeAttribute('data-filter');
+        return;
+      }
       if (img && _activeSource === img) {
         _cancelRender();
         _applyScaling();
@@ -2123,6 +2154,7 @@ export function createViewerPipelines(viewportState) {
     },
     clear() {
       _activeSource = null;
+      _activeIcoRow = false;
       _cancelRender();
       _stopLivePump();
       // In manhwa the renderer parks its single source on every notify, which
