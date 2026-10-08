@@ -2298,6 +2298,7 @@ body.is-importing-url .header-cell:hover {
 
 #viewport[data-filter] #viewer-img-wrapper .viewer-img,
 #viewport[data-filter] #viewer-img-wrapper .viewer-video,
+#viewport[data-filter] #viewer-img-wrapper #viewer-ico-row .ico-size > img,
 #viewport[data-filter] #viewer-bridge-layer .viewer-img,
 #viewport[data-filter] #viewer-bridge-layer .viewer-video {
   opacity: 0 !important;
@@ -2434,6 +2435,11 @@ body.is-importing-url .header-cell:hover {
   align-items: center;
   justify-content: center;
   pointer-events: none;
+}
+
+#viewer-img-wrapper[data-ico="true"] {
+  width: var(--ico-total-w);
+  height: var(--ico-total-h);
 }
 
 #viewer-img-wrapper[data-ico="true"] #viewer-ico-row {

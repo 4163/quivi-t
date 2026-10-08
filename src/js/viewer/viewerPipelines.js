@@ -127,6 +127,12 @@ async function loadSvgCanvas(src) {
 export function createViewerPipelines(viewportState) {
   let _activeSource = null;
   let _activeIcoRow = false;
+  let _icoCompositeKey = null;
+  let _icoCompositeCanvas = null;
+  let _icoCompositeW = 0;
+  let _icoCompositeH = 0;
+  let _icoCompositeUrl = null;
+  let _icoCompositePromise = null;
   let pipeline = null;
   let _singleTextureCache = null;
   let _lastScalingMode = Core.getState().scalingMode;
@@ -174,6 +180,88 @@ export function createViewerPipelines(viewportState) {
     } catch {
       return false;
     }
+  }
+
+  function _icoKeyForLive(live) {
+    const entry = live?.list?.[live?.index];
+    const p = entry?.path || entry?.name || live?.filename || '';
+    return `${live?.mode || ''}|${live?.archivePath || ''}|${p}`;
+  }
+
+  function _icoTotal(sizes) {
+    let w = 0;
+    let h = 0;
+    for (const s of sizes) {
+      w += s?.width || 0;
+      if ((s?.height || 0) > h) h = s.height;
+    }
+    return { width: w, height: h };
+  }
+
+  function _loadIcoImage(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const im = new Image();
+      im.decoding = 'async';
+      im.crossOrigin = 'anonymous';
+      im.onload = () => resolve(im);
+      im.onerror = reject;
+      im.src = dataUrl;
+      if (im.decode) im.decode().then(() => resolve(im)).catch(() => {});
+    });
+  }
+
+  async function _ensureIcoComposite() {
+    const live = Core.getState();
+    const sizes = Array.isArray(live?.src) ? live.src : null;
+    if (!sizes || sizes.length === 0) return null;
+    const key = _icoKeyForLive(live);
+    const total = _icoTotal(sizes);
+    if (!total.width || !total.height) return null;
+    if (_icoCompositeKey === key && _icoCompositeCanvas) {
+      return { canvas: _icoCompositeCanvas, dataUrl: _icoCompositeUrl, width: _icoCompositeW, height: _icoCompositeH, key };
+    }
+    if (_icoCompositePromise && _icoCompositePromise.key === key) return _icoCompositePromise.promise;
+    const promise = (async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = total.width;
+      canvas.height = total.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.clearRect(0, 0, total.width, total.height);
+      let x = 0;
+      for (const s of sizes) {
+        if (!s?.data_url) continue;
+        const w = s.width || 0;
+        const h = s.height || 0;
+        if (!w || !h) continue;
+        const im = await _loadIcoImage(s.data_url);
+        const y = Math.round((total.height - h) / 2);
+        ctx.drawImage(im, x, y, w, h);
+        x += w;
+      }
+      const dataUrl = canvas.toDataURL('image/png');
+      _icoCompositeKey = key;
+      _icoCompositeCanvas = canvas;
+      _icoCompositeW = total.width;
+      _icoCompositeH = total.height;
+      _icoCompositeUrl = dataUrl;
+      return { canvas, dataUrl, width: total.width, height: total.height, key };
+    })();
+    _icoCompositePromise = { key, promise };
+    try {
+      return await promise;
+    } finally {
+      if (_icoCompositePromise && _icoCompositePromise.promise === promise) _icoCompositePromise = null;
+    }
+  }
+
+  function _clearIcoComposite() {
+    _icoCompositeKey = null;
+    _icoCompositeCanvas = null;
+    _icoCompositeW = 0;
+    _icoCompositeH = 0;
+    _icoCompositeUrl = null;
+    _icoCompositePromise = null;
   }
 
   function isVideoSource(el) {
@@ -246,19 +334,14 @@ export function createViewerPipelines(viewportState) {
     const isVideo = isVideoSource(_activeSource);
     const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : !!live?.isAnimated;
     const isSvg = _isActiveSvg(live);
-    const isIcoRow = _activeIcoRow || _isIcoNode(_activeSource);
     const isMoving = isAnimated || isVideo;
     const scaling = getEffectiveScaling(live?.scalingMode, isMoving, isSvg);
 
     const activeFilter = incomingFilter !== undefined ? incomingFilter : _resolveActiveFilter(live);
     
     const useWebGlForLanczos = scaling === 'lanczos' && isMoving && !isSvg && activeFilter === null;
-    let usesWebgl = activeFilter !== null || useWebGlForLanczos;
-    let usesLanczos = scaling === 'lanczos' && !usesWebgl;
-    if (isIcoRow) {
-      usesWebgl = false;
-      usesLanczos = false;
-    }
+    const usesWebgl = activeFilter !== null || useWebGlForLanczos;
+    const usesLanczos = scaling === 'lanczos' && !usesWebgl;
     
     const viewportNode = document.getElementById('viewport');
     if (viewportNode) {
@@ -351,7 +434,45 @@ export function createViewerPipelines(viewportState) {
   }
 
   async function _applyTransform() {
-    if (_activeIcoRow || _isIcoNode(_activeSource)) return;
+    const isIco = _activeIcoRow || _isIcoNode(_activeSource);
+    if (isIco) {
+      if (!pipeline || pipeline.type !== 'webgl') return;
+      const live = Core.getState();
+      const sizes = Array.isArray(live?.src) ? live.src : null;
+      if (!sizes || sizes.length === 0) return;
+      const total = _icoTotal(sizes);
+      if (!total.width || !total.height) return;
+      const geom = viewportState.getGeometry();
+      const gen = _renderGeneration;
+      const composite = await _ensureIcoComposite();
+      if (gen !== _renderGeneration || !pipeline || pipeline.type !== 'webgl') return;
+      if (!composite || !composite.canvas) return;
+      if (!_singleTextureCache && pipeline.gl) {
+        _singleTextureCache = createTextureCache(pipeline.gl, {
+          maxEntries: VIEWER_IMAGE_POOL_CAPACITY,
+          maxBytes: 128 * 1024 * 1024,
+        });
+      }
+      const texKey = `ico:${composite.key}`;
+      let texEntry = _singleTextureCache ? _singleTextureCache.get(texKey) : null;
+      if (!texEntry && _singleTextureCache && pipeline.gl) {
+        const tex = uploadTexture(pipeline.gl, composite.canvas);
+        if (!tex) return;
+        texEntry = _singleTextureCache.put(texKey, tex, composite.width, composite.height);
+      }
+      if (gen !== _renderGeneration) return;
+      if (!texEntry || !texEntry.texture) return;
+      const ok = pipeline.renderFromTexture(texEntry.texture, geom, composite.width, composite.height);
+      if (gen !== _renderGeneration) return;
+      if (ok && filterCanvas) {
+        filterCanvas.setAttribute('data-render-ready', 'true');
+        const vp = document.getElementById('viewport');
+        if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) {
+          vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
+        }
+      }
+      return;
+    }
     if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated || isVideoSource(_activeSource) || _isActiveSvg(Core.getState())) return;
     if (!_activeSource || !_activeSource.complete || _activeSource.naturalWidth <= 0 || _activeSource.naturalHeight <= 0) return;
     
@@ -403,7 +524,7 @@ export function createViewerPipelines(viewportState) {
   }
 
   function _triggerRender() {
-    if (_activeIcoRow || _isIcoNode(_activeSource)) return;
+    const isIco = _activeIcoRow || _isIcoNode(_activeSource);
     const live = Core.getState();
     const isVideo = isVideoSource(_activeSource);
     const liveAnimated = !!live?.isAnimated || isVideo;
@@ -431,7 +552,14 @@ export function createViewerPipelines(viewportState) {
         
         const geom = viewportState.getGeometry();
         if (lanczosCanvas) {
-          const res = await pipeline.render(_activeSource, geom);
+          let sourceForRender = _activeSource;
+          if (isIco) {
+            const composite = await _ensureIcoComposite();
+            if (gen !== _renderGeneration) return;
+            if (!composite || !composite.dataUrl) return;
+            sourceForRender = { src: composite.dataUrl, naturalWidth: composite.width, naturalHeight: composite.height };
+          }
+          const res = await pipeline.render(sourceForRender, geom);
           if (gen !== _renderGeneration) return;
           if (res && res.canvas) {
             lanczosCanvas.width = res.width;
@@ -2113,10 +2241,10 @@ export function createViewerPipelines(viewportState) {
         _activeSource = img;
         if (lanczosCanvas) lanczosCanvas.removeAttribute('data-render-ready');
         _cancelRender();
-        _teardownWebglCanvas();
+        _applyScaling();
+        _scheduleTransform();
+        _triggerRender();
         _stopLivePump();
-        const vp = document.getElementById('viewport');
-        if (vp) vp.removeAttribute('data-filter');
         return;
       }
       if (img && _activeSource === img) {
@@ -2155,6 +2283,7 @@ export function createViewerPipelines(viewportState) {
     clear() {
       _activeSource = null;
       _activeIcoRow = false;
+      _clearIcoComposite();
       _cancelRender();
       _stopLivePump();
       // In manhwa the renderer parks its single source on every notify, which

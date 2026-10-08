@@ -6,6 +6,7 @@ Validation comparison performed against .agents/AGENTS.md and .agents/skills/val
 
 **Scope lock:** ICO files only. No change to strip count, anchors, column width tracking, width scan skip, neighbor preload exclusion, or transparent pref. No architecture-state or README edits during implementation. Backend keeps Rust decode, no JS ICO parser. Deviations go here with reason and file.
 **Deviation 2026-10-08:** slices 5 and 7 fall back to DOM only for ICO rows. N-texture multi-quad in both pipelines needs a compositor rewrite, out of slice scope. `src/js/viewer/viewerPipelines.js` skips ICO nodes in single and column paths, teardown clears stale canvas output, DOM row plus backdrops stay visible. Filter parity for ICO rows is follow-up work.
+**Deviation 2026-10-08:** slice 5 landed through one composite canvas per ICO file instead of N-texture multi-quad. `src/js/viewer/viewerPipelines.js:191-265,332-580,2237-2290` builds total by `sum(widths)` by `max(height)`, draws cells left to right with vertical centering, caches one texture per file key, and reuses the existing single image WebGL plus Lanczos CPU paths. Slice 7 column path stays DOM-only fallback.
 **Deviation 2026-10-08:** ICO cells break HTML-first rendering on purpose. `#ico-size-template` is removed from `src/index.html`. Cells are per-file pipeline output, not stable chrome, so `src/js/viewer/icoCells.js` builds them dynamically. Both viewers import the one factory instead of cloning a static template.
 
 **Definitions.** IcoSize is `{ width, height, data_url }`, sorted largest to smallest, same order as the current strip in `src-tauri/src/ico.rs:71-74`. Total row size is `sum(widths)` by `max(height)`. Row height equals tallest size, small sizes center vertically, tiny sizes stay tiny. Legacy view means the single image viewport owned by `src/js/viewer/viewerRender.js`. Strip means the vertical list owned by `src/js/viewer/manhwaStrip.js`, element `#manhwa-strip` in `src/index.html:336-340`. Shared pattern in both modes:
@@ -28,12 +29,12 @@ Ownership stays as listed in `.agents/architecture-state.md`. New work extends t
 - `src-tauri/src/lib.rs`. Owns command registration at lines 112-113, names unchanged.
 - `src/js/fsUtils.js`. Owns `isIco` at line 157, `buildArchiveEntrySrc` at line 264, `buildFileSrc` at line 275, `neighborEntries` at line 352. New ICO source helpers live here.
 - `src/js/core.js`. Owns state `src` at lines 223 and 227, consumes the new helpers.
-- `src/js/viewer/viewerRender.js`. Owns the legacy image pool plus fit math, lines 17-40, 586, 757-764, 815-831.
+- `src/js/viewer/viewerRender.js`. Owns the legacy image pool plus fit math, lines 17-40, 586, 757-764, 815-831. Owns ICO row mount at lines 466-517 plus `--ico-total-w` and `--ico-total-h` sizing props at lines 510-511, cleared at lines 471-472.
 - `src/js/viewer/icoCells.js`. Owns `.ico-container` and `.ico-size` DOM factory for legacy and strip rows. Both viewers import it, neither clones static markup.
-- `src/js/viewer/viewerPipelines.js`. Owns single-image WebGL at lines 339-442 and column composite at lines 1680-1969. Owns per-cell texture and quad expansion.
+- `src/js/viewer/viewerPipelines.js`. Owns single-image WebGL plus the ICO composite cache at lines 191-265. ICO WebGL transform at lines 436-515 and ICO Lanczos branch at lines 526-580. `setSource` ICO path at lines 2237-2249 and `clear` at lines 2283-2290. Column ICO skip stays as DOM-only fallback.
 - `src/js/viewer/manhwaStrip.js`. Owns `#manhwa-strip`, slots, anchors, layout. Owns `_icoCache` at line 334, `_resolveIco` at line 338, `_createSlotNode` at line 630, `_acquireSlotNode` at line 639, `_claimSlot` at line 1429, prefetch at line 1259, mount at line 1539, decode at line 790.
 - `src/index.html`. Owns placeholders at lines 336-340 and 356-368. `#viewer-ico-row` stays as the mount point. No `#ico-size-template`, cells build dynamically in `icoCells.js`.
-- `src/css/main.css`. Owns slot rules at lines 1674-1767 and grill rules at lines 2387-2426. New `.ico-container` rules go here.
+- `src/css/main.css`. Owns slot rules at lines 1674-1767 and grill rules at lines 2387-2426. New `.ico-container` rules go here. Owns ICO wrapper sizing at lines 2441-2442 through `--ico-total-w` and `--ico-total-h`, plus `.ico-size > img` in the filtered hide rule at line 2301 so backdrops stay visible.
 - `src/css/global.css`. Owns grill tokens at lines 26-28 and 78-85, read only.
 - `src/js/main/main.js`. Owns `grill-active` toggle at lines 210-212 and 231-240, read only.
 - `src-tauri/src/commands/animation.rs`. Owns `skip_for_width_scan` at lines 63-67, read only, stays skipped.
@@ -44,7 +45,7 @@ The risk centers on the IPC shape replacement plus the two WebGL expansions.
 
 - IPC shape. Old callers expect a single data URL string. After replacement every `get_ico_frames` and `get_archive_ico_frames` caller must read an array. A missed caller shows a broken image or a type error at the invoke boundary. Grep both command names plus `isIco` before each slice lands.
 - Fit math. Legacy `_syncActiveImage` and `applyFitMode` in `viewerRender.js:363-390,815-831` use whole spritesheet `naturalWidth` and `naturalHeight` today. After the change fit uses total dims while each cell keeps its own dims. A wrong total breaks zoom to fit for ICO only.
-- Shared filter state. Full WebGL per cell was requested, so `active_filter` and `scaling_mode` keep painting ICO cells. A wrong texture key leaks one cell into another. Keep one cache entry per cell src, never shared.
+- Shared filter state. ICO rows share one composite texture per file, keyed as `ico:<mode>|<archivePath>|<path>` in `_singleTextureCache`. A wrong key leaks one file into another. Single texture per file means cells cannot bleed into each other. Wrapper sizing through `--ico-total-w` and `--ico-total-h` keeps the Lanczos canvas aligned with the DOM row.
 - Column width. ICO totals equal old spritesheet dims, so `_trackedMaxWidth` exclusion at `manhwaStrip.js:62,91-105,821-836` keeps working. If inner cells feed width tracking, the column widens on small icons. Prove by opening a mixed folder and scrolling past the ICO.
 - Probes and scenarios. `e2e/replay-diagnostics/probes/viewerPipelineProbe.js` matches viewer classes and ids. New `.ico-container` and `.ico-size` ids must not break its selectors. Saved scenarios dispatch action ids, unchanged here. Prove with `npm test` plus one viewer e2e spec.
 
@@ -107,14 +108,18 @@ Validation note. The file that paints the surface owns it. Bootstrap and state m
 
 ## Slice 5. Legacy WebGL per cell
 
-**Status:** `[ ]` Left open per user. Runtime filter check failed. Do not analyze yet.
+**Status:** `[x]` Done. User-confirmed 2026-10-08 for filters plus Lanczos alignment fix.
 
-Goal is filter parity per cell.
+Goal is filter parity for the whole row through one composite.
 
-- [ ] In `src/js/viewer/viewerPipelines.js:235-246,339-442`, upload one texture per cell through `_singleTextureCache` and draw one quad per cell with x offset matching DOM order. Keep SVG bypass at lines 68-80 and 183-192 untouched.
-- [ ] Accept when bilinear, lanczos, and each active filter paint every cell, toggling filters does not leak one cell into another, and one viewer e2e spec passes.
+- [x] In `src/js/viewer/viewerPipelines.js:191-265`, build one composite canvas per ICO file in DOM order with vertical centering, cached by file key with promise dedup. Keep SVG bypass untouched.
+- [x] In `src/js/viewer/viewerPipelines.js:332-515`, run the composite through the existing single image WebGL path with one `ico:<key>` texture entry. Set `data-render-ready` plus `data-filter` on paint. Bilinear with no filter keeps the DOM row.
+- [x] In `src/js/viewer/viewerPipelines.js:526-580`, run the composite data URL through the existing Lanczos CPU pipeline with total dims. Keep the 80ms debounce plus generation guards.
+- [x] In `src/js/viewer/viewerPipelines.js:2237-2290`, route ICO `setSource` through `_applyScaling`, `_scheduleTransform`, and `_triggerRender`. Clear the composite in `clear`.
+- [x] In `src/js/viewer/viewerRender.js:466-517`, size the wrapper from total dims with `--ico-total-w` and `--ico-total-h`. In `src/css/main.css:2441-2442`, apply that size when `data-ico` is set. In `src/css/main.css:2301`, hide only `.ico-size > img` when the viewport has an active filter so per cell backdrops stay up. This fixed the Lanczos double render where the canvas sat offset at bottom left of a zero size wrapper.
+- [x] Accept when bilinear, lanczos, and each active filter paint every cell, toggling filters does not leak one file into another, and the Lanczos layer overlaps the DOM row with no second copy. User confirmed filters plus Lanczos paint in place.
 
-Validation note. Highest regression risk in the plan. If unstable, fall back to DOM only for this path per the deviation rule and record it at the top of this file.
+Validation note. The file that paints the surface owns it. No service changes, no column changes. CSS truth holds since JS writes only custom props plus `src`, `classList`, and `data-*`.
 
 ## Slice 6. Manhwa slot interior
 
@@ -142,12 +147,12 @@ Validation note. Same fallback rule as slice 5. Record any fallback here.
 
 ## Slice 8. Verification and handoff
 
-**Status:** `[~]` Partial. Static checks green, runtime items 1-4 and 6 pass plus ICO fit repeat fix, item 5 left open.
+**Status:** `[~]` Partial. Static checks green, runtime items 1-4 plus 6 pass, item 5 now passes per user 2026-10-08 for legacy filters plus Lanczos. Fit repeat fix still in. One viewer e2e spec still open.
 
 Goal is proof before signoff, no docs edits in this slice.
 
 - [x] Run `node --check` on each touched JS file, `cargo check --tests --manifest-path src-tauri/Cargo.toml`, `npm test`, plus `npm run mocha`. `npm run mocha` passes with 305 tests after the fit repeat fix.
 - [ ] Run one viewer e2e spec through `npm run e2e -- --spec <file>`, de-elevated rerun only if it reports an elevated shell.
 - [x] Confirm `e2e/replay-diagnostics/probes/viewerPipelineProbe.js` selectors still match and `e2e/scenarios/` contracts still dispatch.
-- [x] Manual pass: disk ICO, archive ICO, transparent on and off, manhwa scroll plus resize. Each filter in legacy plus restart persistence stay open with item 5.
+- [x] Manual pass: disk ICO, archive ICO, transparent on and off, manhwa scroll plus resize. Legacy filters plus Lanczos pass per user 2026-10-08. Restart persistence plus one viewer e2e spec stay open.
 - [ ] Accept when all checks pass and the runtime list is handed to the user for signoff per `.agents/skills/verify-implementation/SKILL.md`. Do not declare done without explicit user approval.

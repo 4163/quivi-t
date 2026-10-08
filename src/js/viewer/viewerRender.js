@@ -467,6 +467,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     const row = document.getElementById('viewer-ico-row');
     if (row) row.replaceChildren();
     if (imgWrapper) delete imgWrapper.dataset.ico;
+    if (imgWrapper) {
+      imgWrapper.style.removeProperty('--ico-total-w');
+      imgWrapper.style.removeProperty('--ico-total-h');
+    }
   }
 
   function _renderIcoRow(sizes, state) {
@@ -503,6 +507,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     const total = FsUtils.icoSourcesTotal(sizes);
     const tw = total ? total.width : sizes[0].width;
     const th = total ? total.height : sizes[0].height;
+    imgWrapper.style.setProperty('--ico-total-w', `${tw}px`);
+    imgWrapper.style.setProperty('--ico-total-h', `${th}px`);
     const liveDims = Core.getState();
     if (liveDims.naturalWidth !== tw || liveDims.naturalHeight !== th) {
       Core.setImageDimensions(tw, th);
