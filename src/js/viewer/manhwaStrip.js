@@ -59,7 +59,7 @@ const DEFAULT_ESTIMATED_HEIGHT = 1200;
  * Widest width observed for the current container. Fed by the backend
  * header sweep and the decode pipeline alike; backend reports always win
  * by overwrite. Reset on every container change, never reused.
- * SVG measured dims feed it; ICO spritesheet dims stay out.
+ * SVG measured dims feed it; ICO row totals stay out.
  */
 let _trackedMaxWidth = null;
 let _scanContainerKey = null;
@@ -331,7 +331,7 @@ let _mountInFlight = -1;
 /** Coalesced layout pass for decode bursts. One rebuild per frame. */
 let _layoutRaf = 0;
 
-/** Session cache for resolved ICO spritesheet data URIs. */
+/** Session cache for resolved per-size ICO arrays. */
 const ICO_CACHE_CAPACITY = 50;
 const _icoCache = new BoundedMap(ICO_CACHE_CAPACITY);
 
@@ -340,16 +340,69 @@ function _getIcoKey(entry, state) {
 }
 
 function _resolveIco(entry, state) {
-  return state.mode === 'archive'
-    ? FsUtils.buildArchiveEntrySrc(state.archivePath, entry.name)
-    : FsUtils.buildFileSrc(entry.path);
+  const raw = state.mode === 'archive'
+    ? FsUtils.getArchiveIcoSources(state.archivePath, entry.name)
+    : FsUtils.getIcoSources(entry.path);
+  return Promise.resolve(raw);
+}
+
+function _claimIcoSlot(imgIdx, item, slot, sizes) {
+  for (const old of Array.from(slot.querySelectorAll(':scope > img, :scope > video, :scope > .ico-container'))) {
+    _detachStripNode(old);
+  }
+  slot.dataset.ico = 'true';
+  const container = document.createElement('div');
+  container.className = 'ico-container';
+  container.dataset.imgIdx = String(imgIdx);
+  const template = document.getElementById('ico-size-template');
+  const grillAngle = _viewportState ? _viewportState.getGrillAngle() : '45deg';
+  const mirrored = grillAngle === '45deg' ? '-45deg' : '45deg';
+  let firstImg = null;
+  sizes.forEach((s, idx) => {
+    let cell = null;
+    if (template && template.content && template.content.firstElementChild) {
+      cell = template.content.firstElementChild.cloneNode(true);
+    } else {
+      cell = document.createElement('div');
+      cell.className = 'ico-size';
+      const bd = document.createElement('div');
+      bd.className = 'ico-size-backdrop';
+      cell.appendChild(bd);
+      cell.appendChild(document.createElement('img'));
+    }
+    cell.style.setProperty('--ico-w', `${s.width}px`);
+    cell.style.setProperty('--ico-h', `${s.height}px`);
+    if (sizes.length > 1) cell.style.setProperty('--slot-backdrop-bg', computeSlotHue(idx, sizes.length));
+    else cell.style.removeProperty('--slot-backdrop-bg');
+    cell.style.setProperty('--slot-backdrop-angle', mirrored);
+    const im = cell.querySelector('img');
+    if (im) {
+      im.decoding = 'async';
+      im.draggable = false;
+      im.crossOrigin = 'anonymous';
+      im.dataset.imgIdx = String(imgIdx);
+      im.alt = item.entry?.name || '';
+      im.addEventListener('load', () => { cell.dataset.ready = 'true'; }, { once: true });
+      im.addEventListener('error', () => { cell.dataset.ready = 'true'; }, { once: true });
+      im.src = s.data_url;
+      if (im.complete && im.naturalWidth > 0) cell.dataset.ready = 'true';
+      if (!firstImg) firstImg = im;
+    }
+    container.appendChild(cell);
+  });
+  slot.appendChild(container);
+  if (item) {
+    if (item.kind === 'image' || !item.kind) _classifyAnimatedSlot(imgIdx, item);
+  }
+  _mounted.set(imgIdx, firstImg || container);
+  _onSlotMounted?.(imgIdx, imgIdx === _anchorImgIdx);
 }
 
 function _buildSrc(entry, state) {
   const name = entry.name || entry.path || '';
   if (FsUtils.isIco(name)) {
     const key = _getIcoKey(entry, state);
-    if (_icoCache.has(key)) return _icoCache.get(key);
+    if (_icoCache.has(key)) return FsUtils.firstIcoSrc(_icoCache.get(key));
   }
   if (state.mode === 'archive') {
     const archiveSrc = FsUtils.buildArchiveSrc(state.archivePath, entry.name);
@@ -642,6 +695,9 @@ function _acquireSlotNode(item, total) {
   slot.dataset.imgIdx = String(item.imgIdx);
   slot.dataset.listIndex = String(item.listIndex);
   slot.dataset.kind = item.kind || 'image';
+  const entryName = item.entry?.name || item.entry?.path || '';
+  if (FsUtils.isIco(entryName)) slot.dataset.ico = 'true';
+  else delete slot.dataset.ico;
   _setSlotDimensions(slot, item.naturalWidth, item.naturalHeight);
   if (item.decoded) {
     slot.dataset.ready = 'true';
@@ -662,11 +718,12 @@ function _releaseSlotNode(slot) {
   slot.removeAttribute('data-img-idx');
   slot.removeAttribute('data-list-index');
   slot.removeAttribute('data-kind');
+  slot.removeAttribute('data-ico');
   delete slot.dataset.ready;
   slot.style.removeProperty('--slot-width');
   slot.style.removeProperty('--slot-height');
   slot.style.removeProperty('--slot-backdrop-bg');
-  for (const child of slot.querySelectorAll(':scope > img, :scope > video')) {
+  for (const child of slot.querySelectorAll(':scope > img, :scope > video, :scope > .ico-container')) {
     _detachStripNode(child);
   }
   if (_freeSlotPool.length < SLOT_POOL_CAP) {
@@ -819,7 +876,7 @@ function _onItemDecoded(imgIdx, nw, nh) {
   item.decoded = true;
 
   // Running container max: any observed width beats the record so the
-  // column only ever grows from real data. ICO spritesheet dims stay out;
+  // column only ever grows from real data. ICO row totals stay out;
   // measured svg dims count. Backend reports overwrite via the same rule.
   if (!isIco && nw > 0 && nw > (_trackedMaxWidth || 0)) {
     _trackedMaxWidth = nw;
@@ -1260,16 +1317,16 @@ function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, v
     if (isIco) {
       const key = _getIcoKey(item.entry, state);
       if (!_icoCache.has(key)) {
-        _resolveIco(item.entry, state).then((icoSrc) => {
-          if (icoSrc) {
-            _icoCache.set(key, icoSrc);
+        _resolveIco(item.entry, state).then((sizes) => {
+          if (sizes && sizes.length > 0) {
+            _icoCache.set(key, sizes);
             if (!_active || !_prefetching.has(i)) return;
-            pre.src = icoSrc;
+            pre.src = FsUtils.firstIcoSrc(sizes);
             if (typeof pre.decode === 'function') pre.decode().catch(() => {});
           }
         }).catch(() => {});
       } else {
-        pre.src = _icoCache.get(key);
+        pre.src = FsUtils.firstIcoSrc(_icoCache.get(key));
         if (typeof pre.decode === 'function') pre.decode().catch(() => {});
       }
     } else {
@@ -1436,10 +1493,11 @@ function _claimSlot(imgIdx, item, slot, node) {
     node.onload = _handleStripImgLoad;
     node.onerror = _handleStripImgError;
   }
-  for (const old of Array.from(slot.querySelectorAll(':scope > img, :scope > video'))) {
+  for (const old of Array.from(slot.querySelectorAll(':scope > img, :scope > video, :scope > .ico-container'))) {
     if (old === node) continue;
     _detachStripNode(old);
   }
+  delete slot.dataset.ico;
   slot.appendChild(node);
   if (item?.kind === 'video') {
     node.preload = 'auto';
@@ -1625,23 +1683,40 @@ function _advanceMountQueue() {
     if (FsUtils.isIco(entryName)) {
       const key = _getIcoKey(entry.item.entry, entry.state);
       const cached = _icoCache.get(key);
-      if (cached) {
-        pre.src = cached;
+      if (cached && cached.length > 0) {
+        _releaseNode(pre);
+        const total = FsUtils.icoSourcesTotal(cached);
+        _mountInFlight = -1;
+        const slot = _slots.get(entry.imgIdx);
+        if (slot && _active && !_mounted.has(entry.imgIdx)) {
+          _onItemDecoded(entry.imgIdx, total ? total.width : cached[0].width, total ? total.height : cached[0].height);
+          _claimIcoSlot(entry.imgIdx, entry.item, slot, cached);
+        }
+        _advanceMountQueue();
       } else {
-        _resolveIco(entry.item.entry, entry.state).then((icoSrc) => {
+        _resolveIco(entry.item.entry, entry.state).then((sizes) => {
           if (_mountInFlight !== entry.imgIdx) {
             _releaseNode(pre);
             return;
           }
-          if (icoSrc) {
-            _icoCache.set(key, icoSrc);
+          if (sizes && sizes.length > 0) {
+            _icoCache.set(key, sizes);
             if (!_active || _mountInFlight !== entry.imgIdx) {
               _releaseNode(pre);
               _advanceMountQueue();
               return;
             }
-            pre.src = icoSrc;
+            _releaseNode(pre);
+            const total = FsUtils.icoSourcesTotal(sizes);
+            _mountInFlight = -1;
+            const slot = _slots.get(entry.imgIdx);
+            if (slot && _active && !_mounted.has(entry.imgIdx)) {
+              _onItemDecoded(entry.imgIdx, total ? total.width : sizes[0].width, total ? total.height : sizes[0].height);
+              _claimIcoSlot(entry.imgIdx, entry.item, slot, sizes);
+            }
+            _advanceMountQueue();
           } else {
+            _mountInFlight = -1;
             fail();
           }
         }).catch(() => {
@@ -1649,6 +1724,7 @@ function _advanceMountQueue() {
             _releaseNode(pre);
             return;
           }
+          _mountInFlight = -1;
           fail();
         });
       }
