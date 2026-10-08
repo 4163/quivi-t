@@ -19,7 +19,7 @@ function _generateCoverThumbnail(src) {
       canvas.height = h;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', 0.8));
+      resolve(canvas.toDataURL('image/png'));
     };
     img.onerror = reject;
     img.src = src;
@@ -71,7 +71,8 @@ async function _loadMetadataForDirectory(directory, fileList, FsUtils) {
     if (_badgeEl) _badgeEl.classList.toggle('is-visible', true);
 
     const firstImage = fileList.find(f => FsUtils.isImageEntry(f));
-    const coverSrc = firstImage ? await FsUtils.buildFileSrc(firstImage.path) : null;
+    const rawCoverSrc = firstImage ? await FsUtils.buildFileSrc(firstImage.path) : null;
+    const coverSrc = rawCoverSrc ? FsUtils.firstIcoSrc(rawCoverSrc) : null;
 
     let coverDataUrl = null;
     if (coverSrc) {
