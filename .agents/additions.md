@@ -6,9 +6,6 @@
 
 *Easiest and least invasive first.*
 
-### View, Rendering & Window Enhancements (Visuals/Features)
-- **Emergency Boss Key:** Add an "Emergency Button" to hide the application into the system tray, with a configurable keybind.
-
 ### Supported Formats & Advanced Icons (Complex)
 - **Advanced .ico Processing:** Improve .ico processing/rendering following "performance-first". Change the .ico processing and rendering spec.
 

@@ -219,6 +219,11 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-exit-fullscreen-hold', label: 'Exit Fullscreen (Hold)', defaultBinds: 'Escape', category: 'Window & UI',
     run: () => {} // Handled purely by fullscreen gestures
   },
+  { id: 'cmd-hide-to-tray', label: 'Hide to tray', defaultBinds: 'Ctrl+Shift+h', category: 'Window & UI',
+    run: async () => {
+      if (window.__TAURI__) await window.__TAURI__.core.invoke('hide_to_tray').catch(console.error);
+    }
+  },
   { id: 'cmd-quit', label: 'Quit', defaultBinds: [], category: 'Window & UI',
     run: async () => {
       if (window.__TAURI__) {

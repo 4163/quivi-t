@@ -95,14 +95,18 @@ pub fn update_theme(app: tauri::AppHandle, theme: Option<String>) {
 #[tauri::command]
 pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("options") {
-        if window
+        // The window can exist but be hidden (hide to tray), so show it, not just focus it.
+        if !window
             .is_visible()
             .map_err(|e| format!("Failed to check options window: {e}"))?
         {
             window
-                .set_focus()
-                .map_err(|e| format!("Failed to focus options window: {e}"))?;
+                .show()
+                .map_err(|e| format!("Failed to show options window: {e}"))?;
         }
+        window
+            .set_focus()
+            .map_err(|e| format!("Failed to focus options window: {e}"))?;
         return Ok(());
     }
 
@@ -132,14 +136,18 @@ pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("metadata") {
-        if window
+        // The window can exist but be hidden (hide to tray), so show it, not just focus it.
+        if !window
             .is_visible()
             .map_err(|e| format!("Failed to check metadata window: {e}"))?
         {
             window
-                .set_focus()
-                .map_err(|e| format!("Failed to focus metadata window: {e}"))?;
+                .show()
+                .map_err(|e| format!("Failed to show metadata window: {e}"))?;
         }
+        window
+            .set_focus()
+            .map_err(|e| format!("Failed to focus metadata window: {e}"))?;
         return Ok(());
     }
 
@@ -232,4 +240,83 @@ pub async fn fit_metadata_window(app: tauri::AppHandle, height: f64) -> Result<(
 pub fn show_window(window: tauri::Window) {
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+// Hide to tray
+//
+// The tray icon is built lazily on first hide so startup stays unchanged.
+// Left click or Show restores main, Quit exits through the normal close path.
+fn ensure_tray(app: &tauri::AppHandle) -> Result<(), String> {
+    if app.tray_by_id("main-tray").is_some() {
+        return Ok(());
+    }
+    let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
+        .map_err(|e| format!("Failed to load tray icon: {e}"))?;
+    let show = tauri::menu::MenuItem::with_id(app, "tray-show", "Show", true, None::<&str>)
+        .map_err(|e| format!("Failed to build tray menu: {e}"))?;
+    let quit = tauri::menu::MenuItem::with_id(app, "tray-quit", "Quit", true, None::<&str>)
+        .map_err(|e| format!("Failed to build tray menu: {e}"))?;
+    let menu = tauri::menu::Menu::with_items(app, &[&show, &quit])
+        .map_err(|e| format!("Failed to build tray menu: {e}"))?;
+    tauri::tray::TrayIconBuilder::with_id("main-tray")
+        .icon(icon)
+        .tooltip("QuiviT")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "tray-show" => restore_from_tray(app),
+            "tray-quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let tauri::tray::TrayIconEvent::Click {
+                button: tauri::tray::MouseButton::Left,
+                ..
+            } = event
+            {
+                restore_from_tray(tray.app_handle());
+            }
+        })
+        .build(app)
+        .map_err(|e| format!("Failed to build tray icon: {e}"))?;
+    Ok(())
+}
+
+// Secondary windows owned by this app. Closed windows are gone, so only
+// windows hidden by hide_to_tray (or mid-open) can exist here on restore.
+const SECONDARY_WINDOWS: [&str; 2] = ["options", "metadata"];
+
+fn restore_from_tray(app: &tauri::AppHandle) {
+    for label in SECONDARY_WINDOWS {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.show();
+        }
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[tauri::command]
+pub async fn hide_to_tray(app: tauri::AppHandle) -> Result<(), String> {
+    ensure_tray(&app)?;
+    for label in SECONDARY_WINDOWS {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.hide();
+        }
+    }
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    main.hide().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn show_from_tray(app: tauri::AppHandle) -> Result<(), String> {
+    restore_from_tray(&app);
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    main.set_focus().map_err(|e| e.to_string())
 }

@@ -117,6 +117,8 @@ pub fn run() {
         unregister_associations,
         get_initial_args,
         show_window,
+        hide_to_tray,
+        show_from_tray,
         update_theme,
         pick_folder,
         check_is_animated,
