@@ -1,4 +1,4 @@
-pub fn ico_frames_from_bytes(data: &[u8]) -> Result<String, String> {
+pub fn ico_frames_from_bytes(data: &[u8]) -> Result<Vec<crate::models::IcoSize>, String> {
     // Parse the ICO directory header directly to find all image entries,
     // then decode each sub-image individually.
     if data.len() < 6 {
@@ -73,33 +73,24 @@ pub fn ico_frames_from_bytes(data: &[u8]) -> Result<String, String> {
     // Deduplicate by width/height
     frames.dedup_by(|a, b| a.width() == b.width() && a.height() == b.height());
 
-    let total_width: u32 = frames.iter().map(|f| f.width()).sum();
-    let max_height: u32 = frames.iter().map(|f| f.height()).max().unwrap_or(0);
-
-    let mut spritesheet = image::RgbaImage::new(total_width, max_height);
-    let mut x_offset = 0u32;
+    let mut sizes: Vec<crate::models::IcoSize> = Vec::with_capacity(frames.len());
     for frame in &frames {
         let rgba = frame.to_rgba8();
-        let y_offset = (max_height - rgba.height()) / 2;
-        image::imageops::replace(&mut spritesheet, &rgba, x_offset as i64, y_offset as i64);
-        x_offset += rgba.width();
+        let (w, h) = (rgba.width(), rgba.height());
+        let mut png_bytes: Vec<u8> = Vec::new();
+        {
+            use image::ImageEncoder;
+            let encoder = image::codecs::png::PngEncoder::new(&mut png_bytes);
+            encoder
+                .write_image(rgba.as_raw(), w, h, image::ColorType::Rgba8.into())
+                .map_err(|e| format!("Failed to encode PNG: {e}"))?;
+        }
+        let b64 = crate::utils::base64_encode(&png_bytes);
+        sizes.push(crate::models::IcoSize {
+            width: w,
+            height: h,
+            data_url: format!("data:image/png;base64,{b64}"),
+        });
     }
-
-    // Encode as PNG and return as data-URL
-    let mut png_bytes: Vec<u8> = Vec::new();
-    {
-        use image::ImageEncoder;
-        let encoder = image::codecs::png::PngEncoder::new(&mut png_bytes);
-        encoder
-            .write_image(
-                spritesheet.as_raw(),
-                spritesheet.width(),
-                spritesheet.height(),
-                image::ColorType::Rgba8.into(),
-            )
-            .map_err(|e| format!("Failed to encode PNG: {e}"))?;
-    }
-
-    let b64 = crate::utils::base64_encode(&png_bytes);
-    Ok(format!("data:image/png;base64,{b64}"))
+    Ok(sizes)
 }
