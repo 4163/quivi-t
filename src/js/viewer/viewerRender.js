@@ -1,7 +1,7 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { getCachedArchiveBlob, hasCachedArchiveBlob } from '../services/archiveImageCache.js';
-import { computeSlotHue } from '../services/viewerMath.js';
+import { createIcoCell, createIcoContainer, mirroredGrillAngle } from './icoCells.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 const PRELOAD_HALF = 1;
@@ -480,30 +480,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _hideVideo();
     imgWrapper.dataset.ico = 'true';
     row.replaceChildren();
-    const container = document.createElement('div');
-    container.className = 'ico-container';
-    const template = document.getElementById('ico-size-template');
-    const grillAngle = viewportState.getGrillAngle();
-    const mirrored = grillAngle === '45deg' ? '-45deg' : '45deg';
+    const container = createIcoContainer();
+    const mirrored = mirroredGrillAngle(viewportState.getGrillAngle());
     const firstImgs = [];
     sizes.forEach((s, idx) => {
-      let cell = null;
-      if (template && template.content && template.content.firstElementChild) {
-        cell = template.content.firstElementChild.cloneNode(true);
-      } else {
-        cell = document.createElement('div');
-        cell.className = 'ico-size';
-        const bd = document.createElement('div');
-        bd.className = 'ico-size-backdrop';
-        cell.appendChild(bd);
-        cell.appendChild(document.createElement('img'));
-      }
-      cell.style.setProperty('--ico-w', `${s.width}px`);
-      cell.style.setProperty('--ico-h', `${s.height}px`);
-      if (sizes.length > 1) cell.style.setProperty('--slot-backdrop-bg', computeSlotHue(idx, sizes.length));
-      else cell.style.removeProperty('--slot-backdrop-bg');
-      cell.style.setProperty('--slot-backdrop-angle', mirrored);
-      const im = cell.querySelector('img');
+      const { cell, img: im } = createIcoCell(s, idx, sizes.length, mirrored);
       if (im) {
         im.decoding = 'async';
         im.draggable = false;

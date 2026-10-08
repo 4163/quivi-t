@@ -13,6 +13,7 @@ import { BoundedMap } from '../services/cache.js';
 import { FsUtils } from '../fsUtils.js';
 import { getCachedArchiveBlob } from '../services/archiveImageCache.js';
 import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale, firstLastHighlight } from '../services/viewerMath.js';
+import { createIcoCell, createIcoContainer, mirroredGrillAngle } from './icoCells.js';
 import { Statusbar } from '../menubar/statusbar.js';
 import { initManhwaAudio, ManhwaAudio } from './manhwaAudio.js';
 
@@ -351,31 +352,13 @@ function _claimIcoSlot(imgIdx, item, slot, sizes) {
     _detachStripNode(old);
   }
   slot.dataset.ico = 'true';
-  const container = document.createElement('div');
-  container.className = 'ico-container';
+  const container = createIcoContainer();
   container.dataset.imgIdx = String(imgIdx);
-  const template = document.getElementById('ico-size-template');
   const grillAngle = _viewportState ? _viewportState.getGrillAngle() : '45deg';
-  const mirrored = grillAngle === '45deg' ? '-45deg' : '45deg';
+  const mirrored = mirroredGrillAngle(grillAngle);
   let firstImg = null;
   sizes.forEach((s, idx) => {
-    let cell = null;
-    if (template && template.content && template.content.firstElementChild) {
-      cell = template.content.firstElementChild.cloneNode(true);
-    } else {
-      cell = document.createElement('div');
-      cell.className = 'ico-size';
-      const bd = document.createElement('div');
-      bd.className = 'ico-size-backdrop';
-      cell.appendChild(bd);
-      cell.appendChild(document.createElement('img'));
-    }
-    cell.style.setProperty('--ico-w', `${s.width}px`);
-    cell.style.setProperty('--ico-h', `${s.height}px`);
-    if (sizes.length > 1) cell.style.setProperty('--slot-backdrop-bg', computeSlotHue(idx, sizes.length));
-    else cell.style.removeProperty('--slot-backdrop-bg');
-    cell.style.setProperty('--slot-backdrop-angle', mirrored);
-    const im = cell.querySelector('img');
+    const { cell, img: im } = createIcoCell(s, idx, sizes.length, mirrored);
     if (im) {
       im.decoding = 'async';
       im.draggable = false;

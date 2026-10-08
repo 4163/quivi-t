@@ -6,6 +6,7 @@ Validation comparison performed against .agents/AGENTS.md and .agents/skills/val
 
 **Scope lock:** ICO files only. No change to strip count, anchors, column width tracking, width scan skip, neighbor preload exclusion, or transparent pref. No architecture-state or README edits during implementation. Backend keeps Rust decode, no JS ICO parser. Deviations go here with reason and file.
 **Deviation 2026-10-08:** slices 5 and 7 fall back to DOM only for ICO rows. N-texture multi-quad in both pipelines needs a compositor rewrite, out of slice scope. `src/js/viewer/viewerPipelines.js` skips ICO nodes in single and column paths, teardown clears stale canvas output, DOM row plus backdrops stay visible. Filter parity for ICO rows is follow-up work.
+**Deviation 2026-10-08:** ICO cells break HTML-first rendering on purpose. `#ico-size-template` is removed from `src/index.html`. Cells are per-file pipeline output, not stable chrome, so `src/js/viewer/icoCells.js` builds them dynamically. Both viewers import the one factory instead of cloning a static template.
 
 **Definitions.** IcoSize is `{ width, height, data_url }`, sorted largest to smallest, same order as the current strip in `src-tauri/src/ico.rs:71-74`. Total row size is `sum(widths)` by `max(height)`. Row height equals tallest size, small sizes center vertically, tiny sizes stay tiny. Legacy view means the single image viewport owned by `src/js/viewer/viewerRender.js`. Strip means the vertical list owned by `src/js/viewer/manhwaStrip.js`, element `#manhwa-strip` in `src/index.html:336-340`. Shared pattern in both modes:
 
@@ -28,9 +29,10 @@ Ownership stays as listed in `.agents/architecture-state.md`. New work extends t
 - `src/js/fsUtils.js`. Owns `isIco` at line 157, `buildArchiveEntrySrc` at line 264, `buildFileSrc` at line 275, `neighborEntries` at line 352. New ICO source helpers live here.
 - `src/js/core.js`. Owns state `src` at lines 223 and 227, consumes the new helpers.
 - `src/js/viewer/viewerRender.js`. Owns the legacy image pool plus fit math, lines 17-40, 586, 757-764, 815-831.
+- `src/js/viewer/icoCells.js`. Owns `.ico-container` and `.ico-size` DOM factory for legacy and strip rows. Both viewers import it, neither clones static markup.
 - `src/js/viewer/viewerPipelines.js`. Owns single-image WebGL at lines 339-442 and column composite at lines 1680-1969. Owns per-cell texture and quad expansion.
 - `src/js/viewer/manhwaStrip.js`. Owns `#manhwa-strip`, slots, anchors, layout. Owns `_icoCache` at line 334, `_resolveIco` at line 338, `_createSlotNode` at line 630, `_acquireSlotNode` at line 639, `_claimSlot` at line 1429, prefetch at line 1259, mount at line 1539, decode at line 790.
-- `src/index.html`. Owns placeholders at lines 336-340 and 356-368. New ICO row placeholders go here, no runtime node creation for stable chrome.
+- `src/index.html`. Owns placeholders at lines 336-340 and 356-368. `#viewer-ico-row` stays as the mount point. No `#ico-size-template`, cells build dynamically in `icoCells.js`.
 - `src/css/main.css`. Owns slot rules at lines 1674-1767 and grill rules at lines 2387-2426. New `.ico-container` rules go here.
 - `src/css/global.css`. Owns grill tokens at lines 26-28 and 78-85, read only.
 - `src/js/main/main.js`. Owns `grill-active` toggle at lines 210-212 and 231-240, read only.
@@ -79,15 +81,16 @@ Validation note. Shared helpers over inlined repeats. Callers derive from one he
 
 ## Slice 3. Shared DOM plus style placeholders
 
-**Status:** `[x]` Done. Row hidden until `data-ico` is set, no behavior change.
+**Status:** `[x]` Done. Row hidden until `data-ico` is set, no behavior change. Template later removed per deviation, `#viewer-ico-row` stays.
 
 Goal is static markup plus paint rules with no logic change yet.
 
 - [x] In `src/index.html:356-368`, add a static `#viewer-ico-row` placeholder next to `#viewer-img-wrapper`. In `src/index.html:336-340`, confirm no new strip root is needed since slots already exist.
 - [x] In `src/css/main.css:1725-1754,2387-2426`, add `.ico-container` as flex row centered with align center, `.ico-size` as relative centered box sized from IPC dims, `.ico-size-backdrop` copying slot backdrop paint at 0.35 opacity with z-index 0 under img z-index 1. Consume grill tokens from `src/css/global.css:26-28,78-85`, no new tokens.
 - [x] Accept when markup exists on first paint, ICO rows render unstyled boxes with no JS errors, and `grill-active` plus `data-ready` gating matches `main.css:1752-1754` behavior.
+- [x] In `src/js/viewer/icoCells.js`, move cell structure out of static markup into one dynamic factory. `src/index.html` keeps `#viewer-ico-row` only. Both viewers import `createIcoContainer`, `createIcoCell`, and `mirroredGrillAngle`.
 
-Validation note. HTML first rendering plus CSS source of truth. No `createElement` for stable chrome, no inline visual values from JS.
+Validation note. HTML first rendering plus CSS source of truth. No `createElement` for stable chrome, no inline visual values from JS. The factory breaks the first half on purpose per the deviation rule, CSS truth still holds since JS writes only custom properties plus `src`, `classList`, and `data-*`.
 
 ## Slice 4. Legacy row render plus fit
 
@@ -95,7 +98,7 @@ Validation note. HTML first rendering plus CSS source of truth. No `createElemen
 
 Goal is same look as today with separate boxes and backdrops.
 
-- [x] In `src/js/viewer/viewerRender.js:17-40,735-831`, build one `.ico-container` with N `.ico-size` cells for ICO state. Fit plus zoom transform the row as one unit using total dims. Each cell keeps its own width and height from IPC.
+- [x] In `src/js/viewer/viewerRender.js:17-40,735-831`, build one `.ico-container` with N `.ico-size` cells for ICO state through `src/js/viewer/icoCells.js`. Fit plus zoom transform the row as one unit using total dims. Each cell keeps its own width and height from IPC.
 - [x] In `src/js/viewer/viewerRender.js:757-764`, fix the dead `.ico` suffix check for array src so decode gating follows the same path as other raster images.
 - [x] In `src/js/viewer/viewerRender.js:522-529,707-720`, gate ICO same-row refit on `fitModeGen` and skip `Core.setImageDimensions` when total dims match. Fit presses apply once and later notifies hold pan and zoom.
 - [x] Accept when a 4 size ICO shows left to right largest first, vertically centered, each cell with its own backdrop tint and mirrored angle, fit modes frame the whole row, and tiny sizes stay tiny. Accept when a fit press on an ICO row applies once with no delayed re-apply.
@@ -120,7 +123,7 @@ Validation note. Highest regression risk in the plan. If unstable, fall back to 
 Goal is one slot per file with inner backdrops.
 
 - [x] In `src/js/viewer/manhwaStrip.js:334-361`, store arrays in `_icoCache` keyed as today.
-- [x] In `src/js/viewer/manhwaStrip.js:630-657,1429-1466`, build `div.manhwa-slot` holding `div.ico-container` holding N `.ico-size` cells for ICO items. Hide the outer `manhwa-slot-backdrop` for ICO slots. Set per-cell hue plus mirrored angle on acquire, clear on release at lines 659-675.
+- [x] In `src/js/viewer/manhwaStrip.js:630-657,1429-1466`, build `div.manhwa-slot` holding `div.ico-container` holding N `.ico-size` cells through `src/js/viewer/icoCells.js` for ICO items. Hide the outer `manhwa-slot-backdrop` for ICO slots. Set per-cell hue plus mirrored angle on acquire, clear on release at lines 659-675.
 - [x] In `src/js/viewer/manhwaStrip.js:790-884,1259-1278,1539-1659`, update decode, prefetch, and mount queue for arrays with the same in-flight guards. Keep width exclusion and `_fitRefreshPending` behavior for ICO.
 - [x] Accept when an ICO in the strip stays one row, interior matches legacy order and centering, each cell shows its own backdrop, column width and anchors behave as before, and scroll past the ICO shows no kick.
 
