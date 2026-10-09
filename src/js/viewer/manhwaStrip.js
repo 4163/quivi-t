@@ -124,6 +124,7 @@ function _onMaxWidthReport(container, maxWidth, done = false) {
  * decoded item, or timeout, whichever lands first. */
 function _maybeOpenWidthGate() {
   if (_widthGateKey === null || !_active) return;
+  if (_widthGateToggle && _imageIndex.length <= 3 && !_imageIndex.every((it) => it.decoded)) return;
   const wasToggle = _widthGateToggle;
   _widthGateKey = null;
   _widthGateToggle = false;
@@ -148,7 +149,9 @@ function _clearWidthGate() {
  * waits for the first decode, sweep report, sweep completion, or timeout. */
 function _openWidthGate(isToggle = false) {
   _clearWidthGate();
-  if (_imageIndex.length === 0 || _imageIndex.some((it) => it.decoded)) {
+  const ready = _imageIndex.length === 0 ||
+    (isToggle && _imageIndex.length <= 3 ? _imageIndex.every((it) => it.decoded) : _imageIndex.some((it) => it.decoded));
+  if (ready) {
     _finishContainerEntry(isToggle);
     return;
   }
@@ -169,36 +172,40 @@ function _openWidthGate(isToggle = false) {
  * dims. Stale probes (rebuilt index) no-op; failures leave the gate to
  * the sweep, completion, or timeout. */
 function _probeGateDims() {
-  const imgIdx = _anchorImgIdx >= 0 ? _anchorImgIdx : 0;
-  const item = _imageIndex[imgIdx];
-  if (!item || item.decoded) return;
-  let src = null;
-  try {
-    src = _buildSrc(item.entry, Core.getState());
-  } catch {
-    src = null;
-  }
-  if (!src) return;
-  const done = (w, h) => {
-    if (_imageIndex[imgIdx] !== item || w <= 0 || h <= 0) return;
-    _onItemDecoded(imgIdx, w, h);
-  };
-  if (item.kind === 'video') {
-    const probe = document.createElement('video');
-    probe.preload = 'metadata';
-    probe.muted = true;
+  const targets = (_imageIndex.length <= 3)
+    ? _imageIndex.map((_, i) => i).filter((i) => !_imageIndex[i]?.decoded)
+    : [(_anchorImgIdx >= 0 ? _anchorImgIdx : 0)];
+  for (const imgIdx of targets) {
+    const item = _imageIndex[imgIdx];
+    if (!item || item.decoded) continue;
+    let src = null;
+    try {
+      src = _buildSrc(item.entry, Core.getState());
+    } catch {
+      src = null;
+    }
+    if (!src) continue;
+    const done = (w, h) => {
+      if (_imageIndex[imgIdx] !== item || w <= 0 || h <= 0) return;
+      _onItemDecoded(imgIdx, w, h);
+    };
+    if (item.kind === 'video') {
+      const probe = document.createElement('video');
+      probe.preload = 'metadata';
+      probe.muted = true;
+      probe.crossOrigin = 'anonymous';
+      probe.onloadedmetadata = () => done(probe.videoWidth || 0, probe.videoHeight || 0);
+      probe.onerror = () => {};
+      probe.src = src;
+      continue;
+    }
+    const probe = new Image();
     probe.crossOrigin = 'anonymous';
-    probe.onloadedmetadata = () => done(probe.videoWidth || 0, probe.videoHeight || 0);
+    probe.decoding = 'async';
+    probe.onload = () => done(probe.naturalWidth || 0, probe.naturalHeight || 0);
     probe.onerror = () => {};
     probe.src = src;
-    return;
   }
-  const probe = new Image();
-  probe.crossOrigin = 'anonymous';
-  probe.decoding = 'async';
-  probe.onload = () => done(probe.naturalWidth || 0, probe.naturalHeight || 0);
-  probe.onerror = () => {};
-  probe.src = src;
 }
 
 /** Complete a gated container entry once first dims are in. Re-resolves
@@ -208,6 +215,11 @@ function _finishContainerEntry(isToggle = false) {
   if (!_active) return;
   _anchorImgIdx = _resolveOpenAnchor(Core.getState());
   _initEstimatedDimensions();
+  const isMiddle = 0 < _anchorImgIdx && _anchorImgIdx < _imageIndex.length - 1;
+  if (isToggle && _anchorImgIdx >= 0 && (_imageIndex.length <= 2 || isMiddle)) {
+    _anchorHoldover = _anchorImgIdx;
+    _anchorHoldoverAlignTop = false;
+  }
   _updateLayout();
 
   if (_anchorImgIdx < 0) {
@@ -218,7 +230,8 @@ function _finishContainerEntry(isToggle = false) {
   } else if (isToggle) {
     // Toggling the view on keeps legacy whole-column fits. Fresh-open
     // semantics belong to directory opens below.
-    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), false);
+    const alignTop = isMiddle ? false : STRIP_TOP_ALIGN_FITS.includes(_lastFitMode);
+    _applyFitMode(_lastFitMode, _anchorImgIdx, alignTop, false);
     _armEntryRefresh(false);
   } else {
     const state = Core.getState();
@@ -733,11 +746,14 @@ function _insertSlotOrdered(slot, imgIdx) {
 
 function _initEstimatedDimensions() {
   const total = _imageIndex.length;
+  const sampleDecoded = _imageIndex.find((it) => it.decoded && it.naturalHeight > 0);
   for (let i = 0; i < total; i++) {
     const item = _imageIndex[i];
     const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
-    const defW = isSvg ? 1000 : _widthEstimate();
-    const defH = isSvg ? 1000 : DEFAULT_ESTIMATED_HEIGHT;
+    const fallbackW = sampleDecoded?.naturalWidth || _widthEstimate();
+    const fallbackH = sampleDecoded?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT;
+    const defW = isSvg ? 1000 : fallbackW;
+    const defH = isSvg ? 1000 : fallbackH;
     item.naturalHeight = item.naturalHeight || defH;
     item.naturalWidth = item.naturalWidth || defW;
   }
@@ -782,7 +798,11 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
           viewportHeight: vpH,
         });
       } else {
-        if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
+        const isMiddle = 0 < _anchorHoldover && _anchorHoldover < _imageIndex.length - 1;
+        if (_imageIndex.length <= 2 || isMiddle) {
+          const centerSlotY = _layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2;
+          targetTy = (newTotalH / 2 - centerSlotY) * scale;
+        } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
           targetTy = -Math.abs(colH - vpH) / 2;
         } else if (colH <= vpH) {
           targetTy = Math.abs(colH - vpH) / 2;
@@ -795,10 +815,10 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
       // End-pin re-pins snap the whole column. Gate them on quiet: replay
       // showed a top re-pin kicking ty mid-scroll when slot 1 decoded.
       const panning = performance.now() - _lastPanAt < 150;
-      if (wasAtTop && !wasAtBottom && !panning) {
+      if (_imageIndex.length > 2 && wasAtTop && !wasAtBottom && !panning) {
         // View was end-pinned: re-pin the end instead of holding the anchor.
         targetTy = Math.abs(colH - vpH) / 2;
-      } else if (wasAtBottom && !wasAtTop && !panning) {
+      } else if (_imageIndex.length > 2 && wasAtBottom && !wasAtTop && !panning) {
         targetTy = -Math.abs(colH - vpH) / 2;
       } else {
         const newAnchorTop = _layout.offsets[anchorImgIdxToHold].top;
@@ -1879,6 +1899,9 @@ function _firstLastEdge() {
   if (total === 0) return 'neither';
   const rawPrimary = _listToImgIdx.get(Core.getState()?.index);
   const primary = (rawPrimary !== undefined && rawPrimary >= 0) ? rawPrimary : _anchorImgIdx;
+  if (primary !== null && primary > 0 && primary < total - 1) {
+    return 'neither';
+  }
   const { startIndex, endIndex } = _computeVisibleRange();
   return firstLastHighlight({
     primary: primary ?? -1,
@@ -2007,26 +2030,40 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
     if (alignTop) {
       if (_layout.offsets[targetImgIdx]) {
         _topAlignColumnY(_layout.offsets[targetImgIdx].top, 0);
-      } else if (colH <= vh + 0.5) {
+      } else if (_imageIndex.length > 2 && colH <= vh + 0.5) {
         _lastTy = Math.abs(colH - vh) / 2;
         _lastAnchorTy = _lastTy;
         _viewportState.panTo(0, _lastTy);
+      } else {
+        _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       }
     } else {
-      if (entry && targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
+      if (_imageIndex.length > 2 && entry && targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
         _bottomAlignColumnY(_layout.offsets[targetImgIdx].bottom, 0);
       } else if (_layout.offsets[targetImgIdx]) {
         _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
-      } else if (colH <= vh + 0.5) {
+      } else if (_imageIndex.length > 2 && colH <= vh + 0.5) {
         _lastTy = Math.abs(colH - vh) / 2;
         _lastAnchorTy = _lastTy;
         _viewportState.panTo(0, _lastTy);
+      } else {
+        _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       }
     }
   } else if (colH <= vh + 0.5) {
-    _lastTy = Math.abs(colH - vh) / 2;
-    _lastAnchorTy = _lastTy;
-    _viewportState.panTo(0, _lastTy);
+    const isMiddle = 0 < _anchorImgIdx && _anchorImgIdx < _imageIndex.length - 1;
+    if (_imageIndex.length <= 2 || isMiddle) {
+      const idx = _anchorImgIdx >= 0 && _layout.offsets[_anchorImgIdx] ? _anchorImgIdx : 0;
+      if (_layout.offsets[idx]) {
+        _centerColumnY(_layout.offsets[idx].top + _layout.offsets[idx].height / 2, 0);
+      } else {
+        _centerColumnY((_layout.totalHeight || 0) / 2, 0);
+      }
+    } else {
+      _lastTy = Math.abs(colH - vh) / 2;
+      _lastAnchorTy = _lastTy;
+      _viewportState.panTo(0, _lastTy);
+    }
   } else if (preserveReadingRow) {
     _viewportState.panTo(0, (_layout.totalHeight / 2 - centerColY) * targetScale);
     _lastTy = _viewportState.getTy();
@@ -2115,7 +2152,12 @@ export function centerListItem(listIndex) {
     const colH = (_layout.totalHeight || 0) * scale;
     const vh = _viewport?.clientHeight || 800;
     const curTx = _viewportState.getTx();
-    if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
+    const isMiddle = 0 < mapped && mapped < _imageIndex.length - 1;
+    if (_imageIndex.length <= 2 || isMiddle) {
+      if (_layout.offsets[mapped]) {
+        _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
+      }
+    } else if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
       const targetTy = -Math.abs(colH - vh) / 2;
       _lastTy = targetTy;
       _lastAnchorTy = targetTy;
@@ -2167,7 +2209,12 @@ export function resetZoom(exactScale) {
       const settledScale = _viewportState.getScale() || 1;
       const resetColH = (_layout.totalHeight || 0) * settledScale;
       if (resetColH <= vh + 0.5) {
-        _viewportState.panTo(holdTx, Math.abs(resetColH - vh) / 2);
+        const isMiddle = 0 < _anchorImgIdx && _anchorImgIdx < _imageIndex.length - 1;
+        if (_imageIndex.length <= 2 || isMiddle) {
+          _viewportState.panTo(holdTx, 0);
+        } else {
+          _viewportState.panTo(holdTx, Math.abs(resetColH - vh) / 2);
+        }
       } else {
         _viewportState.panTo(holdTx, (_layout.totalHeight / 2 - holdCenterY) * settledScale);
       }
@@ -2209,7 +2256,10 @@ export function resetZoom(exactScale) {
         _topAlignColumnY(_layout.offsets[_anchorHoldover].top, 0);
       } else {
         const colH = (_layout.totalHeight || 0) * exactScale;
-        if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
+        const isMiddle = 0 < _anchorHoldover && _anchorHoldover < _imageIndex.length - 1;
+        if (_imageIndex.length <= 2 || isMiddle) {
+          _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2, 0);
+        } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
           _bottomAlignColumnY(_layout.offsets[_anchorHoldover].bottom, 0);
         } else if (colH <= vh + 0.5) {
           _lastTy = Math.abs(colH - vh) / 2;
