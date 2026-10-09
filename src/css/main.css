@@ -2290,6 +2290,7 @@ body.is-importing-url .header-cell:hover {
   margin: auto;
   pointer-events: none;
   opacity: 0;
+  z-index: 2;
 }
 
 #viewer-filter-canvas[data-render-ready="true"] {
@@ -2318,7 +2319,8 @@ body.is-importing-url .header-cell:hover {
   z-index: 1;
 }
 
-#viewport.manhwa-active #manhwa-filter-canvas[data-render-ready="true"] {
+#viewport.manhwa-active #manhwa-filter-canvas[data-render-ready="true"],
+#viewport.manhwa-exit-warmup #manhwa-filter-canvas[data-render-ready="true"] {
   display: block;
   opacity: 1;
 }
