@@ -179,9 +179,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     if (!isIco) {
       node.classList.add('viewer-img');
     } else {
-      const grillActive = imgWrapper?.classList?.contains('grill-active') ||
-        document.getElementById('manhwa-strip')?.classList?.contains('grill-active');
-      if (grillActive) node.classList.add('grill-active');
+      const transparent = !!Core.getState()?.config?.frontend_data?.transparent_bg;
+      if (!transparent) node.classList.add('grill-active');
     }
     node.classList.add('bridge');
     _retiringNode = node;
