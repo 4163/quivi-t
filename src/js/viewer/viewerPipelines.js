@@ -19,6 +19,7 @@ const _scratchDest = { x: 0, y: 0, width: 0, height: 0 };
 const _scratchSize = { w: 0, h: 0 };
 const _cachedDrawsScratch = [];
 const _liveDrawsScratch = [];
+const _icoDrawsScratch = [];
 const _rasterCandidatesScratch = [];
 const _svgCandidatesScratch = [];
 const _activeRastersScratch = [];
@@ -1176,6 +1177,76 @@ export function createViewerPipelines(viewportState) {
   const _columnSvgSessions = new Map();
   /** imgIdx with SVG fetch in flight. Prevents fetch storms. */
   const _columnSvgPending = new Set();
+  /** File key to per-file ICO composite { canvas, width, height }. One
+   * texture per ICO file, same layout as the legacy single-image path:
+   * total is sum(widths) by max(height), cells left to right centered. */
+  const _columnIcoComposites = new Map();
+  /** File key with composite build in flight. Prevents decode storms. */
+  const _columnIcoPending = new Map();
+  /** Max ICO composites held in memory. Bounded by visible window plus margin. */
+  const COLUMN_ICO_COMPOSITE_CAP = 12;
+
+  function _columnIcoTotal(sizes) {
+    let w = 0;
+    let h = 0;
+    for (const s of sizes) {
+      w += s?.width || 0;
+      if ((s?.height || 0) > h) h = s.height;
+    }
+    return { width: w, height: h };
+  }
+
+  async function _ensureColumnIcoComposite(fileKey, sizes) {
+    if (!fileKey || !Array.isArray(sizes) || sizes.length === 0) return null;
+    const total = _columnIcoTotal(sizes);
+    if (!total.width || !total.height) return null;
+    const hit = _columnIcoComposites.get(fileKey);
+    if (hit?.canvas) {
+      _columnIcoComposites.delete(fileKey);
+      _columnIcoComposites.set(fileKey, hit);
+      return hit;
+    }
+    if (_columnIcoPending.has(fileKey)) return _columnIcoPending.get(fileKey);
+    const promise = (async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = total.width;
+      canvas.height = total.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.clearRect(0, 0, total.width, total.height);
+      let x = 0;
+      for (const s of sizes) {
+        if (!s?.data_url) continue;
+        const w = s.width || 0;
+        const h = s.height || 0;
+        if (!w || !h) continue;
+        const im = await _loadIcoImage(s.data_url);
+        const y = Math.round((total.height - h) / 2);
+        ctx.drawImage(im, x, y, w, h);
+        x += w;
+      }
+      const entry = { canvas, width: total.width, height: total.height };
+      _columnIcoComposites.set(fileKey, entry);
+      while (_columnIcoComposites.size > COLUMN_ICO_COMPOSITE_CAP) {
+        const oldest = _columnIcoComposites.keys().next().value;
+        if (!oldest) break;
+        if (oldest === fileKey) break;
+        _columnIcoComposites.delete(oldest);
+      }
+      return entry;
+    })();
+    _columnIcoPending.set(fileKey, promise);
+    try {
+      return await promise;
+    } finally {
+      if (_columnIcoPending.get(fileKey) === promise) _columnIcoPending.delete(fileKey);
+    }
+  }
+
+  function _clearColumnIcoComposites() {
+    _columnIcoComposites.clear();
+    _columnIcoPending.clear();
+  }
   /** Viewport geometry of the previous column pass. Detects pan/zoom renders. */
   const _columnLastGeom = { scale: 0, tx: 0, ty: 0, vpW: 0, vpH: 0 };
   let _columnLiveLoopId = 0;
@@ -1192,6 +1263,7 @@ export function createViewerPipelines(viewportState) {
       if (_columnPipeline) { _columnPipeline.dispose(); _columnPipeline = null; }
       _columnFilter = null;
       _columnLiveTextures.clear();
+      _clearColumnIcoComposites();
       _scratchStaleIdx.length = 0;
       for (const imgIdx of _columnAnimSessions.keys()) _scratchStaleIdx.push(imgIdx);
       for (let i = 0; i < _scratchStaleIdx.length; i++) _closeColumnAnimSession(_scratchStaleIdx[i]);
@@ -1620,6 +1692,8 @@ export function createViewerPipelines(viewportState) {
     _columnHasLive = false;
     _cachedDrawsScratch.length = 0;
     _liveDrawsScratch.length = 0;
+    _icoDrawsScratch.length = 0;
+    _clearColumnIcoComposites();
     _scratchStaleIdx.length = 0;
     for (const imgIdx of _columnAnimSessions.keys()) _scratchStaleIdx.push(imgIdx);
     for (let i = 0; i < _scratchStaleIdx.length; i++) _closeColumnAnimSession(_scratchStaleIdx[i]);
@@ -1823,6 +1897,7 @@ export function createViewerPipelines(viewportState) {
     // Partition draws into cached stills, live videos, live SVG pumps, and live rasters.
     _cachedDrawsScratch.length = 0;
     _liveDrawsScratch.length = 0;
+    _icoDrawsScratch.length = 0;
     _rasterCandidatesScratch.length = 0;
     _svgCandidatesScratch.length = 0;
     _activeRastersScratch.length = 0;
@@ -1839,10 +1914,16 @@ export function createViewerPipelines(viewportState) {
     for (const draw of drawList) {
       const node = snap.nodes.get(draw.imgIdx);
       if (!node) continue;
-      if (_isIcoNode(node)) continue;
       const item = snap.items ? snap.items[draw.imgIdx] : null;
       const entryName = item?.entry?.name || item?.entry?.path || '';
-      if (entryName && entryName.toLowerCase().endsWith('.ico')) continue;
+      const icoInfo = snap.ico ? snap.ico.get(draw.imgIdx) : null;
+      const isIco = !!icoInfo || _isIcoNode(node) ||
+        (entryName && entryName.toLowerCase().endsWith('.ico'));
+      if (isIco) {
+        if (!icoInfo || !icoInfo.sizes || icoInfo.sizes.length === 0) continue;
+        _icoDrawsScratch.push({ draw, item, icoKey: icoInfo.key, sizes: icoInfo.sizes });
+        continue;
+      }
       const isLive = snap.liveSlots?.has(draw.imgIdx);
       if (!isLive) {
         const src = node.currentSrc || node.src;
@@ -1955,7 +2036,7 @@ export function createViewerPipelines(viewportState) {
       }
     }
     _columnHasLive = hasLive;
-    if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && _activeRastersScratch.length === 0 && _activeSvgsScratch.length === 0) return;
+    if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && _icoDrawsScratch.length === 0 && _activeRastersScratch.length === 0 && _activeSvgsScratch.length === 0) return;
 
     // Decode raster frames before touching GL. An await after the visible
     // canvas is cleared lets the browser composite a blank frame in
@@ -2041,16 +2122,21 @@ export function createViewerPipelines(viewportState) {
           _activeRastersScratch.splice(i, 1);
         }
       }
-      if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && _activeRastersScratch.length === 0 && _activeSvgsScratch.length === 0) return;
+      if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && _icoDrawsScratch.length === 0 && _activeRastersScratch.length === 0 && _activeSvgsScratch.length === 0) return;
     }
+
+    // Pin the visible window so LRU keeps stills and ICO composites alive.
+    _scratchVisibleKeys.clear();
+    for (let i = 0; i < _cachedDrawsScratch.length; i++) {
+      _scratchVisibleKeys.add(_cachedDrawsScratch[i].src);
+    }
+    for (let i = 0; i < _icoDrawsScratch.length; i++) {
+      _scratchVisibleKeys.add(`ico-col:${_icoDrawsScratch[i].icoKey}`);
+    }
+    _columnTextureCache.setPinnedKeys(_scratchVisibleKeys);
 
     // Load missing cached textures after pinning visible window slots.
     if (_cachedDrawsScratch.length > 0) {
-      _scratchVisibleKeys.clear();
-      for (let i = 0; i < _cachedDrawsScratch.length; i++) {
-        _scratchVisibleKeys.add(_cachedDrawsScratch[i].src);
-      }
-      _columnTextureCache.setPinnedKeys(_scratchVisibleKeys);
 
       const missing = _cachedDrawsScratch.filter(({ src }) => !_columnTextureCache.has(src));
       if (missing.length > 0) {
@@ -2068,6 +2154,43 @@ export function createViewerPipelines(viewportState) {
         }
         if (gen !== _columnGeneration || !Core.getState()?.manhwaEnabled || !_columnPipeline) {
           return;
+        }
+      }
+    }
+
+    // Build one composite canvas per visible ICO file, then upload it as
+    // one texture. Same layout as the legacy path, so tiny sizes stay tiny.
+    if (_icoDrawsScratch.length > 0) {
+      try {
+        await Promise.all(_icoDrawsScratch.map(async (entry) => {
+          const texKey = `ico-col:${entry.icoKey}`;
+          if (_columnTextureCache.has(texKey)) return;
+          const comp = await _ensureColumnIcoComposite(entry.icoKey, entry.sizes);
+          if (gen !== _columnGeneration) return;
+          if (!comp || !comp.canvas) return;
+          if (_columnTextureCache.has(texKey)) return;
+          const tex = uploadTexture(gl, comp.canvas);
+          if (!tex) return;
+          _columnTextureCache.put(texKey, tex, comp.width, comp.height);
+        }));
+      } catch (e) {
+        console.warn('Failed to load ICO textures for column composite', e);
+      }
+      if (gen !== _columnGeneration || !Core.getState()?.manhwaEnabled || !_columnPipeline) {
+        return;
+      }
+      // Prune composites for files that left the visible window.
+      if (_columnIcoComposites.size > 0) {
+        _scratchActiveIdx.clear();
+        for (let i = 0; i < _icoDrawsScratch.length; i++) {
+          _scratchActiveIdx.add(_icoDrawsScratch[i].icoKey);
+        }
+        _scratchStaleIdx.length = 0;
+        for (const fileKey of _columnIcoComposites.keys()) {
+          if (!_scratchActiveIdx.has(fileKey)) _scratchStaleIdx.push(fileKey);
+        }
+        for (let i = 0; i < _scratchStaleIdx.length; i++) {
+          _columnIcoComposites.delete(_scratchStaleIdx[i]);
         }
       }
     }
@@ -2103,6 +2226,19 @@ export function createViewerPipelines(viewportState) {
       const nodeH = texEntry.height || node.naturalHeight || 0;
       const item = snap.items ? snap.items[draw.imgIdx] : null;
       if (_drawSlotQuad(_columnQuadCompositor, texEntry.texture, draw, item, nodeW, nodeH, vpW, vpH, flipY, sampler)) {
+        painted++;
+      }
+    }
+
+    // Draw ICO slots from per-file composite textures. Item dims are total
+    // dims, so the source to dest mapping stays 1:1 with no cell stretch.
+    for (const entry of _icoDrawsScratch) {
+      const texEntry = _columnTextureCache.get(`ico-col:${entry.icoKey}`);
+      if (!texEntry || !texEntry.texture) continue;
+      const nodeW = texEntry.width || 0;
+      const nodeH = texEntry.height || 0;
+      if (nodeW <= 0 || nodeH <= 0) continue;
+      if (_drawSlotQuad(_columnQuadCompositor, texEntry.texture, entry.draw, entry.item, nodeW, nodeH, vpW, vpH, flipY, sampler)) {
         painted++;
       }
     }

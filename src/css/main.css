@@ -2349,7 +2349,8 @@ body.is-importing-url .header-cell:hover {
    Visibility keeps slot layout so scroll offsets stay valid. Video.play()
    advances frames regardless of visibility for the live texImage2D path. */
 #viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>img,
-#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>video {
+#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot>video,
+#viewport.manhwa-active[data-filter] #manhwa-strip .manhwa-slot[data-ico="true"] .ico-size>img {
   visibility: hidden;
 }
 

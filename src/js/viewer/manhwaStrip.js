@@ -2940,6 +2940,24 @@ export function isManhwaStripActive() {
  * mounted nodes into its own staging canvas and must not mutate this. */
 export function getManhwaColumnSnapshot() {
   if (!_active) return null;
+  let ico = null;
+  if (_mounted.size > 0) {
+    const mode = _lastMode;
+    const archivePath = _lastArchivePath;
+    for (const [imgIdx, node] of _mounted) {
+      if (!node) continue;
+      const item = _imageIndex[imgIdx];
+      if (!item?.entry) continue;
+      const name = item.entry.name || item.entry.path || '';
+      if (!name || !FsUtils.isIco(name)) continue;
+      const key = mode === 'archive' ? `${archivePath}:${item.entry.name}` : item.entry.path;
+      if (!key) continue;
+      const sizes = _icoCache.get(key);
+      if (!sizes || sizes.length === 0) continue;
+      if (!ico) ico = new Map();
+      ico.set(imgIdx, { key, sizes });
+    }
+  }
   return {
     offsets: _layout.offsets,
     totalHeight: _layout.totalHeight,
@@ -2948,6 +2966,7 @@ export function getManhwaColumnSnapshot() {
     nodes: _mounted,
     liveSlots: _liveSlots,
     liveTypes: _liveTypes,
+    ico,
   };
 }
 

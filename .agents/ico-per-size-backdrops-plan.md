@@ -8,6 +8,7 @@ Validation comparison performed against .agents/AGENTS.md and .agents/skills/val
 **Deviation 2026-10-08:** slices 5 and 7 fall back to DOM only for ICO rows. N-texture multi-quad in both pipelines needs a compositor rewrite, out of slice scope. `src/js/viewer/viewerPipelines.js` skips ICO nodes in single and column paths, teardown clears stale canvas output, DOM row plus backdrops stay visible. Filter parity for ICO rows is follow-up work.
 **Deviation 2026-10-08:** slice 5 landed through one composite canvas per ICO file instead of N-texture multi-quad. `src/js/viewer/viewerPipelines.js:191-265,332-580,2237-2290` builds total by `sum(widths)` by `max(height)`, draws cells left to right with vertical centering, caches one texture per file key, and reuses the existing single image WebGL plus Lanczos CPU paths. Slice 7 column path stays DOM-only fallback.
 **Deviation 2026-10-08:** ICO cells break HTML-first rendering on purpose. `#ico-size-template` is removed from `src/index.html`. Cells are per-file pipeline output, not stable chrome, so `src/js/viewer/icoCells.js` builds them dynamically. Both viewers import the one factory instead of cloning a static template.
+**Deviation 2026-10-09:** slice 7 lands full filtered paint through one composite canvas per ICO file, superseding the 2026-10-08 DOM-only fallback. `src/js/viewer/manhwaStrip.js:2941-2970` exposes a read-only `ico` map in the column snapshot. `src/js/viewer/viewerPipelines.js:1183-1250,1913-1927,2163-2200,2235-2245` builds the composite, uploads one `ico-col:<key>` texture per file, and draws one quad per slot with the existing sampler rule. `src/css/main.css:2351-2355` hides `.ico-size > img` under `manhwa-active[data-filter]` so the canvas is the single painter while per-cell backdrops stay visible. User confirmed working 2026-10-09.
 
 **Definitions.** IcoSize is `{ width, height, data_url }`, sorted largest to smallest, same order as the current strip in `src-tauri/src/ico.rs:71-74`. Total row size is `sum(widths)` by `max(height)`. Row height equals tallest size, small sizes center vertically, tiny sizes stay tiny. Legacy view means the single image viewport owned by `src/js/viewer/viewerRender.js`. Strip means the vertical list owned by `src/js/viewer/manhwaStrip.js`, element `#manhwa-strip` in `src/index.html:336-340`. Shared pattern in both modes:
 
@@ -31,10 +32,10 @@ Ownership stays as listed in `.agents/architecture-state.md`. New work extends t
 - `src/js/core.js`. Owns state `src` at lines 223 and 227, consumes the new helpers.
 - `src/js/viewer/viewerRender.js`. Owns the legacy image pool plus fit math, lines 17-40, 586, 757-764, 815-831. Owns ICO row mount at lines 466-517 plus `--ico-total-w` and `--ico-total-h` sizing props at lines 510-511, cleared at lines 471-472.
 - `src/js/viewer/icoCells.js`. Owns `.ico-container` and `.ico-size` DOM factory for legacy and strip rows. Both viewers import it, neither clones static markup.
-- `src/js/viewer/viewerPipelines.js`. Owns single-image WebGL plus the ICO composite cache at lines 191-265. ICO WebGL transform at lines 436-515 and ICO Lanczos branch at lines 526-580. `setSource` ICO path at lines 2237-2249 and `clear` at lines 2283-2290. Column ICO skip stays as DOM-only fallback.
-- `src/js/viewer/manhwaStrip.js`. Owns `#manhwa-strip`, slots, anchors, layout. Owns `_icoCache` at line 334, `_resolveIco` at line 338, `_createSlotNode` at line 630, `_acquireSlotNode` at line 639, `_claimSlot` at line 1429, prefetch at line 1259, mount at line 1539, decode at line 790.
+- `src/js/viewer/viewerPipelines.js`. Owns single-image WebGL plus the ICO composite cache at lines 191-265. ICO WebGL transform at lines 436-515 and ICO Lanczos branch at lines 526-580. `setSource` ICO path at lines 2237-2249 and `clear` at lines 2283-2290. Owns the column ICO composite cache at lines 1183-1250, partition routing at lines 1913-1927, texture upload at lines 2163-2200, and quad paint at lines 2235-2245. Teardown plus context restore clear the column composites.
+- `src/js/viewer/manhwaStrip.js`. Owns `#manhwa-strip`, slots, anchors, layout. Owns `_icoCache` at line 337, `_resolveIco` at line 343, `_claimIcoSlot` at line 350, prefetch at line 1259, mount at line 1539, decode at line 790. Owns the read-only `ico` snapshot map at lines 2941-2970 for the column pipeline.
 - `src/index.html`. Owns placeholders at lines 336-340 and 356-368. `#viewer-ico-row` stays as the mount point. No `#ico-size-template`, cells build dynamically in `icoCells.js`.
-- `src/css/main.css`. Owns slot rules at lines 1674-1767 and grill rules at lines 2387-2426. New `.ico-container` rules go here. Owns ICO wrapper sizing at lines 2441-2442 through `--ico-total-w` and `--ico-total-h`, plus `.ico-size > img` in the filtered hide rule at line 2301 so backdrops stay visible.
+- `src/css/main.css`. Owns slot rules at lines 1674-1767 and grill rules at lines 2387-2426. New `.ico-container` rules go here. Owns ICO wrapper sizing at lines 2441-2442 through `--ico-total-w` and `--ico-total-h`, plus `.ico-size > img` in the filtered hide rule at line 2301 so backdrops stay visible. Owns the manhwa column hide rule at lines 2351-2355 for `.ico-size > img` under `manhwa-active[data-filter]`.
 - `src/css/global.css`. Owns grill tokens at lines 26-28 and 78-85, read only.
 - `src/js/main/main.js`. Owns `grill-active` toggle at lines 210-212 and 231-240, read only.
 - `src-tauri/src/commands/animation.rs`. Owns `skip_for_width_scan` at lines 63-67, read only, stays skipped.
@@ -136,23 +137,28 @@ Validation note. Slot owner stays `manhwaStrip.js`. No canvas and no WebGL code 
 
 ## Slice 7. Column WebGL per cell
 
-**Status:** `[x]` Done as DOM-only fallback per the deviation rule. ICO slots skip the column composite and stay visible as DOM rows under filters.
+**Status:** `[x]` Done through one composite canvas per ICO file per the 2026-10-09 deviation. User-confirmed working 2026-10-09.
 
 Goal is filtered column parity for ICO rows.
 
-- [x] In `src/js/viewer/viewerPipelines.js:1703-1706,1907-1960`, skip ICO slots in the column draw list so no stretched single-cell quad paints over the DOM row. Keep sampler rules per cell and SVG bypass at lines 1180-1182 untouched.
-- [x] Accept when a filtered column leaves every ICO row to its DOM cells with no blank quads and no texture bleed. Full per-cell filtered paint stays follow-up work with slice 5.
+- [x] In `src/js/viewer/manhwaStrip.js:2941-2970`, expose a read-only `ico` map in `getManhwaColumnSnapshot` from mounted ICO slots through `_icoCache`, keyed by the same file key as mount. Slots without resolved sizes stay out and keep the DOM fallback for that frame. Slot mount triggers `notifyColumnChanged` through the existing `setOnSlotMounted` wiring, so the column re-renders once sizes land.
+- [x] In `src/js/viewer/viewerPipelines.js:1183-1250`, build one composite canvas per ICO file with total `sum(widths)` by `max(height)`, cells left to right with vertical centering, capped at 12 entries with promise dedup. Teardown plus context restore clear it.
+- [x] In `src/js/viewer/viewerPipelines.js:1913-1927`, route ICO draws to `_icoDrawsScratch` with `{ draw, item, icoKey, sizes }`. ICO never joins live raster or SVG paths. Sizes missing means DOM fallback for that frame.
+- [x] In `src/js/viewer/viewerPipelines.js:2128-2200`, pin `ico-col:<key>` textures with stills, upload composites through `uploadTexture` plus `put`, and prune composites that left the visible window. Generation guards match the still path.
+- [x] In `src/js/viewer/viewerPipelines.js:2235-2245`, draw one quad per ICO slot from the composite texture with the existing sampler rule. Item dims are total dims, so source to dest stays 1:1 with no cell stretch. Direct lanczos screen and filtered FBO modes both work unchanged.
+- [x] In `src/css/main.css:2351-2355`, hide `.ico-size > img` for `data-ico` slots under `manhwa-active[data-filter]` so the canvas is the single painter. Backdrop divs stay visible. SVG bypass rules untouched.
+- [x] Accept when a filtered column paints every ICO row with no blank quads and no texture bleed across files, Lanczos-only mode paints sharp in place, and scroll plus resize show no kick. User confirmed 2026-10-09.
 
-Validation note. Same fallback rule as slice 5. Record any fallback here.
+Validation note. Slot owner stays `manhwaStrip.js`, WebGL owner stays `viewerPipelines.js`. Snapshot crosses the boundary as read-only data, no reach-in. CSS truth holds since the change only widens a selector, no inline visual values.
 
 ## Slice 8. Verification and handoff
 
-**Status:** `[~]` Partial. Static checks green, runtime items 1-4 plus 6 pass, item 5 now passes per user 2026-10-08 for legacy filters plus Lanczos. Fit repeat fix still in. One viewer e2e spec still open.
+**Status:** `[~]` Partial. Static checks green, runtime items 1-4 plus 6 pass, item 5 passes per user 2026-10-08 for legacy filters plus Lanczos. Manhwa ICO filters plus Lanczos pass per user 2026-10-09. Fit repeat fix still in. One viewer e2e spec still open.
 
 Goal is proof before signoff, no docs edits in this slice.
 
 - [x] Run `node --check` on each touched JS file, `cargo check --tests --manifest-path src-tauri/Cargo.toml`, `npm test`, plus `npm run mocha`. `npm run mocha` passes with 305 tests after the fit repeat fix.
 - [ ] Run one viewer e2e spec through `npm run e2e -- --spec <file>`, de-elevated rerun only if it reports an elevated shell.
 - [x] Confirm `e2e/replay-diagnostics/probes/viewerPipelineProbe.js` selectors still match and `e2e/scenarios/` contracts still dispatch.
-- [x] Manual pass: disk ICO, archive ICO, transparent on and off, manhwa scroll plus resize. Legacy filters plus Lanczos pass per user 2026-10-08. Restart persistence plus one viewer e2e spec stay open.
+- [x] Manual pass: disk ICO, archive ICO, transparent on and off, manhwa scroll plus resize. Legacy filters plus Lanczos pass per user 2026-10-08. Manhwa ICO filters plus Lanczos pass per user 2026-10-09. Restart persistence plus one viewer e2e spec stay open.
 - [ ] Accept when all checks pass and the runtime list is handed to the user for signoff per `.agents/skills/verify-implementation/SKILL.md`. Do not declare done without explicit user approval.
