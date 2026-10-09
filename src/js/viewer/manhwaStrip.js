@@ -804,7 +804,9 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
     const colH = newTotalH * scale;
     let targetTy = oldTy;
 
-    if (_anchorHoldover !== null && _layout.offsets[_anchorHoldover]) {
+    if (colH <= vpH + 0.5) {
+      targetTy = oldTy;
+    } else if (_anchorHoldover !== null && _layout.offsets[_anchorHoldover]) {
       if (_anchorHoldoverAlignTop) {
         targetTy = computeTopAlignTy({
           slotTop: _layout.offsets[_anchorHoldover].top,
@@ -814,7 +816,7 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
         });
       } else {
         const isMiddle = 0 < _anchorHoldover && _anchorHoldover < _imageIndex.length - 1;
-        if (isMiddle || colH <= vpH) {
+        if (isMiddle) {
           const centerSlotY = _layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2;
           targetTy = (newTotalH / 2 - centerSlotY) * scale;
         } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
@@ -2071,7 +2073,7 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
 
   if (targetImgIdx !== null) {
     if (alignTop) {
-      if (_layout.offsets[targetImgIdx]) {
+      if (!colFits && _layout.offsets[targetImgIdx]) {
         _topAlignColumnY(_layout.offsets[targetImgIdx].top, 0);
       } else {
         _centerColumnY((_layout.totalHeight || 0) / 2, 0);
@@ -2124,12 +2126,19 @@ export function alignListItemTop(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
+  const scale = _viewportState.getScale() || 1;
+  const vh = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * scale;
+  if (colH <= vh + 0.5) {
+    _anchorImgIdx = mapped;
+    _syncAnchorToCore();
+    return true;
+  }
   _viewportProgram++;
   try {
     _anchorImgIdx = mapped;
     _anchorHoldover = mapped;
     _anchorHoldoverAlignTop = true;
-    const scale = _viewportState.getScale() || 1;
     _anchorHoldoverScale = scale;
 
     _topAlignColumnY(_layout.offsets[mapped].top);
@@ -2149,12 +2158,19 @@ export function alignListItemBottom(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
+  const scale = _viewportState.getScale() || 1;
+  const vh = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * scale;
+  if (colH <= vh + 0.5) {
+    _anchorImgIdx = mapped;
+    _syncAnchorToCore();
+    return true;
+  }
   _viewportProgram++;
   try {
     _anchorImgIdx = mapped;
     _anchorHoldover = mapped;
     _anchorHoldoverAlignTop = false;
-    const scale = _viewportState.getScale() || 1;
     _anchorHoldoverScale = scale;
 
     _bottomAlignColumnY(_layout.offsets[mapped].bottom);
@@ -2174,16 +2190,21 @@ export function centerListItem(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
+  const scale = _viewportState.getScale() || 1;
+  const vh = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * scale;
+  if (colH <= vh + 0.5) {
+    _anchorImgIdx = mapped;
+    _syncAnchorToCore();
+    return true;
+  }
   _viewportProgram++;
   try {
     _anchorImgIdx = mapped;
     _anchorHoldover = mapped;
     _anchorHoldoverAlignTop = false;
-    const scale = _viewportState.getScale() || 1;
     _anchorHoldoverScale = scale;
 
-    const colH = (_layout.totalHeight || 0) * scale;
-    const vh = _viewport?.clientHeight || 800;
     const curTx = _viewportState.getTx();
     const isMiddle = 0 < mapped && mapped < _imageIndex.length - 1;
     if (_imageIndex.length <= 2 || isMiddle) {
@@ -2242,12 +2263,7 @@ export function resetZoom(exactScale) {
       const settledScale = _viewportState.getScale() || 1;
       const resetColH = (_layout.totalHeight || 0) * settledScale;
       if (resetColH <= vh + 0.5) {
-        const isMiddle = 0 < _anchorImgIdx && _anchorImgIdx < _imageIndex.length - 1;
-        if (_imageIndex.length <= 2 || isMiddle) {
-          _viewportState.panTo(holdTx, 0);
-        } else {
-          _viewportState.panTo(holdTx, Math.abs(resetColH - vh) / 2);
-        }
+        _viewportState.panTo(holdTx, 0);
       } else {
         _viewportState.panTo(holdTx, (_layout.totalHeight / 2 - holdCenterY) * settledScale);
       }
@@ -2285,19 +2301,18 @@ export function resetZoom(exactScale) {
 
     // Re-pin the anchor at its current offset so ty stays stable.
     if (_anchorHoldover !== null && _layout.offsets[_anchorHoldover]) {
-      if (_anchorHoldoverAlignTop) {
+      const colH = (_layout.totalHeight || 0) * exactScale;
+      const colFits = colH <= vh + 0.5;
+      if (colFits) {
+        _centerColumnY((_layout.totalHeight || 0) / 2, 0);
+      } else if (_anchorHoldoverAlignTop) {
         _topAlignColumnY(_layout.offsets[_anchorHoldover].top, 0);
       } else {
-        const colH = (_layout.totalHeight || 0) * exactScale;
         const isMiddle = 0 < _anchorHoldover && _anchorHoldover < _imageIndex.length - 1;
         if (isMiddle) {
           _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2, 0);
         } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
           _bottomAlignColumnY(_layout.offsets[_anchorHoldover].bottom, 0);
-        } else if (colH <= vh + 0.5) {
-          _lastTy = Math.abs(colH - vh) / 2;
-          _lastAnchorTy = _lastTy;
-          _viewportState.panTo(0, _lastTy);
         } else {
           _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2, 0);
         }
@@ -2437,6 +2452,8 @@ function _topAlignColumnY(colY, targetTx = null) {
   if (!_viewportState || !_layout.offsets.length) return;
   const scale = _viewportState.getScale() || 1;
   const vpH = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * scale;
+  if (colH <= vpH + 0.5) return;
   const targetTy = computeTopAlignTy({
     slotTop: colY,
     totalHeight: _layout.totalHeight || 0,
@@ -2458,6 +2475,8 @@ function _bottomAlignColumnY(colY, targetTx = null) {
   if (!_viewportState || !_layout.offsets.length) return;
   const scale = _viewportState.getScale() || 1;
   const vpH = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * scale;
+  if (colH <= vpH + 0.5) return;
   const targetTy = computeBottomAlignTy({
     slotBottom: colY,
     totalHeight: _layout.totalHeight || 0,
@@ -2788,10 +2807,18 @@ function _onStateChange(state) {
   if (!_anchorUpdateInProgress && state.index >= 0 && performance.now() - _lastPanAt > 150) {
     const mapped = _listToImgIdx.get(state.index);
     if (mapped !== undefined && mapped !== _anchorImgIdx) {
-      if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
-        alignListItemBottom(state.index);
+      const scale = _viewportState?.getScale() || 1;
+      const vh = _viewport?.clientHeight || 800;
+      const colH = (_layout.totalHeight || 0) * scale;
+      if (colH > vh + 0.5) {
+        if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
+          alignListItemBottom(state.index);
+        } else {
+          alignListItemTop(state.index);
+        }
       } else {
-        alignListItemTop(state.index);
+        _anchorImgIdx = mapped;
+        _syncAnchorToCore();
       }
       _resumeMountedVideos();
     } else if (mapped === undefined) {
