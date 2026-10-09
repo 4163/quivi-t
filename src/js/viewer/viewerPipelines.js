@@ -1,5 +1,6 @@
 import { Core } from '../core.js';
-import { getEffectiveScaling, computeColumnComposite } from '../services/viewerMath.js';
+import { getEffectiveScaling, computeColumnComposite, icoSizesTotal } from '../services/viewerMath.js';
+import { buildIcoCompositeCanvas } from './icoCells.js';
 import { createLanczosPipeline } from '../services/scaling/lanczos.js';
 import { filter as lanczosWebGlModule } from '../services/scaling/lanczosWebGL.js';
 import { createGlRuntime } from '../services/pipelines/glRuntime.js';
@@ -189,16 +190,6 @@ export function createViewerPipelines(viewportState) {
     return `${live?.mode || ''}|${live?.archivePath || ''}|${p}`;
   }
 
-  function _icoTotal(sizes) {
-    let w = 0;
-    let h = 0;
-    for (const s of sizes) {
-      w += s?.width || 0;
-      if ((s?.height || 0) > h) h = s.height;
-    }
-    return { width: w, height: h };
-  }
-
   function _loadIcoImage(dataUrl) {
     return new Promise((resolve, reject) => {
       const im = new Image();
@@ -216,30 +207,15 @@ export function createViewerPipelines(viewportState) {
     const sizes = Array.isArray(live?.src) ? live.src : null;
     if (!sizes || sizes.length === 0) return null;
     const key = _icoKeyForLive(live);
-    const total = _icoTotal(sizes);
+    const total = icoSizesTotal(sizes);
     if (!total.width || !total.height) return null;
     if (_icoCompositeKey === key && _icoCompositeCanvas) {
       return { canvas: _icoCompositeCanvas, dataUrl: _icoCompositeUrl, width: _icoCompositeW, height: _icoCompositeH, key };
     }
     if (_icoCompositePromise && _icoCompositePromise.key === key) return _icoCompositePromise.promise;
     const promise = (async () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = total.width;
-      canvas.height = total.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return null;
-      ctx.clearRect(0, 0, total.width, total.height);
-      let x = 0;
-      for (const s of sizes) {
-        if (!s?.data_url) continue;
-        const w = s.width || 0;
-        const h = s.height || 0;
-        if (!w || !h) continue;
-        const im = await _loadIcoImage(s.data_url);
-        const y = Math.round((total.height - h) / 2);
-        ctx.drawImage(im, x, y, w, h);
-        x += w;
-      }
+      const canvas = await buildIcoCompositeCanvas(sizes, total, _loadIcoImage);
+      if (!canvas) return null;
       const dataUrl = canvas.toDataURL('image/png');
       _icoCompositeKey = key;
       _icoCompositeCanvas = canvas;
@@ -441,7 +417,7 @@ export function createViewerPipelines(viewportState) {
       const live = Core.getState();
       const sizes = Array.isArray(live?.src) ? live.src : null;
       if (!sizes || sizes.length === 0) return;
-      const total = _icoTotal(sizes);
+      const total = icoSizesTotal(sizes);
       if (!total.width || !total.height) return;
       const geom = viewportState.getGeometry();
       const gen = _renderGeneration;
@@ -1216,19 +1192,9 @@ export function createViewerPipelines(viewportState) {
   /** Max ICO composites held in memory. Bounded by visible window plus margin. */
   const COLUMN_ICO_COMPOSITE_CAP = 12;
 
-  function _columnIcoTotal(sizes) {
-    let w = 0;
-    let h = 0;
-    for (const s of sizes) {
-      w += s?.width || 0;
-      if ((s?.height || 0) > h) h = s.height;
-    }
-    return { width: w, height: h };
-  }
-
   async function _ensureColumnIcoComposite(fileKey, sizes) {
     if (!fileKey || !Array.isArray(sizes) || sizes.length === 0) return null;
-    const total = _columnIcoTotal(sizes);
+    const total = icoSizesTotal(sizes);
     if (!total.width || !total.height) return null;
     const hit = _columnIcoComposites.get(fileKey);
     if (hit?.canvas) {
@@ -1238,23 +1204,8 @@ export function createViewerPipelines(viewportState) {
     }
     if (_columnIcoPending.has(fileKey)) return _columnIcoPending.get(fileKey);
     const promise = (async () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = total.width;
-      canvas.height = total.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return null;
-      ctx.clearRect(0, 0, total.width, total.height);
-      let x = 0;
-      for (const s of sizes) {
-        if (!s?.data_url) continue;
-        const w = s.width || 0;
-        const h = s.height || 0;
-        if (!w || !h) continue;
-        const im = await _loadIcoImage(s.data_url);
-        const y = Math.round((total.height - h) / 2);
-        ctx.drawImage(im, x, y, w, h);
-        x += w;
-      }
+      const canvas = await buildIcoCompositeCanvas(sizes, total, _loadIcoImage);
+      if (!canvas) return null;
       const entry = { canvas, width: total.width, height: total.height };
       _columnIcoComposites.set(fileKey, entry);
       while (_columnIcoComposites.size > COLUMN_ICO_COMPOSITE_CAP) {

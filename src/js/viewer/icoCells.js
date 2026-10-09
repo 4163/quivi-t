@@ -32,3 +32,26 @@ export function createIcoCell(size, index, total, mirroredAngle) {
   cell.style.setProperty('--slot-backdrop-angle', mirroredAngle);
   return { cell, img };
 }
+
+export async function buildIcoCompositeCanvas(sizes, total, loadImage) {
+  if (!Array.isArray(sizes) || sizes.length === 0) return null;
+  if (!total || !total.width || !total.height) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = total.width;
+  canvas.height = total.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, total.width, total.height);
+  let x = 0;
+  for (const s of sizes) {
+    if (!s?.data_url) continue;
+    const w = s.width || 0;
+    const h = s.height || 0;
+    if (!w || !h) continue;
+    const im = await loadImage(s.data_url);
+    const y = Math.round((total.height - h) / 2);
+    ctx.drawImage(im, x, y, w, h);
+    x += w;
+  }
+  return canvas;
+}

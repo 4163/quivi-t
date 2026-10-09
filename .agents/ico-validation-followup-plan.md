@@ -31,8 +31,8 @@ This validation comparison was performed against `.agents/skills/validate-change
 
 ### Shared helpers
 
-- [ ] 1. Reuse one total helper. See `src/js/viewer/viewerPipelines.js:192`, `src/js/viewer/viewerPipelines.js:1219`, `src/js/fsUtils.js:294`. Delete the two local copies in pipeline code and call `FsUtils.icoSourcesTotal`. If pipeline code should not import `FsUtils`, move the function to `services/viewerMath.js` and call it from all three places. Accept when only one total implementation remains and `npm run mocha` passes.
-- [ ] 2. Share the composite draw block. See `src/js/viewer/viewerPipelines.js:214` and `src/js/viewer/viewerPipelines.js:1229`. Both build a canvas, clear it, then draw each size centered vertically from left to right. Keep the two caches as they are. Extract only the canvas build into one helper. Accept when legacy and column paths call the same draw helper and an ICO with three or more sizes still paints every cell.
+- [x] 1. Reuse one total helper. See `src/js/viewer/viewerPipelines.js:192`, `src/js/viewer/viewerPipelines.js:1219`, `src/js/fsUtils.js:294`. Delete the two local copies in pipeline code and call `FsUtils.icoSourcesTotal`. If pipeline code should not import `FsUtils`, move the function to `services/viewerMath.js` and call it from all three places. Accept when only one total implementation remains and `npm run mocha` passes.
+- [x] 2. Share the composite draw block. See `src/js/viewer/viewerPipelines.js:214` and `src/js/viewer/viewerPipelines.js:1229`. Both build a canvas, clear it, then draw each size centered vertically from left to right. Keep the two caches as they are. Extract only the canvas build into one helper. Accept when legacy and column paths call the same draw helper and an ICO with three or more sizes still paints every cell.
 
 ### Ownership and state
 

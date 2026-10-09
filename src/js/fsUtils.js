@@ -3,6 +3,7 @@ import { DirectoryPrefs } from './directoryPrefs.js';
 import { applySort } from './services/sorting.js';
 import { isMetadataEntryName } from './services/metadataFiles.js';
 import { createHistoryEntry, recordNavigation } from './navigationHistory.js';
+import { icoSizesTotal } from './services/viewerMath.js';
 
 const { invoke } = window.__TAURI__.core;
 
@@ -292,14 +293,7 @@ export const FsUtils = {
   },
 
   icoSourcesTotal(value) {
-    if (!Array.isArray(value) || value.length === 0) return null;
-    let w = 0;
-    let h = 0;
-    for (const s of value) {
-      w += s.width || 0;
-      if ((s.height || 0) > h) h = s.height;
-    }
-    return { width: w, height: h };
+    return icoSizesTotal(value);
   },
 
   async buildArchiveEntrySrc(archivePath, entryName) {
