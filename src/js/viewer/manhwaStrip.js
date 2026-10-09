@@ -814,7 +814,7 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
         });
       } else {
         const isMiddle = 0 < _anchorHoldover && _anchorHoldover < _imageIndex.length - 1;
-        if (_imageIndex.length <= 2 || isMiddle || colH <= vpH) {
+        if (isMiddle || colH <= vpH) {
           const centerSlotY = _layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2;
           targetTy = (newTotalH / 2 - centerSlotY) * scale;
         } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
@@ -828,10 +828,10 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
       // End-pin re-pins snap the whole column. Gate them on quiet: replay
       // showed a top re-pin kicking ty mid-scroll when slot 1 decoded.
       const panning = performance.now() - _lastPanAt < 150;
-      if (_imageIndex.length > 2 && wasAtTop && !wasAtBottom && !panning) {
+      if (_imageIndex.length > 1 && wasAtTop && !wasAtBottom && !panning) {
         // View was end-pinned: re-pin the end instead of holding the anchor.
         targetTy = Math.abs(colH - vpH) / 2;
-      } else if (_imageIndex.length > 2 && wasAtBottom && !wasAtTop && !panning) {
+      } else if (_imageIndex.length > 1 && wasAtBottom && !wasAtTop && !panning) {
         targetTy = -Math.abs(colH - vpH) / 2;
       } else {
         const newAnchorTop = _layout.offsets[anchorImgIdxToHold].top;
@@ -1937,7 +1937,8 @@ function _firstLastEdge() {
   if (total === 0) return 'neither';
   const rawPrimary = _listToImgIdx.get(Core.getState()?.index);
   const primary = (rawPrimary !== undefined && rawPrimary >= 0) ? rawPrimary : _anchorImgIdx;
-  if (primary !== null && primary > 0 && primary < total - 1) {
+  const isMiddle = primary !== null && primary > 0 && primary < total - 1;
+  if (total <= 3 && isMiddle) {
     return 'neither';
   }
   const { startIndex, endIndex } = _computeVisibleRange();
@@ -2001,10 +2002,10 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   if (entry && LATCH_FIT_MODES.includes(fitMode)) {
     const total = _imageIndex.length;
     const primary = _listToImgIdx.get(Core.getState()?.index);
-    if (total > 2 && primary === 0 && _layout.offsets[0]) {
+    if (total > 1 && primary === 0 && _layout.offsets[0]) {
       targetImgIdx = 0;
       alignTop = true;
-    } else if (total > 2 && primary === total - 1 && _layout.offsets[total - 1]) {
+    } else if (total > 1 && primary === total - 1 && _layout.offsets[total - 1]) {
       targetImgIdx = total - 1;
       alignTop = false;
     }
@@ -2033,7 +2034,7 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   const targetScale = _resolveStripFitScale(fitMode, entry, anchorIdxForEntry);
 
   const anchorIdx = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
-  if (!entry && alignTop && anchorIdx >= 0 && _layout.offsets[anchorIdx]) {
+  if (!entry && alignTop && anchorIdx > 0 && _layout.offsets[anchorIdx]) {
     const slotH = _layout.offsets[anchorIdx].height * targetScale;
     if (slotH <= vh) {
       alignTop = false;
@@ -2076,7 +2077,7 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
         _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       }
     } else {
-      if (!colFits && _imageIndex.length > 2 && entry && targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
+      if (!colFits && targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
         _bottomAlignColumnY(_layout.offsets[targetImgIdx].bottom, 0);
       } else if (_layout.offsets[targetImgIdx]) {
         _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
@@ -2289,7 +2290,7 @@ export function resetZoom(exactScale) {
       } else {
         const colH = (_layout.totalHeight || 0) * exactScale;
         const isMiddle = 0 < _anchorHoldover && _anchorHoldover < _imageIndex.length - 1;
-        if (_imageIndex.length <= 2 || isMiddle) {
+        if (isMiddle) {
           _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2, 0);
         } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
           _bottomAlignColumnY(_layout.offsets[_anchorHoldover].bottom, 0);
