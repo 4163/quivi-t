@@ -72,6 +72,7 @@ function _widthEstimate() {
  * column never paints from a guess. Opens on first decode, first sweep
  * report, sweep completion, or timeout, whichever lands first. */
 const WIDTH_GATE_TIMEOUT_MS = 2000;
+const GATE_PROBE_ALL_LIMIT = 4;
 let _widthGateKey = null;
 let _widthGateTimer = 0;
 let _widthGateToggle = false;
@@ -106,9 +107,10 @@ function _onMaxWidthReport(container, maxWidth, done = false) {
     }
     grew = true;
   }
-  if (_entryRefreshArmed && grew) {
+  if (grew) {
     const fit = Core.getState()?.fitMode || _lastFitMode;
-    if (['width', 'width-if-larger', 'window', 'window-if-larger'].includes(fit)) {
+    const quiet = performance.now() - _lastPanAt >= 150 && performance.now() - _lastZoomAt >= 150;
+    if ((_entryRefreshArmed || quiet) && ['width', 'width-if-larger', 'window', 'window-if-larger'].includes(fit)) {
       // Width sweep changes column width. Flush path re-resolves scale
       // through _resolveStripFitScale, covering Behavior 1 and Behavior 2
       // width inheritance. Height-only fits skip: scaleY is width independent.
@@ -124,7 +126,7 @@ function _onMaxWidthReport(container, maxWidth, done = false) {
  * decoded item, or timeout, whichever lands first. */
 function _maybeOpenWidthGate() {
   if (_widthGateKey === null || !_active) return;
-  if (_widthGateToggle && _imageIndex.length <= 3 && !_imageIndex.every((it) => it.decoded)) return;
+  if (_widthGateToggle && _imageIndex.length <= GATE_PROBE_ALL_LIMIT && !_imageIndex.every((it) => it.decoded)) return;
   const wasToggle = _widthGateToggle;
   _widthGateKey = null;
   _widthGateToggle = false;
@@ -150,7 +152,7 @@ function _clearWidthGate() {
 function _openWidthGate(isToggle = false) {
   _clearWidthGate();
   const ready = _imageIndex.length === 0 ||
-    (isToggle && _imageIndex.length <= 3 ? _imageIndex.every((it) => it.decoded) : _imageIndex.some((it) => it.decoded));
+    (isToggle && _imageIndex.length <= GATE_PROBE_ALL_LIMIT ? _imageIndex.every((it) => it.decoded) : _imageIndex.some((it) => it.decoded));
   if (ready) {
     _finishContainerEntry(isToggle);
     return;
@@ -172,7 +174,7 @@ function _openWidthGate(isToggle = false) {
  * dims. Stale probes (rebuilt index) no-op; failures leave the gate to
  * the sweep, completion, or timeout. */
 function _probeGateDims() {
-  const targets = (_imageIndex.length <= 3)
+  const targets = (_imageIndex.length <= GATE_PROBE_ALL_LIMIT)
     ? _imageIndex.map((_, i) => i).filter((i) => !_imageIndex[i]?.decoded)
     : [(_anchorImgIdx >= 0 ? _anchorImgIdx : 0)];
   for (const imgIdx of targets) {
@@ -1011,7 +1013,7 @@ function _updateWindow() {
 
   // Zooming in reframes the window: warm both sides regardless of direction.
   const zoomedIn = _lastScale !== null && scale > _lastScale + 1e-9;
-  if (isScaleChange) {
+  if (isScaleChange && _viewportProgram === 0) {
     _lastZoomAt = performance.now();
   }
   _lastScale = scale;
@@ -1418,14 +1420,17 @@ function _requestLayout() {
         : (currentAnchor !== -1 ? currentAnchor : 0));
     const oldAnchorTop = _layout.offsets[anchorToHold]?.top || 0;
     _updateLayout(anchorToHold, oldAnchorTop);
-    if (_fitRefreshPending) {
+    if (_fitRefreshPending && _widthGateKey === null) {
       _fitRefreshPending = false;
       const fitRefreshEntry = _entryRefreshEntry && _entryAnchorImgIdx === _anchorImgIdx;
       _disarmEntryRefresh();
       _applyFitMode(Core.getState()?.fitMode || _lastFitMode, _anchorImgIdx, _anchorHoldoverAlignTop, fitRefreshEntry);
+      if (_imageIndex.some((it) => !it.decoded) && performance.now() - _lastPanAt >= 150) {
+        _armEntryRefresh(fitRefreshEntry);
+      }
       return;
     }
-    if (_entryRefreshPending && !_fitRefreshPending) {
+    if (_entryRefreshPending && !_fitRefreshPending && _widthGateKey === null) {
       const fit = Core.getState()?.fitMode || _lastFitMode;
       const quiet = _lastPanAt < _entryRefreshArmedAt && _lastZoomAt < _entryRefreshArmedAt;
       const replayEntry = _entryRefreshEntry;
@@ -1955,7 +1960,6 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   if (_widthGateKey !== null) return;
   _viewportProgram++;
   try {
-  if (!entry) _disarmEntryRefresh();
   const fitMode = mode || Core.getState()?.fitMode || 'none';
 
   // Decide first/last alignment on the highlighted state, before the zoom
@@ -2747,6 +2751,7 @@ function _onStateChange(state) {
 
   const fitModeChanged = (state.fitMode && state.fitMode !== _lastFitMode) || (state.fitModeGen !== undefined && state.fitModeGen !== _lastFitModeGen);
   if (fitModeChanged) {
+    _disarmEntryRefresh();
     _lastFitMode = state.fitMode;
     _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : _lastFitModeGen;
     _applyFitMode(state.fitMode);
