@@ -36,9 +36,9 @@ This validation comparison was performed against `.agents/skills/validate-change
 
 ### Ownership and state
 
-- [ ] 3. Remove cross-surface read in legacy bridge parking. See `src/js/viewer/viewerRender.js:183`. It reads `#manhwa-strip` class state to decide grill on an ICO bridge node. Read `Core` manhwa state or the viewport grill value instead. Accept when no `getElementById('manhwa-strip')` remains in `viewerRender.js` and legacy to manhwa toggle still carries grill correctly.
-- [ ] 4. Decide the owner for wrapper grill. See `src/js/main/main.js:238` and `src/js/main/main.js:241`. Bootstrap toggles `grill-active` on `#viewer-img-wrapper`. Either keep it as documented fan-out or move it into the viewer owner. Do not keep it ambiguous. Accept when one file owns the wrapper class and the choice is noted in the checklist.
-- [ ] 5. Scope the cover thumbnail format. See `src/js/main/metadataBadge.js:22`. The change moved all covers from JPEG to PNG. PNG fits ICO transparency but costs more bytes for photos. Branch on ICO or restore JPEG for non-ICO covers. Accept when ICO covers keep transparency and photo covers stay JPEG, verified by generating both covers.
+- [x] 3. Remove cross-surface read in legacy bridge parking. See `src/js/viewer/viewerRender.js:183`. It reads `#manhwa-strip` class state to decide grill on an ICO bridge node. Read `Core` manhwa state or the viewport grill value instead. Accept when no `getElementById('manhwa-strip')` remains in `viewerRender.js` and legacy to manhwa toggle still carries grill correctly.
+- [x] 4. Decide the owner for wrapper grill. See `src/js/main/main.js:238` and `src/js/main/main.js:241`. Bootstrap toggles `grill-active` on `#viewer-img-wrapper`. Either keep it as documented fan-out or move it into the viewer owner. Do not keep it ambiguous. Accept when one file owns the wrapper class and the choice is noted in the checklist.
+- [x] 5. Scope the cover thumbnail format. See `src/js/main/metadataBadge.js:22`. The change moved all covers from JPEG to PNG. PNG fits ICO transparency but costs more bytes for photos. Branch on ICO or restore JPEG for non-ICO covers. Accept when ICO covers keep transparency and photo covers stay JPEG, verified by generating both covers.
 
 ### Pooling and CSS nits
 
@@ -48,7 +48,7 @@ This validation comparison was performed against `.agents/skills/validate-change
 
 ### Coverage gap
 
-- [ ] 9. Add a Rust unit test for the new IPC shape. See `src-tauri/src/ico.rs:1` and `src-tauri/src/models.rs:123`. No test in `src-tauri/src/tests/` covers `Vec<IcoSize>`. Add one that decodes a small ICO and asserts widths, heights, sort order, and `data_url` prefix. Accept when `cargo test` with an ICO filter passes.
+- [x] 9. Add a Rust unit test for the new IPC shape. See `src-tauri/src/ico.rs:1` and `src-tauri/src/models.rs:123`. No test in `src-tauri/src/tests/` covers `Vec<IcoSize>`. Add one that decodes a small ICO and asserts widths, heights, sort order, and `data_url` prefix. Accept when `cargo test` with an ICO filter passes.
 
 ### Accepted, no action
 

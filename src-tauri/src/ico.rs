@@ -94,3 +94,7 @@ pub fn ico_frames_from_bytes(data: &[u8]) -> Result<Vec<crate::models::IcoSize>,
     }
     Ok(sizes)
 }
+
+#[cfg(test)]
+#[path = "tests/ico_tests.rs"]
+mod tests;

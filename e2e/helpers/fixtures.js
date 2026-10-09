@@ -15,7 +15,7 @@ export const fixtures = {
   testSpread: path.resolve(testFilesRoot, 'spread_test_white.png'),
   testBmp: path.resolve(testFilesRoot, 'BDレーベル.bmp'),
   testSvg: path.resolve(testFilesRoot, 'gfl-spinner.svg'),
-  testIco: path.resolve(testFilesRoot, 'manhwa/isolate/endfield.ico'),
+  testIco: path.resolve(testFilesRoot, 'manhwa/single-ico/endfield.ico'),
 
   // Base archives
   zip: path.resolve(archivesDir, 'zip.zip'),
