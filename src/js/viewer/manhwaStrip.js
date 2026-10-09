@@ -1100,31 +1100,43 @@ function _updateWindow() {
     const slot = _slots.get(i);
     if (!slot) continue;
 
+    // ICO items mount as a per-size row through the queue below. A
+    // completed single-frame prefetch must not claim their slot.
+    const entryName = item.entry?.name || item.entry?.path || '';
+    const isIcoItem = FsUtils.isIco(entryName);
+
     if (_prefetchedImages.has(i)) {
       const node = _prefetchedImages.get(i);
       _prefetchedImages.delete(i);
-      const dims = _probeDims(node);
-      if (!item.decoded && dims) {
-        _onItemDecoded(i, dims.w, dims.h);
+      if (isIcoItem) {
+        _releaseStripNode(node);
+      } else {
+        const dims = _probeDims(node);
+        if (!item.decoded && dims) {
+          _onItemDecoded(i, dims.w, dims.h);
+        }
+        _claimSlot(i, item, slot, node);
+        continue;
       }
-      _claimSlot(i, item, slot, node);
-      continue;
     }
 
     if (_prefetching.has(i)) {
-      const pre = _prefetching.get(i);
-      const dims = _probeDims(pre);
-      if (dims) {
-        // Finished while off-DOM: take over, size the slot, then mount.
-        _prefetching.delete(i);
-        if (!item.decoded) {
-          _onItemDecoded(i, dims.w, dims.h);
+      if (!isIcoItem) {
+        const pre = _prefetching.get(i);
+        const dims = _probeDims(pre);
+        if (dims) {
+          // Finished while off-DOM: take over, size the slot, then mount.
+          _prefetching.delete(i);
+          if (!item.decoded) {
+            _onItemDecoded(i, dims.w, dims.h);
+          }
+          _claimSlot(i, item, slot, pre);
         }
-        _claimSlot(i, item, slot, pre);
+        // Still loading: leave it off-DOM. Its load handler hands to
+        // _prefetchedImages, and a later pass appends it with known dims.
+        continue;
       }
-      // Still loading: leave it off-DOM. Its load handler hands to
-      // _prefetchedImages, and a later pass appends it with known dims.
-      continue;
+      // ICO sizes resolve through the mount queue, not this single frame.
     }
 
     // Fresh: decode off-DOM through the sequential queue before mounting.
@@ -1314,7 +1326,10 @@ function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, v
       if (gated) {
         _prefetchedImages.set(i, pre);
         _trimPrefetchCache();
-        if (!stillCur.decoded && pre.naturalWidth > 0) {
+        // Single-frame probes must not size ICO items. Their row total
+        // lands through the mount queue; this would stick at one frame.
+        const gatedIco = FsUtils.isIco(stillCur.entry?.name || stillCur.entry?.path || '');
+        if (!stillCur.decoded && !gatedIco && pre.naturalWidth > 0) {
           _onItemDecoded(i, pre.naturalWidth, pre.naturalHeight);
         }
       }
