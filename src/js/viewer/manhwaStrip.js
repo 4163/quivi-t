@@ -393,10 +393,7 @@ function _claimIcoSlot(imgIdx, item, slot, sizes) {
       im.crossOrigin = 'anonymous';
       im.dataset.imgIdx = String(imgIdx);
       im.alt = item.entry?.name || '';
-      im.addEventListener('load', () => { cell.dataset.ready = 'true'; }, { once: true });
-      im.addEventListener('error', () => { cell.dataset.ready = 'true'; }, { once: true });
       im.src = s.data_url;
-      if (im.complete && im.naturalWidth > 0) cell.dataset.ready = 'true';
       if (!firstImg) firstImg = im;
     }
     container.appendChild(cell);

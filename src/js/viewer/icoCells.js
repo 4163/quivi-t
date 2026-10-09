@@ -20,6 +20,7 @@ export function createIcoContainer() {
 export function createIcoCell(size, index, total, mirroredAngle) {
   const cell = document.createElement('div');
   cell.className = 'ico-size';
+  cell.dataset.ready = 'true';
   const backdrop = document.createElement('div');
   backdrop.className = 'ico-size-backdrop';
   cell.appendChild(backdrop);

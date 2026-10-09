@@ -2240,10 +2240,6 @@ body.is-importing-url .header-cell:hover {
   z-index: 0;
 }
 
-#viewer-bridge-layer .ico-container.bridge.grill-active .ico-size[data-ready] .ico-size-backdrop {
-  display: block;
-}
-
 /* Retiring images keep their transform in this unscaled sibling layer. */
 #viewer-bridge-layer {
   position: absolute;

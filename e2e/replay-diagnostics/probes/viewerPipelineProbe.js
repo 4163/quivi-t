@@ -268,8 +268,11 @@ export function createViewerPipelineProbe() {
       if (!isBlackout) return null;
 
       const imgWrapper = document.getElementById('viewer-img-wrapper');
-      const activeImg = imgWrapper?.querySelector('.viewer-img.active');
-      const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge') ?? imgWrapper?.querySelector('.viewer-img.bridge');
+      const activeImg = imgWrapper?.querySelector('.viewer-img.active')
+        ?? imgWrapper?.querySelector('#viewer-ico-row .ico-container .ico-size[data-ready] > img');
+      const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge')
+        ?? imgWrapper?.querySelector('.viewer-img.bridge')
+        ?? document.getElementById('viewer-bridge-layer')?.querySelector('.ico-container.bridge .ico-size[data-ready] > img');
       const activeVideo = imgWrapper?.querySelector('.viewer-video.active');
       const bridgeVideo = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-video.bridge') ?? imgWrapper?.querySelector('.viewer-video.bridge');
       const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');

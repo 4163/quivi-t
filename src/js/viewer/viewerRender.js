@@ -501,15 +501,22 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         im.crossOrigin = 'anonymous';
         im.alt = state.filename || '';
         im.title = state.filename || '';
-        im.addEventListener('load', () => { cell.dataset.ready = 'true'; }, { once: true });
-        im.addEventListener('error', () => { cell.dataset.ready = 'true'; }, { once: true });
         im.src = s.data_url;
-        if (im.complete && im.naturalWidth > 0) cell.dataset.ready = 'true';
         firstImgs.push(im);
       }
       container.appendChild(cell);
     });
     row.appendChild(container);
+    if (_retiringNode && _retiringNode !== container) {
+      _clearBridgeFallback();
+      if (_retireRaf) cancelAnimationFrame(_retireRaf);
+      const retiring = _retiringNode;
+      _scheduleRetireRaf(() => {
+        if (_retiringNode === retiring) {
+          _cancelRetiringNode();
+        }
+      });
+    }
     const total = FsUtils.icoSourcesTotal(sizes);
     const tw = total ? total.width : sizes[0].width;
     const th = total ? total.height : sizes[0].height;

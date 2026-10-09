@@ -577,7 +577,8 @@ export function initReplayDiagnostics() {
       }
 
       // Check real visual visibility on screen via getBoundingClientRect & computed style
-      const bridgeEl = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge, .viewer-video.bridge');
+      const bridgeEl = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge, .viewer-video.bridge')
+        ?? document.getElementById('viewer-bridge-layer')?.querySelector('.ico-container.bridge .ico-size[data-ready] > img');
       const bRect = bridgeEl ? bridgeEl.getBoundingClientRect() : null;
       const bCs = bridgeEl ? window.getComputedStyle(bridgeEl) : null;
       const bridgeVisible = !!(
@@ -611,7 +612,8 @@ export function initReplayDiagnostics() {
       const stripVideoVisible = !!visibleStripVideo;
 
       const imgWrapper = document.getElementById('viewer-img-wrapper');
-      const activeImg = imgWrapper?.querySelector('.viewer-img.active');
+      const activeImg = imgWrapper?.querySelector('.viewer-img.active')
+        ?? imgWrapper?.querySelector('#viewer-ico-row .ico-container .ico-size[data-ready] > img');
       const aRect = activeImg ? activeImg.getBoundingClientRect() : null;
       const aCs = activeImg ? window.getComputedStyle(activeImg) : null;
       const activeImgVisible = !!(
