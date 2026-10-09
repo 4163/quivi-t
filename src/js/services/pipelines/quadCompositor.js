@@ -159,7 +159,7 @@ const float PI = 3.14159265358979323846264;
 
 float lanczos3(float x) {
   x = abs(x);
-  if (x == 0.0) return 1.0;
+  if (x < 0.0001) return 1.0;
   if (x >= 3.0) return 0.0;
   float px = PI * x;
   return (sin(px) / px) * (sin(px / 3.0) / (px / 3.0));
@@ -193,7 +193,9 @@ void main() {
     }
   }
 
-  color /= totalWeight;
+  if (totalWeight > 0.00001) {
+    color /= totalWeight;
+  }
   fragColor = clamp(color, 0.0, 1.0);
 }
 `;

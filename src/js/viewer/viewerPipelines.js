@@ -51,6 +51,11 @@ function _drawSlotQuad(compositor, texture, draw, item, nodeW, nodeH, vpW, vpH, 
   const dh = dr.height ?? dr.dh ?? 0;
   if (dw <= 0 || dh <= 0) return false;
 
+  const slotScaleX = sw > 0 ? dw / sw : 1;
+  const slotScaleY = sh > 0 ? dh / sh : 1;
+  const isSlot1to1 = Math.abs(slotScaleX - 1) < 0.001 && Math.abs(slotScaleY - 1) < 0.001;
+  const quadSampler = (sampler === 'lanczos' && isSlot1to1) ? 'bilinear' : sampler;
+
   _scratchUV.u0 = sx / nodeW;
   _scratchUV.v0 = sy / nodeH;
   _scratchUV.u1 = (sx + sw) / nodeW;
@@ -64,7 +69,7 @@ function _drawSlotQuad(compositor, texture, draw, item, nodeW, nodeH, vpW, vpH, 
   _scratchSize.w = nodeW;
   _scratchSize.h = nodeH;
 
-  return compositor.drawQuad(texture, _scratchDest, _scratchUV, vpW, vpH, flipY, sampler, _scratchSize);
+  return compositor.drawQuad(texture, _scratchDest, _scratchUV, vpW, vpH, flipY, quadSampler, _scratchSize);
 }
 
 function isSvgSource(src, item = null) {
@@ -2213,9 +2218,10 @@ export function createViewerPipelines(viewportState) {
     }
 
     const isDirectScreen = _columnFilter === 'lanczos';
+    const isOneToOne = Math.abs(scale - 1) < 0.001;
     // One scaler only: a real filter owns resampling, so the composite base
-    // stays bilinear. Lanczos applies solely in lanczos-only direct mode.
-    const sampler = isDirectScreen && _columnScaling === 'lanczos' ? 'lanczos' : 'bilinear';
+    // stays bilinear. Lanczos applies solely in lanczos-only direct mode at non-1:1 scales.
+    const sampler = isDirectScreen && _columnScaling === 'lanczos' && !isOneToOne ? 'lanczos' : 'bilinear';
 
     let compositeFbo = null;
     if (isDirectScreen) {
