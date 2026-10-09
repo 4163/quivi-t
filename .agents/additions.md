@@ -6,9 +6,6 @@
 
 *Easiest and least invasive first.*
 
-### Supported Formats & Advanced Icons (Complex)
-- **Advanced .ico Processing:** Improve .ico processing/rendering following "performance-first". Change the .ico processing and rendering spec.
-
 ## Post-Release Backlog (Future Considerations)
 
 *Items deliberately deferred until after the initial release. Low priority by design: do not start without re-validating the need.*
