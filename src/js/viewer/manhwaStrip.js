@@ -171,8 +171,8 @@ function _openWidthGate(isToggle = false) {
 }
 
 /** Upfront decode of the entry target so first paint resolves from real
- * dims. Stale probes (rebuilt index) no-op; failures leave the gate to
- * the sweep, completion, or timeout. */
+ * dims. Stale probes (rebuilt index or already decoded) no-op; failures
+ * leave the gate to the sweep, completion, or timeout. */
 function _probeGateDims() {
   const targets = (_imageIndex.length <= GATE_PROBE_ALL_LIMIT)
     ? _imageIndex.map((_, i) => i).filter((i) => !_imageIndex[i]?.decoded)
@@ -188,7 +188,9 @@ function _probeGateDims() {
     }
     if (!src) continue;
     const done = (w, h) => {
-      if (_imageIndex[imgIdx] !== item || w <= 0 || h <= 0) return;
+      // A real decode may land while the probe is in flight (ICO rows
+      // resolve totals through the mount queue). Never clobber it.
+      if (_imageIndex[imgIdx] !== item || item.decoded || w <= 0 || h <= 0) return;
       _onItemDecoded(imgIdx, w, h);
     };
     if (item.kind === 'video') {
