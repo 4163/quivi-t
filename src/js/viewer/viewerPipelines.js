@@ -2430,7 +2430,9 @@ export function createViewerPipelines(viewportState) {
       // In manhwa the renderer parks its single source on every notify, which
       // funnels here through onActiveImageChanged(null). The column lifecycle
       // stays state-driven through _syncColumnPipeline, so leave it alone.
-      if (Core.getState()?.manhwaEnabled) return;
+      // During exit warmup, the column canvas must remain bridging until the
+      // legacy canvas completes its first frame.
+      if (Core.getState()?.manhwaEnabled || _exitWarmupActive) return;
       _finishManhwaExitWarmup();
       _teardownColumn();
       if (pipeline) {

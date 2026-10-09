@@ -1855,7 +1855,10 @@ export function getVisibleImageIndices() {
 
   const listIndices = [];
   for (let i = startIndex; i <= endIndex; i++) {
-    listIndices.push(_imageIndex[i].listIndex);
+    const item = _imageIndex[i];
+    if (item && item.listIndex != null) {
+      listIndices.push(item.listIndex);
+    }
   }
   return listIndices;
 }

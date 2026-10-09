@@ -278,7 +278,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _activeVideoEl = null;
     _activeVideoSrc = null;
     _activeMedia = null;
-    onActiveImageChanged(null);
   }
 
   function _releaseBridgeNode(node) {
