@@ -33,7 +33,7 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Windows integration**: Drag and drop supported files to open them. Register file associations per-user for Windows Default Apps. Native window dragging supports PowerToys FancyZones snapping.
 - **Configuration**: Choose roaming user config or portable config stored next to the executable, and move the shared URL Library to an existing empty folder.
 - **Custom theming**: Inject and live-reload custom CSS rules, with native light/dark mode support.
-- **ICO spritesheets**: Render multi-frame `.ico` files as generated spritesheets.
+- **ICO rows**: Render each size inside a `.ico` file side by side in one row, largest first.
 - **File panel**: Switchable list and thumbnail view modes with virtualized card grid layout, Favorites, and provider-organized URL Library galleries.
 - **Performance**: Fast O(1) virtualized rendering handles folders and archives with thousands of items instantly. Caching native shell icons and thumbnails eliminates UI pop-in.
 
@@ -91,9 +91,9 @@ The shortcut engine supports simultaneous multi-key combinations (e.g. `A + B`),
 | Toggle menu bar | `2` |
 | Toggle status bar | `3` |
 | Fullscreen | `4` / `Alt+Enter` / `F11` |
-| Hide to tray | `Ctrl+Shift+H` |
 | Exit fullscreen (Hold) | `Escape` |
 | Toggle thumbnail / list view | `T` |
+| Hide to tray | `Ctrl+Shift+H` |
 | **File operations** | |
 | Open directory | `Ctrl+O` |
 | Open file / archive | `Ctrl+Shift+O` |
@@ -292,7 +292,7 @@ For automated iterative probing, see [`.agents/skills/replay-debugging/SKILL.md`
 | **Archives (7Z/CB7)** | [`sevenz-rust2`](https://crates.io/crates/sevenz-rust2) | Read 7Z entries, including passwords |
 | **Archives (TAR/CBT)** | [`tar`](https://crates.io/crates/tar) | Read TAR archives |
 | **Character Encoding** | [`chardetng`](https://crates.io/crates/chardetng) / [`encoding_rs`](https://crates.io/crates/encoding_rs) | Shift-JIS, GBK, EUC-KR, and Big5 names in ZIP and TAR |
-| **Image Processing** | [`image`](https://crates.io/crates/image) | ICO spritesheets, and descrambling for protected gallery images |
+| **Image Processing** | [`image`](https://crates.io/crates/image) | Per-size ICO PNG data URLs, and descrambling for protected gallery images |
 | **SVG Sanitization** | [DOMPurify](https://github.com/cure53/DOMPurify) | Cleans an imported SVG before saving it |
 | **Syntax Highlighting** | [Prism.js](https://prismjs.com) | Live CSS syntax highlighting in Options |
 | **Windows APIs** | [`windows`](https://crates.io/crates/windows) / [`winreg`](https://crates.io/crates/winreg) | Icons, thumbnails, file attributes, associations, and matching a temp extract back to its archive |
@@ -394,6 +394,7 @@ QuiviT/
 │     │  └─ purify.min.js         # SVG cleanup
 │     └─ viewer/
 │        ├─ viewer.js             # Viewer entry
+│        ├─ icoCells.js           # Per-size ICO DOM factory
 │        ├─ viewerRender.js       # Image and video elements
 │        ├─ viewerPipelines.js    # Filters on the viewer
 │        ├─ viewerGestures.js     # Pan drag
@@ -411,7 +412,7 @@ QuiviT/
 │  │  ├─ tests/                   # Rust tests
 │  │  ├─ config.rs                # Load and save settings
 │  │  ├─ formats.rs               # Which extensions open
-│  │  ├─ ico.rs                   # ICO spritesheets
+│  │  ├─ ico.rs                   # Per-size ICO PNG data URLs
 │  │  ├─ lib.rs                   # App startup
 │  │  ├─ main.rs                  # Executable entry
 │  │  ├─ models.rs                # Data passed across to the UI
