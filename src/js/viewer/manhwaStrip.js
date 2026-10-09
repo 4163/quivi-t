@@ -215,12 +215,19 @@ function _finishContainerEntry(isToggle = false) {
   if (!_active) return;
   _anchorImgIdx = _resolveOpenAnchor(Core.getState());
   _initEstimatedDimensions();
+  _updateLayout();
+
+  const fitMode = _lastFitMode || Core.getState()?.fitMode || 'none';
+  const targetScale = _resolveStripFitScale(fitMode, false, _anchorImgIdx);
+  const vh = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * targetScale;
+  const colFits = colH <= vh + 0.5 || _imageIndex.length <= 1;
   const isMiddle = 0 < _anchorImgIdx && _anchorImgIdx < _imageIndex.length - 1;
-  if (isToggle && _anchorImgIdx >= 0 && (_imageIndex.length <= 2 || isMiddle)) {
+
+  if (_anchorImgIdx >= 0 && (colFits || isMiddle)) {
     _anchorHoldover = _anchorImgIdx;
     _anchorHoldoverAlignTop = false;
   }
-  _updateLayout();
 
   if (_anchorImgIdx < 0) {
     // Behavior 1 entry: no image selection, whole-column fit. The overlay
@@ -230,7 +237,7 @@ function _finishContainerEntry(isToggle = false) {
   } else if (isToggle) {
     // Toggling the view on keeps legacy whole-column fits. Fresh-open
     // semantics belong to directory opens below.
-    const alignTop = isMiddle ? false : STRIP_TOP_ALIGN_FITS.includes(_lastFitMode);
+    const alignTop = (colFits || isMiddle) ? false : STRIP_TOP_ALIGN_FITS.includes(_lastFitMode);
     _applyFitMode(_lastFitMode, _anchorImgIdx, alignTop, false);
     _armEntryRefresh(false);
   } else {
@@ -239,11 +246,14 @@ function _finishContainerEntry(isToggle = false) {
     const openAtStart = _anchorImgIdx === 0;
     const isTargetEntry = !!state?.hasTargetEntry;
     const isEntryActiveImage = isTargetEntry || (openAtStart && openFirst);
+    const alignTop = (colFits || isMiddle)
+      ? false
+      : (STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && (openAtStart || isTargetEntry));
 
     _applyFitMode(
       _lastFitMode,
       _anchorImgIdx,
-      STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && (openAtStart || isTargetEntry),
+      alignTop,
       isEntryActiveImage
     );
     _armEntryRefresh(isEntryActiveImage);
@@ -799,13 +809,11 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
         });
       } else {
         const isMiddle = 0 < _anchorHoldover && _anchorHoldover < _imageIndex.length - 1;
-        if (_imageIndex.length <= 2 || isMiddle) {
+        if (_imageIndex.length <= 2 || isMiddle || colH <= vpH) {
           const centerSlotY = _layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2;
           targetTy = (newTotalH / 2 - centerSlotY) * scale;
         } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
           targetTy = -Math.abs(colH - vpH) / 2;
-        } else if (colH <= vpH) {
-          targetTy = Math.abs(colH - vpH) / 2;
         } else {
           const centerSlotY = _layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2;
           targetTy = (newTotalH / 2 - centerSlotY) * scale;
@@ -1964,10 +1972,10 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   if (entry && LATCH_FIT_MODES.includes(fitMode)) {
     const total = _imageIndex.length;
     const primary = _listToImgIdx.get(Core.getState()?.index);
-    if (total > 1 && primary === 0 && _layout.offsets[0]) {
+    if (total > 2 && primary === 0 && _layout.offsets[0]) {
       targetImgIdx = 0;
       alignTop = true;
-    } else if (total > 1 && primary === total - 1 && _layout.offsets[total - 1]) {
+    } else if (total > 2 && primary === total - 1 && _layout.offsets[total - 1]) {
       targetImgIdx = total - 1;
       alignTop = false;
     }
@@ -2003,6 +2011,12 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
     }
   }
 
+  const colH = (_layout.totalHeight || 0) * targetScale;
+  const colFits = colH <= vh + 0.5 || _imageIndex.length <= 1;
+  if (entry && colFits) {
+    alignTop = false;
+  }
+
   // Normal width/1:1 fit press while reading mid-column: keep the vertical
   // row, center horizontally, and hold no anchor so later layout passes do
   // not re-pin toward a slot center.
@@ -2024,35 +2038,26 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   const preScale = _viewportState.getScale() || 1;
   const centerColY = (_layout.totalHeight || 0) / 2 - (_viewportState.getTy() || 0) / preScale;
   _viewportState.zoomTo(targetScale, vw / 2, vh / 2);
-  const colH = (_layout.totalHeight || 0) * targetScale;
 
   if (targetImgIdx !== null) {
     if (alignTop) {
       if (_layout.offsets[targetImgIdx]) {
         _topAlignColumnY(_layout.offsets[targetImgIdx].top, 0);
-      } else if (_imageIndex.length > 2 && colH <= vh + 0.5) {
-        _lastTy = Math.abs(colH - vh) / 2;
-        _lastAnchorTy = _lastTy;
-        _viewportState.panTo(0, _lastTy);
       } else {
         _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       }
     } else {
-      if (_imageIndex.length > 2 && entry && targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
+      if (!colFits && _imageIndex.length > 2 && entry && targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
         _bottomAlignColumnY(_layout.offsets[targetImgIdx].bottom, 0);
       } else if (_layout.offsets[targetImgIdx]) {
         _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
-      } else if (_imageIndex.length > 2 && colH <= vh + 0.5) {
-        _lastTy = Math.abs(colH - vh) / 2;
-        _lastAnchorTy = _lastTy;
-        _viewportState.panTo(0, _lastTy);
       } else {
         _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       }
     }
   } else if (colH <= vh + 0.5) {
     const isMiddle = 0 < _anchorImgIdx && _anchorImgIdx < _imageIndex.length - 1;
-    if (_imageIndex.length <= 2 || isMiddle) {
+    if (_imageIndex.length <= 2 || isMiddle || colFits) {
       const idx = _anchorImgIdx >= 0 && _layout.offsets[_anchorImgIdx] ? _anchorImgIdx : 0;
       if (_layout.offsets[idx]) {
         _centerColumnY(_layout.offsets[idx].top + _layout.offsets[idx].height / 2, 0);
@@ -2060,9 +2065,7 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
         _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       }
     } else {
-      _lastTy = Math.abs(colH - vh) / 2;
-      _lastAnchorTy = _lastTy;
-      _viewportState.panTo(0, _lastTy);
+      _centerColumnY((_layout.totalHeight || 0) / 2, 0);
     }
   } else if (preserveReadingRow) {
     _viewportState.panTo(0, (_layout.totalHeight / 2 - centerColY) * targetScale);
