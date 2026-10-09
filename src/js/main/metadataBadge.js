@@ -5,7 +5,7 @@ let _lastMetadataDir = null;
 let _currentMeta = null;
 let _badgeEl = null;
 
-function _generateCoverThumbnail(src) {
+function _generateCoverThumbnail(src, usePng) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -19,7 +19,7 @@ function _generateCoverThumbnail(src) {
       canvas.height = h;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/png'));
+      resolve(usePng ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.8));
     };
     img.onerror = reject;
     img.src = src;
@@ -43,7 +43,8 @@ async function _loadMetadataForArchive(archivePath, metaFiles, fileList, FsUtils
     let coverDataUrl = null;
     if (coverSrc) {
       try {
-        coverDataUrl = await _generateCoverThumbnail(coverSrc);
+        const isIco = firstImage ? FsUtils.isIco(firstImage.name || '') : false;
+        coverDataUrl = await _generateCoverThumbnail(coverSrc, isIco);
       } catch (_) {}
     }
     const payload = { meta, coverSrc: coverDataUrl || coverSrc };
@@ -77,7 +78,7 @@ async function _loadMetadataForDirectory(directory, fileList, FsUtils) {
     let coverDataUrl = null;
     if (coverSrc) {
       try {
-        coverDataUrl = await _generateCoverThumbnail(coverSrc);
+        coverDataUrl = await _generateCoverThumbnail(coverSrc, Array.isArray(rawCoverSrc));
       } catch (_) {}
     }
 
