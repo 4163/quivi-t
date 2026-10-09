@@ -447,6 +447,7 @@ export function createViewerPipelines(viewportState) {
         if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) {
           vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
         }
+        _finishManhwaExitWarmup();
       }
       return;
     }
@@ -488,6 +489,7 @@ export function createViewerPipelines(viewportState) {
       if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) {
         vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
       }
+      _finishManhwaExitWarmup();
     }
   }
 
@@ -500,7 +502,7 @@ export function createViewerPipelines(viewportState) {
     });
   }
 
-  function _triggerRender(immediate = false) {
+  function _triggerRender() {
     const isIco = _activeIcoRow || _isIcoNode(_activeSource);
     const live = Core.getState();
     const isVideo = isVideoSource(_activeSource);
@@ -523,10 +525,13 @@ export function createViewerPipelines(viewportState) {
     
     if (usesLanczos && _activeSource) {
       const gen = _renderGeneration;
-      const delay = immediate ? 0 : 80;
+      const delay = _exitWarmupActive ? 0 : 80;
       _renderTimeout = setTimeout(async () => {
         if (gen !== _renderGeneration) return;
-        if (!_activeSource || !pipeline || pipeline.type !== 'lanczos') return;
+        if (!_activeSource || !pipeline || pipeline.type !== 'lanczos') {
+          _finishManhwaExitWarmup();
+          return;
+        }
         
         const geom = viewportState.getGeometry();
         if (lanczosCanvas) {
@@ -534,7 +539,10 @@ export function createViewerPipelines(viewportState) {
           if (isIco) {
             const composite = await _ensureIcoComposite();
             if (gen !== _renderGeneration) return;
-            if (!composite || !composite.dataUrl) return;
+            if (!composite || !composite.dataUrl) {
+              _finishManhwaExitWarmup();
+              return;
+            }
             sourceForRender = { src: composite.dataUrl, naturalWidth: composite.width, naturalHeight: composite.height };
           }
           const res = await pipeline.render(sourceForRender, geom);
@@ -558,7 +566,13 @@ export function createViewerPipelines(viewportState) {
               lanczosCanvas.style.removeProperty('--crop-h');
             }
             lanczosCanvas.setAttribute('data-render-ready', 'true');
+            _finishManhwaExitWarmup();
+          } else {
+            lanczosCanvas.removeAttribute('data-render-ready');
+            _finishManhwaExitWarmup();
           }
+        } else {
+          _finishManhwaExitWarmup();
         }
       }, delay);
     }
@@ -675,6 +689,7 @@ export function createViewerPipelines(viewportState) {
           if (vpEl && (_lastActiveFilter || pipeline.filter === 'lanczos')) {
             vpEl.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
           }
+          _finishManhwaExitWarmup();
         }
       }
 
@@ -839,6 +854,7 @@ export function createViewerPipelines(viewportState) {
             if (filterCanvas) filterCanvas.setAttribute('data-render-ready', 'true');
             const vpEl = document.getElementById('viewport');
             if (vpEl && (_lastActiveFilter || pipeline.filter === 'lanczos')) vpEl.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
+            _finishManhwaExitWarmup();
           }
           lastGeometryHash = geomHash;
           lastFilter = curFilter;
@@ -998,6 +1014,7 @@ export function createViewerPipelines(viewportState) {
           if (filterCanvas) filterCanvas.setAttribute('data-render-ready', 'true');
           const vp = document.getElementById('viewport');
           if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
+          _finishManhwaExitWarmup();
         }
       }
 
@@ -1014,6 +1031,13 @@ export function createViewerPipelines(viewportState) {
     const exitingManhwa = !state.manhwaEnabled && _columnWasManhwa;
     _columnWasManhwa = !!state.manhwaEnabled;
     if (state.manhwaEnabled) {
+      if (_manhwaExitWarmupTimer) {
+        clearTimeout(_manhwaExitWarmupTimer);
+        _manhwaExitWarmupTimer = null;
+      }
+      _exitWarmupActive = false;
+      const vpEl = document.getElementById('viewport');
+      if (vpEl) vpEl.classList.remove('manhwa-exit-warmup');
       // Legacy pipeline parks. The column pipeline takes over from here.
       _cancelRender();
       _stopLivePump();
@@ -1054,24 +1078,36 @@ export function createViewerPipelines(viewportState) {
       _requestColumnRender();
       return;
     }
-    const hadFrame = _columnVisible;
-    if (exitingManhwa) {
-      _teardownColumn();
+    if (exitingManhwa && _columnVisible) {
+      // Bridge the filtered column frame: keep the column canvas displayed until
+      // the legacy canvas paints its first frame.
+      _exitWarmupActive = true;
+      const vp = document.getElementById('viewport');
+      if (vp) vp.classList.add('manhwa-exit-warmup');
+      if (_manhwaExitWarmupTimer) clearTimeout(_manhwaExitWarmupTimer);
+      _manhwaExitWarmupTimer = setTimeout(() => {
+        _finishManhwaExitWarmup();
+      }, 500);
+    } else if (exitingManhwa) {
+      _finishManhwaExitWarmup();
       _teardownWebglCanvas();
     }
     _columnContainerKey = null;
 
-    if (_columnPipeline || hadFrame) {
-      if (!_columnPipeline && !hadFrame) {
+    if (_columnPipeline || _columnVisible) {
+      const hadFrame = _columnVisible;
+      if (!hadFrame) {
         _teardownColumn();
       }
       if (hadFrame) {
         // Markers still hold pre-manhwa values and the legacy overlay was
         // cleared on entry, so repaint once instead of trusting the diff.
+        // If manhwa-exit-warmup is active, _teardownColumn is deferred until
+        // the first legacy frame paints.
         _cancelRender();
         _applyScaling();
         _scheduleTransform();
-        _triggerRender(true);
+        _triggerRender();
         _syncLivePump();
         return;
       }
@@ -1136,6 +1172,8 @@ export function createViewerPipelines(viewportState) {
   /** Previous notify's manhwa state. Detects the legacy-to-manhwa edge so
    * entry work runs once instead of on every notify while active. */
   let _columnWasManhwa = false;
+  let _manhwaExitWarmupTimer = null;
+  let _exitWarmupActive = false;
 
   function _columnKeyFor(state) {
     if (!state) return null;
@@ -1633,11 +1671,31 @@ export function createViewerPipelines(viewportState) {
     })();
   }
 
+  function _finishManhwaExitWarmup() {
+    if (!_exitWarmupActive && !_manhwaExitWarmupTimer) return;
+    _exitWarmupActive = false;
+    if (_manhwaExitWarmupTimer) {
+      clearTimeout(_manhwaExitWarmupTimer);
+      _manhwaExitWarmupTimer = null;
+    }
+    const vp = document.getElementById('viewport');
+    if (vp && vp.classList.contains('manhwa-exit-warmup')) {
+      vp.classList.remove('manhwa-exit-warmup');
+    }
+    _teardownColumn();
+  }
+
   function _teardownColumn() {
     _columnGeneration++;
+    _exitWarmupActive = false;
+    if (_manhwaExitWarmupTimer) {
+      clearTimeout(_manhwaExitWarmupTimer);
+      _manhwaExitWarmupTimer = null;
+    }
     const vp = document.getElementById('viewport');
     if (vp) {
       vp.classList.remove('manhwa-warmup');
+      vp.classList.remove('manhwa-exit-warmup');
     }
     if (_columnRafId) {
       cancelAnimationFrame(_columnRafId);
@@ -2384,7 +2442,10 @@ export function createViewerPipelines(viewportState) {
       // In manhwa the renderer parks its single source on every notify, which
       // funnels here through onActiveImageChanged(null). The column lifecycle
       // stays state-driven through _syncColumnPipeline, so leave it alone.
-      if (Core.getState()?.manhwaEnabled) return;
+      // During exit warmup, the column canvas must remain bridging until the
+      // legacy canvas completes its first frame.
+      if (Core.getState()?.manhwaEnabled || _exitWarmupActive) return;
+      _finishManhwaExitWarmup();
       _teardownColumn();
       if (pipeline) {
         _teardownWebglCanvas();

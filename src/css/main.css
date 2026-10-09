@@ -2335,7 +2335,8 @@ body.is-importing-url .header-cell:hover {
   z-index: 1;
 }
 
-#viewport.manhwa-active #manhwa-filter-canvas[data-render-ready="true"] {
+#viewport.manhwa-active #manhwa-filter-canvas[data-render-ready="true"],
+#viewport.manhwa-exit-warmup #manhwa-filter-canvas[data-render-ready="true"] {
   display: block;
   opacity: 1;
 }
