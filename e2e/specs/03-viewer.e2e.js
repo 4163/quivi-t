@@ -207,7 +207,7 @@ describe('03 - Viewport & Viewer Controls', () => {
     );
   });
 
-  it('renders multi-size ICO in legacy row and maintains spritesheet continuity across manhwa toggle', async () => {
+  it('renders multi-size ICO in legacy row and maintains row continuity across manhwa toggle', async () => {
     // 1. Load multi-resolution ICO file
     await browser.execute((filePath) => {
       if (window.__TAURI__ && window.__TAURI__.event) {
