@@ -55,11 +55,11 @@ test-files/export_1785548648565.apng
 # Animated format test files duplicated into one directory for manual testing
 test-files/animated/
 # Manhwa test chapter
-내 최애는 막차를 탄다 - ch. 75/
-내 최애는 막차를 탄다 - ch. 75.zip
-issue/
-issue.zip
-issue.rar
+test-files/manhwa/내 최애는 막차를 탄다 - ch. 75/
+test-files/manhwa/내 최애는 막차를 탄다 - ch. 75.zip
+test-files/issue/
+test-files/issue.zip
+test-files/issue.rar
 
 # Python bytecode
 __pycache__/

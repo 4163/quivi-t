@@ -1,5 +1,6 @@
 import { Core } from '../core.js';
-import { getEffectiveScaling, computeColumnComposite } from '../services/viewerMath.js';
+import { getEffectiveScaling, computeColumnComposite, icoSizesTotal } from '../services/viewerMath.js';
+import { buildIcoCompositeCanvas } from './icoCells.js';
 import { createLanczosPipeline } from '../services/scaling/lanczos.js';
 import { filter as lanczosWebGlModule } from '../services/scaling/lanczosWebGL.js';
 import { createGlRuntime } from '../services/pipelines/glRuntime.js';
@@ -19,6 +20,7 @@ const _scratchDest = { x: 0, y: 0, width: 0, height: 0 };
 const _scratchSize = { w: 0, h: 0 };
 const _cachedDrawsScratch = [];
 const _liveDrawsScratch = [];
+const _icoDrawsScratch = [];
 const _rasterCandidatesScratch = [];
 const _svgCandidatesScratch = [];
 const _activeRastersScratch = [];
@@ -49,6 +51,11 @@ function _drawSlotQuad(compositor, texture, draw, item, nodeW, nodeH, vpW, vpH, 
   const dh = dr.height ?? dr.dh ?? 0;
   if (dw <= 0 || dh <= 0) return false;
 
+  const slotScaleX = sw > 0 ? dw / sw : 1;
+  const slotScaleY = sh > 0 ? dh / sh : 1;
+  const isSlot1to1 = Math.abs(slotScaleX - 1) < 0.001 && Math.abs(slotScaleY - 1) < 0.001;
+  const quadSampler = (sampler === 'lanczos' && isSlot1to1) ? 'bilinear' : sampler;
+
   _scratchUV.u0 = sx / nodeW;
   _scratchUV.v0 = sy / nodeH;
   _scratchUV.u1 = (sx + sw) / nodeW;
@@ -62,7 +69,7 @@ function _drawSlotQuad(compositor, texture, draw, item, nodeW, nodeH, vpW, vpH, 
   _scratchSize.w = nodeW;
   _scratchSize.h = nodeH;
 
-  return compositor.drawQuad(texture, _scratchDest, _scratchUV, vpW, vpH, flipY, sampler, _scratchSize);
+  return compositor.drawQuad(texture, _scratchDest, _scratchUV, vpW, vpH, flipY, quadSampler, _scratchSize);
 }
 
 function isSvgSource(src, item = null) {
@@ -70,7 +77,7 @@ function isSvgSource(src, item = null) {
     const name = item.entry.name || item.entry.path || '';
     if (/\.svg($|[?#])/i.test(name)) return true;
   }
-  if (!src) return false;
+  if (!src || typeof src !== 'string') return false;
   try {
     const url = new URL(src);
     return url.pathname.toLowerCase().endsWith('.svg');
@@ -126,6 +133,13 @@ async function loadSvgCanvas(src) {
 
 export function createViewerPipelines(viewportState) {
   let _activeSource = null;
+  let _activeIcoRow = false;
+  let _icoCompositeKey = null;
+  let _icoCompositeCanvas = null;
+  let _icoCompositeW = 0;
+  let _icoCompositeH = 0;
+  let _icoCompositeUrl = null;
+  let _icoCompositePromise = null;
   let pipeline = null;
   let _singleTextureCache = null;
   let _lastScalingMode = Core.getState().scalingMode;
@@ -165,6 +179,71 @@ export function createViewerPipelines(viewportState) {
       _triggerRender();
       _syncLivePump();
     });
+  }
+
+  function _isIcoNode(el) {
+    try {
+      return !!(el && el.closest && el.closest('.ico-container'));
+    } catch {
+      return false;
+    }
+  }
+
+  function _icoKeyForLive(live) {
+    const entry = live?.list?.[live?.index];
+    const p = entry?.path || entry?.name || live?.filename || '';
+    return `${live?.mode || ''}|${live?.archivePath || ''}|${p}`;
+  }
+
+  function _loadIcoImage(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const im = new Image();
+      im.decoding = 'async';
+      im.crossOrigin = 'anonymous';
+      im.onload = () => resolve(im);
+      im.onerror = reject;
+      im.src = dataUrl;
+      if (im.decode) im.decode().then(() => resolve(im)).catch(() => {});
+    });
+  }
+
+  async function _ensureIcoComposite() {
+    const live = Core.getState();
+    const sizes = Array.isArray(live?.src) ? live.src : null;
+    if (!sizes || sizes.length === 0) return null;
+    const key = _icoKeyForLive(live);
+    const total = icoSizesTotal(sizes);
+    if (!total.width || !total.height) return null;
+    if (_icoCompositeKey === key && _icoCompositeCanvas) {
+      return { canvas: _icoCompositeCanvas, dataUrl: _icoCompositeUrl, width: _icoCompositeW, height: _icoCompositeH, key };
+    }
+    if (_icoCompositePromise && _icoCompositePromise.key === key) return _icoCompositePromise.promise;
+    const promise = (async () => {
+      const canvas = await buildIcoCompositeCanvas(sizes, total, _loadIcoImage);
+      if (!canvas) return null;
+      const dataUrl = canvas.toDataURL('image/png');
+      _icoCompositeKey = key;
+      _icoCompositeCanvas = canvas;
+      _icoCompositeW = total.width;
+      _icoCompositeH = total.height;
+      _icoCompositeUrl = dataUrl;
+      return { canvas, dataUrl, width: total.width, height: total.height, key };
+    })();
+    _icoCompositePromise = { key, promise };
+    try {
+      return await promise;
+    } finally {
+      if (_icoCompositePromise && _icoCompositePromise.promise === promise) _icoCompositePromise = null;
+    }
+  }
+
+  function _clearIcoComposite() {
+    _icoCompositeKey = null;
+    _icoCompositeCanvas = null;
+    _icoCompositeW = 0;
+    _icoCompositeH = 0;
+    _icoCompositeUrl = null;
+    _icoCompositePromise = null;
   }
 
   function isVideoSource(el) {
@@ -337,6 +416,46 @@ export function createViewerPipelines(viewportState) {
   }
 
   async function _applyTransform() {
+    const isIco = _activeIcoRow || _isIcoNode(_activeSource);
+    if (isIco) {
+      if (!pipeline || pipeline.type !== 'webgl') return;
+      const live = Core.getState();
+      const sizes = Array.isArray(live?.src) ? live.src : null;
+      if (!sizes || sizes.length === 0) return;
+      const total = icoSizesTotal(sizes);
+      if (!total.width || !total.height) return;
+      const geom = viewportState.getGeometry();
+      const gen = _renderGeneration;
+      const composite = await _ensureIcoComposite();
+      if (gen !== _renderGeneration || !pipeline || pipeline.type !== 'webgl') return;
+      if (!composite || !composite.canvas) return;
+      if (!_singleTextureCache && pipeline.gl) {
+        _singleTextureCache = createTextureCache(pipeline.gl, {
+          maxEntries: VIEWER_IMAGE_POOL_CAPACITY,
+          maxBytes: 128 * 1024 * 1024,
+        });
+      }
+      const texKey = `ico:${composite.key}`;
+      let texEntry = _singleTextureCache ? _singleTextureCache.get(texKey) : null;
+      if (!texEntry && _singleTextureCache && pipeline.gl) {
+        const tex = uploadTexture(pipeline.gl, composite.canvas);
+        if (!tex) return;
+        texEntry = _singleTextureCache.put(texKey, tex, composite.width, composite.height);
+      }
+      if (gen !== _renderGeneration) return;
+      if (!texEntry || !texEntry.texture) return;
+      const ok = pipeline.renderFromTexture(texEntry.texture, geom, composite.width, composite.height);
+      if (gen !== _renderGeneration) return;
+      if (ok && filterCanvas) {
+        filterCanvas.setAttribute('data-render-ready', 'true');
+        const vp = document.getElementById('viewport');
+        if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) {
+          vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
+        }
+        _finishManhwaExitWarmup();
+      }
+      return;
+    }
     if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated || isVideoSource(_activeSource) || _isActiveSvg(Core.getState())) return;
     if (!_activeSource || !_activeSource.complete || _activeSource.naturalWidth <= 0 || _activeSource.naturalHeight <= 0) return;
     
@@ -375,6 +494,7 @@ export function createViewerPipelines(viewportState) {
       if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) {
         vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
       }
+      _finishManhwaExitWarmup();
     }
   }
 
@@ -388,6 +508,7 @@ export function createViewerPipelines(viewportState) {
   }
 
   function _triggerRender() {
+    const isIco = _activeIcoRow || _isIcoNode(_activeSource);
     const live = Core.getState();
     const isVideo = isVideoSource(_activeSource);
     const liveAnimated = !!live?.isAnimated || isVideo;
@@ -409,13 +530,27 @@ export function createViewerPipelines(viewportState) {
     
     if (usesLanczos && _activeSource) {
       const gen = _renderGeneration;
+      const delay = _exitWarmupActive ? 0 : 80;
       _renderTimeout = setTimeout(async () => {
         if (gen !== _renderGeneration) return;
-        if (!_activeSource || !pipeline || pipeline.type !== 'lanczos') return;
+        if (!_activeSource || !pipeline || pipeline.type !== 'lanczos') {
+          _finishManhwaExitWarmup();
+          return;
+        }
         
         const geom = viewportState.getGeometry();
         if (lanczosCanvas) {
-          const res = await pipeline.render(_activeSource, geom);
+          let sourceForRender = _activeSource;
+          if (isIco) {
+            const composite = await _ensureIcoComposite();
+            if (gen !== _renderGeneration) return;
+            if (!composite || !composite.dataUrl) {
+              _finishManhwaExitWarmup();
+              return;
+            }
+            sourceForRender = { src: composite.dataUrl, naturalWidth: composite.width, naturalHeight: composite.height };
+          }
+          const res = await pipeline.render(sourceForRender, geom);
           if (gen !== _renderGeneration) return;
           if (res && res.canvas) {
             lanczosCanvas.width = res.width;
@@ -436,9 +571,15 @@ export function createViewerPipelines(viewportState) {
               lanczosCanvas.style.removeProperty('--crop-h');
             }
             lanczosCanvas.setAttribute('data-render-ready', 'true');
+            _finishManhwaExitWarmup();
+          } else {
+            lanczosCanvas.removeAttribute('data-render-ready');
+            _finishManhwaExitWarmup();
           }
+        } else {
+          _finishManhwaExitWarmup();
         }
-      }, 80);
+      }, delay);
     }
   }
 
@@ -553,6 +694,7 @@ export function createViewerPipelines(viewportState) {
           if (vpEl && (_lastActiveFilter || pipeline.filter === 'lanczos')) {
             vpEl.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
           }
+          _finishManhwaExitWarmup();
         }
       }
 
@@ -717,6 +859,7 @@ export function createViewerPipelines(viewportState) {
             if (filterCanvas) filterCanvas.setAttribute('data-render-ready', 'true');
             const vpEl = document.getElementById('viewport');
             if (vpEl && (_lastActiveFilter || pipeline.filter === 'lanczos')) vpEl.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
+            _finishManhwaExitWarmup();
           }
           lastGeometryHash = geomHash;
           lastFilter = curFilter;
@@ -876,6 +1019,7 @@ export function createViewerPipelines(viewportState) {
           if (filterCanvas) filterCanvas.setAttribute('data-render-ready', 'true');
           const vp = document.getElementById('viewport');
           if (vp && (_lastActiveFilter || pipeline.filter === 'lanczos')) vp.setAttribute('data-filter', _lastActiveFilter || pipeline.filter);
+          _finishManhwaExitWarmup();
         }
       }
 
@@ -892,6 +1036,13 @@ export function createViewerPipelines(viewportState) {
     const exitingManhwa = !state.manhwaEnabled && _columnWasManhwa;
     _columnWasManhwa = !!state.manhwaEnabled;
     if (state.manhwaEnabled) {
+      if (_manhwaExitWarmupTimer) {
+        clearTimeout(_manhwaExitWarmupTimer);
+        _manhwaExitWarmupTimer = null;
+      }
+      _exitWarmupActive = false;
+      const vpEl = document.getElementById('viewport');
+      if (vpEl) vpEl.classList.remove('manhwa-exit-warmup');
       // Legacy pipeline parks. The column pipeline takes over from here.
       _cancelRender();
       _stopLivePump();
@@ -932,17 +1083,32 @@ export function createViewerPipelines(viewportState) {
       _requestColumnRender();
       return;
     }
-    if (exitingManhwa) {
+    if (exitingManhwa && _columnVisible) {
+      // Bridge the filtered column frame: keep the column canvas displayed until
+      // the legacy canvas paints its first frame.
+      _exitWarmupActive = true;
+      const vp = document.getElementById('viewport');
+      if (vp) vp.classList.add('manhwa-exit-warmup');
+      if (_manhwaExitWarmupTimer) clearTimeout(_manhwaExitWarmupTimer);
+      _manhwaExitWarmupTimer = setTimeout(() => {
+        _finishManhwaExitWarmup();
+      }, 500);
+    } else if (exitingManhwa) {
+      _finishManhwaExitWarmup();
       _teardownWebglCanvas();
     }
     _columnContainerKey = null;
 
     if (_columnPipeline || _columnVisible) {
       const hadFrame = _columnVisible;
-      _teardownColumn();
+      if (!hadFrame) {
+        _teardownColumn();
+      }
       if (hadFrame) {
         // Markers still hold pre-manhwa values and the legacy overlay was
         // cleared on entry, so repaint once instead of trusting the diff.
+        // If manhwa-exit-warmup is active, _teardownColumn is deferred until
+        // the first legacy frame paints.
         _cancelRender();
         _applyScaling();
         _scheduleTransform();
@@ -1011,6 +1177,8 @@ export function createViewerPipelines(viewportState) {
   /** Previous notify's manhwa state. Detects the legacy-to-manhwa edge so
    * entry work runs once instead of on every notify while active. */
   let _columnWasManhwa = false;
+  let _manhwaExitWarmupTimer = null;
+  let _exitWarmupActive = false;
 
   function _columnKeyFor(state) {
     if (!state) return null;
@@ -1032,6 +1200,51 @@ export function createViewerPipelines(viewportState) {
   const _columnSvgSessions = new Map();
   /** imgIdx with SVG fetch in flight. Prevents fetch storms. */
   const _columnSvgPending = new Set();
+  /** File key to per-file ICO composite { canvas, width, height }. One
+   * texture per ICO file, same layout as the legacy single-image path:
+   * total is sum(widths) by max(height), cells left to right centered. */
+  const _columnIcoComposites = new Map();
+  /** File key with composite build in flight. Prevents decode storms. */
+  const _columnIcoPending = new Map();
+  /** Max ICO composites held in memory. Bounded by visible window plus margin. */
+  const COLUMN_ICO_COMPOSITE_CAP = 12;
+
+  async function _ensureColumnIcoComposite(fileKey, sizes) {
+    if (!fileKey || !Array.isArray(sizes) || sizes.length === 0) return null;
+    const total = icoSizesTotal(sizes);
+    if (!total.width || !total.height) return null;
+    const hit = _columnIcoComposites.get(fileKey);
+    if (hit?.canvas) {
+      _columnIcoComposites.delete(fileKey);
+      _columnIcoComposites.set(fileKey, hit);
+      return hit;
+    }
+    if (_columnIcoPending.has(fileKey)) return _columnIcoPending.get(fileKey);
+    const promise = (async () => {
+      const canvas = await buildIcoCompositeCanvas(sizes, total, _loadIcoImage);
+      if (!canvas) return null;
+      const entry = { canvas, width: total.width, height: total.height };
+      _columnIcoComposites.set(fileKey, entry);
+      while (_columnIcoComposites.size > COLUMN_ICO_COMPOSITE_CAP) {
+        const oldest = _columnIcoComposites.keys().next().value;
+        if (!oldest) break;
+        if (oldest === fileKey) break;
+        _columnIcoComposites.delete(oldest);
+      }
+      return entry;
+    })();
+    _columnIcoPending.set(fileKey, promise);
+    try {
+      return await promise;
+    } finally {
+      if (_columnIcoPending.get(fileKey) === promise) _columnIcoPending.delete(fileKey);
+    }
+  }
+
+  function _clearColumnIcoComposites() {
+    _columnIcoComposites.clear();
+    _columnIcoPending.clear();
+  }
   /** Viewport geometry of the previous column pass. Detects pan/zoom renders. */
   const _columnLastGeom = { scale: 0, tx: 0, ty: 0, vpW: 0, vpH: 0 };
   let _columnLiveLoopId = 0;
@@ -1048,6 +1261,7 @@ export function createViewerPipelines(viewportState) {
       if (_columnPipeline) { _columnPipeline.dispose(); _columnPipeline = null; }
       _columnFilter = null;
       _columnLiveTextures.clear();
+      _clearColumnIcoComposites();
       _scratchStaleIdx.length = 0;
       for (const imgIdx of _columnAnimSessions.keys()) _scratchStaleIdx.push(imgIdx);
       for (let i = 0; i < _scratchStaleIdx.length; i++) _closeColumnAnimSession(_scratchStaleIdx[i]);
@@ -1462,9 +1676,32 @@ export function createViewerPipelines(viewportState) {
     })();
   }
 
+  function _finishManhwaExitWarmup() {
+    if (!_exitWarmupActive && !_manhwaExitWarmupTimer) return;
+    _exitWarmupActive = false;
+    if (_manhwaExitWarmupTimer) {
+      clearTimeout(_manhwaExitWarmupTimer);
+      _manhwaExitWarmupTimer = null;
+    }
+    const vp = document.getElementById('viewport');
+    if (vp && vp.classList.contains('manhwa-exit-warmup')) {
+      vp.classList.remove('manhwa-exit-warmup');
+    }
+    _teardownColumn();
+  }
+
   function _teardownColumn() {
     _columnGeneration++;
-    document.getElementById('viewport')?.classList.remove('manhwa-warmup');
+    _exitWarmupActive = false;
+    if (_manhwaExitWarmupTimer) {
+      clearTimeout(_manhwaExitWarmupTimer);
+      _manhwaExitWarmupTimer = null;
+    }
+    const vp = document.getElementById('viewport');
+    if (vp) {
+      vp.classList.remove('manhwa-warmup');
+      vp.classList.remove('manhwa-exit-warmup');
+    }
     if (_columnRafId) {
       cancelAnimationFrame(_columnRafId);
       _columnRafId = 0;
@@ -1476,6 +1713,8 @@ export function createViewerPipelines(viewportState) {
     _columnHasLive = false;
     _cachedDrawsScratch.length = 0;
     _liveDrawsScratch.length = 0;
+    _icoDrawsScratch.length = 0;
+    _clearColumnIcoComposites();
     _scratchStaleIdx.length = 0;
     for (const imgIdx of _columnAnimSessions.keys()) _scratchStaleIdx.push(imgIdx);
     for (let i = 0; i < _scratchStaleIdx.length; i++) _closeColumnAnimSession(_scratchStaleIdx[i]);
@@ -1519,7 +1758,8 @@ export function createViewerPipelines(viewportState) {
     if (_columnVisible) {
       _columnVisible = false;
       const vp = document.getElementById('viewport');
-      if (vp && _columnFilter && vp.getAttribute('data-filter') === _columnFilter) {
+      const legacyReady = filterCanvas && filterCanvas.getAttribute('data-render-ready') === 'true';
+      if (vp && _columnFilter && vp.getAttribute('data-filter') === _columnFilter && !legacyReady) {
         vp.removeAttribute('data-filter');
       }
     }
@@ -1679,6 +1919,7 @@ export function createViewerPipelines(viewportState) {
     // Partition draws into cached stills, live videos, live SVG pumps, and live rasters.
     _cachedDrawsScratch.length = 0;
     _liveDrawsScratch.length = 0;
+    _icoDrawsScratch.length = 0;
     _rasterCandidatesScratch.length = 0;
     _svgCandidatesScratch.length = 0;
     _activeRastersScratch.length = 0;
@@ -1695,6 +1936,16 @@ export function createViewerPipelines(viewportState) {
     for (const draw of drawList) {
       const node = snap.nodes.get(draw.imgIdx);
       if (!node) continue;
+      const item = snap.items ? snap.items[draw.imgIdx] : null;
+      const entryName = item?.entry?.name || item?.entry?.path || '';
+      const icoInfo = snap.ico ? snap.ico.get(draw.imgIdx) : null;
+      const isIco = !!icoInfo || _isIcoNode(node) ||
+        (entryName && entryName.toLowerCase().endsWith('.ico'));
+      if (isIco) {
+        if (!icoInfo || !icoInfo.sizes || icoInfo.sizes.length === 0) continue;
+        _icoDrawsScratch.push({ draw, item, icoKey: icoInfo.key, sizes: icoInfo.sizes });
+        continue;
+      }
       const isLive = snap.liveSlots?.has(draw.imgIdx);
       if (!isLive) {
         const src = node.currentSrc || node.src;
@@ -1807,7 +2058,7 @@ export function createViewerPipelines(viewportState) {
       }
     }
     _columnHasLive = hasLive;
-    if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && _activeRastersScratch.length === 0 && _activeSvgsScratch.length === 0) return;
+    if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && _icoDrawsScratch.length === 0 && _activeRastersScratch.length === 0 && _activeSvgsScratch.length === 0) return;
 
     // Decode raster frames before touching GL. An await after the visible
     // canvas is cleared lets the browser composite a blank frame in
@@ -1893,16 +2144,21 @@ export function createViewerPipelines(viewportState) {
           _activeRastersScratch.splice(i, 1);
         }
       }
-      if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && _activeRastersScratch.length === 0 && _activeSvgsScratch.length === 0) return;
+      if (_cachedDrawsScratch.length === 0 && _liveDrawsScratch.length === 0 && _icoDrawsScratch.length === 0 && _activeRastersScratch.length === 0 && _activeSvgsScratch.length === 0) return;
     }
+
+    // Pin the visible window so LRU keeps stills and ICO composites alive.
+    _scratchVisibleKeys.clear();
+    for (let i = 0; i < _cachedDrawsScratch.length; i++) {
+      _scratchVisibleKeys.add(_cachedDrawsScratch[i].src);
+    }
+    for (let i = 0; i < _icoDrawsScratch.length; i++) {
+      _scratchVisibleKeys.add(`ico-col:${_icoDrawsScratch[i].icoKey}`);
+    }
+    _columnTextureCache.setPinnedKeys(_scratchVisibleKeys);
 
     // Load missing cached textures after pinning visible window slots.
     if (_cachedDrawsScratch.length > 0) {
-      _scratchVisibleKeys.clear();
-      for (let i = 0; i < _cachedDrawsScratch.length; i++) {
-        _scratchVisibleKeys.add(_cachedDrawsScratch[i].src);
-      }
-      _columnTextureCache.setPinnedKeys(_scratchVisibleKeys);
 
       const missing = _cachedDrawsScratch.filter(({ src }) => !_columnTextureCache.has(src));
       if (missing.length > 0) {
@@ -1924,10 +2180,48 @@ export function createViewerPipelines(viewportState) {
       }
     }
 
+    // Build one composite canvas per visible ICO file, then upload it as
+    // one texture. Same layout as the legacy path, so tiny sizes stay tiny.
+    if (_icoDrawsScratch.length > 0) {
+      try {
+        await Promise.all(_icoDrawsScratch.map(async (entry) => {
+          const texKey = `ico-col:${entry.icoKey}`;
+          if (_columnTextureCache.has(texKey)) return;
+          const comp = await _ensureColumnIcoComposite(entry.icoKey, entry.sizes);
+          if (gen !== _columnGeneration) return;
+          if (!comp || !comp.canvas) return;
+          if (_columnTextureCache.has(texKey)) return;
+          const tex = uploadTexture(gl, comp.canvas);
+          if (!tex) return;
+          _columnTextureCache.put(texKey, tex, comp.width, comp.height);
+        }));
+      } catch (e) {
+        console.warn('Failed to load ICO textures for column composite', e);
+      }
+      if (gen !== _columnGeneration || !Core.getState()?.manhwaEnabled || !_columnPipeline) {
+        return;
+      }
+      // Prune composites for files that left the visible window.
+      if (_columnIcoComposites.size > 0) {
+        _scratchActiveIdx.clear();
+        for (let i = 0; i < _icoDrawsScratch.length; i++) {
+          _scratchActiveIdx.add(_icoDrawsScratch[i].icoKey);
+        }
+        _scratchStaleIdx.length = 0;
+        for (const fileKey of _columnIcoComposites.keys()) {
+          if (!_scratchActiveIdx.has(fileKey)) _scratchStaleIdx.push(fileKey);
+        }
+        for (let i = 0; i < _scratchStaleIdx.length; i++) {
+          _columnIcoComposites.delete(_scratchStaleIdx[i]);
+        }
+      }
+    }
+
     const isDirectScreen = _columnFilter === 'lanczos';
+    const isOneToOne = Math.abs(scale - 1) < 0.001;
     // One scaler only: a real filter owns resampling, so the composite base
-    // stays bilinear. Lanczos applies solely in lanczos-only direct mode.
-    const sampler = isDirectScreen && _columnScaling === 'lanczos' ? 'lanczos' : 'bilinear';
+    // stays bilinear. Lanczos applies solely in lanczos-only direct mode at non-1:1 scales.
+    const sampler = isDirectScreen && _columnScaling === 'lanczos' && !isOneToOne ? 'lanczos' : 'bilinear';
 
     let compositeFbo = null;
     if (isDirectScreen) {
@@ -1955,6 +2249,19 @@ export function createViewerPipelines(viewportState) {
       const nodeH = texEntry.height || node.naturalHeight || 0;
       const item = snap.items ? snap.items[draw.imgIdx] : null;
       if (_drawSlotQuad(_columnQuadCompositor, texEntry.texture, draw, item, nodeW, nodeH, vpW, vpH, flipY, sampler)) {
+        painted++;
+      }
+    }
+
+    // Draw ICO slots from per-file composite textures. Item dims are total
+    // dims, so the source to dest mapping stays 1:1 with no cell stretch.
+    for (const entry of _icoDrawsScratch) {
+      const texEntry = _columnTextureCache.get(`ico-col:${entry.icoKey}`);
+      if (!texEntry || !texEntry.texture) continue;
+      const nodeW = texEntry.width || 0;
+      const nodeH = texEntry.height || 0;
+      if (nodeW <= 0 || nodeH <= 0) continue;
+      if (_drawSlotQuad(_columnQuadCompositor, texEntry.texture, entry.draw, entry.item, nodeW, nodeH, vpW, vpH, flipY, sampler)) {
         painted++;
       }
     }
@@ -2088,6 +2395,17 @@ export function createViewerPipelines(viewportState) {
   return {
     setSource(img) {
       if (Core.getState()?.manhwaEnabled) return;
+      _activeIcoRow = _isIcoNode(img);
+      if (_activeIcoRow) {
+        _activeSource = img;
+        if (lanczosCanvas) lanczosCanvas.removeAttribute('data-render-ready');
+        _cancelRender();
+        _applyScaling();
+        _scheduleTransform();
+        _triggerRender();
+        _stopLivePump();
+        return;
+      }
       if (img && _activeSource === img) {
         _cancelRender();
         _applyScaling();
@@ -2123,12 +2441,17 @@ export function createViewerPipelines(viewportState) {
     },
     clear() {
       _activeSource = null;
+      _activeIcoRow = false;
+      _clearIcoComposite();
       _cancelRender();
       _stopLivePump();
       // In manhwa the renderer parks its single source on every notify, which
       // funnels here through onActiveImageChanged(null). The column lifecycle
       // stays state-driven through _syncColumnPipeline, so leave it alone.
-      if (Core.getState()?.manhwaEnabled) return;
+      // During exit warmup, the column canvas must remain bridging until the
+      // legacy canvas completes its first frame.
+      if (Core.getState()?.manhwaEnabled || _exitWarmupActive) return;
+      _finishManhwaExitWarmup();
       _teardownColumn();
       if (pipeline) {
         _teardownWebglCanvas();

@@ -106,7 +106,7 @@ describe('Replay Diagnostics Runner', function () {
         const check = () => {
           if (Core.getState().list?.length > 0) {
             if (Core.getState().index !== targetIdx) {
-              Core.selectIndex(targetIdx).finally(done);
+              Promise.resolve(Core.selectIndex(targetIdx)).finally(done);
             } else {
               done();
             }
@@ -133,7 +133,7 @@ describe('Replay Diagnostics Runner', function () {
                 return base === target;
               });
               if (foundIdx !== -1 && foundIdx !== state.index) {
-                Core.selectIndex(foundIdx).finally(done);
+                Promise.resolve(Core.selectIndex(foundIdx)).finally(done);
                 return;
               }
             }

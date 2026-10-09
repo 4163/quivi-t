@@ -1,6 +1,7 @@
 import { Core } from '../core.js';
 import { FsUtils } from '../fsUtils.js';
 import { getCachedArchiveBlob, hasCachedArchiveBlob } from '../services/archiveImageCache.js';
+import { createIcoCell, createIcoContainer, mirroredGrillAngle } from './icoCells.js';
 import { Statusbar } from '../menubar/statusbar.js';
 
 const PRELOAD_HALF = 1;
@@ -174,7 +175,13 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       }
       bridgeLayer.appendChild(node);
     }
-    node.classList.add('viewer-img');
+    const isIco = node.classList?.contains('ico-container');
+    if (!isIco) {
+      node.classList.add('viewer-img');
+    } else {
+      const transparent = !!Core.getState()?.config?.frontend_data?.transparent_bg;
+      if (!transparent) node.classList.add('grill-active');
+    }
     node.classList.add('bridge');
     _retiringNode = node;
     if (autoRetire) {
@@ -271,17 +278,17 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _activeVideoEl = null;
     _activeVideoSrc = null;
     _activeMedia = null;
-    onActiveImageChanged(null);
   }
 
   function _releaseBridgeNode(node) {
     node.classList.remove('bridge');
+    node.classList.remove('grill-active');
     node.style.removeProperty('--bridge-tx');
     node.style.removeProperty('--bridge-ty');
     node.style.removeProperty('--bridge-rot');
     node.style.removeProperty('--bridge-sx');
     node.style.removeProperty('--bridge-sy');
-    if (node.dataset?.borrowedBridge === 'true') {
+    if (node.dataset?.borrowedBridge === 'true' || node.classList?.contains('ico-container')) {
       node.remove();
     } else if (imgWrapper && node.parentElement !== imgWrapper && !node.classList.contains('is-placeholder')) {
       imgWrapper.appendChild(node);
@@ -462,6 +469,72 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     return !!(el && el.src && el.classList.contains('active'));
   }
 
+  function _clearIcoRow() {
+    const row = document.getElementById('viewer-ico-row');
+    if (row) row.replaceChildren();
+    if (imgWrapper) delete imgWrapper.dataset.ico;
+    if (imgWrapper) {
+      imgWrapper.style.removeProperty('--ico-total-w');
+      imgWrapper.style.removeProperty('--ico-total-h');
+    }
+  }
+
+  function _renderIcoRow(sizes, state) {
+    const row = document.getElementById('viewer-ico-row');
+    if (!row || !imgWrapper || !Array.isArray(sizes) || sizes.length === 0) return null;
+    if (img && img !== null) {
+      img.classList.remove('active');
+      img = null;
+    }
+    for (const src of Array.from(_activeNodes.keys())) _recyclePoolNode(src);
+    _hideVideo();
+    imgWrapper.dataset.ico = 'true';
+    row.replaceChildren();
+    const container = createIcoContainer();
+    const mirrored = mirroredGrillAngle(viewportState.getGrillAngle());
+    const firstImgs = [];
+    sizes.forEach((s, idx) => {
+      const { cell, img: im } = createIcoCell(s, idx, sizes.length, mirrored);
+      if (im) {
+        im.decoding = 'async';
+        im.draggable = false;
+        im.crossOrigin = 'anonymous';
+        im.alt = state.filename || '';
+        im.title = state.filename || '';
+        im.src = s.data_url;
+        firstImgs.push(im);
+      }
+      container.appendChild(cell);
+    });
+    row.appendChild(container);
+    if (_retiringNode && _retiringNode !== container) {
+      _clearBridgeFallback();
+      if (_retireRaf) cancelAnimationFrame(_retireRaf);
+      const retiring = _retiringNode;
+      _scheduleRetireRaf(() => {
+        if (_retiringNode === retiring) {
+          _cancelRetiringNode();
+        }
+      });
+    }
+    const total = FsUtils.icoSourcesTotal(sizes);
+    const tw = total ? total.width : sizes[0].width;
+    const th = total ? total.height : sizes[0].height;
+    imgWrapper.style.setProperty('--ico-total-w', `${tw}px`);
+    imgWrapper.style.setProperty('--ico-total-h', `${th}px`);
+    const liveDims = Core.getState();
+    if (liveDims.naturalWidth !== tw || liveDims.naturalHeight !== th) {
+      Core.setImageDimensions(tw, th);
+    }
+    viewportState.applyFitMode(state.fitMode, tw, th);
+    imgWrapper.style.setProperty('--grill-angle', viewportState.getGrillAngle());
+    Statusbar.setImage({ filename: state.filename || '', dims: `${tw} × ${th}`, zoom: viewportState.getScale() });
+    Statusbar.syncSpreadIndicator(state);
+    if (firstImgs.length > 0) onActiveImageChanged(firstImgs[0]);
+    else onActiveImageChanged(container);
+    return container;
+  }
+
   function _activatePoolNode(el, filename, state) {
     if (img && img !== el) {
       _parkNodeInBridge(img);
@@ -544,6 +617,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     _stopLoadingAnimation();
     _activeTargetSrc = null;
     _hideVideo();
+    _clearIcoRow();
     _poolGeneration += 1;
     _activationGeneration += 1;
     _clearTargetLoadTimer();
@@ -595,7 +669,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     if (state.manhwaEnabled) {
       const isArch = state.mode === 'archive';
       _lastRenderedArchivePath = isArch ? state.archivePath : null;
-      if (img && img.src && img.classList.contains('active')) {
+      const icoContainer = document.getElementById('viewer-ico-row')?.querySelector('.ico-container');
+      if (icoContainer) {
+        _parkNodeInBridge(icoContainer, null, false);
+        clearDisplayedImage(true);
+      } else if (img && img.src && img.classList.contains('active')) {
         _parkNodeInBridge(img, null, false);
         clearDisplayedImage(true);
       } else if (_activeMedia === 'video' && _activeVideoEl && _activeVideoEl.classList.contains('active')) {
@@ -622,16 +700,51 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
     if (state.mode === 'empty' || !state.src || !state.list || state.list.length === 0) {
       clearDisplayedImage();
+      _clearIcoRow();
       return;
     }
+
+    if (Array.isArray(state.src) && state.src.length > 0) {
+      _clearScheduledPreloads();
+      _clearTargetLoadTimer();
+      _stopLoadingAnimation();
+      const sameRow = _activeTargetSrc === state.src && document.getElementById('viewer-ico-row')?.firstChild;
+      _activeTargetSrc = state.src;
+      _forceReloadTarget = false;
+      const fitChanged = _lastFitModeGen !== state.fitModeGen;
+      if (sameRow) {
+        if (fitChanged) {
+          const total = FsUtils.icoSourcesTotal(state.src);
+          const tw = total ? total.width : state.src[0].width;
+          const th = total ? total.height : state.src[0].height;
+          viewportState.applyFitMode(state.fitMode, tw, th);
+          _lastFitModeGen = state.fitModeGen;
+        }
+      } else {
+        _lastFitModeGen = state.fitModeGen;
+        _renderIcoRow(state.src, state);
+      }
+      if (_retiringNode) {
+        _clearBridgeFallback();
+        if (_retireRaf) cancelAnimationFrame(_retireRaf);
+        const retiring = _retiringNode;
+        _scheduleRetireRaf(() => {
+          if (_retiringNode === retiring) {
+            _cancelRetiringNode();
+          }
+        });
+      }
+      return;
+    }
+    _clearIcoRow();
 
     if (_isVideoState(state) && videoEls.length > 0) {
       _clearTargetLoadTimer();
       _stopLoadingAnimation();
       const isVideoReload = _forceReloadTarget;
-      let videoSrc = state.src;
-      if (isVideoReload) {
-        videoSrc = state.src.includes('?') ? `${state.src}&_t=${Date.now()}` : `${state.src}?_t=${Date.now()}`;
+      let videoSrc = FsUtils.firstIcoSrc(state.src);
+      if (isVideoReload && typeof videoSrc === 'string') {
+        videoSrc = videoSrc.includes('?') ? `${videoSrc}&_t=${Date.now()}` : `${videoSrc}?_t=${Date.now()}`;
       }
       const videoChanged = videoSrc !== _activeVideoSrc || isVideoReload || _activeMedia !== 'video';
       _activeTargetSrc = state.src;
@@ -691,7 +804,8 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       if (img && !_isVisibleImage(img)) img = null;
     }
 
-    const desiredSrcs = new Set([state.src]);
+    const effectiveSrc = FsUtils.firstIcoSrc(state.src);
+    const desiredSrcs = new Set([effectiveSrc]);
     if (_isVisibleImage(img) && img.dataset.poolSrc) desiredSrcs.add(img.dataset.poolSrc);
 
     const neighborSrcs = FsUtils.neighborEntries(state, state.index, PRELOAD_HALF);
@@ -703,7 +817,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       _getPoolNode(src);
     }
 
-    let activeEl = _activeNodes.get(state.src);
+    let activeEl = _activeNodes.get(effectiveSrc);
     const isReload = _forceReloadTarget;
     const activeChanged = state.src !== _activeTargetSrc || isReload;
     _lastRenderedIsAnimated = !!state.isAnimated;
@@ -718,7 +832,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       if (activeEl) activeEl.alt = LOADING_LABEL;
 
       const isAlreadyLoaded = !isReload && activeEl && activeEl.complete && activeEl.naturalWidth > 0;
-      const isCacheWarm = !isAlreadyLoaded && hasCachedArchiveBlob(state.src);
+      const isCacheWarm = !isAlreadyLoaded && typeof effectiveSrc === 'string' && hasCachedArchiveBlob(effectiveSrc);
       if (!isAlreadyLoaded && !isCacheWarm) {
         _startLoadingAnimation(activeEl);
       }
@@ -740,22 +854,23 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         _targetLoadTimer = null;
         
         if (activeEl) {
-          let newSrc = state.src;
-          if (isReload) {
-            newSrc = state.src.includes('?') ? `${state.src}&_t=${_reloadTimestamp}` : `${state.src}?_t=${_reloadTimestamp}`;
-          } else if (state.isAnimated) {
-            newSrc = state.src.includes('?') ? `${state.src}&_reset=${Date.now()}` : `${state.src}?_reset=${Date.now()}`;
-          } else {
-            const cached = getCachedArchiveBlob(state.src);
+          let newSrc = effectiveSrc;
+          if (isReload && typeof effectiveSrc === 'string') {
+            newSrc = effectiveSrc.includes('?') ? `${effectiveSrc}&_t=${_reloadTimestamp}` : `${effectiveSrc}?_t=${_reloadTimestamp}`;
+          } else if (state.isAnimated && typeof effectiveSrc === 'string') {
+            newSrc = effectiveSrc.includes('?') ? `${effectiveSrc}&_reset=${Date.now()}` : `${effectiveSrc}?_reset=${Date.now()}`;
+          } else if (typeof effectiveSrc === 'string') {
+            const cached = getCachedArchiveBlob(effectiveSrc);
             if (cached) {
               newSrc = cached;
             }
           }
-          _loadPoolNode(activeEl, newSrc, state.src);
+          _loadPoolNode(activeEl, newSrc, effectiveSrc);
         }
 
-        const skipDecode = state.src.toLowerCase().endsWith('.ico') || state.src.includes('.ico?') || 
-                           state.src.toLowerCase().endsWith('.svg') || state.src.includes('.svg?');
+        const srcForCheck = typeof effectiveSrc === 'string' ? effectiveSrc : '';
+        const skipDecode = srcForCheck.toLowerCase().endsWith('.ico') || srcForCheck.includes('.ico?') || 
+                           srcForCheck.toLowerCase().endsWith('.svg') || srcForCheck.includes('.svg?');
         const ready = !isReload && activeEl && activeEl.complete && (activeEl.naturalWidth > 0 || skipDecode);
 
         let decodePromise;

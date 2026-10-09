@@ -991,4 +991,52 @@ describe('viewerMath', () => {
       }
     });
   });
+
+  describe('ICO sources and backdrop helpers', () => {
+    it('inverts grill angle for ICO backdrops', async () => {
+      const { mirroredGrillAngle } = await import('../src/js/viewer/icoCells.js');
+      assert.equal(mirroredGrillAngle('45deg'), '-45deg');
+      assert.equal(mirroredGrillAngle('-45deg'), '45deg');
+      assert.equal(mirroredGrillAngle(''), '45deg');
+    });
+
+    it('calculates total dimensions for ICO frame arrays', async () => {
+      if (typeof window === 'undefined') {
+        globalThis.window = { __TAURI__: { core: { invoke: async () => ({}) } } };
+      }
+      const { FsUtils } = await import('../src/js/fsUtils.js');
+
+      const sizes = [
+        { width: 256, height: 256, data_url: 'data:256' },
+        { width: 64, height: 64, data_url: 'data:64' },
+        { width: 32, height: 32, data_url: 'data:32' },
+        { width: 16, height: 16, data_url: 'data:16' },
+      ];
+      const total = FsUtils.icoSourcesTotal(sizes);
+      assert.deepEqual(total, { width: 368, height: 256 });
+      assert.equal(FsUtils.icoSourcesTotal([]), null);
+      assert.equal(FsUtils.icoSourcesTotal(null), null);
+      assert.equal(FsUtils.icoSourcesTotal('not-array'), null);
+    });
+
+    it('extracts first ICO frame data_url and detects source shapes', async () => {
+      if (typeof window === 'undefined') {
+        globalThis.window = { __TAURI__: { core: { invoke: async () => ({}) } } };
+      }
+      const { FsUtils } = await import('../src/js/fsUtils.js');
+
+      const sizes = [
+        { width: 128, height: 128, data_url: 'data:image/png;base64,primary' },
+        { width: 32, height: 32, data_url: 'data:image/png;base64,secondary' },
+      ];
+      assert.equal(FsUtils.firstIcoSrc(sizes), 'data:image/png;base64,primary');
+      assert.equal(FsUtils.firstIcoSrc('plain-url'), 'plain-url');
+      assert.equal(FsUtils.firstIcoSrc([]), '');
+
+      assert.equal(FsUtils.isIcoSources(sizes), true);
+      assert.equal(FsUtils.isIcoSources('https://example.com/icon.ico'), false);
+      assert.equal(FsUtils.isIcoSources(null), false);
+    });
+  });
 });
+

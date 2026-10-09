@@ -3,6 +3,7 @@ import { DirectoryPrefs } from './directoryPrefs.js';
 import { applySort } from './services/sorting.js';
 import { isMetadataEntryName } from './services/metadataFiles.js';
 import { createHistoryEntry, recordNavigation } from './navigationHistory.js';
+import { icoSizesTotal } from './services/viewerMath.js';
 
 const { invoke } = window.__TAURI__.core;
 
@@ -182,6 +183,7 @@ export const FsUtils = {
   },
 
   revokeIfObjectURL(src) {
+    if (typeof src !== 'string') return;
     if (src && src.startsWith('blob:')) URL.revokeObjectURL(src);
   },
 
@@ -261,13 +263,43 @@ export const FsUtils = {
     return extKey.includes('\\') || extKey.includes('/') || extKey.includes(':');
   },
 
+  async getIcoSources(filePath) {
+    if (!window.__TAURI__) return [];
+    try {
+      const sizes = await invoke('get_ico_frames', { path: filePath });
+      return Array.isArray(sizes) ? sizes : [];
+    } catch (e) {
+      console.error('Failed to extract ICO frames:', e);
+      return [];
+    }
+  },
+
+  async getArchiveIcoSources(archivePath, entryName) {
+    if (!window.__TAURI__) return [];
+    try {
+      const sizes = await invoke('get_archive_ico_frames', { archivePath, entryName });
+      return Array.isArray(sizes) ? sizes : [];
+    } catch (e) {
+      console.error('Failed to extract archive ICO frames:', e);
+      return [];
+    }
+  },
+
+  isIcoSources(value) { return Array.isArray(value); },
+
+  firstIcoSrc(value) {
+    if (Array.isArray(value)) return value.length > 0 ? value[0].data_url : '';
+    return value;
+  },
+
+  icoSourcesTotal(value) {
+    return icoSizesTotal(value);
+  },
+
   async buildArchiveEntrySrc(archivePath, entryName) {
     if (this.isIco(entryName) && window.__TAURI__) {
-      try {
-        return await invoke('get_archive_ico_frames', { archivePath, entryName });
-      } catch (e) {
-        console.error('Failed to extract archive ICO frames:', e);
-      }
+      const sizes = await this.getArchiveIcoSources(archivePath, entryName);
+      if (sizes.length > 0) return sizes;
     }
     return this.buildArchiveSrc(archivePath, entryName);
   },
@@ -278,11 +310,8 @@ export const FsUtils = {
       return window.__TAURI__.core.convertFileSrc(filePath);
     }
     if (this.isIco(filePath) && window.__TAURI__) {
-      try {
-        return await invoke('get_ico_frames', { path: filePath });
-      } catch (e) {
-        console.error('Failed to extract ICO frames:', e);
-      }
+      const sizes = await this.getIcoSources(filePath);
+      if (sizes.length > 0) return sizes;
     }
     return window.__TAURI__.core.convertFileSrc(filePath);
   },
@@ -360,8 +389,8 @@ export const FsUtils = {
         // Archive ico now serves full file (quivit://archive/...) like other archive images. Shell cannot read inside archive
         return this.buildArchiveSrc(state.archivePath, entry.name);
       }
-      // Disk ico now serves shell thumb (buildThumbnailSrc handles it), but viewer still uses spritesheet via buildFileSrc async path
-      // For neighbor preload we keep ico excluded here because viewer ico is data: URL spritesheet, not asset://
+      // Disk ico now serves shell thumb (buildThumbnailSrc handles it), but viewer still uses per-size arrays via buildFileSrc async path
+      // For neighbor preload we keep ico excluded here because viewer ico is data: URL parts, not asset://
       return this.isIco(entry.path) ? null : this.buildFileSrcSync(entry.path);
     };
 

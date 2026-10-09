@@ -6,6 +6,17 @@ export function checkIsSpread(w, h) {
   return (w / h) >= 1.2;
 }
 
+export function icoSizesTotal(value) {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  let w = 0;
+  let h = 0;
+  for (const s of value) {
+    w += s?.width || 0;
+    if ((s?.height || 0) > h) h = s.height;
+  }
+  return { width: w, height: h };
+}
+
 /**
  * Map a fit mode to a CSS width for the manhwa strip.
  * Width-based and window modes fill the viewport width.

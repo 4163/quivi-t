@@ -235,8 +235,11 @@ Core.onStateChange((state) => {
     const toggleEl = document.getElementById('cmd-toggle-transparent');
     
     const showSingleGrill = !isTransparent && !!state.src;
+    const wrapperEl = document.getElementById('viewer-img-wrapper');
+    // Bootstrap fans out grill state. Viewer and strip paint their own surfaces from it.
     if (grillEl) grillEl.classList.toggle('active', showSingleGrill);
     if (grillBorderEl) grillBorderEl.classList.toggle('active', showSingleGrill);
+    if (wrapperEl) wrapperEl.classList.toggle('grill-active', showSingleGrill);
     if (stripEl) stripEl.classList.toggle('grill-active', !isTransparent && isManhwaStripActive() && (state.list?.length || 0) > 0);
     if (toggleEl) {
       toggleEl.classList.toggle('checked', !isTransparent);

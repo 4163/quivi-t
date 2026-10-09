@@ -76,6 +76,12 @@ describe('Diagnostics system contract integrity', () => {
       assert.ok(viewerRender.includes('active'), 'viewerRender.js must manage active pool role');
       assert.ok(viewerRender.includes('bridge'), 'viewerRender.js must manage bridge pool role');
 
+      // #viewer-ico-row and ico-container elements must exist and be managed
+      assert.ok(indexHtml.includes('id="viewer-ico-row"'), 'index.html must define id="viewer-ico-row"');
+      assert.ok(viewerRender.includes('viewer-ico-row'), 'viewerRender.js must reference viewer-ico-row');
+      assert.ok(viewerRender.includes('ico-container'), 'viewerRender.js must reference ico-container');
+      assert.ok(manhwaStrip.includes('ico-container'), 'manhwaStrip.js must reference ico-container');
+
       // viewerPipelines must manage canvas elements and render-ready data attributes
       assert.ok(viewerPipelines.includes('viewer-lanczos-canvas'), 'viewerPipelines.js must reference viewer-lanczos-canvas');
       assert.ok(viewerPipelines.includes('viewer-filter-canvas'), 'viewerPipelines.js must reference viewer-filter-canvas');

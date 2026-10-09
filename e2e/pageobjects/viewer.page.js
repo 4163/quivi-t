@@ -15,6 +15,8 @@ class ViewerPage extends Page {
   get manhwaFilterCanvas() { return $('#manhwa-filter-canvas'); }
   get manhwaSvgPumpLayer() { return $('#manhwa-svg-pump-layer'); }
   get manhwaAudioOverlay() { return $('#manhwa-audio-overlay'); }
+  get icoRow() { return $('#viewer-ico-row'); }
+  get icoCells() { return $$('#viewer-ico-row .ico-size'); }
 
   async isManhwaActive() {
     const vp = await this.viewport;

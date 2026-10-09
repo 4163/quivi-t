@@ -121,6 +121,13 @@ pub struct TempArchiveOrigin {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IcoSize {
+    pub width: u32,
+    pub height: u32,
+    pub data_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LibraryNode {
     pub name: String,
     pub path: String,

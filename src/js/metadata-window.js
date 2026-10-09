@@ -38,7 +38,7 @@ function render(payload) {
 
   if (!meta) return;
 
-  // Cover image stays hidden until fully decoded to avoid progressive JPEG scan-line rendering.
+  // Cover image stays hidden until fully decoded to avoid partial paint.
   if (coverSrc) {
     coverWrap.classList.add('hidden');
     coverImg.onload = () => {

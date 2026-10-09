@@ -61,7 +61,7 @@ pub fn check_media_audio(
 const DIMENSION_HEADER_LIMIT: usize = 32_768;
 
 /// Extensions skipped during the width scan. SVG has no reliable header
-/// dimensions, and ICO dimensions differ from the generated spritesheet.
+/// dimensions, and ICO header dimensions differ from the generated row total.
 fn skip_for_width_scan(ext: &str) -> bool {
     ext.eq_ignore_ascii_case("svg") || ext.eq_ignore_ascii_case("ico")
 }

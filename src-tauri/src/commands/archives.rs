@@ -6,7 +6,7 @@ use crate::models::ArchiveReadResult;
 use std::fs;
 
 #[tauri::command(async)]
-pub fn get_ico_frames(path: String) -> Result<String, String> {
+pub fn get_ico_frames(path: String) -> Result<Vec<crate::models::IcoSize>, String> {
     let data = fs::read(&path).map_err(|e| format!("Cannot read ICO file: {e}"))?;
     ico_frames_from_bytes(&data)
 }
@@ -65,7 +65,7 @@ pub fn get_archive_ico_frames(
     archive_path: String,
     entry_name: String,
     state: tauri::State<'_, RwLock<ArchiveCache>>,
-) -> Result<String, String> {
+) -> Result<Vec<crate::models::IcoSize>, String> {
     let entry_data = state
         .write()
         .map_err(|e| e.to_string())?

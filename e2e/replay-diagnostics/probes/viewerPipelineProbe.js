@@ -60,6 +60,13 @@ export function createViewerPipelineProbe() {
           return true;
         }
       }
+
+      const mountedIcoImg = strip?.querySelector('.manhwa-slot[data-ico="true"] .ico-size[data-ready] > img');
+      if (mountedIcoImg && mountedIcoImg.complete && mountedIcoImg.naturalWidth > 0) {
+        if (!hasFilter || window.getComputedStyle(mountedIcoImg).visibility !== 'hidden') {
+          return true;
+        }
+      }
     }
 
     const imgWrapper = document.getElementById('viewer-img-wrapper');
@@ -67,6 +74,8 @@ export function createViewerPipelineProbe() {
     const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge') ?? imgWrapper?.querySelector('.viewer-img.bridge');
     const activeVideo = imgWrapper?.querySelector('.viewer-video.active');
     const bridgeVideo = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-video.bridge') ?? imgWrapper?.querySelector('.viewer-video.bridge');
+    const activeIcoImg = imgWrapper?.querySelector('#viewer-ico-row .ico-container .ico-size[data-ready] > img');
+    const bridgeIcoImg = document.getElementById('viewer-bridge-layer')?.querySelector('.ico-container.bridge .ico-size[data-ready] > img');
     const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');
     const filterCanvas = document.getElementById('viewer-filter-canvas');
     const manhwaCanvas = document.getElementById('manhwa-filter-canvas');
@@ -75,6 +84,8 @@ export function createViewerPipelineProbe() {
     const bridgeOpacity = bridgeImg ? parseFloat(window.getComputedStyle(bridgeImg).opacity) : 0;
     const activeVideoOpacity = activeVideo ? parseFloat(window.getComputedStyle(activeVideo).opacity) : 0;
     const bridgeVideoOpacity = bridgeVideo ? parseFloat(window.getComputedStyle(bridgeVideo).opacity) : 0;
+    const activeIcoOpacity = activeIcoImg ? parseFloat(window.getComputedStyle(activeIcoImg).opacity) : 0;
+    const bridgeIcoOpacity = bridgeIcoImg ? parseFloat(window.getComputedStyle(bridgeIcoImg).opacity) : 0;
     const lanczosOpacity = lanczosCanvas ? parseFloat(window.getComputedStyle(lanczosCanvas).opacity) : 0;
     const filterOpacity = filterCanvas ? parseFloat(window.getComputedStyle(filterCanvas).opacity) : 0;
     const manhwaOpacity = manhwaCanvas ? parseFloat(window.getComputedStyle(manhwaCanvas).opacity) : 0;
@@ -87,9 +98,11 @@ export function createViewerPipelineProbe() {
     const hasBridge = !!(bridgeImg && bridgeOpacity > 0 && bridgeImg.naturalWidth > 0);
     const hasActiveVideo = !!(activeVideo && activeVideoOpacity > 0 && activeVideo.readyState >= 2 && activeVideo.videoWidth > 0);
     const hasBridgeVideo = !!(bridgeVideo && bridgeVideoOpacity > 0 && bridgeVideo.readyState >= 2);
+    const hasActiveIco = !!(activeIcoImg && activeIcoOpacity > 0 && activeIcoImg.complete && activeIcoImg.naturalWidth > 0);
+    const hasBridgeIco = !!(bridgeIcoImg && bridgeIcoOpacity > 0 && bridgeIcoImg.complete && bridgeIcoImg.naturalWidth > 0);
     const hasCanvas = (lanczosReady && lanczosOpacity > 0) || (filterReady && filterOpacity > 0) || (manhwaReady && manhwaOpacity > 0);
 
-    return hasActive || hasBridge || hasActiveVideo || hasBridgeVideo || hasCanvas;
+    return hasActive || hasBridge || hasActiveVideo || hasBridgeVideo || hasCanvas || hasActiveIco || hasBridgeIco;
   }
 
   function ensureInitialized() {
@@ -103,7 +116,7 @@ export function createViewerPipelineProbe() {
     if (typeof HTMLImageElement !== 'undefined' && HTMLImageElement.prototype.decode) {
       const originalDecode = HTMLImageElement.prototype.decode;
       HTMLImageElement.prototype.decode = async function() {
-        const isViewerImg = this.classList.contains('viewer-img');
+        const isViewerImg = this.classList.contains('viewer-img') || !!(this.closest && this.closest('.ico-container'));
         if (!isViewerImg) return originalDecode.call(this);
 
         const src = this.getAttribute('src') || this.src || '';
@@ -162,7 +175,7 @@ export function createViewerPipelineProbe() {
       observer = new MutationObserver((mutations) => {
         for (const m of mutations) {
           if (m.type === 'attributes') {
-            if (m.attributeName === 'class' && m.target.classList.contains('viewer-img')) {
+            if (m.attributeName === 'class' && (m.target.classList.contains('viewer-img') || m.target.classList.contains('ico-container'))) {
               const isActive = m.target.classList.contains('active');
               const isBridge = m.target.classList.contains('bridge');
               const role = isActive ? 'active' : (isBridge ? 'bridge' : 'idle');
@@ -255,8 +268,11 @@ export function createViewerPipelineProbe() {
       if (!isBlackout) return null;
 
       const imgWrapper = document.getElementById('viewer-img-wrapper');
-      const activeImg = imgWrapper?.querySelector('.viewer-img.active');
-      const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge') ?? imgWrapper?.querySelector('.viewer-img.bridge');
+      const activeImg = imgWrapper?.querySelector('.viewer-img.active')
+        ?? imgWrapper?.querySelector('#viewer-ico-row .ico-container .ico-size[data-ready] > img');
+      const bridgeImg = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-img.bridge')
+        ?? imgWrapper?.querySelector('.viewer-img.bridge')
+        ?? document.getElementById('viewer-bridge-layer')?.querySelector('.ico-container.bridge .ico-size[data-ready] > img');
       const activeVideo = imgWrapper?.querySelector('.viewer-video.active');
       const bridgeVideo = document.getElementById('viewer-bridge-layer')?.querySelector('.viewer-video.bridge') ?? imgWrapper?.querySelector('.viewer-video.bridge');
       const lanczosCanvas = document.getElementById('viewer-lanczos-canvas');

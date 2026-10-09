@@ -206,4 +206,81 @@ describe('03 - Viewport & Viewer Controls', () => {
       { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class' }
     );
   });
+
+  it('renders multi-size ICO in legacy row and maintains row continuity across manhwa toggle', async () => {
+    // 1. Load multi-resolution ICO file
+    await browser.execute((filePath) => {
+      if (window.__TAURI__ && window.__TAURI__.event) {
+        window.__TAURI__.event.emit('single-instance-open', filePath);
+      }
+    }, fixtures.testIco);
+
+    await browser.waitUntil(
+      async () => (await statusbarPage.getFilenameText()).includes('endfield.ico'),
+      { timeout: 5000, timeoutMsg: 'ICO file failed to load into statusbar' }
+    );
+
+    // 2. Legacy ICO row should be visible with multi-resolution cells
+    await browser.waitUntil(
+      async () => await viewerPage.icoRow.isDisplayed(),
+      { timeout: 5000, timeoutMsg: 'Legacy ICO row did not display' }
+    );
+    const legacyCells = await viewerPage.icoCells;
+    expect(legacyCells.length).toBeGreaterThan(0);
+
+    // 3. Toggle manhwa mode on ('m')
+    await browser.keys(['m']);
+    await browser.waitUntil(
+      async () => await viewerPage.isManhwaActive(),
+      { timeout: 5000, timeoutMsg: 'Viewport did not gain manhwa-active class on ICO view toggle' }
+    );
+
+    // 4. Manhwa strip mounts ICO container and bridge layer cleans up
+    await browser.waitUntil(
+      async () => {
+        return await browser.execute(() => {
+          const container = document.querySelector('#manhwa-strip .ico-container');
+          return container !== null && container.querySelectorAll('.ico-size').length > 0;
+        });
+      },
+      { timeout: 5000, timeoutMsg: 'Manhwa strip did not mount ICO container with size cells' }
+    );
+
+    // Verify bridge layer has retired lingering elements
+    await browser.waitUntil(
+      async () => {
+        return await browser.execute(() => {
+          const bridgeLayer = document.getElementById('viewer-bridge-layer');
+          return !bridgeLayer || bridgeLayer.childElementCount === 0;
+        });
+      },
+      { timeout: 5000, timeoutMsg: 'Bridge layer did not retire elements after manhwa transition' }
+    );
+
+    // 5. Toggle manhwa mode off ('m') back to legacy view
+    await browser.keys(['m']);
+    await browser.waitUntil(
+      async () => !(await viewerPage.isManhwaActive()),
+      { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class on ICO view toggle' }
+    );
+
+    // 6. Legacy ICO row should be restored and displayed with cells intact, bridge empty
+    await browser.waitUntil(
+      async () => await viewerPage.icoRow.isDisplayed(),
+      { timeout: 5000, timeoutMsg: 'Legacy ICO row did not restore after exiting manhwa mode' }
+    );
+    const restoredCells = await viewerPage.icoCells;
+    expect(restoredCells.length).toBe(legacyCells.length);
+
+    await browser.waitUntil(
+      async () => {
+        return await browser.execute(() => {
+          const bridgeLayer = document.getElementById('viewer-bridge-layer');
+          return !bridgeLayer || bridgeLayer.childElementCount === 0;
+        });
+      },
+      { timeout: 5000, timeoutMsg: 'Bridge layer did not retire elements after legacy restore' }
+    );
+  });
 });
+

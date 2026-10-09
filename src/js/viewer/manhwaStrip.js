@@ -13,6 +13,7 @@ import { BoundedMap } from '../services/cache.js';
 import { FsUtils } from '../fsUtils.js';
 import { getCachedArchiveBlob } from '../services/archiveImageCache.js';
 import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale, firstLastHighlight } from '../services/viewerMath.js';
+import { createIcoCell, createIcoContainer, mirroredGrillAngle } from './icoCells.js';
 import { Statusbar } from '../menubar/statusbar.js';
 import { initManhwaAudio, ManhwaAudio } from './manhwaAudio.js';
 
@@ -59,7 +60,7 @@ const DEFAULT_ESTIMATED_HEIGHT = 1200;
  * Widest width observed for the current container. Fed by the backend
  * header sweep and the decode pipeline alike; backend reports always win
  * by overwrite. Reset on every container change, never reused.
- * SVG measured dims feed it; ICO spritesheet dims stay out.
+ * SVG measured dims feed it; ICO row totals stay out.
  */
 let _trackedMaxWidth = null;
 let _scanContainerKey = null;
@@ -71,6 +72,7 @@ function _widthEstimate() {
  * column never paints from a guess. Opens on first decode, first sweep
  * report, sweep completion, or timeout, whichever lands first. */
 const WIDTH_GATE_TIMEOUT_MS = 2000;
+const GATE_PROBE_ALL_LIMIT = 4;
 let _widthGateKey = null;
 let _widthGateTimer = 0;
 let _widthGateToggle = false;
@@ -105,9 +107,10 @@ function _onMaxWidthReport(container, maxWidth, done = false) {
     }
     grew = true;
   }
-  if (_entryRefreshArmed && grew) {
+  if (grew) {
     const fit = Core.getState()?.fitMode || _lastFitMode;
-    if (['width', 'width-if-larger', 'window', 'window-if-larger'].includes(fit)) {
+    const quiet = performance.now() - _lastPanAt >= 150 && performance.now() - _lastZoomAt >= 150;
+    if ((_entryRefreshArmed || quiet) && ['width', 'width-if-larger', 'window', 'window-if-larger'].includes(fit)) {
       // Width sweep changes column width. Flush path re-resolves scale
       // through _resolveStripFitScale, covering Behavior 1 and Behavior 2
       // width inheritance. Height-only fits skip: scaleY is width independent.
@@ -123,6 +126,7 @@ function _onMaxWidthReport(container, maxWidth, done = false) {
  * decoded item, or timeout, whichever lands first. */
 function _maybeOpenWidthGate() {
   if (_widthGateKey === null || !_active) return;
+  if (_widthGateToggle && _imageIndex.length <= GATE_PROBE_ALL_LIMIT && !_imageIndex.every((it) => it.decoded)) return;
   const wasToggle = _widthGateToggle;
   _widthGateKey = null;
   _widthGateToggle = false;
@@ -147,7 +151,9 @@ function _clearWidthGate() {
  * waits for the first decode, sweep report, sweep completion, or timeout. */
 function _openWidthGate(isToggle = false) {
   _clearWidthGate();
-  if (_imageIndex.length === 0 || _imageIndex.some((it) => it.decoded)) {
+  const ready = _imageIndex.length === 0 ||
+    (isToggle && _imageIndex.length <= GATE_PROBE_ALL_LIMIT ? _imageIndex.every((it) => it.decoded) : _imageIndex.some((it) => it.decoded));
+  if (ready) {
     _finishContainerEntry(isToggle);
     return;
   }
@@ -165,39 +171,45 @@ function _openWidthGate(isToggle = false) {
 }
 
 /** Upfront decode of the entry target so first paint resolves from real
- * dims. Stale probes (rebuilt index) no-op; failures leave the gate to
- * the sweep, completion, or timeout. */
+ * dims. Stale probes (rebuilt index or already decoded) no-op; failures
+ * leave the gate to the sweep, completion, or timeout. */
 function _probeGateDims() {
-  const imgIdx = _anchorImgIdx >= 0 ? _anchorImgIdx : 0;
-  const item = _imageIndex[imgIdx];
-  if (!item || item.decoded) return;
-  let src = null;
-  try {
-    src = _buildSrc(item.entry, Core.getState());
-  } catch {
-    src = null;
-  }
-  if (!src) return;
-  const done = (w, h) => {
-    if (_imageIndex[imgIdx] !== item || w <= 0 || h <= 0) return;
-    _onItemDecoded(imgIdx, w, h);
-  };
-  if (item.kind === 'video') {
-    const probe = document.createElement('video');
-    probe.preload = 'metadata';
-    probe.muted = true;
+  const targets = (_imageIndex.length <= GATE_PROBE_ALL_LIMIT)
+    ? _imageIndex.map((_, i) => i).filter((i) => !_imageIndex[i]?.decoded)
+    : [(_anchorImgIdx >= 0 ? _anchorImgIdx : 0)];
+  for (const imgIdx of targets) {
+    const item = _imageIndex[imgIdx];
+    if (!item || item.decoded) continue;
+    let src = null;
+    try {
+      src = _buildSrc(item.entry, Core.getState());
+    } catch {
+      src = null;
+    }
+    if (!src) continue;
+    const done = (w, h) => {
+      // A real decode may land while the probe is in flight (ICO rows
+      // resolve totals through the mount queue). Never clobber it.
+      if (_imageIndex[imgIdx] !== item || item.decoded || w <= 0 || h <= 0) return;
+      _onItemDecoded(imgIdx, w, h);
+    };
+    if (item.kind === 'video') {
+      const probe = document.createElement('video');
+      probe.preload = 'metadata';
+      probe.muted = true;
+      probe.crossOrigin = 'anonymous';
+      probe.onloadedmetadata = () => done(probe.videoWidth || 0, probe.videoHeight || 0);
+      probe.onerror = () => {};
+      probe.src = src;
+      continue;
+    }
+    const probe = new Image();
     probe.crossOrigin = 'anonymous';
-    probe.onloadedmetadata = () => done(probe.videoWidth || 0, probe.videoHeight || 0);
+    probe.decoding = 'async';
+    probe.onload = () => done(probe.naturalWidth || 0, probe.naturalHeight || 0);
     probe.onerror = () => {};
     probe.src = src;
-    return;
   }
-  const probe = new Image();
-  probe.crossOrigin = 'anonymous';
-  probe.decoding = 'async';
-  probe.onload = () => done(probe.naturalWidth || 0, probe.naturalHeight || 0);
-  probe.onerror = () => {};
-  probe.src = src;
 }
 
 /** Complete a gated container entry once first dims are in. Re-resolves
@@ -209,6 +221,18 @@ function _finishContainerEntry(isToggle = false) {
   _initEstimatedDimensions();
   _updateLayout();
 
+  const fitMode = _lastFitMode || Core.getState()?.fitMode || 'none';
+  const targetScale = _resolveStripFitScale(fitMode, false, _anchorImgIdx);
+  const vh = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * targetScale;
+  const colFits = colH <= vh + 0.5 || _imageIndex.length <= 1;
+  const isMiddle = 0 < _anchorImgIdx && _anchorImgIdx < _imageIndex.length - 1;
+
+  if (_anchorImgIdx >= 0 && (colFits || isMiddle)) {
+    _anchorHoldover = _anchorImgIdx;
+    _anchorHoldoverAlignTop = false;
+  }
+
   if (_anchorImgIdx < 0) {
     // Behavior 1 entry: no image selection, whole-column fit. The overlay
     // stays up, but scan, window, and settle still run.
@@ -217,7 +241,8 @@ function _finishContainerEntry(isToggle = false) {
   } else if (isToggle) {
     // Toggling the view on keeps legacy whole-column fits. Fresh-open
     // semantics belong to directory opens below.
-    _applyFitMode(_lastFitMode, _anchorImgIdx, STRIP_TOP_ALIGN_FITS.includes(_lastFitMode), false);
+    const alignTop = (colFits || isMiddle) ? false : STRIP_TOP_ALIGN_FITS.includes(_lastFitMode);
+    _applyFitMode(_lastFitMode, _anchorImgIdx, alignTop, false);
     _armEntryRefresh(false);
   } else {
     const state = Core.getState();
@@ -225,11 +250,14 @@ function _finishContainerEntry(isToggle = false) {
     const openAtStart = _anchorImgIdx === 0;
     const isTargetEntry = !!state?.hasTargetEntry;
     const isEntryActiveImage = isTargetEntry || (openAtStart && openFirst);
+    const alignTop = (colFits || isMiddle)
+      ? false
+      : (STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && (openAtStart || isTargetEntry));
 
     _applyFitMode(
       _lastFitMode,
       _anchorImgIdx,
-      STRIP_TOP_ALIGN_FITS.includes(_lastFitMode) && (openAtStart || isTargetEntry),
+      alignTop,
       isEntryActiveImage
     );
     _armEntryRefresh(isEntryActiveImage);
@@ -331,7 +359,7 @@ let _mountInFlight = -1;
 /** Coalesced layout pass for decode bursts. One rebuild per frame. */
 let _layoutRaf = 0;
 
-/** Session cache for resolved ICO spritesheet data URIs. */
+/** Session cache for resolved per-size ICO arrays. */
 const ICO_CACHE_CAPACITY = 50;
 const _icoCache = new BoundedMap(ICO_CACHE_CAPACITY);
 
@@ -340,16 +368,49 @@ function _getIcoKey(entry, state) {
 }
 
 function _resolveIco(entry, state) {
-  return state.mode === 'archive'
-    ? FsUtils.buildArchiveEntrySrc(state.archivePath, entry.name)
-    : FsUtils.buildFileSrc(entry.path);
+  const raw = state.mode === 'archive'
+    ? FsUtils.getArchiveIcoSources(state.archivePath, entry.name)
+    : FsUtils.getIcoSources(entry.path);
+  return Promise.resolve(raw);
+}
+
+function _claimIcoSlot(imgIdx, item, slot, sizes) {
+  for (const old of Array.from(slot.querySelectorAll(':scope > img, :scope > video, :scope > .ico-container'))) {
+    _detachStripNode(old);
+  }
+  slot.dataset.ico = 'true';
+  const container = createIcoContainer();
+  container.dataset.imgIdx = String(imgIdx);
+  if (item?.listIndex !== undefined) container.dataset.listIndex = String(item.listIndex);
+  const grillAngle = _viewportState ? _viewportState.getGrillAngle() : '45deg';
+  const mirrored = mirroredGrillAngle(grillAngle);
+  let firstImg = null;
+  sizes.forEach((s, idx) => {
+    const { cell, img: im } = createIcoCell(s, idx, sizes.length, mirrored);
+    if (im) {
+      im.decoding = 'async';
+      im.draggable = false;
+      im.crossOrigin = 'anonymous';
+      im.dataset.imgIdx = String(imgIdx);
+      im.alt = item.entry?.name || '';
+      im.src = s.data_url;
+      if (!firstImg) firstImg = im;
+    }
+    container.appendChild(cell);
+  });
+  slot.appendChild(container);
+  if (item) {
+    if (item.kind === 'image' || !item.kind) _classifyAnimatedSlot(imgIdx, item);
+  }
+  _mounted.set(imgIdx, container);
+  _onSlotMounted?.(imgIdx, imgIdx === _anchorImgIdx);
 }
 
 function _buildSrc(entry, state) {
   const name = entry.name || entry.path || '';
   if (FsUtils.isIco(name)) {
     const key = _getIcoKey(entry, state);
-    if (_icoCache.has(key)) return _icoCache.get(key);
+    if (_icoCache.has(key)) return FsUtils.firstIcoSrc(_icoCache.get(key));
   }
   if (state.mode === 'archive') {
     const archiveSrc = FsUtils.buildArchiveSrc(state.archivePath, entry.name);
@@ -493,11 +554,11 @@ function _releaseVideoNode(video) {
   }
 }
 
-/** Release a strip node to its own pool. Img and video pools never mix. */
+/** Release a strip node to its own pool. Img and video pools never mix. ICO containers detach instead of pooling. */
 function _releaseStripNode(node) {
   if (!node) return;
   if (node.tagName === 'VIDEO') _releaseVideoNode(node);
-  else _releaseNode(node);
+  else if (node.tagName === 'IMG') _releaseNode(node);
 }
 
 /** Unhook a slot child without pooling. Evict paths pool via _releaseStripNode. */
@@ -642,6 +703,9 @@ function _acquireSlotNode(item, total) {
   slot.dataset.imgIdx = String(item.imgIdx);
   slot.dataset.listIndex = String(item.listIndex);
   slot.dataset.kind = item.kind || 'image';
+  const entryName = item.entry?.name || item.entry?.path || '';
+  if (FsUtils.isIco(entryName)) slot.dataset.ico = 'true';
+  else delete slot.dataset.ico;
   _setSlotDimensions(slot, item.naturalWidth, item.naturalHeight);
   if (item.decoded) {
     slot.dataset.ready = 'true';
@@ -662,11 +726,12 @@ function _releaseSlotNode(slot) {
   slot.removeAttribute('data-img-idx');
   slot.removeAttribute('data-list-index');
   slot.removeAttribute('data-kind');
+  slot.removeAttribute('data-ico');
   delete slot.dataset.ready;
   slot.style.removeProperty('--slot-width');
   slot.style.removeProperty('--slot-height');
   slot.style.removeProperty('--slot-backdrop-bg');
-  for (const child of slot.querySelectorAll(':scope > img, :scope > video')) {
+  for (const child of slot.querySelectorAll(':scope > img, :scope > video, :scope > .ico-container')) {
     _detachStripNode(child);
   }
   if (_freeSlotPool.length < SLOT_POOL_CAP) {
@@ -693,11 +758,14 @@ function _insertSlotOrdered(slot, imgIdx) {
 
 function _initEstimatedDimensions() {
   const total = _imageIndex.length;
+  const sampleDecoded = _imageIndex.find((it) => it.decoded && it.naturalHeight > 0);
   for (let i = 0; i < total; i++) {
     const item = _imageIndex[i];
     const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
-    const defW = isSvg ? 1000 : _widthEstimate();
-    const defH = isSvg ? 1000 : DEFAULT_ESTIMATED_HEIGHT;
+    const fallbackW = sampleDecoded?.naturalWidth || _widthEstimate();
+    const fallbackH = sampleDecoded?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT;
+    const defW = isSvg ? 1000 : fallbackW;
+    const defH = isSvg ? 1000 : fallbackH;
     item.naturalHeight = item.naturalHeight || defH;
     item.naturalWidth = item.naturalWidth || defW;
   }
@@ -733,7 +801,9 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
     const colH = newTotalH * scale;
     let targetTy = oldTy;
 
-    if (_anchorHoldover !== null && _layout.offsets[_anchorHoldover]) {
+    if (colH <= vpH + 0.5) {
+      targetTy = oldTy;
+    } else if (_anchorHoldover !== null && _layout.offsets[_anchorHoldover]) {
       if (_anchorHoldoverAlignTop) {
         targetTy = computeTopAlignTy({
           slotTop: _layout.offsets[_anchorHoldover].top,
@@ -742,10 +812,12 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
           viewportHeight: vpH,
         });
       } else {
-        if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
+        const isMiddle = 0 < _anchorHoldover && _anchorHoldover < _imageIndex.length - 1;
+        if (isMiddle) {
+          const centerSlotY = _layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2;
+          targetTy = (newTotalH / 2 - centerSlotY) * scale;
+        } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
           targetTy = -Math.abs(colH - vpH) / 2;
-        } else if (colH <= vpH) {
-          targetTy = Math.abs(colH - vpH) / 2;
         } else {
           const centerSlotY = _layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2;
           targetTy = (newTotalH / 2 - centerSlotY) * scale;
@@ -755,10 +827,10 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
       // End-pin re-pins snap the whole column. Gate them on quiet: replay
       // showed a top re-pin kicking ty mid-scroll when slot 1 decoded.
       const panning = performance.now() - _lastPanAt < 150;
-      if (wasAtTop && !wasAtBottom && !panning) {
+      if (_imageIndex.length > 1 && wasAtTop && !wasAtBottom && !panning) {
         // View was end-pinned: re-pin the end instead of holding the anchor.
         targetTy = Math.abs(colH - vpH) / 2;
-      } else if (wasAtBottom && !wasAtTop && !panning) {
+      } else if (_imageIndex.length > 1 && wasAtBottom && !wasAtTop && !panning) {
         targetTy = -Math.abs(colH - vpH) / 2;
       } else {
         const newAnchorTop = _layout.offsets[anchorImgIdxToHold].top;
@@ -819,7 +891,7 @@ function _onItemDecoded(imgIdx, nw, nh) {
   item.decoded = true;
 
   // Running container max: any observed width beats the record so the
-  // column only ever grows from real data. ICO spritesheet dims stay out;
+  // column only ever grows from real data. ICO row totals stay out;
   // measured svg dims count. Backend reports overwrite via the same rule.
   if (!isIco && nw > 0 && nw > (_trackedMaxWidth || 0)) {
     _trackedMaxWidth = nw;
@@ -942,7 +1014,7 @@ function _updateWindow() {
 
   // Zooming in reframes the window: warm both sides regardless of direction.
   const zoomedIn = _lastScale !== null && scale > _lastScale + 1e-9;
-  if (isScaleChange) {
+  if (isScaleChange && _viewportProgram === 0) {
     _lastZoomAt = performance.now();
   }
   _lastScale = scale;
@@ -1029,31 +1101,43 @@ function _updateWindow() {
     const slot = _slots.get(i);
     if (!slot) continue;
 
+    // ICO items mount as a per-size row through the queue below. A
+    // completed single-frame prefetch must not claim their slot.
+    const entryName = item.entry?.name || item.entry?.path || '';
+    const isIcoItem = FsUtils.isIco(entryName);
+
     if (_prefetchedImages.has(i)) {
       const node = _prefetchedImages.get(i);
       _prefetchedImages.delete(i);
-      const dims = _probeDims(node);
-      if (!item.decoded && dims) {
-        _onItemDecoded(i, dims.w, dims.h);
+      if (isIcoItem) {
+        _releaseStripNode(node);
+      } else {
+        const dims = _probeDims(node);
+        if (!item.decoded && dims) {
+          _onItemDecoded(i, dims.w, dims.h);
+        }
+        _claimSlot(i, item, slot, node);
+        continue;
       }
-      _claimSlot(i, item, slot, node);
-      continue;
     }
 
     if (_prefetching.has(i)) {
-      const pre = _prefetching.get(i);
-      const dims = _probeDims(pre);
-      if (dims) {
-        // Finished while off-DOM: take over, size the slot, then mount.
-        _prefetching.delete(i);
-        if (!item.decoded) {
-          _onItemDecoded(i, dims.w, dims.h);
+      if (!isIcoItem) {
+        const pre = _prefetching.get(i);
+        const dims = _probeDims(pre);
+        if (dims) {
+          // Finished while off-DOM: take over, size the slot, then mount.
+          _prefetching.delete(i);
+          if (!item.decoded) {
+            _onItemDecoded(i, dims.w, dims.h);
+          }
+          _claimSlot(i, item, slot, pre);
         }
-        _claimSlot(i, item, slot, pre);
+        // Still loading: leave it off-DOM. Its load handler hands to
+        // _prefetchedImages, and a later pass appends it with known dims.
+        continue;
       }
-      // Still loading: leave it off-DOM. Its load handler hands to
-      // _prefetchedImages, and a later pass appends it with known dims.
-      continue;
+      // ICO sizes resolve through the mount queue, not this single frame.
     }
 
     // Fresh: decode off-DOM through the sequential queue before mounting.
@@ -1243,7 +1327,10 @@ function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, v
       if (gated) {
         _prefetchedImages.set(i, pre);
         _trimPrefetchCache();
-        if (!stillCur.decoded && pre.naturalWidth > 0) {
+        // Single-frame probes must not size ICO items. Their row total
+        // lands through the mount queue; this would stick at one frame.
+        const gatedIco = FsUtils.isIco(stillCur.entry?.name || stillCur.entry?.path || '');
+        if (!stillCur.decoded && !gatedIco && pre.naturalWidth > 0) {
           _onItemDecoded(i, pre.naturalWidth, pre.naturalHeight);
         }
       }
@@ -1260,16 +1347,16 @@ function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, v
     if (isIco) {
       const key = _getIcoKey(item.entry, state);
       if (!_icoCache.has(key)) {
-        _resolveIco(item.entry, state).then((icoSrc) => {
-          if (icoSrc) {
-            _icoCache.set(key, icoSrc);
+        _resolveIco(item.entry, state).then((sizes) => {
+          if (sizes && sizes.length > 0) {
+            _icoCache.set(key, sizes);
             if (!_active || !_prefetching.has(i)) return;
-            pre.src = icoSrc;
+            pre.src = FsUtils.firstIcoSrc(sizes);
             if (typeof pre.decode === 'function') pre.decode().catch(() => {});
           }
         }).catch(() => {});
       } else {
-        pre.src = _icoCache.get(key);
+        pre.src = FsUtils.firstIcoSrc(_icoCache.get(key));
         if (typeof pre.decode === 'function') pre.decode().catch(() => {});
       }
     } else {
@@ -1349,14 +1436,17 @@ function _requestLayout() {
         : (currentAnchor !== -1 ? currentAnchor : 0));
     const oldAnchorTop = _layout.offsets[anchorToHold]?.top || 0;
     _updateLayout(anchorToHold, oldAnchorTop);
-    if (_fitRefreshPending) {
+    if (_fitRefreshPending && _widthGateKey === null) {
       _fitRefreshPending = false;
       const fitRefreshEntry = _entryRefreshEntry && _entryAnchorImgIdx === _anchorImgIdx;
       _disarmEntryRefresh();
       _applyFitMode(Core.getState()?.fitMode || _lastFitMode, _anchorImgIdx, _anchorHoldoverAlignTop, fitRefreshEntry);
+      if (_imageIndex.some((it) => !it.decoded) && performance.now() - _lastPanAt >= 150) {
+        _armEntryRefresh(fitRefreshEntry);
+      }
       return;
     }
-    if (_entryRefreshPending && !_fitRefreshPending) {
+    if (_entryRefreshPending && !_fitRefreshPending && _widthGateKey === null) {
       const fit = Core.getState()?.fitMode || _lastFitMode;
       const quiet = _lastPanAt < _entryRefreshArmedAt && _lastZoomAt < _entryRefreshArmedAt;
       const replayEntry = _entryRefreshEntry;
@@ -1436,10 +1526,11 @@ function _claimSlot(imgIdx, item, slot, node) {
     node.onload = _handleStripImgLoad;
     node.onerror = _handleStripImgError;
   }
-  for (const old of Array.from(slot.querySelectorAll(':scope > img, :scope > video'))) {
+  for (const old of Array.from(slot.querySelectorAll(':scope > img, :scope > video, :scope > .ico-container'))) {
     if (old === node) continue;
     _detachStripNode(old);
   }
+  delete slot.dataset.ico;
   slot.appendChild(node);
   if (item?.kind === 'video') {
     node.preload = 'auto';
@@ -1624,24 +1715,45 @@ function _advanceMountQueue() {
     const entryName = entry.item.entry.name || entry.item.entry.path || '';
     if (FsUtils.isIco(entryName)) {
       const key = _getIcoKey(entry.item.entry, entry.state);
-      const cached = _icoCache.get(key);
-      if (cached) {
-        pre.src = cached;
+      let cached = _icoCache.get(key);
+      if (!cached && entry.item.listIndex === entry.state.index && Array.isArray(entry.state.src) && entry.state.src.length > 0) {
+        cached = entry.state.src;
+        _icoCache.set(key, cached);
+      }
+      if (cached && cached.length > 0) {
+        _releaseNode(pre);
+        const total = FsUtils.icoSourcesTotal(cached);
+        _mountInFlight = -1;
+        const slot = _slots.get(entry.imgIdx);
+        if (slot && _active && !_mounted.has(entry.imgIdx)) {
+          _onItemDecoded(entry.imgIdx, total ? total.width : cached[0].width, total ? total.height : cached[0].height);
+          _claimIcoSlot(entry.imgIdx, entry.item, slot, cached);
+        }
+        _advanceMountQueue();
       } else {
-        _resolveIco(entry.item.entry, entry.state).then((icoSrc) => {
+        _resolveIco(entry.item.entry, entry.state).then((sizes) => {
           if (_mountInFlight !== entry.imgIdx) {
             _releaseNode(pre);
             return;
           }
-          if (icoSrc) {
-            _icoCache.set(key, icoSrc);
+          if (sizes && sizes.length > 0) {
+            _icoCache.set(key, sizes);
             if (!_active || _mountInFlight !== entry.imgIdx) {
               _releaseNode(pre);
               _advanceMountQueue();
               return;
             }
-            pre.src = icoSrc;
+            _releaseNode(pre);
+            const total = FsUtils.icoSourcesTotal(sizes);
+            _mountInFlight = -1;
+            const slot = _slots.get(entry.imgIdx);
+            if (slot && _active && !_mounted.has(entry.imgIdx)) {
+              _onItemDecoded(entry.imgIdx, total ? total.width : sizes[0].width, total ? total.height : sizes[0].height);
+              _claimIcoSlot(entry.imgIdx, entry.item, slot, sizes);
+            }
+            _advanceMountQueue();
           } else {
+            _mountInFlight = -1;
             fail();
           }
         }).catch(() => {
@@ -1649,6 +1761,7 @@ function _advanceMountQueue() {
             _releaseNode(pre);
             return;
           }
+          _mountInFlight = -1;
           fail();
         });
       }
@@ -1741,7 +1854,10 @@ export function getVisibleImageIndices() {
 
   const listIndices = [];
   for (let i = startIndex; i <= endIndex; i++) {
-    listIndices.push(_imageIndex[i].listIndex);
+    const item = _imageIndex[i];
+    if (item && item.listIndex != null) {
+      listIndices.push(item.listIndex);
+    }
   }
   return listIndices;
 }
@@ -1820,6 +1936,10 @@ function _firstLastEdge() {
   if (total === 0) return 'neither';
   const rawPrimary = _listToImgIdx.get(Core.getState()?.index);
   const primary = (rawPrimary !== undefined && rawPrimary >= 0) ? rawPrimary : _anchorImgIdx;
+  const isMiddle = primary !== null && primary > 0 && primary < total - 1;
+  if (total <= 3 && isMiddle) {
+    return 'neither';
+  }
   const { startIndex, endIndex } = _computeVisibleRange();
   return firstLastHighlight({
     primary: primary ?? -1,
@@ -1860,7 +1980,6 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   if (_widthGateKey !== null) return;
   _viewportProgram++;
   try {
-  if (!entry) _disarmEntryRefresh();
   const fitMode = mode || Core.getState()?.fitMode || 'none';
 
   // Decide first/last alignment on the highlighted state, before the zoom
@@ -1914,11 +2033,17 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   const targetScale = _resolveStripFitScale(fitMode, entry, anchorIdxForEntry);
 
   const anchorIdx = targetImgIdx !== null ? targetImgIdx : _anchorImgIdx;
-  if (!entry && alignTop && anchorIdx >= 0 && _layout.offsets[anchorIdx]) {
+  if (!entry && alignTop && anchorIdx > 0 && _layout.offsets[anchorIdx]) {
     const slotH = _layout.offsets[anchorIdx].height * targetScale;
     if (slotH <= vh) {
       alignTop = false;
     }
+  }
+
+  const colH = (_layout.totalHeight || 0) * targetScale;
+  const colFits = colH <= vh + 0.5 || _imageIndex.length <= 1;
+  if (entry && colFits) {
+    alignTop = false;
   }
 
   // Normal width/1:1 fit press while reading mid-column: keep the vertical
@@ -1942,32 +2067,35 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   const preScale = _viewportState.getScale() || 1;
   const centerColY = (_layout.totalHeight || 0) / 2 - (_viewportState.getTy() || 0) / preScale;
   _viewportState.zoomTo(targetScale, vw / 2, vh / 2);
-  const colH = (_layout.totalHeight || 0) * targetScale;
 
   if (targetImgIdx !== null) {
     if (alignTop) {
-      if (_layout.offsets[targetImgIdx]) {
+      if (!colFits && _layout.offsets[targetImgIdx]) {
         _topAlignColumnY(_layout.offsets[targetImgIdx].top, 0);
-      } else if (colH <= vh + 0.5) {
-        _lastTy = Math.abs(colH - vh) / 2;
-        _lastAnchorTy = _lastTy;
-        _viewportState.panTo(0, _lastTy);
+      } else {
+        _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       }
     } else {
-      if (entry && targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
+      if (!colFits && targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
         _bottomAlignColumnY(_layout.offsets[targetImgIdx].bottom, 0);
       } else if (_layout.offsets[targetImgIdx]) {
         _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
-      } else if (colH <= vh + 0.5) {
-        _lastTy = Math.abs(colH - vh) / 2;
-        _lastAnchorTy = _lastTy;
-        _viewportState.panTo(0, _lastTy);
+      } else {
+        _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       }
     }
   } else if (colH <= vh + 0.5) {
-    _lastTy = Math.abs(colH - vh) / 2;
-    _lastAnchorTy = _lastTy;
-    _viewportState.panTo(0, _lastTy);
+    const isMiddle = 0 < _anchorImgIdx && _anchorImgIdx < _imageIndex.length - 1;
+    if (_imageIndex.length <= 2 || isMiddle || colFits) {
+      const idx = _anchorImgIdx >= 0 && _layout.offsets[_anchorImgIdx] ? _anchorImgIdx : 0;
+      if (_layout.offsets[idx]) {
+        _centerColumnY(_layout.offsets[idx].top + _layout.offsets[idx].height / 2, 0);
+      } else {
+        _centerColumnY((_layout.totalHeight || 0) / 2, 0);
+      }
+    } else {
+      _centerColumnY((_layout.totalHeight || 0) / 2, 0);
+    }
   } else if (preserveReadingRow) {
     _viewportState.panTo(0, (_layout.totalHeight / 2 - centerColY) * targetScale);
     _lastTy = _viewportState.getTy();
@@ -1995,12 +2123,19 @@ export function alignListItemTop(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
+  const scale = _viewportState.getScale() || 1;
+  const vh = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * scale;
+  if (colH <= vh + 0.5) {
+    _anchorImgIdx = mapped;
+    _syncAnchorToCore();
+    return true;
+  }
   _viewportProgram++;
   try {
     _anchorImgIdx = mapped;
     _anchorHoldover = mapped;
     _anchorHoldoverAlignTop = true;
-    const scale = _viewportState.getScale() || 1;
     _anchorHoldoverScale = scale;
 
     _topAlignColumnY(_layout.offsets[mapped].top);
@@ -2020,12 +2155,19 @@ export function alignListItemBottom(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
+  const scale = _viewportState.getScale() || 1;
+  const vh = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * scale;
+  if (colH <= vh + 0.5) {
+    _anchorImgIdx = mapped;
+    _syncAnchorToCore();
+    return true;
+  }
   _viewportProgram++;
   try {
     _anchorImgIdx = mapped;
     _anchorHoldover = mapped;
     _anchorHoldoverAlignTop = false;
-    const scale = _viewportState.getScale() || 1;
     _anchorHoldoverScale = scale;
 
     _bottomAlignColumnY(_layout.offsets[mapped].bottom);
@@ -2045,18 +2187,28 @@ export function centerListItem(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
   if (mapped === undefined || !_layout.offsets[mapped]) return false;
+  const scale = _viewportState.getScale() || 1;
+  const vh = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * scale;
+  if (colH <= vh + 0.5) {
+    _anchorImgIdx = mapped;
+    _syncAnchorToCore();
+    return true;
+  }
   _viewportProgram++;
   try {
     _anchorImgIdx = mapped;
     _anchorHoldover = mapped;
     _anchorHoldoverAlignTop = false;
-    const scale = _viewportState.getScale() || 1;
     _anchorHoldoverScale = scale;
 
-    const colH = (_layout.totalHeight || 0) * scale;
-    const vh = _viewport?.clientHeight || 800;
     const curTx = _viewportState.getTx();
-    if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
+    const isMiddle = 0 < mapped && mapped < _imageIndex.length - 1;
+    if (_imageIndex.length <= 2 || isMiddle) {
+      if (_layout.offsets[mapped]) {
+        _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
+      }
+    } else if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
       const targetTy = -Math.abs(colH - vh) / 2;
       _lastTy = targetTy;
       _lastAnchorTy = targetTy;
@@ -2108,7 +2260,7 @@ export function resetZoom(exactScale) {
       const settledScale = _viewportState.getScale() || 1;
       const resetColH = (_layout.totalHeight || 0) * settledScale;
       if (resetColH <= vh + 0.5) {
-        _viewportState.panTo(holdTx, Math.abs(resetColH - vh) / 2);
+        _viewportState.panTo(holdTx, 0);
       } else {
         _viewportState.panTo(holdTx, (_layout.totalHeight / 2 - holdCenterY) * settledScale);
       }
@@ -2146,16 +2298,18 @@ export function resetZoom(exactScale) {
 
     // Re-pin the anchor at its current offset so ty stays stable.
     if (_anchorHoldover !== null && _layout.offsets[_anchorHoldover]) {
-      if (_anchorHoldoverAlignTop) {
+      const colH = (_layout.totalHeight || 0) * exactScale;
+      const colFits = colH <= vh + 0.5;
+      if (colFits) {
+        _centerColumnY((_layout.totalHeight || 0) / 2, 0);
+      } else if (_anchorHoldoverAlignTop) {
         _topAlignColumnY(_layout.offsets[_anchorHoldover].top, 0);
       } else {
-        const colH = (_layout.totalHeight || 0) * exactScale;
-        if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
+        const isMiddle = 0 < _anchorHoldover && _anchorHoldover < _imageIndex.length - 1;
+        if (isMiddle) {
+          _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2, 0);
+        } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
           _bottomAlignColumnY(_layout.offsets[_anchorHoldover].bottom, 0);
-        } else if (colH <= vh + 0.5) {
-          _lastTy = Math.abs(colH - vh) / 2;
-          _lastAnchorTy = _lastTy;
-          _viewportState.panTo(0, _lastTy);
         } else {
           _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2, 0);
         }
@@ -2295,6 +2449,8 @@ function _topAlignColumnY(colY, targetTx = null) {
   if (!_viewportState || !_layout.offsets.length) return;
   const scale = _viewportState.getScale() || 1;
   const vpH = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * scale;
+  if (colH <= vpH + 0.5) return;
   const targetTy = computeTopAlignTy({
     slotTop: colY,
     totalHeight: _layout.totalHeight || 0,
@@ -2316,6 +2472,8 @@ function _bottomAlignColumnY(colY, targetTx = null) {
   if (!_viewportState || !_layout.offsets.length) return;
   const scale = _viewportState.getScale() || 1;
   const vpH = _viewport?.clientHeight || 800;
+  const colH = (_layout.totalHeight || 0) * scale;
+  if (colH <= vpH + 0.5) return;
   const targetTy = computeBottomAlignTy({
     slotBottom: colY,
     totalHeight: _layout.totalHeight || 0,
@@ -2385,6 +2543,11 @@ function _activate(state) {
     anchorItem.naturalWidth = knownW;
     anchorItem.naturalHeight = knownH;
     anchorItem.decoded = true;
+  }
+  if (_anchorImgIdx >= 0 && _imageIndex[_anchorImgIdx] && Array.isArray(state.src) && state.src.length > 0) {
+    const anchorEntry = _imageIndex[_anchorImgIdx].entry;
+    const key = _getIcoKey(anchorEntry, state);
+    _icoCache.set(key, state.src);
   }
 
   _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
@@ -2462,7 +2625,7 @@ function _deactivate() {
   const natW = nodeW || anchorItem?.naturalWidth || Core.getState()?.naturalWidth || 0;
   const natH = nodeH || anchorItem?.naturalHeight || Core.getState()?.naturalHeight || 0;
 
-  if (anchorNode && anchorNode.src && natW > 0 && natH > 0) {
+  if (anchorNode && (anchorNode.src || anchorNode.classList?.contains('ico-container')) && natW > 0 && natH > 0) {
     const sourceMap = anchorSource === '_mounted'
       ? _mounted
       : (anchorSource === '_prefetchedImages' ? _prefetchedImages : _prefetching);
@@ -2625,6 +2788,7 @@ function _onStateChange(state) {
 
   const fitModeChanged = (state.fitMode && state.fitMode !== _lastFitMode) || (state.fitModeGen !== undefined && state.fitModeGen !== _lastFitModeGen);
   if (fitModeChanged) {
+    _disarmEntryRefresh();
     _lastFitMode = state.fitMode;
     _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : _lastFitModeGen;
     _applyFitMode(state.fitMode);
@@ -2640,10 +2804,18 @@ function _onStateChange(state) {
   if (!_anchorUpdateInProgress && state.index >= 0 && performance.now() - _lastPanAt > 150) {
     const mapped = _listToImgIdx.get(state.index);
     if (mapped !== undefined && mapped !== _anchorImgIdx) {
-      if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
-        alignListItemBottom(state.index);
+      const scale = _viewportState?.getScale() || 1;
+      const vh = _viewport?.clientHeight || 800;
+      const colH = (_layout.totalHeight || 0) * scale;
+      if (colH > vh + 0.5) {
+        if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
+          alignListItemBottom(state.index);
+        } else {
+          alignListItemTop(state.index);
+        }
       } else {
-        alignListItemTop(state.index);
+        _anchorImgIdx = mapped;
+        _syncAnchorToCore();
       }
       _resumeMountedVideos();
     } else if (mapped === undefined) {
@@ -2756,7 +2928,7 @@ function _admitCompleted(destPath) {
       newMounted.set(ni, img);
     } else {
       img.remove();
-      _releaseNode(img);
+      _releaseStripNode(img);
     }
   }
   // Remap live slots to match new imgIdx
@@ -2881,6 +3053,24 @@ export function isManhwaStripActive() {
  * mounted nodes into its own staging canvas and must not mutate this. */
 export function getManhwaColumnSnapshot() {
   if (!_active) return null;
+  let ico = null;
+  if (_mounted.size > 0) {
+    const mode = _lastMode;
+    const archivePath = _lastArchivePath;
+    for (const [imgIdx, node] of _mounted) {
+      if (!node) continue;
+      const item = _imageIndex[imgIdx];
+      if (!item?.entry) continue;
+      const name = item.entry.name || item.entry.path || '';
+      if (!name || !FsUtils.isIco(name)) continue;
+      const key = mode === 'archive' ? `${archivePath}:${item.entry.name}` : item.entry.path;
+      if (!key) continue;
+      const sizes = _icoCache.get(key);
+      if (!sizes || sizes.length === 0) continue;
+      if (!ico) ico = new Map();
+      ico.set(imgIdx, { key, sizes });
+    }
+  }
   return {
     offsets: _layout.offsets,
     totalHeight: _layout.totalHeight,
@@ -2889,6 +3079,7 @@ export function getManhwaColumnSnapshot() {
     nodes: _mounted,
     liveSlots: _liveSlots,
     liveTypes: _liveTypes,
+    ico,
   };
 }
 

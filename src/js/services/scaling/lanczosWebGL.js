@@ -22,7 +22,7 @@ export const filter = {
 
     float lanczos3(float x) {
       x = abs(x);
-      if (x == 0.0) return 1.0;
+      if (x < 0.0001) return 1.0;
       if (x >= 3.0) return 0.0;
       float px = PI * x;
       return (sin(px) / px) * (sin(px / 3.0) / (px / 3.0));
@@ -64,7 +64,9 @@ export const filter = {
         }
       }
       
-      color /= totalWeight;
+      if (totalWeight > 0.00001) {
+        color /= totalWeight;
+      }
       
       // Keep output premultiplied for WebGL composite
       outColor = clamp(color, 0.0, 1.0);
