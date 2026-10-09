@@ -555,7 +555,7 @@ function _releaseVideoNode(video) {
   }
 }
 
-/** Release a strip node to its own pool. Img and video pools never mix. */
+/** Release a strip node to its own pool. Img and video pools never mix. ICO containers detach instead of pooling. */
 function _releaseStripNode(node) {
   if (!node) return;
   if (node.tagName === 'VIDEO') _releaseVideoNode(node);

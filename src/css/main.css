@@ -2229,8 +2229,8 @@ body.is-importing-url .header-cell:hover {
   z-index: 0;
 }
 
-.ico-container.bridge {
-  display: flex !important;
+#viewer-bridge-layer .ico-container.bridge {
+  display: flex;
   position: absolute;
   top: 50%;
   left: 50%;

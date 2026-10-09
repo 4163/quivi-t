@@ -42,8 +42,8 @@ This validation comparison was performed against `.agents/skills/validate-change
 
 ### Pooling and CSS nits
 
-- [ ] 6. Document the narrowed strip release. See `src/js/viewer/manhwaStrip.js:559`. The `else` became `else if IMG`, so `.ico-container` DIVs fall through without pooling. That is likely correct because ICO nodes detach rather than pool. Add a short comment that states this. Accept when the intent is written in code and no behavior changes.
-- [ ] 7. Drop `!important` on the bridge container. See `src/css/main.css:2232`. Replace with a selector that already wins, such as the full `#viewer-bridge-layer` path used at line 2243. Accept when computed display stays flex for bridge ICO and no `!important` remains in the added rule.
+- [x] 6. Document the narrowed strip release. See `src/js/viewer/manhwaStrip.js:559`. The `else` became `else if IMG`, so `.ico-container` DIVs fall through without pooling. That is likely correct because ICO nodes detach rather than pool. Add a short comment that states this. Accept when the intent is written in code and no behavior changes.
+- [x] 7. Drop `!important` on the bridge container. See `src/css/main.css:2232`. Replace with a selector that already wins, such as the full `#viewer-bridge-layer` path used at line 2243. Accept when computed display stays flex for bridge ICO and no `!important` remains in the added rule.
 - [x] 8. Rename the stale test. See `e2e/specs/03-viewer.e2e.js:210`. The name still says spritesheet continuity. The code now uses per-size row and composite. Rename to row continuity. Accept when the test name names the current mechanism and the spec still passes.
 
 ### Coverage gap
