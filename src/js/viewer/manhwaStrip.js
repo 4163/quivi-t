@@ -377,6 +377,7 @@ function _claimIcoSlot(imgIdx, item, slot, sizes) {
   slot.dataset.ico = 'true';
   const container = createIcoContainer();
   container.dataset.imgIdx = String(imgIdx);
+  if (item?.listIndex !== undefined) container.dataset.listIndex = String(item.listIndex);
   const grillAngle = _viewportState ? _viewportState.getGrillAngle() : '45deg';
   const mirrored = mirroredGrillAngle(grillAngle);
   let firstImg = null;
@@ -400,7 +401,7 @@ function _claimIcoSlot(imgIdx, item, slot, sizes) {
   if (item) {
     if (item.kind === 'image' || !item.kind) _classifyAnimatedSlot(imgIdx, item);
   }
-  _mounted.set(imgIdx, firstImg || container);
+  _mounted.set(imgIdx, container);
   _onSlotMounted?.(imgIdx, imgIdx === _anchorImgIdx);
 }
 
@@ -556,7 +557,7 @@ function _releaseVideoNode(video) {
 function _releaseStripNode(node) {
   if (!node) return;
   if (node.tagName === 'VIDEO') _releaseVideoNode(node);
-  else _releaseNode(node);
+  else if (node.tagName === 'IMG') _releaseNode(node);
 }
 
 /** Unhook a slot child without pooling. Evict paths pool via _releaseStripNode. */
@@ -1693,7 +1694,11 @@ function _advanceMountQueue() {
     const entryName = entry.item.entry.name || entry.item.entry.path || '';
     if (FsUtils.isIco(entryName)) {
       const key = _getIcoKey(entry.item.entry, entry.state);
-      const cached = _icoCache.get(key);
+      let cached = _icoCache.get(key);
+      if (!cached && entry.item.listIndex === entry.state.index && Array.isArray(entry.state.src) && entry.state.src.length > 0) {
+        cached = entry.state.src;
+        _icoCache.set(key, cached);
+      }
       if (cached && cached.length > 0) {
         _releaseNode(pre);
         const total = FsUtils.icoSourcesTotal(cached);
@@ -2498,6 +2503,11 @@ function _activate(state) {
     anchorItem.naturalHeight = knownH;
     anchorItem.decoded = true;
   }
+  if (_anchorImgIdx >= 0 && _imageIndex[_anchorImgIdx] && Array.isArray(state.src) && state.src.length > 0) {
+    const anchorEntry = _imageIndex[_anchorImgIdx].entry;
+    const key = _getIcoKey(anchorEntry, state);
+    _icoCache.set(key, state.src);
+  }
 
   _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
   _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
@@ -2574,7 +2584,7 @@ function _deactivate() {
   const natW = nodeW || anchorItem?.naturalWidth || Core.getState()?.naturalWidth || 0;
   const natH = nodeH || anchorItem?.naturalHeight || Core.getState()?.naturalHeight || 0;
 
-  if (anchorNode && anchorNode.src && natW > 0 && natH > 0) {
+  if (anchorNode && (anchorNode.src || anchorNode.classList?.contains('ico-container')) && natW > 0 && natH > 0) {
     const sourceMap = anchorSource === '_mounted'
       ? _mounted
       : (anchorSource === '_prefetchedImages' ? _prefetchedImages : _prefetching);
@@ -2868,7 +2878,7 @@ function _admitCompleted(destPath) {
       newMounted.set(ni, img);
     } else {
       img.remove();
-      _releaseNode(img);
+      _releaseStripNode(img);
     }
   }
   // Remap live slots to match new imgIdx

@@ -175,7 +175,14 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       }
       bridgeLayer.appendChild(node);
     }
-    node.classList.add('viewer-img');
+    const isIco = node.classList?.contains('ico-container');
+    if (!isIco) {
+      node.classList.add('viewer-img');
+    } else {
+      const grillActive = imgWrapper?.classList?.contains('grill-active') ||
+        document.getElementById('manhwa-strip')?.classList?.contains('grill-active');
+      if (grillActive) node.classList.add('grill-active');
+    }
     node.classList.add('bridge');
     _retiringNode = node;
     if (autoRetire) {
@@ -277,12 +284,13 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
   function _releaseBridgeNode(node) {
     node.classList.remove('bridge');
+    node.classList.remove('grill-active');
     node.style.removeProperty('--bridge-tx');
     node.style.removeProperty('--bridge-ty');
     node.style.removeProperty('--bridge-rot');
     node.style.removeProperty('--bridge-sx');
     node.style.removeProperty('--bridge-sy');
-    if (node.dataset?.borrowedBridge === 'true') {
+    if (node.dataset?.borrowedBridge === 'true' || node.classList?.contains('ico-container')) {
       node.remove();
     } else if (imgWrapper && node.parentElement !== imgWrapper && !node.classList.contains('is-placeholder')) {
       imgWrapper.appendChild(node);
@@ -656,7 +664,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     if (state.manhwaEnabled) {
       const isArch = state.mode === 'archive';
       _lastRenderedArchivePath = isArch ? state.archivePath : null;
-      if (img && img.src && img.classList.contains('active')) {
+      const icoContainer = document.getElementById('viewer-ico-row')?.querySelector('.ico-container');
+      if (icoContainer) {
+        _parkNodeInBridge(icoContainer, null, false);
+        clearDisplayedImage(true);
+      } else if (img && img.src && img.classList.contains('active')) {
         _parkNodeInBridge(img, null, false);
         clearDisplayedImage(true);
       } else if (_activeMedia === 'video' && _activeVideoEl && _activeVideoEl.classList.contains('active')) {
@@ -706,6 +718,16 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       } else {
         _lastFitModeGen = state.fitModeGen;
         _renderIcoRow(state.src, state);
+      }
+      if (_retiringNode) {
+        _clearBridgeFallback();
+        if (_retireRaf) cancelAnimationFrame(_retireRaf);
+        const retiring = _retiringNode;
+        _scheduleRetireRaf(() => {
+          if (_retiringNode === retiring) {
+            _cancelRetiringNode();
+          }
+        });
       }
       return;
     }
