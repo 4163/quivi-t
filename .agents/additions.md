@@ -43,7 +43,13 @@
 ### Documentation & GitHub (Project Health)
 - **Contributing Guide:** Add a general contributing guide (`CONTRIBUTING.md`) based on the active architecture state and repository guidelines at the time of writing.
 
+### Favorites List Reorder
+- Allow manual reorder of items in each favorites loadout (Favorites, Bookmarks, and the rest) with a grip SVG handle and Sortable-based drag. Order persists through the existing `favoritesStore.js` save path with `filePanel.js` staying the sole list owner. Keep add, remove, and loadout switching as is, with a keyboard accessible fallback.
+
 ## Out of Scope
+
+### Thumbnail Item Grid Mode
+- Keep thumbnail view as a virtualized list. A true wrapped item grid stays out of scope. It adds too much complexity for the O(1) file list and thumbnail virtualization in `filePanel.js` for little practical gain.
 
 ### Native 7-Zip Sidecar Extraction (7Z/CB7 speed)
 - The original UI-blocking bug was already solved in pure Rust. The speed gap does not manifest as a real UX problem, and the sidecar adds deployment complexity plus re-introduces partial-file race concerns.
