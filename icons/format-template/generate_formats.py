@@ -15,7 +15,16 @@ import pathlib
 import re
 import sys
 
-import cairosvg
+try:
+    import resvg_python
+except ImportError:
+    resvg_python = None
+
+try:
+    import cairosvg
+except (ImportError, OSError):
+    cairosvg = None
+
 from PIL import Image, ImageDraw, ImageFont
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
@@ -37,7 +46,7 @@ TEXT_RE = re.compile(
 )
 
 GROUPS = {
-    "template_mascot.svg": ["jpg", "png", "jpeg", "bmp", "ico"],
+    "template_mascot.svg": ["jpg", "png", "jpeg", "bmp", "dib", "ico"],
     "template_moe-1.svg": ["gif", "webp", "apng", "svg", "avif"],
     "template_stoic.svg": ["zip", "rar", "7z", "tar"],
     "template_moe-3.svg": ["cbt", "cbz", "cbr", "cb7"],
@@ -94,12 +103,21 @@ def render_icon(fmt: str) -> Image.Image:
     fs_svg = int(match.group(1))
     label = match.group(2)
     svg_no_text = TEXT_RE.sub("", svg)
-    png_bytes = cairosvg.svg2png(
-        bytestring=svg_no_text.encode("utf-8"),
-        output_width=RENDER_SIZE,
-        output_height=RENDER_SIZE,
-        url=str(path),
-    )
+    if resvg_python:
+        svg_sized = svg_no_text.replace(
+            'width="100%" height="100%"', f'width="{RENDER_SIZE}" height="{RENDER_SIZE}"'
+        )
+        png_bytes = bytes(resvg_python.svg_to_png(svg_sized))
+    elif cairosvg:
+        png_bytes = cairosvg.svg2png(
+            bytestring=svg_no_text.encode("utf-8"),
+            output_width=RENDER_SIZE,
+            output_height=RENDER_SIZE,
+            url=str(path),
+        )
+    else:
+        raise SystemExit("Neither resvg_python nor cairosvg is available to render SVG.")
+
     img = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
     scale = RENDER_SIZE / VB_W
     sign_cx = (SIGN_X - VB_X + SIGN_W / 2) * scale
@@ -114,11 +132,12 @@ def render_icon(fmt: str) -> Image.Image:
     return img
 
 
-def generate_icos():
+def generate_icos(target_fmt: str | None = None):
     FORMATS_DIR.mkdir(parents=True, exist_ok=True)
     ASSETS_ICONS_DIR.mkdir(parents=True, exist_ok=True)
 
-    for fmt in all_formats():
+    formats = [target_fmt] if target_fmt else all_formats()
+    for fmt in formats:
         img = render_icon(fmt)
         ui = img.resize((128, 128), Image.LANCZOS)
         ui_path = ASSETS_ICONS_DIR / f"{fmt}.png"
@@ -136,10 +155,11 @@ def generate_icos():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in ("svg", "ico"):
-        raise SystemExit("usage: python generate_formats.py svg|ico")
+    if len(sys.argv) < 2 or sys.argv[1] not in ("svg", "ico"):
+        raise SystemExit("usage: python generate_formats.py svg|ico [format]")
+    target = sys.argv[2] if len(sys.argv) > 2 else None
     if sys.argv[1] == "svg":
         generate_svgs()
     else:
-        generate_icos()
+        generate_icos(target)
 

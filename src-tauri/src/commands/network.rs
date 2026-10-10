@@ -464,7 +464,7 @@ fn check_image_magic_head(head: &[u8], expected_ext: &str) -> bool {
         "png" | "apng" => enough(8) && head[..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
         "jpg" | "jpeg" => enough(2) && head[..2] == [0xFF, 0xD8],
         "gif" => enough(6) && (head[..6] == *b"GIF87a" || head[..6] == *b"GIF89a"),
-        "bmp" => enough(2) && head[..2] == *b"BM",
+        "bmp" | "dib" => enough(2) && head[..2] == *b"BM",
         "webp" => enough(12) && head[..4] == *b"RIFF" && head[8..12] == *b"WEBP",
         "avif" => enough(12) && head[4..8] == *b"ftyp",
         _ => true,

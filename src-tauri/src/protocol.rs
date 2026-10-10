@@ -310,7 +310,7 @@ fn guess_mime(name: &str) -> &'static str {
         "image/webp"
     } else if ext.eq_ignore_ascii_case("svg") {
         "image/svg+xml"
-    } else if ext.eq_ignore_ascii_case("bmp") {
+    } else if ext.eq_ignore_ascii_case("bmp") || ext.eq_ignore_ascii_case("dib") {
         "image/bmp"
     } else if ext.eq_ignore_ascii_case("ico") {
         "image/x-icon"

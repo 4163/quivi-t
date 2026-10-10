@@ -8,7 +8,7 @@ import { icoSizesTotal } from './services/viewerMath.js';
 const { invoke } = window.__TAURI__.core;
 
 export const SUPPORTED_IMAGES = new Set([
-  'jpg', 'jpeg', 'png', 'gif', 'webp', 'apng', 'svg', 'bmp', 'ico', 'avif', 'mp4'
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'apng', 'svg', 'bmp', 'dib', 'ico', 'avif', 'mp4'
 ]);
 
 export const SUPPORTED_ARCHIVES = new Set(['zip', 'cbz', 'rar', 'cbr', '7z', 'cb7', 'cbt', 'tar']);

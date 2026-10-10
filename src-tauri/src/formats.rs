@@ -83,6 +83,12 @@ pub const SUPPORTED_FORMATS: &[FileFormat] = &[
         category: FormatCategory::Image,
     },
     FileFormat {
+        ext: "dib",
+        name: "BMP Image",
+        icon: "dib.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
         ext: "ico",
         name: "Icon Image",
         icon: "ico.ico",

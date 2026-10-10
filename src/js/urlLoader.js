@@ -53,7 +53,7 @@ const SAFE_EXTRACTOR_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SAFE_EXTRACTOR_SOURCE_RE = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*\.js$/i;
 const WINDOWS_NAME_FORBIDDEN_RE = /[<>:"/\\|?*\x00-\x1F]/;
 const SUPPORTED_IMAGE_EXTENSIONS = new Set([
-  'apng', 'avif', 'bmp', 'gif', 'ico', 'jpeg', 'jpg', 'mp4', 'png', 'svg', 'webp'
+  'apng', 'avif', 'bmp', 'dib', 'gif', 'ico', 'jpeg', 'jpg', 'mp4', 'png', 'svg', 'webp'
 ]);
 export const MAX_GALLERY_PATH_DEPTH = 8;
 const GALLERY_WRITE_CHUNK_SIZE = 25;

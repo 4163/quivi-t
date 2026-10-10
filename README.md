@@ -183,6 +183,7 @@ What QuiviT ships with. The id in backticks is the value stored in config.
 - **Video audio.** `Muted` at 50% volume. Volume and unmute states are session only. In manhwa view, each video has an individual audio pill; only one slot can be unmuted at a time, and scrolling a video off-screen mutes it.
 - **Thumbnails.** Static images load concurrently from the 96x96 OS thumbnail cache. While archive thumbnails, and animated images decode at full-size, one at a time for the visible rows. The file list performance drops significantly for such cases, so maybe don't use thumbnail view if the performance hinders navigation.
 - **Image swap.** The previous image stays up while the next loads, then the swap waits `45ms` after navigation settles. That avoids a blank frame when WebView2 decodes a large `<img>`. The delay is a Tauri and WebView2 tradeoff, for the time being it stays but hopefully it can be cut down further in the future.
+- **BMP and DIB.** DIB files use BMP decoding, MIME routing, and viewer paths directly. In Windows file associations, toggling `.bmp` quietly manages `.dib` alongside it.
 
 ### Configuration & persistence
 

@@ -8,6 +8,7 @@ fn guess_mime_matches_known_image_extensions_case_insensitively() {
     assert_eq!(guess_mime("page.JPG"), "image/jpeg");
     assert_eq!(guess_mime("cover.WebP"), "image/webp");
     assert_eq!(guess_mime("icon.ICO"), "image/x-icon");
+    assert_eq!(guess_mime("bitmap.DIB"), "image/bmp");
     assert_eq!(guess_mime("notes.txt"), "application/octet-stream");
 }
 

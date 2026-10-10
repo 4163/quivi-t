@@ -24,8 +24,10 @@ export async function applyAssociations(statusCallback) {
     if (cb.checked !== initialState[ext]) {
       if (cb.checked) {
         toRegister.push(ext);
+        if (ext === 'bmp') toRegister.push('dib');
       } else {
         toUnregister.push(ext);
+        if (ext === 'bmp') toUnregister.push('dib');
       }
       initialState[ext] = cb.checked; // Update baseline
     }

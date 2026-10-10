@@ -12,6 +12,8 @@ fn test_is_image_ext() {
     assert!(is_image_ext("gif"));
     assert!(is_image_ext("avif"));
     assert!(is_image_ext("webp"));
+    assert!(is_image_ext("dib"));
+    assert!(is_image_ext("DIB"));
 
     // Invalid cases
     assert!(!is_image_ext(""));

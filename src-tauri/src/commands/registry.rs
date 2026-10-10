@@ -89,6 +89,7 @@ const FORMAT_ICONS: &[(&str, &[u8])] = &[
     ("cbr.ico", include_bytes!("../../../icons/formats/cbr.ico")),
     ("cbt.ico", include_bytes!("../../../icons/formats/cbt.ico")),
     ("cbz.ico", include_bytes!("../../../icons/formats/cbz.ico")),
+    ("dib.ico", include_bytes!("../../../icons/formats/dib.ico")),
     ("gif.ico", include_bytes!("../../../icons/formats/gif.ico")),
     ("ico.ico", include_bytes!("../../../icons/formats/ico.ico")),
     (
