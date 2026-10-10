@@ -112,6 +112,7 @@ pub fn run() {
         get_ico_frames,
         get_archive_ico_frames,
         get_native_icon,
+        invalidate_native_icon_cache,
         get_format_status,
         register_associations,
         unregister_associations,

@@ -32,6 +32,19 @@ use windows::Win32::UI::WindowsAndMessaging::{
 #[cfg(windows)]
 static NATIVE_ICON_CACHE: Mutex<Option<HashMap<String, Vec<u8>>>> = Mutex::new(None);
 
+/// Drops the process-local shell icon cache after Windows changes a file association.
+pub fn clear_cached_native_icons() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let mut cache_guard = NATIVE_ICON_CACHE.lock().map_err(|e| e.to_string())?;
+        if let Some(cache) = cache_guard.as_mut() {
+            cache.clear();
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(windows)]
 struct ScopedHicon(HICON);
 #[cfg(windows)]

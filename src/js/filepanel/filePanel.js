@@ -408,6 +408,58 @@ export function toggleFavoriteCurrent() {
 }
 
 const iconCache = new Map();
+const NATIVE_ICON_STORAGE_VERSION = '2';
+const NATIVE_ICON_STORAGE_VERSION_KEY = 'quivit_native_icon_storage_version';
+let nativeIconRequestVersion = 0;
+let nativeIconRefresh = null;
+
+function clearPersistedNativeIcons() {
+  try {
+    const keys = [];
+    for (let index = 0; index < localStorage.length; index++) {
+      const key = localStorage.key(index);
+      if (key?.startsWith('icon:')) keys.push(key);
+    }
+    keys.forEach(key => localStorage.removeItem(key));
+  } catch (e) {}
+}
+
+function migrateNativeIconStorage() {
+  try {
+    if (localStorage.getItem(NATIVE_ICON_STORAGE_VERSION_KEY) === NATIVE_ICON_STORAGE_VERSION) return;
+    clearPersistedNativeIcons();
+    localStorage.setItem(NATIVE_ICON_STORAGE_VERSION_KEY, NATIVE_ICON_STORAGE_VERSION);
+  } catch (e) {}
+}
+
+function redrawNativeIcons() {
+  const state = Core?.getState();
+  if (state?.list) {
+    for (const [index, li] of activeRows) {
+      if (state.list[index]) updateEntry(li, state.list[index], index);
+    }
+  }
+  renderFavorites();
+  renderLibrary().catch(err => console.error('[FilePanel] Failed to refresh native icons:', err));
+}
+
+function refreshNativeIcons() {
+  if (!window.__TAURI__?.core?.invoke || nativeIconRefresh) return nativeIconRefresh;
+
+  nativeIconRequestVersion += 1;
+  nativeIconRefresh = window.__TAURI__.core.invoke('invalidate_native_icon_cache')
+    .then(() => {
+      iconCache.clear();
+      clearPersistedNativeIcons();
+      FsUtils.bumpNativeIconCacheVersion();
+      redrawNativeIcons();
+    })
+    .catch(err => console.error('[FilePanel] Failed to invalidate native icon cache:', err))
+    .finally(() => {
+      nativeIconRefresh = null;
+    });
+  return nativeIconRefresh;
+}
 
 
 
@@ -415,8 +467,10 @@ function fetchNativeIcon(path, ext, size = 'small') {
   const cacheKey = size === 'large' ? `large:${ext}` : ext;
   if (iconCache.has(cacheKey)) return;
   iconCache.set(cacheKey, 'pending');
+  const requestVersion = nativeIconRequestVersion;
 
   const applyIconSrc = (src) => {
+    if (requestVersion !== nativeIconRequestVersion) return;
     const finalSrc = src || '';
     iconCache.set(cacheKey, finalSrc);
     try { localStorage.setItem('icon:' + cacheKey, finalSrc); } catch (e) {}
@@ -425,7 +479,6 @@ function fetchNativeIcon(path, ext, size = 'small') {
       if (img.dataset.iconKey && img.dataset.iconKey !== cacheKey) return;
       if (src) {
         img.src = src;
-        img.removeAttribute('data-icon-key');
         img.removeAttribute('data-ext');
       } else {
         const isFolder = ext === '__folder__' || ext.includes('\\') || ext.includes('/');
@@ -436,7 +489,6 @@ function fetchNativeIcon(path, ext, size = 'small') {
         const svgSlot = img.parentElement?.querySelector('.item-icon-svg');
         if (svgSlot) {
           img.style.display = 'none';
-          img.removeAttribute('data-icon-key');
           img.removeAttribute('data-ext');
           svgSlot.innerHTML = svgContent;
           svgSlot.style.display = '';
@@ -487,7 +539,7 @@ function getIconHtml(item, size = 'small') {
       return `<img data-ext="${CSS.escape(ext)}" data-icon-key="${CSS.escape(cacheKey)}" draggable="false" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNCIgaGVpZ2h0PSIxNCI+PC9zdmc+">`;
     }
     if (src) {
-      return `<img src="${src}" draggable="false">`;
+      return `<img data-icon-key="${CSS.escape(cacheKey)}" src="${src}" draggable="false">`;
     }
     return fallbackSvg;
   }
@@ -496,7 +548,7 @@ function getIconHtml(item, size = 'small') {
   if (stored !== null) {
     iconCache.set(cacheKey, stored);
     if (stored) {
-      return `<img src="${stored}" draggable="false">`;
+      return `<img data-icon-key="${CSS.escape(cacheKey)}" src="${stored}" draggable="false">`;
     }
     return fallbackSvg;
   }
@@ -1559,11 +1611,10 @@ function updateRowIcon(slots, item) {
   const showImg = (src, isPending = false) => {
     slots.iconSvg.style.display = 'none';
     slots.iconImg.style.display = '';
+    slots.iconImg.dataset.iconKey = ext;
     if (isPending) {
       slots.iconImg.dataset.ext = ext;
-      slots.iconImg.dataset.iconKey = ext;
     } else {
-      slots.iconImg.removeAttribute('data-icon-key');
       slots.iconImg.removeAttribute('data-ext');
     }
     if (slots.iconImg.getAttribute('src') !== src) {
@@ -2460,6 +2511,7 @@ export function initFilePanel(deps) {
   if (deps.alignListItemBottom) _alignListItemBottom = deps.alignListItemBottom;
   if (deps.pageStrip) _pageStrip = deps.pageStrip;
 
+  migrateNativeIconStorage();
   ensureSpacer();
 
   fileListUl.addEventListener('scroll', () => {
@@ -2612,7 +2664,10 @@ export function initFilePanel(deps) {
     }).catch(console.error);
   }
 
-  window.addEventListener('focus', refreshFilesystemState);
+  window.addEventListener('focus', () => {
+    refreshFilesystemState();
+    refreshNativeIcons();
+  });
 
   window.addEventListener('quivit-config-loaded', () => {
     favoritesExpanded = !getFavoritesCollapsed();

@@ -15,6 +15,8 @@ export const SUPPORTED_ARCHIVES = new Set(['zip', 'cbz', 'rar', 'cbr', '7z', 'cb
 
 export const SHELL_THUMBNAIL_EXTS = new Set(['jpg', 'jpeg', 'png', 'bmp', 'dib', 'gif', 'ico', 'mp4']);
 
+let nativeIconCacheVersion = 0;
+
 function _ext(name) {
   return name.split('.').pop().toLowerCase();
 }
@@ -199,8 +201,14 @@ export const FsUtils = {
     const encodedExt = _base64Encode(extKey || '');
     const isWindows = typeof navigator !== 'undefined' && navigator.userAgent ? navigator.userAgent.includes('Windows') : true;
     const base = isWindows ? 'http://quivit.localhost' : 'quivit://localhost';
-    const query = size === 'large' ? '?size=large' : '';
+    const query = size === 'large'
+      ? `?size=large&v=${nativeIconCacheVersion}`
+      : `?v=${nativeIconCacheVersion}`;
     return `${base}/icon/${encodedPath}/${encodedExt}${query}`;
+  },
+
+  bumpNativeIconCacheVersion() {
+    nativeIconCacheVersion += 1;
   },
 
   buildShellThumbnailSrc(path) {

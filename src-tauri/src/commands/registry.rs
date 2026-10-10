@@ -14,6 +14,11 @@ pub fn get_native_icon(
 }
 
 #[tauri::command]
+pub fn invalidate_native_icon_cache() -> Result<(), String> {
+    crate::platform::icons::clear_cached_native_icons()
+}
+
+#[tauri::command]
 pub fn get_format_status() -> Vec<FormatStatus> {
     let mut statuses = Vec::new();
 
