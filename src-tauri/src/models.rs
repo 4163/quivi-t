@@ -109,6 +109,18 @@ pub struct FormatStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PreviewDiagnostic {
+    pub ext: String,
+    pub registered: bool,
+    pub classes_default: Option<String>,
+    pub userchoice_progid: Option<String>,
+    pub progid_preview_clsid: Option<String>,
+    pub clsid_server: Option<String>,
+    pub hklm_clsid_server: Option<String>,
+    pub in_preview_handlers_list: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnimationInfo {
     pub is_animated: bool,
     pub loop_count: u32,

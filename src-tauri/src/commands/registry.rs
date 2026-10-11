@@ -79,6 +79,113 @@ pub fn get_format_status() -> Vec<FormatStatus> {
     statuses
 }
 
+/// Reports how Explorer resolves the QuiviT preview handler for each archive
+/// type. Read-only; used to tell a stale registration or a foreign default
+/// apart from a rendering failure.
+#[tauri::command]
+pub fn get_preview_diagnostics() -> Result<Vec<crate::models::PreviewDiagnostic>, String> {
+    #[cfg(windows)]
+    {
+        use crate::models::PreviewDiagnostic;
+
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        let registered_by_ext: std::collections::HashMap<String, bool> = get_format_status()
+            .into_iter()
+            .map(|status| (status.ext, status.registered))
+            .collect();
+
+        let read_default = |root: &RegKey, path: &str| -> Option<String> {
+            root.open_subkey(path)
+                .and_then(|key| key.get_value::<String, _>(""))
+                .ok()
+        };
+        let classes_default = |ext: &str| -> Option<String> {
+            let path = format!(r#"Software\Classes\.{}"#, ext);
+            read_default(&hkcu, &path).or_else(|| {
+                hklm.open_subkey(format!(r#"SOFTWARE\Classes\.{}"#, ext))
+                    .and_then(|key| key.get_value::<String, _>(""))
+                    .ok()
+            })
+        };
+
+        let clsid_path = format!(
+            r"Software\Classes\CLSID\{}",
+            crate::platform::preview_handler::PREVIEW_HANDLER_CLSID_TEXT
+        );
+        let clsid_server = read_default(&hkcu, &format!(r"{}\LocalServer32", clsid_path));
+        let hklm_clsid_server = read_default(&hklm, &format!(r"{}\LocalServer32", clsid_path));
+        let in_handlers_list = hkcu
+            .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\PreviewHandlers")
+            .and_then(|key| {
+                key.get_value::<String, _>(
+                    crate::platform::preview_handler::PREVIEW_HANDLER_CLSID_TEXT,
+                )
+            })
+            .is_ok();
+
+        let mut rows = Vec::new();
+        for format in SUPPORTED_FORMATS
+            .iter()
+            .filter(|format| is_archive_ext(format.ext))
+        {
+            let userchoice_path = format!(
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.{}\UserChoice",
+                format.ext
+            );
+            let progid_preview_path = format!(
+                r"Software\Classes\QuiviT.{}\shellex\{}",
+                format.ext,
+                crate::platform::preview_handler::PREVIEW_HANDLER_CATEGORY
+            );
+            rows.push(PreviewDiagnostic {
+                ext: format.ext.to_string(),
+                registered: registered_by_ext.get(format.ext).copied().unwrap_or(false),
+                classes_default: classes_default(format.ext),
+                userchoice_progid: read_default(&hkcu, &userchoice_path),
+                progid_preview_clsid: read_default(&hkcu, &progid_preview_path),
+                clsid_server: clsid_server.clone(),
+                hklm_clsid_server: hklm_clsid_server.clone(),
+                in_preview_handlers_list: in_handlers_list,
+            });
+        }
+        return Ok(rows);
+    }
+
+    #[cfg(not(windows))]
+    return Err("File associations are only supported natively on Windows.".into());
+}
+
+/// Enables Explorer previews for active QuiviT archive associations when the
+/// File Types page opens.
+#[tauri::command]
+pub fn sync_preview_associations() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let exe_path = std::env::current_exe().map_err(|error| error.to_string())?;
+        let mut changed = false;
+        for status in get_format_status()
+            .into_iter()
+            .filter(|status| status.registered && is_archive_ext(&status.ext))
+        {
+            if crate::platform::preview_handler::register_for_extension(&status.ext, &exe_path)? {
+                changed = true;
+            }
+        }
+
+        if changed {
+            unsafe {
+                use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+                SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
+            }
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    return Err("File associations are only supported natively on Windows.".into());
+}
+
 const FORMAT_ICONS: &[(&str, &[u8])] = &[
     ("7z.ico", include_bytes!("../../../icons/formats/7z.ico")),
     (
@@ -163,6 +270,10 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
                 .map_err(|e| format!("Failed creating progid {}: {}", progid_path, e))?;
             let _ = progid_key.set_value("", &display_name);
 
+            if is_archive_ext(&lower_ext) {
+                crate::platform::preview_handler::register_for_extension(&lower_ext, &exe_path)?;
+            }
+
             // DefaultIcon
             let icon_path_key = format!(r#"Software\Classes\{}\DefaultIcon"#, progid);
             let (icon_key, _) = hkcu
@@ -243,6 +354,10 @@ pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
         for ext in &extensions {
             let lower_ext = ext.to_lowercase();
             let progid = format!("QuiviT.{}", lower_ext);
+
+            if is_archive_ext(&lower_ext) {
+                crate::platform::preview_handler::unregister_for_extension(&lower_ext)?;
+            }
 
             // Remove ProgId class entry
             let progid_path = format!(r#"Software\Classes\{}"#, progid);

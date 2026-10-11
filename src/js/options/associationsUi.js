@@ -59,6 +59,14 @@ export async function initAssociationsUi(containerId, statusCallback) {
   try {
     const formats = await invoke('get_format_status');
     const registeredSet = new Set(formats.filter(f => f.registered).map(f => f.ext));
+    if (registeredSet.size > 0) {
+      try {
+        // Migrate previews for associations created before Explorer preview support.
+        await invoke('sync_preview_associations');
+      } catch (syncErr) {
+        console.warn('[Assoc] Preview migration skipped:', syncErr);
+      }
+    }
     
     document.querySelectorAll('.assoc-checkbox').forEach(checkbox => {
       const ext = checkbox.dataset.ext;

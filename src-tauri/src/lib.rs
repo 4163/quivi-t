@@ -114,6 +114,8 @@ pub fn run() {
         get_native_icon,
         invalidate_native_icon_cache,
         get_format_status,
+        get_preview_diagnostics,
+        sync_preview_associations,
         register_associations,
         unregister_associations,
         get_initial_args,

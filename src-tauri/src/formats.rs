@@ -165,6 +165,26 @@ pub fn is_archive_ext(ext: &str) -> bool {
         .any(|f| f.category == FormatCategory::Archive && f.ext.eq_ignore_ascii_case(ext))
 }
 
+/// Sniffs archive bytes for the preview handler, which receives an
+/// `IStream` without a file name. Returns the generic extension used for
+/// the temp file so `ArchiveKind::from_path` resolves to the right reader.
+pub fn sniff_archive_ext(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"PK\x03\x04")
+        || bytes.starts_with(b"PK\x05\x06")
+        || bytes.starts_with(b"PK\x07\x08")
+    {
+        Some("zip")
+    } else if bytes.starts_with(b"Rar!\x1a\x07") {
+        Some("rar")
+    } else if bytes.starts_with(b"7z\xbc\xaf\x27\x1c") {
+        Some("7z")
+    } else if bytes.get(257..262) == Some(b"ustar") {
+        Some("tar")
+    } else {
+        None
+    }
+}
+
 #[inline]
 pub fn is_metadata_ext(ext: &str) -> bool {
     ext.eq_ignore_ascii_case("xml") || ext.eq_ignore_ascii_case("opf")
