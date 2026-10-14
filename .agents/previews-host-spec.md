@@ -2,7 +2,7 @@
 
 This validation comparison was performed against `.agents/skills/validate-changes/SKILL.md` before presenting. Spec only, no code changed, no behavior changed.
 
-Status: draft. Do not implement until the user signs off each open point at the bottom.
+Status: accepted. User runtime verified all slices plus the Apply perf follow-up.
 
 ## Locked definitions
 
@@ -72,30 +72,35 @@ Self clone is the low flag option. One hash, signature preserved, no Mark of the
 
 ## Checklist slice 1: host staging and versioning
 
-- [ ] Add `PREVIEW_HOST_VERSION` plus `resolve_previews_host_path()` and `ensure_previews_host()` under the renamed previews module. Accept: path is always the global bin, portable included. No registry writes in this unit.
-- [ ] Sidecar read and write with version, profile, plus sha256, tmp plus rename. Accept: missing sidecar stages, corrupt staged bytes repair, staged debug profile overwritten by release, equal healthy release keeps bytes without rewrite, greater staged version keeps bytes.
-- [ ] Isolation test. Accept: e2e suite stages and registers nothing; debug stages global with no version check; release is version gated.
-- [ ] Locked helper test. Accept: staging over a running helper returns a retry message naming the preview pane, no process is killed.
+- [x] Add `PREVIEW_HOST_VERSION` plus `resolve_previews_host_path()` and `ensure_previews_host()` under the renamed previews module. Accept: path is always the global bin, portable included. No registry writes in this unit.
+- [x] Sidecar read and write with version, profile, plus sha256, tmp plus rename. Accept: missing sidecar stages, corrupt staged bytes repair, staged debug profile overwritten by release, equal healthy release keeps bytes without rewrite, greater staged version keeps bytes.
+- [x] Isolation test. Accept: e2e suite stages and registers nothing; debug stages global with no version check; release is version gated.
+- [x] Locked helper test. Accept: staging over a running helper returns a retry message naming the preview pane, no process is killed.
 
 ## Checklist slice 2: registration retarget
 
-- [ ] Change `register_for_extension()` and callers in `src-tauri/src/commands/registry.rs` to use the ensured host path. Accept: `LocalServer32` in HKCU and HKLM (when writable) points at the stable host, never at `target/debug` or a portable path.
-- [ ] Rename flag to `--previews-pane` in `src-tauri/src/main.rs` and the COM server entry. Accept: old `--preview-handler` registrations get repaired to the new command on next Apply or repair.
-- [ ] Rename module and binary references to `previews` plural. Accept: `cargo check --tests --manifest-path src-tauri/Cargo.toml` green, CLSID value unchanged.
+- [x] Change `register_for_extension()` and callers in `src-tauri/src/commands/registry.rs` to use the ensured host path. Accept: `LocalServer32` in HKCU and HKLM (when writable) points at the stable host, never at `target/debug` or a portable path.
+- [x] Rename flag to `--previews-pane` in `src-tauri/src/main.rs` and the COM server entry. Accept: old `--preview-handler` registrations get repaired to the new command on next Apply or repair.
+- [x] Rename module and binary references to `previews` plural. Accept: `cargo check --tests --manifest-path src-tauri/Cargo.toml` green, CLSID value unchanged.
 
 ## Checklist slice 3: diagnostics and repair
 
-- [ ] Extend preview diagnostics with host path, exists, staged versus embedded version, stale flag. Accept: Options can tell a stale registration apart from a render failure.
-- [ ] Repair on File Types open touches only already registered archive types. Accept: opening the page never enables a new type by itself.
+- [x] Extend preview diagnostics with host path, exists, staged versus embedded version, stale flag. Accept: Options can tell a stale registration apart from a render failure.
+- [x] Repair on File Types open touches only already registered archive types. Accept: opening the page never enables a new type by itself.
 
 ## Checklist slice 4: verification
 
-- [ ] `cargo check --tests --manifest-path src-tauri/Cargo.toml` green.
-- [ ] Nearest filtered backend test for touched registry and format code green. Full `cargo test` only at final signoff per blast radius.
-- [ ] `node --check` on touched frontend files plus `npm run mocha` green.
-- [ ] Defender scan of the staged helper noted clean.
-- [ ] Staged file carries no `Zone.Identifier` stream (check with `dir /r`).
-- [ ] Manual runtime list handed to the user, no slice declared done without signoff.
+- [x] `cargo check --tests --manifest-path src-tauri/Cargo.toml` green.
+- [x] Nearest filtered backend test for touched registry and format code green. Full `cargo test` only at final signoff per blast radius.
+- [x] `node --check` on touched frontend files plus `npm run mocha` green.
+- [x] Defender scan of the staged helper noted clean.
+- [x] Staged file carries no `Zone.Identifier` stream (check with `dir /r`).
+- [x] Manual runtime list handed to the user, no slice declared done without signoff.
+
+## Follow-up: Apply perf (done, user verified)
+
+- [x] Stage the helper once per Apply via `register_for_extension_with_host()` instead of once per archive type. Accept: one Apply pays exactly one copy plus one hash.
+- [x] `register_associations` and `sync_preview_associations` are async with blocking work in `spawn_blocking`, per the threading guideline. Accept: Apply no longer stalls the app windows.
 
 ## Open points for user review
 

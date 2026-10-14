@@ -111,7 +111,7 @@ pub fn get_preview_diagnostics() -> Result<Vec<crate::models::PreviewDiagnostic>
 
         let clsid_path = format!(
             r"Software\Classes\CLSID\{}",
-            crate::platform::preview_handler::PREVIEW_HANDLER_CLSID_TEXT
+            crate::platform::previews::PREVIEW_HANDLER_CLSID_TEXT
         );
         let clsid_server = read_default(&hkcu, &format!(r"{}\LocalServer32", clsid_path));
         let hklm_clsid_server = read_default(&hklm, &format!(r"{}\LocalServer32", clsid_path));
@@ -119,10 +119,20 @@ pub fn get_preview_diagnostics() -> Result<Vec<crate::models::PreviewDiagnostic>
             .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\PreviewHandlers")
             .and_then(|key| {
                 key.get_value::<String, _>(
-                    crate::platform::preview_handler::PREVIEW_HANDLER_CLSID_TEXT,
+                    crate::platform::previews::PREVIEW_HANDLER_CLSID_TEXT,
                 )
             })
             .is_ok();
+
+        let (host_path, host_exists, sidecar) =
+            crate::platform::previews::host::staged_host_info();
+        let host_path_text = host_path.to_string_lossy().into_owned();
+        let staged_preview_version = sidecar.as_ref().map(|sidecar| sidecar.preview_version);
+        let embedded_preview_version = crate::platform::previews::PREVIEW_HOST_VERSION;
+        let stale = crate::platform::previews::host::is_stale_registration(
+            clsid_server.as_deref(),
+            &host_path,
+        );
 
         let mut rows = Vec::new();
         for format in SUPPORTED_FORMATS
@@ -136,7 +146,7 @@ pub fn get_preview_diagnostics() -> Result<Vec<crate::models::PreviewDiagnostic>
             let progid_preview_path = format!(
                 r"Software\Classes\QuiviT.{}\shellex\{}",
                 format.ext,
-                crate::platform::preview_handler::PREVIEW_HANDLER_CATEGORY
+                crate::platform::previews::PREVIEW_HANDLER_CATEGORY
             );
             rows.push(PreviewDiagnostic {
                 ext: format.ext.to_string(),
@@ -147,6 +157,11 @@ pub fn get_preview_diagnostics() -> Result<Vec<crate::models::PreviewDiagnostic>
                 clsid_server: clsid_server.clone(),
                 hklm_clsid_server: hklm_clsid_server.clone(),
                 in_preview_handlers_list: in_handlers_list,
+                host_path: host_path_text.clone(),
+                host_exists,
+                staged_preview_version,
+                embedded_preview_version,
+                stale,
             });
         }
         return Ok(rows);
@@ -157,21 +172,35 @@ pub fn get_preview_diagnostics() -> Result<Vec<crate::models::PreviewDiagnostic>
 }
 
 /// Enables Explorer previews for active QuiviT archive associations when the
-/// File Types page opens.
-#[tauri::command]
-pub fn sync_preview_associations() -> Result<(), String> {
+/// File Types page opens. Blocking registry plus staging work runs on a
+/// background thread, and the helper stages exactly once per call.
+#[tauri::command(async)]
+pub async fn sync_preview_associations() -> Result<(), String> {
     #[cfg(windows)]
     {
-        let exe_path = std::env::current_exe().map_err(|error| error.to_string())?;
-        let mut changed = false;
-        for status in get_format_status()
-            .into_iter()
-            .filter(|status| status.registered && is_archive_ext(&status.ext))
-        {
-            if crate::platform::preview_handler::register_for_extension(&status.ext, &exe_path)? {
-                changed = true;
-            }
+        if crate::config::is_e2e_suite() {
+            return Ok(());
         }
+        let changed = tauri::async_runtime::spawn_blocking(|| {
+            let exts: Vec<String> = get_format_status()
+                .into_iter()
+                .filter(|status| status.registered && is_archive_ext(&status.ext))
+                .map(|status| status.ext)
+                .collect();
+            if exts.is_empty() {
+                return Ok::<bool, String>(false);
+            }
+            let host = crate::platform::previews::ensure_previews_host()?;
+            let mut changed = false;
+            for ext in &exts {
+                if crate::platform::previews::register_for_extension_with_host(ext, &host)? {
+                    changed = true;
+                }
+            }
+            Ok::<bool, String>(changed)
+        })
+        .await
+        .map_err(|err| format!("Preview repair worker failed: {err}"))??;
 
         if changed {
             unsafe {
@@ -232,13 +261,42 @@ pub fn dump_icons(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> 
     Ok(icon_dir)
 }
 
-#[tauri::command]
-pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> Result<(), String> {
+#[tauri::command(async)]
+pub async fn register_associations(
+    app: tauri::AppHandle,
+    extensions: Vec<String>,
+) -> Result<(), String> {
     #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(move || {
+            register_associations_impl(app, extensions)
+        })
+        .await
+        .map_err(|err| format!("File Types worker failed: {err}"))??;
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    return Err("File associations are only supported natively on Windows.".into());
+}
+
+#[cfg(windows)]
+fn register_associations_impl(
+    app: tauri::AppHandle,
+    extensions: Vec<String>,
+) -> Result<(), String> {
     {
         let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
         let exe_str = exe_path.to_string_lossy().into_owned();
         let icon_dir = dump_icons(&app)?;
+        let need_preview = extensions
+            .iter()
+            .any(|ext| is_archive_ext(&ext.to_lowercase()));
+        let host = if need_preview {
+            Some(crate::platform::previews::ensure_previews_host()?)
+        } else {
+            None
+        };
 
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
@@ -271,7 +329,13 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             let _ = progid_key.set_value("", &display_name);
 
             if is_archive_ext(&lower_ext) {
-                crate::platform::preview_handler::register_for_extension(&lower_ext, &exe_path)?;
+                let host_path = host
+                    .as_ref()
+                    .ok_or("Preview helper was not staged.".to_string())?;
+                crate::platform::previews::register_for_extension_with_host(
+                    &lower_ext,
+                    host_path,
+                )?;
             }
 
             // DefaultIcon
@@ -338,11 +402,8 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
             SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
         }
-        return Ok(());
+        Ok(())
     }
-
-    #[cfg(not(windows))]
-    return Err("File associations are only supported natively on Windows.".into());
 }
 
 #[tauri::command]
@@ -356,7 +417,7 @@ pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
             let progid = format!("QuiviT.{}", lower_ext);
 
             if is_archive_ext(&lower_ext) {
-                crate::platform::preview_handler::unregister_for_extension(&lower_ext)?;
+                crate::platform::previews::unregister_for_extension(&lower_ext)?;
             }
 
             // Remove ProgId class entry

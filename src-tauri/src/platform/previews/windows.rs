@@ -8,19 +8,39 @@ pub const PREVIEW_HANDLER_CLSID_TEXT: &str = "{4FCA3A7C-329E-4B50-98D1-1B6DDFE36
 pub const PREVIEW_HANDLER_CATEGORY: &str = "{8895b1c6-b41f-4c1c-a562-0d564250836f}";
 const PREVIEW_HANDLER_NAME: &str = "QuiviT Preview";
 
-/// Registers this process as the local server and associates it with the
-/// selected QuiviT ProgID only. It deliberately does not touch other apps'
-/// extension or preview registrations. Returns true when a registry value
-/// was created or updated.
-pub fn register_for_extension(extension: &str, exe_path: &Path) -> Result<bool, String> {
+/// Registers the staged helper as the local server and associates it with
+/// the selected QuiviT ProgID only. It deliberately does not touch other
+/// apps' extension or preview registrations. Returns true when a registry
+/// value was created or updated.
+pub fn register_for_extension(extension: &str) -> Result<bool, String> {
     if !crate::formats::is_archive_ext(extension) {
         return Ok(false);
     }
+    if crate::config::is_e2e_suite() {
+        return Ok(false);
+    }
 
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    let executable = exe_path.to_string_lossy();
-    let command = format!(r#""{}" --preview-handler"#, executable);
+    let host_path = super::host::ensure_previews_host()?;
+    register_for_extension_with_host(extension, &host_path)
+}
+
+/// Registry writes for one extension against an already staged host. Callers
+/// that touch several types stage once via `ensure_previews_host` and reuse
+/// the path here, so one Apply pays exactly one copy plus one hash.
+pub fn register_for_extension_with_host(
+    extension: &str,
+    host_path: &Path,
+) -> Result<bool, String> {
+    if !crate::formats::is_archive_ext(extension) {
+        return Ok(false);
+    }
+    if crate::config::is_e2e_suite() {
+        return Ok(false);
+    }
+
+    let command = super::host::expected_command_for(host_path);
     let mut changed = false;
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
     // Association surface stays per-user: Explorer reads it directly.
     let progid_preview_path = format!(
@@ -131,8 +151,12 @@ fn writable_hklm() -> Option<RegKey> {
 
 /// Removes the preview registration for one QuiviT-owned extension. The
 /// shared server registration is retained while another selected type uses it.
-/// Returns true when a key or value was removed.
+/// The helper binary stays on disk by design. Returns true when a key or
+/// value was removed.
 pub fn unregister_for_extension(extension: &str) -> Result<bool, String> {
+    if crate::config::is_e2e_suite() {
+        return Ok(false);
+    }
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let progid_preview_path = format!(
         r"Software\Classes\QuiviT.{}\shellex\{}",

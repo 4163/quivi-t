@@ -118,6 +118,16 @@ pub struct PreviewDiagnostic {
     pub clsid_server: Option<String>,
     pub hklm_clsid_server: Option<String>,
     pub in_preview_handlers_list: bool,
+    #[serde(default)]
+    pub host_path: String,
+    #[serde(default)]
+    pub host_exists: bool,
+    #[serde(default)]
+    pub staged_preview_version: Option<u32>,
+    #[serde(default)]
+    pub embedded_preview_version: u32,
+    #[serde(default)]
+    pub stale: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
