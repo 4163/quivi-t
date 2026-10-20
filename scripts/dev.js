@@ -22,7 +22,8 @@ if (args.includes('--print-dir')) {
   process.exit(0);
 }
 
-const res = spawnSync('npx', ['tauri', 'dev', ...passthrough], {
+const devConfig = path.join(repoRoot, 'src-tauri', 'tauri.dev.conf.json');
+const res = spawnSync('npx', ['tauri', 'dev', '--config', devConfig, ...passthrough], {
   cwd: repoRoot,
   stdio: 'inherit',
   shell: true,

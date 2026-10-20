@@ -1,0 +1,2 @@
+# true opens files in the dev build; false opens them in the release build.
+true

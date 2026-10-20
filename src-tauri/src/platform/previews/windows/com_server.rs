@@ -1815,6 +1815,15 @@ fn handle_key(pane: &mut PreviewPane, key: u32) {
 }
 
 fn find_quivit_app_exe() -> Option<PathBuf> {
+    match crate::platform::direct_open::selected_exe() {
+        Ok(Some(selected)) => return Some(selected),
+        Err(error) => {
+            preview_log(&format!("find_quivit_app_exe failed: {error}"));
+            return None;
+        }
+        Ok(None) => {}
+    }
+
     if let Ok(current) = std::env::current_exe() {
         let file_name = current.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if !file_name.eq_ignore_ascii_case("quivit-previews.exe") && current.exists() {

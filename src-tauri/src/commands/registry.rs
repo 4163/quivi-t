@@ -347,7 +347,7 @@ fn register_associations_impl(
     extensions: Vec<String>,
 ) -> Result<(), String> {
     {
-        let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe_path = crate::platform::direct_open::release_exe()?;
         let exe_str = exe_path.to_string_lossy().into_owned();
         let icon_dir = dump_icons(&app)?;
         let need_preview = extensions
