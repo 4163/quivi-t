@@ -20,7 +20,17 @@ pub fn register_for_extension(extension: &str) -> Result<bool, String> {
         return Ok(false);
     }
 
-    let host_path = super::host::ensure_previews_host()?;
+    let host_path = match super::host::ensure_previews_host() {
+        Ok(path) => path,
+        Err(err) => {
+            let fallback = super::host::resolve_previews_host_path();
+            if fallback.exists() {
+                fallback
+            } else {
+                return Err(err);
+            }
+        }
+    };
     register_for_extension_with_host(extension, &host_path)
 }
 

@@ -171,6 +171,82 @@ pub fn get_preview_diagnostics() -> Result<Vec<crate::models::PreviewDiagnostic>
     return Err("File associations are only supported natively on Windows.".into());
 }
 
+#[cfg(windows)]
+fn sync_preview_associations_impl(stage_host_always: bool) -> Result<bool, String> {
+    if crate::config::is_e2e_suite() {
+        return Ok(false);
+    }
+
+    let host_path = if stage_host_always {
+        match crate::platform::previews::ensure_previews_host() {
+            Ok(path) => Some(path),
+            Err(err) => {
+                eprintln!("[previews] Staging notice: {err}");
+                let fallback = crate::platform::previews::resolve_previews_host_path();
+                if fallback.exists() {
+                    Some(fallback)
+                } else {
+                    None
+                }
+            }
+        }
+    } else {
+        let path = crate::platform::previews::resolve_previews_host_path();
+        if path.exists() {
+            Some(path)
+        } else {
+            crate::platform::previews::ensure_previews_host().ok()
+        }
+    };
+
+    let exts: Vec<String> = get_format_status()
+        .into_iter()
+        .filter(|status| status.registered && is_archive_ext(&status.ext))
+        .map(|status| status.ext)
+        .collect();
+
+    let Some(host) = host_path else {
+        return Ok(false);
+    };
+
+    if exts.is_empty() {
+        return Ok(false);
+    }
+
+    let mut changed = false;
+    for ext in &exts {
+        if crate::platform::previews::register_for_extension_with_host(ext, &host)? {
+            changed = true;
+        }
+    }
+
+    Ok(changed)
+}
+
+/// Spawns a background thread on startup to stage the preview helper and ensure
+/// active archive associations have their preview handlers registered.
+pub fn spawn_launch_previews_sync() {
+    #[cfg(windows)]
+    {
+        if crate::config::is_e2e_suite() {
+            return;
+        }
+        std::thread::spawn(|| {
+            match sync_preview_associations_impl(true) {
+                Ok(true) => unsafe {
+                    use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+                    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
+                },
+                Ok(false) => {}
+                Err(err) => eprintln!("[previews] Launch sync warning: {err}"),
+            }
+        });
+    }
+}
+
+#[cfg(not(windows))]
+pub fn spawn_launch_previews_sync() {}
+
 /// Enables Explorer previews for active QuiviT archive associations when the
 /// File Types page opens. Blocking registry plus staging work runs on a
 /// background thread, and the helper stages exactly once per call.
@@ -182,22 +258,7 @@ pub async fn sync_preview_associations() -> Result<(), String> {
             return Ok(());
         }
         let changed = tauri::async_runtime::spawn_blocking(|| {
-            let exts: Vec<String> = get_format_status()
-                .into_iter()
-                .filter(|status| status.registered && is_archive_ext(&status.ext))
-                .map(|status| status.ext)
-                .collect();
-            if exts.is_empty() {
-                return Ok::<bool, String>(false);
-            }
-            let host = crate::platform::previews::ensure_previews_host()?;
-            let mut changed = false;
-            for ext in &exts {
-                if crate::platform::previews::register_for_extension_with_host(ext, &host)? {
-                    changed = true;
-                }
-            }
-            Ok::<bool, String>(changed)
+            sync_preview_associations_impl(false)
         })
         .await
         .map_err(|err| format!("Preview repair worker failed: {err}"))??;
@@ -293,7 +354,12 @@ fn register_associations_impl(
             .iter()
             .any(|ext| is_archive_ext(&ext.to_lowercase()));
         let host = if need_preview {
-            Some(crate::platform::previews::ensure_previews_host()?)
+            let host_path = crate::platform::previews::resolve_previews_host_path();
+            if host_path.exists() {
+                Some(host_path)
+            } else {
+                Some(crate::platform::previews::ensure_previews_host()?)
+            }
         } else {
             None
         };

@@ -13,9 +13,9 @@ These hold for the whole spec. A change here needs explicit user signoff.
 - Ship artifact stays one file. `QuiviT.exe` is the only download. The helper materializes at runtime on machines where the user opts into archive previews. It is a runtime cache like `extractor-cache`, not a second product.
 - Portable does not move the helper. Config stays portable per `src-tauri/src/config.rs:46`. Shell integration is machine local by nature. Deleting a portable folder does not unregister the handler.
 - Preview version is independent of app version. One constant, `PREVIEW_HOST_VERSION: u32`, lives in the previews module and both the main exe and any future lean helper share it. Bump only on preview contract change. App only changes do not bump.
-- Update rule is newest wins, never downgrade between release builds. Release: staged version lower than embedded means overwrite, staged debug profile means overwrite, equal healthy release means keep staged and re-register even when the running exe bytes differ, corrupt staged file (sha256 differs from the sidecar record) means repair, greater staged version means keep and re-register. Debug: always overwrite on consent with no version check. E2E suite: never stage, never register.
-- Test runners stay hermetic and helpers stay global. Override folders (`.dev-config`, `.e2e-config`, `e2e/.debug-config`) hold config splits only, never helper binaries. The e2e suite (`is_e2e_suite`, `src-tauri/src/config.rs:407`) stages and registers nothing. Debug builds always overwrite the global path on consent with no version check, so iteration needs no bump. Release builds are version gated per the update rule.
-- Registration writes only on user consent. File Types Apply enables, File Types remove disables, and open repairs already registered types. No background staging on every launch.
+- Update rule is newest wins, never downgrade between release builds. Release: staged version lower than embedded means overwrite, staged debug profile means overwrite, equal healthy release means keep staged and re-register even when the running exe bytes differ, corrupt staged file (sha256 differs from the sidecar record) means repair, greater staged version means keep and re-register. Debug: always overwrite on launch and consent with no version check. E2E suite: never stage, never register.
+- Test runners stay hermetic and helpers stay global. Override folders (`.dev-config`, `.e2e-config`, `e2e/.debug-config`) hold config splits only, never helper binaries. The e2e suite (`is_e2e_suite`, `src-tauri/src/config.rs:407`) stages and registers nothing. Debug builds always overwrite the global path on launch and consent with no version check, so iteration needs no bump. Release builds are version gated per the update rule.
+- Helper staging and association sync run on application launch in a non-blocking background thread. In dev mode (`debug_assertions`), the helper stages and rebuilds on launch. In release builds, staging follows the version, profile, and hash check rules. Registration in the Windows Registry is applied only to the archive file types currently registered to QuiviT in the user's config and registry. The e2e test suite never stages and never registers.
 - Helper does read only work. List names, paint text, read archive stream. No registry writes, no child processes, no network from the `--previews-pane` path.
 
 ## Deviation rules
@@ -53,9 +53,10 @@ Only if release pane start is slow or Defender scans of the full copy hurt. New 
 ## Registration flow
 
 - `ensure_previews_host()` always resolves the global bin path. Override folders never change it. The e2e suite returns early and stages nothing.
-- Compare staged sidecar version plus profile against embedded `PREVIEW_HOST_VERSION`. Release: lower stages overwrite, staged debug profile overwrites, equal healthy release keeps bytes and only re-registers, corrupt repairs from the running exe, greater keeps and re-registers. Debug outside the suite always overwrites on consent with no version check. The e2e suite stages nothing and touches no hive. Registration and the HKLM mirror run only outside the suite.
+- Launch sync. `spawn_launch_previews_sync()` runs during app setup on a background thread. It stages the helper binary per the dev and release rules, catching file locks gracefully. If the host binary is available, it queries registered archive formats and ensures preview handler registrations match. If any registration changed, it sends `SHChangeNotify(SHCNE_ASSOCCHANGED, ...)`. Unregistered archive formats are left without preview keys.
+- Compare staged sidecar version plus profile against embedded `PREVIEW_HOST_VERSION`. Release: lower stages overwrite, staged debug profile overwrites, equal healthy release keeps bytes and only re-registers, corrupt repairs from the running exe, greater keeps and re-registers. Debug outside the suite always overwrites on launch and consent with no version check. The e2e suite stages nothing and touches no hive. Registration and the HKLM mirror run only outside the suite.
 - `register_for_extension()` takes the ensured host path, not `current_exe`. Writes per user CLSID `LocalServer32`, the `DisableLowILProcessIsolation` opt out, the `PreviewHandlers` list value, and the `QuiviT.<ext>\shellex` link for archive types only. Elevated runs also mirror the CLSID tree to HKLM; standard runs write HKCU only. Existing helpers `is_archive_ext` in `src-tauri/src/formats.rs` gate the type list.
-- Locked file handling. Explorer keeps the helper running briefly after the pane closes, and Windows refuses to overwrite a running program. A failed write returns a plain error telling the user to close the preview pane and retry. Never kill the server process.
+- Locked file handling. Explorer keeps the helper running briefly after the pane closes, and Windows refuses to overwrite a running program. On manual Apply, a failed write returns a plain error telling the user to close the preview pane and retry. On launch, staging catches the lock error, logs a warning without crashing or stalling startup, and falls back to syncing associations against the existing host if present. Never kill the server process.
 - Unregister removes the per extension link. Removes the shared CLSID tree only when no archive type still links it. Never deletes the helper binary on unregister.
 - Diagnostics extend the existing preview diagnostics with host path, host exists, staged preview version versus embedded, and a stale flag when `LocalServer32` points elsewhere.
 
@@ -101,6 +102,15 @@ Self clone is the low flag option. One hash, signature preserved, no Mark of the
 
 - [x] Stage the helper once per Apply via `register_for_extension_with_host()` instead of once per archive type. Accept: one Apply pays exactly one copy plus one hash.
 - [x] `register_associations` and `sync_preview_associations` are async with blocking work in `spawn_blocking`, per the threading guideline. Accept: Apply no longer stalls the app windows.
+
+## Checklist slice 5: launch staging and association sync
+
+- [x] Add `spawn_launch_previews_sync()` in `src-tauri/src/commands/registry.rs` (with no-op stub for non-Windows) and invoke it inside `setup` in `src-tauri/src/lib.rs`. Accept: non-blocking background thread runs during startup without stalling main window presentation.
+- [x] Isolation check in `spawn_launch_previews_sync()`. Accept: `crate::config::is_e2e_suite()` returns immediately and writes nothing.
+- [x] Dev mode vs release mode launch staging. Accept: in dev mode, helper is rebuilt and staged to `%LOCALAPPDATA%\QuiviT\bin\quivit-previews.exe`; in release builds, version and hash rule is applied.
+- [x] Resilient staging on file locks. Accept: if Explorer has `quivit-previews.exe` locked, the background task logs a warning and does not panic or crash the app, and reuses the existing host path for association sync if already present.
+- [x] Gated association sync. Accept: `register_for_extension_with_host` runs only for archive formats currently registered to QuiviT; unregistered archive formats receive no preview keys. Shell `SHChangeNotify(SHCNE_ASSOCCHANGED, ...)` is called only when registrations changed.
+- [x] Verification. Accept: `cargo check --tests`, targeted preview tests, and `npm run mocha` pass.
 
 ## Open points for user review
 
