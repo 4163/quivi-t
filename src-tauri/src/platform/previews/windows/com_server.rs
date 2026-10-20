@@ -1676,7 +1676,7 @@ fn handle_lbutton_down(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
     let row = (y - HEADER_HEIGHT) / ROW_HEIGHT + archive.scroll as i32;
     if row >= 0 && (row as usize) < rows.len() {
         let (node_id, depth) = rows[row as usize];
-        let indent_x = MARGIN_LEFT + depth as i32 * INDENT_WIDTH;
+        let indent_x = client.left + MARGIN_LEFT + depth as i32 * INDENT_WIDTH;
         let chevron_left = indent_x;
         let chevron_right = indent_x + CHEVRON_WIDTH;
 
@@ -1752,11 +1752,12 @@ fn handle_mouse_move(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
             let is_expandable =
                 !archive.nodes[node_id].is_file && !archive.nodes[node_id].children.is_empty();
 
-            if is_expandable && x >= chevron_left && x < chevron_right {
-                (None, Some(node_id))
+            let chevron = if is_expandable && x >= chevron_left && x < chevron_right {
+                Some(node_id)
             } else {
-                (Some(node_id), None)
-            }
+                None
+            };
+            (Some(node_id), chevron)
         } else {
             (None, None)
         }
@@ -2100,9 +2101,9 @@ unsafe fn draw_archive(
     {
         let y = client.top + HEADER_HEIGHT + view_index as i32 * ROW_HEIGHT;
         let row = RECT {
-            left: client.left,
+            left: client.left + 6,
             top: y,
-            right: content_right + 4,
+            right: content_right + 1,
             bottom: y + ROW_HEIGHT,
         };
         let node = &archive.nodes[*node_id];
@@ -2110,13 +2111,13 @@ unsafe fn draw_archive(
         let is_hovered = hovered_item == Some(*node_id);
 
         let indent_x = client.left + MARGIN_LEFT + *depth as i32 * INDENT_WIDTH;
-        let item_box_left = (indent_x + CHEVRON_WIDTH - 2).max(client.left + 2);
+        let item_box_left = client.left + 6;
 
         if is_selected {
             let sel_rect = RECT {
                 left: item_box_left,
                 top: row.top + 1,
-                right: content_right + 4,
+                right: content_right + 1,
                 bottom: row.bottom - 1,
             };
             fill(hdc, sel_rect, theme.selected);
@@ -2125,7 +2126,7 @@ unsafe fn draw_archive(
             let hov_rect = RECT {
                 left: item_box_left,
                 top: row.top + 1,
-                right: content_right + 4,
+                right: content_right + 1,
                 bottom: row.bottom - 1,
             };
             fill(hdc, hov_rect, theme.hover);
