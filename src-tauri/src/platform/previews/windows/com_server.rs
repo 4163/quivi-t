@@ -10,13 +10,16 @@ use windows::{
     Win32::{
         Foundation::{
             CLASS_E_NOAGGREGATION, COLORREF, E_NOINTERFACE, E_NOTIMPL, HINSTANCE, HWND, LPARAM,
-            LRESULT, RECT, S_FALSE, WPARAM,
+            LRESULT, POINT, RECT, S_FALSE, WPARAM,
         },
         Graphics::Gdi::{
-            BeginPaint, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect, GetDC,
-            InvalidateRect, ReleaseDC, SetBkMode, SetTextColor, DT_END_ELLIPSIS, DT_LEFT,
-            DT_SINGLELINE, DT_VCENTER, HGDIOBJ, PAINTSTRUCT, TRANSPARENT,
+            BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateFontIndirectW,
+            CreatePen, CreateSolidBrush, DeleteDC, DeleteObject, DrawTextW, EndPaint, FillRect,
+            GetDC, InvalidateRect, Polyline, ReleaseDC, SelectObject, SetBkMode, SetTextColor,
+            DT_END_ELLIPSIS, DT_LEFT, DT_SINGLELINE, DT_VCENTER, HFONT, HGDIOBJ, LOGFONTW,
+            PAINTSTRUCT, PS_SOLID, SRCCOPY, TRANSPARENT,
         },
+        Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL},
         System::{
             Com::{
                 CoInitializeEx, CoRegisterClassObject, CoRevokeClassObject, CoUninitialize,
@@ -33,16 +36,17 @@ use windows::{
                 IInitializeWithItem, IInitializeWithItem_Impl, IPreviewHandler,
                 IPreviewHandlerFrame, IPreviewHandlerVisuals, IPreviewHandlerVisuals_Impl,
                 IPreviewHandler_Impl, PropertiesSystem::IInitializeWithFile,
-                PropertiesSystem::IInitializeWithFile_Impl, SIGDN_FILESYSPATH,
+                PropertiesSystem::IInitializeWithFile_Impl, SHGetFileInfoW, SHFILEINFOW,
+                SHGFI_ICON, SHGFI_SMALLICON, SHGFI_USEFILEATTRIBUTES, SIGDN_FILESYSPATH,
             },
             WindowsAndMessaging::{
-                CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect,
-                GetMessageW, GetWindowLongPtrW, KillTimer, MoveWindow, PostMessageW,
-                PostThreadMessageW, RegisterClassW, SetParent, SetTimer, SetWindowLongPtrW,
-                TranslateMessage,
-                CREATESTRUCTW, GWLP_USERDATA, MSG, WINDOW_EX_STYLE, WM_ERASEBKGND, WM_KEYDOWN,
-                WM_LBUTTONDOWN, WM_MOUSEWHEEL, WM_NCCREATE, WM_PAINT, WM_SIZE, WM_TIMER, WNDCLASSW,
-                WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
+                CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow, DispatchMessageW,
+                DrawIconEx, GetClientRect, GetMessageW, GetWindowLongPtrW, KillTimer, MoveWindow,
+                PostMessageW, PostThreadMessageW, RegisterClassW, SetParent, SetTimer,
+                SetWindowLongPtrW, TranslateMessage, CREATESTRUCTW, CS_DBLCLKS, DI_NORMAL,
+                GWLP_USERDATA, HICON, MSG, WINDOW_EX_STYLE, WM_ERASEBKGND, WM_KEYDOWN,
+                WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_MOUSEWHEEL, WM_NCCREATE, WM_PAINT, WM_SIZE,
+                WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
             },
         },
     },
@@ -56,6 +60,11 @@ const PREVIEW_CLASS_NAME: &[u16] = &[
 const MAX_SOURCE_BYTES: usize = 512 * 1024 * 1024;
 const HEADER_HEIGHT: i32 = 34;
 const ROW_HEIGHT: i32 = 24;
+const MARGIN_LEFT: i32 = 8;
+const INDENT_WIDTH: i32 = 16;
+const CHEVRON_WIDTH: i32 = 16;
+const ICON_SIZE: i32 = 16;
+const ICON_TEXT_GAP: i32 = 6;
 static PREVIEW_SOURCE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static ACTIVE_HANDLERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static PREVIEW_CLASS_REGISTERED: OnceLock<()> = OnceLock::new();
@@ -235,6 +244,8 @@ struct PreviewState {
     site: Option<IPreviewHandlerFrame>,
     pane: Option<Box<PreviewPane>>,
     dark: bool,
+    custom_font: Option<LOGFONTW>,
+    custom_text_color: Option<COLORREF>,
     pending_preview: Option<PreviewParams>,
     applied_parent: HWND,
     applied_rect: RECT,
@@ -254,6 +265,8 @@ struct PreviewParams {
     materialized: Materialized,
     dark: bool,
     epoch: u64,
+    custom_font: Option<LOGFONTW>,
+    custom_text_color: Option<COLORREF>,
 }
 
 static PREVIEW_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -435,18 +448,35 @@ impl IPreviewHandlerVisuals_Impl for PreviewHandler_Impl {
         let blue = (color.0 >> 16) & 0xff;
         state.dark = red + green + blue < 384;
         let dark = state.dark;
+        let custom_text = state.custom_text_color;
         if let Some(pane) = state.pane.as_mut() {
             pane.theme = Theme::from_dark(dark);
+            if let Some(text_color) = custom_text {
+                pane.theme.text = text_color;
+            }
             let _ = unsafe { InvalidateRect(Some(pane.hwnd), None, false) };
         }
         Ok(())
     }
 
-    fn SetFont(&self, _font: *const windows::Win32::Graphics::Gdi::LOGFONTW) -> Result<()> {
+    fn SetFont(&self, font: *const windows::Win32::Graphics::Gdi::LOGFONTW) -> Result<()> {
+        let lf = unsafe { font.as_ref() }.copied();
+        let mut state = lock_state(&self.state);
+        state.custom_font = lf;
+        if let Some(pane) = state.pane.as_mut() {
+            pane.update_font(lf);
+            let _ = unsafe { InvalidateRect(Some(pane.hwnd), None, false) };
+        }
         Ok(())
     }
 
-    fn SetTextColor(&self, _color: COLORREF) -> Result<()> {
+    fn SetTextColor(&self, color: COLORREF) -> Result<()> {
+        let mut state = lock_state(&self.state);
+        state.custom_text_color = Some(color);
+        if let Some(pane) = state.pane.as_mut() {
+            pane.theme.text = color;
+            let _ = unsafe { InvalidateRect(Some(pane.hwnd), None, false) };
+        }
         Ok(())
     }
 }
@@ -506,7 +536,7 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
         // here. Chunked sequential I/O only: no window calls, no locks held.
         // The recipe-blessed pattern: preview hosts expect DoPreview itself
         // to pull stream data.
-        let (stream, file_path, dark) = {
+        let (stream, file_path, dark, custom_font, custom_text_color) = {
             let state = lock_state(&self.state);
             if state.stream.is_none() && state.file_path.is_none() {
                 preview_log("DoPreview no source");
@@ -519,6 +549,8 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
                 state.stream.clone(),
                 state.file_path.clone(),
                 state.dark,
+                state.custom_font,
+                state.custom_text_color,
             )
         };
         let materialized: Materialized =
@@ -544,6 +576,8 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
                 materialized,
                 dark,
                 epoch,
+                custom_font,
+                custom_text_color,
             });
             preview_log("DoPreview posted");
         }
@@ -636,7 +670,12 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
         destroy_pane(&mut guard);
     }
 
-    let mut pane = Box::new(PreviewPane::loading(params.dark, params.epoch));
+    let mut pane = Box::new(PreviewPane::loading(
+        params.dark,
+        params.epoch,
+        params.custom_font,
+        params.custom_text_color,
+    ));
     let worker_input = match params.materialized {
         Materialized::List(path, owns) => Some((path, owns)),
         Materialized::NotArchive => {
@@ -664,7 +703,7 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
         }
     };
     pane.hwnd = hwnd;
-    paint_now(hwnd, &pane);
+    paint_now(hwnd, &mut pane);
     let job = Arc::new(Mutex::new(PreviewJob {
         epoch: params.epoch,
         result: None,
@@ -813,27 +852,33 @@ struct Theme {
     text: COLORREF,
     muted: COLORREF,
     selected: COLORREF,
+    selected_border: COLORREF,
+    chevron: COLORREF,
 }
 
 impl Theme {
     fn from_dark(dark: bool) -> Self {
         if dark {
             Self {
-                bg: color(30, 30, 30),
-                surface: color(37, 37, 38),
-                border: color(60, 60, 60),
-                text: color(232, 232, 232),
-                muted: color(166, 166, 166),
-                selected: color(30, 58, 95),
+                bg: color(25, 25, 25),
+                surface: color(32, 32, 32),
+                border: color(50, 50, 50),
+                text: color(240, 240, 240),
+                muted: color(150, 150, 150),
+                selected: color(38, 50, 66),
+                selected_border: color(65, 85, 115),
+                chevron: color(160, 160, 160),
             }
         } else {
             Self {
-                bg: color(240, 240, 240),
+                bg: color(255, 255, 255),
                 surface: color(255, 255, 255),
-                border: color(212, 212, 212),
+                border: color(229, 229, 229),
                 text: color(26, 26, 26),
-                muted: color(100, 100, 100),
-                selected: color(204, 228, 247),
+                muted: color(112, 112, 112),
+                selected: color(204, 232, 255),
+                selected_border: color(153, 209, 255),
+                chevron: color(112, 112, 112),
             }
         }
     }
@@ -897,7 +942,7 @@ impl ArchivePreview {
         }
     }
 
-    fn move_selection(&mut self, offset: isize) {
+    fn move_selection(&mut self, offset: isize, visible_count: usize) {
         let rows = self.visible_rows();
         if rows.is_empty() {
             return;
@@ -908,6 +953,12 @@ impl ArchivePreview {
             .unwrap_or(0) as isize;
         let next = (current + offset).clamp(0, rows.len() as isize - 1) as usize;
         self.selected = Some(rows[next].0);
+
+        if next < self.scroll {
+            self.scroll = next;
+        } else if visible_count > 0 && next >= self.scroll + visible_count {
+            self.scroll = next + 1 - visible_count;
+        }
     }
 }
 
@@ -996,21 +1047,160 @@ enum PreviewContent {
     Message(String),
 }
 
+struct IconCache {
+    icons: HashMap<String, HICON>,
+}
+
+impl IconCache {
+    fn new() -> Self {
+        Self {
+            icons: HashMap::new(),
+        }
+    }
+
+    fn get_or_load(&mut self, is_folder: bool, ext: &str) -> Option<HICON> {
+        let key = if is_folder {
+            "__folder__".to_string()
+        } else {
+            ext.to_ascii_lowercase()
+        };
+
+        if let Some(&hicon) = self.icons.get(&key) {
+            return if !hicon.is_invalid() { Some(hicon) } else { None };
+        }
+
+        let hicon = load_shell_icon(is_folder, ext);
+        if let Some(h) = hicon {
+            self.icons.insert(key, h);
+            Some(h)
+        } else {
+            None
+        }
+    }
+}
+
+impl Drop for IconCache {
+    fn drop(&mut self) {
+        for (_, hicon) in self.icons.drain() {
+            if !hicon.is_invalid() {
+                unsafe {
+                    let _ = DestroyIcon(hicon);
+                }
+            }
+        }
+    }
+}
+
+fn load_shell_icon(is_folder: bool, ext: &str) -> Option<HICON> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let (query_name, attrs) = if is_folder {
+        let wide: Vec<u16> = OsStr::new("dummy")
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        (wide, FILE_ATTRIBUTE_DIRECTORY)
+    } else {
+        let name = if ext.is_empty() {
+            "dummy".to_string()
+        } else {
+            format!("dummy.{}", ext.trim_start_matches('.'))
+        };
+        let wide: Vec<u16> = OsStr::new(&name)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        (wide, FILE_ATTRIBUTE_NORMAL)
+    };
+
+    let mut shfi = SHFILEINFOW::default();
+    let res = unsafe {
+        SHGetFileInfoW(
+            PCWSTR(query_name.as_ptr()),
+            attrs,
+            Some(&mut shfi),
+            std::mem::size_of::<SHFILEINFOW>() as u32,
+            SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | SHGFI_SMALLICON,
+        )
+    };
+
+    if res != 0 && !shfi.hIcon.is_invalid() {
+        Some(shfi.hIcon)
+    } else {
+        None
+    }
+}
+
+fn create_default_ui_font(custom: Option<&LOGFONTW>) -> HFONT {
+    if let Some(lf) = custom {
+        let hfont = unsafe { CreateFontIndirectW(lf) };
+        if !hfont.is_invalid() {
+            return hfont;
+        }
+    }
+
+    let font_name: Vec<u16> = "Segoe UI\0".encode_utf16().collect();
+    let mut lf = LOGFONTW::default();
+    lf.lfHeight = -12;
+    lf.lfWeight = 400;
+    lf.lfCharSet = windows::Win32::Graphics::Gdi::FONT_CHARSET(1);
+    lf.lfQuality = windows::Win32::Graphics::Gdi::FONT_QUALITY(5);
+    let len = font_name.len().min(lf.lfFaceName.len());
+    lf.lfFaceName[..len].copy_from_slice(&font_name[..len]);
+
+    unsafe { CreateFontIndirectW(&lf) }
+}
+
 struct PreviewPane {
     hwnd: HWND,
     theme: Theme,
     content: PreviewContent,
     epoch: u64,
+    font: HFONT,
+    icon_cache: IconCache,
+}
+
+impl Drop for PreviewPane {
+    fn drop(&mut self) {
+        if !self.font.is_invalid() {
+            unsafe {
+                let _ = DeleteObject(HGDIOBJ(self.font.0));
+            }
+        }
+    }
 }
 
 impl PreviewPane {
-    fn loading(dark: bool, epoch: u64) -> Self {
+    fn loading(
+        dark: bool,
+        epoch: u64,
+        custom_font: Option<LOGFONTW>,
+        custom_text_color: Option<COLORREF>,
+    ) -> Self {
+        let mut theme = Theme::from_dark(dark);
+        if let Some(tc) = custom_text_color {
+            theme.text = tc;
+        }
+        let font = create_default_ui_font(custom_font.as_ref());
         Self {
             hwnd: HWND(std::ptr::null_mut()),
-            theme: Theme::from_dark(dark),
+            theme,
             content: PreviewContent::Message("Loading archive contents...".into()),
             epoch,
+            font,
+            icon_cache: IconCache::new(),
         }
+    }
+
+    fn update_font(&mut self, custom: Option<LOGFONTW>) {
+        let new_font = create_default_ui_font(custom.as_ref());
+        if !self.font.is_invalid() {
+            unsafe {
+                let _ = DeleteObject(HGDIOBJ(self.font.0));
+            }
+        }
+        self.font = new_font;
     }
 }
 
@@ -1099,6 +1289,7 @@ fn create_preview_child(parent: HWND, rect: RECT, pane: &mut PreviewPane) -> Res
         preview_log("create child returned null hwnd");
         return Err(Error::from(E_NOINTERFACE));
     }
+    pane.hwnd = hwnd;
     Ok(hwnd)
 }
 
@@ -1107,6 +1298,7 @@ fn register_preview_class() -> Result<()> {
         return Ok(());
     }
     let class = WNDCLASSW {
+        style: CS_DBLCLKS,
         lpfnWndProc: Some(preview_window_proc),
         hInstance: module_instance(),
         lpszClassName: windows::core::PCWSTR(PREVIEW_CLASS_NAME.as_ptr()),
@@ -1148,7 +1340,7 @@ unsafe extern "system" fn preview_window_proc(
             let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
             LRESULT(0)
         }
-        WM_LBUTTONDOWN => {
+        WM_LBUTTONDOWN | WM_LBUTTONDBLCLK => {
             let _ = unsafe { SetFocus(Some(hwnd)) };
             handle_click(pane, lparam);
             let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
@@ -1188,6 +1380,7 @@ unsafe extern "system" fn preview_window_proc(
 
 fn handle_click(pane: &mut PreviewPane, lparam: LPARAM) {
     let y = ((lparam.0 as u32 >> 16) & 0xffff) as i16 as i32;
+    let x = (lparam.0 as u32 & 0xffff) as i16 as i32;
     let PreviewContent::Archive(archive) = &mut pane.content else {
         return;
     };
@@ -1195,8 +1388,22 @@ fn handle_click(pane: &mut PreviewPane, lparam: LPARAM) {
         return;
     }
     let row = (y - HEADER_HEIGHT) / ROW_HEIGHT + archive.scroll as i32;
-    if let Some((node_id, _)) = archive.visible_rows().get(row.max(0) as usize) {
-        archive.activate(*node_id);
+    let rows = archive.visible_rows();
+    if let Some((node_id, depth)) = rows.get(row.max(0) as usize) {
+        let node_id = *node_id;
+        let depth = *depth;
+        let indent_x = MARGIN_LEFT + depth as i32 * INDENT_WIDTH;
+        let chevron_left = indent_x;
+        let chevron_right = indent_x + CHEVRON_WIDTH;
+
+        let is_expandable = !archive.nodes[node_id].is_file && !archive.nodes[node_id].children.is_empty();
+
+        if is_expandable && x >= chevron_left && x < chevron_right {
+            archive.nodes[node_id].expanded = !archive.nodes[node_id].expanded;
+            archive.selected = Some(node_id);
+        } else {
+            archive.activate(node_id);
+        }
     }
 }
 
@@ -1206,10 +1413,17 @@ fn handle_wheel(pane: &mut PreviewPane, wparam: WPARAM) {
     };
     let delta = ((wparam.0 >> 16) & 0xffff) as i16;
     let rows = archive.visible_rows();
+    let mut client = RECT::default();
+    unsafe {
+        let _ = GetClientRect(pane.hwnd, &mut client);
+    }
+    let visible_count = ((client.bottom - client.top - HEADER_HEIGHT).max(0) / ROW_HEIGHT) as usize;
+    let max_scroll = rows.len().saturating_sub(visible_count);
+
     if delta > 0 {
         archive.scroll = archive.scroll.saturating_sub(3);
     } else if delta < 0 {
-        archive.scroll = (archive.scroll + 3).min(rows.len().saturating_sub(1));
+        archive.scroll = (archive.scroll + 3).min(max_scroll);
     }
 }
 
@@ -1217,20 +1431,39 @@ fn handle_key(pane: &mut PreviewPane, key: u32) {
     let PreviewContent::Archive(archive) = &mut pane.content else {
         return;
     };
+    let mut client = RECT::default();
+    unsafe {
+        let _ = GetClientRect(pane.hwnd, &mut client);
+    }
+    let visible_count = ((client.bottom - client.top - HEADER_HEIGHT).max(0) / ROW_HEIGHT) as usize;
+
     match key {
-        0x26 => archive.move_selection(-1), // VK_UP
-        0x28 => archive.move_selection(1),  // VK_DOWN
-        0x0d | 0x27 => {
+        0x26 => archive.move_selection(-1, visible_count), // VK_UP
+        0x28 => archive.move_selection(1, visible_count),  // VK_DOWN
+        0x0d => {
             if let Some(selected) = archive.selected {
                 archive.activate(selected);
             }
         }
-        0x25 => {
+        0x27 => {
+            // VK_RIGHT: expand folder if collapsed, or move down
             if let Some(selected) = archive.selected {
-                if let Some(node) = archive.nodes.get_mut(selected) {
-                    if !node.is_file {
-                        node.expanded = false;
+                let node = &mut archive.nodes[selected];
+                if !node.is_file && !node.children.is_empty() {
+                    if !node.expanded {
+                        node.expanded = true;
+                    } else {
+                        archive.move_selection(1, visible_count);
                     }
+                }
+            }
+        }
+        0x25 => {
+            // VK_LEFT: collapse folder if expanded
+            if let Some(selected) = archive.selected {
+                let node = &mut archive.nodes[selected];
+                if !node.is_file && node.expanded {
+                    node.expanded = false;
                 }
             }
         }
@@ -1238,7 +1471,7 @@ fn handle_key(pane: &mut PreviewPane, key: u32) {
     }
 }
 
-fn paint_preview(hwnd: HWND, pane: &PreviewPane) {
+fn paint_preview(hwnd: HWND, pane: &mut PreviewPane) {
     unsafe {
         let mut paint = PAINTSTRUCT::default();
         let hdc = BeginPaint(hwnd, &mut paint);
@@ -1248,7 +1481,7 @@ fn paint_preview(hwnd: HWND, pane: &PreviewPane) {
         if hdc.0.is_null() {
             return;
         }
-        render_content(hdc, client, pane);
+        paint_double_buffered(hdc, client, pane);
         let _ = EndPaint(hwnd, &paint);
     }
 }
@@ -1257,7 +1490,7 @@ fn paint_preview(hwnd: HWND, pane: &PreviewPane) {
 /// the child before its first WM_PAINT arrives; painting synchronously here
 /// guarantees content from the first frame. Later repaints still flow
 /// through WM_PAINT.
-fn paint_now(hwnd: HWND, pane: &PreviewPane) {
+fn paint_now(hwnd: HWND, pane: &mut PreviewPane) {
     unsafe {
         let hdc = GetDC(Some(hwnd));
         let mut client = RECT::default();
@@ -1266,7 +1499,7 @@ fn paint_now(hwnd: HWND, pane: &PreviewPane) {
         if hdc.0.is_null() {
             return;
         }
-        render_content(hdc, client, pane);
+        paint_double_buffered(hdc, client, pane);
         let _ = ReleaseDC(Some(hwnd), hdc);
     }
 }
@@ -1274,8 +1507,8 @@ fn paint_now(hwnd: HWND, pane: &PreviewPane) {
 /// Repaints the live child after a host-driven resize without waiting for
 /// WM_PAINT. Moves the window first, then draws synchronously.
 fn repaint_now(state: &Arc<Mutex<PreviewState>>, hwnd: HWND) {
-    let state = lock_state(state);
-    if let Some(pane) = state.pane.as_ref() {
+    let mut state = lock_state(state);
+    if let Some(pane) = state.pane.as_mut() {
         if pane.hwnd == hwnd {
             paint_now(hwnd, pane);
         }
@@ -1303,15 +1536,70 @@ fn log_paint(
     }
 }
 
+unsafe fn paint_double_buffered(
+    hdc: windows::Win32::Graphics::Gdi::HDC,
+    client: RECT,
+    pane: &mut PreviewPane,
+) {
+    let width = (client.right - client.left).max(1);
+    let height = (client.bottom - client.top).max(1);
+
+    let mem_dc = CreateCompatibleDC(Some(hdc));
+    if mem_dc.0.is_null() {
+        render_content(hdc, client, pane);
+        return;
+    }
+
+    let mem_bm = CreateCompatibleBitmap(hdc, width, height);
+    if mem_bm.0.is_null() {
+        let _ = DeleteDC(mem_dc);
+        render_content(hdc, client, pane);
+        return;
+    }
+
+    let old_bm = SelectObject(mem_dc, mem_bm.into());
+
+    render_content(mem_dc, client, pane);
+
+    let _ = BitBlt(
+        hdc,
+        client.left,
+        client.top,
+        width,
+        height,
+        Some(mem_dc),
+        client.left,
+        client.top,
+        SRCCOPY,
+    );
+
+    SelectObject(mem_dc, old_bm);
+    let _ = DeleteObject(mem_bm.into());
+    let _ = DeleteDC(mem_dc);
+}
+
 unsafe fn render_content(
     hdc: windows::Win32::Graphics::Gdi::HDC,
     client: RECT,
-    pane: &PreviewPane,
+    pane: &mut PreviewPane,
 ) {
     fill(hdc, client, pane.theme.bg);
+    let old_font = if !pane.font.is_invalid() {
+        Some(SelectObject(hdc, pane.font.into()))
+    } else {
+        None
+    };
+
+    let theme = pane.theme;
     match &pane.content {
-        PreviewContent::Archive(archive) => draw_archive(hdc, client, archive, pane.theme),
-        PreviewContent::Message(message) => draw_message(hdc, client, message, pane.theme),
+        PreviewContent::Archive(archive) => {
+            draw_archive(hdc, client, archive, &mut pane.icon_cache, theme)
+        }
+        PreviewContent::Message(message) => draw_message(hdc, client, message, theme),
+    }
+
+    if let Some(old) = old_font {
+        SelectObject(hdc, old);
     }
 }
 
@@ -1319,6 +1607,7 @@ unsafe fn draw_archive(
     hdc: windows::Win32::Graphics::Gdi::HDC,
     client: RECT,
     archive: &ArchivePreview,
+    icon_cache: &mut IconCache,
     theme: Theme,
 ) {
     fill(hdc, client, theme.surface);
@@ -1362,38 +1651,156 @@ unsafe fn draw_archive(
         };
         let node = &archive.nodes[*node_id];
         if archive.selected == Some(*node_id) {
-            fill(hdc, row, theme.selected);
+            let sel_rect = RECT {
+                left: client.left + 2,
+                top: row.top + 1,
+                right: client.right - 2,
+                bottom: row.bottom - 1,
+            };
+            fill(hdc, sel_rect, theme.selected);
+            draw_border(hdc, sel_rect, theme.selected_border);
         }
-        let glyph = if node.is_file {
-            "•"
-        } else if node.expanded {
-            "⌄"
+
+        let indent_x = client.left + MARGIN_LEFT + *depth as i32 * INDENT_WIDTH;
+
+        // Chevron slot: only folders with children get an arrow chevron
+        if !node.is_file && !node.children.is_empty() {
+            let chevron_cx = indent_x + CHEVRON_WIDTH / 2;
+            let chevron_cy = row.top + ROW_HEIGHT / 2;
+            draw_chevron(hdc, chevron_cx, chevron_cy, node.expanded, theme.chevron);
+        }
+
+        // Icon slot: Windows folder or file icon
+        let icon_x = indent_x + CHEVRON_WIDTH;
+        let icon_y = row.top + (ROW_HEIGHT - ICON_SIZE) / 2;
+        let ext = if node.is_file {
+            Path::new(&node.label)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
         } else {
-            "›"
+            ""
         };
-        draw_text(
-            hdc,
-            glyph,
-            RECT {
-                left: row.left + 9 + *depth as i32 * 14,
-                top: row.top,
-                right: row.left + 25 + *depth as i32 * 14,
-                bottom: row.bottom,
-            },
-            theme.muted,
-        );
+
+        if let Some(hicon) = icon_cache.get_or_load(!node.is_file, ext) {
+            let _ = DrawIconEx(
+                hdc,
+                icon_x,
+                icon_y,
+                hicon,
+                ICON_SIZE,
+                ICON_SIZE,
+                0,
+                None,
+                DI_NORMAL,
+            );
+        }
+
+        // Text slot
+        let text_x = icon_x + ICON_SIZE + ICON_TEXT_GAP;
         draw_text(
             hdc,
             &node.label,
             RECT {
-                left: row.left + 25 + *depth as i32 * 14,
+                left: text_x,
                 top: row.top,
-                right: row.right - 6,
+                right: client.right - 8,
                 bottom: row.bottom,
             },
             theme.text,
         );
     }
+}
+
+unsafe fn draw_chevron(
+    hdc: windows::Win32::Graphics::Gdi::HDC,
+    cx: i32,
+    cy: i32,
+    expanded: bool,
+    color: COLORREF,
+) {
+    let pen = CreatePen(PS_SOLID, 1, color);
+    let old_pen = SelectObject(hdc, pen.into());
+
+    if expanded {
+        // Down-pointing chevron (expanded)
+        let pts1 = [
+            POINT { x: cx - 4, y: cy - 2 },
+            POINT { x: cx, y: cy + 2 },
+            POINT { x: cx + 4, y: cy - 2 },
+        ];
+        let pts2 = [
+            POINT { x: cx - 4, y: cy - 1 },
+            POINT { x: cx, y: cy + 3 },
+            POINT { x: cx + 4, y: cy - 1 },
+        ];
+        let _ = Polyline(hdc, &pts1);
+        let _ = Polyline(hdc, &pts2);
+    } else {
+        // Right-pointing chevron (collapsed)
+        let pts1 = [
+            POINT { x: cx - 2, y: cy - 4 },
+            POINT { x: cx + 2, y: cy },
+            POINT { x: cx - 2, y: cy + 4 },
+        ];
+        let pts2 = [
+            POINT { x: cx - 1, y: cy - 4 },
+            POINT { x: cx + 3, y: cy },
+            POINT { x: cx - 1, y: cy + 4 },
+        ];
+        let _ = Polyline(hdc, &pts1);
+        let _ = Polyline(hdc, &pts2);
+    }
+
+    SelectObject(hdc, old_pen);
+    let _ = DeleteObject(pen.into());
+}
+
+unsafe fn draw_border(
+    hdc: windows::Win32::Graphics::Gdi::HDC,
+    rect: RECT,
+    color: COLORREF,
+) {
+    fill(
+        hdc,
+        RECT {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.top + 1,
+        },
+        color,
+    );
+    fill(
+        hdc,
+        RECT {
+            left: rect.left,
+            top: rect.bottom - 1,
+            right: rect.right,
+            bottom: rect.bottom,
+        },
+        color,
+    );
+    fill(
+        hdc,
+        RECT {
+            left: rect.left,
+            top: rect.top,
+            right: rect.left + 1,
+            bottom: rect.bottom,
+        },
+        color,
+    );
+    fill(
+        hdc,
+        RECT {
+            left: rect.right - 1,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+        },
+        color,
+    );
 }
 
 unsafe fn draw_message(
@@ -1402,7 +1809,11 @@ unsafe fn draw_message(
     message: &str,
     theme: Theme,
 ) {
-    draw_text(hdc, message, area, theme.muted);
+    let mut padded = area;
+    padded.left += 16;
+    padded.right -= 16;
+    padded.top += 16;
+    draw_text(hdc, message, padded, theme.muted);
 }
 
 unsafe fn draw_text(
