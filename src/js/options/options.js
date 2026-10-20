@@ -517,7 +517,7 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
     return;
   }
   showStatus('');
-  const associationsApplied = await applyAssociations(showStatus);
+  const associationsResult = await applyAssociations(showStatus);
   
   const isSingleInstanceModified = document.getElementById('opt-single-instance').checked !== initialSingleInstance;
   const formConfig = buildConfigFromForm(config);
@@ -560,8 +560,8 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
     const relocationWarning = relocationWarningMessage(relocation);
     if (relocationWarning) {
       showStatus(relocationWarning);
-    } else if (!associationsApplied) {
-      showStatus('Settings saved, but file types could not be updated.');
+    } else if (!associationsResult.ok) {
+      showStatus(`Settings saved. ${associationsResult.message}`);
     } else if (isSingleInstanceModified) {
       showStatus('Settings saved. Restart QuiviT to apply this change.');
     } else {

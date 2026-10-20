@@ -552,6 +552,7 @@
       <p class="hint">Open Windows Settings if your selection did not, or cannot, make QuiviT the default app.</p>
       <div class="flex-row">
         <button id="btn-assoc-settings" class="secondary">Windows Defaults Settings</button>
+        <button id="btn-assoc-remove" class="secondary" type="button">Remove QuiviT file registrations</button>
       </div>
     </div>
   </div>
@@ -632,6 +633,17 @@ html {
       </label>
     </div>
   </div>
+
+  <dialog id="assoc-remove-dialog" class="assoc-remove-dialog" aria-labelledby="assoc-remove-title">
+    <form method="dialog">
+      <h3 id="assoc-remove-title">Remove QuiviT file registrations?</h3>
+      <p>This removes QuiviT's file type and preview pane registrations. Windows may ask you to choose a new default app for affected files.</p>
+      <div class="assoc-remove-actions">
+        <button value="cancel" type="submit">Cancel</button>
+        <button value="remove" type="submit" class="danger">Remove</button>
+      </div>
+    </form>
+  </dialog>
 
   <div class="dialog-footer">
     <span id="options-status" role="status" aria-live="polite"></span>

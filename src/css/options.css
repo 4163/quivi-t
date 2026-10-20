@@ -586,6 +586,18 @@ button.primary:hover {
   background: var(--accent-hover);
 }
 
+button.danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+
+button.danger:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  filter: brightness(1.1);
+}
+
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -689,5 +701,99 @@ button:disabled {
 .assoc-mascot-box.is-active .assoc-format-icon {
   opacity: 1;
   transform: scale(1);
+}
+
+/* File type unregistration confirmation dialog */
+.assoc-remove-dialog {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 20px;
+  max-width: 420px;
+  width: calc(100% - 32px);
+  margin: auto;
+}
+
+.assoc-remove-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+@supports (transition-behavior: allow-discrete) {
+  .assoc-remove-dialog {
+    transition: opacity 0.15s ease-out, transform 0.15s ease-out, overlay 0.15s ease-out, display 0.15s ease-out;
+    transition-behavior: allow-discrete;
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  .assoc-remove-dialog[open] {
+    opacity: 1;
+    transform: scale(1);
+
+    @starting-style {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+
+  .assoc-remove-dialog::backdrop {
+    transition: background-color 0.15s ease-out, overlay 0.15s ease-out, display 0.15s ease-out;
+    transition-behavior: allow-discrete;
+    background-color: transparent;
+  }
+
+  .assoc-remove-dialog[open]::backdrop {
+    background-color: rgba(0, 0, 0, 0.45);
+
+    @starting-style {
+      background-color: transparent;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assoc-remove-dialog {
+    transform: none;
+    transition: opacity 0.1s ease-out;
+  }
+
+  @starting-style {
+    .assoc-remove-dialog[open] {
+      transform: none;
+    }
+  }
+}
+
+.assoc-remove-dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.assoc-remove-dialog h3 {
+  font-size: var(--fs-15);
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+  margin: 0;
+}
+
+.assoc-remove-dialog p {
+  font-size: var(--fs-13);
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.assoc-remove-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.assoc-remove-actions button {
+  padding: 6px 14px;
 }
 
