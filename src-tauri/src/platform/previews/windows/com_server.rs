@@ -22,16 +22,16 @@ use windows::{
         Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL},
         System::{
             Com::{
-                CoInitializeEx, CoRegisterClassObject, CoRevokeClassObject, CoUninitialize,
-                IClassFactory, IClassFactory_Impl, IStream, CLSCTX_LOCAL_SERVER,
-                COINIT_APARTMENTTHREADED, REGCLS_MULTIPLEUSE, STREAM_SEEK_SET,
+                CoInitializeEx, CoRegisterClassObject, CoRevokeClassObject, CoTaskMemFree,
+                CoUninitialize, IClassFactory, IClassFactory_Impl, IStream, CLSCTX_LOCAL_SERVER,
+                COINIT_APARTMENTTHREADED, REGCLS_MULTIPLEUSE, STATFLAG_DEFAULT, STREAM_SEEK_SET,
             },
             LibraryLoader::GetModuleHandleW,
             Ole::{IObjectWithSite, IObjectWithSite_Impl, IOleWindow, IOleWindow_Impl},
             Threading::GetCurrentThreadId,
         },
         UI::{
-            Input::KeyboardAndMouse::{GetFocus, SetFocus},
+            Input::KeyboardAndMouse::{GetFocus, ReleaseCapture, SetCapture, SetFocus},
             Shell::{
                 IInitializeWithItem, IInitializeWithItem_Impl, IPreviewHandler,
                 IPreviewHandlerFrame, IPreviewHandlerVisuals, IPreviewHandlerVisuals_Impl,
@@ -41,12 +41,13 @@ use windows::{
             },
             WindowsAndMessaging::{
                 CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow, DispatchMessageW,
-                DrawIconEx, GetClientRect, GetMessageW, GetWindowLongPtrW, KillTimer, MoveWindow,
-                PostMessageW, PostThreadMessageW, RegisterClassW, SetParent, SetTimer,
-                SetWindowLongPtrW, TranslateMessage, CREATESTRUCTW, CS_DBLCLKS, DI_NORMAL,
-                GWLP_USERDATA, HICON, MSG, WINDOW_EX_STYLE, WM_ERASEBKGND, WM_KEYDOWN,
-                WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_MOUSEWHEEL, WM_NCCREATE, WM_PAINT, WM_SIZE,
-                WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
+                DrawIconEx, GetClientRect, GetMessageW, GetWindowLongPtrW, KillTimer, LoadCursorW,
+                MoveWindow, PostMessageW, PostThreadMessageW, RegisterClassW, SetCursor, SetParent,
+                SetTimer, SetWindowLongPtrW, TranslateMessage, CREATESTRUCTW, CS_DBLCLKS,
+                DI_NORMAL, GWLP_USERDATA, HICON, IDC_ARROW, MSG, WINDOW_EX_STYLE,
+                WM_CAPTURECHANGED, WM_ERASEBKGND, WM_KEYDOWN, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
+                WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCCREATE, WM_PAINT, WM_SETCURSOR,
+                WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
             },
         },
     },
@@ -65,6 +66,23 @@ const INDENT_WIDTH: i32 = 16;
 const CHEVRON_WIDTH: i32 = 16;
 const ICON_SIZE: i32 = 16;
 const ICON_TEXT_GAP: i32 = 6;
+const SCROLLBAR_WIDTH: i32 = 12;
+const ARROW_BUTTON_HEIGHT: i32 = 14;
+const WM_MOUSELEAVE: u32 = 0x02A3;
+const TME_LEAVE: u32 = 0x00000002;
+
+#[repr(C)]
+struct TRACKMOUSEEVENT {
+    cb_size: u32,
+    flags: u32,
+    hwnd_track: HWND,
+    hover_time: u32,
+}
+
+extern "system" {
+    fn TrackMouseEvent(lp_event_track: *mut TRACKMOUSEEVENT) -> i32;
+}
+
 static PREVIEW_SOURCE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static ACTIVE_HANDLERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static PREVIEW_CLASS_REGISTERED: OnceLock<()> = OnceLock::new();
@@ -239,6 +257,7 @@ impl IClassFactory_Impl for PreviewClassFactory_Impl {
 struct PreviewState {
     stream: Option<IStream>,
     file_path: Option<PathBuf>,
+    display_name: Option<String>,
     parent: HWND,
     rect: RECT,
     site: Option<IPreviewHandlerFrame>,
@@ -267,6 +286,7 @@ struct PreviewParams {
     epoch: u64,
     custom_font: Option<LOGFONTW>,
     custom_text_color: Option<COLORREF>,
+    display_name: String,
 }
 
 static PREVIEW_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -368,9 +388,24 @@ impl windows::Win32::UI::Shell::PropertiesSystem::IInitializeWithStream_Impl
     fn Initialize(&self, stream: windows::core::Ref<IStream>, _mode: u32) -> Result<()> {
         let has_stream = (*stream).is_some();
         preview_log(&format!("Initialize stream has_stream={has_stream}"));
+        let mut display_name = None;
+        if let Some(s) = (*stream).as_ref() {
+            unsafe {
+                let mut stat = std::mem::zeroed();
+                if s.Stat(&mut stat, STATFLAG_DEFAULT).is_ok() && !stat.pwcsName.is_null() {
+                    if let Ok(name) = stat.pwcsName.to_string() {
+                        display_name = Path::new(&name)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned());
+                    }
+                    CoTaskMemFree(Some(stat.pwcsName.0 as *const _));
+                }
+            }
+        }
         let mut state = self.state.lock().unwrap();
         state.stream = (*stream).clone();
         state.file_path = None;
+        state.display_name = display_name;
         Ok(())
     }
 }
@@ -382,6 +417,7 @@ impl IInitializeWithFile_Impl for PreviewHandler_Impl {
         })?;
         preview_log(&format!("Initialize file path={}", path.display()));
         let mut state = self.state.lock().unwrap();
+        state.display_name = path.file_name().map(|n| n.to_string_lossy().into_owned());
         state.file_path = Some(path);
         state.stream = None;
         Ok(())
@@ -410,6 +446,7 @@ impl IInitializeWithItem_Impl for PreviewHandler_Impl {
             .map(PathBuf::from)?;
         preview_log(&format!("Initialize item path={}", path.display()));
         let mut state = self.state.lock().unwrap();
+        state.display_name = path.file_name().map(|n| n.to_string_lossy().into_owned());
         state.file_path = Some(path);
         state.stream = None;
         Ok(())
@@ -536,7 +573,7 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
         // here. Chunked sequential I/O only: no window calls, no locks held.
         // The recipe-blessed pattern: preview hosts expect DoPreview itself
         // to pull stream data.
-        let (stream, file_path, dark, custom_font, custom_text_color) = {
+        let (stream, file_path, dark, custom_font, custom_text_color, state_display_name) = {
             let state = lock_state(&self.state);
             if state.stream.is_none() && state.file_path.is_none() {
                 preview_log("DoPreview no source");
@@ -551,8 +588,16 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
                 state.dark,
                 state.custom_font,
                 state.custom_text_color,
+                state.display_name.clone(),
             )
         };
+        let display_name = state_display_name.unwrap_or_else(|| {
+            file_path
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "Archive".into())
+        });
         let materialized: Materialized =
             if let Some(stream) = stream.as_ref() {
                 match copy_stream_to_temp(stream) {
@@ -578,6 +623,7 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
                 epoch,
                 custom_font,
                 custom_text_color,
+                display_name,
             });
             preview_log("DoPreview posted");
         }
@@ -592,6 +638,7 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
             state.pending_preview = None;
             state.stream = None;
             state.file_path = None;
+            state.display_name = None;
             state.site = None;
         }
         post_task(&self.state, TASK_TEARDOWN);
@@ -675,6 +722,7 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
         params.epoch,
         params.custom_font,
         params.custom_text_color,
+        params.display_name.clone(),
     ));
     let worker_input = match params.materialized {
         Materialized::List(path, owns) => Some((path, owns)),
@@ -723,7 +771,7 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
             "preview worker spawn owns={owns} path={}",
             path.display()
         ));
-        spawn_preview_worker(path, owns, params.epoch, job, hwnd.0 as isize);
+        spawn_preview_worker(path, owns, params.epoch, params.display_name, job, hwnd.0 as isize);
     } else {
         preview_log("preview worker skipped (message pane)");
     }
@@ -844,41 +892,64 @@ fn sniff_file_head(path: &Path) -> std::result::Result<Option<&'static str>, Str
     Ok(crate::formats::sniff_archive_ext(&head[..read]))
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ScrollbarPart {
+    UpArrow,
+    DownArrow,
+    Thumb,
+    Track,
+}
+
 #[derive(Clone, Copy)]
 struct Theme {
-    bg: COLORREF,
     surface: COLORREF,
     border: COLORREF,
     text: COLORREF,
     muted: COLORREF,
     selected: COLORREF,
     selected_border: COLORREF,
+    hover: COLORREF,
+    hover_border: COLORREF,
     chevron: COLORREF,
+    scrollbar_thumb: COLORREF,
+    scrollbar_hover: COLORREF,
+    scrollbar_active: COLORREF,
+    scrollbar_btn_hover: COLORREF,
 }
 
 impl Theme {
     fn from_dark(dark: bool) -> Self {
         if dark {
             Self {
-                bg: color(25, 25, 25),
                 surface: color(32, 32, 32),
                 border: color(50, 50, 50),
                 text: color(240, 240, 240),
                 muted: color(150, 150, 150),
                 selected: color(38, 50, 66),
                 selected_border: color(65, 85, 115),
+                hover: color(45, 48, 52),
+                hover_border: color(60, 64, 70),
                 chevron: color(160, 160, 160),
+                scrollbar_thumb: color(85, 85, 85),
+                scrollbar_hover: color(110, 110, 110),
+                scrollbar_active: color(140, 140, 140),
+                scrollbar_btn_hover: color(56, 56, 56),
             }
         } else {
             Self {
-                bg: color(255, 255, 255),
                 surface: color(255, 255, 255),
                 border: color(229, 229, 229),
                 text: color(26, 26, 26),
                 muted: color(112, 112, 112),
                 selected: color(204, 232, 255),
                 selected_border: color(153, 209, 255),
+                hover: color(232, 243, 253),
+                hover_border: color(205, 228, 247),
                 chevron: color(112, 112, 112),
+                scrollbar_thumb: color(195, 195, 195),
+                scrollbar_hover: color(165, 165, 165),
+                scrollbar_active: color(135, 135, 135),
+                scrollbar_btn_hover: color(225, 225, 225),
             }
         }
     }
@@ -901,6 +972,7 @@ struct ArchivePreview {
     nodes: Vec<TreeNode>,
     selected: Option<usize>,
     scroll: usize,
+    display_name: String,
 }
 
 impl Drop for ArchivePreview {
@@ -916,6 +988,7 @@ impl ArchivePreview {
         source_path: PathBuf,
         owns_source: bool,
         files: Vec<crate::models::FileEntry>,
+        display_name: String,
     ) -> Self {
         Self {
             source_path,
@@ -923,6 +996,7 @@ impl ArchivePreview {
             nodes: build_tree(files),
             selected: None,
             scroll: 0,
+            display_name,
         }
     }
 
@@ -1152,6 +1226,88 @@ fn create_default_ui_font(custom: Option<&LOGFONTW>) -> HFONT {
     unsafe { CreateFontIndirectW(&lf) }
 }
 
+struct ScrollbarGeometry {
+    up_btn: RECT,
+    down_btn: RECT,
+    track: RECT,
+    thumb: RECT,
+    max_scroll: usize,
+    track_height: i32,
+    thumb_height: i32,
+}
+
+fn compute_scrollbar(
+    client: RECT,
+    total_rows: usize,
+    scroll: usize,
+) -> Option<ScrollbarGeometry> {
+    let content_height = (client.bottom - client.top - HEADER_HEIGHT).max(0);
+    let visible_count = (content_height / ROW_HEIGHT) as usize;
+    if total_rows <= visible_count || visible_count == 0 {
+        return None;
+    }
+    let sb_left = client.right - SCROLLBAR_WIDTH - 2;
+    let sb_right = client.right - 2;
+    let sb_top = client.top + HEADER_HEIGHT + 2;
+    let sb_bottom = client.bottom - 2;
+    let total_height = (sb_bottom - sb_top).max(0);
+    if total_height < 50 {
+        return None;
+    }
+    let up_btn = RECT {
+        left: sb_left,
+        top: sb_top,
+        right: sb_right,
+        bottom: sb_top + ARROW_BUTTON_HEIGHT,
+    };
+    let down_btn = RECT {
+        left: sb_left,
+        top: sb_bottom - ARROW_BUTTON_HEIGHT,
+        right: sb_right,
+        bottom: sb_bottom,
+    };
+    let track = RECT {
+        left: sb_left,
+        top: up_btn.bottom + 2,
+        right: sb_right,
+        bottom: down_btn.top - 2,
+    };
+    let track_height = (track.bottom - track.top).max(0);
+    if track_height < 20 {
+        return None;
+    }
+    let max_scroll = total_rows.saturating_sub(visible_count);
+    let thumb_height = ((track_height as f64 * visible_count as f64 / total_rows as f64) as i32)
+        .clamp(20, track_height);
+    let travel = (track_height - thumb_height).max(0);
+    let thumb_top = if max_scroll > 0 {
+        track.top + ((scroll.min(max_scroll) as f64 / max_scroll as f64) * travel as f64) as i32
+    } else {
+        track.top
+    };
+    let thumb = RECT {
+        left: track.left,
+        top: thumb_top,
+        right: track.right,
+        bottom: thumb_top + thumb_height,
+    };
+    Some(ScrollbarGeometry {
+        up_btn,
+        down_btn,
+        track,
+        thumb,
+        max_scroll,
+        track_height,
+        thumb_height,
+    })
+}
+
+#[derive(Clone, Copy)]
+struct ScrollbarDrag {
+    start_y: i32,
+    start_scroll: usize,
+}
+
 struct PreviewPane {
     hwnd: HWND,
     theme: Theme,
@@ -1159,6 +1315,12 @@ struct PreviewPane {
     epoch: u64,
     font: HFONT,
     icon_cache: IconCache,
+    display_name: String,
+    dragging_scrollbar: Option<ScrollbarDrag>,
+    hovered_item: Option<usize>,
+    hovered_chevron: Option<usize>,
+    hovered_scrollbar_part: Option<ScrollbarPart>,
+    mouse_tracked: bool,
 }
 
 impl Drop for PreviewPane {
@@ -1177,6 +1339,7 @@ impl PreviewPane {
         epoch: u64,
         custom_font: Option<LOGFONTW>,
         custom_text_color: Option<COLORREF>,
+        display_name: String,
     ) -> Self {
         let mut theme = Theme::from_dark(dark);
         if let Some(tc) = custom_text_color {
@@ -1186,10 +1349,16 @@ impl PreviewPane {
         Self {
             hwnd: HWND(std::ptr::null_mut()),
             theme,
-            content: PreviewContent::Message("Loading archive contents...".into()),
+            content: PreviewContent::Message(String::new()),
             epoch,
             font,
             icon_cache: IconCache::new(),
+            display_name,
+            dragging_scrollbar: None,
+            hovered_item: None,
+            hovered_chevron: None,
+            hovered_scrollbar_part: None,
+            mouse_tracked: false,
         }
     }
 
@@ -1215,6 +1384,7 @@ fn spawn_preview_worker(
     list_path: PathBuf,
     owns_source: bool,
     epoch: u64,
+    display_name: String,
     job: Arc<Mutex<PreviewJob>>,
     child_addr: isize,
 ) {
@@ -1230,6 +1400,7 @@ fn spawn_preview_worker(
                         list_path,
                         owns_source,
                         files,
+                        display_name,
                     ))
                 }
                 Err(error) => {
@@ -1337,13 +1508,78 @@ unsafe extern "system" fn preview_window_proc(
         }
         WM_ERASEBKGND => LRESULT(1),
         WM_SIZE => {
+            clamp_scroll(hwnd, pane);
             let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
             LRESULT(0)
         }
         WM_LBUTTONDOWN | WM_LBUTTONDBLCLK => {
             let _ = unsafe { SetFocus(Some(hwnd)) };
-            handle_click(pane, lparam);
+            handle_lbutton_down(hwnd, pane, lparam);
             let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
+            LRESULT(0)
+        }
+        WM_SETCURSOR => {
+            unsafe {
+                if let Ok(cursor) = LoadCursorW(None, IDC_ARROW) {
+                    let _ = SetCursor(Some(cursor));
+                }
+            }
+            LRESULT(1)
+        }
+        WM_MOUSEMOVE => {
+            unsafe {
+                if let Ok(cursor) = LoadCursorW(None, IDC_ARROW) {
+                    let _ = SetCursor(Some(cursor));
+                }
+            }
+            if !pane.mouse_tracked {
+                let mut tme = TRACKMOUSEEVENT {
+                    cb_size: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
+                    flags: TME_LEAVE,
+                    hwnd_track: hwnd,
+                    hover_time: 0,
+                };
+                unsafe {
+                    let _ = TrackMouseEvent(&mut tme);
+                }
+                pane.mouse_tracked = true;
+            }
+            handle_mouse_move(hwnd, pane, lparam);
+            LRESULT(0)
+        }
+        WM_MOUSELEAVE => {
+            pane.mouse_tracked = false;
+            let mut changed = false;
+            if pane.hovered_item.is_some() {
+                pane.hovered_item = None;
+                changed = true;
+            }
+            if pane.hovered_chevron.is_some() {
+                pane.hovered_chevron = None;
+                changed = true;
+            }
+            if pane.hovered_scrollbar_part.is_some() {
+                pane.hovered_scrollbar_part = None;
+                changed = true;
+            }
+            if changed {
+                let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
+            }
+            LRESULT(0)
+        }
+        WM_LBUTTONUP => {
+            if pane.dragging_scrollbar.is_some() {
+                pane.dragging_scrollbar = None;
+                let _ = unsafe { ReleaseCapture() };
+                let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
+            }
+            LRESULT(0)
+        }
+        WM_CAPTURECHANGED => {
+            if pane.dragging_scrollbar.is_some() {
+                pane.dragging_scrollbar = None;
+                let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
+            }
             LRESULT(0)
         }
         WM_MOUSEWHEEL => {
@@ -1378,25 +1614,74 @@ unsafe extern "system" fn preview_window_proc(
     }
 }
 
-fn handle_click(pane: &mut PreviewPane, lparam: LPARAM) {
+fn clamp_scroll(hwnd: HWND, pane: &mut PreviewPane) {
+    let PreviewContent::Archive(archive) = &mut pane.content else {
+        return;
+    };
+    let mut client = RECT::default();
+    unsafe {
+        let _ = GetClientRect(hwnd, &mut client);
+    }
+    let visible_count = ((client.bottom - client.top - HEADER_HEIGHT).max(0) / ROW_HEIGHT) as usize;
+    let rows = archive.visible_rows();
+    let max_scroll = rows.len().saturating_sub(visible_count);
+    if archive.scroll > max_scroll {
+        archive.scroll = max_scroll;
+    }
+}
+
+fn handle_lbutton_down(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
     let y = ((lparam.0 as u32 >> 16) & 0xffff) as i16 as i32;
     let x = (lparam.0 as u32 & 0xffff) as i16 as i32;
     let PreviewContent::Archive(archive) = &mut pane.content else {
         return;
     };
     if y < HEADER_HEIGHT {
+        archive.selected = None;
         return;
     }
-    let row = (y - HEADER_HEIGHT) / ROW_HEIGHT + archive.scroll as i32;
+
+    let mut client = RECT::default();
+    unsafe {
+        let _ = GetClientRect(hwnd, &mut client);
+    }
     let rows = archive.visible_rows();
-    if let Some((node_id, depth)) = rows.get(row.max(0) as usize) {
-        let node_id = *node_id;
-        let depth = *depth;
+    if let Some(sb) = compute_scrollbar(client, rows.len(), archive.scroll) {
+        if x >= sb.track.left - 2 && x <= client.right {
+            if y >= sb.up_btn.top && y <= sb.up_btn.bottom {
+                archive.scroll = archive.scroll.saturating_sub(1);
+            } else if y >= sb.down_btn.top && y <= sb.down_btn.bottom {
+                archive.scroll = (archive.scroll + 1).min(sb.max_scroll);
+            } else if y >= sb.thumb.top && y <= sb.thumb.bottom {
+                pane.dragging_scrollbar = Some(ScrollbarDrag {
+                    start_y: y,
+                    start_scroll: archive.scroll,
+                });
+                unsafe {
+                    let _ = SetCapture(hwnd);
+                }
+            } else if y < sb.thumb.top && y > sb.up_btn.bottom {
+                let visible_count =
+                    ((client.bottom - client.top - HEADER_HEIGHT).max(0) / ROW_HEIGHT) as usize;
+                archive.scroll = archive.scroll.saturating_sub(visible_count.max(1));
+            } else if y > sb.thumb.bottom && y < sb.down_btn.top {
+                let visible_count =
+                    ((client.bottom - client.top - HEADER_HEIGHT).max(0) / ROW_HEIGHT) as usize;
+                archive.scroll = (archive.scroll + visible_count.max(1)).min(sb.max_scroll);
+            }
+            return;
+        }
+    }
+
+    let row = (y - HEADER_HEIGHT) / ROW_HEIGHT + archive.scroll as i32;
+    if row >= 0 && (row as usize) < rows.len() {
+        let (node_id, depth) = rows[row as usize];
         let indent_x = MARGIN_LEFT + depth as i32 * INDENT_WIDTH;
         let chevron_left = indent_x;
         let chevron_right = indent_x + CHEVRON_WIDTH;
 
-        let is_expandable = !archive.nodes[node_id].is_file && !archive.nodes[node_id].children.is_empty();
+        let is_expandable =
+            !archive.nodes[node_id].is_file && !archive.nodes[node_id].children.is_empty();
 
         if is_expandable && x >= chevron_left && x < chevron_right {
             archive.nodes[node_id].expanded = !archive.nodes[node_id].expanded;
@@ -1404,6 +1689,89 @@ fn handle_click(pane: &mut PreviewPane, lparam: LPARAM) {
         } else {
             archive.activate(node_id);
         }
+    } else {
+        archive.selected = None;
+    }
+}
+
+fn handle_mouse_move(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
+    let PreviewContent::Archive(archive) = &mut pane.content else {
+        return;
+    };
+    let y = ((lparam.0 as u32 >> 16) & 0xffff) as i16 as i32;
+    let x = (lparam.0 as u32 & 0xffff) as i16 as i32;
+    let mut client = RECT::default();
+    unsafe {
+        let _ = GetClientRect(hwnd, &mut client);
+    }
+    let rows = archive.visible_rows();
+
+    if let Some(drag) = pane.dragging_scrollbar {
+        if let Some(sb) = compute_scrollbar(client, rows.len(), drag.start_scroll) {
+            let delta_y = y - drag.start_y;
+            let travel = (sb.track_height - sb.thumb_height).max(1);
+            let delta_scroll =
+                (delta_y as f64 * sb.max_scroll as f64 / travel as f64).round() as isize;
+            let new_scroll =
+                (drag.start_scroll as isize + delta_scroll).clamp(0, sb.max_scroll as isize) as usize;
+            if new_scroll != archive.scroll {
+                archive.scroll = new_scroll;
+                let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
+            }
+        }
+        return;
+    }
+
+    let scrollbar = compute_scrollbar(client, rows.len(), archive.scroll);
+    let (new_sb_part, is_over_scrollbar) = if let Some(sb) = &scrollbar {
+        if x >= sb.track.left - 2 && x <= client.right && y >= client.top + HEADER_HEIGHT {
+            let part = if y >= sb.up_btn.top && y <= sb.up_btn.bottom {
+                Some(ScrollbarPart::UpArrow)
+            } else if y >= sb.down_btn.top && y <= sb.down_btn.bottom {
+                Some(ScrollbarPart::DownArrow)
+            } else if y >= sb.thumb.top && y <= sb.thumb.bottom {
+                Some(ScrollbarPart::Thumb)
+            } else {
+                Some(ScrollbarPart::Track)
+            };
+            (part, true)
+        } else {
+            (None, false)
+        }
+    } else {
+        (None, false)
+    };
+
+    let (new_item, new_chevron) = if !is_over_scrollbar && y >= HEADER_HEIGHT {
+        let row = (y - HEADER_HEIGHT) / ROW_HEIGHT + archive.scroll as i32;
+        if row >= 0 && (row as usize) < rows.len() {
+            let (node_id, depth) = rows[row as usize];
+            let indent_x = client.left + MARGIN_LEFT + depth as i32 * INDENT_WIDTH;
+            let chevron_left = indent_x;
+            let chevron_right = indent_x + CHEVRON_WIDTH;
+            let is_expandable =
+                !archive.nodes[node_id].is_file && !archive.nodes[node_id].children.is_empty();
+
+            if is_expandable && x >= chevron_left && x < chevron_right {
+                (None, Some(node_id))
+            } else {
+                (Some(node_id), None)
+            }
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
+    if new_sb_part != pane.hovered_scrollbar_part
+        || new_item != pane.hovered_item
+        || new_chevron != pane.hovered_chevron
+    {
+        pane.hovered_scrollbar_part = new_sb_part;
+        pane.hovered_item = new_item;
+        pane.hovered_chevron = new_chevron;
+        let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
     }
 }
 
@@ -1440,6 +1808,10 @@ fn handle_key(pane: &mut PreviewPane, key: u32) {
     match key {
         0x26 => archive.move_selection(-1, visible_count), // VK_UP
         0x28 => archive.move_selection(1, visible_count),  // VK_DOWN
+        0x21 => archive.move_selection(-(visible_count.max(1) as isize), visible_count), // VK_PRIOR (Page Up)
+        0x22 => archive.move_selection(visible_count.max(1) as isize, visible_count),  // VK_NEXT (Page Down)
+        0x24 => archive.move_selection(-(archive.nodes.len() as isize), visible_count), // VK_HOME
+        0x23 => archive.move_selection(archive.nodes.len() as isize, visible_count),  // VK_END
         0x0d => {
             if let Some(selected) = archive.selected {
                 archive.activate(selected);
@@ -1583,7 +1955,7 @@ unsafe fn render_content(
     client: RECT,
     pane: &mut PreviewPane,
 ) {
-    fill(hdc, client, pane.theme.bg);
+    fill(hdc, client, pane.theme.surface);
     let old_font = if !pane.font.is_invalid() {
         Some(SelectObject(hdc, pane.font.into()))
     } else {
@@ -1591,11 +1963,38 @@ unsafe fn render_content(
     };
 
     let theme = pane.theme;
-    match &pane.content {
+    let display_name = if !pane.display_name.is_empty() {
+        &pane.display_name
+    } else if let PreviewContent::Archive(archive) = &pane.content {
+        &archive.display_name
+    } else {
+        ""
+    };
+    draw_header(hdc, client, display_name, &mut pane.icon_cache, theme);
+
+    let is_dragging = pane.dragging_scrollbar.is_some();
+    let hovered_item = pane.hovered_item;
+    let hovered_chevron = pane.hovered_chevron;
+    let hovered_sb = pane.hovered_scrollbar_part;
+    match &mut pane.content {
         PreviewContent::Archive(archive) => {
-            draw_archive(hdc, client, archive, &mut pane.icon_cache, theme)
+            draw_archive(
+                hdc,
+                client,
+                archive,
+                &mut pane.icon_cache,
+                theme,
+                is_dragging,
+                hovered_item,
+                hovered_chevron,
+                hovered_sb,
+            );
         }
-        PreviewContent::Message(message) => draw_message(hdc, client, message, theme),
+        PreviewContent::Message(message) => {
+            if !message.is_empty() {
+                draw_message(hdc, client, message, theme);
+            }
+        }
     }
 
     if let Some(old) = old_font {
@@ -1603,14 +2002,23 @@ unsafe fn render_content(
     }
 }
 
-unsafe fn draw_archive(
+unsafe fn draw_header(
     hdc: windows::Win32::Graphics::Gdi::HDC,
     client: RECT,
-    archive: &ArchivePreview,
+    display_name: &str,
     icon_cache: &mut IconCache,
     theme: Theme,
 ) {
-    fill(hdc, client, theme.surface);
+    fill(
+        hdc,
+        RECT {
+            left: client.left,
+            top: client.top,
+            right: client.right,
+            bottom: client.top + HEADER_HEIGHT,
+        },
+        theme.surface,
+    );
     fill(
         hdc,
         RECT {
@@ -1621,19 +2029,67 @@ unsafe fn draw_archive(
         },
         theme.border,
     );
+
+    let title = if display_name.is_empty() {
+        "Archive"
+    } else {
+        display_name
+    };
+
+    let ext = Path::new(title)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+
+    let mut text_left = client.left + 12;
+    if let Some(hicon) = icon_cache.get_or_load(false, ext) {
+        let icon_y = client.top + (HEADER_HEIGHT - ICON_SIZE) / 2;
+        let _ = DrawIconEx(
+            hdc,
+            text_left,
+            icon_y,
+            hicon,
+            ICON_SIZE,
+            ICON_SIZE,
+            0,
+            None,
+            DI_NORMAL,
+        );
+        text_left += ICON_SIZE + ICON_TEXT_GAP;
+    }
+
     draw_text(
         hdc,
-        "ARCHIVE CONTENTS",
+        title,
         RECT {
-            left: client.left + 12,
+            left: text_left,
             top: client.top,
             right: client.right - 8,
             bottom: client.top + HEADER_HEIGHT,
         },
-        theme.muted,
+        theme.text,
     );
+}
 
+unsafe fn draw_archive(
+    hdc: windows::Win32::Graphics::Gdi::HDC,
+    client: RECT,
+    archive: &ArchivePreview,
+    icon_cache: &mut IconCache,
+    theme: Theme,
+    is_dragging_scrollbar: bool,
+    hovered_item: Option<usize>,
+    hovered_chevron: Option<usize>,
+    hovered_sb_part: Option<ScrollbarPart>,
+) {
     let rows = archive.visible_rows();
+    let scrollbar = compute_scrollbar(client, rows.len(), archive.scroll);
+    let content_right = if let Some(sb) = &scrollbar {
+        sb.track.left - 4
+    } else {
+        client.right - 8
+    };
+
     let visible_height =
         (client.bottom - client.top - HEADER_HEIGHT).max(0) as usize / ROW_HEIGHT as usize + 1;
     for (view_index, (node_id, depth)) in rows
@@ -1646,28 +2102,47 @@ unsafe fn draw_archive(
         let row = RECT {
             left: client.left,
             top: y,
-            right: client.right,
+            right: content_right + 4,
             bottom: y + ROW_HEIGHT,
         };
         let node = &archive.nodes[*node_id];
-        if archive.selected == Some(*node_id) {
+        let is_selected = archive.selected == Some(*node_id);
+        let is_hovered = hovered_item == Some(*node_id);
+
+        let indent_x = client.left + MARGIN_LEFT + *depth as i32 * INDENT_WIDTH;
+        let item_box_left = (indent_x + CHEVRON_WIDTH - 2).max(client.left + 2);
+
+        if is_selected {
             let sel_rect = RECT {
-                left: client.left + 2,
+                left: item_box_left,
                 top: row.top + 1,
-                right: client.right - 2,
+                right: content_right + 4,
                 bottom: row.bottom - 1,
             };
             fill(hdc, sel_rect, theme.selected);
             draw_border(hdc, sel_rect, theme.selected_border);
+        } else if is_hovered {
+            let hov_rect = RECT {
+                left: item_box_left,
+                top: row.top + 1,
+                right: content_right + 4,
+                bottom: row.bottom - 1,
+            };
+            fill(hdc, hov_rect, theme.hover);
+            draw_border(hdc, hov_rect, theme.hover_border);
         }
-
-        let indent_x = client.left + MARGIN_LEFT + *depth as i32 * INDENT_WIDTH;
 
         // Chevron slot: only folders with children get an arrow chevron
         if !node.is_file && !node.children.is_empty() {
             let chevron_cx = indent_x + CHEVRON_WIDTH / 2;
             let chevron_cy = row.top + ROW_HEIGHT / 2;
-            draw_chevron(hdc, chevron_cx, chevron_cy, node.expanded, theme.chevron);
+            let is_ch_hovered = hovered_chevron == Some(*node_id);
+            let chevron_color = if is_ch_hovered {
+                theme.text
+            } else {
+                theme.chevron
+            };
+            draw_chevron(hdc, chevron_cx, chevron_cy, node.expanded, chevron_color);
         }
 
         // Icon slot: Windows folder or file icon
@@ -1704,12 +2179,100 @@ unsafe fn draw_archive(
             RECT {
                 left: text_x,
                 top: row.top,
-                right: client.right - 8,
+                right: content_right,
                 bottom: row.bottom,
             },
             theme.text,
         );
     }
+
+    if let Some(sb) = scrollbar {
+        // Up arrow button
+        let is_up_hovered = hovered_sb_part == Some(ScrollbarPart::UpArrow);
+        let is_up_enabled = archive.scroll > 0;
+        if is_up_hovered && is_up_enabled {
+            fill(hdc, sb.up_btn, theme.scrollbar_btn_hover);
+        }
+        let up_cx = (sb.up_btn.left + sb.up_btn.right) / 2;
+        let up_cy = (sb.up_btn.top + sb.up_btn.bottom) / 2;
+        let up_color = if !is_up_enabled {
+            theme.border
+        } else if is_up_hovered {
+            theme.text
+        } else {
+            theme.chevron
+        };
+        draw_scroll_arrow(hdc, up_cx, up_cy, true, up_color);
+
+        // Down arrow button
+        let is_down_hovered = hovered_sb_part == Some(ScrollbarPart::DownArrow);
+        let is_down_enabled = archive.scroll < sb.max_scroll;
+        if is_down_hovered && is_down_enabled {
+            fill(hdc, sb.down_btn, theme.scrollbar_btn_hover);
+        }
+        let down_cx = (sb.down_btn.left + sb.down_btn.right) / 2;
+        let down_cy = (sb.down_btn.top + sb.down_btn.bottom) / 2;
+        let down_color = if !is_down_enabled {
+            theme.border
+        } else if is_down_hovered {
+            theme.text
+        } else {
+            theme.chevron
+        };
+        draw_scroll_arrow(hdc, down_cx, down_cy, false, down_color);
+
+        // Thumb
+        let thumb_color = if is_dragging_scrollbar {
+            theme.scrollbar_active
+        } else if hovered_sb_part == Some(ScrollbarPart::Thumb) {
+            theme.scrollbar_hover
+        } else {
+            theme.scrollbar_thumb
+        };
+        fill(hdc, sb.thumb, thumb_color);
+    }
+}
+
+unsafe fn draw_scroll_arrow(
+    hdc: windows::Win32::Graphics::Gdi::HDC,
+    cx: i32,
+    cy: i32,
+    up: bool,
+    color: COLORREF,
+) {
+    let pen = CreatePen(PS_SOLID, 1, color);
+    let old_pen = SelectObject(hdc, pen.into());
+
+    if up {
+        let pts1 = [
+            POINT { x: cx - 3, y: cy + 1 },
+            POINT { x: cx, y: cy - 2 },
+            POINT { x: cx + 4, y: cy + 2 },
+        ];
+        let pts2 = [
+            POINT { x: cx - 3, y: cy + 2 },
+            POINT { x: cx, y: cy - 1 },
+            POINT { x: cx + 4, y: cy + 3 },
+        ];
+        let _ = Polyline(hdc, &pts1);
+        let _ = Polyline(hdc, &pts2);
+    } else {
+        let pts1 = [
+            POINT { x: cx - 3, y: cy - 2 },
+            POINT { x: cx, y: cy + 1 },
+            POINT { x: cx + 4, y: cy - 3 },
+        ];
+        let pts2 = [
+            POINT { x: cx - 3, y: cy - 1 },
+            POINT { x: cx, y: cy + 2 },
+            POINT { x: cx + 4, y: cy - 2 },
+        ];
+        let _ = Polyline(hdc, &pts1);
+        let _ = Polyline(hdc, &pts2);
+    }
+
+    SelectObject(hdc, old_pen);
+    let _ = DeleteObject(pen.into());
 }
 
 unsafe fn draw_chevron(
@@ -1727,12 +2290,12 @@ unsafe fn draw_chevron(
         let pts1 = [
             POINT { x: cx - 4, y: cy - 2 },
             POINT { x: cx, y: cy + 2 },
-            POINT { x: cx + 4, y: cy - 2 },
+            POINT { x: cx + 5, y: cy - 3 },
         ];
         let pts2 = [
             POINT { x: cx - 4, y: cy - 1 },
             POINT { x: cx, y: cy + 3 },
-            POINT { x: cx + 4, y: cy - 1 },
+            POINT { x: cx + 5, y: cy - 2 },
         ];
         let _ = Polyline(hdc, &pts1);
         let _ = Polyline(hdc, &pts2);
@@ -1741,12 +2304,12 @@ unsafe fn draw_chevron(
         let pts1 = [
             POINT { x: cx - 2, y: cy - 4 },
             POINT { x: cx + 2, y: cy },
-            POINT { x: cx - 2, y: cy + 4 },
+            POINT { x: cx - 3, y: cy + 5 },
         ];
         let pts2 = [
             POINT { x: cx - 1, y: cy - 4 },
             POINT { x: cx + 3, y: cy },
-            POINT { x: cx - 1, y: cy + 4 },
+            POINT { x: cx - 2, y: cy + 5 },
         ];
         let _ = Polyline(hdc, &pts1);
         let _ = Polyline(hdc, &pts2);
@@ -1812,7 +2375,7 @@ unsafe fn draw_message(
     let mut padded = area;
     padded.left += 16;
     padded.right -= 16;
-    padded.top += 16;
+    padded.top += HEADER_HEIGHT + 16;
     draw_text(hdc, message, padded, theme.muted);
 }
 
