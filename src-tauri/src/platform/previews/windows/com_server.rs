@@ -22,9 +22,9 @@ use windows::{
         Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL},
         System::{
             Com::{
-                CoInitializeEx, CoRegisterClassObject, CoRevokeClassObject, CoTaskMemFree,
-                CoUninitialize, IClassFactory, IClassFactory_Impl, IStream, CLSCTX_LOCAL_SERVER,
-                COINIT_APARTMENTTHREADED, REGCLS_MULTIPLEUSE, STATFLAG_DEFAULT, STREAM_SEEK_SET,
+                CoInitializeEx, CoRegisterClassObject, CoRevokeClassObject,
+                CoUninitialize, IClassFactory, IClassFactory_Impl, CLSCTX_LOCAL_SERVER,
+                COINIT_APARTMENTTHREADED, REGCLS_MULTIPLEUSE,
             },
             LibraryLoader::GetModuleHandleW,
             Ole::{IObjectWithSite, IObjectWithSite_Impl, IOleWindow, IOleWindow_Impl},
@@ -58,7 +58,6 @@ use super::PREVIEW_HANDLER_CLSID;
 const PREVIEW_CLASS_NAME: &[u16] = &[
     81, 117, 105, 118, 105, 84, 80, 114, 101, 118, 105, 101, 119, 80, 97, 110, 101, 0,
 ];
-const MAX_SOURCE_BYTES: usize = 512 * 1024 * 1024;
 const HEADER_HEIGHT: i32 = 34;
 const ROW_HEIGHT: i32 = 24;
 const MARGIN_LEFT: i32 = 8;
@@ -83,7 +82,6 @@ extern "system" {
     fn TrackMouseEvent(lp_event_track: *mut TRACKMOUSEEVENT) -> i32;
 }
 
-static PREVIEW_SOURCE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static ACTIVE_HANDLERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static PREVIEW_CLASS_REGISTERED: OnceLock<()> = OnceLock::new();
 static PAINT_LOGGED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -255,7 +253,6 @@ impl IClassFactory_Impl for PreviewClassFactory_Impl {
 
 #[derive(Default)]
 struct PreviewState {
-    stream: Option<IStream>,
     file_path: Option<PathBuf>,
     display_name: Option<String>,
     parent: HWND,
@@ -282,6 +279,7 @@ enum Materialized {
 
 struct PreviewParams {
     materialized: Materialized,
+    real_path: Option<PathBuf>,
     dark: bool,
     epoch: u64,
     custom_font: Option<LOGFONTW>,
@@ -343,8 +341,7 @@ fn post_task(state: &Arc<Mutex<PreviewState>>, kind: usize) {
     IObjectWithSite,
     IOleWindow,
     IInitializeWithFile,
-    IInitializeWithItem,
-    windows::Win32::UI::Shell::PropertiesSystem::IInitializeWithStream
+    IInitializeWithItem
 )]
 struct PreviewHandler {
     state: Arc<Mutex<PreviewState>>,
@@ -382,34 +379,6 @@ fn disarm_idle_timeout() {
     }
 }
 
-impl windows::Win32::UI::Shell::PropertiesSystem::IInitializeWithStream_Impl
-    for PreviewHandler_Impl
-{
-    fn Initialize(&self, stream: windows::core::Ref<IStream>, _mode: u32) -> Result<()> {
-        let has_stream = (*stream).is_some();
-        preview_log(&format!("Initialize stream has_stream={has_stream}"));
-        let mut display_name = None;
-        if let Some(s) = (*stream).as_ref() {
-            unsafe {
-                let mut stat = std::mem::zeroed();
-                if s.Stat(&mut stat, STATFLAG_DEFAULT).is_ok() && !stat.pwcsName.is_null() {
-                    if let Ok(name) = stat.pwcsName.to_string() {
-                        display_name = Path::new(&name)
-                            .file_name()
-                            .map(|n| n.to_string_lossy().into_owned());
-                    }
-                    CoTaskMemFree(Some(stat.pwcsName.0 as *const _));
-                }
-            }
-        }
-        let mut state = self.state.lock().unwrap();
-        state.stream = (*stream).clone();
-        state.file_path = None;
-        state.display_name = display_name;
-        Ok(())
-    }
-}
-
 impl IInitializeWithFile_Impl for PreviewHandler_Impl {
     fn Initialize(&self, file_path: &PCWSTR, _mode: u32) -> Result<()> {
         let path = unsafe { file_path.to_string() }.map(PathBuf::from).map_err(|error| {
@@ -419,7 +388,6 @@ impl IInitializeWithFile_Impl for PreviewHandler_Impl {
         let mut state = self.state.lock().unwrap();
         state.display_name = path.file_name().map(|n| n.to_string_lossy().into_owned());
         state.file_path = Some(path);
-        state.stream = None;
         Ok(())
     }
 }
@@ -448,7 +416,6 @@ impl IInitializeWithItem_Impl for PreviewHandler_Impl {
         let mut state = self.state.lock().unwrap();
         state.display_name = path.file_name().map(|n| n.to_string_lossy().into_owned());
         state.file_path = Some(path);
-        state.stream = None;
         Ok(())
     }
 }
@@ -573,17 +540,16 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
         // here. Chunked sequential I/O only: no window calls, no locks held.
         // The recipe-blessed pattern: preview hosts expect DoPreview itself
         // to pull stream data.
-        let (stream, file_path, dark, custom_font, custom_text_color, state_display_name) = {
+        let (file_path, dark, custom_font, custom_text_color, state_display_name) = {
             let state = lock_state(&self.state);
-            if state.stream.is_none() && state.file_path.is_none() {
+            if state.file_path.is_none() {
                 preview_log("DoPreview no source");
                 return Err(Error::new(
                     E_NOINTERFACE,
-                    "Explorer did not provide preview data.",
+                    "Explorer did not provide a preview file path.",
                 ));
             }
             (
-                state.stream.clone(),
                 state.file_path.clone(),
                 state.dark,
                 state.custom_font,
@@ -598,27 +564,22 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "Archive".into())
         });
-        let materialized: Materialized =
-            if let Some(stream) = stream.as_ref() {
-                match copy_stream_to_temp(stream) {
-                    Ok(Some((path, _))) => Materialized::List(path, true),
-                    Ok(None) => Materialized::NotArchive,
-                    Err(error) => Materialized::Failed(error),
-                }
-            } else if let Some(path) = file_path.as_ref() {
-                match sniff_file_head(path) {
-                    Ok(Some(_)) => Materialized::List(path.clone(), false),
-                    Ok(None) => Materialized::NotArchive,
-                    Err(error) => Materialized::Failed(error),
-                }
-            } else {
-                Materialized::NotArchive
-            };
+        let materialized: Materialized = if let Some(path) = file_path.as_ref() {
+            match sniff_file_head(path) {
+                Ok(Some(_)) => Materialized::List(path.clone(), false),
+                Ok(None) => Materialized::NotArchive,
+                Err(error) => Materialized::Failed(error),
+            }
+        } else {
+            Materialized::NotArchive
+        };
         {
             let mut state = lock_state(&self.state);
             let epoch = PREVIEW_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let real_path = file_path.clone();
             state.pending_preview = Some(PreviewParams {
                 materialized,
+                real_path,
                 dark,
                 epoch,
                 custom_font,
@@ -636,7 +597,6 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
         {
             let mut state = lock_state(&self.state);
             state.pending_preview = None;
-            state.stream = None;
             state.file_path = None;
             state.display_name = None;
             state.site = None;
@@ -725,7 +685,7 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
         params.display_name.clone(),
     ));
     let worker_input = match params.materialized {
-        Materialized::List(path, owns) => Some((path, owns)),
+        Materialized::List(path, owns) => Some((path, params.real_path, owns)),
         Materialized::NotArchive => {
             pane.content = PreviewContent::Message(
                 "This preview is available only for QuiviT archive types. Open this file in QuiviT."
@@ -766,12 +726,12 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
     // A SetRect can land while the child is being built; reconcile once so
     // the pane never sticks at a stale zero size.
     pump_position(state);
-    if let Some((path, owns)) = worker_input {
+    if let Some((path, real_path, owns)) = worker_input {
         preview_log(&format!(
             "preview worker spawn owns={owns} path={}",
             path.display()
         ));
-        spawn_preview_worker(path, owns, params.epoch, params.display_name, job, hwnd.0 as isize);
+        spawn_preview_worker(path, real_path, owns, params.epoch, params.display_name, job, hwnd.0 as isize);
     } else {
         preview_log("preview worker skipped (message pane)");
     }
@@ -809,69 +769,6 @@ fn pump_teardown(state: &Arc<Mutex<PreviewState>>) {
     let mut guard = lock_state(state);
     guard.pending_preview = None;
     destroy_pane(&mut guard);
-}
-
-/// Copies a shell stream to a temp file in 64 KiB chunks, sniffing the first
-/// chunk for the archive kind. Single pass with bounded memory; the listing
-/// worker reads the temp file afterwards on its own thread.
-fn copy_stream_to_temp(stream: &IStream) -> std::result::Result<Option<(PathBuf, usize)>, String> {
-    use std::io::Write as _;
-
-    unsafe { stream.Seek(0, STREAM_SEEK_SET, None) }.map_err(|error| error.to_string())?;
-    let mut buffer = [0u8; 64 * 1024];
-    let mut total = 0usize;
-    let mut out: Option<(PathBuf, fs::File)> = None;
-    loop {
-        let mut read = 0u32;
-        unsafe {
-            stream
-                .Read(
-                    buffer.as_mut_ptr().cast(),
-                    buffer.len() as u32,
-                    Some(&mut read),
-                )
-                .ok()
-        }
-        .map_err(|error| error.to_string())?;
-        if read == 0 {
-            preview_log(&format!("stream read empty total={total}"));
-            break;
-        }
-        let part = &buffer[..read as usize];
-        if out.is_none() {
-            preview_log(&format!(
-                "stream first chunk len={} head={:02x?}",
-                part.len(),
-                &part[..part.len().min(8)]
-            ));
-        }
-        total = total.saturating_add(part.len());
-        if total > MAX_SOURCE_BYTES {
-            if let Some((path, _)) = out.take() {
-                let _ = fs::remove_file(path);
-            }
-            return Err("This file is too large for a File Explorer preview.".into());
-        }
-        if out.is_none() {
-            match crate::formats::sniff_archive_ext(part) {                Some(extension) => {
-                    let source_id =
-                        PREVIEW_SOURCE_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let path = std::env::temp_dir().join(format!(
-                        "QuiviT-preview-{}-{source_id}.{extension}",
-                        std::process::id()
-                    ));
-                    let mut file =
-                        fs::File::create(&path).map_err(|error| error.to_string())?;
-                    file.write_all(part).map_err(|error| error.to_string())?;
-                    out = Some((path, file));
-                }
-                None => return Ok(None),
-            }
-        } else if let Some((_, file)) = out.as_mut() {
-            file.write_all(part).map_err(|error| error.to_string())?;
-        }
-    }
-    Ok(out.map(|(path, _)| (path, total)))
 }
 
 fn sniff_file_head(path: &Path) -> std::result::Result<Option<&'static str>, String> {
@@ -961,6 +858,7 @@ const fn color(red: u8, green: u8, blue: u8) -> COLORREF {
 
 struct TreeNode {
     label: String,
+    path: String,
     is_file: bool,
     children: Vec<usize>,
     expanded: bool,
@@ -968,6 +866,7 @@ struct TreeNode {
 
 struct ArchivePreview {
     source_path: PathBuf,
+    real_path: Option<PathBuf>,
     owns_source: bool,
     nodes: Vec<TreeNode>,
     selected: Option<usize>,
@@ -986,18 +885,24 @@ impl Drop for ArchivePreview {
 impl ArchivePreview {
     fn from_listed(
         source_path: PathBuf,
+        real_path: Option<PathBuf>,
         owns_source: bool,
         files: Vec<crate::models::FileEntry>,
         display_name: String,
     ) -> Self {
         Self {
             source_path,
+            real_path,
             owns_source,
             nodes: build_tree(files),
             selected: None,
             scroll: 0,
             display_name,
         }
+    }
+
+    fn target_archive_path(&self) -> &Path {
+        self.real_path.as_deref().unwrap_or(&self.source_path)
     }
 
     fn visible_rows(&self) -> Vec<(usize, usize)> {
@@ -1039,6 +944,7 @@ impl ArchivePreview {
 fn build_tree(files: Vec<crate::models::FileEntry>) -> Vec<TreeNode> {
     let mut nodes = vec![TreeNode {
         label: String::new(),
+        path: String::new(),
         is_file: false,
         children: Vec::new(),
         expanded: true,
@@ -1055,7 +961,12 @@ fn build_tree(files: Vec<crate::models::FileEntry>) -> Vec<TreeNode> {
             continue;
         }
         let mut parent = 0;
+        let mut folder_path = String::new();
         for part in &parts[..parts.len() - 1] {
+            if !folder_path.is_empty() {
+                folder_path.push('/');
+            }
+            folder_path.push_str(part);
             let key = (parent, (*part).to_string());
             parent = if let Some(existing) = folders.get(&key) {
                 *existing
@@ -1063,6 +974,7 @@ fn build_tree(files: Vec<crate::models::FileEntry>) -> Vec<TreeNode> {
                 let id = nodes.len();
                 nodes.push(TreeNode {
                     label: (*part).to_string(),
+                    path: folder_path.clone(),
                     is_file: false,
                     children: Vec::new(),
                     expanded: true,
@@ -1075,6 +987,7 @@ fn build_tree(files: Vec<crate::models::FileEntry>) -> Vec<TreeNode> {
         let id = nodes.len();
         nodes.push(TreeNode {
             label: parts.last().unwrap().to_string(),
+            path: normalized,
             is_file: true,
             children: Vec::new(),
             expanded: false,
@@ -1382,6 +1295,7 @@ fn module_instance() -> HINSTANCE {
 /// which also removes its temp file through ArchivePreview.
 fn spawn_preview_worker(
     list_path: PathBuf,
+    real_path: Option<PathBuf>,
     owns_source: bool,
     epoch: u64,
     display_name: String,
@@ -1398,6 +1312,7 @@ fn spawn_preview_worker(
                     preview_log(&format!("preview listed {} entries", files.len()));
                     PreviewContent::Archive(ArchivePreview::from_listed(
                         list_path,
+                        real_path,
                         owns_source,
                         files,
                         display_name,
@@ -1512,9 +1427,15 @@ unsafe extern "system" fn preview_window_proc(
             let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
             LRESULT(0)
         }
-        WM_LBUTTONDOWN | WM_LBUTTONDBLCLK => {
+        WM_LBUTTONDOWN => {
             let _ = unsafe { SetFocus(Some(hwnd)) };
             handle_lbutton_down(hwnd, pane, lparam);
+            let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
+            LRESULT(0)
+        }
+        WM_LBUTTONDBLCLK => {
+            let _ = unsafe { SetFocus(Some(hwnd)) };
+            handle_lbutton_dblclk(hwnd, pane, lparam);
             let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
             LRESULT(0)
         }
@@ -1694,6 +1615,49 @@ fn handle_lbutton_down(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
     }
 }
 
+fn handle_lbutton_dblclk(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
+    let y = ((lparam.0 as u32 >> 16) & 0xffff) as i16 as i32;
+    let x = (lparam.0 as u32 & 0xffff) as i16 as i32;
+    let PreviewContent::Archive(archive) = &mut pane.content else {
+        return;
+    };
+    if y < HEADER_HEIGHT {
+        return;
+    }
+
+    let mut client = RECT::default();
+    unsafe {
+        let _ = GetClientRect(hwnd, &mut client);
+    }
+    let rows = archive.visible_rows();
+    if let Some(sb) = compute_scrollbar(client, rows.len(), archive.scroll) {
+        if x >= sb.track.left - 2 && x <= client.right {
+            return;
+        }
+    }
+
+    let row = (y - HEADER_HEIGHT) / ROW_HEIGHT + archive.scroll as i32;
+    if row >= 0 && (row as usize) < rows.len() {
+        let (node_id, depth) = rows[row as usize];
+        let indent_x = client.left + MARGIN_LEFT + depth as i32 * INDENT_WIDTH;
+        let chevron_left = indent_x;
+        let chevron_right = indent_x + CHEVRON_WIDTH;
+
+        let is_expandable =
+            !archive.nodes[node_id].is_file && !archive.nodes[node_id].children.is_empty();
+
+        if is_expandable && x >= chevron_left && x < chevron_right {
+            archive.nodes[node_id].expanded = !archive.nodes[node_id].expanded;
+            archive.selected = Some(node_id);
+        } else if archive.nodes[node_id].is_file {
+            archive.selected = Some(node_id);
+            open_item_in_app(archive, node_id);
+        } else {
+            archive.activate(node_id);
+        }
+    }
+}
+
 fn handle_mouse_move(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
     let PreviewContent::Archive(archive) = &mut pane.content else {
         return;
@@ -1815,7 +1779,13 @@ fn handle_key(pane: &mut PreviewPane, key: u32) {
         0x23 => archive.move_selection(archive.nodes.len() as isize, visible_count),  // VK_END
         0x0d => {
             if let Some(selected) = archive.selected {
-                archive.activate(selected);
+                if let Some(node) = archive.nodes.get(selected) {
+                    if node.is_file {
+                        open_item_in_app(archive, selected);
+                    } else {
+                        archive.activate(selected);
+                    }
+                }
             }
         }
         0x27 => {
@@ -1841,6 +1811,91 @@ fn handle_key(pane: &mut PreviewPane, key: u32) {
             }
         }
         _ => {}
+    }
+}
+
+fn find_quivit_app_exe() -> Option<PathBuf> {
+    if let Ok(current) = std::env::current_exe() {
+        let file_name = current.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if !file_name.eq_ignore_ascii_case("quivit-previews.exe") && current.exists() {
+            return Some(current);
+        }
+    }
+
+    let host_path = crate::platform::previews::resolve_previews_host_path();
+    let sidecar_path = crate::platform::previews::host::sidecar_path_for(&host_path);
+    if let Some(sidecar) = crate::platform::previews::host::read_sidecar(&sidecar_path) {
+        if let Some(app_path) = sidecar.app_path {
+            let path = PathBuf::from(app_path);
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        use winreg::enums::HKEY_CURRENT_USER;
+        use winreg::RegKey;
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let candidates = [
+            r"Software\Classes\Applications\quivit.exe\shell\open\command",
+            r"Software\Classes\QuiviT.zip\shell\open\command",
+        ];
+        for subkey in candidates {
+            if let Ok(key) = hkcu.open_subkey(subkey) {
+                if let Ok(val) = key.get_value::<String, _>("") {
+                    let trimmed = val.trim();
+                    let exe_str = if trimmed.starts_with('"') {
+                        trimmed.trim_start_matches('"').split('"').next().unwrap_or("")
+                    } else {
+                        trimmed.split_whitespace().next().unwrap_or("")
+                    };
+                    let path = PathBuf::from(exe_str);
+                    if path.exists() {
+                        return Some(path);
+                    }
+                }
+            }
+        }
+    }
+
+    std::env::current_exe().ok()
+}
+
+fn open_item_in_app(archive: &ArchivePreview, node_id: usize) {
+    let Some(node) = archive.nodes.get(node_id) else {
+        return;
+    };
+    if !node.is_file {
+        return;
+    }
+
+    let archive_path = archive.target_archive_path();
+    let target_arg = format!("{}|{}", archive_path.to_string_lossy(), node.path);
+
+    let Some(app_exe) = find_quivit_app_exe() else {
+        preview_log(&format!(
+            "open_item_in_app failed: could not locate app exe for target={target_arg}"
+        ));
+        return;
+    };
+
+    preview_log(&format!(
+        "open_item_in_app exe={} target={target_arg}",
+        app_exe.display()
+    ));
+
+    let mut cmd = std::process::Command::new(&app_exe);
+    if let Some(parent) = app_exe.parent() {
+        cmd.current_dir(parent);
+    }
+    cmd.arg(&target_arg);
+
+
+    match cmd.spawn() {
+        Ok(_) => preview_log("open_item_in_app spawned successfully"),
+        Err(err) => preview_log(&format!("open_item_in_app spawn error: {err}")),
     }
 }
 

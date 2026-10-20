@@ -39,11 +39,18 @@ pub fn run() {
     if single_instance {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(main_window) = app.get_webview_window("main") {
+                let _ = main_window.unminimize();
                 let _ = main_window.show();
                 let _ = main_window.set_focus();
-                let path_arg = argv.iter().skip(1).find(|arg| !arg.starts_with('-'));
-                if let Some(path) = path_arg {
-                    let _ = main_window.emit("single-instance-open", path.clone());
+                let path_arg = argv
+                    .iter()
+                    .skip(1)
+                    .filter(|arg| !arg.starts_with('-'))
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("|");
+                if !path_arg.is_empty() {
+                    let _ = main_window.emit("single-instance-open", path_arg);
                 }
             }
         }));

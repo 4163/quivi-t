@@ -21,6 +21,8 @@ pub struct PreviewsSidecar {
     pub preview_version: u32,
     pub profile: String,
     pub sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,6 +175,7 @@ pub(crate) fn ensure_previews_host_from(
         return Ok(host_path.to_path_buf());
     }
     let sidecar_path = sidecar_path_for(host_path);
+    let app_path_str = Some(source_exe.to_string_lossy().into_owned());
     if embedded_is_debug {
         let sha256 = stage_copy(source_exe, host_path)?;
         write_sidecar_atomic(
@@ -181,6 +184,7 @@ pub(crate) fn ensure_previews_host_from(
                 preview_version: embedded_version,
                 profile: "debug".into(),
                 sha256,
+                app_path: app_path_str,
             },
         )?;
         return Ok(host_path.to_path_buf());
@@ -195,7 +199,15 @@ pub(crate) fn ensure_previews_host_from(
         _ => false,
     };
     match decide_host_action(staged.as_ref(), hash_ok, embedded_version, false) {
-        HostAction::Keep => Ok(host_path.to_path_buf()),
+        HostAction::Keep => {
+            if let Some(mut sidecar) = staged {
+                if sidecar.app_path != app_path_str {
+                    sidecar.app_path = app_path_str;
+                    let _ = write_sidecar_atomic(&sidecar_path, &sidecar);
+                }
+            }
+            Ok(host_path.to_path_buf())
+        }
         HostAction::Stage => {
             let sha256 = stage_copy(source_exe, host_path)?;
             write_sidecar_atomic(
@@ -204,6 +216,7 @@ pub(crate) fn ensure_previews_host_from(
                     preview_version: embedded_version,
                     profile: "release".into(),
                     sha256,
+                    app_path: app_path_str,
                 },
             )?;
             Ok(host_path.to_path_buf())

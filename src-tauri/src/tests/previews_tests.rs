@@ -157,6 +157,7 @@ fn test_decide_matrix() {
         preview_version: 1,
         profile: "release".into(),
         sha256: "x".into(),
+        app_path: None,
     };
     assert_eq!(
         decide_host_action(None, false, 1, false),
@@ -170,6 +171,7 @@ fn test_decide_matrix() {
         preview_version: 1,
         profile: "debug".into(),
         sha256: "x".into(),
+        app_path: None,
     };
     assert_eq!(
         decide_host_action(Some(&debug), true, 1, false),
@@ -179,6 +181,7 @@ fn test_decide_matrix() {
         preview_version: 1,
         profile: "release".into(),
         sha256: "x".into(),
+        app_path: None,
     };
     assert_eq!(
         decide_host_action(Some(&old), true, 2, false),
@@ -192,6 +195,7 @@ fn test_decide_matrix() {
         preview_version: 3,
         profile: "release".into(),
         sha256: "x".into(),
+        app_path: None,
     };
     assert_eq!(
         decide_host_action(Some(&newer), true, 1, false),

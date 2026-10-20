@@ -722,13 +722,16 @@ export const FsUtils = {
       let preferredIndex = -1;
 
       if (targetPath) {
+        if (targetPath.includes('|')) {
+          targetPath = targetPath.slice(targetPath.indexOf('|') + 1);
+        }
         const cleanTarget = cleanEntryName(targetPath);
-        const normTarget = cleanTarget.replace(/\\/g, '/').toLowerCase();
+        const normTarget = cleanTarget.replace(/\\/g, '/').replace(/^\.?\/+/, '').toLowerCase();
         preferredIndex = files.findIndex(f => {
           if (f.path === targetPath || f.name === targetPath || f.name === cleanTarget || f.path === cleanTarget) return true;
-          const normName = f.name?.replace(/\\/g, '/').toLowerCase();
+          const normName = f.name?.replace(/\\/g, '/').replace(/^\.?\/+/, '').toLowerCase();
           const normPath = f.path?.replace(/\\/g, '/').toLowerCase();
-          return normName === normTarget || normPath === normTarget || normPath?.endsWith('/' + normTarget);
+          return normName === normTarget || normPath === normTarget || normName?.endsWith('/' + normTarget) || normPath?.endsWith('/' + normTarget) || normPath?.endsWith('|' + normTarget);
         });
       }
 
@@ -886,8 +889,13 @@ export const FsUtils = {
     if (path.includes('|')) {
       const sep = path.indexOf('|');
       const archivePath = path.slice(0, sep);
+      const innerEntry = path.slice(sep + 1);
       if (this.isArchive(archivePath)) {
-        await this.loadArchive(archivePath, path, options);
+        await this.loadArchive(archivePath, innerEntry, {
+          ...options,
+          preferInitial: true,
+          restoreLastImage: false,
+        });
         return;
       }
     }
