@@ -60,9 +60,19 @@ export async function applyAssociations(statusCallback) {
     return { ok: true };
   } catch (err) {
     console.error('[Assoc] Apply error:', err);
-    const message = String(err).startsWith('The release build')
-      ? 'Release build not found. Start it once, then retry File Types.'
-      : 'File types could not be updated.';
+    const detail = typeof err === 'string' ? err.trim() : String(err?.message || '').trim();
+    let message = 'File types could not be updated.';
+    if (detail.startsWith('The release build')) {
+      message = 'Release build not found. Start it once, then retry File Types.';
+    } else if (
+      (detail.startsWith('Close the preview pane and Explorer windows, then retry:')
+        && /\(os error (?:5|32|33)\)/.test(detail))
+      || detail.startsWith('Preview helper update is pending.')
+    ) {
+      message = 'File types could not be updated. Previews may still be in use. Close all File Explorer windows, then save again.';
+    } else if (detail) {
+      message += ` ${detail}`;
+    }
     statusCallback?.(message);
     return { ok: false, message };
   }

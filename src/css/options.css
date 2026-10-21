@@ -502,9 +502,7 @@ textarea:focus {
   min-width: 0;
   color: var(--text-status);
   font-size: var(--fs-11);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 button {
