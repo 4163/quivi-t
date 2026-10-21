@@ -368,7 +368,6 @@ enum Materialized {
     List(PathBuf, bool),
     Image(PathBuf, MediaKind),
     NotArchive,
-    Failed(String),
 }
 
 struct PreviewParams {
@@ -649,11 +648,7 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
     }
 
     fn DoPreview(&self) -> Result<()> {
-        // The stream proxy is only valid on this calling thread (proven by
-        // failed reads anywhere else), so materialize the listable path
-        // here. Chunked sequential I/O only: no window calls, no locks held.
-        // The recipe-blessed pattern: preview hosts expect DoPreview itself
-        // to pull stream data.
+        // Record the source here; archive validation and image I/O run on workers.
         let (file_path, dark, custom_font, custom_text_color, state_display_name) = {
             let state = lock_state(&self.state);
             if state.file_path.is_none() {
@@ -678,17 +673,10 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "Archive".into())
         });
-        let materialized: Materialized = if let Some(path) = file_path.as_ref() {
-            match sniff_file_head(path) {
-                Ok(Some(_)) => Materialized::List(path.clone(), false),
-                Ok(None) => MediaKind::for_path(path)
-                    .map(|kind| Materialized::Image(path.clone(), kind))
-                    .unwrap_or(Materialized::NotArchive),
-                Err(error) => Materialized::Failed(error),
-            }
-        } else {
-            Materialized::NotArchive
-        };
+        let materialized = file_path
+            .as_deref()
+            .map(preview_source)
+            .unwrap_or(Materialized::NotArchive);
         {
             let mut state = lock_state(&self.state);
             let epoch = PREVIEW_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -867,10 +855,6 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
             );
             None
         }
-        Materialized::Failed(error) => {
-            pane.content = PreviewContent::Message(format!("Unable to open this archive: {error}"));
-            None
-        }
     };
     let (parent, area) = {
         let guard = lock_state(state);
@@ -966,22 +950,17 @@ fn pump_teardown(state: &Arc<Mutex<PreviewState>>, epoch: Option<u64>) {
     destroy_pane(state);
 }
 
-fn sniff_file_head(path: &Path) -> std::result::Result<Option<&'static str>, String> {
-    use std::io::Read as _;
-
-    let mut file = fs::File::open(path).map_err(|error| error.to_string())?;
-    let mut head = [0u8; 512];
-    let mut read = 0usize;
-    while read < head.len() {
-        match file
-            .read(&mut head[read..])
-            .map_err(|error| error.to_string())?
-        {
-            0 => break,
-            n => read += n,
-        }
+fn preview_source(path: &Path) -> Materialized {
+    if path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(crate::formats::is_archive_ext)
+    {
+        return Materialized::List(path.to_path_buf(), false);
     }
-    Ok(crate::formats::sniff_archive_ext(&head[..read]))
+    MediaKind::for_path(path)
+        .map(|kind| Materialized::Image(path.to_path_buf(), kind))
+        .unwrap_or(Materialized::NotArchive)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
