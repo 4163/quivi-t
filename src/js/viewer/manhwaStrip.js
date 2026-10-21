@@ -2707,17 +2707,17 @@ function _onStateChange(state) {
     encryptionChanged;
 
   if (listChanged || containerChanged) {
-    // Same-container reload (manual refresh, queue-complete refresh): keep
-    // the reading position instead of reopening. Only a real container
-    // switch earns a refit.
-    const preserveView = !containerChanged && _anchorImgIdx >= 0;
+    // Refreshes keep the reading position; opening another entry must
+    // replace the old anchor before the next selection sync.
+    const anchorPath = _imageIndex[_anchorImgIdx]?.entry.path;
+    const hasNewTarget = state.hasTargetEntry && state.list?.[state.index]?.path !== anchorPath;
+    const preserveView = !containerChanged && _anchorImgIdx >= 0 && !hasNewTarget;
     const holdTop = preserveView ? _layout.offsets[_anchorImgIdx]?.top || 0 : 0;
-    const holdListIndex = preserveView ? _imageIndex[_anchorImgIdx]?.listIndex : undefined;
     const holdTrackedMaxW = _trackedMaxWidth;
     // Same-container reload: carried dims keep slots exact so the refresh
     // remounts without replaying the estimate staircase.
     const carryDims = !containerChanged
-      ? new Map(_imageIndex.map((it) => [it.listIndex, it]))
+      ? new Map(_imageIndex.map((it) => [it.entry.path, it]))
       : null;
 
     _clearCaches();
@@ -2725,7 +2725,7 @@ function _onStateChange(state) {
     _imageIndex = isLocked ? [] : _buildImageIndex(state.list || []);
     if (carryDims) {
       for (const it of _imageIndex) {
-        const old = carryDims.get(it.listIndex);
+        const old = carryDims.get(it.entry.path);
         if (old && old.decoded) {
           it.naturalWidth = old.naturalWidth;
           it.naturalHeight = old.naturalHeight;
@@ -2762,9 +2762,7 @@ function _onStateChange(state) {
     _slots.clear();
 
     if (preserveView) {
-      const remapped = holdListIndex !== undefined
-        ? _imageIndex.findIndex((it) => it.listIndex === holdListIndex)
-        : -1;
+      const remapped = _imageIndex.findIndex((it) => it.entry.path === anchorPath);
       if (remapped >= 0) {
         _anchorImgIdx = remapped;
         _updateLayout(remapped, holdTop);

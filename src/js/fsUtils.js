@@ -660,7 +660,7 @@ export const FsUtils = {
       isAnimated,
       loopCount,
       isSiblingNavigation: !!options.isSiblingNavigation,
-      hasTargetEntry,
+      hasTargetEntry: hasTargetEntry && !options.isRefresh,
     });
     recordNavigation(options.previousEntry, Core.getState(), options);
 
@@ -799,7 +799,7 @@ export const FsUtils = {
         isAnimated: initialAnimated,
         loopCount: 0,
         isSiblingNavigation: !!options.isSiblingNavigation,
-        hasTargetEntry,
+        hasTargetEntry: hasTargetEntry && !options.isRefresh,
       });
       recordNavigation(options.previousEntry, Core.getState(), options);
       if (!_isCurrentGeneration(options.generation)) return;
