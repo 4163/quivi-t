@@ -223,8 +223,8 @@ fn sync_preview_associations_impl(stage_host_always: bool) -> Result<bool, Strin
     Ok(changed)
 }
 
-/// Spawns a background thread on startup to stage the preview helper and ensure
-/// active archive associations have their preview handlers registered.
+/// Spawns a background thread on startup to sync preview handlers. Ordinary
+/// launches also stage the preview helper.
 pub fn spawn_launch_previews_sync() {
     #[cfg(windows)]
     {
@@ -232,9 +232,13 @@ pub fn spawn_launch_previews_sync() {
             return;
         }
         std::thread::spawn(|| {
-            match sync_preview_associations_impl(true) {
+            let args: Vec<_> = std::env::args_os().collect();
+            let stage_host = !crate::platform::direct_open::has_file_open_arg(&args);
+            match sync_preview_associations_impl(stage_host) {
                 Ok(true) => unsafe {
-                    use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+                    use windows::Win32::UI::Shell::{
+                        SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST,
+                    };
                     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
                 },
                 Ok(false) => {}

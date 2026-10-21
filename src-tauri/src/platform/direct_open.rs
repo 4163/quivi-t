@@ -100,12 +100,14 @@ pub fn selected_exe() -> Result<Option<PathBuf>, String> {
     recorded_exe(profile, name).map(Some)
 }
 
-pub fn forward_file_open(args: &[OsString]) -> Result<bool, String> {
-    if !args
-        .iter()
+pub fn has_file_open_arg(args: &[OsString]) -> bool {
+    args.iter()
         .skip(1)
         .any(|arg| !arg.to_string_lossy().starts_with('-'))
-    {
+}
+
+pub fn forward_file_open(args: &[OsString]) -> Result<bool, String> {
+    if !has_file_open_arg(args) {
         return Ok(false);
     }
     let Some(target) = selected_exe()? else {
