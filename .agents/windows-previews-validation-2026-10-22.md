@@ -8,7 +8,7 @@ Validation comparison performed against `.agents/skills/validate-changes/SKILL.m
 
 **Summary:** The branch adds Explorer archive and image previews, native image thumbnails through a COM proxy, staged helper updates, file registration removal, and build selection for external file opens. The review covers all 39 touched non-Markdown files across the 19 branch commits, including the accepted changes outside the previews work.
 
-**Verdict: Pass with warnings.** The user confirmed all five blocking runtime checks and all five W1/W4 runtime checks passed on 2026-10-22. B1 through B5, W1, and W4 are resolved with user runtime acceptance. W2 and W3 remain open, and N1 is partly addressed.
+**Verdict: Pass.** The user confirmed all blocking runtime checks, W1/W4 checks, and the final W2, W3, and N1 runtime checks passed on 2026-10-22. B1 through B5, W1 through W4, and N1 are resolved with user runtime acceptance.
 
 The findings and reproduction results below record the original review. The resolution notes and checked runtime list record the subsequent fixes and user acceptance.
 
@@ -158,6 +158,8 @@ The actual preview dispatch was traced in source; Explorer was not used for this
 
 ### W2. [Warning] Item initialization leaks the shell-allocated display-name buffer
 
+- [x] Fixed and runtime accepted on 2026-10-22. Item initialization now frees the shell-allocated `PWSTR` via `CoTaskMemFree` on both successful conversion and conversion failure.
+
 **Location:** [com_server.rs:513](E:/Projects/QuiviT/src-tauri/src/platform/previews/windows/com_server.rs:513) through [com_server.rs:525](E:/Projects/QuiviT/src-tauri/src/platform/previews/windows/com_server.rs:525).
 
 `IShellItem::GetDisplayName` returns a `PWSTR`. The code converts it into an owned Rust string but never frees the original allocation, including when string conversion fails. The Windows binding's `PWSTR` has no freeing destructor. Each use of `IInitializeWithItem` therefore retains one path buffer until the helper exits.
@@ -171,6 +173,8 @@ Microsoft documents the caller's responsibility to release this result with `CoT
 **Recommendation:** Use a small scoped owner for the returned task-memory buffer, or free it on every exit after converting it.
 
 ### W3. [Warning] The platform preview implementation depends on an IPC command module's asset table
+
+- [x] Fixed and runtime accepted on 2026-10-22. The embedded `FORMAT_ICONS` table was moved to the domain format module (`formats.rs`) with `pub(crate)` visibility. Both `commands::registry` and `platform::previews::windows::com_server` now import it from `crate::formats`, eliminating the platform-to-command dependency.
 
 **Location:** [com_server.rs:1385](E:/Projects/QuiviT/src-tauri/src/platform/previews/windows/com_server.rs:1385), enabled by the changed visibility at [registry.rs:351](E:/Projects/QuiviT/src-tauri/src/commands/registry.rs:351).
 
@@ -199,6 +203,8 @@ Mouse down, double-click, and mouse move independently calculate the row index, 
 ## Stale code and references
 
 ### N1. [Nit] Stream-materialization comments and ownership branches describe a removed input path
+
+- [x] Fixed and runtime accepted on 2026-10-22. Removed `owns_source` boolean and obsolete temporary-source deletion branches from `Materialized::List` and `ArchivePreview`. Dropped unused `real_path` fallback. Updated documentation comments in `com_server.rs` and `host.rs` to describe file and item initialization plus launch-time staging, while retaining the `--preview-handler` compatibility alias and bumping `PREVIEW_HOST_VERSION` to 8.
 
 **Location:** [com_server.rs:363](E:/Projects/QuiviT/src-tauri/src/platform/previews/windows/com_server.rs:363), [com_server.rs:651](E:/Projects/QuiviT/src-tauri/src/platform/previews/windows/com_server.rs:651), [formats.rs:168](E:/Projects/QuiviT/src-tauri/src/formats.rs:168), and [host.rs:1](E:/Projects/QuiviT/src-tauri/src/platform/previews/host.rs:1).
 
@@ -289,6 +295,22 @@ The user confirmed all five items passed on 2026-10-22.
 4. [x] Preview `duplicate-pages-and-collapse.cbz`, navigate with Up/Down, Page Up/Page Down, and Home/End, then open pages with Enter and double-click. Confirm root `001.png` opens the red image and `folder/001.png` opens the blue image, including after collapsing and reopening the folder.
 5. [x] Keep two Explorer windows previewing different archives and collapse or scroll one list. Confirm the other list stays unchanged, then switch one window to `empty.tar` and back; confirm it shows the new contents without leftover rows.
 
+## W2, W3, and N1 verification and runtime list
+
+The final follow-up addressed the remaining preview findings. Item initialization in `com_server.rs` now releases the shell display-name buffer via `CoTaskMemFree` on all exit paths. The embedded `FORMAT_ICONS` table was relocated to `formats.rs` with `pub(crate)` visibility, removing the platform dependency on an IPC command module. Obsolete stream-materialization comments, the unused `owns_source` deletion flag, and `real_path` fallbacks were removed from `com_server.rs`, while `host.rs` comments were refreshed to reflect launch staging and the helper version was bumped to 8.
+
+All automated checks passed: `cargo check --tests`, 12 preview tests, 12 format tests, 308 frontend tests, `git diff --check`, and the debug application build.
+
+Use `E:/Projects/QuiviT/src-tauri/target/debug/tauri-app.exe`.
+
+The user confirmed all five items passed on 2026-10-22:
+
+1. [x] Close existing QuiviT and Explorer instances. Launch `E:/Projects/QuiviT/src-tauri/target/debug/tauri-app.exe`. Check `%LOCALAPPDATA%\QuiviT\bin\quivit-previews.version` and confirm `preview_version` is 8.
+2. [x] Open Windows Explorer with the preview pane visible. Select an archive file (such as `duplicate-pages-and-collapse.cbz`). Confirm the preview displays the archive header and tree contents without delay.
+3. [x] Rapidly select different archive and image files in Explorer (alternating 5 to 10 times). Confirm previews switch cleanly on every selection without crashing the preview host.
+4. [x] In the archive preview pane, select an entry and press Enter or double-click it. Confirm QuiviT opens the archive, highlights the item in the file panel, and loads the image into the viewer.
+5. [x] In QuiviT, press `5` to open Options and navigate to File Types. Confirm file format icons render beside each entry.
+
 ## Verdict
 
-**Pass with warnings.** All five blocking findings, W1, and W4 have passing code checks and user runtime acceptance. W2, W3, and the remaining N1 cleanup are outside this follow-up.
+**Pass.** All five blocking findings (B1 through B5), all four warning findings (W1 through W4), and the cleanup finding (N1) have passing automated checks and user runtime acceptance.

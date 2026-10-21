@@ -2,14 +2,14 @@
 //!
 //! Explorer must always launch the same helper path. Every build registers
 //! `%LOCALAPPDATA%\QuiviT\bin\quivit-previews.exe`, never `current_exe`.
-//! The helper materializes at runtime on consent by copying the running exe
-//! bytes with tmp plus rename. Override folders never change the path, and
-//! the e2e suite stages nothing.
+//! The helper is staged at application launch or registration by copying
+//! the running exe bytes with tmp plus rename. Override folders never change
+//! the path, and the e2e suite stages nothing.
 
 use std::path::{Path, PathBuf};
 
 /// Bump only on preview contract change. App only changes do not bump.
-pub const PREVIEW_HOST_VERSION: u32 = 7;
+pub const PREVIEW_HOST_VERSION: u32 = 8;
 
 pub const PREVIEWS_BIN_NAME: &str = "quivit-previews.exe";
 pub const PREVIEWS_SIDECAR_NAME: &str = "quivit-previews.version";

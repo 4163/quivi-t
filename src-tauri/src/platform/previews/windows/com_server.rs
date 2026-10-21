@@ -22,9 +22,9 @@ use windows::{
         Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL},
         System::{
             Com::{
-                CoInitializeEx, CoRegisterClassObject, CoRevokeClassObject, CoUninitialize,
-                IClassFactory, IClassFactory_Impl, CLSCTX_LOCAL_SERVER, COINIT_APARTMENTTHREADED,
-                REGCLS_MULTIPLEUSE,
+                CoInitializeEx, CoRegisterClassObject, CoRevokeClassObject, CoTaskMemFree,
+                CoUninitialize, IClassFactory, IClassFactory_Impl, CLSCTX_LOCAL_SERVER,
+                COINIT_APARTMENTTHREADED, REGCLS_MULTIPLEUSE,
             },
             LibraryLoader::GetModuleHandleW,
             Ole::{IObjectWithSite, IObjectWithSite_Impl, IOleWindow, IOleWindow_Impl},
@@ -362,17 +362,15 @@ struct PreviewState {
 
 // Everything a deferred preview build needs. Recorded synchronously in
 // DoPreview so the host call returns immediately; the pump consumes it.
-// Holds only plain data: the shell stream stays behind because its proxy
-// is only valid on the calling thread.
+// The file path is provided via IInitializeWithItem or IInitializeWithFile.
 enum Materialized {
-    List(PathBuf, bool),
+    List(PathBuf),
     Image(PathBuf, MediaKind),
     NotArchive,
 }
 
 struct PreviewParams {
     materialized: Materialized,
-    real_path: Option<PathBuf>,
     dark: bool,
     background: COLORREF,
     epoch: u64,
@@ -505,21 +503,16 @@ impl IInitializeWithItem_Impl for PreviewHandler_Impl {
         item: windows::core::Ref<windows::Win32::UI::Shell::IShellItem>,
         _mode: u32,
     ) -> Result<()> {
-        let path = (*item)
-            .as_ref()
-            .ok_or_else(|| Error::from(E_NOINTERFACE))
-            .and_then(|shell_item| unsafe {
-                shell_item
-                    .GetDisplayName(SIGDN_FILESYSPATH)
-                    .map_err(|error| error.into())
-            })
-            .and_then(|display| unsafe {
-                display.to_string().map_err(|error| {
-                    Error::new(
-                        E_NOINTERFACE,
-                        format!("Preview path is not readable: {error}"),
-                    )
-                })
+        let shell_item = (*item).as_ref().ok_or_else(|| Error::from(E_NOINTERFACE))?;
+        let display = unsafe { shell_item.GetDisplayName(SIGDN_FILESYSPATH)? };
+        let path = unsafe { display.to_string() };
+        unsafe { CoTaskMemFree(Some(display.0.cast())) };
+        let path = path
+            .map_err(|error| {
+                Error::new(
+                    E_NOINTERFACE,
+                    format!("Preview path is not readable: {error}"),
+                )
             })
             .map(PathBuf::from)?;
         preview_log(&format!("Initialize item path={}", path.display()));
@@ -684,10 +677,8 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
             if let Some(pane) = state.image_pane.as_ref() {
                 pane.cancel();
             }
-            let real_path = file_path.clone();
             state.pending_preview = Some(PreviewParams {
                 materialized,
-                real_path,
                 dark,
                 background: state.background.unwrap_or(COLORREF(0xffffff)),
                 epoch,
@@ -847,7 +838,7 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
     ));
     let worker_input = match params.materialized {
         Materialized::Image(_, _) => unreachable!(),
-        Materialized::List(path, owns) => Some((path, params.real_path, owns)),
+        Materialized::List(path) => Some(path),
         Materialized::NotArchive => {
             pane.content = PreviewContent::Message(
                 "This preview is available only for QuiviT archive types. Open this file in QuiviT."
@@ -887,15 +878,10 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
     // A SetRect can land while the child is being built; reconcile once so
     // the pane never sticks at a stale zero size.
     pump_position(state);
-    if let Some((path, real_path, owns)) = worker_input {
-        preview_log(&format!(
-            "preview worker spawn owns={owns} path={}",
-            path.display()
-        ));
+    if let Some(path) = worker_input {
+        preview_log(&format!("preview worker spawn path={}", path.display()));
         spawn_preview_worker(
             path,
-            real_path,
-            owns,
             params.epoch,
             params.display_name,
             job,
@@ -956,7 +942,7 @@ fn preview_source(path: &Path) -> Materialized {
         .and_then(|extension| extension.to_str())
         .is_some_and(crate::formats::is_archive_ext)
     {
-        return Materialized::List(path.to_path_buf(), false);
+        return Materialized::List(path.to_path_buf());
     }
     MediaKind::for_path(path)
         .map(|kind| Materialized::Image(path.to_path_buf(), kind))
@@ -1039,9 +1025,7 @@ struct TreeNode {
 }
 
 struct ArchivePreview {
-    source_path: PathBuf,
-    real_path: Option<PathBuf>,
-    owns_source: bool,
+    path: PathBuf,
     nodes: Vec<TreeNode>,
     rows: Vec<(usize, usize)>,
     selected: Option<usize>,
@@ -1049,19 +1033,9 @@ struct ArchivePreview {
     display_name: String,
 }
 
-impl Drop for ArchivePreview {
-    fn drop(&mut self) {
-        if self.owns_source {
-            let _ = fs::remove_file(&self.source_path);
-        }
-    }
-}
-
 impl ArchivePreview {
     fn from_listed(
-        source_path: PathBuf,
-        real_path: Option<PathBuf>,
-        owns_source: bool,
+        path: PathBuf,
         files: Vec<crate::models::FileEntry>,
         display_name: String,
     ) -> Self {
@@ -1069,9 +1043,7 @@ impl ArchivePreview {
         let mut rows = Vec::with_capacity(nodes.len().saturating_sub(1));
         append_visible_rows(&nodes, 0, 0, &mut rows);
         Self {
-            source_path,
-            real_path,
-            owns_source,
+            path,
             nodes,
             rows,
             selected: None,
@@ -1081,7 +1053,7 @@ impl ArchivePreview {
     }
 
     fn target_archive_path(&self) -> &Path {
-        self.real_path.as_deref().unwrap_or(&self.source_path)
+        &self.path
     }
 
     fn visible_rows(&self) -> &[(usize, usize)] {
@@ -1374,7 +1346,7 @@ fn resolve_ico_path_for_ext(ext: &str) -> Option<PathBuf> {
         }
     }
 
-    for &(name, bytes) in crate::commands::registry::FORMAT_ICONS {
+    for &(name, bytes) in crate::formats::FORMAT_ICONS {
         if name.eq_ignore_ascii_case(&icon_file_name) {
             let target_dir = if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
                 PathBuf::from(localappdata).join("QuiviT").join("icons")
@@ -1748,12 +1720,9 @@ fn module_instance() -> HINSTANCE {
 }
 
 /// Lists one archive off the host thread. The result lands in the job slot
-/// only for the preview that requested it; a superseded result is dropped,
-/// which also removes its temp file through ArchivePreview.
+/// only for the preview that requested it; a superseded result is dropped.
 fn spawn_preview_worker(
-    list_path: PathBuf,
-    real_path: Option<PathBuf>,
-    owns_source: bool,
+    path: PathBuf,
     epoch: u64,
     display_name: String,
     job: Arc<Mutex<PreviewJob>>,
@@ -1763,21 +1732,16 @@ fn spawn_preview_worker(
         .name("quivit-preview-list".into())
         .spawn(move || {
             preview_log("preview worker start");
-            let content = match crate::archives::list_archive_names(&list_path.to_string_lossy()) {
+            let content = match crate::archives::list_archive_names(&path.to_string_lossy()) {
                 Ok(files) => {
                     preview_log(&format!("preview listed {} entries", files.len()));
                     PreviewContent::Archive(ArchivePreview::from_listed(
-                        list_path,
-                        real_path,
-                        owns_source,
+                        path,
                         files,
                         display_name,
                     ))
                 }
                 Err(error) => {
-                    if owns_source {
-                        let _ = fs::remove_file(&list_path);
-                    }
                     PreviewContent::Message(format!("Unable to open this archive: {error}"))
                 }
             };
