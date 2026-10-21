@@ -1007,9 +1007,9 @@ fn sort_tree(nodes: &mut [TreeNode], node_id: usize) {
     children.sort_by(|left, right| {
         let left_node = &nodes[*left];
         let right_node = &nodes[*right];
-        left_node
+        right_node
             .is_file
-            .cmp(&right_node.is_file)
+            .cmp(&left_node.is_file)
             .then_with(|| natord::compare(&left_node.label, &right_node.label))
     });
     nodes[node_id].children = children.clone();
