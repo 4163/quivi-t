@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 
 /// Bump only on preview contract change. App only changes do not bump.
-pub const PREVIEW_HOST_VERSION: u32 = 5;
+pub const PREVIEW_HOST_VERSION: u32 = 6;
 
 pub const PREVIEWS_BIN_NAME: &str = "quivit-previews.exe";
 pub const PREVIEWS_SIDECAR_NAME: &str = "quivit-previews.version";
@@ -210,6 +210,22 @@ fn same_file(left: &Path, right: &Path) -> bool {
     }
 }
 
+fn lock_staging(host_path: &Path) -> Result<std::fs::File, String> {
+    if let Some(parent) = host_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(host_path.with_extension("lock"))
+        .map_err(|error| format!("Cannot open the preview staging lock: {error}"))?;
+    lock.lock()
+        .map_err(|error| format!("Cannot acquire the preview staging lock: {error}"))?;
+    Ok(lock)
+}
+
 /// Testable core. Copies `source_exe` to `host_path` per the update rule.
 /// Never kills a process; a locked helper surfaces as a retry message.
 pub(crate) fn ensure_previews_host_from(
@@ -224,6 +240,8 @@ pub(crate) fn ensure_previews_host_from(
     if same_file(source_exe, host_path) {
         return Ok(host_path.to_path_buf());
     }
+    // Keep helper bytes, proxy bytes, and their sidecar in one writer's update.
+    let _staging_lock = lock_staging(host_path)?;
     let sidecar_path = sidecar_path_for(host_path);
     let app_path_str = Some(source_exe.to_string_lossy().into_owned());
     if embedded_is_debug {
