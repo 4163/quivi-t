@@ -280,7 +280,7 @@ pub async fn sync_preview_associations() -> Result<(), String> {
     return Err("File associations are only supported natively on Windows.".into());
 }
 
-const FORMAT_ICONS: &[(&str, &[u8])] = &[
+pub(crate) const FORMAT_ICONS: &[(&str, &[u8])] = &[
     ("7z.ico", include_bytes!("../../../icons/formats/7z.ico")),
     (
         "apng.ico",

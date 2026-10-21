@@ -16,8 +16,8 @@ use windows::{
             BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateFontIndirectW,
             CreatePen, CreateSolidBrush, DeleteDC, DeleteObject, DrawTextW, EndPaint, FillRect,
             GetDC, InvalidateRect, Polyline, ReleaseDC, SelectObject, SetBkMode, SetTextColor,
-            DT_END_ELLIPSIS, DT_LEFT, DT_SINGLELINE, DT_VCENTER, HFONT, HGDIOBJ, LOGFONTW,
-            PAINTSTRUCT, PS_SOLID, SRCCOPY, TRANSPARENT,
+            DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_SINGLELINE, DT_VCENTER, HFONT, HGDIOBJ,
+            LOGFONTW, PAINTSTRUCT, PS_SOLID, SRCCOPY, TRANSPARENT,
         },
         Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL},
         System::{
@@ -31,23 +31,25 @@ use windows::{
             Threading::GetCurrentThreadId,
         },
         UI::{
+            Controls::IImageList,
             Input::KeyboardAndMouse::{GetFocus, ReleaseCapture, SetCapture, SetFocus},
             Shell::{
                 IInitializeWithItem, IInitializeWithItem_Impl, IPreviewHandler,
                 IPreviewHandlerFrame, IPreviewHandlerVisuals, IPreviewHandlerVisuals_Impl,
                 IPreviewHandler_Impl, PropertiesSystem::IInitializeWithFile,
-                PropertiesSystem::IInitializeWithFile_Impl, SHGetFileInfoW, SHFILEINFOW,
-                SHGFI_ICON, SHGFI_SMALLICON, SHGFI_USEFILEATTRIBUTES, SIGDN_FILESYSPATH,
+                PropertiesSystem::IInitializeWithFile_Impl, SHGetFileInfoW, SHGetImageList,
+                SHFILEINFOW, SHGFI_ICON, SHGFI_SMALLICON, SHGFI_SYSICONINDEX,
+                SHGFI_USEFILEATTRIBUTES, SIGDN_FILESYSPATH,
             },
             WindowsAndMessaging::{
                 CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow, DispatchMessageW,
                 DrawIconEx, GetClientRect, GetMessageW, GetWindowLongPtrW, KillTimer, LoadCursorW,
-                MoveWindow, PostMessageW, PostThreadMessageW, RegisterClassW, SetCursor, SetParent,
-                SetTimer, SetWindowLongPtrW, TranslateMessage, CREATESTRUCTW, CS_DBLCLKS,
-                DI_NORMAL, GWLP_USERDATA, HICON, IDC_ARROW, MSG, WINDOW_EX_STYLE,
-                WM_CAPTURECHANGED, WM_ERASEBKGND, WM_KEYDOWN, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN,
-                WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCCREATE, WM_PAINT, WM_SETCURSOR,
-                WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
+                LoadImageW, MoveWindow, PostMessageW, PostThreadMessageW, RegisterClassW, SetCursor,
+                SetParent, SetTimer, SetWindowLongPtrW, TranslateMessage, CREATESTRUCTW, CS_DBLCLKS,
+                DI_NORMAL, GWLP_USERDATA, HICON, IDC_ARROW, IMAGE_ICON, LR_LOADFROMFILE, MSG,
+                WINDOW_EX_STYLE, WM_CAPTURECHANGED, WM_ERASEBKGND, WM_KEYDOWN, WM_LBUTTONDBLCLK,
+                WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCCREATE, WM_PAINT,
+                WM_SETCURSOR, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
             },
         },
     },
@@ -58,12 +60,13 @@ use super::PREVIEW_HANDLER_CLSID;
 const PREVIEW_CLASS_NAME: &[u16] = &[
     81, 117, 105, 118, 105, 84, 80, 114, 101, 118, 105, 101, 119, 80, 97, 110, 101, 0,
 ];
-const HEADER_HEIGHT: i32 = 34;
+const HEADER_HEIGHT: i32 = 150;
 const ROW_HEIGHT: i32 = 24;
 const MARGIN_LEFT: i32 = 8;
 const INDENT_WIDTH: i32 = 16;
 const CHEVRON_WIDTH: i32 = 16;
 const ICON_SIZE: i32 = 16;
+const LARGE_ICON_SIZE: i32 = 96;
 const ICON_TEXT_GAP: i32 = 6;
 const SCROLLBAR_WIDTH: i32 = 12;
 const ARROW_BUTTON_HEIGHT: i32 = 14;
@@ -1064,6 +1067,22 @@ impl IconCache {
             None
         }
     }
+
+    fn get_or_load_large(&mut self, ext: &str) -> Option<HICON> {
+        let key = format!("{}:large", ext.to_ascii_lowercase());
+
+        if let Some(&hicon) = self.icons.get(&key) {
+            return if !hicon.is_invalid() { Some(hicon) } else { None };
+        }
+
+        let hicon = load_shell_large_icon(ext);
+        if let Some(h) = hicon {
+            self.icons.insert(key, h);
+            Some(h)
+        } else {
+            None
+        }
+    }
 }
 
 impl Drop for IconCache {
@@ -1076,6 +1095,203 @@ impl Drop for IconCache {
             }
         }
     }
+}
+
+fn parse_icon_path(raw: &str) -> Option<PathBuf> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let unquoted = if let Some(rest) = trimmed.strip_prefix('"') {
+        rest.split('"').next().unwrap_or("")
+    } else {
+        trimmed.split(',').next().unwrap_or("")
+    };
+    let clean = unquoted.trim();
+    if clean.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(clean))
+    }
+}
+
+fn resolve_ico_path_for_ext(ext: &str) -> Option<PathBuf> {
+    let clean = ext.trim_start_matches('.').to_ascii_lowercase();
+    if clean.is_empty() {
+        return None;
+    }
+
+    #[cfg(windows)]
+    {
+        use winreg::enums::HKEY_CURRENT_USER;
+        use winreg::RegKey;
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+        let progid_icon_key = format!(r"Software\Classes\QuiviT.{}\DefaultIcon", clean);
+        if let Ok(key) = hkcu.open_subkey(&progid_icon_key) {
+            if let Ok(val) = key.get_value::<String, _>("") {
+                if let Some(path) = parse_icon_path(&val) {
+                    if path.exists() {
+                        return Some(path);
+                    }
+                }
+            }
+        }
+
+        let ext_key = format!(r"Software\Classes\.{}", clean);
+        if let Ok(key) = hkcu.open_subkey(&ext_key) {
+            if let Ok(progid) = key.get_value::<String, _>("") {
+                let p_icon_key = format!(r"Software\Classes\{}\DefaultIcon", progid.trim());
+                if let Ok(ikey) = hkcu.open_subkey(&p_icon_key) {
+                    if let Ok(val) = ikey.get_value::<String, _>("") {
+                        if let Some(path) = parse_icon_path(&val) {
+                            if path.exists() {
+                                return Some(path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let icon_file_name = format!("{}.ico", clean);
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let p1 = PathBuf::from(&appdata)
+            .join("com.x4163.quivit.dev")
+            .join("icons")
+            .join(&icon_file_name);
+        if p1.exists() {
+            return Some(p1);
+        }
+        let p2 = PathBuf::from(&appdata)
+            .join("com.x4163.quivit")
+            .join("icons")
+            .join(&icon_file_name);
+        if p2.exists() {
+            return Some(p2);
+        }
+    }
+    if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+        let p = PathBuf::from(&localappdata)
+            .join("QuiviT")
+            .join("icons")
+            .join(&icon_file_name);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+
+    for &(name, bytes) in crate::commands::registry::FORMAT_ICONS {
+        if name.eq_ignore_ascii_case(&icon_file_name) {
+            let target_dir = if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                PathBuf::from(localappdata).join("QuiviT").join("icons")
+            } else {
+                std::env::temp_dir().join("quivit_icons")
+            };
+            let _ = std::fs::create_dir_all(&target_dir);
+            let target_path = target_dir.join(&icon_file_name);
+            if std::fs::write(&target_path, bytes).is_ok() {
+                return Some(target_path);
+            }
+        }
+    }
+
+    None
+}
+
+fn load_hicon_from_ico_file(path: &Path, size: i32) -> Option<HICON> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    if !path.exists() {
+        return None;
+    }
+    if !path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("ico"))
+        .unwrap_or(false)
+    {
+        return None;
+    }
+
+    let wide: Vec<u16> = OsStr::new(path.as_os_str())
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let handle_res = unsafe {
+        LoadImageW(
+            None,
+            PCWSTR(wide.as_ptr()),
+            IMAGE_ICON,
+            size,
+            size,
+            LR_LOADFROMFILE,
+        )
+    };
+
+    match handle_res {
+        Ok(handle) => {
+            let hicon = HICON(handle.0);
+            if !hicon.is_invalid() {
+                Some(hicon)
+            } else {
+                None
+            }
+        }
+        Err(_) => None,
+    }
+}
+
+fn load_shell_large_icon(ext: &str) -> Option<HICON> {
+    // 1. First attempt: Load directly from high-resolution .ico source to avoid
+    // Shell System Image List nearest-neighbor upscaling artifacts.
+    if let Some(ico_path) = resolve_ico_path_for_ext(ext) {
+        if let Some(hicon) = load_hicon_from_ico_file(&ico_path, LARGE_ICON_SIZE) {
+            return Some(hicon);
+        }
+    }
+
+    // 2. Fallback to Shell Image List (SHIL_JUMBO 256x256, SHIL_EXTRALARGE 48x48)
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let name = if ext.is_empty() {
+        "dummy".to_string()
+    } else {
+        format!("dummy.{}", ext.trim_start_matches('.'))
+    };
+    let wide: Vec<u16> = OsStr::new(&name)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    let mut shfi = SHFILEINFOW::default();
+    let res = unsafe {
+        SHGetFileInfoW(
+            PCWSTR(wide.as_ptr()),
+            FILE_ATTRIBUTE_NORMAL,
+            Some(&mut shfi),
+            std::mem::size_of::<SHFILEINFOW>() as u32,
+            SHGFI_SYSICONINDEX | SHGFI_USEFILEATTRIBUTES,
+        )
+    };
+
+    if res != 0 {
+        for &shil in &[4, 2] {
+            if let Ok(image_list) = unsafe { SHGetImageList::<IImageList>(shil) } {
+                if let Ok(hicon) = unsafe { image_list.GetIcon(shfi.iIcon, 1) } {
+                    if !hicon.is_invalid() {
+                        return Some(hicon);
+                    }
+                }
+            }
+        }
+    }
+
+    load_shell_icon(false, ext)
 }
 
 fn load_shell_icon(is_folder: bool, ext: &str) -> Option<HICON> {
@@ -2106,34 +2322,46 @@ unsafe fn draw_header(
         .and_then(|e| e.to_str())
         .unwrap_or("");
 
-    let mut text_left = client.left + 12;
-    if let Some(hicon) = icon_cache.get_or_load(false, ext) {
-        let icon_y = client.top + (HEADER_HEIGHT - ICON_SIZE) / 2;
+    let width = client.right - client.left;
+    if let Some(hicon) = icon_cache.get_or_load_large(ext) {
+        let icon_x = client.left + ((width - LARGE_ICON_SIZE) / 2).max(0);
+        let icon_y = client.top + 14;
         let _ = DrawIconEx(
             hdc,
-            text_left,
+            icon_x,
             icon_y,
             hicon,
-            ICON_SIZE,
-            ICON_SIZE,
+            LARGE_ICON_SIZE,
+            LARGE_ICON_SIZE,
             0,
             None,
             DI_NORMAL,
         );
-        text_left += ICON_SIZE + ICON_TEXT_GAP;
-    }
 
-    draw_text(
-        hdc,
-        title,
-        RECT {
-            left: text_left,
-            top: client.top,
-            right: client.right - 8,
-            bottom: client.top + HEADER_HEIGHT,
-        },
-        theme.text,
-    );
+        draw_text_centered(
+            hdc,
+            title,
+            RECT {
+                left: client.left + 12,
+                top: client.top + 118,
+                right: (client.right - 12).max(client.left + 12),
+                bottom: client.top + 136,
+            },
+            theme.text,
+        );
+    } else {
+        draw_text_centered(
+            hdc,
+            title,
+            RECT {
+                left: client.left + 12,
+                top: client.top,
+                right: (client.right - 12).max(client.left + 12),
+                bottom: client.top + HEADER_HEIGHT,
+            },
+            theme.text,
+        );
+    }
 }
 
 unsafe fn draw_archive(
@@ -2458,6 +2686,23 @@ unsafe fn draw_text(
         &mut wide,
         &mut rect,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
+    );
+}
+
+unsafe fn draw_text_centered(
+    hdc: windows::Win32::Graphics::Gdi::HDC,
+    text: &str,
+    mut rect: RECT,
+    text_color: COLORREF,
+) {
+    let mut wide: Vec<u16> = text.encode_utf16().collect();
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, text_color);
+    let _ = DrawTextW(
+        hdc,
+        &mut wide,
+        &mut rect,
+        DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS,
     );
 }
 
