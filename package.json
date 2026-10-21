@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
+    "build": "tauri build",
     "dev": "node scripts/dev.js",
     "mocha": "mocha 'mocha/*.test.js'",
     "e2e": "node scripts/e2e.js",
