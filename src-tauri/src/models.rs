@@ -128,6 +128,24 @@ pub struct PreviewDiagnostic {
     pub embedded_preview_version: u32,
     #[serde(default)]
     pub stale: bool,
+    #[serde(default)]
+    pub progid_thumbnail_clsid: Option<String>,
+    #[serde(default)]
+    pub thumbnail_server: Option<String>,
+    #[serde(default)]
+    pub thumbnail_proxy_server: Option<String>,
+    #[serde(default)]
+    pub thumbnail_proxy_path: String,
+    #[serde(default)]
+    pub thumbnail_proxy_exists: bool,
+    #[serde(default)]
+    pub thumbnail_proxy_healthy: bool,
+    #[serde(default)]
+    pub external_preview_handler: Option<String>,
+    #[serde(default)]
+    pub external_thumbnail_provider: Option<String>,
+    #[serde(default)]
+    pub svg_skipped: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

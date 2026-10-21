@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 
 /// Bump only on preview contract change. App only changes do not bump.
-pub const PREVIEW_HOST_VERSION: u32 = 2;
+pub const PREVIEW_HOST_VERSION: u32 = 5;
 
 pub const PREVIEWS_BIN_NAME: &str = "quivit-previews.exe";
 pub const PREVIEWS_SIDECAR_NAME: &str = "quivit-previews.version";
@@ -23,6 +23,52 @@ pub struct PreviewsSidecar {
     pub sha256: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_sha256: Option<String>,
+}
+
+#[cfg(windows)]
+const THUMBNAIL_PROXY_BYTES: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/quivit-thumbnail-proxy.dll"));
+
+pub fn proxy_path_for(host_path: &Path) -> PathBuf {
+    host_path.with_file_name(super::contract::THUMBNAIL_PROXY_NAME)
+}
+
+pub fn proxy_is_healthy(host_path: &Path, sidecar: &PreviewsSidecar) -> bool {
+    #[cfg(windows)]
+    {
+        sidecar.proxy_sha256.as_ref().is_some_and(|expected| {
+            std::fs::read(proxy_path_for(host_path))
+                .is_ok_and(|bytes| compute_sha256_hex(&bytes) == *expected)
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (host_path, sidecar);
+        true
+    }
+}
+
+fn stage_proxy(host_path: &Path) -> Result<Option<String>, String> {
+    #[cfg(windows)]
+    {
+        let hash = compute_sha256_hex(THUMBNAIL_PROXY_BYTES);
+        let path = proxy_path_for(host_path);
+        if std::fs::read(&path).is_ok_and(|bytes| compute_sha256_hex(&bytes) == hash) {
+            return Ok(Some(hash));
+        }
+        let tmp = tmp_for(&path);
+        std::fs::write(&tmp, THUMBNAIL_PROXY_BYTES)
+            .map_err(|error| locked_retry_message(&error.to_string()))?;
+        std::fs::rename(&tmp, &path).map_err(|error| locked_retry_message(&error.to_string()))?;
+        Ok(Some(hash))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = host_path;
+        Ok(None)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,7 +106,11 @@ pub fn expected_command_for(host_path: &Path) -> String {
 }
 
 pub fn thumb_command_for(host_path: &Path) -> String {
-    format!(r#""{}" {}"#, host_path.to_string_lossy(), PREVIEWS_THUMB_ARG)
+    format!(
+        r#""{}" {}"#,
+        host_path.to_string_lossy(),
+        PREVIEWS_THUMB_ARG
+    )
 }
 
 /// True when a registration points somewhere other than the stable host.
@@ -92,7 +142,7 @@ fn tmp_for(path: &Path) -> PathBuf {
 }
 
 fn locked_retry_message(detail: &str) -> String {
-    format!("Close the preview pane and retry: cannot update the preview helper ({detail}). The preview pane may still be running.")
+    format!("Close the preview pane and Explorer windows, then retry: cannot update the preview helper ({detail}). A shell handler may still be running.")
 }
 
 pub(crate) fn decide_host_action(
@@ -178,6 +228,7 @@ pub(crate) fn ensure_previews_host_from(
     let app_path_str = Some(source_exe.to_string_lossy().into_owned());
     if embedded_is_debug {
         let sha256 = stage_copy(source_exe, host_path)?;
+        let proxy_sha256 = stage_proxy(host_path)?;
         write_sidecar_atomic(
             &sidecar_path,
             &PreviewsSidecar {
@@ -185,6 +236,7 @@ pub(crate) fn ensure_previews_host_from(
                 profile: "debug".into(),
                 sha256,
                 app_path: app_path_str,
+                proxy_sha256,
             },
         )?;
         return Ok(host_path.to_path_buf());
@@ -193,7 +245,9 @@ pub(crate) fn ensure_previews_host_from(
     let staged = read_sidecar(&sidecar_path);
     let hash_ok = match (&staged, host_path.exists()) {
         (Some(sidecar), true) => match std::fs::read(host_path) {
-            Ok(bytes) => compute_sha256_hex(&bytes) == sidecar.sha256,
+            Ok(bytes) => {
+                compute_sha256_hex(&bytes) == sidecar.sha256 && proxy_is_healthy(host_path, sidecar)
+            }
             Err(_) => false,
         },
         _ => false,
@@ -210,6 +264,7 @@ pub(crate) fn ensure_previews_host_from(
         }
         HostAction::Stage => {
             let sha256 = stage_copy(source_exe, host_path)?;
+            let proxy_sha256 = stage_proxy(host_path)?;
             write_sidecar_atomic(
                 &sidecar_path,
                 &PreviewsSidecar {
@@ -217,6 +272,7 @@ pub(crate) fn ensure_previews_host_from(
                     profile: "release".into(),
                     sha256,
                     app_path: app_path_str,
+                    proxy_sha256,
                 },
             )?;
             Ok(host_path.to_path_buf())

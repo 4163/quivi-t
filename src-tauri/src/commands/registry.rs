@@ -33,7 +33,10 @@ pub fn get_format_status() -> Vec<FormatStatus> {
         {
             let mut actually_exists = false;
             let progid_path = format!(r#"Software\Classes\{}"#, expected_progid);
-            if hkcu.open_subkey(&progid_path).is_ok() {
+            if hkcu
+                .open_subkey(format!(r"{}\shell\open\command", progid_path))
+                .is_ok()
+            {
                 actually_exists = true;
             }
 
@@ -79,96 +82,159 @@ pub fn get_format_status() -> Vec<FormatStatus> {
     statuses
 }
 
-/// Reports how Explorer resolves the QuiviT preview handler for each archive
-/// type. Read-only; used to tell a stale registration or a foreign default
-/// apart from a rendering failure.
+/// Read-only registration and staged-helper diagnostics for Explorer handlers.
 #[tauri::command]
 pub fn get_preview_diagnostics() -> Result<Vec<crate::models::PreviewDiagnostic>, String> {
     #[cfg(windows)]
     {
-        use crate::models::PreviewDiagnostic;
-
+        use crate::{models::PreviewDiagnostic, platform::previews};
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-        let registered_by_ext: std::collections::HashMap<String, bool> = get_format_status()
+        let registered: std::collections::HashMap<_, _> = get_format_status()
             .into_iter()
             .map(|status| (status.ext, status.registered))
             .collect();
-
-        let read_default = |root: &RegKey, path: &str| -> Option<String> {
+        let read = |root: &RegKey, path: &str| -> Option<String> {
             root.open_subkey(path)
-                .and_then(|key| key.get_value::<String, _>(""))
+                .and_then(|key| key.get_value(""))
                 .ok()
         };
-        let classes_default = |ext: &str| -> Option<String> {
-            let path = format!(r#"Software\Classes\.{}"#, ext);
-            read_default(&hkcu, &path).or_else(|| {
-                hklm.open_subkey(format!(r#"SOFTWARE\Classes\.{}"#, ext))
-                    .and_then(|key| key.get_value::<String, _>(""))
-                    .ok()
-            })
+        let class_server = |root: &RegKey, clsid: &str, server: &str| {
+            read(root, &format!(r"Software\Classes\CLSID\{clsid}\{server}"))
         };
-
-        let clsid_path = format!(
-            r"Software\Classes\CLSID\{}",
-            crate::platform::previews::PREVIEW_HANDLER_CLSID_TEXT
-        );
-        let clsid_server = read_default(&hkcu, &format!(r"{}\LocalServer32", clsid_path));
-        let hklm_clsid_server = read_default(&hklm, &format!(r"{}\LocalServer32", clsid_path));
-        let in_handlers_list = hkcu
-            .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\PreviewHandlers")
-            .and_then(|key| {
-                key.get_value::<String, _>(
-                    crate::platform::previews::PREVIEW_HANDLER_CLSID_TEXT,
-                )
-            })
-            .is_ok();
-
-        let (host_path, host_exists, sidecar) =
-            crate::platform::previews::host::staged_host_info();
-        let host_path_text = host_path.to_string_lossy().into_owned();
-        let staged_preview_version = sidecar.as_ref().map(|sidecar| sidecar.preview_version);
-        let embedded_preview_version = crate::platform::previews::PREVIEW_HOST_VERSION;
-        let stale = crate::platform::previews::host::is_stale_registration(
-            clsid_server.as_deref(),
-            &host_path,
-        );
-
+        let (host_path, host_exists, sidecar) = previews::host::staged_host_info();
+        let proxy_path = previews::host::proxy_path_for(&host_path);
+        let proxy_healthy = sidecar
+            .as_ref()
+            .is_some_and(|sidecar| previews::host::proxy_is_healthy(&host_path, sidecar));
+        let svg = previews::detect_svg_shell_handlers();
+        let thumbnail_server =
+            class_server(&hkcu, previews::IMAGE_THUMBNAIL_CLSID_TEXT, "LocalServer32").or_else(
+                || class_server(&hklm, previews::IMAGE_THUMBNAIL_CLSID_TEXT, "LocalServer32"),
+            );
+        let thumbnail_proxy_server = class_server(
+            &hkcu,
+            previews::IMAGE_THUMBNAIL_CLSID_TEXT,
+            "InprocServer32",
+        )
+        .or_else(|| {
+            class_server(
+                &hklm,
+                previews::IMAGE_THUMBNAIL_CLSID_TEXT,
+                "InprocServer32",
+            )
+        });
         let mut rows = Vec::new();
         for format in SUPPORTED_FORMATS
             .iter()
-            .filter(|format| is_archive_ext(format.ext))
+            .filter(|format| previews::supports_extension(format.ext))
         {
-            let userchoice_path = format!(
-                r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.{}\UserChoice",
-                format.ext
+            let clsid = if is_archive_ext(format.ext) {
+                previews::PREVIEW_HANDLER_CLSID_TEXT
+            } else {
+                previews::IMAGE_PREVIEW_CLSID_TEXT
+            };
+            let clsid_server = class_server(&hkcu, clsid, "LocalServer32");
+            let hklm_clsid_server = class_server(&hklm, clsid, "LocalServer32");
+            let progid_preview_clsid = read(
+                &hkcu,
+                &format!(
+                    r"Software\Classes\QuiviT.{}\shellex\{}",
+                    format.ext,
+                    previews::PREVIEW_HANDLER_CATEGORY
+                ),
             );
-            let progid_preview_path = format!(
-                r"Software\Classes\QuiviT.{}\shellex\{}",
-                format.ext,
-                crate::platform::previews::PREVIEW_HANDLER_CATEGORY
+            let progid_thumbnail_clsid = read(
+                &hkcu,
+                &format!(
+                    r"Software\Classes\QuiviT.{}\shellex\{}",
+                    format.ext,
+                    previews::THUMBNAIL_CATEGORY
+                ),
             );
+            let owns_thumbnail = progid_thumbnail_clsid.as_deref().is_some_and(|value| {
+                value.eq_ignore_ascii_case(previews::IMAGE_THUMBNAIL_CLSID_TEXT)
+            });
+            let stale = previews::host::is_stale_registration(
+                clsid_server.as_deref().or(hklm_clsid_server.as_deref()),
+                &host_path,
+            ) || (owns_thumbnail
+                && (thumbnail_server.as_deref()
+                    != Some(previews::host::thumb_command_for(&host_path).as_str())
+                    || thumbnail_proxy_server.as_deref()
+                        != Some(proxy_path.to_string_lossy().as_ref())
+                    || !proxy_healthy));
+            let userchoice_progid = hkcu
+                .open_subkey(format!(
+                    r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.{}\UserChoice",
+                    format.ext
+                ))
+                .and_then(|key| key.get_value::<String, _>("ProgId"))
+                .ok();
+            let in_preview_handlers_list = hkcu
+                .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\PreviewHandlers")
+                .and_then(|key| key.get_value::<String, _>(clsid))
+                .is_ok();
+            let classes_path = format!(r"Software\Classes\.{}", format.ext);
             rows.push(PreviewDiagnostic {
-                ext: format.ext.to_string(),
-                registered: registered_by_ext.get(format.ext).copied().unwrap_or(false),
-                classes_default: classes_default(format.ext),
-                userchoice_progid: read_default(&hkcu, &userchoice_path),
-                progid_preview_clsid: read_default(&hkcu, &progid_preview_path),
-                clsid_server: clsid_server.clone(),
-                hklm_clsid_server: hklm_clsid_server.clone(),
-                in_preview_handlers_list: in_handlers_list,
-                host_path: host_path_text.clone(),
+                ext: format.ext.into(),
+                registered: registered.get(format.ext).copied().unwrap_or(false),
+                classes_default: read(&hkcu, &classes_path).or_else(|| read(&hklm, &classes_path)),
+                userchoice_progid,
+                progid_preview_clsid,
+                clsid_server,
+                hklm_clsid_server,
+                in_preview_handlers_list,
+                host_path: host_path.to_string_lossy().into_owned(),
                 host_exists,
-                staged_preview_version,
-                embedded_preview_version,
+                staged_preview_version: sidecar.as_ref().map(|sidecar| sidecar.preview_version),
+                embedded_preview_version: previews::PREVIEW_HOST_VERSION,
                 stale,
+                progid_thumbnail_clsid,
+                thumbnail_server: previews::has_thumbnail(format.ext)
+                    .then(|| thumbnail_server.clone())
+                    .flatten(),
+                thumbnail_proxy_server: previews::has_thumbnail(format.ext)
+                    .then(|| thumbnail_proxy_server.clone())
+                    .flatten(),
+                thumbnail_proxy_path: proxy_path.to_string_lossy().into_owned(),
+                thumbnail_proxy_exists: proxy_path.exists(),
+                thumbnail_proxy_healthy: proxy_healthy,
+                external_preview_handler: (format.ext == "svg")
+                    .then(|| svg.preview.as_ref().map(|handler| handler.clsid.clone()))
+                    .flatten(),
+                external_thumbnail_provider: (format.ext == "svg")
+                    .then(|| svg.thumbnail.as_ref().map(|handler| handler.clsid.clone()))
+                    .flatten(),
+                svg_skipped: format.ext == "svg" && svg.is_external(),
             });
         }
-        return Ok(rows);
+        Ok(rows)
     }
-
     #[cfg(not(windows))]
-    return Err("File associations are only supported natively on Windows.".into());
+    Err("File associations are only supported natively on Windows.".into())
+}
+
+#[cfg(windows)]
+fn sync_image_thumbnail_overlay(extension: &str) -> Result<bool, String> {
+    if !is_image_ext(extension) {
+        return Ok(false);
+    }
+    let key = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(
+            format!(r"Software\Classes\QuiviT.{extension}"),
+            KEY_READ | KEY_WRITE,
+        )
+        .map_err(|error| error.to_string())?;
+    if key
+        .get_value::<String, _>("TypeOverlay")
+        .is_ok_and(|value| value.is_empty())
+    {
+        return Ok(false);
+    }
+    key.set_value("TypeOverlay", &"")
+        .map_err(|error| error.to_string())?;
+    Ok(true)
 }
 
 #[cfg(windows)]
@@ -201,7 +267,7 @@ fn sync_preview_associations_impl(stage_host_always: bool) -> Result<bool, Strin
 
     let exts: Vec<String> = get_format_status()
         .into_iter()
-        .filter(|status| status.registered && is_archive_ext(&status.ext))
+        .filter(|status| status.registered)
         .map(|status| status.ext)
         .collect();
 
@@ -215,7 +281,10 @@ fn sync_preview_associations_impl(stage_host_always: bool) -> Result<bool, Strin
 
     let mut changed = false;
     for ext in &exts {
-        if crate::platform::previews::register_for_extension_with_host(ext, &host)? {
+        changed |= sync_image_thumbnail_overlay(ext)?;
+        if crate::platform::previews::supports_extension(ext)
+            && crate::platform::previews::register_for_extension_with_host(ext, &host)?
+        {
             changed = true;
         }
     }
@@ -251,7 +320,7 @@ pub fn spawn_launch_previews_sync() {
 #[cfg(not(windows))]
 pub fn spawn_launch_previews_sync() {}
 
-/// Enables Explorer previews for active QuiviT archive associations when the
+/// Enables Explorer previews for active QuiviT associations when the
 /// File Types page opens. Blocking registry plus staging work runs on a
 /// background thread, and the helper stages exactly once per call.
 #[tauri::command(async)]
@@ -261,11 +330,10 @@ pub async fn sync_preview_associations() -> Result<(), String> {
         if crate::config::is_e2e_suite() {
             return Ok(());
         }
-        let changed = tauri::async_runtime::spawn_blocking(|| {
-            sync_preview_associations_impl(false)
-        })
-        .await
-        .map_err(|err| format!("Preview repair worker failed: {err}"))??;
+        let changed =
+            tauri::async_runtime::spawn_blocking(|| sync_preview_associations_impl(false))
+                .await
+                .map_err(|err| format!("Preview repair worker failed: {err}"))??;
 
         if changed {
             unsafe {
@@ -333,11 +401,9 @@ pub async fn register_associations(
 ) -> Result<(), String> {
     #[cfg(windows)]
     {
-        tauri::async_runtime::spawn_blocking(move || {
-            register_associations_impl(app, extensions)
-        })
-        .await
-        .map_err(|err| format!("File Types worker failed: {err}"))??;
+        tauri::async_runtime::spawn_blocking(move || register_associations_impl(app, extensions))
+            .await
+            .map_err(|err| format!("File Types worker failed: {err}"))??;
         return Ok(());
     }
 
@@ -350,25 +416,31 @@ fn register_associations_impl(
     app: tauri::AppHandle,
     extensions: Vec<String>,
 ) -> Result<(), String> {
+    if crate::config::is_e2e_suite() {
+        return Ok(());
+    }
     {
         let exe_path = crate::platform::direct_open::release_exe()?;
         let exe_str = exe_path.to_string_lossy().into_owned();
         let icon_dir = dump_icons(&app)?;
         let need_preview = extensions
             .iter()
-            .any(|ext| is_archive_ext(&ext.to_lowercase()));
+            .any(|ext| crate::platform::previews::supports_extension(&ext.to_lowercase()));
         let host = if need_preview {
-            let host_path = crate::platform::previews::resolve_previews_host_path();
-            if host_path.exists() {
-                Some(host_path)
-            } else {
-                Some(crate::platform::previews::ensure_previews_host()?)
-            }
+            Some(crate::platform::previews::ensure_previews_host()?)
         } else {
             None
         };
 
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+        // Capture the old SVG resolver before changing its default ProgID.
+        if extensions.iter().any(|ext| ext.eq_ignore_ascii_case("svg")) {
+            let handlers = crate::platform::previews::detect_svg_shell_handlers();
+            if handlers.is_external() {
+                crate::platform::previews::preserve_svg_handlers(&handlers)?;
+            }
+        }
 
         for ext in &extensions {
             let lower_ext = ext.to_lowercase();
@@ -397,15 +469,13 @@ fn register_associations_impl(
                 .create_subkey(&progid_path)
                 .map_err(|e| format!("Failed creating progid {}: {}", progid_path, e))?;
             let _ = progid_key.set_value("", &display_name);
+            sync_image_thumbnail_overlay(&lower_ext)?;
 
-            if is_archive_ext(&lower_ext) {
+            if crate::platform::previews::supports_extension(&lower_ext) {
                 let host_path = host
                     .as_ref()
                     .ok_or("Preview helper was not staged.".to_string())?;
-                crate::platform::previews::register_for_extension_with_host(
-                    &lower_ext,
-                    host_path,
-                )?;
+                crate::platform::previews::register_for_extension_with_host(&lower_ext, host_path)?;
             }
 
             // DefaultIcon
@@ -480,19 +550,28 @@ fn register_associations_impl(
 pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
     #[cfg(windows)]
     {
+        if crate::config::is_e2e_suite() {
+            return Ok(());
+        }
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
         for ext in &extensions {
             let lower_ext = ext.to_lowercase();
             let progid = format!("QuiviT.{}", lower_ext);
 
-            if is_archive_ext(&lower_ext) {
+            if crate::platform::previews::supports_extension(&lower_ext) {
                 crate::platform::previews::unregister_for_extension(&lower_ext)?;
             }
 
             // Remove ProgId class entry
             let progid_path = format!(r#"Software\Classes\{}"#, progid);
-            let _ = hkcu.delete_subkey_all(&progid_path);
+            if crate::platform::previews::has_foreign_progid_handlers(&lower_ext) {
+                // Keep the external shell relay while removing QuiviT's open command.
+                let _ = hkcu.delete_subkey_all(format!(r"{}\shell\open", progid_path));
+                let _ = hkcu.delete_subkey_all(format!(r"{}\DefaultIcon", progid_path));
+            } else {
+                let _ = hkcu.delete_subkey_all(&progid_path);
+            }
 
             // If .ext default is our progid, clear it
             let ext_key_path = format!(r#"Software\Classes\.{}"#, lower_ext);

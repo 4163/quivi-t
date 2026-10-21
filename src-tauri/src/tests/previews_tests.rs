@@ -146,7 +146,10 @@ fn test_stale_points_elsewhere() {
         &host
     ));
     assert!(is_stale_registration(
-        Some(&format!(r#""{}" --preview-handler"#, host.to_string_lossy())),
+        Some(&format!(
+            r#""{}" --preview-handler"#,
+            host.to_string_lossy()
+        )),
         &host
     ));
 }
@@ -158,11 +161,9 @@ fn test_decide_matrix() {
         profile: "release".into(),
         sha256: "x".into(),
         app_path: None,
+        proxy_sha256: None,
     };
-    assert_eq!(
-        decide_host_action(None, false, 1, false),
-        HostAction::Stage
-    );
+    assert_eq!(decide_host_action(None, false, 1, false), HostAction::Stage);
     assert_eq!(
         decide_host_action(Some(&release_v1), false, 1, false),
         HostAction::Stage
@@ -172,6 +173,7 @@ fn test_decide_matrix() {
         profile: "debug".into(),
         sha256: "x".into(),
         app_path: None,
+        proxy_sha256: None,
     };
     assert_eq!(
         decide_host_action(Some(&debug), true, 1, false),
@@ -182,6 +184,7 @@ fn test_decide_matrix() {
         profile: "release".into(),
         sha256: "x".into(),
         app_path: None,
+        proxy_sha256: None,
     };
     assert_eq!(
         decide_host_action(Some(&old), true, 2, false),
@@ -196,6 +199,7 @@ fn test_decide_matrix() {
         profile: "release".into(),
         sha256: "x".into(),
         app_path: None,
+        proxy_sha256: None,
     };
     assert_eq!(
         decide_host_action(Some(&newer), true, 1, false),

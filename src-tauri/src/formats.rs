@@ -391,7 +391,7 @@ fn be_u32(bytes: &[u8], offset: usize) -> Option<u32> {
 }
 
 /// Next ISO BMFF box at `pos`: (total size, header length, type).
-fn isobmff_box(bytes: &[u8], pos: usize) -> Option<(usize, usize, [u8; 4])> {
+pub(crate) fn isobmff_box(bytes: &[u8], pos: usize) -> Option<(usize, usize, [u8; 4])> {
     let size32 = be_u32(bytes, pos)? as usize;
     let typ: [u8; 4] = bytes.get(pos + 4..pos + 8)?.try_into().ok()?;
     if size32 == 1 {

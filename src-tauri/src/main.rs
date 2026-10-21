@@ -3,6 +3,14 @@
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|arg| arg == "--previews-thumb") {
+        if let Err(error) = tauri_app_lib::platform::previews::run_thumbnail_server() {
+            tauri_app_lib::platform::previews::log_event(&format!("thumbnail server error: {error}"));
+            eprintln!("[QuiviT thumbnail] {error}");
+        }
+        return;
+    }
+
     // New flag is `--previews-pane`. The old `--preview-handler` still serves
     // so machines registered before the rename keep working until repair.
     if args

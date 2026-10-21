@@ -44,3 +44,9 @@ winreg = "0.53.0"
 encoding_rs = "0.8"
 chardetng = "1.0.0"
 ureq = "2.10"
+
+[target.'cfg(windows)'.dependencies]
+aom-decode = "0.2.14"
+resvg = { version = "0.48.1", default-features = false, features = ["text", "system-fonts", "raster-images"] }
+wry = "0.55.1"
+webview2-com = "0.38.2"

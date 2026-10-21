@@ -9,8 +9,8 @@ use windows::{
     core::{implement, Error, IUnknown, Interface, Result, BOOL, GUID, PCWSTR},
     Win32::{
         Foundation::{
-            CLASS_E_NOAGGREGATION, COLORREF, E_NOINTERFACE, E_NOTIMPL, HINSTANCE, HWND, LPARAM,
-            LRESULT, POINT, RECT, S_FALSE, WPARAM,
+            CLASS_E_NOAGGREGATION, COLORREF, E_NOINTERFACE, E_NOTIMPL, E_POINTER, HINSTANCE, HWND,
+            LPARAM, LRESULT, POINT, RECT, WPARAM,
         },
         Graphics::Gdi::{
             BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateFontIndirectW,
@@ -22,9 +22,9 @@ use windows::{
         Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL},
         System::{
             Com::{
-                CoInitializeEx, CoRegisterClassObject, CoRevokeClassObject,
-                CoUninitialize, IClassFactory, IClassFactory_Impl, CLSCTX_LOCAL_SERVER,
-                COINIT_APARTMENTTHREADED, REGCLS_MULTIPLEUSE,
+                CoInitializeEx, CoRegisterClassObject, CoRevokeClassObject, CoUninitialize,
+                IClassFactory, IClassFactory_Impl, CLSCTX_LOCAL_SERVER, COINIT_APARTMENTTHREADED,
+                REGCLS_MULTIPLEUSE,
             },
             LibraryLoader::GetModuleHandleW,
             Ole::{IObjectWithSite, IObjectWithSite_Impl, IOleWindow, IOleWindow_Impl},
@@ -44,18 +44,22 @@ use windows::{
             WindowsAndMessaging::{
                 CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyWindow, DispatchMessageW,
                 DrawIconEx, GetClientRect, GetMessageW, GetWindowLongPtrW, KillTimer, LoadCursorW,
-                LoadImageW, MoveWindow, PostMessageW, PostThreadMessageW, RegisterClassW, SetCursor,
-                SetParent, SetTimer, SetWindowLongPtrW, TranslateMessage, CREATESTRUCTW, CS_DBLCLKS,
-                DI_NORMAL, GWLP_USERDATA, HICON, IDC_ARROW, IMAGE_ICON, LR_LOADFROMFILE, MSG,
-                WINDOW_EX_STYLE, WM_CAPTURECHANGED, WM_ERASEBKGND, WM_KEYDOWN, WM_LBUTTONDBLCLK,
-                WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCCREATE, WM_PAINT,
-                WM_SETCURSOR, WM_SIZE, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
+                LoadImageW, MoveWindow, PostMessageW, PostQuitMessage, RegisterClassW, SetCursor,
+                SetParent, SetTimer, SetWindowLongPtrW, TranslateMessage, CREATESTRUCTW,
+                CS_DBLCLKS, DI_NORMAL, GWLP_USERDATA, HICON, HWND_MESSAGE, IDC_ARROW, IMAGE_ICON,
+                LR_LOADFROMFILE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE, WM_CAPTURECHANGED,
+                WM_ERASEBKGND, WM_KEYDOWN, WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP,
+                WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_NCCREATE, WM_PAINT, WM_SETCURSOR, WM_SIZE,
+                WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
             },
         },
     },
 };
 
-use super::PREVIEW_HANDLER_CLSID;
+use super::{
+    image_pane::{ImagePane, MediaKind},
+    PREVIEW_HANDLER_CLSID,
+};
 
 const PREVIEW_CLASS_NAME: &[u16] = &[
     81, 117, 105, 118, 105, 84, 80, 114, 101, 118, 105, 101, 119, 80, 97, 110, 101, 0,
@@ -86,9 +90,11 @@ extern "system" {
 }
 
 static ACTIVE_HANDLERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static SERVER_LOCKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static PREVIEW_CLASS_REGISTERED: OnceLock<()> = OnceLock::new();
 static PAINT_LOGGED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-static PUMP_THREAD_ID: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static PUMP_WINDOW: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+static QUIT_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 // Idle shutdown keeps one warm server while the user browses archives, so
 // only the first preview pays process startup. All timer state changes run
 // on the pump thread, which keeps arming race-free.
@@ -104,8 +110,9 @@ const WM_APP_TASK: u32 = 0x8003;
 const TASK_CREATE: usize = 1;
 const TASK_POSITION: usize = 2;
 const TASK_TEARDOWN: usize = 3;
-// Actual thread-timer id returned by SetTimer. Thread timers ignore the
-// requested id, so the WM_TIMER match must use this, not IDLE_TIMER_ID.
+const TASK_BACKGROUND: usize = 4;
+const TASK_FOCUS: usize = 5;
+// The private window receives timers even inside WebView2's nested pump.
 static IDLE_TIMER_ACTUAL: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 fn preview_log(event: &str) {
@@ -131,19 +138,57 @@ pub(super) fn log_event(event: &str) {
     preview_log(event);
 }
 
-fn lock_state(
-    state: &Arc<Mutex<PreviewState>>,
-) -> std::sync::MutexGuard<'_, PreviewState> {
-    state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+fn lock_state(state: &Arc<Mutex<PreviewState>>) -> std::sync::MutexGuard<'_, PreviewState> {
+    state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 pub(super) fn run() -> Result<()> {
     preview_log("server start");
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()? };
+    let result = run_initialized();
+    unsafe { CoUninitialize() };
+    result
+}
 
-    // Recorded before any class object exists so no task post can miss it.
-    PUMP_THREAD_ID.store(unsafe { GetCurrentThreadId() }, std::sync::atomic::Ordering::Relaxed);
+fn run_initialized() -> Result<()> {
+    let pump = unsafe {
+        let instance = HINSTANCE(GetModuleHandleW(None)?.0);
+        let class = WNDCLASSW {
+            lpfnWndProc: Some(pump_proc),
+            hInstance: instance,
+            lpszClassName: windows::core::w!("QuiviTPreviewPump"),
+            ..Default::default()
+        };
+        if RegisterClassW(&class) == 0 {
+            return Err(Error::from_thread());
+        }
+        CreateWindowExW(
+            WINDOW_EX_STYLE::default(),
+            class.lpszClassName,
+            windows::core::w!(""),
+            WINDOW_STYLE::default(),
+            0,
+            0,
+            0,
+            0,
+            Some(HWND_MESSAGE),
+            None,
+            Some(instance),
+            None,
+        )?
+    };
+    PUMP_WINDOW.store(pump.0 as isize, std::sync::atomic::Ordering::Release);
+    let result = run_pump();
+    PUMP_WINDOW.store(0, std::sync::atomic::Ordering::Release);
+    unsafe {
+        let _ = DestroyWindow(pump);
+    }
+    result
+}
 
+fn run_pump() -> Result<()> {
     let factory: IClassFactory = PreviewClassFactory.into();
     let cookie = unsafe {
         CoRegisterClassObject(
@@ -154,69 +199,93 @@ pub(super) fn run() -> Result<()> {
         )?
     };
     preview_log("server registered");
-
-    // Explorer releases the COM object when its Preview pane closes. The
-    // message pump keeps the native child responsive for tree interaction.
-    // The pump thread id lets handler teardown manage the idle timer even
-    // when the final Release arrives on an RPC worker thread.
+    let image_cookie = match unsafe {
+        CoRegisterClassObject(
+            &GUID::from_u128(super::super::contract::IMAGE_PREVIEW_CLSID),
+            &factory,
+            CLSCTX_LOCAL_SERVER,
+            REGCLS_MULTIPLEUSE,
+        )
+    } {
+        Ok(cookie) => cookie,
+        Err(error) => {
+            unsafe {
+                let _ = CoRevokeClassObject(cookie);
+            }
+            return Err(error);
+        }
+    };
+    arm_idle_timeout();
     unsafe {
         let mut message = MSG::default();
-        loop {
-            let more: bool = GetMessageW(&mut message, None, 0, 0).into();
-            if !more {
-                break;
+        let result = loop {
+            if QUIT_REQUESTED.load(std::sync::atomic::Ordering::Acquire) {
+                break Ok(());
             }
-            if message.message == WM_APP_ARM_IDLE {
-                let prev = IDLE_TIMER_ACTUAL.swap(0, std::sync::atomic::Ordering::Relaxed);
-                if prev != 0 {
-                    KillTimer(None, prev).ok();
-                }
-                let id = SetTimer(None, IDLE_TIMER_ID, IDLE_QUIT_MS, None);
-                if id == 0 {
-                    preview_log("server idle timer failed");
-                } else {
-                    IDLE_TIMER_ACTUAL.store(id, std::sync::atomic::Ordering::Relaxed);
-                }
-                continue;
-            }
-            if message.message == WM_APP_DISARM_IDLE {
-                let prev = IDLE_TIMER_ACTUAL.swap(0, std::sync::atomic::Ordering::Relaxed);
-                if prev != 0 {
-                    KillTimer(None, prev).ok();
-                }
-                continue;
-            }
-            if message.message == WM_TIMER {
-                let actual = IDLE_TIMER_ACTUAL.load(std::sync::atomic::Ordering::Relaxed);
-                if actual != 0
-                    && message.wParam.0 == actual
-                    && ACTIVE_HANDLERS.load(std::sync::atomic::Ordering::Relaxed) == 0
-                {
-                    preview_log("server idle timeout");
-                    break;
-                }
-                continue;
-            }
-            if message.message == WM_APP_TASK {
-                let kind = message.wParam.0;
-                let state = Arc::from_raw(message.lParam.0 as *const Mutex<PreviewState>);
-                match kind {
-                    TASK_CREATE => pump_create(&state),
-                    TASK_POSITION => pump_position(&state),
-                    TASK_TEARDOWN => pump_teardown(&state),
-                    _ => {}
-                }
-                drop(state);
-                continue;
+            match GetMessageW(&mut message, None, 0, 0).0 {
+                -1 => break Err(Error::from_thread()),
+                0 => break Ok(()),
+                _ => {}
             }
             let _ = TranslateMessage(&message);
             DispatchMessageW(&message);
-        }
+        };
         preview_log("server message loop exit");
         CoRevokeClassObject(cookie)?;
-        CoUninitialize();
+        CoRevokeClassObject(image_cookie)?;
+        result
     }
-    Ok(())
+}
+
+unsafe extern "system" fn pump_proc(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    use std::sync::atomic::Ordering;
+    match message {
+        WM_APP_ARM_IDLE => {
+            let previous = IDLE_TIMER_ACTUAL.swap(0, Ordering::Relaxed);
+            if previous != 0 {
+                let _ = KillTimer(Some(hwnd), previous);
+            }
+            let timer = SetTimer(Some(hwnd), IDLE_TIMER_ID, IDLE_QUIT_MS, None);
+            IDLE_TIMER_ACTUAL.store(timer, Ordering::Relaxed);
+            if timer == 0 {
+                preview_log("server idle timer failed");
+            }
+        }
+        WM_APP_DISARM_IDLE => {
+            let previous = IDLE_TIMER_ACTUAL.swap(0, Ordering::Relaxed);
+            if previous != 0 {
+                let _ = KillTimer(Some(hwnd), previous);
+            }
+        }
+        WM_TIMER => {
+            if wparam.0 == IDLE_TIMER_ACTUAL.load(Ordering::Relaxed)
+                && ACTIVE_HANDLERS.load(Ordering::Relaxed) == 0
+                && SERVER_LOCKS.load(Ordering::Relaxed) == 0
+            {
+                preview_log("server idle timeout");
+                QUIT_REQUESTED.store(true, Ordering::Release);
+                PostQuitMessage(0);
+            }
+        }
+        WM_APP_TASK => {
+            let task = Box::from_raw(lparam.0 as *mut PumpTask);
+            match wparam.0 {
+                TASK_CREATE => pump_create(&task.state),
+                TASK_POSITION => pump_position(&task.state),
+                TASK_TEARDOWN => pump_teardown(&task.state, task.epoch),
+                TASK_BACKGROUND => pump_background(&task.state),
+                TASK_FOCUS => pump_focus(&task.state),
+                _ => {}
+            }
+        }
+        _ => return DefWindowProcW(hwnd, message, wparam, lparam),
+    }
+    LRESULT(0)
 }
 
 #[implement(IClassFactory)]
@@ -233,6 +302,12 @@ impl IClassFactory_Impl for PreviewClassFactory_Impl {
             preview_log("CreateInstance rejected aggregation");
             return Err(Error::from(CLASS_E_NOAGGREGATION));
         }
+        if riid.is_null() || result.is_null() {
+            return Err(Error::from(E_POINTER));
+        }
+        unsafe {
+            *result = std::ptr::null_mut();
+        }
         ACTIVE_HANDLERS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         disarm_idle_timeout();
         let preview: IUnknown = PreviewHandler {
@@ -241,7 +316,6 @@ impl IClassFactory_Impl for PreviewClassFactory_Impl {
         .into();
         let queried = unsafe { preview.query(riid, result) };
         if queried.is_err() {
-            ACTIVE_HANDLERS.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
             preview_log("CreateInstance QueryInterface failed");
         } else {
             preview_log("CreateInstance ok");
@@ -249,7 +323,20 @@ impl IClassFactory_Impl for PreviewClassFactory_Impl {
         queried.ok()
     }
 
-    fn LockServer(&self, _lock: BOOL) -> Result<()> {
+    fn LockServer(&self, lock: BOOL) -> Result<()> {
+        use std::sync::atomic::Ordering;
+        if lock.as_bool() {
+            SERVER_LOCKS.fetch_add(1, Ordering::Relaxed);
+            disarm_idle_timeout();
+        } else if SERVER_LOCKS
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+                count.checked_sub(1)
+            })
+            .is_ok_and(|old| old == 1)
+            && ACTIVE_HANDLERS.load(Ordering::Relaxed) == 0
+        {
+            arm_idle_timeout();
+        }
         Ok(())
     }
 }
@@ -262,10 +349,13 @@ struct PreviewState {
     rect: RECT,
     site: Option<IPreviewHandlerFrame>,
     pane: Option<Box<PreviewPane>>,
+    image_pane: Option<ImagePane>,
+    background: Option<COLORREF>,
     dark: bool,
     custom_font: Option<LOGFONTW>,
     custom_text_color: Option<COLORREF>,
     pending_preview: Option<PreviewParams>,
+    epoch: u64,
     applied_parent: HWND,
     applied_rect: RECT,
 }
@@ -276,6 +366,7 @@ struct PreviewState {
 // is only valid on the calling thread.
 enum Materialized {
     List(PathBuf, bool),
+    Image(PathBuf, MediaKind),
     NotArchive,
     Failed(String),
 }
@@ -284,6 +375,7 @@ struct PreviewParams {
     materialized: Materialized,
     real_path: Option<PathBuf>,
     dark: bool,
+    background: COLORREF,
     epoch: u64,
     custom_font: Option<LOGFONTW>,
     custom_text_color: Option<COLORREF>,
@@ -300,8 +392,7 @@ struct PreviewJob {
     result: Option<PreviewContent>,
 }
 
-static PREVIEW_JOBS: OnceLock<Mutex<HashMap<isize, Arc<Mutex<PreviewJob>>>>> =
-    OnceLock::new();
+static PREVIEW_JOBS: OnceLock<Mutex<HashMap<isize, Arc<Mutex<PreviewJob>>>>> = OnceLock::new();
 
 fn preview_jobs() -> &'static Mutex<HashMap<isize, Arc<Mutex<PreviewJob>>>> {
     PREVIEW_JOBS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -319,22 +410,28 @@ fn unregister_job(hwnd: HWND) {
     }
 }
 
-/// Hands one unit of deferred work to the pump thread. The state Arc travels
-/// as a raw pointer through the message itself, so no shared registry is
-/// needed. The pump reclaims exactly one ref per delivered task; if posting
-/// fails the ref is reclaimed here instead.
+/// Each posted task owns its state reference until the pump consumes it.
+struct PumpTask {
+    state: Arc<Mutex<PreviewState>>,
+    epoch: Option<u64>,
+}
+
 fn post_task(state: &Arc<Mutex<PreviewState>>, kind: usize) {
-    let ptr = Arc::into_raw(state.clone());
-    let posted = unsafe {
-        PostThreadMessageW(
-            pump_thread_id(),
-            WM_APP_TASK,
-            WPARAM(kind),
-            LPARAM(ptr as isize),
-        )
+    post_task_for_epoch(state, kind, None);
+}
+
+fn post_task_for_epoch(state: &Arc<Mutex<PreviewState>>, kind: usize, epoch: Option<u64>) {
+    let Some(hwnd) = pump_window() else {
+        return;
     };
+    let ptr = Box::into_raw(Box::new(PumpTask {
+        state: state.clone(),
+        epoch,
+    }));
+    let posted =
+        unsafe { PostMessageW(Some(hwnd), WM_APP_TASK, WPARAM(kind), LPARAM(ptr as isize)) };
     if posted.is_err() {
-        drop(unsafe { Arc::from_raw(ptr) });
+        drop(unsafe { Box::from_raw(ptr) });
     }
 }
 
@@ -352,41 +449,49 @@ struct PreviewHandler {
 
 impl Drop for PreviewHandler {
     fn drop(&mut self) {
+        // Window and controller ownership must end on the pump thread.
+        post_task(&self.state, TASK_TEARDOWN);
         let remaining = ACTIVE_HANDLERS.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
-        preview_log(&format!("handler drop remaining={}", remaining.saturating_sub(1)));
+        preview_log(&format!(
+            "handler drop remaining={}",
+            remaining.saturating_sub(1)
+        ));
         if remaining == 1 {
             arm_idle_timeout();
         }
     }
 }
 
-fn pump_thread_id() -> u32 {
-    PUMP_THREAD_ID.load(std::sync::atomic::Ordering::Relaxed)
+fn pump_window() -> Option<HWND> {
+    let value = PUMP_WINDOW.load(std::sync::atomic::Ordering::Acquire);
+    (value != 0).then_some(HWND(value as _))
 }
 
 fn arm_idle_timeout() {
-    let tid = pump_thread_id();
-    preview_log(&format!("arm idle timeout tid={tid}"));
-    if tid != 0 {
-        let posted = unsafe { PostThreadMessageW(tid, WM_APP_ARM_IDLE, WPARAM(0), LPARAM(0)) };
+    if let Some(hwnd) = pump_window() {
+        let posted = unsafe { PostMessageW(Some(hwnd), WM_APP_ARM_IDLE, WPARAM(0), LPARAM(0)) };
         preview_log(&format!("arm post ok={}", posted.is_ok()));
     }
 }
 
 fn disarm_idle_timeout() {
-    let tid = pump_thread_id();
-    if tid != 0 {
+    if let Some(hwnd) = pump_window() {
         unsafe {
-            let _ = PostThreadMessageW(tid, WM_APP_DISARM_IDLE, WPARAM(0), LPARAM(0));
+            let _ = PostMessageW(Some(hwnd), WM_APP_DISARM_IDLE, WPARAM(0), LPARAM(0));
         }
     }
 }
 
 impl IInitializeWithFile_Impl for PreviewHandler_Impl {
     fn Initialize(&self, file_path: &PCWSTR, _mode: u32) -> Result<()> {
-        let path = unsafe { file_path.to_string() }.map(PathBuf::from).map_err(|error| {
-            Error::new(E_NOINTERFACE, format!("Preview path is not readable: {error}"))
-        })?;
+        let path = unsafe { file_path.to_string() }
+            .map(PathBuf::from)
+            .map_err(|error| {
+                Error::new(
+                    E_NOINTERFACE,
+                    format!("Preview path is not readable: {error}"),
+                )
+            })?;
         preview_log(&format!("Initialize file path={}", path.display()));
         let mut state = self.state.lock().unwrap();
         state.display_name = path.file_name().map(|n| n.to_string_lossy().into_owned());
@@ -411,7 +516,10 @@ impl IInitializeWithItem_Impl for PreviewHandler_Impl {
             })
             .and_then(|display| unsafe {
                 display.to_string().map_err(|error| {
-                    Error::new(E_NOINTERFACE, format!("Preview path is not readable: {error}"))
+                    Error::new(
+                        E_NOINTERFACE,
+                        format!("Preview path is not readable: {error}"),
+                    )
                 })
             })
             .map(PathBuf::from)?;
@@ -454,6 +562,7 @@ impl IPreviewHandlerVisuals_Impl for PreviewHandler_Impl {
         let green = (color.0 >> 8) & 0xff;
         let blue = (color.0 >> 16) & 0xff;
         state.dark = red + green + blue < 384;
+        state.background = Some(color);
         let dark = state.dark;
         let custom_text = state.custom_text_color;
         if let Some(pane) = state.pane.as_mut() {
@@ -463,6 +572,8 @@ impl IPreviewHandlerVisuals_Impl for PreviewHandler_Impl {
             }
             let _ = unsafe { InvalidateRect(Some(pane.hwnd), None, false) };
         }
+        drop(state);
+        post_task(&self.state, TASK_BACKGROUND);
         Ok(())
     }
 
@@ -503,9 +614,9 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
                 state.rect.top,
                 state.rect.right,
                 state.rect.bottom,
-                state.pane.is_some()
+                state.pane.is_some() || state.image_pane.is_some()
             ));
-            state.pane.is_some()
+            state.pane.is_some() || state.image_pane.is_some()
         };
         // Window moves happen on the pump, outside the host call, so the
         // host thread never blocks on cross-process window messages.
@@ -527,9 +638,9 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
                 state.rect.top,
                 state.rect.right,
                 state.rect.bottom,
-                state.pane.is_some()
+                state.pane.is_some() || state.image_pane.is_some()
             ));
-            state.pane.is_some()
+            state.pane.is_some() || state.image_pane.is_some()
         };
         if has_pane {
             post_task(&self.state, TASK_POSITION);
@@ -570,7 +681,9 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
         let materialized: Materialized = if let Some(path) = file_path.as_ref() {
             match sniff_file_head(path) {
                 Ok(Some(_)) => Materialized::List(path.clone(), false),
-                Ok(None) => Materialized::NotArchive,
+                Ok(None) => MediaKind::for_path(path)
+                    .map(|kind| Materialized::Image(path.clone(), kind))
+                    .unwrap_or(Materialized::NotArchive),
                 Err(error) => Materialized::Failed(error),
             }
         } else {
@@ -579,11 +692,16 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
         {
             let mut state = lock_state(&self.state);
             let epoch = PREVIEW_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            state.epoch = epoch;
+            if let Some(pane) = state.image_pane.as_ref() {
+                pane.cancel();
+            }
             let real_path = file_path.clone();
             state.pending_preview = Some(PreviewParams {
                 materialized,
                 real_path,
                 dark,
+                background: state.background.unwrap_or(COLORREF(0xffffff)),
                 epoch,
                 custom_font,
                 custom_text_color,
@@ -597,27 +715,25 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
 
     fn Unload(&self) -> Result<()> {
         preview_log("Unload");
-        {
+        let epoch = {
             let mut state = lock_state(&self.state);
+            state.epoch = PREVIEW_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             state.pending_preview = None;
             state.file_path = None;
             state.display_name = None;
             state.site = None;
-        }
-        post_task(&self.state, TASK_TEARDOWN);
+            if let Some(pane) = state.image_pane.as_ref() {
+                pane.cancel();
+            }
+            state.epoch
+        };
+        post_task_for_epoch(&self.state, TASK_TEARDOWN, Some(epoch));
         Ok(())
     }
 
     fn SetFocus(&self) -> Result<()> {
-        let state = lock_state(&self.state);
-        if let Some(pane) = state.pane.as_ref() {
-            if pane.hwnd.0.is_null() {
-                return Err(Error::from(S_FALSE));
-            }
-            unsafe { SetFocus(Some(pane.hwnd))? };
-            return Ok(());
-        }
-        Err(Error::from(S_FALSE))
+        post_task(&self.state, TASK_FOCUS);
+        Ok(())
     }
 
     fn QueryFocus(&self) -> Result<HWND> {
@@ -633,8 +749,41 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
     }
 }
 
-fn destroy_pane(state: &mut PreviewState) {
-    if let Some(pane) = state.pane.take() {
+fn pump_focus(state: &Arc<Mutex<PreviewState>>) {
+    let hwnd = {
+        let state = lock_state(state);
+        if let Some(pane) = state.image_pane.as_ref() {
+            pane.focus();
+            return;
+        }
+        if let Some(pane) = state.pane.as_ref() {
+            pane.hwnd
+        } else {
+            return;
+        }
+    };
+    if !hwnd.0.is_null() {
+        unsafe {
+            let _ = SetFocus(Some(hwnd));
+        }
+    }
+}
+
+fn pump_background(state: &Arc<Mutex<PreviewState>>) {
+    let mut state = lock_state(state);
+    let color = state.background.unwrap_or(COLORREF(0xffffff));
+    if let Some(pane) = state.image_pane.as_mut() {
+        pane.set_background(color);
+    }
+}
+
+fn destroy_pane(state: &Arc<Mutex<PreviewState>>) {
+    let (image, archive) = {
+        let mut state = lock_state(state);
+        (state.image_pane.take(), state.pane.take())
+    };
+    drop(image);
+    if let Some(pane) = archive {
         unregister_job(pane.hwnd);
         if !pane.hwnd.0.is_null() {
             let _ = unsafe { DestroyWindow(pane.hwnd) };
@@ -658,10 +807,7 @@ fn resize_child(hwnd: HWND, rect: RECT) -> Result<()> {
 }
 
 fn rect_equal(a: RECT, b: RECT) -> bool {
-    a.left == b.left
-        && a.top == b.top
-        && a.right == b.right
-        && a.bottom == b.bottom
+    a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom
 }
 
 /// Builds the preview on the pump thread, outside any host call. Runs after
@@ -675,9 +821,33 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
     let Some(params) = params else {
         return;
     };
-    {
-        let mut guard = lock_state(state);
-        destroy_pane(&mut guard);
+    destroy_pane(state);
+    if lock_state(state).epoch != params.epoch {
+        return;
+    }
+
+    if let Materialized::Image(path, kind) = &params.materialized {
+        let (parent, area) = {
+            let guard = lock_state(state);
+            (guard.parent, guard.rect)
+        };
+        match ImagePane::create(parent, area, path.clone(), *kind, params.background) {
+            Ok(pane) => {
+                let mut guard = lock_state(state);
+                if guard.epoch != params.epoch {
+                    drop(guard);
+                    drop(pane);
+                    return;
+                }
+                guard.image_pane = Some(pane);
+                guard.applied_parent = parent;
+                guard.applied_rect = area;
+            }
+            Err(error) => preview_log(&format!("image preview child failed: {error}")),
+        }
+        pump_background(state);
+        pump_position(state);
+        return;
     }
 
     let mut pane = Box::new(PreviewPane::loading(
@@ -688,6 +858,7 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
         params.display_name.clone(),
     ));
     let worker_input = match params.materialized {
+        Materialized::Image(_, _) => unreachable!(),
         Materialized::List(path, owns) => Some((path, params.real_path, owns)),
         Materialized::NotArchive => {
             pane.content = PreviewContent::Message(
@@ -697,8 +868,7 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
             None
         }
         Materialized::Failed(error) => {
-            pane.content =
-                PreviewContent::Message(format!("Unable to open this archive: {error}"));
+            pane.content = PreviewContent::Message(format!("Unable to open this archive: {error}"));
             None
         }
     };
@@ -714,6 +884,10 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
         }
     };
     pane.hwnd = hwnd;
+    if lock_state(state).epoch != params.epoch {
+        let _ = unsafe { DestroyWindow(hwnd) };
+        return;
+    }
     paint_now(hwnd, &mut pane);
     let job = Arc::new(Mutex::new(PreviewJob {
         epoch: params.epoch,
@@ -734,7 +908,15 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
             "preview worker spawn owns={owns} path={}",
             path.display()
         ));
-        spawn_preview_worker(path, real_path, owns, params.epoch, params.display_name, job, hwnd.0 as isize);
+        spawn_preview_worker(
+            path,
+            real_path,
+            owns,
+            params.epoch,
+            params.display_name,
+            job,
+            hwnd.0 as isize,
+        );
     } else {
         preview_log("preview worker skipped (message pane)");
     }
@@ -745,11 +927,16 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
 fn pump_position(state: &Arc<Mutex<PreviewState>>) {
     let (hwnd, parent, area, move_needed) = {
         let mut guard = lock_state(state);
-        let Some(hwnd) = guard.pane.as_ref().map(|pane| pane.hwnd) else {
+        let Some(hwnd) = guard
+            .pane
+            .as_ref()
+            .map(|pane| pane.hwnd)
+            .or_else(|| guard.image_pane.as_ref().map(ImagePane::hwnd))
+        else {
             return;
         };
-        let changed = guard.parent.0 != guard.applied_parent.0
-            || !rect_equal(guard.rect, guard.applied_rect);
+        let changed =
+            guard.parent.0 != guard.applied_parent.0 || !rect_equal(guard.rect, guard.applied_rect);
         if changed {
             guard.applied_parent = guard.parent;
             guard.applied_rect = guard.rect;
@@ -768,10 +955,15 @@ fn pump_position(state: &Arc<Mutex<PreviewState>>) {
 }
 
 /// Tears the preview down on the pump thread.
-fn pump_teardown(state: &Arc<Mutex<PreviewState>>) {
-    let mut guard = lock_state(state);
-    guard.pending_preview = None;
-    destroy_pane(&mut guard);
+fn pump_teardown(state: &Arc<Mutex<PreviewState>>, epoch: Option<u64>) {
+    {
+        let mut guard = lock_state(state);
+        if epoch.is_some_and(|epoch| epoch != guard.epoch) {
+            return;
+        }
+        guard.pending_preview = None;
+    }
+    destroy_pane(state);
 }
 
 fn sniff_file_head(path: &Path) -> std::result::Result<Option<&'static str>, String> {
@@ -1056,7 +1248,11 @@ impl IconCache {
         };
 
         if let Some(&hicon) = self.icons.get(&key) {
-            return if !hicon.is_invalid() { Some(hicon) } else { None };
+            return if !hicon.is_invalid() {
+                Some(hicon)
+            } else {
+                None
+            };
         }
 
         let hicon = load_shell_icon(is_folder, ext);
@@ -1072,7 +1268,11 @@ impl IconCache {
         let key = format!("{}:large", ext.to_ascii_lowercase());
 
         if let Some(&hicon) = self.icons.get(&key) {
-            return if !hicon.is_invalid() { Some(hicon) } else { None };
+            return if !hicon.is_invalid() {
+                Some(hicon)
+            } else {
+                None
+            };
         }
 
         let hicon = load_shell_large_icon(ext);
@@ -1365,11 +1565,7 @@ struct ScrollbarGeometry {
     thumb_height: i32,
 }
 
-fn compute_scrollbar(
-    client: RECT,
-    total_rows: usize,
-    scroll: usize,
-) -> Option<ScrollbarGeometry> {
+fn compute_scrollbar(client: RECT, total_rows: usize, scroll: usize) -> Option<ScrollbarGeometry> {
     let content_height = (client.bottom - client.top - HEADER_HEIGHT).max(0);
     let visible_count = (content_height / ROW_HEIGHT) as usize;
     if total_rows <= visible_count || visible_count == 0 {
@@ -1503,7 +1699,11 @@ impl PreviewPane {
 }
 
 fn module_instance() -> HINSTANCE {
-    unsafe { GetModuleHandleW(None).map(|handle| handle.into()).unwrap_or_default() }
+    unsafe {
+        GetModuleHandleW(None)
+            .map(|handle| handle.into())
+            .unwrap_or_default()
+    }
 }
 
 /// Lists one archive off the host thread. The result lands in the job slot
@@ -1522,8 +1722,7 @@ fn spawn_preview_worker(
         .name("quivit-preview-list".into())
         .spawn(move || {
             preview_log("preview worker start");
-            let content = match crate::archives::list_archive_names(&list_path.to_string_lossy())
-            {
+            let content = match crate::archives::list_archive_names(&list_path.to_string_lossy()) {
                 Ok(files) => {
                     preview_log(&format!("preview listed {} entries", files.len()));
                     PreviewContent::Archive(ArchivePreview::from_listed(
@@ -1555,9 +1754,8 @@ fn spawn_preview_worker(
             };
             if stored {
                 let child = HWND(child_addr as *mut std::ffi::c_void);
-                let posted = unsafe {
-                    PostMessageW(Some(child), WM_APP_PREVIEW_DONE, WPARAM(0), LPARAM(0))
-                };
+                let posted =
+                    unsafe { PostMessageW(Some(child), WM_APP_PREVIEW_DONE, WPARAM(0), LPARAM(0)) };
                 preview_log(&format!("preview worker done posted={}", posted.is_ok()));
             } else {
                 preview_log("preview worker discarded superseded result");
@@ -1892,8 +2090,8 @@ fn handle_mouse_move(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
             let travel = (sb.track_height - sb.thumb_height).max(1);
             let delta_scroll =
                 (delta_y as f64 * sb.max_scroll as f64 / travel as f64).round() as isize;
-            let new_scroll =
-                (drag.start_scroll as isize + delta_scroll).clamp(0, sb.max_scroll as isize) as usize;
+            let new_scroll = (drag.start_scroll as isize + delta_scroll)
+                .clamp(0, sb.max_scroll as isize) as usize;
             if new_scroll != archive.scroll {
                 archive.scroll = new_scroll;
                 let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
@@ -1990,7 +2188,7 @@ fn handle_key(pane: &mut PreviewPane, key: u32) {
         0x26 => archive.move_selection(-1, visible_count), // VK_UP
         0x28 => archive.move_selection(1, visible_count),  // VK_DOWN
         0x21 => archive.move_selection(-(visible_count.max(1) as isize), visible_count), // VK_PRIOR (Page Up)
-        0x22 => archive.move_selection(visible_count.max(1) as isize, visible_count),  // VK_NEXT (Page Down)
+        0x22 => archive.move_selection(visible_count.max(1) as isize, visible_count), // VK_NEXT (Page Down)
         0x24 => archive.move_selection(-(archive.nodes.len() as isize), visible_count), // VK_HOME
         0x23 => archive.move_selection(archive.nodes.len() as isize, visible_count),  // VK_END
         0x0d => {
@@ -2072,7 +2270,11 @@ fn find_quivit_app_exe() -> Option<PathBuf> {
                 if let Ok(val) = key.get_value::<String, _>("") {
                     let trimmed = val.trim();
                     let exe_str = if trimmed.starts_with('"') {
-                        trimmed.trim_start_matches('"').split('"').next().unwrap_or("")
+                        trimmed
+                            .trim_start_matches('"')
+                            .split('"')
+                            .next()
+                            .unwrap_or("")
                     } else {
                         trimmed.split_whitespace().next().unwrap_or("")
                     };
@@ -2116,7 +2318,6 @@ fn open_item_in_app(archive: &ArchivePreview, node_id: usize) {
         cmd.current_dir(parent);
     }
     cmd.arg(&target_arg);
-
 
     match cmd.spawn() {
         Ok(_) => preview_log("open_item_in_app spawned successfully"),
@@ -2168,11 +2369,7 @@ fn repaint_now(state: &Arc<Mutex<PreviewState>>, hwnd: HWND) {
     }
 }
 
-fn log_paint(
-    hdc: windows::Win32::Graphics::Gdi::HDC,
-    client: RECT,
-    pane: &PreviewPane,
-) {
+fn log_paint(hdc: windows::Win32::Graphics::Gdi::HDC, client: RECT, pane: &PreviewPane) {
     if PAINT_LOGGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 5 {
         let kind = match &pane.content {
             PreviewContent::Archive(_) => "archive",
@@ -2452,15 +2649,7 @@ unsafe fn draw_archive(
 
         if let Some(hicon) = icon_cache.get_or_load(!node.is_file, ext) {
             let _ = DrawIconEx(
-                hdc,
-                icon_x,
-                icon_y,
-                hicon,
-                ICON_SIZE,
-                ICON_SIZE,
-                0,
-                None,
-                DI_NORMAL,
+                hdc, icon_x, icon_y, hicon, ICON_SIZE, ICON_SIZE, 0, None, DI_NORMAL,
             );
         }
 
@@ -2538,27 +2727,51 @@ unsafe fn draw_scroll_arrow(
 
     if up {
         let pts1 = [
-            POINT { x: cx - 3, y: cy + 1 },
+            POINT {
+                x: cx - 3,
+                y: cy + 1,
+            },
             POINT { x: cx, y: cy - 2 },
-            POINT { x: cx + 4, y: cy + 2 },
+            POINT {
+                x: cx + 4,
+                y: cy + 2,
+            },
         ];
         let pts2 = [
-            POINT { x: cx - 3, y: cy + 2 },
+            POINT {
+                x: cx - 3,
+                y: cy + 2,
+            },
             POINT { x: cx, y: cy - 1 },
-            POINT { x: cx + 4, y: cy + 3 },
+            POINT {
+                x: cx + 4,
+                y: cy + 3,
+            },
         ];
         let _ = Polyline(hdc, &pts1);
         let _ = Polyline(hdc, &pts2);
     } else {
         let pts1 = [
-            POINT { x: cx - 3, y: cy - 2 },
+            POINT {
+                x: cx - 3,
+                y: cy - 2,
+            },
             POINT { x: cx, y: cy + 1 },
-            POINT { x: cx + 4, y: cy - 3 },
+            POINT {
+                x: cx + 4,
+                y: cy - 3,
+            },
         ];
         let pts2 = [
-            POINT { x: cx - 3, y: cy - 1 },
+            POINT {
+                x: cx - 3,
+                y: cy - 1,
+            },
             POINT { x: cx, y: cy + 2 },
-            POINT { x: cx + 4, y: cy - 2 },
+            POINT {
+                x: cx + 4,
+                y: cy - 2,
+            },
         ];
         let _ = Polyline(hdc, &pts1);
         let _ = Polyline(hdc, &pts2);
@@ -2581,28 +2794,52 @@ unsafe fn draw_chevron(
     if expanded {
         // Down-pointing chevron (expanded)
         let pts1 = [
-            POINT { x: cx - 4, y: cy - 2 },
+            POINT {
+                x: cx - 4,
+                y: cy - 2,
+            },
             POINT { x: cx, y: cy + 2 },
-            POINT { x: cx + 5, y: cy - 3 },
+            POINT {
+                x: cx + 5,
+                y: cy - 3,
+            },
         ];
         let pts2 = [
-            POINT { x: cx - 4, y: cy - 1 },
+            POINT {
+                x: cx - 4,
+                y: cy - 1,
+            },
             POINT { x: cx, y: cy + 3 },
-            POINT { x: cx + 5, y: cy - 2 },
+            POINT {
+                x: cx + 5,
+                y: cy - 2,
+            },
         ];
         let _ = Polyline(hdc, &pts1);
         let _ = Polyline(hdc, &pts2);
     } else {
         // Right-pointing chevron (collapsed)
         let pts1 = [
-            POINT { x: cx - 2, y: cy - 4 },
+            POINT {
+                x: cx - 2,
+                y: cy - 4,
+            },
             POINT { x: cx + 2, y: cy },
-            POINT { x: cx - 3, y: cy + 5 },
+            POINT {
+                x: cx - 3,
+                y: cy + 5,
+            },
         ];
         let pts2 = [
-            POINT { x: cx - 1, y: cy - 4 },
+            POINT {
+                x: cx - 1,
+                y: cy - 4,
+            },
             POINT { x: cx + 3, y: cy },
-            POINT { x: cx - 2, y: cy + 5 },
+            POINT {
+                x: cx - 2,
+                y: cy + 5,
+            },
         ];
         let _ = Polyline(hdc, &pts1);
         let _ = Polyline(hdc, &pts2);
@@ -2612,11 +2849,7 @@ unsafe fn draw_chevron(
     let _ = DeleteObject(pen.into());
 }
 
-unsafe fn draw_border(
-    hdc: windows::Win32::Graphics::Gdi::HDC,
-    rect: RECT,
-    color: COLORREF,
-) {
+unsafe fn draw_border(hdc: windows::Win32::Graphics::Gdi::HDC, rect: RECT, color: COLORREF) {
     fill(
         hdc,
         RECT {
