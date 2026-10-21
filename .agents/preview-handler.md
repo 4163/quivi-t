@@ -1,82 +1,115 @@
-# Explorer archive preview: issues hit and what fixed them
+# Explorer archive preview implementation
 
-This validation comparison was performed against `.agents/skills/validate-changes/SKILL.md` before presenting. The report covers the working tree only. It adds no code and changes no behavior.
+Validation comparison performed against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md` before finalizing this document.
 
-Goal: archives associated with QuiviT show a file list tree in the Windows preview pane, in a style matching the app, from the single QuiviT executable. The user confirmed the pane renders and signed off, then asked for this writeup.
+Status: finalized on 2026-10-22 at the user's request. The archive pane has user runtime signoff, including independent previews in multiple Explorer windows. The shared File Types error-message follow-up also has final user runtime signoff. No acceptance checks remain open. This document records the current implementation and the failures that shaped it.
 
-## 1. Diff view showed phantom changes
+The shared executable, staging, registration, and version rules live in [previews-host-spec.md](previews-host-spec.md). Image panes and thumbnail providers are covered by [image-previews-spec.md](image-previews-spec.md).
 
-`git status` listed 19 modified files while `git diff` showed real changes in 8. The extra 11 had hashes identical to HEAD. Stale stat info, nothing more. Checking out those 11 paths cleared the noise without losing work. The real diff is 11 tracked files plus the new `src-tauri/src/platform/preview_handler.rs` module from `src-tauri/src/platform/mod.rs:4`.
+## Accepted behavior
 
-## 2. First review findings, all fixed
+Archives associated with QuiviT display a native file tree in Explorer's preview pane. The tree uses QuiviT's light or dark palette, system file icons, expandable folders, selection, and scrolling. Listing reads archive metadata without extracting entry contents into the main viewer cache.
 
-The opening validation pass flagged one blocking item and several warnings. Each got a fix in the tree.
+The pane accepts a filesystem path through IInitializeWithFile or IInitializeWithItem. It sniffs the file header through `formats::sniff_archive_ext` and lists the source in place. The current pane has no IInitializeWithStream interface or stream-to-temp copy. Stream initialization belongs to the separate thumbnail provider.
 
-- `src/js/options/associationsUi.js:62` ran preview migration inside the same try block as checkbox setup, so a sync failure left File Types unusable. The sync call now lives in its own try/catch and only logs a warning.
-- `src-tauri/src/commands/registry.rs:162` sent a shell-wide associate-changed notice on every Options open. It notifies only when registration actually wrote something.
-- Unregister ran preview cleanup for image types that never register previews. It now guards on archive types, matching register.
-- The 64 MB preview cache was a bare number. The cache is gone entirely now. Preview listing never opens a cache entry, so there is nothing to budget.
-- Magic-byte sniffing lived only in the preview module. It moved to `src-tauri/src/formats.rs:171` as `sniff_archive_ext`, and the preview module calls it.
-- A whitespace-only reformat in `src-tauri/src/lib.rs` got reverted.
+Explorer activates the stable staged executable with `--previews-pane`. The archive CLSID remains `{4FCA3A7C-329E-4B50-98D1-1B6DDFE36C59}`. The legacy `--preview-handler` flag still works until registration repair replaces it. These entry points return before normal Tauri startup.
 
-## 3. The activator ignored per-user registration on this machine
+Archive rendering does not initialize WebView2. The same pane process also serves the image class, whose browser requirements are documented separately.
 
-Symptom: correct keys under `HKCU\Software\Classes`, yet Explorer never launched the server and no log appeared.
+## Current owners
 
-A throwaway harness outside the repo called `CoCreateInstance` directly. `HKCU` plus local server failed with class-not-registered, elevated and filtered alike. `HKCU` plus in-proc DLL failed the same way. `HKLM` plus local server launched. So this box resolves machine-wide classes and skips per-user ones.
+| Concern | Owner and lookup |
+| --- | --- |
+| Early helper dispatch | [main.rs](../src-tauri/src/main.rs), `main` |
+| Stable executable, sidecar, update rules | [previews/host.rs](../src-tauri/src/platform/previews/host.rs), `ensure_previews_host` |
+| COM registration and ownership-aware cleanup | [previews/windows.rs](../src-tauri/src/platform/previews/windows.rs), `register_for_extension_with_host` and `unregister_for_extension` |
+| COM interfaces, native tree, window lifecycle | [windows/com_server.rs](../src-tauri/src/platform/previews/windows/com_server.rs), `PreviewHandler` and `ArchivePreview` |
+| Metadata-only archive listing | [archives/mod.rs](../src-tauri/src/archives/mod.rs), `list_archive_names` |
+| Archive signature detection | [formats.rs](../src-tauri/src/formats.rs), `sniff_archive_ext` |
+| Apply, repair, startup sync, diagnostics | [commands/registry.rs](../src-tauri/src/commands/registry.rs) |
+| File Types repair error handling | [associationsUi.js](../src/js/options/associationsUi.js), `sync_preview_associations` call |
 
-Fix: `src-tauri/src/platform/preview_handler/windows.rs:59` writes the CLSID local-server subtree to `HKCU` always and mirrors it to `HKLM` when the process can write there. Association keys stay per-user. Standard users see no prompt and no change. `src-tauri/src/commands/registry.rs:86` adds a read-only diagnostics command reporting both hives per archive type, backed by `src-tauri/src/models.rs:112`.
+## COM and window lifecycle
 
-## 4. The host launches preview servers at low integrity
+COM calls can arrive on RPC threads while the native window pump runs elsewhere. SetWindow and SetRect record geometry. DoPreview resolves the source and posts creation work. Unload clears the source, cancels pending work, and posts teardown. Cross-process child creation, positioning, focus, and destruction run on the pump rather than synchronously inside Explorer's call.
 
-I checked the launched server token directly. It ran at low integrity. A low process cannot write `%TEMP%`, which killed both the log and the temp archive copy, and it cannot parent a window to Explorer's medium pane, which fails the child creation. Black pane, no trace.
+Posted tasks own a reference to their state until dispatch. Epoch checks discard work superseded by a new selection. Archive listing runs on a named worker and places plain results in the window's job slot. The worker does not manipulate HWNDs. A completed job cannot paint into a recycled child.
 
-Fix: `src-tauri/src/platform/preview_handler/windows.rs:94` sets the documented low-IL opt-out DWORD on the CLSID in both hives. I confirmed medium integrity afterwards. The server is read-only. It lists names and draws text, nothing more.
+A private message-only window receives lifecycle tasks and idle timers. This matters when the image renderer enters a nested WebView2 message loop in the same process. Both the outer and nested pumps dispatch window messages; thread-only messages could otherwise be consumed without executing the task.
 
-## 5. COM calls run on RPC threads, not the pump thread
+The server remains warm while COM references or server locks exist. Once they are released, its 30-second idle window allows natural exit. Closing a visible pane alone does not prove Explorer has released every reference. Staging never terminates a helper to replace its executable.
 
-Per-call thread ids in the log settled this. Pump work logs one thread. `Initialize`, `SetWindow`, `DoPreview`, and `Unload` log other threads. The shell stream proxy only works on the calling thread. Reads moved anywhere else fail.
+## Failures and their resolutions
 
-Fix: `DoPreview` copies the stream to temp on the calling thread, in 64 KiB chunks with a 512 MB cap, and file paths list in place with no copy at all. The pump task and the listing worker only ever touch plain paths. `src-tauri/src/platform/preview_handler/windows/com_server.rs:588` holds the chunked copy, `src-tauri/src/platform/preview_handler/windows/com_server.rs:787` sniffs file heads.
+### Correct registration did not produce activation
 
-## 6. Thread timers ignore the requested id
+Early direct activation on this test machine rejected the per-user class registration but accepted a machine-wide class. Registration therefore always writes HKCU and mirrors QuiviT's class entries to HKLM when already writable. It does not prompt standard users for elevation.
 
-The idle shutdown never fired during testing. `SetTimer` with a null window returns a system-generated id, not the id passed in. The code compared the `WM_TIMER` parameter against the requested id, so it never matched.
+This was an observed result on the test machine, not a claim that Windows universally ignores per-user COM registration. Read-only diagnostics report both hives and the selected ProgID so activation failures can be distinguished from rendering failures.
 
-Fix: `src-tauri/src/platform/preview_handler/windows/com_server.rs:68` keeps a 30 second budget, and the pump stores the actual returned id and matches against that. I watched one process serve two activations 10 seconds apart with zero startup on the second, then exit by itself after the timeout.
+### Low-integrity activation hid the cause of a blank pane
 
-## 7. A resize landing mid-build stuck the child at zero size
+Early failures included writes to locations unavailable to the launched token. The retained `DisableLowILProcessIsolation=1` class value produced medium-integrity activation in an earlier direct check. Later real Explorer image activations still ran at low integrity.
 
-`SetRect` with the real size arrived after `DoPreview` posted but before the pump built the child. With no pane yet, `SetRect` recorded and skipped. The child was born at zero size and nothing repositioned it.
+The registration value is therefore not evidence of the actual launch token. The current archive path lists files in place. The image browser resolves Windows' LocalLow known folder for its writable profile. See the image spec for the repaired Explorer startup path.
 
-Fix: `src-tauri/src/platform/preview_handler/windows/com_server.rs:626` reconciles position at the end of every build through the same `pump_position` path the resize calls use.
+### Moving a COM stream between threads failed
 
-## 8. The first paint never arrived on its own
+An earlier stream-based experiment failed when an apartment-bound stream proxy was read away from its calling thread. The current archive pane receives file or item paths and has no stream-copy path. The thumbnail server reads its IStream on the calling thread before decoding plain bytes.
 
-Across many runs the child existed and stayed blank with no `WM_PAINT` dispatched to it. Rather than fight the delivery, the server paints synchronously with `GetDC` right after creation and after every resize. `WM_PAINT` handling stays as the backup path. Pixel capture of the live pane showed dark filenames clustered at the top, matching the header plus rows layout.
+This history explains the threading constraint without claiming the removed archive stream interface is still supported.
 
-## 9. Explorer froze while the pane worked
+### Resize arrived before child creation
 
-Once rendering worked, Explorer locked up on selection. Every host call did cross-process window work synchronously while Explorer waited on it. That is the classic mutual wait.
+SetRect could record a real size while creation was still queued. The child then appeared at the old zero size.
 
-Fix: host entry points in `src-tauri/src/platform/preview_handler/windows/com_server.rs:443` only record and return. `SetWindow` and `SetRect` store geometry. `DoPreview` stores params. `Unload` clears. Each posts one of `TASK_CREATE`, `TASK_POSITION`, or `TASK_TEARDOWN` from `src-tauri/src/platform/preview_handler/windows/com_server.rs:76`, and the pump performs the window work serially when no host call is in flight. The state handle crosses through the message itself with strict single-owner discipline, so no shared registry was needed. Listing runs on a named worker thread per `src-tauri/src/platform/preview_handler/windows/com_server.rs:1024`, and results land in a per-window job slot keyed by child handle, so a superseded listing can never paint into a recycled window. `src-tauri/src/archives/mod.rs:66` exposes the name-only listing the worker uses, with no cache entry and no background extraction.
+`pump_create` now reconciles the latest geometry through `pump_position` after construction. Later resizes use the same path.
 
-## 10. Dead servers locked the binary
+### The first paint stayed blank
 
-The first lifetime design quit on last release, but crashed or killed servers lingered and held `target/debug/tauri-app.exe` open, which broke rebuilds with access denied. The idle timer design keeps one warm server for browsing and still exits by itself. Kill-before-build is no longer part of the loop.
+Some runs created a child without delivering an initial WM_PAINT promptly. Archive creation and positioning paint synchronously through a device context, with WM_PAINT retained for normal repaint delivery.
 
-## 11. My own test artifacts, kept out of the tree
+Live pixel captures confirmed filenames in the expected header and row layout.
 
-Several dead ends came from the test setup, not the product. Wrong interface ids in my probe script, since corrected against the windows crate metadata and `HKCR\Interface`. A stream the script let the garbage collector drop mid-run. Multi-select accumulation hiding selection changes. A background window that never drives the visible pane. Stale binaries and consoles killed by hand. Explorer caching handler state per session, cleared with a restart. All harness files lived under `%TEMP%\quivit-ph-test` and are deleted, along with the dummy registry keys from activation tests.
+### Explorer waited on its own synchronous window work
 
-## Verification on record
+Creating or repositioning a child synchronously during a host call caused a cross-process mutual wait. Deferring that work to the pump lets Explorer's COM call return before the window operations run.
 
-- `cargo check --tests`, `cargo build`, 35 archive tests, 13 format tests, 308 mocha, `node --check` on the touched frontend file. All green.
-- Direct COM activation with class-not-registered for `HKCU` and success for `HKLM`.
-- Full Explorer runs in the log: activate, stream init, list of 3 entries, swap, paint at full pane size.
-- Pixel capture of live preview children showing rendered rows.
-- One process serving two activations, then exiting alone after the idle window.
+Later mixed archive/image stress checks exercised the same shared lifecycle.
 
-## Open notes
+### Idle tasks disappeared inside a nested browser pump
 
-Debug builds pay Defender scans and unoptimized code on every cold start, so release numbers will read better. If huge archives still feel heavy, the honest next step is streaming the listing itself instead of the temp copy, or a first-rows-fast mode. The preview log at `%TEMP%\QuiviT-preview.log` stays in the code, capped to lifecycle lines, for the next round of questions.
+An early null-window timer check compared the requested id with a different id returned by SetTimer. Recording the returned id fixed that case.
+
+Image integration later exposed another failure: Wry's nested loop consumed thread messages without executing the outer loop's dispatch logic. Tasks and timers now target the private message-only window. A quit flag also lets the outer loop finish if a nested wait consumes WM_QUIT.
+
+The corrected stress run exited naturally 30,108 ms after its references were released.
+
+### Rebuilds targeted a running application executable
+
+Registering a debug or portable application path let Explorer lock that file and left stale registrations when the application moved. Staging now isolates the shell server at the stable global path. A locked staged helper returns a retry message rather than triggering process termination.
+
+### Repair disrupted File Types or repeated shell-wide notifications
+
+File Types runs preview repair in its own try/catch, so a repair failure does not prevent association controls from initializing. Repair sends SHChangeNotify only when it changes registration. Apply stages the host once and performs blocking work off the UI thread.
+
+## Verification record
+
+The recorded checks include:
+
+- Direct COM activation, archive initialization, metadata listing, painting, resizing, and unload.
+- Pixel capture of live native children.
+- Repeated activations sharing a warm process, followed by natural idle exit.
+- Mixed archive/image rapid selections after the shared pump repair.
+- The user's confirmation that archive previews work independently in multiple Explorer windows.
+- The final implementation's `cargo check --tests`, all 108 Rust tests, and all 308 frontend tests. The broader image spec records the release build, portable-mode checks, and Defender results.
+
+These are results from implementation verification, not new test runs performed for this documentation pass.
+
+## Operational notes
+
+Lifecycle logging remains in `%TEMP%\QuiviT-preview.log`. A helper's token can affect whether that location is writable, so an absent log does not establish that activation never occurred. Use the diagnostics command and actual process state as well.
+
+Explorer's Internet-zone warning can block preview activation before QuiviT runs. It is Windows behavior and applies to archives as well as images. The image spec records the affected fixtures and the decision to preserve their trust marks.
+
+There is no pending archive implementation work in this document. Performance redesigns, such as streaming an enormous listing or presenting only its first rows, require a measured need and a separate scope.

@@ -1,120 +1,134 @@
-# Previews host spec (draft for review)
+# Shared previews host specification
 
-This validation comparison was performed against `.agents/skills/validate-changes/SKILL.md` before presenting. Spec only, no code changed, no behavior changed.
+Validation comparison performed against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md` before finalizing this document.
 
-Status: accepted. User runtime verified all slices plus the Apply perf follow-up.
+Status: finalized on 2026-10-22 at the user's request. This is the shared hosting contract for the accepted archive and image preview implementation. Host staging, Apply performance, and the final File Types error-message follow-up have user runtime signoff. No acceptance checks remain open.
 
-## Locked definitions
+[preview-handler.md](preview-handler.md) records the native archive pane and its troubleshooting history. [image-previews-spec.md](image-previews-spec.md) defines image behavior, thumbnail decoding, verification evidence, and the tested release artifact.
 
-These hold for the whole spec. A change here needs explicit user signoff.
+## Release packaging and runtime files
 
-- Previews means the Windows Explorer preview pane today plus the thumbnail handler later. Code and binary names use the plural. The CLSID value from `origin/experimental/windows-previews` stays unchanged so test machines do not orphan.
-- Stable host path is `%LOCALAPPDATA%\QuiviT\bin\quivit-previews.exe` plus a sidecar `%LOCALAPPDATA%\QuiviT\bin\quivit-previews.version` holding preview version, build profile, and sha256. It is the only helper location. Every build registers this path, never `current_exe`.
-- Ship artifact stays one file. `QuiviT.exe` is the only download. The helper materializes at runtime on machines where the user opts into archive previews. It is a runtime cache like `extractor-cache`, not a second product.
-- Portable does not move the helper. Config stays portable per `src-tauri/src/config.rs:46`. Shell integration is machine local by nature. Deleting a portable folder does not unregister the handler.
-- Preview version is independent of app version. One constant, `PREVIEW_HOST_VERSION: u32`, lives in the previews module and both the main exe and any future lean helper share it. Bump only on preview contract change. App only changes do not bump.
-- Update rule is newest wins, never downgrade between release builds. Release: staged version lower than embedded means overwrite, staged debug profile means overwrite, equal healthy release means keep staged and re-register even when the running exe bytes differ, corrupt staged file (sha256 differs from the sidecar record) means repair, greater staged version means keep and re-register. Debug: always overwrite on launch and consent with no version check. E2E suite: never stage, never register.
-- Test runners stay hermetic and helpers stay global. Override folders (`.dev-config`, `.e2e-config`, `e2e/.debug-config`) hold config splits only, never helper binaries. The e2e suite (`is_e2e_suite`, `src-tauri/src/config.rs:407`) stages and registers nothing. Debug builds always overwrite the global path on launch and consent with no version check, so iteration needs no bump. Release builds are version gated per the update rule.
-- Helper staging and association sync run on application launch in a non-blocking background thread. In dev mode (`debug_assertions`), the helper stages and rebuilds on launch. In release builds, staging follows the version, profile, and hash check rules. Registration in the Windows Registry is applied only to the archive file types currently registered to QuiviT in the user's config and registry. The e2e test suite never stages and never registers.
-- Helper does read only work. List names, paint text, read archive stream. No registry writes, no child processes, no network from the `--previews-pane` path.
+QuiviT remains one downloadable EXE. Its bytes are copied to the stable preview host path when staging is required. The application also embeds the thumbnail proxy DLL and writes it beside that host. The user approved the embedded, staged DLL on 2026-10-21 after Windows rejected EXE-only thumbnail-cache activation.
 
-## Deviation rules
+| File | Purpose |
+| --- | --- |
+| `%LOCALAPPDATA%\QuiviT\bin\quivit-previews.exe` | Shared executable for pane and thumbnail COM servers |
+| `%LOCALAPPDATA%\QuiviT\bin\quivit-previews.version` | JSON staging metadata |
+| `%LOCALAPPDATA%\QuiviT\bin\quivit-thumbnail-proxy.dll` | Standard in-process thumbnail proxy forwarding to the EXE |
 
-- A cold agent picks this up from a dirty tree with no handoff. Work the checklists in order. Check an item only when its accept line passes.
-- States are `[x]` done and verified, `[ ]` not started, `[~]` partial with a note.
-- Do not rename the CLSID, the registry layout, or the CLI contract without a migration note in this file first.
-- Do not add a second shipped binary, a packer, or a scheduled task to solve anything in here.
-- Docs stay in this file until signoff. Do not touch `README.md` or `.agents/architecture-state.md` for this work until asked.
+Portable mode and config overrides do not move these files. Each application's config retains its existing portable or split layout. Removing a portable application folder does not unregister shell integration.
 
-## Background
+There is no second download, optional AVIF codec installation, background service, scheduled task, custom packer, or injected loader. `build.rs` compiles the proxy as a small Rust cdylib with a static CRT and embeds its bytes through the host module. A separate lean executable remains outside this scope.
 
-Branch `origin/experimental/windows-previews` (`a4a45c6`) puts the COM local server inside the main exe. `src-tauri/src/main.rs` on that branch serves `--preview-handler` and returns before Tauri runs. Registration in `src-tauri/src/commands/registry.rs` on that branch passes `std::env::current_exe()` into `register_for_extension()`, and `src-tauri/src/platform/preview_handler/windows.rs:19` writes that path into `CLSID\{...}\LocalServer32`.
+The helper entry points return before Tauri startup, config initialization, and ordinary file-open forwarding:
 
-That breaks when more than one build exists. Installed release, portable copy, debug target, or a renamed download all overwrite the same `LocalServer32`. Last writer wins. Move or delete that exe and the pane goes black with a stale registration. Debug runs point Explorer at a path that gets rebuilt and locked. The historical writeup on that branch (`.agents/preview-handler.md`) already records the lock and low integrity fixes. This spec keeps those fixes and changes only where the exe lives and how it is versioned.
+| Argument | Runtime |
+| --- | --- |
+| `--previews-pane` | Archive and image preview class factories on the shared pane pump |
+| `--previews-thumb` | Native thumbnail COM worker |
+| `--preview-handler` | Legacy pane alias retained until registration repair |
 
-Existing main branch anchors: `src-tauri/src/commands/registry.rs:129` builds shell open commands from `current_exe`, `src-tauri/src/config.rs:38` defines exe dir and portable detection, `src-tauri/src/config.rs:78` defines the override dir used for dev isolation.
+The helper reads preview inputs and draws results. Registration belongs to the main app, not to an activated helper. Archive and thumbnail requests do not initialize WebView2. Image panes lazily create WebView2 controllers and its normal runtime child processes. The browser profile uses Windows' LocalLow known folder under `QuiviT\preview-webview`.
 
-## Design phase 1: staged self clone (this spec)
+## Version and sidecar contract
 
-No new crate. On consent, copy the running exe bytes to the stable host path with tmp plus rename, write the sidecar, register the stable path. The `--previews-pane` entry keeps the early return before Tauri setup so the helper never opens a window or touches the network.
+`PREVIEW_HOST_VERSION: u32` lives in [previews/host.rs](../src-tauri/src/platform/previews/host.rs). Its current value is **5**. It changes for preview capability or contract updates, independently of the app version.
 
-Why a copy and not a second build target: one hash and one reputation to build, the Authenticode signature carries over byte for byte once signing exists, and the change is about 100 lines. A lean helper stays phase 2, only if pane cold start measures slow in release.
+The JSON sidecar contains:
 
-Naming in phase 1:
+| Field | Meaning |
+| --- | --- |
+| `preview_version` | Staged preview capability version |
+| `profile` | `debug` or `release` |
+| `sha256` | SHA-256 of the staged executable |
+| `app_path` | Optional source application path, refreshed on a keep decision when possible |
+| `proxy_sha256` | Optional proxy hash in the schema, required for healthy current Windows staging |
 
-- Binary `quivit-previews.exe`. Folder `%LOCALAPPDATA%\QuiviT\bin\`.
-- Module rename `platform/preview_handler/` to `platform/previews/`. Keep the CLSID string value.
-- CLI flag becomes `--previews-pane`. Reserve `--previews-thumb` for later. This breaks old test machine registrations on purpose while unmerged. Repair path re-registers.
+Optional fields deserialize with defaults for older sidecars. A current Windows host is healthy only when both executable and proxy bytes match their recorded hashes. The host and proxy are staged before publishing the updated sidecar.
 
-## Design phase 2: lean helper (deferred)
+Staging writes sibling `.tmp` files and renames them into place. The executable, proxy, and sidecar are separate file operations, not one filesystem transaction. An interrupted or locked update can leave a mismatch, which subsequent health checks detect. A proxy whose bytes already match the embedded DLL is left untouched, including when Windows has it loaded.
 
-Only if release pane start is slow or Defender scans of the full copy hurt. New `[[bin]]` with no Tauri dep, shared listing module, embedded into the main exe and staged the same way to the same path with the same version rule. Not part of the checklists below.
+### Update decisions
 
-## Registration flow
+The following rules apply in order:
 
-- `ensure_previews_host()` always resolves the global bin path. Override folders never change it. The e2e suite returns early and stages nothing.
-- Launch sync. `spawn_launch_previews_sync()` runs during app setup on a background thread. It stages the helper binary per the dev and release rules, catching file locks gracefully. If the host binary is available, it queries registered archive formats and ensures preview handler registrations match. If any registration changed, it sends `SHChangeNotify(SHCNE_ASSOCCHANGED, ...)`. Unregistered archive formats are left without preview keys.
-- Compare staged sidecar version plus profile against embedded `PREVIEW_HOST_VERSION`. Release: lower stages overwrite, staged debug profile overwrites, equal healthy release keeps bytes and only re-registers, corrupt repairs from the running exe, greater keeps and re-registers. Debug outside the suite always overwrites on launch and consent with no version check. The e2e suite stages nothing and touches no hive. Registration and the HKLM mirror run only outside the suite.
-- `register_for_extension()` takes the ensured host path, not `current_exe`. Writes per user CLSID `LocalServer32`, the `DisableLowILProcessIsolation` opt out, the `PreviewHandlers` list value, and the `QuiviT.<ext>\shellex` link for archive types only. Elevated runs also mirror the CLSID tree to HKLM; standard runs write HKCU only. Existing helpers `is_archive_ext` in `src-tauri/src/formats.rs` gate the type list.
-- Locked file handling. Explorer keeps the helper running briefly after the pane closes, and Windows refuses to overwrite a running program. On manual Apply, a failed write returns a plain error telling the user to close the preview pane and retry. On launch, staging catches the lock error, logs a warning without crashing or stalling startup, and falls back to syncing associations against the existing host if present. Never kill the server process.
-- Unregister removes the per extension link. Removes the shared CLSID tree only when no archive type still links it. Never deletes the helper binary on unregister.
-- Diagnostics extend the existing preview diagnostics with host path, host exists, staged preview version versus embedded, and a stale flag when `LocalServer32` points elsewhere.
+| Condition | Action |
+| --- | --- |
+| E2E suite | Stage and register nothing |
+| Running executable is already the resolved host | Return the host path without copying itself |
+| Debug application outside E2E | Stage the running EXE and embedded proxy regardless of version |
+| Release with missing or unreadable sidecar, missing files, or failed hash checks | Repair from the running EXE and embedded proxy |
+| Release with staged debug profile | Replace with the release implementation |
+| Release with a lower staged preview version | Stage the newer capability |
+| Release with an equal or greater healthy release version | Keep staged bytes and synchronize eligible registrations |
 
-## Antivirus posture
+Thus an older release preserves a newer healthy host. Corruption is repaired from the application performing the repair rather than trusted solely because the sidecar advertises a greater version. A healthy equal-version host is kept even when the running application EXE has a different hash.
 
-Self clone is the low flag option. One hash, signature preserved, no Mark of the Web on the copy since Rust read plus write does not propagate `Zone.Identifier`. Keep it that way and do not copy ADS streams.
+On a keep decision, `app_path` can change without replacing the executable or proxy. That sidecar-only refresh is best effort.
 
-- Write rarely, only on consent or repair. Version gate so app updates that did not touch previews rewrite nothing.
-- Stage to the app bin folder only. Never `%TEMP%`.
-- No packer, no UPX, no obfuscation. Publish sha256 per release.
-- Helper stays read only at runtime. No registry, process, or network calls from the pane path.
-- Local verification per slice: scan the staged file with Defender and note it. Per release: submit the single exe for a clean verdict. The copy needs no separate submission.
-- Code signing and SmartScreen reputation stay future work. Nothing here blocks them. Signing the main exe signs the staged copy automatically. When signing lands, verify the staged copy still validates before relying on it.
+Windows refuses to replace a running EXE or loaded DLL. Apply returns a retry error asking the user to close the preview pane and Explorer windows. File Types shows concise recovery guidance for known preview-lock errors and retains other specific failure reasons; the status wraps so the instructions remain visible. Startup logs a staging notice and can synchronize against an existing host, subject to capability checks. Product staging never terminates a server process.
 
-## Checklist slice 1: host staging and versioning
+## Registration identity
 
-- [x] Add `PREVIEW_HOST_VERSION` plus `resolve_previews_host_path()` and `ensure_previews_host()` under the renamed previews module. Accept: path is always the global bin, portable included. No registry writes in this unit.
-- [x] Sidecar read and write with version, profile, plus sha256, tmp plus rename. Accept: missing sidecar stages, corrupt staged bytes repair, staged debug profile overwritten by release, equal healthy release keeps bytes without rewrite, greater staged version keeps bytes.
-- [x] Isolation test. Accept: e2e suite stages and registers nothing; debug stages global with no version check; release is version gated.
-- [x] Locked helper test. Accept: staging over a running helper returns a retry message naming the preview pane, no process is killed.
+The archive identity is unchanged. Image pane and thumbnail identities are separate:
 
-## Checklist slice 2: registration retarget
+| Class | CLSID | Activation |
+| --- | --- | --- |
+| Archive preview | `{4FCA3A7C-329E-4B50-98D1-1B6DDFE36C59}` | Host with `--previews-pane` |
+| Image preview | `{B75A51FA-2D58-45F2-9214-E48BD1A14282}` | Host with `--previews-pane` |
+| Image thumbnail | `{A6F7C8D1-4E2B-4A1C-8D93-7F6E5B4A3C21}` | Proxy InprocServer32 and host LocalServer32 with `--previews-thumb` |
 
-- [x] Change `register_for_extension()` and callers in `src-tauri/src/commands/registry.rs` to use the ensured host path. Accept: `LocalServer32` in HKCU and HKLM (when writable) points at the stable host, never at `target/debug` or a portable path.
-- [x] Rename flag to `--previews-pane` in `src-tauri/src/main.rs` and the COM server entry. Accept: old `--preview-handler` registrations get repaired to the new command on next Apply or repair.
-- [x] Rename module and binary references to `previews` plural. Accept: `cargo check --tests --manifest-path src-tauri/Cargo.toml` green, CLSID value unchanged.
+The preview shell category is `{8895b1c6-b41f-4c1c-a562-0d564250836f}`. The thumbnail category is `{e357fccd-a995-4576-b01f-234630154e96}`.
 
-## Checklist slice 3: diagnostics and repair
+The archive constants and registration logic live in [previews/windows.rs](../src-tauri/src/platform/previews/windows.rs). Shared image GUIDs, the thumbnail category, and the DLL name live in [previews/contract.rs](../src-tauri/src/platform/previews/contract.rs), which is also used by the standalone proxy build.
 
-- [x] Extend preview diagnostics with host path, exists, staged versus embedded version, stale flag. Accept: Options can tell a stale registration apart from a render failure.
-- [x] Repair on File Types open touches only already registered archive types. Accept: opening the page never enables a new type by itself.
+Class entries are written under HKCU. When the current process can already write HKLM, QuiviT mirrors its class entries there without requesting elevation. Preview classes retain `DisableLowILProcessIsolation=1` and a PreviewHandlers entry. This value does not guarantee medium-integrity activation; real Explorer image previews were observed at low integrity.
 
-## Checklist slice 4: verification
+Per-extension shell links live under QuiviT-owned ProgIDs. Eligible formats are archives plus WebP, APNG, AVIF, GIF, SVG, and ICO. GIF and ICO receive pane links only. Thumbnail links cover WebP, APNG, AVIF, and SVG when external SVG handlers do not take precedence.
 
-- [x] `cargo check --tests --manifest-path src-tauri/Cargo.toml` green.
-- [x] Nearest filtered backend test for touched registry and format code green. Full `cargo test` only at final signoff per blast radius.
-- [x] `node --check` on touched frontend files plus `npm run mocha` green.
-- [x] Defender scan of the staged helper noted clean.
-- [x] Staged file carries no `Zone.Identifier` stream (check with `dir /r`).
-- [x] Manual runtime list handed to the user, no slice declared done without signoff.
+Image registration checks the staged capability and proxy health. GIF requires version 5; the other image formats require at least version 3. A locked older host must not acquire a GIF registration it cannot serve. SVG external-handler preservation runs before this image capability check.
 
-## Follow-up: Apply perf (done, user verified)
+## Apply, launch, repair, and removal
 
-- [x] Stage the helper once per Apply via `register_for_extension_with_host()` instead of once per archive type. Accept: one Apply pays exactly one copy plus one hash.
-- [x] `register_associations` and `sync_preview_associations` are async with blocking work in `spawn_blocking`, per the threading guideline. Accept: Apply no longer stalls the app windows.
+[commands/registry.rs](../src-tauri/src/commands/registry.rs) owns these operations:
 
-## Checklist slice 5: launch staging and association sync
+1. Apply stages once when the selection includes an eligible preview format, then passes the ensured path to `register_for_extension_with_host` for each extension. Blocking work runs through `spawn_blocking`.
+2. Ordinary startup runs `spawn_launch_previews_sync` on a background thread. Launches without a file-open argument perform normal staging checks. File-open launches reuse an existing host and stage only if it is missing.
+3. Opening File Types calls `sync_preview_associations`. It synchronizes existing registrations and stages only if the host is absent. Apply or ordinary startup performs replacement and hash-based staging repair.
+4. Startup and File Types repair operate only on formats already registered to QuiviT. They do not enable a new association as a side effect of opening the page.
+5. Repair also applies an empty `TypeOverlay` value to active QuiviT image ProgIDs, consistently suppressing Explorer's application badge.
+6. SVG detection captures external preview and thumbnail references before changing the open ProgID. Either external slot causes both QuiviT SVG implementations to be skipped. Any relay is written only under QuiviT.svg; third-party source registrations and class servers stay intact.
+7. Removal deletes a shell link only when it still names the expected QuiviT class. Shared activation entries survive while a supported extension still links that class. External SVG references under QuiviT.svg are preserved when needed. Helper files remain on disk.
+8. Registration synchronization sends SHChangeNotify only when it reports actual changes. The File Types UI catches a sync failure separately from checkbox setup.
 
-- [x] Add `spawn_launch_previews_sync()` in `src-tauri/src/commands/registry.rs` (with no-op stub for non-Windows) and invoke it inside `setup` in `src-tauri/src/lib.rs`. Accept: non-blocking background thread runs during startup without stalling main window presentation.
-- [x] Isolation check in `spawn_launch_previews_sync()`. Accept: `crate::config::is_e2e_suite()` returns immediately and writes nothing.
-- [x] Dev mode vs release mode launch staging. Accept: in dev mode, helper is rebuilt and staged to `%LOCALAPPDATA%\QuiviT\bin\quivit-previews.exe`; in release builds, version and hash rule is applied.
-- [x] Resilient staging on file locks. Accept: if Explorer has `quivit-previews.exe` locked, the background task logs a warning and does not panic or crash the app, and reuses the existing host path for association sync if already present.
-- [x] Gated association sync. Accept: `register_for_extension_with_host` runs only for archive formats currently registered to QuiviT; unregistered archive formats receive no preview keys. Shell `SHChangeNotify(SHCNE_ASSOCCHANGED, ...)` is called only when registrations changed.
-- [x] Verification. Accept: `cargo check --tests`, targeted preview tests, and `npm run mocha` pass.
+E2E guards run before staging or registry mutation. Development and test override folders hold config, not another shell host. The explicit early helper CLI entry points are separate from normal app startup.
 
-## Open points for user review
+## Diagnostics
 
-1. Decided: sidecar is JSON with `preview_version`, `profile`, and `sha256`. Matches the repo config convention, serde is already in the tree, and new fields later do not break field order.
-2. Decided: File Types open repairs both bytes and registry for already registered archive types. Opening the page never enables a new type by itself.
-3. Decided: the helper binary stays on disk on unregister by design. Keys only. No delete button in this spec.
-4. Decided: thumbnail CLSID later. The thumbnail slice picks its ID when it starts. Nothing reserved now.
+`get_preview_diagnostics` returns read-only rows for supported preview extensions. The `PreviewDiagnostic` model in [models.rs](../src-tauri/src/models.rs) retains the existing fields and adds defaulted image and thumbnail fields.
+
+Rows report association state, UserChoice, preview CLSID and servers in both hives, PreviewHandlers membership, host existence, staged and embedded capability versions, thumbnail servers and proxy health, external SVG handlers, and SVG skip status.
+
+The stale flag identifies a noncanonical pane server command or an owned thumbnail registration with a wrong worker command, wrong proxy path, or unhealthy proxy. A missing pane registration is unregistered rather than stale. An old `--preview-handler` command is stale for repair purposes even though the alias remains executable.
+
+Diagnostics do not stage files or modify registration.
+
+## Antivirus and trust boundaries
+
+Staging uses ordinary file I/O and standard COM registration/loading. No executable compression, obfuscation, process injection, or background persistence mechanism is added. Version and hash decisions avoid unnecessary rewrites of a healthy release host.
+
+The executable copy preserves the source EXE's bytes, including any future Authenticode signature. The DLL is a separate artifact; signing the main EXE would not sign it. A future signing workflow must sign and verify the proxy before embedding it as well.
+
+Recorded Defender custom scans of the release EXE and staged bin folder completed without new detections. This is evidence for the tested files and local signatures, not a promise about SmartScreen reputation or future antivirus verdicts. The image spec records the exact tested hashes.
+
+Preview input trust is separate from executable staging. QuiviT does not strip Zone.Identifier from images or archives or change Windows policies to bypass Explorer's Internet-zone preview block.
+
+## Verification and closure
+
+The recorded host checks cover all 12 existing staging tests, including version decisions, missing sidecars, corrupt bytes, equal and greater healthy release preservation, debug replacement, global path resolution, and locked-file errors.
+
+Normal split-config and real portable release launches used the same global host and proxy. The original release `app_path` was restored after the portable check. Existing configuration E2E cases passed in split and portable modes without changing the real helper/proxy hashes.
+
+Apply performance and the original host slices have user runtime signoff. The final image follow-up also passed its user runtime checks. The final source passed `cargo check --tests`, all 108 Rust tests, all 308 frontend tests, and debug/release builds. Those results were recorded before this docs-only pass.
+
+The host specification has no open product or packaging decisions. The image spec records the remaining preview checks, single-slot SVG code verification, and the association error-message fix. The user confirmed that fix at runtime on 2026-10-22, closing the final follow-up. This documentation pass changed no runtime code, registration, config, or installed helper.

@@ -1,211 +1,247 @@
-# Image thumbnails and previews spec
+# Image thumbnails and previews specification
 
-This validation comparison was performed against `.agents/skills/validate-changes/SKILL.md` before presenting. Spec only, no code changed, no behavior changed.
+Validation comparison performed against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md` before finalizing this document.
 
-Status: accepted. Definitions locked. References `.agents/additions.md:L57-L60`.
+Status: finalized on 2026-10-22 at the user's request. The accepted implementation is the version-5 preview contract. The user confirmed the raster previews, GIF follow-up, static AVIF repair, ICO spritesheet, PowerToys SVG delegation, direct QuiviT SVG animation, removal of loading text, and independent animated image previews across multiple Explorer windows. Subsequent user and code verification covers the remaining preview checks below. The final association error-message follow-up also has user runtime signoff. No acceptance checks remain open.
 
-## Locked definitions
+The shared packaging, staging, CLI, registration identities, and update rules are defined in [previews-host-spec.md](previews-host-spec.md). The native archive pane is documented in [preview-handler.md](preview-handler.md).
 
-These hold for the whole spec. A change here needs explicit user signoff.
+## Accepted behavior
 
-- **Formats in scope:** Animated WebP (`.webp`), SVG (`.svg`), APNG (`.apng`), AVIF (`.avif`), and ICO (`.ico`).
-- **Thumbnail contract:** Windows Explorer thumbnail provider (`IThumbnailProvider`). Renders a static first-frame raster bitmap (`HBITMAP`) scaled proportionally within requested bounding dimension `cx` (e.g., 96, 256), preserving alpha (`WTSAT_ARGB` or `WTSAT_RGB`) for `webp`, `svg`, `apng`, and `avif`. Windows native `.ico` thumbnailing remains untouched.
-- **SVG thumbnail rasterizer:** Uses lightweight, high-performance native Rust vector rasterization (`resvg` / `tiny-skia`) for instantaneous (<5ms) first-frame generation without browser cold-start latency or memory spikes.
-- **Preview pane contract:** Windows Explorer preview handler (`IPreviewHandler`). Displays the full animated version of the image for animated formats (`webp`, `svg`, `apng`, `avif`), looping continuously and indefinitely regardless of any finite loop count limit in the file header.
-- **ICO spritesheet preview:** For `.ico` files in the preview pane, all distinct embedded frames are parsed, deduplicated by dimensions, sorted largest to smallest, and stitched horizontally into a single spritesheet with vertical centering (reusing the legacy math from commit `a499611`). This showcases all available icon resolutions side-by-side in one view.
-- **Silent SVG external program skip:** When an external tool (such as Microsoft PowerToys) is registered as the preview handler or thumbnail provider for `.svg`, QuiviT's registration logic silently skips registering QuiviT for `.svg`. QuiviT never overwrites a functioning third-party SVG shell handler, and does not add UI override complexity.
-- **Single helper binary and command flags:** All out-of-process shell handlers (`IPreviewHandler` and `IThumbnailProvider`) run from the staged `%LOCALAPPDATA%\QuiviT\bin\quivit-previews.exe` helper using `--previews-pane` and `--previews-thumb` respectively. No separate `quivit-thumbs.exe` or second binary is shipped or staged.
-- **Process isolation and CLSIDs:**
-  - Archive preview handler CLSID stays `{331F9B3C-6B0C-4DC8-A0FB-B62D19E52C06}` (served via `--previews-pane`).
-  - Image/ICO preview handler CLSID is dedicated (e.g., `{B75A51FA-2D58-45F2-9214-E48BD1A14282}`), served via `--previews-pane`.
-  - Image thumbnail provider CLSID is dedicated (e.g., `{A6F7C8D1-4E2B-4A1C-8D93-7F6E5B4A3C21}`), served via `--previews-thumb`.
-  - Shell category GUIDs: Preview Handlers use `{8895b1c6-b41f-4c1c-a562-0d564250836f}`; Thumbnail Providers use `{e357ffcd-a995-4576-b01f-234630154e96}`.
-- **Low integrity opt-out:** Every preview and thumbnail CLSID under QuiviT registers `DisableLowILProcessIsolation = 1` so Explorer can host child windows and receive rendered bitmaps without integrity-level rejections.
+| Format | Explorer preview pane | Thumbnail |
+| --- | --- | --- |
+| WebP | Static image or animation repeating indefinitely | Native, static first composited frame |
+| APNG | Static image or animation repeating indefinitely | Native, static first animation frame |
+| AVIF | Static image or animation repeating indefinitely | Bundled native decoder, static first frame |
+| GIF | Static image or animation repeating indefinitely | Existing Windows provider; no QuiviT thumbnail hook |
+| SVG | Authored declarative animation timing, when QuiviT owns the pane | Static resvg rendering, when QuiviT owns the thumbnail slot |
+| ICO | Native spritesheet of distinct dimensions | Existing Windows provider; no QuiviT thumbnail hook |
 
-## Deviation rules
+No new handlers are registered for ordinary PNG or general video. Existing main-viewer behavior is unchanged.
 
-- A cold agent picks this up from a dirty tree with no handoff. Work the checklists in order. Check an item only when its accept line passes.
-- States are `[x]` done and verified, `[ ]` not started, `[~]` partial with a note.
-- Do not introduce new external runtime dependencies, DLL sidecars, or background service daemons.
-- Do not touch `.agents/architecture-state.md` or `README.md` during implementation until explicitly asked.
+Raster animation repeats indefinitely so Explorer users can inspect motion without a replay control. SVG retains authored timing because forcing repeats can disturb dependent or chained animations. Finite SVG animations can stop; authored infinite animations continue. Previewing never rewrites source files.
 
----
+An APNG can have a default PNG image outside its animation. Its thumbnail and player start with the first animation frame rather than assuming IDAT is frame zero.
 
-## Research: SVG previews and thumbnails on Windows
+Image panes paint Explorer's supplied background while media loads. There is no visible "Loading preview..." placeholder. Decode or runtime failures still produce a visible error.
 
-### 1. Programs that implement Windows SVG shell extensions
+QuiviT image ProgIDs use an empty `TypeOverlay` string to suppress Explorer's application-logo badge consistently. Apply and repair share this policy. Other applications' ProgIDs are not changed.
 
-Windows does not natively render SVG thumbnails or preview pane content out of the box in File Explorer. Third-party utilities fill this gap:
+### SVG coexistence
 
-1. **Microsoft PowerToys (most prevalent):**
-   - Implements `SvgPreviewHandler` (`PowerToys.SvgPreviewHandler.comhost.dll`) for the Preview Pane.
-   - Implements `SvgThumbnailProvider` (`PowerToys.SvgThumbnailProvider.comhost.dll`) for Explorer thumbnail grids.
-   - Uses standard Windows Shell COM registration under `HKEY_CLASSES_ROOT\.svg\ShellEx`.
-2. **SVG Explorer Extension (tibbe / svg-explorer-extension):**
-   - Open-source C++ in-process shell extension (`svgthumbnailprovider.dll`) dating back to Windows Vista/7.
-   - Uses Cairo / libxml2 or GDI+ to rasterize vector markup to an `HBITMAP`.
-3. **SVG Explorer Preview (Microsoft Store / third-party):**
-   - Packaged store application registering an `IThumbnailProvider` and `IPreviewHandler` for vector formats.
+A registered non-QuiviT SVG preview handler or thumbnail provider causes both QuiviT SVG shell implementations to be skipped. Merely installing PowerToys without registered SVG shell support does not trigger the skip. There is no override setting.
 
-### 2. How PowerToys achieves SVG thumbnails and previews
+Detection checks merged shell registration through the extension, UserChoice/default ProgIDs, SystemFileAssociations, and QuiviT's own relayed references. It preserves non-QuiviT slot values conservatively rather than identifying a provider by its filename.
 
-PowerToys relies on **Microsoft Edge WebView2** (`Microsoft.Web.WebView2` runtime):
+Changing the default open ProgID must preserve effective SVG preview and thumbnail resolution. QuiviT can relay the external CLSIDs under QuiviT.svg with source metadata, but it does not edit the third party's source keys or class servers. Either external slot suppresses both QuiviT implementations, including when the other slot is absent.
 
-- **Preview Pane (`SvgPreviewHandler`):**
-  - Implements `IPreviewHandler`, `IPreviewHandlerVisuals`, and `IInitializeWithStream`.
-  - Hosts a WebView2 control inside the parent `HWND` provided by File Explorer.
-  - Generates a lightweight HTML page with the SVG embedded in an `<img>` tag or raw inline XML, centering it with CSS flexbox.
-  - Adapts to system dark/light themes and applies an optional checkered transparency grid.
-- **Thumbnail Provider (`SvgThumbnailProvider`):**
-  - Implements `IThumbnailProvider` and `IInitializeWithStream`.
-  - Spawns a headless or off-screen WebView2 webview, passes the SVG markup, and calls WebView2's bitmap capture API (`CapturePreview`).
-  - Converts the resulting image buffer into a Windows GDI `HBITMAP` sized to bounding box `cx`, setting `WTSAT_ARGB` for alpha transparency.
-- **Trade-offs of the WebView2 approach:**
-  - Complete compliance with SVG 1.1, SVG 2, CSS styling, SMIL animations, and embedded fonts.
-  - Higher cold-start latency and memory overhead per thumbnail call if spinning up a full browser instance.
+This skip applies to shell rendering. SVG opening in QuiviT remains available. Apply and launch/repair reevaluate the shell ownership.
 
-### 3. QuiviT implementation strategy for SVG and animated media
+### ICO layout
 
-QuiviT can adopt a split, high-performance approach:
+The shared ICO parser supplies valid frames, deduplicated by dimensions and ordered largest first. The shell composes them in one horizontal row:
 
-1. **Static First-Frame Thumbnails (`IThumbnailProvider`):**
-   - **For Animated WebP, APNG, and AVIF:** Native decoding directly into a 32-bit GDI DIB section (`HBITMAP`) with alpha (`WTSAT_ARGB`).
-     - WebP: First-frame decode via `image` crate (already present in `src-tauri/Cargo.toml`).
-     - APNG: Standard PNG chunk parser reads the default `IDAT` frame 0.
-     - AVIF: First-frame decode via lightweight decoder or native Windows WIC (`CLSID_WICAvifDecoder`).
-   - **For SVG:**
-     - Primary path: Render SVG DOM to GDI bitmap at target size `cx` using lightweight Rust vector rasterization (`resvg` / `tiny-skia`), keeping thumbnail generation instantaneous (under 5ms, no browser spin-up).
-     - Fallback: Headless WebView2 snapshot if complex script-driven SVGs require a full DOM engine.
-2. **Animated Preview Pane (`IPreviewHandler`):**
-   - The preview pane is already an out-of-process COM server (`quivit-previews.exe --previews-pane`).
-   - For animated media (WebP, APNG, AVIF, and animated SVG), the preview pane hosts a dedicated child window.
-   - Using WebView2 inside `quivit-previews.exe`:
-     - WebView2 natively renders animated WebP, APNG, AVIF, and SVG with hardware acceleration.
-     - A minimal HTML template with `<img src="...">` handles infinite looping: JavaScript ensures finite-loop images (e.g. single-loop APNG/WebP) restart continuously.
-     - Background color mirrors Explorer's theme via `IPreviewHandlerVisuals::SetBackgroundColor`.
-3. **ICO Spritesheet Preview (`IPreviewHandler`):**
-   - For `.ico` files, parse all embedded frames via manual ICO header traversal (reusing the legacy algorithm from commit `a499611`).
-   - Deduplicate frames by resolution and sort largest to smallest.
-   - Stitch all unique sizes horizontally side-by-side with vertical centering into a composite image (`total_width = sum(widths)`, `max_height = max(heights)`).
-   - Display the horizontal spritesheet centered in the preview pane against Explorer's theme surface, showing every resolution supported by the icon file in one view.
+- Width is the sum of frame widths.
+- Height is the greatest frame height.
+- Each frame's vertical offset is half the difference between the row and frame heights, rounded down.
+- The whole row scales down proportionally when necessary. Natural sizes are retained when space permits, and small frames are not individually inflated.
+- Transparency is composited against Explorer's background.
 
----
+The existing `Vec<IcoSize>` and per-size PNG data-URL IPC shapes remain unchanged.
 
-## SVG program detection logic
+## Implementation ownership
 
-To prevent clobbering Microsoft PowerToys or existing SVG tools:
+| Concern | Owner and lookup |
+| --- | --- |
+| Early pane and thumbnail dispatch | [main.rs](../src-tauri/src/main.rs), `main` |
+| Shared GUIDs and proxy name | [previews/contract.rs](../src-tauri/src/platform/previews/contract.rs) |
+| Stable staging, hashes, capability version | [previews/host.rs](../src-tauri/src/platform/previews/host.rs) |
+| Eligibility, SVG resolution, per-class registration and removal | [previews/windows.rs](../src-tauri/src/platform/previews/windows.rs) |
+| Shared COM pump and source routing | [windows/com_server.rs](../src-tauri/src/platform/previews/windows/com_server.rs), `PreviewHandler` |
+| Image/ICO child surfaces and browser lifetime | [windows/image_pane.rs](../src-tauri/src/platform/previews/windows/image_pane.rs), `ImagePane` |
+| Wrapper structure and presentation | [preview_player.html](../src-tauri/src/platform/previews/windows/preview_player.html) and [preview_player.css](../src-tauri/src/platform/previews/windows/preview_player.css) |
+| Raster playback and native-image fallback | [preview_player.js](../src-tauri/src/platform/previews/windows/preview_player.js), `start` and `paintFrame` |
+| Standard DLL forwarding | [windows/thumb_proxy.rs](../src-tauri/src/platform/previews/windows/thumb_proxy.rs) |
+| Thumbnail COM interfaces and worker lifetime | [windows/thumb_server.rs](../src-tauri/src/platform/previews/windows/thumb_server.rs) |
+| Native decoding and thumbnail bounds | [previews/thumb_decoders.rs](../src-tauri/src/platform/previews/thumb_decoders.rs) |
+| First AV1 sample and optional alpha from AVIF sequences | [previews/avif_sequence.rs](../src-tauri/src/platform/previews/avif_sequence.rs) |
+| Premultiplied BGRA DIB ownership | [windows/bitmap.rs](../src-tauri/src/platform/previews/windows/bitmap.rs), `Bitmap` |
+| Shared ICO parser and compositor | [ico.rs](../src-tauri/src/ico.rs) |
+| Apply, repair, launch sync, diagnostics | [commands/registry.rs](../src-tauri/src/commands/registry.rs) and [models.rs](../src-tauri/src/models.rs) |
 
-1. **Detection points in Windows Registry:**
-   - **Preview Handler check:**
-     - Query `HKCU\Software\Classes\.svg\ShellEx\{8895b1c6-b41f-4c1c-a562-0d564250836f}` and `HKLM\SOFTWARE\Classes\.svg\ShellEx\{8895b1c6-b41f-4c1c-a562-0d564250836f}`.
-     - Query the active ProgID for `.svg` (from `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.svg\UserChoice` or `HKCR\.svg`), then check that ProgID's `ShellEx\{8895b1c6-b41f-4c1c-a562-0d564250836f}`.
-   - **Thumbnail Provider check:**
-     - Query `HKCR\.svg\ShellEx\{e357ffcd-a995-4576-b01f-234630154e96}` and the ProgID's `ShellEx\{e357ffcd-a995-4576-b01f-234630154e96}`.
-   - **Server identification:**
-     - If the subkey exists, resolve its default CLSID under `Software\Classes\CLSID\{CLSID}`.
-     - Inspect `InprocServer32` or `LocalServer32` value.
-     - If the path contains `PowerToys`, `svgthumbnailprovider`, or belongs to a known third party (not QuiviT):
-       - Flag `svg_preview_handled_externally = true`
-       - Flag `svg_thumbnail_handled_externally = true`
-2. **Behavior on association sync:**
-   - When registering associations or running launch sync, if `.svg` has an active external handler, QuiviT silently skips writing `ShellEx` subkeys for `.svg`.
-   - File Types UI in Options operates as normal without extra checkboxes or override switches.
-   - If no external handler is registered, QuiviT registers its own SVG thumbnail and preview handlers.
+These are implementation owners, not proposed modules. There is no second ICO parser or main-app protocol added for shell previews.
 
----
+## Native thumbnail contract
 
-## Architectural design
+Windows loads `quivit-thumbnail-proxy.dll` through standard COM. The proxy forwards initialization and bitmap extraction to the EXE's `--previews-thumb` local server. It does not decode media in Explorer or start a browser.
 
-```text
-File Explorer
-    │
-    ├── Thumbnail Grid ──> IThumbnailProvider (quivit-previews.exe --previews-thumb)
-    │                         ├── Animated WebP : Frame 0 decode -> HBITMAP (WTSAT_ARGB)
-    │                         ├── APNG          : Frame 0 decode -> HBITMAP (WTSAT_ARGB)
-    │                         ├── AVIF          : Frame 0 decode -> HBITMAP (WTSAT_ARGB)
-    │                         └── SVG           : Fast vector rasterize -> HBITMAP (WTSAT_ARGB)
-    │                                             [Skipped if PowerToys detected]
-    │
-    └── Preview Pane   ──> IPreviewHandler (quivit-previews.exe --previews-pane)
-                              ├── Archive files  : Win32 GDI Archive Tree (existing com_server.rs)
-                              ├── ICO files      : Horizontal Spritesheet Preview (all sizes side-by-side)
-                              └── Image media    : Win32 WebView2 Child Player
-                                    ├── WebP / APNG / AVIF : Animated playback, infinite loop
-                                    └── SVG                : Animated / scalable vector display
-                                                             [Skipped if PowerToys detected]
-```
+The thumbnail server initializes through IInitializeWithStream. It reads the COM stream on its calling thread in 64 KiB chunks. Only plain bytes cross into decoding; an apartment-bound stream proxy is not moved to a worker.
 
----
+Native decoders produce straight RGBA. The DIB boundary converts once to top-down, premultiplied BGRA and returns WTSAT_ARGB. Explorer owns a successfully transferred HBITMAP. Failure paths release their bitmaps and decoder resources.
 
-## Detailed checklist
+The implementations use the existing image decoder for WebP/APNG, bundled `aom-decode 0.2.14` with static libaom for AVIF, and `resvg 0.48.1` with tiny-skia for SVG. AVIF thumbnails require no optional Windows codec or runtime codec DLL. Higher-depth native pixels are converted to 8-bit thumbnail output.
 
-### Slice 1: SVG external handler detection
+SVG thumbnails are static document rendering. They do not evaluate animation or scripts, and there is no browser fallback. A warm render below 5 ms is a measured target, not a guarantee for every SVG or process startup. Spinner samples at 256 px measured 1.46 to 1.83 ms warm; the complex koi sample was about 18 ms. These do not establish a cold-start bound.
 
-- [ ] Add `detect_svg_shell_handlers()` in `src-tauri/src/platform/previews/windows.rs`.
-  - Accept: Correctly detects PowerToys `SvgPreviewHandler` and `SvgThumbnailProvider` under `HKCR\.svg\ShellEx` or ProgID subkeys without panicking on missing keys.
-- [ ] Extend `PreviewDiagnostic` in `src-tauri/src/models.rs` with `external_preview_handler: Option<String>` and `external_thumbnail_provider: Option<String>`.
-  - Accept: `get_preview_diagnostics` IPC command reports third-party SVG handlers accurately.
-- [ ] Guard `register_for_extension_with_host` in `src-tauri/src/platform/previews/windows.rs` to skip `.svg` when an external handler is active.
-  - Accept: Registering all file types does not overwrite PowerToys SVG preview or thumbnail registry keys.
-- [ ] Add unit test in `src-tauri/src/tests/previews_tests.rs` for SVG detection logic with mock registry fixtures or simulated CLSIDs.
-  - Accept: `cargo test previews_tests` passes.
+### Limits and compatibility
 
-### Slice 2: Out-of-process thumbnail provider (`--previews-thumb`)
+| Resource | Bound |
+| --- | --- |
+| Encoded thumbnail input | 128 MiB |
+| Aggregate stored thumbnail inputs | 256 MiB per worker |
+| Decoded native image | 256 MiB and maximum edge 32,768 |
+| SVG thumbnail input | 16 MiB |
+| Thumbnail output edge | `min(cx, 1024)`; zero is invalid |
+| Native decoding concurrency | Serialized within a thumbnail worker |
 
-- [ ] Define `IMAGE_THUMBNAIL_CLSID` in `src-tauri/src/platform/previews/windows.rs` and register CLI command `--previews-thumb` in `src-tauri/src/main.rs`.
-  - Accept: Running `quivit-previews.exe --previews-thumb` enters the thumbnail COM server message loop and exits when idle.
-- [ ] Implement `IThumbnailProvider` and `IInitializeWithFile` in `src-tauri/src/platform/previews/windows/thumb_server.rs`.
-  - Accept: Implements `GetThumbnail(cx, phbmp, pdwalpha)` returning `WTSAT_ARGB` and a valid 32-bit GDI `HBITMAP`.
-- [ ] Add first-frame raster decoders in `src-tauri/src/platform/previews/thumb_decoders.rs`:
-  - `decode_webp_first_frame(path, cx) -> Result<(Vec<u8>, u32, u32), String>`
-  - `decode_apng_first_frame(path, cx) -> Result<(Vec<u8>, u32, u32), String>`
-  - `decode_avif_first_frame(path, cx) -> Result<(Vec<u8>, u32, u32), String>`
-  - `render_svg_first_frame(path, cx) -> Result<(Vec<u8>, u32, u32), String>`
-  - Accept: Each decoder returns premultiplied 32-bit ARGB pixels fitted within `cx` × `cx` with preserved aspect ratio.
-- [ ] Add DIB section bitmap builder `create_dib_hbitmap(width, height, argb_pixels) -> HBITMAP`.
-  - Accept: Generates valid GDI bitmap handles that Explorer paints cleanly in thumbnail grid views.
-- [ ] Register `IThumbnailProvider` shell keys under `Software\Classes\QuiviT.<ext>\ShellEx\{e357ffcd-a995-4576-b01f-234630154e96}` for `webp`, `apng`, `avif`, and `svg` (conditional on detection).
-  - Accept: Explorer displays static first-frame thumbnails for supported formats.
+Explorer requested `cx=2560` during testing. The provider accepts a positive request above 1024 and caps output rather than rejecting the request. A real APNG extraction returned a proportional 184×199 bitmap for both 2560 and 1280 requests.
 
-### Slice 3: Animated image and ICO preview pane player
+Two fixture compatibility cases are deliberate. Animated AVIF detection includes avis and compatible AVIF brands, then extracts the first AV1 movie-track sample plus optional alpha. An animated WebP fixture shares a final subchunk padding byte with ANMF; an in-memory copy accounts for it before decoding. Source files remain unchanged. Malformed or unsupported input returns an error within the configured limits.
 
-- [ ] Extend `quivit-previews.exe --previews-pane` in `src-tauri/src/platform/previews/windows/com_server.rs` to support image formats and ICO spritesheets alongside archive files.
-  - Accept: `Materialized` enum handles `AnimatedMedia(PathBuf, String)` and `IcoSpritesheet(PathBuf, String)`.
-- [ ] Add ICO horizontal spritesheet generator in `src-tauri/src/platform/previews/windows/ico_preview.rs`:
-  - Parses ICO header, decodes all embedded PNG/BMP frames, deduplicates by resolution, sorts largest-first, and stitches horizontally side-by-side with vertical centering per commit `a499611`.
-  - Accept: Stitches all distinct icon sizes into an RGBA composite buffer with accurate dimensions.
-- [ ] Render ICO spritesheet in preview pane:
-  - Centers the stitched spritesheet horizontally and vertically against the theme background surface.
-  - Accept: Selecting an `.ico` file in Explorer displays all available resolutions side-by-side in one view.
-- [ ] Embed WebView2 child host window in `com_server.rs` when previewing an animated image format (`webp`, `apng`, `avif`, `svg`).
-  - Accept: Child HWND attaches to Explorer's preview pane parent window via `SetParent` and resizes smoothly with `SetRect`.
-- [ ] Implement continuous animation loop in preview player HTML/JS template:
-  - Inject CSS for viewport fit (`object-fit: contain; width: 100%; height: 100%`).
-  - Listen for WebCodecs / HTML video / image completion events or use timed resets so finite-loop images restart indefinitely.
-  - Accept: Single-loop and multi-loop animated WebP/APNG/AVIF files play in an endless loop.
-- [ ] Implement `IPreviewHandlerVisuals` background color sync in the image and ICO players:
-  - Accept: Background color seamlessly matches Explorer's current theme (light or dark mode) without visual flashing.
+## Preview pane lifecycle and security
 
-### Slice 4: Association integration and unregistration
+The archive and image CLSIDs share the native COM pump. Host callbacks record state and queue window operations. Workers load plain data. Epoch and window-generation checks reject superseded results, late browser creation, and messages for recycled HWNDs.
 
-- [ ] Update `register_associations` and `unregister_associations` in `src-tauri/src/commands/registry.rs` to manage thumbnail and preview keys for image formats and `.ico`.
-  - Accept: `register_associations` links `IThumbnailProvider` for `webp`, `apng`, `avif`, and conditionally `svg`; and links `IPreviewHandler` for `webp`, `apng`, `avif`, conditionally `svg`, and `ico`. `unregister_associations` cleanly removes both `{8895b1c6-...}` and `{e357ffcd-...}` shell extension entries.
-- [ ] Ensure silent skip in launch sync: `spawn_launch_previews_sync()` in `src-tauri/src/commands/registry.rs` leaves existing external SVG handlers intact.
-  - Accept: Launching QuiviT does not clobber PowerToys SVG registrations.
+Image loading uses one reader with at most eight pending jobs. Reads check cancellation in 64 KiB chunks and accept at most 128 MiB per media input. The ICO parser imposes its own tighter entry, dimension, and decoded-memory limits.
 
-### Slice 5: Verification and safety
+ICO remains native. Other image panes create WebView2 lazily and reuse a cached native environment for their controllers. Browser creation and destruction stay on the owning pump thread; WebView objects are dropped outside locks to tolerate reentrant callbacks.
 
-- [ ] `cargo check --tests --manifest-path src-tauri/Cargo.toml` green.
-- [ ] Targeted tests for thumbnail decoders, ICO spritesheet stitching, and SVG detection pass.
-- [ ] `node --check` on touched JS modules and `npm test` green.
-- [ ] Manual runtime checklist verifying Explorer thumbnail paint, preview pane animation looping, ICO spritesheet display, and PowerToys non-interference.
+The browser serves only embedded wrapper assets and the selected media through the isolated secure origin `https://quivit-preview.localhost/`. CSP, request filtering, navigation checks, and download/popup denial prevent external document activity. SVG source scripts are disabled. Responses use no-store and nosniff headers.
 
----
+The profile directory is resolved through `SHGetKnownFolderPath(FOLDERID_LocalAppDataLow)` and placed under `QuiviT\preview-webview`. This works with Explorer's observed low-integrity activation. Browser creation uses explicit initial bounds and does not take focus; explicit host focus requests remain separate. The additional browser arguments retain WebView2's default security features.
 
-## Decisions (locked)
+Raster playback uses WebCodecs ImageDecoder with explicit frame indices. It waits for both decoder completion and track discovery, then selects an animated track if available. It does not set preferAnimation during construction. That preference made WebView2 reject metadata discovery for the valid static AVIF fixture.
 
-1. **SVG rasterizer:** Use `resvg` / `tiny-skia` for SVG thumbnail rasterization. It gives QuiviT the performance edge with sub-5ms render times, pure Rust execution, and zero browser process spin-up.
-2. **Infinite looping enforcement:** In the preview pane, all animated media (WebP, APNG, AVIF, and animated SVG) loop continuously and indefinitely. Finite header loop counts are ignored or reset on loop completion.
-3. **Silent SVG external skip:** If Microsoft PowerToys or another third-party SVG handler is detected in the registry, QuiviT silently skips registering `.svg` for both thumbnails and the preview pane. No override toggles or extra UI options are added.
-4. **Binary and flag naming:** Consolidated in `quivit-previews.exe` using `--previews-pane` for the preview handler and `--previews-thumb` for the thumbnail provider (singular target nouns matching `IPreviewHandler` and `IThumbnailProvider`). No separate `quivit-thumbs.exe` is created.
-5. **ICO spritesheet preview:** `.ico` files in the Windows preview pane render a horizontal spritesheet containing all unique resolution frames sorted largest-first with vertical centering, reusing the legacy stitching math from commit `a499611`. Windows native thumbnail handling for `.ico` remains untouched.
+Single-frame raster files and SVG use the native browser image element. Animated raster frames paint to a canvas with the authored frame durations and wrap indefinitely. The canvas is bounded to 4096 per edge and 16 × 1024² pixels. Every VideoFrame is closed after drawing. Visibility changes pause playback, and unload closes the decoder and cancels pending work.
+
+Unload also removes native children, releases bitmaps and controllers, and invalidates pending callbacks. Pane tasks and idle timers target a private message-only window so Wry's nested pump cannot consume thread-only messages without dispatching them. The helper exits after its 30-second idle window once COM objects and server locks are released.
+
+## Thumbnail hosting decision and proof
+
+The initial EXE-only thumbnail design failed a real Windows-cache activation gate, despite direct COM success. A Windows DLL control passed on the same test data. The user then approved an embedded, staged proxy while retaining one release EXE download.
+
+| Exercised path | Observed result |
+| --- | --- |
+| Direct EXE IInitializeWithStream and GetThumbnail | S_OK; valid 32×16 alpha bitmap |
+| EXE-only IThumbnailCache with WTS_FORCEEXTRACTION | 0x80040154, REGDB_E_CLASSNOTREG; no provider activation |
+| EXE-only cache with WTS_EXTRACTINPROC or WTS_REQUIRESURROGATE | Same class-not-registered result |
+| Windows PhotoThumbnailProvider DLL control | S_OK in all three cache modes |
+| QuiviT staged proxy forwarding to the EXE | S_OK in all three cache modes; worker initialization and extraction observed |
+
+The controlled alpha sample returned first BGRA bytes `19-32-64-80` for source RGBA `200,100,50,128`, matching premultiplication. The corrected shell category was used for the decisive comparison. An earlier probe with the draft's misspelled category is excluded.
+
+Disposable gate registrations were removed. Runtime probe code stayed outside release sources, and no permanent test suite or harness was added during implementation.
+
+## Verification record
+
+These results were recorded on 2026-10-21 and 2026-10-22. They were not rerun merely to finalize these documents.
+
+| Area | Evidence |
+| --- | --- |
+| Static thumbnails | Real cache extraction for still and animated WebP/APNG/AVIF, plus native SVG samples; user confirmed thumbnail appearance, badge removal after refresh, and transparent edges |
+| APNG frame selection | Separate red default image and blue first animation frame; thumbnail and player both return blue |
+| Raster loops | Actual WebView2 observed WebP, APNG, and AVIF beyond authored repeat counts; the version-5 player observed two wraps for WebP/AVIF/GIF and four for an APNG with repetitionCount 2 |
+| GIF and static AVIF | User confirmed no_loop.gif and pixiv_final-gif.gif animate, the finite GIF repeats, and still_single_frame.avif displays; single-frame GIF also passes browser checks |
+| Loading transition | User confirmed file switching no longer shows loading text |
+| SVG ownership | User confirmed PowerToys handles registered SVG previews; effective preview and thumbnail CLSIDs remain external at their source and under QuiviT.svg |
+| QuiviT SVG rendering | User confirmed the spinner in a separate direct activation of QuiviT's image CLSID; finite SVG screenshots changed during animation and matched after two authored repeats |
+| ICO | Existing IPC tests pass; user confirmed the spritesheet, wide/narrow pane sizing, and keyboard focus behavior; native background, resize, and unload checks pass |
+| Shared lifecycle | 100 rapid mixed selections returned with a maximum observed DoPreview latency of 47 ms; the corrected idle stress run exited after 30,108 ms |
+| Background and bounds | Browser resized from 640×400 to 240×180 and matched supplied RGB backgrounds 17,34,51 and 187,204,221; ICO corner pixels matched the supplied COLORREF |
+| Explorer activation | Version-5 release activated at low integrity and created visible native/browser children for GIF |
+| Multiple windows | User confirmed archive previews and animated image previews work independently in multiple Explorer windows |
+| Diagnostics and staging | Actual IPC reported class ownership, proxy health, capability version, and SVG skip state; portable and split-config release launches used the same global host |
+| E2E isolation | Existing config cases passed in split and portable layouts without changing the real helper/proxy hashes; the first portable driver attach timed out and a clean retry passed |
+| Static checks and builds | cargo check --tests, all 108 Rust tests including 12 host tests, all 308 frontend tests, node --check for the player, git diff --check, and debug/release builds passed |
+
+PowerToys-rendered SVG observations are not evidence that QuiviT's renderer works. The separately activated QuiviT spinner check provides that evidence.
+
+### Follow-up coverage, 2026-10-22
+
+| Check | Result |
+| --- | --- |
+| Thumbnail badges and transparent edges after refresh | User confirmed pass |
+| External SVG preview-only and thumbnail-only states | Code and production-function checks passed; the user requested code verification instead of manual toggling |
+| Partial image/archive association removal and restoration | User confirmed pass, with the error-message issue recorded below |
+| Keyboard focus and ICO appearance at wide/narrow pane sizes | User confirmed pass |
+
+The single-slot SVG check compiled the unchanged production detection and preservation functions in memory and exercised nine transitions in a process-local registry sandbox: preview-only, thumbnail-only, then preview-only again, each resolved through the extension, default ProgID, and UserChoice. Assertions confirmed that either slot triggers external ownership, the absent slot has no QuiviT handler, obsolete inherited relays are removed, original fixture registrations survive, and repeated preservation is a no-op. Source inspection also confirmed that registration returns through this preservation path before creating QuiviT classes.
+
+This is function-level registry verification, not an Explorer rendering test. No real PowerToys registration was changed. Registry overrides were restored and the disposable sandbox key was removed. These four preview checks no longer require manual confirmation.
+
+## Explorer startup repairs
+
+Real Explorer activation exposed failures that the earlier medium-integrity direct COM checks did not:
+
+- WebView2 `0x800700AA` occurred with the helper's low-integrity token and an unsuitable writable profile location. Resolving the LocalLow known folder repaired that path.
+- Browser creation then hit `0x80070057` during automatic startup focus. Disabling automatic focus and supplying initial bounds repaired the controller creation.
+- Explorer's large thumbnail requests exceeded the original rejection threshold. Capping positive requested sizes repaired those extractions.
+- Valid static AVIF metadata discovery failed with preferAnimation=true. Discovering tracks first repaired static files while retaining animated AVIF selection.
+
+Capability version 3 introduced image panes and the thumbnail proxy. Version 4 refreshed the Explorer startup, overlay, and thumbnail-size fixes. Version 5 adds GIF pane support, empty loading surfaces, and the static AVIF track-selection repair. The shared host spec defines the actual update and registration gates.
+
+## Windows Internet-zone behavior
+
+The following fixtures retain `Zone.Identifier` with `ZoneId=3`:
+
+- `test-files/animated/export_1785518859589.webp`
+- `test-files/animated/export_1788174887667.avif`
+- `test-files/issue.zip`
+
+Windows security updates from October 2025 block preview activation for Internet-zone files before QuiviT runs. The user requested a cause and YAGNI assessment, so no trust marks or Windows security policies were changed. This is not a decoder or archive-preview defect.
+
+For a file the user trusts, Properties → Unblock is the per-file Windows action. QuiviT does not automate it. [Microsoft KB5070960](https://support.microsoft.com/en-us/servicing/os/windows/docs/2025/10/file-explorer-automatically-disables-the-preview-feature-for-files-downloaded-from-the-internet)
+
+## Tested release artifact and build requirements
+
+This is the local artifact used for preview verification before the later File Types error-message change, not a published release. Later builds can replace the executable at this path; the association UI follow-up is recorded below.
+
+| Item | Recorded value |
+| --- | --- |
+| Preview capability | 5 |
+| Local executable | `src-tauri/target/release/tauri-app.exe` |
+| Executable size | 33,270,784 bytes |
+| Executable/staged-host SHA-256 | `5ef0fe7ee2be4ff9c1afeba0304d04e47d68e5e46def646e0c52487aca300f51` |
+| Proxy SHA-256 | `d489fda5605f1421b094ba37813938192233bc444bd5daef5d8796c35c2b9ca4` |
+| Defender signature | 1.461.135.0; real-time protection enabled |
+| Defender result | Custom scans of the release EXE and staged bin folder completed with no new detections |
+
+A local clean scan does not establish SmartScreen reputation or guarantee future signatures. The release remains one EXE download, with the proxy embedded and staged at runtime.
+
+Building static libaom on this host requires the MSVC C++ toolchain, CMake, Ninja, and NASM. The recorded build used the Visual Studio developer shell, `CMAKE_GENERATOR=Ninja`, and NASM 2.16.03 under ignored `src-tauri/target/build-tools`. These are build prerequisites, not end-user installations. The PE has no AVIF codec DLL import.
+
+Debug linking reports the existing libaom MSVCRTD conflict warning. The release build does not import that debug CRT. Temporary fixtures, logs, and portable proofs remain under ignored `src-tauri/target` rather than release assets.
+
+## Association error-message follow-up, 2026-10-22
+
+The user passed the remaining manual preview checks but found that a blocked association update displayed only a generic failure. The backend already returned the reason and retry instructions; associationsUi.js discarded that detail, and the Options footer truncated long status messages.
+
+The user requested concise indicators that retain useful recovery information. Known preview-update lock errors now display:
+
+> File types could not be updated. Previews may still be in use. Close all File Explorer windows, then save again.
+
+The existing Options save flow prefixes this with "Settings saved." when other settings were saved successfully. Console logging retains the full error. Other failures keep their specific reason, including registry and disk-space errors. The existing missing-release instruction is preserved. options.css allows the status to wrap instead of hiding its ending behind an ellipsis.
+
+Verification covers eleven error/retry cases through the actual association module, all 308 frontend tests, and both existing Options E2E cases. A controlled IPC failure in an isolated release window exercised the actual Save handler and confirmed that the concise message and Save button remain visible at 800 px and the 400 px minimum width. Screenshots were inspected. Diagnostics used isolated config/profile paths and the E2E guard; real helper/proxy hashes stayed unchanged. No permanent test suite or harness was added.
+
+The final debug and release builds pass. The rebuilt release embeds the concise copy and passed the same Save-handler and layout checks. It is 33,270,784 bytes with SHA-256 68352c42b4f9454d706325100f59a79665fa0d7e1550bab81bcc1d773d8723d0. Defender scans of that EXE and the staged bin folder found no new detections with real-time protection enabled and signature 1.461.135.0. The existing debug-only libaom CRT warning remains.
+
+The user confirmed the concise error message works at runtime on 2026-10-22. The four preview coverage checks and this follow-up are closed. There is no preview capability bump because the change affects only Options copy and layout.
+
+## Research references
+
+The PowerToys source inspected on 2026-10-21 embeds SVG without rewriting repeat counts. That informed the authored-timing decision; it is not an independent interactive test of PowerToys timing.
+
+- [PowerToys SVG control](https://github.com/microsoft/PowerToys/blob/main/src/modules/previewpane/SvgPreviewHandler/SvgPreviewControl.cs)
+- [PowerToys SVG HTML generator](https://github.com/microsoft/PowerToys/blob/main/src/modules/previewpane/SvgPreviewHandler/SvgHTMLPreviewGenerator.cs)
+- [PowerToys SVG layout helper](https://github.com/microsoft/PowerToys/blob/main/src/modules/previewpane/common/Utilities/SvgPreviewHandlerHelper.cs)
+- [resvg static SVG scope](https://github.com/linebender/resvg#svg-support)
+- [Windows thumbnail-provider initialization](https://learn.microsoft.com/en-us/windows/win32/api/thumbcache/nn-thumbcache-ithumbnailprovider)
+- [Building Windows thumbnail handlers](https://learn.microsoft.com/en-us/windows/win32/shell/building-thumbnail-providers)
+- [GetThumbnail bitmap contract](https://learn.microsoft.com/en-us/windows/win32/api/thumbcache/nf-thumbcache-ithumbnailprovider-getthumbnail)
+- [Windows application-badge overlays](https://learn.microsoft.com/en-us/windows/win32/shell/thumbnail-providers#thumbnail-overlays)
+- [APNG default images and animation frames](https://www.w3.org/TR/png-3/#4Concepts.APNG)
+- [WebCodecs image decoding and track selection](https://www.w3.org/TR/webcodecs/#image-decoding)
+- [Wry startup-focus issue](https://github.com/tauri-apps/wry/issues/1798)
+
+These three preview documents are finalized at the user's request. Branch-wide cleanup or an architecture/README update is separate work. No commit, release publication, or additional code change is implied by this documentation finalization.
