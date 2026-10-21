@@ -15,8 +15,8 @@ const EXT_TO_GROUP = new Map([
   ['zip', 'stoic'], ['rar', 'stoic'], ['7z', 'stoic'], ['tar', 'stoic']
 ]);
 
-function setCheckboxRegistered(checkbox, registered) {
-  checkbox.checked = registered;
+function setCheckboxRegistered(checkbox, registered, { preserveSelection = false } = {}) {
+  if (!preserveSelection) checkbox.checked = registered;
   initialState[checkbox.dataset.ext] = registered;
   const textSpan = checkbox.closest('label')?.querySelector('.assoc-text');
   if (textSpan) {
@@ -24,6 +24,15 @@ function setCheckboxRegistered(checkbox, registered) {
       ? 'QuiviT is registered for this format.'
       : 'QuiviT is not registered for this format.';
   }
+}
+
+async function refreshAssociations(options) {
+  const formats = await invoke('get_format_status');
+  const registeredSet = new Set(formats.filter(format => format.registered).map(format => format.ext));
+  document.querySelectorAll('.assoc-checkbox').forEach(checkbox => {
+    setCheckboxRegistered(checkbox, registeredSet.has(checkbox.dataset.ext), options);
+  });
+  return registeredSet;
 }
 
 export async function applyAssociations(statusCallback) {
@@ -60,6 +69,12 @@ export async function applyAssociations(statusCallback) {
     return { ok: true };
   } catch (err) {
     console.error('[Assoc] Apply error:', err);
+    try {
+      await refreshAssociations({ preserveSelection: true });
+    } catch (refreshErr) {
+      changes.forEach(({ ext }) => { delete initialState[ext]; });
+      console.warn('[Assoc] Could not refresh formats after apply error:', refreshErr);
+    }
     const detail = typeof err === 'string' ? err.trim() : String(err?.message || '').trim();
     let message = 'File types could not be updated.';
     if (detail.startsWith('The release build')) {
@@ -83,8 +98,7 @@ export async function initAssociationsUi(containerId, statusCallback) {
   if (!container || !invoke) return;
 
   try {
-    const formats = await invoke('get_format_status');
-    const registeredSet = new Set(formats.filter(f => f.registered).map(f => f.ext));
+    const registeredSet = await refreshAssociations();
     if (registeredSet.size > 0) {
       try {
         // Migrate previews for associations created before Explorer preview support.
@@ -93,11 +107,6 @@ export async function initAssociationsUi(containerId, statusCallback) {
         console.warn('[Assoc] Preview migration skipped:', syncErr);
       }
     }
-    
-    document.querySelectorAll('.assoc-checkbox').forEach(checkbox => {
-      const ext = checkbox.dataset.ext;
-      setCheckboxRegistered(checkbox, registeredSet.has(ext));
-    });
   } catch (err) {
     console.error('[Assoc] Error loading formats:', err);
     container.classList.add('is-error');
@@ -141,11 +150,7 @@ export async function initAssociationsUi(containerId, statusCallback) {
       } catch (err) {
         console.error('[Assoc] Removal error:', err);
         try {
-          const formats = await invoke('get_format_status');
-          const registeredSet = new Set(formats.filter(format => format.registered).map(format => format.ext));
-          document.querySelectorAll('.assoc-checkbox').forEach(checkbox => {
-            setCheckboxRegistered(checkbox, registeredSet.has(checkbox.dataset.ext));
-          });
+          await refreshAssociations();
         } catch (refreshErr) {
           console.error('[Assoc] Could not refresh formats after removal error:', refreshErr);
         }
