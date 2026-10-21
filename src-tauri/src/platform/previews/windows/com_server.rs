@@ -1043,6 +1043,7 @@ struct ArchivePreview {
     real_path: Option<PathBuf>,
     owns_source: bool,
     nodes: Vec<TreeNode>,
+    rows: Vec<(usize, usize)>,
     selected: Option<usize>,
     scroll: usize,
     display_name: String,
@@ -1064,11 +1065,15 @@ impl ArchivePreview {
         files: Vec<crate::models::FileEntry>,
         display_name: String,
     ) -> Self {
+        let nodes = build_tree(files);
+        let mut rows = Vec::with_capacity(nodes.len().saturating_sub(1));
+        append_visible_rows(&nodes, 0, 0, &mut rows);
         Self {
             source_path,
             real_path,
             owns_source,
-            nodes: build_tree(files),
+            nodes,
+            rows,
             selected: None,
             scroll: 0,
             display_name,
@@ -1079,20 +1084,28 @@ impl ArchivePreview {
         self.real_path.as_deref().unwrap_or(&self.source_path)
     }
 
-    fn visible_rows(&self) -> Vec<(usize, usize)> {
-        let mut rows = Vec::new();
-        append_visible_rows(&self.nodes, 0, 0, &mut rows);
-        rows
+    fn visible_rows(&self) -> &[(usize, usize)] {
+        &self.rows
     }
 
-    fn activate(&mut self, node_id: usize) {
+    fn set_expanded(&mut self, node_id: usize, expanded: bool) {
         let Some(node) = self.nodes.get_mut(node_id) else {
             return;
         };
-        self.selected = Some(node_id);
-        if !node.is_file {
-            node.expanded = !node.expanded;
+        if node.is_file || node.expanded == expanded {
+            return;
         }
+        node.expanded = expanded;
+        self.rows.clear();
+        append_visible_rows(&self.nodes, 0, 0, &mut self.rows);
+    }
+
+    fn activate(&mut self, node_id: usize) {
+        let Some(node) = self.nodes.get(node_id) else {
+            return;
+        };
+        self.selected = Some(node_id);
+        self.set_expanded(node_id, !node.expanded);
     }
 
     fn move_selection(&mut self, offset: isize, visible_count: usize) {
@@ -1544,9 +1557,58 @@ struct ScrollbarGeometry {
     thumb_height: i32,
 }
 
+enum ArchiveHit {
+    Row { node_id: usize, chevron: bool },
+    Scrollbar(ScrollbarPart),
+}
+
+fn visible_row_count(client: RECT) -> usize {
+    ((client.bottom - client.top - HEADER_HEIGHT).max(0) / ROW_HEIGHT) as usize
+}
+
+fn row_indent_x(client: RECT, depth: usize) -> i32 {
+    client.left + MARGIN_LEFT + depth as i32 * INDENT_WIDTH
+}
+
+fn hit_test_archive(
+    archive: &ArchivePreview,
+    client: RECT,
+    scrollbar: Option<&ScrollbarGeometry>,
+    x: i32,
+    y: i32,
+) -> Option<ArchiveHit> {
+    let content_top = client.top + HEADER_HEIGHT;
+    if x < client.left || x >= client.right || y < content_top || y >= client.bottom {
+        return None;
+    }
+    if let Some(sb) = scrollbar {
+        if x >= sb.track.left - 2 {
+            let part = if y >= sb.up_btn.top && y <= sb.up_btn.bottom {
+                ScrollbarPart::UpArrow
+            } else if y >= sb.down_btn.top && y <= sb.down_btn.bottom {
+                ScrollbarPart::DownArrow
+            } else if y >= sb.thumb.top && y <= sb.thumb.bottom {
+                ScrollbarPart::Thumb
+            } else {
+                ScrollbarPart::Track
+            };
+            return Some(ArchiveHit::Scrollbar(part));
+        }
+    }
+
+    let row = archive.scroll + ((y - content_top) / ROW_HEIGHT) as usize;
+    let &(node_id, depth) = archive.visible_rows().get(row)?;
+    let node = &archive.nodes[node_id];
+    let indent_x = row_indent_x(client, depth);
+    let chevron = !node.is_file
+        && !node.children.is_empty()
+        && x >= indent_x
+        && x < indent_x + CHEVRON_WIDTH;
+    Some(ArchiveHit::Row { node_id, chevron })
+}
+
 fn compute_scrollbar(client: RECT, total_rows: usize, scroll: usize) -> Option<ScrollbarGeometry> {
-    let content_height = (client.bottom - client.top - HEADER_HEIGHT).max(0);
-    let visible_count = (content_height / ROW_HEIGHT) as usize;
+    let visible_count = visible_row_count(client);
     if total_rows <= visible_count || visible_count == 0 {
         return None;
     }
@@ -1939,7 +2001,7 @@ fn clamp_scroll(hwnd: HWND, pane: &mut PreviewPane) {
     unsafe {
         let _ = GetClientRect(hwnd, &mut client);
     }
-    let visible_count = ((client.bottom - client.top - HEADER_HEIGHT).max(0) / ROW_HEIGHT) as usize;
+    let visible_count = visible_row_count(client);
     let rows = archive.visible_rows();
     let max_scroll = rows.len().saturating_sub(visible_count);
     if archive.scroll > max_scroll {
@@ -1953,61 +2015,42 @@ fn handle_lbutton_down(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
     let PreviewContent::Archive(archive) = &mut pane.content else {
         return;
     };
-    if y < HEADER_HEIGHT {
-        archive.selected = None;
-        return;
-    }
-
     let mut client = RECT::default();
     unsafe {
         let _ = GetClientRect(hwnd, &mut client);
     }
-    let rows = archive.visible_rows();
-    if let Some(sb) = compute_scrollbar(client, rows.len(), archive.scroll) {
-        if x >= sb.track.left - 2 && x <= client.right {
-            if y >= sb.up_btn.top && y <= sb.up_btn.bottom {
-                archive.scroll = archive.scroll.saturating_sub(1);
-            } else if y >= sb.down_btn.top && y <= sb.down_btn.bottom {
-                archive.scroll = (archive.scroll + 1).min(sb.max_scroll);
-            } else if y >= sb.thumb.top && y <= sb.thumb.bottom {
-                pane.dragging_scrollbar = Some(ScrollbarDrag {
-                    start_y: y,
-                    start_scroll: archive.scroll,
-                });
-                unsafe {
-                    let _ = SetCapture(hwnd);
+    let scrollbar = compute_scrollbar(client, archive.visible_rows().len(), archive.scroll);
+    match hit_test_archive(archive, client, scrollbar.as_ref(), x, y) {
+        Some(ArchiveHit::Row { node_id, .. }) => archive.activate(node_id),
+        Some(ArchiveHit::Scrollbar(part)) => {
+            let Some(sb) = scrollbar else {
+                return;
+            };
+            match part {
+                ScrollbarPart::UpArrow => archive.scroll = archive.scroll.saturating_sub(1),
+                ScrollbarPart::DownArrow => {
+                    archive.scroll = (archive.scroll + 1).min(sb.max_scroll);
                 }
-            } else if y < sb.thumb.top && y > sb.up_btn.bottom {
-                let visible_count =
-                    ((client.bottom - client.top - HEADER_HEIGHT).max(0) / ROW_HEIGHT) as usize;
-                archive.scroll = archive.scroll.saturating_sub(visible_count.max(1));
-            } else if y > sb.thumb.bottom && y < sb.down_btn.top {
-                let visible_count =
-                    ((client.bottom - client.top - HEADER_HEIGHT).max(0) / ROW_HEIGHT) as usize;
-                archive.scroll = (archive.scroll + visible_count.max(1)).min(sb.max_scroll);
+                ScrollbarPart::Thumb => {
+                    pane.dragging_scrollbar = Some(ScrollbarDrag {
+                        start_y: y,
+                        start_scroll: archive.scroll,
+                    });
+                    unsafe {
+                        let _ = SetCapture(hwnd);
+                    }
+                }
+                ScrollbarPart::Track => {
+                    let page = visible_row_count(client).max(1);
+                    if y < sb.thumb.top && y > sb.up_btn.bottom {
+                        archive.scroll = archive.scroll.saturating_sub(page);
+                    } else if y > sb.thumb.bottom && y < sb.down_btn.top {
+                        archive.scroll = (archive.scroll + page).min(sb.max_scroll);
+                    }
+                }
             }
-            return;
         }
-    }
-
-    let row = (y - HEADER_HEIGHT) / ROW_HEIGHT + archive.scroll as i32;
-    if row >= 0 && (row as usize) < rows.len() {
-        let (node_id, depth) = rows[row as usize];
-        let indent_x = client.left + MARGIN_LEFT + depth as i32 * INDENT_WIDTH;
-        let chevron_left = indent_x;
-        let chevron_right = indent_x + CHEVRON_WIDTH;
-
-        let is_expandable =
-            !archive.nodes[node_id].is_file && !archive.nodes[node_id].children.is_empty();
-
-        if is_expandable && x >= chevron_left && x < chevron_right {
-            archive.nodes[node_id].expanded = !archive.nodes[node_id].expanded;
-            archive.selected = Some(node_id);
-        } else {
-            archive.activate(node_id);
-        }
-    } else {
-        archive.selected = None;
+        None => archive.selected = None,
     }
 }
 
@@ -2017,40 +2060,21 @@ fn handle_lbutton_dblclk(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
     let PreviewContent::Archive(archive) = &mut pane.content else {
         return;
     };
-    if y < HEADER_HEIGHT {
-        return;
-    }
-
     let mut client = RECT::default();
     unsafe {
         let _ = GetClientRect(hwnd, &mut client);
     }
-    let rows = archive.visible_rows();
-    if let Some(sb) = compute_scrollbar(client, rows.len(), archive.scroll) {
-        if x >= sb.track.left - 2 && x <= client.right {
-            return;
-        }
-    }
-
-    let row = (y - HEADER_HEIGHT) / ROW_HEIGHT + archive.scroll as i32;
-    if row >= 0 && (row as usize) < rows.len() {
-        let (node_id, depth) = rows[row as usize];
-        let indent_x = client.left + MARGIN_LEFT + depth as i32 * INDENT_WIDTH;
-        let chevron_left = indent_x;
-        let chevron_right = indent_x + CHEVRON_WIDTH;
-
-        let is_expandable =
-            !archive.nodes[node_id].is_file && !archive.nodes[node_id].children.is_empty();
-
-        if is_expandable && x >= chevron_left && x < chevron_right {
-            archive.nodes[node_id].expanded = !archive.nodes[node_id].expanded;
-            archive.selected = Some(node_id);
-        } else if archive.nodes[node_id].is_file {
-            archive.selected = Some(node_id);
-            open_item_in_app(archive, node_id);
-        } else {
-            archive.activate(node_id);
-        }
+    let scrollbar = compute_scrollbar(client, archive.visible_rows().len(), archive.scroll);
+    let Some(ArchiveHit::Row { node_id, chevron }) =
+        hit_test_archive(archive, client, scrollbar.as_ref(), x, y)
+    else {
+        return;
+    };
+    if !chevron && archive.nodes[node_id].is_file {
+        archive.selected = Some(node_id);
+        open_item_in_app(archive, node_id);
+    } else {
+        archive.activate(node_id);
     }
 }
 
@@ -2064,10 +2088,8 @@ fn handle_mouse_move(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
     unsafe {
         let _ = GetClientRect(hwnd, &mut client);
     }
-    let rows = archive.visible_rows();
-
     if let Some(drag) = pane.dragging_scrollbar {
-        if let Some(sb) = compute_scrollbar(client, rows.len(), drag.start_scroll) {
+        if let Some(sb) = compute_scrollbar(client, archive.visible_rows().len(), drag.start_scroll) {
             let delta_y = y - drag.start_y;
             let travel = (sb.track_height - sb.thumb_height).max(1);
             let delta_scroll =
@@ -2082,48 +2104,15 @@ fn handle_mouse_move(hwnd: HWND, pane: &mut PreviewPane, lparam: LPARAM) {
         return;
     }
 
-    let scrollbar = compute_scrollbar(client, rows.len(), archive.scroll);
-    let (new_sb_part, is_over_scrollbar) = if let Some(sb) = &scrollbar {
-        if x >= sb.track.left - 2 && x <= client.right && y >= client.top + HEADER_HEIGHT {
-            let part = if y >= sb.up_btn.top && y <= sb.up_btn.bottom {
-                Some(ScrollbarPart::UpArrow)
-            } else if y >= sb.down_btn.top && y <= sb.down_btn.bottom {
-                Some(ScrollbarPart::DownArrow)
-            } else if y >= sb.thumb.top && y <= sb.thumb.bottom {
-                Some(ScrollbarPart::Thumb)
-            } else {
-                Some(ScrollbarPart::Track)
-            };
-            (part, true)
-        } else {
-            (None, false)
-        }
-    } else {
-        (None, false)
-    };
-
-    let (new_item, new_chevron) = if !is_over_scrollbar && y >= HEADER_HEIGHT {
-        let row = (y - HEADER_HEIGHT) / ROW_HEIGHT + archive.scroll as i32;
-        if row >= 0 && (row as usize) < rows.len() {
-            let (node_id, depth) = rows[row as usize];
-            let indent_x = client.left + MARGIN_LEFT + depth as i32 * INDENT_WIDTH;
-            let chevron_left = indent_x;
-            let chevron_right = indent_x + CHEVRON_WIDTH;
-            let is_expandable =
-                !archive.nodes[node_id].is_file && !archive.nodes[node_id].children.is_empty();
-
-            let chevron = if is_expandable && x >= chevron_left && x < chevron_right {
-                Some(node_id)
-            } else {
-                None
-            };
-            (Some(node_id), chevron)
-        } else {
-            (None, None)
-        }
-    } else {
-        (None, None)
-    };
+    let scrollbar = compute_scrollbar(client, archive.visible_rows().len(), archive.scroll);
+    let (new_sb_part, new_item, new_chevron) =
+        match hit_test_archive(archive, client, scrollbar.as_ref(), x, y) {
+            Some(ArchiveHit::Scrollbar(part)) => (Some(part), None, None),
+            Some(ArchiveHit::Row { node_id, chevron }) => {
+                (None, Some(node_id), chevron.then_some(node_id))
+            }
+            None => (None, None, None),
+        };
 
     if new_sb_part != pane.hovered_scrollbar_part
         || new_item != pane.hovered_item
@@ -2146,7 +2135,7 @@ fn handle_wheel(pane: &mut PreviewPane, wparam: WPARAM) {
     unsafe {
         let _ = GetClientRect(pane.hwnd, &mut client);
     }
-    let visible_count = ((client.bottom - client.top - HEADER_HEIGHT).max(0) / ROW_HEIGHT) as usize;
+    let visible_count = visible_row_count(client);
     let max_scroll = rows.len().saturating_sub(visible_count);
 
     if delta > 0 {
@@ -2164,7 +2153,7 @@ fn handle_key(pane: &mut PreviewPane, key: u32) {
     unsafe {
         let _ = GetClientRect(pane.hwnd, &mut client);
     }
-    let visible_count = ((client.bottom - client.top - HEADER_HEIGHT).max(0) / ROW_HEIGHT) as usize;
+    let visible_count = visible_row_count(client);
 
     match key {
         0x26 => archive.move_selection(-1, visible_count), // VK_UP
@@ -2187,10 +2176,10 @@ fn handle_key(pane: &mut PreviewPane, key: u32) {
         0x27 => {
             // VK_RIGHT: expand folder if collapsed, or move down
             if let Some(selected) = archive.selected {
-                let node = &mut archive.nodes[selected];
+                let node = &archive.nodes[selected];
                 if !node.is_file && !node.children.is_empty() {
                     if !node.expanded {
-                        node.expanded = true;
+                        archive.set_expanded(selected, true);
                     } else {
                         archive.move_selection(1, visible_count);
                     }
@@ -2200,10 +2189,7 @@ fn handle_key(pane: &mut PreviewPane, key: u32) {
         0x25 => {
             // VK_LEFT: collapse folder if expanded
             if let Some(selected) = archive.selected {
-                let node = &mut archive.nodes[selected];
-                if !node.is_file && node.expanded {
-                    node.expanded = false;
-                }
+                archive.set_expanded(selected, false);
             }
         }
         _ => {}
@@ -2562,8 +2548,7 @@ unsafe fn draw_archive(
         client.right - 8
     };
 
-    let visible_height =
-        (client.bottom - client.top - HEADER_HEIGHT).max(0) as usize / ROW_HEIGHT as usize + 1;
+    let visible_height = visible_row_count(client) + 1;
     for (view_index, (node_id, depth)) in rows
         .iter()
         .skip(archive.scroll)
@@ -2581,7 +2566,7 @@ unsafe fn draw_archive(
         let is_selected = archive.selected == Some(*node_id);
         let is_hovered = hovered_item == Some(*node_id);
 
-        let indent_x = client.left + MARGIN_LEFT + *depth as i32 * INDENT_WIDTH;
+        let indent_x = row_indent_x(client, *depth);
         let item_box_left = client.left + 6;
 
         if is_selected {

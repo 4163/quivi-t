@@ -8,7 +8,7 @@ Validation comparison performed against `.agents/skills/validate-changes/SKILL.m
 
 **Summary:** The branch adds Explorer archive and image previews, native image thumbnails through a COM proxy, staged helper updates, file registration removal, and build selection for external file opens. The review covers all 39 touched non-Markdown files across the 19 branch commits, including the accepted changes outside the previews work.
 
-**Verdict: Pass with warnings.** B1 through B5 are fixed in the working tree. The user confirmed all five runtime checks passed on 2026-10-22. W1 through W4 remain open, and N1 is partly addressed. Warning fixes have not started.
+**Verdict: Pass with warnings.** The user confirmed all five blocking runtime checks and all five W1/W4 runtime checks passed on 2026-10-22. B1 through B5, W1, and W4 are resolved with user runtime acceptance. W2 and W3 remain open, and N1 is partly addressed.
 
 The findings and reproduction results below record the original review. The resolution notes and checked runtime list record the subsequent fixes and user acceptance.
 
@@ -144,6 +144,8 @@ The actual preview dispatch was traced in source; Explorer was not used for this
 
 ### W1. [Warning] Archive hover and painting allocate and traverse the full expanded tree
 
+- [x] Fixed and runtime accepted on 2026-10-22. Each archive now builds its visible-row cache on the listing worker and reuses its storage when folder expansion changes. Hover, scrolling, selection, and drawing borrow the cache. In the follow-up diagnostic, 100 cached hover and row-read calls on 100,000 entries made zero Rust allocations.
+
 **Location:** [com_server.rs:1103](E:/Projects/QuiviT/src-tauri/src/platform/previews/windows/com_server.rs:1103), called by [com_server.rs:2085](E:/Projects/QuiviT/src-tauri/src/platform/previews/windows/com_server.rs:2085) and [com_server.rs:2575](E:/Projects/QuiviT/src-tauri/src/platform/previews/windows/com_server.rs:2575).
 
 `visible_rows` allocates a new vector and recursively walks every expanded node for every mouse movement. A hover change then invalidates the pane, and painting repeats the same work. Wheel input, selection, and scrollbar handling also rebuild it. Only the final drawing loop is limited to the viewport.
@@ -183,6 +185,8 @@ The low-level preview implementation reaches into `commands::registry::FORMAT_IC
 ## Redundant code and shared helpers
 
 ### W4. [Warning] Archive hit testing repeats the same row and chevron geometry in three handlers
+
+- [x] Fixed and runtime accepted on 2026-10-22. Mouse down, double-click, and mouse move share one hit-test function for rows, chevrons, and scrollbar parts. Painting and input also share indentation and viewport row-count calculations. Native handler diagnostics passed for nested rows, scrollbar controls, navigation, and client bounds.
 
 **Location:** [com_server.rs:2011](E:/Projects/QuiviT/src-tauri/src/platform/previews/windows/com_server.rs:2011), [com_server.rs:2053](E:/Projects/QuiviT/src-tauri/src/platform/previews/windows/com_server.rs:2053), and [com_server.rs:2123](E:/Projects/QuiviT/src-tauri/src/platform/previews/windows/com_server.rs:2123).
 
@@ -267,6 +271,24 @@ The user confirmed every item below passed on 2026-10-22:
 4. [x] In the CBZ preview, select the expanded folder and scroll it above the viewport. Press Left to collapse it and confirm rows remain visible and the scrollbar adjusts. Repeat collapse with Enter and the chevron.
 5. [x] Preview the legacy TAR and CBT fixtures and confirm `001.png` appears. Confirm the empty TAR shows zero entries and the invalid TAR reports an error.
 
+## W1 and W4 verification and runtime list
+
+The follow-up changes are confined to the existing native archive pane and the helper version, now 7, so release staging also picks up the updated pane. `cargo check --tests`, all 12 preview tests, all 308 frontend tests, and the debug application build passed. `git diff --check` passed. The preview test link step still reported the previously noted `LNK4098` warning.
+
+The existing temporary native diagnostic was refreshed from the current source. It exercised cache refresh through mouse and keyboard handlers, nested row and chevron hits, scrollbar arrows, track clicks and dragging, wheel input, selection navigation, empty and replacement archives, independent archive caches, and the accepted collapse regression. The app-open function was stubbed in this diagnostic; the user subsequently confirmed page opening in the runtime checks below.
+
+For 100 calls on 100,000 flat entries, the original flattening algorithm made 1,600 allocations or reallocations totaling 419,424,000 cumulative bytes. Cached hover and row reads made zero Rust allocations. This measures the native diagnostic, not Explorer frame times or allocations made by GDI drawing. The actual archive reader also verified the new runtime fixture's 100,000 images and 1,100 folders, and nested collapse and re-expansion preserved the cached row list.
+
+Use `E:/Projects/QuiviT/src-tauri/target/debug/tauri-app.exe`. Fixtures are under `E:/Projects/QuiviT/.agents/scratch/windows-previews-blockers/`.
+
+The user confirmed all five items passed on 2026-10-22.
+
+1. [x] Close QuiviT and Explorer windows, start the updated executable, then preview `large-archive-tree.cbz` in Explorer. After its list appears, move the pointer over rows, use the wheel, and drag the scrollbar; confirm the pane responds and highlights follow the pointer.
+2. [x] Expand and collapse nested folders using their chevrons, labels, double-click, Enter, and Left/Right. Repeat after scrolling and resizing the preview pane; confirm children appear or disappear correctly and rows stay visible.
+3. [x] Use the scrollbar arrows, click the track above and below the thumb, and drag the thumb. Confirm these controls scroll the list without selecting or opening an archive entry, and row clicks still match their highlights afterward.
+4. [x] Preview `duplicate-pages-and-collapse.cbz`, navigate with Up/Down, Page Up/Page Down, and Home/End, then open pages with Enter and double-click. Confirm root `001.png` opens the red image and `folder/001.png` opens the blue image, including after collapsing and reopening the folder.
+5. [x] Keep two Explorer windows previewing different archives and collapse or scroll one list. Confirm the other list stays unchanged, then switch one window to `empty.tar` and back; confirm it shows the new contents without leftover rows.
+
 ## Verdict
 
-**Pass with warnings.** All five blocking findings are resolved and have user runtime acceptance. W1 through W4 remain open, and N1 still has cleanup remaining. W1 and W4 are recommended as one follow-up change because cached rows and shared hit testing must agree. No warning fixes have started; further work awaits the user's next instruction.
+**Pass with warnings.** All five blocking findings, W1, and W4 have passing code checks and user runtime acceptance. W2, W3, and the remaining N1 cleanup are outside this follow-up.
