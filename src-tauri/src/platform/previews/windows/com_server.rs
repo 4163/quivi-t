@@ -1823,12 +1823,14 @@ unsafe extern "system" fn preview_window_proc(
         WM_LBUTTONDOWN => {
             let _ = unsafe { SetFocus(Some(hwnd)) };
             handle_lbutton_down(hwnd, pane, lparam);
+            clamp_scroll(hwnd, pane);
             let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
             LRESULT(0)
         }
         WM_LBUTTONDBLCLK => {
             let _ = unsafe { SetFocus(Some(hwnd)) };
             handle_lbutton_dblclk(hwnd, pane, lparam);
+            clamp_scroll(hwnd, pane);
             let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
             LRESULT(0)
         }
@@ -1903,6 +1905,7 @@ unsafe extern "system" fn preview_window_proc(
         }
         WM_KEYDOWN => {
             handle_key(pane, wparam.0 as u32);
+            clamp_scroll(hwnd, pane);
             let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
             LRESULT(0)
         }
