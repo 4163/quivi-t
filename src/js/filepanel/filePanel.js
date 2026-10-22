@@ -2396,8 +2396,7 @@ export function renderFilePanel(state) {
   const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
 
   // Deduplication guard: if file list state has not changed, exit early.
-  // Manhwa mode is a token: toggling it changes no list, index, or view
-  // mode, but must still repaint to drop secondary highlights.
+  // Mode changes also clear secondary highlights when the list stays the same.
   if (
     lastRenderedList === state.list &&
     lastRenderedIndex === state.index &&
@@ -2727,6 +2726,7 @@ export function initFilePanel(deps) {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
 
     const state = Core.getState();
+    if (state.manhwaEnabled && e.shiftKey) return;
     const list = state.list;
     if (!list || !list.length) return;
 
@@ -2741,18 +2741,18 @@ export function initFilePanel(deps) {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        const lastImg = isManhwa ? _lastImageIndex(list) : (list.length - 1);
-        const maxBound = lastImg !== -1 ? lastImg : (list.length - 1);
-        targetIdx = state.index === -1 ? (isManhwa ? _firstImageIndex(list) : 0) : Math.min(state.index + 1, maxBound);
+        targetIdx = state.index === -1
+          ? (isManhwa ? _firstImageIndex(list) : 0)
+          : (isManhwa ? (state.index + 1) % list.length : Math.min(state.index + 1, list.length - 1));
         break;
       }
       case 'ArrowUp': {
         e.preventDefault();
         e.stopPropagation();
         panelKeyboardActive = true;
-        const firstImg = isManhwa ? _firstImageIndex(list) : 0;
-        const minBound = firstImg !== -1 ? firstImg : 0;
-        targetIdx = state.index === -1 ? (isManhwa ? _lastImageIndex(list) : list.length - 1) : Math.max(state.index - 1, minBound);
+        targetIdx = state.index === -1
+          ? (isManhwa ? _lastImageIndex(list) : list.length - 1)
+          : (isManhwa ? (state.index + list.length - 1) % list.length : Math.max(state.index - 1, 0));
         break;
       }
       case 'PageDown':
@@ -2949,10 +2949,12 @@ export function isFileListFocused() {
 }
 
 /** Scroll the list to the very top so `..` is visible. Panel stays the sole
- * owner of its scroll; other modules call this instead of touching the UL. */
+ * owner of its scroll. Returns whether the top was already visible. */
 export function revealListTop() {
-  if (!fileListUl) return;
+  if (!fileListUl) return true;
+  const wasAtTop = fileListUl.scrollTop === 0;
   fileListUl.scrollTop = 0;
+  return wasAtTop;
 }
 
 export function getFileListViewportRange() {

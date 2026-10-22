@@ -44,8 +44,7 @@ import {
   isManhwaStripActive,
   alignListItemTop,
   alignListItemBottom,
-  getFirstImageIndex,
-  getLastImageIndex,
+  jumpManhwa,
   navigateManhwa,
   pageStrip,
   setRevealListTop,
@@ -68,9 +67,7 @@ window.addEventListener('keydown', (e) => {
   handleTabJump(e);
 });
 
-// Manhwa strip owns Home/End/PageUp/PageDown at any focus (except text
-// inputs) so panel legacy keys never divert them to '..' or row jumps.
-// Capture phase plus stopPropagation preempts the file-list handler.
+// Route strip jumps before the file list's row-based navigation.
 window.addEventListener('keydown', (e) => {
   if (!isManhwaStripActive()) return;
   const tag = document.activeElement?.tagName;
@@ -79,17 +76,9 @@ window.addEventListener('keydown', (e) => {
 
   let handled = false;
   if (e.key === 'Home') {
-    const firstIdx = getFirstImageIndex();
-    if (firstIdx !== -1) {
-      Core.selectIndex(firstIdx);
-      handled = alignListItemTop(firstIdx);
-    }
+    handled = jumpManhwa(-1);
   } else if (e.key === 'End') {
-    const lastIdx = getLastImageIndex();
-    if (lastIdx !== -1) {
-      Core.selectIndex(lastIdx);
-      handled = alignListItemBottom(lastIdx);
-    }
+    handled = jumpManhwa(1);
   } else if (e.key === 'PageUp') {
     handled = pageStrip(-1, 2);
   } else if (e.key === 'PageDown') {

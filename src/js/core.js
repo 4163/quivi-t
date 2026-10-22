@@ -348,7 +348,7 @@ export const Core = {
 
   setListAndIndex(newList, newIndex) {
     _state.list = newList;
-    if (newIndex !== undefined && newIndex !== -1) _state.index = newIndex;
+    if (newIndex !== undefined) _state.index = newIndex;
     _state.spreadStep = 1;
     _notify();
   },
@@ -594,7 +594,7 @@ export const Core = {
   },
 
   selectIndex(index) {
-    _selectEntry(index);
+    return _selectEntry(index);
   },
 
   /**

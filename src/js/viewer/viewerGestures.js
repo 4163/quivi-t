@@ -1,7 +1,7 @@
 import { Core } from '../core.js';
 import { activeKeys } from '../shortcuts.js';
 import { MOUSE_BUTTON_NAMES } from '../services/keyCombo.js';
-export function createViewerGestures(viewportState) {
+export function createViewerGestures(viewportState, panBy) {
   let _isPanning = false;
   let _panStartX = 0;
   let _panStartY = 0;
@@ -254,7 +254,7 @@ export function createViewerGestures(viewportState) {
           const dx = (pos.x - _lastPollPos.x) / _winScaleFactor;
           const dy = (pos.y - _lastPollPos.y) / _winScaleFactor;
           if (dx !== 0 || dy !== 0) {
-            viewportState.panBy(dx, dy);
+            panBy(dx, dy);
           }
         }
         _lastPollPos = pos;
@@ -270,7 +270,7 @@ export function createViewerGestures(viewportState) {
     _lastPanX = clientX;
     _lastPanY = clientY;
     if (dx !== 0 || dy !== 0) {
-      viewportState.panBy(dx, dy);
+      panBy(dx, dy);
     }
   }
 

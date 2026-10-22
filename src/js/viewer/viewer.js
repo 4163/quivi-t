@@ -26,12 +26,20 @@ const viewportState = createViewportState({
   getViewport: () => _cachedViewport
 });
 
+function _revealListTopOnPan(dy) {
+  // Panning beyond the strip's top reveals the parent without changing selection.
+  if (dy > 0 && isManhwaStripActive() && isStripAtTop()) triggerRevealListTop();
+}
+
 const pipelines = createViewerPipelines(viewportState);
 const renderer = createViewerRenderer(viewportState, (img) => {
   if (img) pipelines.setSource(img);
   else pipelines.clear();
 });
-const gestures = createViewerGestures(viewportState);
+const gestures = createViewerGestures(viewportState, (dx, dy) => {
+  _revealListTopOnPan(dy);
+  viewportState.panBy(dx, dy);
+});
 initManhwaStrip(viewportState);
 pipelines.setColumnSource(getManhwaColumnSnapshot);
 function _doubleRaf(fn) {
@@ -90,9 +98,7 @@ export const Viewer = {
     if (c) viewportState.zoomAt(delta, c.x, c.y);
   },
   panBy: (dx, dy) => {
-    // Upward pan with the strip already top-pinned has nowhere to go:
-    // hand it to the file list so `..` scrolls into view.
-    if (dy > 0 && isManhwaStripActive() && isStripAtTop()) triggerRevealListTop();
+    _revealListTopOnPan(dy);
     viewportState.panByStep(dx, dy);
   },
   rotate: (deg) => {

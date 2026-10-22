@@ -2057,7 +2057,9 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   _anchorHoldoverAlignTop = !!alignTop;
   if (targetImgIdx !== null) {
     _anchorImgIdx = targetImgIdx;
-    if (_imageIndex[targetImgIdx]) {
+    // Late fit refreshes must preserve a selected folder or archive.
+    const liveIndex = Core.getState().index;
+    if (_imageIndex[targetImgIdx] && (liveIndex < 0 || _listToImgIdx.has(liveIndex))) {
       _anchorUpdateInProgress = true;
       Core.selectIndex(_imageIndex[targetImgIdx].listIndex);
       _anchorUpdateInProgress = false;
@@ -2127,6 +2129,7 @@ export function alignListItemTop(listIndex) {
   const vh = _viewport?.clientHeight || 800;
   const colH = (_layout.totalHeight || 0) * scale;
   if (colH <= vh + 0.5) {
+    _anchorHoldover = null;
     _anchorImgIdx = mapped;
     _syncAnchorToCore();
     return true;
@@ -2159,6 +2162,7 @@ export function alignListItemBottom(listIndex) {
   const vh = _viewport?.clientHeight || 800;
   const colH = (_layout.totalHeight || 0) * scale;
   if (colH <= vh + 0.5) {
+    _anchorHoldover = null;
     _anchorImgIdx = mapped;
     _syncAnchorToCore();
     return true;
@@ -2346,25 +2350,50 @@ export function getLastImageIndex() {
   return _imageIndex[_imageIndex.length - 1]?.listIndex ?? -1;
 }
 
+function _revealBeforeLeavingStrip(direction) {
+  return direction < 0 && getFirstImageIndex() > 0 && !triggerRevealListTop();
+}
+
+export function jumpManhwa(direction) {
+  if (!_active || _imageIndex.length === 0) return false;
+  const state = Core.getState();
+  const edgeIndex = direction < 0 ? getFirstImageIndex() : getLastImageIndex();
+  if (direction < 0 && state.index === edgeIndex) {
+    if (!isStripAtTop()) return alignListItemTop(edgeIndex);
+    if (_revealBeforeLeavingStrip(direction)) return true;
+  }
+  const beyondEdge = state.index >= 0 && (direction < 0 ? state.index <= edgeIndex : state.index >= edgeIndex);
+  let targetIndex = beyondEdge ? (direction < 0 ? 0 : state.list.length - 1) : edgeIndex;
+  if (direction > 0 && state.index === edgeIndex && edgeIndex === state.list.length - 1 && !_listToImgIdx.has(0)) {
+    targetIndex = 0;
+  }
+  const selection = Core.selectIndex(targetIndex);
+  const handled = !_listToImgIdx.has(targetIndex) ||
+    (direction < 0 ? alignListItemTop(targetIndex) : alignListItemBottom(targetIndex));
+  if (targetIndex === 0) {
+    triggerRevealListTop();
+    selection.then(() => {
+      if (Core.getState().index === targetIndex) triggerRevealListTop();
+    });
+  }
+  return handled;
+}
+
 export function navigateManhwa(delta) {
   if (!_active || _imageIndex.length === 0) return false;
-  // Cleared or unmapped selection restarts at the near image end instead of
-  // stepping through edge rows. Select first so the jump lands even when
-  // layout is not ready, then latch top or bottom like the fit keys do.
-  if (!_listToImgIdx.has(Core.getState().index)) {
-    const target = delta < 0 ? _imageIndex[_imageIndex.length - 1] : _imageIndex[0];
-    Core.selectIndex(target.listIndex);
-    if (delta < 0 && _imageIndex.length > 1) return alignListItemBottom(target.listIndex);
-    return alignListItemTop(target.listIndex);
-  }
-  Core.navigate(delta);
   const state = Core.getState();
-  const mapped = _listToImgIdx.get(state.index);
+  if (state.index < 0) {
+    Core.selectIndex(delta < 0 ? getLastImageIndex() : getFirstImageIndex());
+  } else {
+    Core.navigate(delta);
+  }
+  const targetIndex = Core.getState().index;
+  const mapped = _listToImgIdx.get(targetIndex);
   if (mapped !== undefined) {
     if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
-      return alignListItemBottom(state.index);
+      return alignListItemBottom(targetIndex);
     }
-    return alignListItemTop(state.index);
+    return alignListItemTop(targetIndex);
   }
   // Landed on an entry with no strip mapping (folder edge):
   // highlight-only. The overlay shows, and the strip and its anchor stay
@@ -2374,8 +2403,7 @@ export function navigateManhwa(delta) {
 
 export function pageStrip(direction, pageMultiplier = 1) {
   if (!_active || !_viewportState || !_layout.offsets.length || _imageIndex.length === 0) return false;
-  // Cleared or unmapped selection restarts at the near image end instead of
-  // paging blindly from a stale anchor. navigateManhwa owns that jump.
+  // Outside the strip, keep walking the file list until media is selected.
   if (!_listToImgIdx.has(Core.getState().index)) {
     return navigateManhwa(direction);
   }
@@ -2383,17 +2411,22 @@ export function pageStrip(direction, pageMultiplier = 1) {
   const vpH = _viewport?.clientHeight || 800;
   const colVisualH = (_layout.totalHeight || 0) * scale;
 
-  if (colVisualH <= vpH) {
+  const ty = _viewportState.getTy() || 0;
+  const maxTy = (colVisualH - vpH) / 2;
+  const minTy = -(colVisualH - vpH) / 2;
+  const atBoundary = direction < 0 ? ty >= maxTy - 0.5 : ty <= minTy + 0.5;
+
+  if (colVisualH <= vpH || atBoundary) {
     const targetIdx = direction > 0 ? getLastImageIndex() : getFirstImageIndex();
     if (targetIdx !== -1) {
-      if (Core.getState().index !== targetIdx) {
-        Core.selectIndex(targetIdx);
+      if (Core.getState().index === targetIdx) {
+        if (_revealBeforeLeavingStrip(direction)) return true;
+        return navigateManhwa(direction);
       }
+      Core.selectIndex(targetIdx);
       if (direction > 0) {
         alignListItemBottom(targetIdx);
       } else {
-        // Whole column fits: paging up lands on the top, so reveal `..`
-        // in the same gesture instead of asking for a second press.
         triggerRevealListTop();
         alignListItemTop(targetIdx);
       }
@@ -2401,35 +2434,7 @@ export function pageStrip(direction, pageMultiplier = 1) {
     return true;
   }
 
-  const ty = _viewportState.getTy() || 0;
-  const maxTy = (colVisualH - vpH) / 2;
-  const minTy = -(colVisualH - vpH) / 2;
   const step = Math.max(1, pageMultiplier) * vpH;
-
-  if (direction < 0 && ty >= maxTy - 0.5) {
-    // Nowhere left to go upstairs: hand the gesture to the file list so
-    // one more page-up reveals `..`.
-    triggerRevealListTop();
-    const firstIdx = getFirstImageIndex();
-    if (firstIdx !== -1) {
-      if (Core.getState().index !== firstIdx) {
-        Core.selectIndex(firstIdx);
-      }
-      alignListItemTop(firstIdx);
-    }
-    return true;
-  }
-
-  if (direction > 0 && ty <= minTy + 0.5) {
-    const lastIdx = getLastImageIndex();
-    if (lastIdx !== -1) {
-      if (Core.getState().index !== lastIdx) {
-        Core.selectIndex(lastIdx);
-      }
-      alignListItemBottom(lastIdx);
-    }
-    return true;
-  }
 
   const targetTy = direction > 0 ? Math.max(minTy, ty - step) : Math.min(maxTy, ty + step);
   _anchorHoldover = null;
@@ -2812,6 +2817,7 @@ function _onStateChange(state) {
           alignListItemTop(state.index);
         }
       } else {
+        _anchorHoldover = null;
         _anchorImgIdx = mapped;
         _syncAnchorToCore();
       }
@@ -3088,7 +3094,7 @@ export function setRevealListTop(fn) {
 
 
 export function triggerRevealListTop() {
-  _onRevealListTop?.();
+  return _onRevealListTop?.() ?? true;
 }
 
 let _onSlotMounted = null;
