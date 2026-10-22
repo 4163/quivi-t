@@ -1,6 +1,8 @@
 import { DEFAULT_FIT_MODE } from '../keybinds.js';
 export { computeSlotHue } from './keybindDomain.js';
 
+const SPREAD_PAN_RETURN_TO_TOP = true;
+
 export function checkIsSpread(w, h) {
   if (!w || !h) return false;
   return (w / h) >= 1.2;
@@ -552,6 +554,19 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     notify();
   }
 
+  function panByStep(dx, dy) {
+    if (SPREAD_PAN_RETURN_TO_TOP && dx !== 0 && dy === 0 && isSpreadActive()) {
+      const vp = getViewport();
+      const { width, height } = _visualSize();
+      const remainingX = (width - vp.clientWidth) / 2 - Math.sign(dx) * _tx;
+      if (width > vp.clientWidth && height > vp.clientHeight && remainingX > 0) {
+        const topY = (height - vp.clientHeight) / 2;
+        dy = (topY - _ty) * Math.min(Math.abs(dx) / remainingX, 1);
+      }
+    }
+    panBy(dx, dy);
+  }
+
   function panTo(tx, ty) {
     const prevTransformed = _userTransformed;
     _userTransformed = true;
@@ -692,6 +707,7 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     zoomAt,
     resetZoomOnly,
     panBy,
+    panByStep,
     panTo,
     rotate,
     flip,

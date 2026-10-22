@@ -93,7 +93,7 @@ export const Viewer = {
     // Upward pan with the strip already top-pinned has nowhere to go:
     // hand it to the file list so `..` scrolls into view.
     if (dy > 0 && isManhwaStripActive() && isStripAtTop()) triggerRevealListTop();
-    viewportState.panBy(dx, dy);
+    viewportState.panByStep(dx, dy);
   },
   rotate: (deg) => {
     if (isManhwaStripActive()) return;
