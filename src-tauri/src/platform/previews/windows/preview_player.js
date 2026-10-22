@@ -3,10 +3,12 @@ const canvas = document.getElementById('animation');
 const status = document.getElementById('status');
 const MAX_CANVAS_PIXELS = 16 * 1024 * 1024;
 const MAX_CANVAS_EDGE = 4096;
+const MIN_REPLAY_HOLD_MS = 2000;
 let decoder = null;
 let stopped = false;
 let frameIndex = 0;
 let frameCount = 0;
+let holdAtLoopEnd = false;
 let duration = 100;
 let deadline = 0;
 let raf = 0;
@@ -59,6 +61,9 @@ async function paintFrame(index, first = false) {
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.drawImage(frame, 0, 0, canvas.width, canvas.height);
     duration = Math.max(10, Math.min(60000, (frame.duration || 100000) / 1000));
+    if (holdAtLoopEnd && index === frameCount - 1) {
+      duration = Math.max(duration, MIN_REPLAY_HOLD_MS);
+    }
   } finally {
     frame.close();
   }
@@ -71,7 +76,12 @@ async function tick(now) {
     try {
       frameIndex = (frameIndex + 1) % frameCount;
       await paintFrame(frameIndex);
-      deadline += duration;
+      // Loop boundaries use paint time so catch-up cannot consume the end hold or first frame.
+      if (holdAtLoopEnd && (frameIndex === frameCount - 1 || frameIndex === 0)) {
+        deadline = performance.now() + duration;
+      } else {
+        deadline += duration;
+      }
       if (now - deadline > 1000) deadline = performance.now() + duration;
     } catch {
       if (!stopped) showError('Unable to continue this animation.');
@@ -85,7 +95,7 @@ async function tick(now) {
 
 document.addEventListener('visibilitychange', () => {
   cancelAnimationFrame(raf);
-  if (!stopped && decoder && !document.hidden && !decoding) {
+  if (!stopped && decoder && context && !document.hidden && !decoding) {
     deadline = performance.now() + duration;
     raf = requestAnimationFrame(tick);
   }
@@ -117,7 +127,9 @@ async function start() {
         break;
       }
     }
-    frameCount = decoder.tracks.selectedTrack?.frameCount || 0;
+    const track = decoder.tracks.selectedTrack;
+    frameCount = track?.frameCount || 0;
+    holdAtLoopEnd = Number.isFinite(track?.repetitionCount);
     if (frameCount === 0) throw new Error('Image contains no readable frames.');
     if (frameCount < 2) {
       decoder.close();

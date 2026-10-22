@@ -2,7 +2,7 @@
 
 Validation comparison performed against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md` before finalizing this document.
 
-Status: finalized on 2026-10-22 at the user's request. This is the shared hosting contract for the accepted archive and image preview implementation. The user confirmed the launch-only preparation, registry-only Apply, retained blocking guidance, and rebuilt development/release binaries at runtime. No acceptance checks remain open.
+Status: finalized on 2026-10-22 at the user's request. The user confirmed the launch-only preparation, registry-only Apply, retained blocking guidance, and rebuilt development/release binaries at runtime. The version-9 finite raster end hold also has passing automated checks and user runtime signoff. No acceptance checks remain open.
 
 [preview-handler.md](preview-handler.md) records the native archive pane and its troubleshooting history. [image-previews-spec.md](image-previews-spec.md) defines image behavior, thumbnail decoding, verification evidence, and the tested release artifact.
 
@@ -32,7 +32,7 @@ The helper reads preview inputs and draws results. Registration belongs to the m
 
 ## Version and sidecar contract
 
-`PREVIEW_HOST_VERSION: u32` lives in [previews/host.rs](../src-tauri/src/platform/previews/host.rs). Its current value is **8**. It changes for preview capability or contract updates, independently of the app version. The launch-only preparation and registry-only Apply follow-up did not change this version.
+`PREVIEW_HOST_VERSION: u32` lives in [previews/host.rs](../src-tauri/src/platform/previews/host.rs). Its current value is **9**. It changes for preview capability or contract updates, independently of the app version. Version 9 delivers a two-second minimum final-frame hold before each replay of a finite raster animation. Infinite animations retain continuous playback. The earlier launch-only preparation and registry-only Apply follow-up did not change version 8.
 
 The JSON sidecar contains:
 
@@ -156,4 +156,14 @@ A native probe exercised the production registration functions and Apply command
 
 The probe also covered mixed additions/removals, legacy IPC commands, idempotent registration, shared-class retention and final cleanup, external SVG ownership, missing or incompatible helpers, and corrupt proxies. A deliberately blocked launch update produced the retained Apply error while removals remained available. Registry mappings were restored and the temporary registry keys and app icons were removed. Focused frontend checks covered changed-only batching, BMP/DIB pairing, retry after partial failure, retained error details, and duplicate-click protection.
 
-The user confirmed all follow-up behavior at runtime on 2026-10-22 and requested these documentation updates. No acceptance checks remain open. The [image spec](image-previews-spec.md#launch-preparation-and-apply-follow-up-2026-10-22) records the rebuilt release artifact. These results precede this documentation pass; this pass changes no runtime code, registration, config, or installed helper.
+The user confirmed the launch/Apply follow-up at runtime on 2026-10-22 and requested its documentation updates. No baseline acceptance checks remain open. The [image spec](image-previews-spec.md#launch-preparation-and-apply-follow-up-2026-10-22) records that version-8 release artifact.
+
+### Finite raster replay follow-up, 2026-10-22
+
+Version 9 changes the embedded image player, so a normal launch replaces a healthy version-8 host under the existing staging rules. Registration identities, the proxy, thumbnails, launch preparation, and registry-only Apply retain their contracts. No new setting or config migration is required. The isolated checks did not replace the installed helper or change the user's shell registration.
+
+The follow-up passed `cargo check --tests`, all 12 host staging tests, all 308 frontend tests, player syntax checking, and 21 production-player timing/lifecycle diagnostic cases. Native WebView2 exercised finite and infinite GIF, WebP, APNG, and AVIF files through two replays each. The [image spec](image-previews-spec.md#finite-raster-replay-follow-up-2026-10-22) records timing evidence and the two passed Explorer checks. Archive runtime acceptance remains the version-8 record above.
+
+Both application profiles rebuilt successfully and embed the exact updated player. Their read-only diagnostics each reported capability 9 across all 14 rows. The isolated E2E launches did not stage a helper. The image spec records the new release artifact separately from the accepted version-8 builds.
+
+The user confirmed both Explorer checks passed on 2026-10-22 and requested documentation finalization. No acceptance checks remain open.

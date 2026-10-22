@@ -122,3 +122,7 @@ Lifecycle logging remains in `%TEMP%\QuiviT-preview.log`. A helper's token can a
 Explorer's Internet-zone warning can block preview activation before QuiviT runs. It is Windows behavior and applies to archives as well as images. The image spec records the affected fixtures and the decision to preserve their trust marks.
 
 There is no pending archive implementation work in this document. Performance redesigns, such as streaming an enormous listing or presenting only its first rows, require a measured need and a separate scope.
+
+## Finite raster replay follow-up, 2026-10-22
+
+The shared host's capability is now 9 so release staging delivers the image player's two-second minimum hold before finite raster replays. Archive initialization, listing, painting, input, and COM lifetime retain their existing implementation and acceptance record. All 12 host staging tests pass for this follow-up; archive rendering was not rerun. The user confirmed both image Explorer checks passed on 2026-10-22. The [image spec](image-previews-spec.md#finite-raster-replay-follow-up-2026-10-22) records the accepted follow-up. No acceptance checks remain open.

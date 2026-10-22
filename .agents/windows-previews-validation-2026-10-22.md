@@ -8,7 +8,7 @@ Validation comparison performed against `.agents/skills/validate-changes/SKILL.m
 
 **Summary:** The branch adds Explorer archive and image previews, native image thumbnails through a COM proxy, staged helper updates, file registration removal, and build selection for external file opens. The review covers all 39 touched non-Markdown files across the 19 branch commits, including the accepted changes outside the previews work.
 
-**Verdict: Pass.** The user confirmed all blocking runtime checks, W1/W4 checks, and the final W2, W3, and N1 runtime checks passed on 2026-10-22. B1 through B5, W1 through W4, and N1 are resolved with user runtime acceptance.
+**Verdict: Pass.** The user confirmed all blocking runtime checks, W1/W4 checks, and the final W2, W3, and N1 runtime checks passed on 2026-10-22. B1 through B5, W1 through W4, and N1 are resolved with user runtime acceptance. The later version-9 finite raster replay follow-up also has passing automated checks and user runtime acceptance, recorded below.
 
 The findings and reproduction results below record the original review. The resolution notes and checked runtime list record the subsequent fixes and user acceptance.
 
@@ -314,3 +314,22 @@ The user confirmed all five items passed on 2026-10-22:
 ## Verdict
 
 **Pass.** All five blocking findings (B1 through B5), all four warning findings (W1 through W4), and the cleanup finding (N1) have passing automated checks and user runtime acceptance.
+
+## Finite raster replay follow-up, 2026-10-22
+
+Validation-rule comparison performed for the later changes to `preview_player.js` and the capability constant in `host.rs`. This is a focused follow-up, not a repeat of the 39-file branch review above. The original verdict and runtime acceptance remain the baseline record.
+
+The player now holds a finite raster track's final frame for at least two seconds before every replay, including its authored final-frame duration in that interval. Infinite tracks retain continuous playback. Loop-boundary deadlines start at actual paint time, and visibility resume waits for the first canvas frame to exist. Capability 9 distributes the embedded change through the existing staging owner. The comparison found no new ownership, IPC, persistence, CSS, or diagnostics-contract violation.
+
+| Check | Result and scope |
+| --- | --- |
+| Player syntax, Rust type check, whitespace | Pass: `node --check`, `cargo check --tests`, and `git diff --check`. |
+| Existing tests | All 308 frontend tests and 12 host staging tests pass. |
+| Production-player diagnostic | 21 controlled-clock timing/lifecycle cases pass, including long endings, delayed decode, late callbacks, visibility, static/SVG routing, errors, and unload. |
+| Native WebView2 | Eight animated fixtures, covering finite and infinite GIF/WebP/APNG/AVIF, pass two replays each with real decoding and canvas drawing. Four still-image fixtures decode as single frames. |
+| Real-clock player timing | Finite WebP/APNG final frames measure 2,002.30/2,002.00 ms; infinite WebP retains its normal cadence. These use timer-driven callbacks in isolated WebView2, not Explorer observations. |
+| Application builds | Development and release builds pass and embed the exact current player. Read-only diagnostics from both report capability 9 across 14 rows; isolated E2E launches stage no helper. |
+
+The isolated checks did not change the user's associations or installed helper. The existing debug CRT linker warning remains. The [image spec](image-previews-spec.md#finite-raster-replay-follow-up-2026-10-22) records the automated evidence and both passed Explorer checks. The user confirmed the runtime checks passed on 2026-10-22 and requested documentation finalization.
+
+**Follow-up verdict: Pass.** The finite raster end hold, continuous infinite playback, visibility resume, and file switching have user runtime acceptance. No acceptance checks remain open. This closes the focused follow-up without repeating the original branch-wide review.

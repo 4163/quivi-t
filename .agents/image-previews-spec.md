@@ -2,7 +2,7 @@
 
 Validation comparison performed against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md` before finalizing this document.
 
-Status: finalized on 2026-10-22 at the user's request. The image behavior below was accepted with preview capability 5 and remains supported by the current version-8 shared host. The user confirmed the raster previews, GIF follow-up, static AVIF repair, ICO spritesheet, PowerToys SVG delegation, direct QuiviT SVG animation, removal of loading text, and independent animated image previews across multiple Explorer windows. The launch-only preparation, registry-only Apply, and retained blocking message also have user runtime signoff. No acceptance checks remain open.
+Status: finalized on 2026-10-22 at the user's request for the current version-9 host. The user confirmed the raster previews, GIF follow-up, static AVIF repair, ICO spritesheet, PowerToys SVG delegation, direct QuiviT SVG animation, removal of loading text, independent previews across Explorer windows, and the launch/Apply follow-up. The two-second minimum end hold for finite raster animations has passing automated checks and user runtime signoff. No acceptance checks remain open.
 
 The shared packaging, staging, CLI, registration identities, and update rules are defined in [previews-host-spec.md](previews-host-spec.md). The native archive pane is documented in [preview-handler.md](preview-handler.md).
 
@@ -19,7 +19,9 @@ The shared packaging, staging, CLI, registration identities, and update rules ar
 
 No new handlers are registered for ordinary PNG or general video. Existing main-viewer behavior is unchanged.
 
-Raster animation repeats indefinitely so Explorer users can inspect motion without a replay control. SVG retains authored timing because forcing repeats can disturb dependent or chained animations. Finite SVG animations can stop; authored infinite animations continue. Previewing never rewrites source files.
+Raster animation repeats indefinitely so Explorer users can inspect motion without a replay control. A finite raster track holds its final frame for at least two seconds before every replay. The hold includes the authored final-frame duration, so its display interval is `max(authored duration, 2000 ms)` within the player's existing duration bounds. Longer endings receive no extra delay. Finite loop counts, including zero repeats, do not stop playback or determine a batch of passes; the hold follows each complete pass.
+
+Tracks authored to repeat forever retain continuous playback without an added hold. The player uses the selected WebCodecs track's `repetitionCount` to distinguish finite counts from `Infinity`. The held image is the composited final frame, including transparent or blank endings. SVG retains authored timing because forcing repeats can disturb dependent or chained animations. Finite SVG animations can stop; authored infinite animations continue. Previewing never rewrites source files.
 
 An APNG can have a default PNG image outside its animation. Its thumbnail and player start with the first animation frame rather than assuming IDAT is frame zero.
 
@@ -113,7 +115,9 @@ The profile directory is resolved through `SHGetKnownFolderPath(FOLDERID_LocalAp
 
 Raster playback uses WebCodecs ImageDecoder with explicit frame indices. It waits for both decoder completion and track discovery, then selects an animated track if available. It does not set preferAnimation during construction. That preference made WebView2 reject metadata discovery for the valid static AVIF fixture.
 
-Single-frame raster files and SVG use the native browser image element. Animated raster frames paint to a canvas with the authored frame durations and wrap indefinitely. The canvas is bounded to 4096 per edge and 16 × 1024² pixels. Every VideoFrame is closed after drawing. Visibility changes pause playback, and unload closes the decoder and cancels pending work.
+Single-frame raster files and SVG use the native browser image element. Animated raster frames paint to a canvas with the authored frame durations and wrap indefinitely, with the finite-track end hold defined above. The final frame and the first frame after a finite-track replay receive deadlines measured from their actual paint time, so delayed decoding or a late callback cannot consume the hold or immediately skip the first frame. Other frames retain the existing playback cadence.
+
+The canvas is bounded to 4096 per edge and 16 × 1024² pixels. Every VideoFrame is closed after drawing, including the held frame; the canvas retains its pixels. Visibility changes pause playback. Returning to a visible pane restarts the current frame's display interval, including the full end hold when applicable. Visibility cannot start the frame loop before the first canvas frame is ready. Unload closes the decoder and cancels pending work.
 
 Unload also removes native children, releases bitmaps and controllers, and invalidates pending callbacks. Pane tasks and idle timers target a private message-only window so Wry's nested pump cannot consume thread-only messages without dispatching them. The helper exits after its 30-second idle window once COM objects and server locks are released.
 
@@ -235,7 +239,7 @@ The user confirmed the concise error message works at runtime on 2026-10-22. The
 
 Helper and icon preparation now belongs to application launch. Saving File Types selections submits one registry batch and reuses the prepared files. A failed launch update still blocks new preview registrations with the recovery message above. Readiness, batching, ownership checks, and removal behavior are defined in the [shared host contract](previews-host-spec.md#launch-preparation-and-association-updates).
 
-The follow-up passed the Rust and frontend checks, Options E2E in portable and split-config layouts, and native registration checks in an isolated registry. The native Apply command completed in 27.60 ms with the helper exclusively locked and all prepared files preserved. The [host verification record](previews-host-spec.md#verification-and-closure) gives the scope and limits of those checks. The user then confirmed all behavior at runtime and requested this documentation update. No preview capability bump was needed; the current host remains at version 8.
+The follow-up passed the Rust and frontend checks, Options E2E in portable and split-config layouts, and native registration checks in an isolated registry. The native Apply command completed in 27.60 ms with the helper exclusively locked and all prepared files preserved. The [host verification record](previews-host-spec.md#verification-and-closure) gives the scope and limits of those checks. The user then confirmed all behavior at runtime and requested this documentation update. No preview capability bump was needed for that follow-up; its host remained at version 8.
 
 Both development and release binaries were rebuilt after restoring the build tools removed with `target`. The rebuilt release recorded for this follow-up is:
 
@@ -247,6 +251,36 @@ Both development and release binaries were rebuilt after restoring the build too
 | Executable SHA-256 | `9e4467585bc1fddd689052f6fd6df404d3b75998a80328de9a7499e5e9013ed1` |
 
 The earlier Defender results above apply to their recorded artifacts. No new Defender scan is recorded for this rebuilt release.
+
+## Finite raster replay follow-up, 2026-10-22
+
+The user approved a two-second minimum final-frame hold before each forced replay of a finite raster animation. The player still replays indefinitely. Infinite raster tracks keep their continuous cadence. Single-frame images, SVG timing, ICO, archive panes, and thumbnails retain their existing paths. Capability 9 ensures release staging picks up the embedded player change.
+
+The production-player diagnostic passed 21 cases covering zero and positive finite counts, infinite counts, two-second and longer authored endings, delayed decode, late callbacks at both ends of a replay, visibility changes during loading and a held frame, static/SVG routing, decode failure, and unload. The visibility guard also prevents a resume event from entering the animation loop before the first canvas frame is ready. The diagnostic executed the real player source with controlled clocks and decoder/DOM substitutes; it added no repository test suite.
+
+Native WebView2 155 then ran the unchanged player source with real `ImageDecoder` instances and canvas drawing. Finite and infinite GIF, WebP, APNG, and AVIF fixtures each passed two replays with controlled callback timing. The finite APNG reports two authored repeats; the finite GIF, WebP, and AVIF report zero. Each finite track still held after every pass, independently of its authored count. Four still-image fixtures also decoded as single-frame inputs.
+
+Separate real-clock checks used native decoding and canvas drawing with timer-driven callbacks. The finite WebP final frame stayed visible for 2,002.30 ms and the finite APNG for 2,002.00 ms. The infinite WebP retained its normal cadence, measuring 32.40 ms at the boundary for a 33 ms authored final frame. These are isolated player measurements, not observations of Explorer's preview pane.
+
+`cargo check --tests`, all 12 host staging tests, all 308 frontend tests, player syntax checking, and whitespace checks passed. The existing debug `LNK4098` CRT conflict warning remains. The native checks used isolated config/profile folders and the E2E guard; they did not stage the real helper or change shell registrations. No new Defender scan is recorded for this follow-up.
+
+Both development and release binaries rebuilt successfully and contain the exact updated player bytes. Read-only diagnostics from both running binaries reported capability 9 across all 14 rows. Their isolated E2E launches left the selected helper locations absent, confirming that launch preparation remained disabled for those checks.
+
+The rebuilt release for this follow-up is:
+
+| Item | Recorded value |
+| --- | --- |
+| Preview capability | 9 |
+| Local executable | `src-tauri/target/release/tauri-app.exe` |
+| Executable size | 33,412,096 bytes |
+| Executable SHA-256 | `8922d5941273b1c0ca038363aef15d1482a2cd49d69251047261fac4e995c467` |
+
+The user confirmed both Explorer checks passed on 2026-10-22:
+
+1. [x] Close File Explorer windows, launch the rebuilt QuiviT, and preview finite GIF, WebP, APNG, and AVIF files. Confirm each final frame stays visible for about two seconds before replay, including after several passes.
+2. [x] Preview an infinite animation and confirm it stays continuous. Return to a finite animation, hide and restore its pane during the end hold, then select another file during a hold; confirm playback resumes without skipping the ending and file changes show the new preview.
+
+The finite raster replay follow-up is accepted. No acceptance checks remain open.
 
 ## Research references
 
@@ -264,4 +298,4 @@ The PowerToys source inspected on 2026-10-21 embeds SVG without rewriting repeat
 - [WebCodecs image decoding and track selection](https://www.w3.org/TR/webcodecs/#image-decoding)
 - [Wry startup-focus issue](https://github.com/tauri-apps/wry/issues/1798)
 
-These three preview documents are finalized at the user's request. Branch-wide cleanup or an architecture/README update is separate work. No commit, release publication, or additional code change is implied by this documentation finalization.
+These preview documents are finalized at the user's request, including the accepted finite raster replay follow-up. Branch-wide cleanup, an architecture/README update, commits, and release publication remain separate work.
