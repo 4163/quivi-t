@@ -54,10 +54,5 @@
 ### Native 7-Zip Sidecar Extraction (7Z/CB7 speed)
 - The original UI-blocking bug was already solved in pure Rust. The speed gap does not manifest as a real UX problem, and the sidecar adds deployment complexity plus re-introduces partial-file race concerns.
 
-### Windows Thumbnails / Previews (APNG/WebP/AVIF)
-- Add working Windows thumbnails (including preview pane) for APNG, AVIF, and animated WebP.
-- Thumbnails would just hide the cute mascots format icons.
-- Conflicts with system shell extensions like Microsoft PowerToys.
-
 ### Other Platform Support
 - Cross-platform desktop support is replaced by the planned QuiviT Web build (component library). Native desktop builds remain strictly focused on Windows APIs (`SHGetFileInfoW`, registry associations, portable configuration, explorer integration, and WebView2).

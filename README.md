@@ -10,7 +10,7 @@ A lightweight standalone (performance-first*) port of Quivi, built with Tauri us
 
 ## Quivi
 
-Quivi is an image viewer specialized for comic and manga reading, with fast file browsing and compressed archive support.
+"Quivi is an image viewer (specialized for comic/manga reading) which supports many file formats and compressed (zip, rar) files. It is aimed for fast & easy file browsing with keyboard or mouse."
 
 - Original project: [Quivi](http://quivi.sourceforge.net/)
 - Later continuation/fork: [qazmlpok/quivi](https://github.com/qazmlpok/quivi) (used as reference)
@@ -30,7 +30,8 @@ Quivi is an image viewer specialized for comic and manga reading, with fast file
 - **Filters**: WebGL filters for Anime4K (Mode A Fast/HQ), CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or Scanlines.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
 - **Persistent state**: Persists favorites lists, URL Library content and location, single-instance handoff, optional auto-open behavior, and the last opened image.
-- **Windows integration**: Drag and drop supported files to open them. Register file associations per-user for Windows Default Apps. Native window dragging supports PowerToys FancyZones snapping.
+- **Windows integration**: Drag and drop supported files to open them. Register or remove file associations per-user for Windows Default Apps. Native window dragging supports PowerToys FancyZones snapping.
+- **Explorer previews & thumbnails**: Display archive trees, preview animated images directly in the Windows Explorer preview pane, and show shell thumbnails for supported media.
 - **Configuration**: Choose roaming user config or portable config stored next to the executable, and move the shared URL Library to an existing empty folder.
 - **Custom theming**: Inject and live-reload custom CSS rules, with native light/dark mode support.
 - **ICO rows**: Render each size inside a `.ico` file side by side in one row, largest first.
@@ -220,7 +221,7 @@ QuiviT checks the [`extractors`](https://github.com/4163/quivi-t/tree/extractors
 
 **Options → File Types** lists the image and archive formats QuiviT can open. Check the ones you want and apply.
 
-Clicking **Apply** registers QuiviT for the formats you selected. If changes do not reflect on Windows, right-click the specific file and choose **Open with**, and pick QuiviT. Or use the **Windows Defaults Settings** button, and choose specific file formats via **Choose default apps by file type**.
+Clicking **Apply** registers QuiviT for the selected formats. If changes do not reflect on Windows, right-click the specific file and choose **Open with**, and pick QuiviT. Or use the **Windows Defaults Settings** button, and choose specific file formats via **Choose default apps by file type**. Use **Remove QuiviT file registrations** to clear association registry entries and avoid leaving stale executable paths behind.
 
 
 ## Development & installation
@@ -298,12 +299,13 @@ For automated iterative probing, see [`.agents/skills/replay-debugging/SKILL.md`
 | **Image Processing** | [`image`](https://crates.io/crates/image) | Per-size ICO PNG data URLs, and descrambling for protected gallery images |
 | **SVG Sanitization** | [DOMPurify](https://github.com/cure53/DOMPurify) | Cleans an imported SVG before saving it |
 | **Syntax Highlighting** | [Prism.js](https://prismjs.com) | Live CSS syntax highlighting in Options |
-| **Windows APIs** | [`windows`](https://crates.io/crates/windows) / [`winreg`](https://crates.io/crates/winreg) | Icons, thumbnails, file attributes, associations, and matching a temp extract back to its archive |
+| **Windows APIs** | [`windows`](https://crates.io/crates/windows) / [`windows-core`](https://crates.io/crates/windows-core) / [`winreg`](https://crates.io/crates/winreg) | Icons, shell previews, thumbnails, file attributes, associations, and matching a temp extract back to its archive |
+| **Explorer Previews & Thumbnails** | [`resvg`](https://crates.io/crates/resvg) / [`aom-decode`](https://crates.io/crates/aom-decode) / [`wry`](https://crates.io/crates/wry) / [`webview2-com`](https://crates.io/crates/webview2-com) | Shell preview handler, child webview player, SVG thumbnails, and AVIF sequence decoding |
 | **Sorting** | [`natord`](https://crates.io/crates/natord) | Natural sort, so 2 comes before 10 |
 | **File Watching** | [`notify`](https://crates.io/crates/notify) | Refresh when a folder changes |
 | **Network** | [`ureq`](https://crates.io/crates/ureq) | Gallery downloads and extractor fetches |
 | **Config** | [`serde`](https://serde.rs) / [`serde_json`](https://crates.io/crates/serde_json) | Reads and writes the config files |
-| **Hashing** | [`md5`](https://crates.io/crates/md5) | Stable names for temporary extract folders |
+| **Hashing** | [`md5`](https://crates.io/crates/md5) / [`sha2`](https://crates.io/crates/sha2) | Stable extract folder names and preview helper verification |
 | **Data URIs** | [`base64`](https://crates.io/crates/base64) | Encodes generated images for the UI |
 
 ## Project structure
@@ -411,17 +413,18 @@ QuiviT/
 │  ├─ src/
 │  │  ├─ archives/                # Archive reading and the open-archive cache
 │  │  ├─ commands/                # Calls the UI can make into Rust
-│  │  ├─ platform/                # Shell icons, thumbnails, dialogs, file attributes
+│  │  ├─ platform/                # Shell icons, thumbnails, previews, file attributes
 │  │  ├─ tests/                   # Rust tests
 │  │  ├─ config.rs                # Load and save settings
-│  │  ├─ formats.rs               # Which extensions open
-│  │  ├─ ico.rs                   # Per-size ICO PNG data URLs
+│  │  ├─ formats.rs               # Which extensions open and format icons
+│  │  ├─ ico.rs                   # Per-size ICO PNG data URLs and spritesheets
 │  │  ├─ lib.rs                   # App startup
 │  │  ├─ main.rs                  # Executable entry
 │  │  ├─ models.rs                # Data passed across to the UI
 │  │  ├─ protocol.rs              # quivit:// pages, thumbnails, and icons
 │  │  ├─ utils.rs                 # Encoding helpers
 │  │  └─ windows.rs               # Window sizes
+│  ├─ build.rs                    # Compiles embedded thumbnail proxy DLL
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json
 ├─ themes/                        # Example themes shipped with the app
