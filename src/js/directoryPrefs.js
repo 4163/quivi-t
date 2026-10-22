@@ -8,6 +8,10 @@ function normalizePathKey(p) {
 }
 
 export const DirectoryPrefs = {
+  sortList(list, col, desc) {
+    return applySort(list, col, desc, Core.getState().manhwaEnabled);
+  },
+
   getSortPrefs(directoryPath) {
     const state = Core.getState();
     if (!state || !state.config || !state.config.frontend_data) return { col: 'name', desc: false };
@@ -147,10 +151,10 @@ export const DirectoryPrefs = {
     if (!directoryPath) return; // No active directory, nothing to sort/persist.
     this.setSortPrefs(directoryPath, col, desc);
     const state = Core.getState();
-    const sortedList = applySort(state.list, col, desc);
+    const sortedList = this.sortList(state.list, col, desc);
     
     // Keep the currently viewed file selected
-    const newIdx = sortedList.findIndex(f => f.name === state.filename && !f.is_dir && !f.is_parent);
+    const newIdx = sortedList.indexOf(state.list[state.index]);
     Core.setListAndIndex(sortedList, newIdx);
   }
 };

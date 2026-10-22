@@ -30,15 +30,17 @@ function compareNames(a, b) {
   return naturalCompare(a.name.toLowerCase(), b.name.toLowerCase());
 }
 
-export function applySort(list, col, desc) {
+export function applySort(list, col, desc, groupArchives = false) {
   if (!list || list.length <= 1) return list;
 
   const parents = [];
   const dirs = [];
+  const archives = [];
   const files = [];
   for (const item of list) {
     if (item.is_parent) parents.push(item);
     else if (item.is_dir || item.is_drive) dirs.push(item);
+    else if (groupArchives && getSavedItemKind(item) === 'archive') archives.push(item);
     else files.push(item);
   }
 
@@ -73,9 +75,10 @@ export function applySort(list, col, desc) {
   };
 
   dirs.sort(sortLogic);
+  archives.sort(sortLogic);
   files.sort(sortLogic);
 
-  return parents.concat(dirs).concat(files);
+  return parents.concat(dirs, archives, files);
 }
 
 export const SAVED_ARCHIVE_EXTS = new Set([

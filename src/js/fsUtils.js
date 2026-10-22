@@ -546,7 +546,7 @@ export const FsUtils = {
     }
 
     const prefs = DirectoryPrefs.getSortPrefs(result.directory);
-    files = applySort(files, prefs.col, prefs.desc);
+    files = DirectoryPrefs.sortList(files, prefs.col, prefs.desc);
 
     const state = Core.getState();
     let index = 0;
@@ -713,7 +713,7 @@ export const FsUtils = {
 
       let files = this.buildArchiveList({ ...result, files: imgFiles });
       const prefs = DirectoryPrefs.getSortPrefs(result.archive_path);
-      files = applySort(files, prefs.col, prefs.desc);
+      files = DirectoryPrefs.sortList(files, prefs.col, prefs.desc);
 
       const state = Core.getState();
       this.revokeIfObjectURL(state.src);

@@ -38,6 +38,7 @@
 
 import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_DIRECTION, DEFAULT_FILE_LIST_VIEW_MODE, DEFAULT_MANHWA_ENABLED, mergeConfig } from './keybinds.js';
 import { FsUtils } from './fsUtils.js';
+import { DirectoryPrefs } from './directoryPrefs.js';
 import { BoundedMap } from './services/cache.js';
 
 const invoke = window.__TAURI__?.core?.invoke;
@@ -148,6 +149,15 @@ let _persistTimer = null;
 function _notify() {
   const snapshot = { ..._state };
   for (const fn of _listeners) fn(snapshot);
+}
+
+function _sortCurrentList() {
+  if (_state.list.length <= 1) return;
+  const path = _state.mode === 'archive' ? _state.archivePath : _state.directory;
+  const prefs = DirectoryPrefs.getSortPrefs(path);
+  const selected = _state.list[_state.index];
+  _state.list = DirectoryPrefs.sortList(_state.list, prefs.col, prefs.desc);
+  _state.index = _state.list.indexOf(selected);
 }
 
 async function _persistConfig() {
@@ -442,6 +452,7 @@ export const Core = {
       if (_state.config?.frontend_data) {
         _state.config.frontend_data.manhwa_enabled = false;
       }
+      _sortCurrentList();
     }
     if (options.persist) {
       _scheduleConfigFlush(1500);
@@ -487,10 +498,12 @@ export const Core = {
   },
 
   setManhwaMode(enabled, options = {}) {
+    const modeChanged = _state.manhwaEnabled !== !!enabled;
     _state.manhwaEnabled = !!enabled;
     if (_state.config?.frontend_data) {
       _state.config.frontend_data.manhwa_enabled = _state.manhwaEnabled;
     }
+    if (modeChanged) _sortCurrentList();
     if (_state.manhwaEnabled) {
       this.setSpreadEnabled(false, options);
     }
@@ -592,6 +605,7 @@ export const Core = {
       const loaded = await invoke('load_config');
       
       const oldShowHidden = _state.config?.frontend_data?.show_hidden;
+      const oldManhwaEnabled = _state.manhwaEnabled;
       _state.config = mergeConfig(loaded);
       
       const newFitMode = _state.config.frontend_data.fit_mode || DEFAULT_FIT_MODE;
@@ -604,7 +618,7 @@ export const Core = {
       _state.spreadDirection = _state.config.frontend_data.spread_direction || DEFAULT_SPREAD_DIRECTION;
       _state.fileListViewMode = _state.config.frontend_data.file_list_view_mode || DEFAULT_FILE_LIST_VIEW_MODE;
       _state.manhwaEnabled = _state.config.frontend_data.manhwa_enabled === true;
-      
+      if (oldManhwaEnabled !== _state.manhwaEnabled) _sortCurrentList();
 
       // Refresh when show_hidden changes.
       if (oldShowHidden !== undefined && oldShowHidden !== _state.config.frontend_data.show_hidden) {
