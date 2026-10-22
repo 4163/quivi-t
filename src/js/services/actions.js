@@ -290,7 +290,7 @@ export const ACTION_REGISTRY = [
         return;
       }
       try {
-        if (entry.is_parent) {
+        if (entry.is_parent && state.mode !== 'archive') {
           await window.__TAURI__.core.invoke('open_in_explorer', { path: state.directory });
         } else {
           const sep = entry.path.indexOf('|');
@@ -327,14 +327,12 @@ export const ACTION_REGISTRY = [
       let targetPath = state.directory;
 
       if (entry) {
-        if (entry.is_dir || entry.is_parent) {
+        const sep = entry.path.indexOf('|');
+        if (state.mode === 'archive' || sep !== -1) {
+          const realPath = sep === -1 ? entry.path : entry.path.slice(0, sep);
+          targetPath = realPath.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '');
+        } else if (entry.is_dir || entry.is_parent) {
           targetPath = entry.path;
-        } else {
-          const sep = entry.path.indexOf('|');
-          if (sep !== -1) {
-            const realPath = entry.path.slice(0, sep);
-            targetPath = realPath.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '');
-          }
         }
       }
       try {
