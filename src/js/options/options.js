@@ -509,7 +509,7 @@ function buildConfigFromForm(baseConfig) {
   return newConfig;
 }
 
-document.getElementById('btn-save-options').addEventListener('click', async () => {
+async function saveOptions() {
   const keybindSafety = validateKeybindSafety(config);
   if (!keybindSafety.ok) {
     switchTab('tab-keys');
@@ -570,6 +570,23 @@ document.getElementById('btn-save-options').addEventListener('click', async () =
   } catch (err) {
     console.error('Failed to save config:', err);
     showStatus(saveErrorMessage(err));
+  }
+}
+
+const saveOptionsButton = document.getElementById('btn-save-options');
+saveOptionsButton.addEventListener('click', async () => {
+  if (saveOptionsButton.disabled) return;
+  const removeAssociationsButton = document.getElementById('btn-assoc-remove');
+  saveOptionsButton.disabled = true;
+  if (removeAssociationsButton) removeAssociationsButton.disabled = true;
+  try {
+    await saveOptions();
+  } catch (err) {
+    console.error('Failed to save options:', err);
+    showStatus(saveErrorMessage(err));
+  } finally {
+    saveOptionsButton.disabled = false;
+    if (removeAssociationsButton) removeAssociationsButton.disabled = false;
   }
 });
 

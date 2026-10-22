@@ -223,21 +223,6 @@ pub fn has_foreign_progid_handlers(extension: &str) -> bool {
         })
 }
 
-pub fn register_for_extension(extension: &str) -> Result<bool, String> {
-    if !supports_extension(extension) || crate::config::is_e2e_suite() {
-        return Ok(false);
-    }
-    let host = super::host::ensure_previews_host().or_else(|error| {
-        let path = super::host::resolve_previews_host_path();
-        if path.exists() {
-            Ok(path)
-        } else {
-            Err(error)
-        }
-    })?;
-    register_for_extension_with_host(extension, &host)
-}
-
 struct ShellClass<'a> {
     clsid: &'static str,
     name: &'static str,
@@ -289,19 +274,48 @@ fn register_class(class: &ShellClass<'_>) -> Result<bool, String> {
     Ok(changed)
 }
 
-pub fn register_for_extension_with_host(extension: &str, host_path: &Path) -> Result<bool, String> {
-    if !supports_extension(extension) || crate::config::is_e2e_suite() {
+pub fn register_for_extensions_with_host(
+    extensions: &[String],
+    host_path: &Path,
+) -> Result<bool, String> {
+    if crate::config::is_e2e_suite() {
         return Ok(false);
     }
-    if extension == "svg" {
-        let handlers = detect_svg_shell_handlers();
-        if handlers.is_external() {
-            return preserve_svg_handlers(&handlers);
-        }
+    let extensions: Vec<_> = extensions
+        .iter()
+        .map(|extension| extension.to_lowercase())
+        .filter(|extension| supports_extension(extension))
+        .collect();
+    let svg_handlers = extensions
+        .iter()
+        .any(|extension| extension == "svg")
+        .then(detect_svg_shell_handlers);
+    let native_extensions: Vec<_> = extensions
+        .iter()
+        .filter(|extension| {
+            extension.as_str() != "svg"
+                || !svg_handlers
+                    .as_ref()
+                    .is_some_and(SvgShellHandlers::is_external)
+        })
+        .collect();
+    if !native_extensions.is_empty() && !host_path.is_file() {
+        return Err("Preview helper update is pending. Close the preview pane and Explorer windows, then restart QuiviT and apply again.".into());
     }
-    let archive = crate::formats::is_archive_ext(extension);
-    if !archive {
-        let minimum_version = if extension == "gif" {
+    let has_archives = native_extensions
+        .iter()
+        .any(|extension| crate::formats::is_archive_ext(extension));
+    let has_images = native_extensions
+        .iter()
+        .any(|extension| !crate::formats::is_archive_ext(extension));
+    let has_thumbnails = native_extensions
+        .iter()
+        .any(|extension| has_thumbnail(extension));
+    if has_images {
+        let minimum_version = if native_extensions
+            .iter()
+            .any(|extension| extension.as_str() == "gif")
+        {
             GIF_PREVIEW_MIN_HOST_VERSION
         } else {
             3
@@ -311,24 +325,30 @@ pub fn register_for_extension_with_host(extension: &str, host_path: &Path) -> Re
             sidecar.preview_version >= minimum_version
                 && super::host::proxy_is_healthy(host_path, sidecar)
         }) {
-            return Err("Preview helper update is pending. Close the preview pane and Explorer windows, then apply again.".into());
+            return Err("Preview helper update is pending. Close the preview pane and Explorer windows, then restart QuiviT and apply again.".into());
         }
     }
     let command = super::host::expected_command_for(host_path);
-    let (clsid, name) = if archive {
-        (PREVIEW_HANDLER_CLSID_TEXT, "QuiviT archive preview")
-    } else {
-        (IMAGE_PREVIEW_CLSID_TEXT, "QuiviT image preview")
-    };
-    let mut changed = register_class(&ShellClass {
-        clsid,
-        name,
-        command: &command,
-        preview: true,
-        proxy: None,
-    })?;
-    changed |= write_link(extension, PREVIEW_HANDLER_CATEGORY, clsid, None)?;
-    if has_thumbnail(extension) {
+    let mut changed = false;
+    for (needed, clsid, name) in [
+        (
+            has_archives,
+            PREVIEW_HANDLER_CLSID_TEXT,
+            "QuiviT archive preview",
+        ),
+        (has_images, IMAGE_PREVIEW_CLSID_TEXT, "QuiviT image preview"),
+    ] {
+        if needed {
+            changed |= register_class(&ShellClass {
+                clsid,
+                name,
+                command: &command,
+                preview: true,
+                proxy: None,
+            })?;
+        }
+    }
+    if has_thumbnails {
         let command = super::host::thumb_command_for(host_path);
         let proxy = super::host::proxy_path_for(host_path);
         changed |= register_class(&ShellClass {
@@ -338,12 +358,25 @@ pub fn register_for_extension_with_host(extension: &str, host_path: &Path) -> Re
             preview: false,
             proxy: Some(&proxy),
         })?;
-        changed |= write_link(
-            extension,
-            THUMBNAIL_CATEGORY,
-            IMAGE_THUMBNAIL_CLSID_TEXT,
-            None,
-        )?;
+    }
+    for extension in native_extensions {
+        let clsid = if crate::formats::is_archive_ext(extension) {
+            PREVIEW_HANDLER_CLSID_TEXT
+        } else {
+            IMAGE_PREVIEW_CLSID_TEXT
+        };
+        changed |= write_link(extension, PREVIEW_HANDLER_CATEGORY, clsid, None)?;
+        if has_thumbnail(extension) {
+            changed |= write_link(
+                extension,
+                THUMBNAIL_CATEGORY,
+                IMAGE_THUMBNAIL_CLSID_TEXT,
+                None,
+            )?;
+        }
+    }
+    if let Some(handlers) = svg_handlers.filter(SvgShellHandlers::is_external) {
+        changed |= preserve_svg_handlers(&handlers)?;
     }
     Ok(changed)
 }
@@ -373,23 +406,29 @@ fn unregister_server_tree(root: &RegKey, clsid: &str) -> bool {
     changed
 }
 
-pub fn unregister_for_extension(extension: &str) -> Result<bool, String> {
+pub fn unregister_for_extensions(extensions: &[String]) -> Result<bool, String> {
     if crate::config::is_e2e_suite() {
         return Ok(false);
     }
-    let archive = crate::formats::is_archive_ext(extension);
-    let clsid = if archive {
-        PREVIEW_HANDLER_CLSID_TEXT
-    } else {
-        IMAGE_PREVIEW_CLSID_TEXT
-    };
-    let mut changed = remove_link(extension, PREVIEW_HANDLER_CATEGORY, clsid, false)?;
-    changed |= remove_link(
-        extension,
-        THUMBNAIL_CATEGORY,
-        IMAGE_THUMBNAIL_CLSID_TEXT,
-        false,
-    )?;
+    let mut changed = false;
+    for extension in extensions {
+        let extension = extension.to_lowercase();
+        if !supports_extension(&extension) {
+            continue;
+        }
+        let clsid = if crate::formats::is_archive_ext(&extension) {
+            PREVIEW_HANDLER_CLSID_TEXT
+        } else {
+            IMAGE_PREVIEW_CLSID_TEXT
+        };
+        changed |= remove_link(&extension, PREVIEW_HANDLER_CATEGORY, clsid, false)?;
+        changed |= remove_link(
+            &extension,
+            THUMBNAIL_CATEGORY,
+            IMAGE_THUMBNAIL_CLSID_TEXT,
+            false,
+        )?;
+    }
     for (clsid, category) in [
         (PREVIEW_HANDLER_CLSID_TEXT, PREVIEW_HANDLER_CATEGORY),
         (IMAGE_PREVIEW_CLSID_TEXT, PREVIEW_HANDLER_CATEGORY),

@@ -4,6 +4,32 @@ use crate::models::FormatStatus;
 #[cfg(windows)]
 use winreg::{enums::*, RegKey};
 
+#[cfg(windows)]
+enum PreviewPreparation {
+    Pending,
+    Ready,
+    Failed(String),
+}
+
+#[cfg(windows)]
+static ASSOCIATIONS_LOCK: std::sync::Mutex<PreviewPreparation> =
+    std::sync::Mutex::new(PreviewPreparation::Pending);
+
+#[cfg(windows)]
+fn lock_associations() -> Result<std::sync::MutexGuard<'static, PreviewPreparation>, String> {
+    ASSOCIATIONS_LOCK
+        .lock()
+        .map_err(|_| "File Types worker lock is unavailable.".to_string())
+}
+
+#[cfg(windows)]
+fn notify_associations_changed() {
+    unsafe {
+        use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
+    }
+}
+
 #[tauri::command(async)]
 pub fn get_native_icon(
     path: String,
@@ -238,32 +264,12 @@ fn sync_image_thumbnail_overlay(extension: &str) -> Result<bool, String> {
 }
 
 #[cfg(windows)]
-fn sync_preview_associations_impl(stage_host_always: bool) -> Result<bool, String> {
+fn sync_preview_associations_impl() -> Result<bool, String> {
     if crate::config::is_e2e_suite() {
         return Ok(false);
     }
 
-    let host_path = if stage_host_always {
-        match crate::platform::previews::ensure_previews_host() {
-            Ok(path) => Some(path),
-            Err(err) => {
-                eprintln!("[previews] Staging notice: {err}");
-                let fallback = crate::platform::previews::resolve_previews_host_path();
-                if fallback.exists() {
-                    Some(fallback)
-                } else {
-                    None
-                }
-            }
-        }
-    } else {
-        let path = crate::platform::previews::resolve_previews_host_path();
-        if path.exists() {
-            Some(path)
-        } else {
-            crate::platform::previews::ensure_previews_host().ok()
-        }
-    };
+    let host = crate::platform::previews::resolve_previews_host_path();
 
     let exts: Vec<String> = get_format_status()
         .into_iter()
@@ -271,22 +277,13 @@ fn sync_preview_associations_impl(stage_host_always: bool) -> Result<bool, Strin
         .map(|status| status.ext)
         .collect();
 
-    let Some(host) = host_path else {
-        return Ok(false);
-    };
-
-    if exts.is_empty() {
+    if exts.is_empty() || !host.is_file() {
         return Ok(false);
     }
 
-    let mut changed = false;
+    let mut changed = crate::platform::previews::register_for_extensions_with_host(&exts, &host)?;
     for ext in &exts {
         changed |= sync_image_thumbnail_overlay(ext)?;
-        if crate::platform::previews::supports_extension(ext)
-            && crate::platform::previews::register_for_extension_with_host(ext, &host)?
-        {
-            changed = true;
-        }
     }
 
     Ok(changed)
@@ -294,22 +291,39 @@ fn sync_preview_associations_impl(stage_host_always: bool) -> Result<bool, Strin
 
 /// Spawns a background thread on startup to sync preview handlers. Ordinary
 /// launches also stage the preview helper.
-pub fn spawn_launch_previews_sync() {
+pub fn spawn_launch_previews_sync(app: tauri::AppHandle) {
     #[cfg(windows)]
     {
         if crate::config::is_e2e_suite() {
             return;
         }
-        std::thread::spawn(|| {
+        std::thread::spawn(move || {
+            let mut preparation = match lock_associations() {
+                Ok(guard) => guard,
+                Err(err) => {
+                    eprintln!("[previews] Launch sync warning: {err}");
+                    return;
+                }
+            };
+            if let Err(err) = provision_format_icons(&app) {
+                eprintln!("[previews] Icon preparation warning: {err}");
+            }
             let args: Vec<_> = std::env::args_os().collect();
-            let stage_host = !crate::platform::direct_open::has_file_open_arg(&args);
-            match sync_preview_associations_impl(stage_host) {
-                Ok(true) => unsafe {
-                    use windows::Win32::UI::Shell::{
-                        SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST,
-                    };
-                    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
-                },
+            let host = crate::platform::previews::resolve_previews_host_path();
+            *preparation =
+                if !crate::platform::direct_open::has_file_open_arg(&args) || !host.is_file() {
+                    match crate::platform::previews::ensure_previews_host() {
+                        Ok(_) => PreviewPreparation::Ready,
+                        Err(err) => {
+                            eprintln!("[previews] Staging notice: {err}");
+                            PreviewPreparation::Failed(err)
+                        }
+                    }
+                } else {
+                    PreviewPreparation::Ready
+                };
+            match sync_preview_associations_impl() {
+                Ok(true) => notify_associations_changed(),
                 Ok(false) => {}
                 Err(err) => eprintln!("[previews] Launch sync warning: {err}"),
             }
@@ -317,12 +331,8 @@ pub fn spawn_launch_previews_sync() {
     }
 }
 
-#[cfg(not(windows))]
-pub fn spawn_launch_previews_sync() {}
-
 /// Enables Explorer previews for active QuiviT associations when the
-/// File Types page opens. Blocking registry plus staging work runs on a
-/// background thread, and the helper stages exactly once per call.
+/// File Types page opens, using only the helper prepared at launch.
 #[tauri::command(async)]
 pub async fn sync_preview_associations() -> Result<(), String> {
     #[cfg(windows)]
@@ -330,16 +340,15 @@ pub async fn sync_preview_associations() -> Result<(), String> {
         if crate::config::is_e2e_suite() {
             return Ok(());
         }
-        let changed =
-            tauri::async_runtime::spawn_blocking(|| sync_preview_associations_impl(false))
-                .await
-                .map_err(|err| format!("Preview repair worker failed: {err}"))??;
+        let changed = tauri::async_runtime::spawn_blocking(|| {
+            let _guard = lock_associations()?;
+            sync_preview_associations_impl()
+        })
+        .await
+        .map_err(|err| format!("Preview repair worker failed: {err}"))??;
 
         if changed {
-            unsafe {
-                use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
-                SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
-            }
+            notify_associations_changed();
         }
         return Ok(());
     }
@@ -348,16 +357,70 @@ pub async fn sync_preview_associations() -> Result<(), String> {
     return Err("File associations are only supported natively on Windows.".into());
 }
 
-pub fn dump_icons(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+#[cfg(windows)]
+fn provision_format_icons(app: &tauri::AppHandle) -> Result<(), String> {
     let config_dir = crate::config::roaming_dir(app);
     let icon_dir = config_dir.join("icons");
     std::fs::create_dir_all(&icon_dir).map_err(|e| e.to_string())?;
 
     for (name, bytes) in crate::formats::FORMAT_ICONS {
-        let _ = std::fs::write(icon_dir.join(name), bytes);
+        let path = icon_dir.join(name);
+        if std::fs::read(&path).is_ok_and(|existing| existing == *bytes) {
+            continue;
+        }
+        std::fs::write(&path, bytes)
+            .map_err(|err| format!("Cannot prepare {}: {err}", path.display()))?;
     }
 
-    Ok(icon_dir)
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn apply_associations(
+    app: tauri::AppHandle,
+    to_register: Vec<String>,
+    to_unregister: Vec<String>,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        if crate::config::is_e2e_suite() || (to_register.is_empty() && to_unregister.is_empty()) {
+            return Ok(());
+        }
+        return tauri::async_runtime::spawn_blocking(move || {
+            let preparation = lock_associations()?;
+            if to_register.iter().any(|extension| {
+                crate::platform::previews::supports_extension(&extension.to_lowercase())
+            }) {
+                match &*preparation {
+                    PreviewPreparation::Pending => {
+                        return Err(
+                            "Preview helper is still being prepared. Try saving again in a moment."
+                                .into(),
+                        );
+                    }
+                    PreviewPreparation::Failed(err) => return Err(err.clone()),
+                    PreviewPreparation::Ready => {}
+                }
+            }
+            let result = (|| {
+                if !to_unregister.is_empty() {
+                    unregister_associations_impl(to_unregister)?;
+                }
+                if !to_register.is_empty() {
+                    register_associations_impl(app, to_register)?;
+                }
+                Ok(())
+            })();
+            // A failed batch can still have changed some registrations.
+            notify_associations_changed();
+            result
+        })
+        .await
+        .map_err(|err| format!("File Types worker failed: {err}"))?;
+    }
+
+    #[cfg(not(windows))]
+    Err("File associations are only supported natively on Windows.".into())
 }
 
 #[tauri::command(async)]
@@ -365,16 +428,7 @@ pub async fn register_associations(
     app: tauri::AppHandle,
     extensions: Vec<String>,
 ) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        tauri::async_runtime::spawn_blocking(move || register_associations_impl(app, extensions))
-            .await
-            .map_err(|err| format!("File Types worker failed: {err}"))??;
-        return Ok(());
-    }
-
-    #[cfg(not(windows))]
-    return Err("File associations are only supported natively on Windows.".into());
+    apply_associations(app, extensions, Vec::new()).await
 }
 
 #[cfg(windows)]
@@ -388,25 +442,22 @@ fn register_associations_impl(
     {
         let exe_path = crate::platform::direct_open::release_exe()?;
         let exe_str = exe_path.to_string_lossy().into_owned();
-        let icon_dir = dump_icons(&app)?;
-        let need_preview = extensions
-            .iter()
-            .any(|ext| crate::platform::previews::supports_extension(&ext.to_lowercase()));
-        let host = if need_preview {
-            Some(crate::platform::previews::ensure_previews_host()?)
-        } else {
-            None
-        };
-
-        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-
-        // Capture the old SVG resolver before changing its default ProgID.
-        if extensions.iter().any(|ext| ext.eq_ignore_ascii_case("svg")) {
-            let handlers = crate::platform::previews::detect_svg_shell_handlers();
-            if handlers.is_external() {
-                crate::platform::previews::preserve_svg_handlers(&handlers)?;
+        let icon_dir = crate::config::roaming_dir_path(&app).join("icons");
+        for ext in &extensions {
+            let icon_name = SUPPORTED_FORMATS
+                .iter()
+                .find(|format| format.ext.eq_ignore_ascii_case(ext))
+                .map(|format| format.icon)
+                .unwrap_or("jpg.ico");
+            if !icon_dir.join(icon_name).is_file() {
+                return Err(
+                    "File Types icons are unavailable. Restart QuiviT, then save again.".into(),
+                );
             }
         }
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let host = crate::platform::previews::resolve_previews_host_path();
+        crate::platform::previews::register_for_extensions_with_host(&extensions, &host)?;
 
         for ext in &extensions {
             let lower_ext = ext.to_lowercase();
@@ -436,13 +487,6 @@ fn register_associations_impl(
                 .map_err(|e| format!("Failed creating progid {}: {}", progid_path, e))?;
             let _ = progid_key.set_value("", &display_name);
             sync_image_thumbnail_overlay(&lower_ext)?;
-
-            if crate::platform::previews::supports_extension(&lower_ext) {
-                let host_path = host
-                    .as_ref()
-                    .ok_or("Preview helper was not staged.".to_string())?;
-                crate::platform::previews::register_for_extension_with_host(&lower_ext, host_path)?;
-            }
 
             // DefaultIcon
             let icon_path_key = format!(r#"Software\Classes\{}\DefaultIcon"#, progid);
@@ -503,31 +547,31 @@ fn register_associations_impl(
             let _ = app_supported.set_value(format!(".{}", lower_ext), &"");
         }
 
-        // Notify shell to refresh icons
-        unsafe {
-            use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
-            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
-        }
         Ok(())
     }
 }
 
-#[tauri::command]
-pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
+#[tauri::command(async)]
+pub async fn unregister_associations(
+    app: tauri::AppHandle,
+    extensions: Vec<String>,
+) -> Result<(), String> {
+    apply_associations(app, Vec::new(), extensions).await
+}
+
+#[cfg(windows)]
+fn unregister_associations_impl(extensions: Vec<String>) -> Result<(), String> {
     #[cfg(windows)]
     {
         if crate::config::is_e2e_suite() {
             return Ok(());
         }
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        crate::platform::previews::unregister_for_extensions(&extensions)?;
 
         for ext in &extensions {
             let lower_ext = ext.to_lowercase();
             let progid = format!("QuiviT.{}", lower_ext);
-
-            if crate::platform::previews::supports_extension(&lower_ext) {
-                crate::platform::previews::unregister_for_extension(&lower_ext)?;
-            }
 
             // Remove ProgId class entry
             let progid_path = format!(r#"Software\Classes\{}"#, progid);
@@ -595,10 +639,6 @@ pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
             }
         }
 
-        unsafe {
-            use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
-            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
-        }
         return Ok(());
     }
 

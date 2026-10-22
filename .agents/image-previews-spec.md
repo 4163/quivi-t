@@ -2,7 +2,7 @@
 
 Validation comparison performed against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md` before finalizing this document.
 
-Status: finalized on 2026-10-22 at the user's request. The accepted implementation is the version-5 preview contract. The user confirmed the raster previews, GIF follow-up, static AVIF repair, ICO spritesheet, PowerToys SVG delegation, direct QuiviT SVG animation, removal of loading text, and independent animated image previews across multiple Explorer windows. Subsequent user and code verification covers the remaining preview checks below. The final association error-message follow-up also has user runtime signoff. No acceptance checks remain open.
+Status: finalized on 2026-10-22 at the user's request. The image behavior below was accepted with preview capability 5 and remains supported by the current version-8 shared host. The user confirmed the raster previews, GIF follow-up, static AVIF repair, ICO spritesheet, PowerToys SVG delegation, direct QuiviT SVG animation, removal of loading text, and independent animated image previews across multiple Explorer windows. The launch-only preparation, registry-only Apply, and retained blocking message also have user runtime signoff. No acceptance checks remain open.
 
 The shared packaging, staging, CLI, registration identities, and update rules are defined in [previews-host-spec.md](previews-host-spec.md). The native archive pane is documented in [preview-handler.md](preview-handler.md).
 
@@ -56,7 +56,7 @@ The existing `Vec<IcoSize>` and per-size PNG data-URL IPC shapes remain unchange
 | Early pane and thumbnail dispatch | [main.rs](../src-tauri/src/main.rs), `main` |
 | Shared GUIDs and proxy name | [previews/contract.rs](../src-tauri/src/platform/previews/contract.rs) |
 | Stable staging, hashes, capability version | [previews/host.rs](../src-tauri/src/platform/previews/host.rs) |
-| Eligibility, SVG resolution, per-class registration and removal | [previews/windows.rs](../src-tauri/src/platform/previews/windows.rs) |
+| Eligibility, SVG resolution, batched class registration and removal | [previews/windows.rs](../src-tauri/src/platform/previews/windows.rs), `register_for_extensions_with_host` and `unregister_for_extensions` |
 | Shared COM pump and source routing | [windows/com_server.rs](../src-tauri/src/platform/previews/windows/com_server.rs), `PreviewHandler` |
 | Image/ICO child surfaces and browser lifetime | [windows/image_pane.rs](../src-tauri/src/platform/previews/windows/image_pane.rs), `ImagePane` |
 | Wrapper structure and presentation | [preview_player.html](../src-tauri/src/platform/previews/windows/preview_player.html) and [preview_player.css](../src-tauri/src/platform/previews/windows/preview_player.css) |
@@ -67,7 +67,8 @@ The existing `Vec<IcoSize>` and per-size PNG data-URL IPC shapes remain unchange
 | First AV1 sample and optional alpha from AVIF sequences | [previews/avif_sequence.rs](../src-tauri/src/platform/previews/avif_sequence.rs) |
 | Premultiplied BGRA DIB ownership | [windows/bitmap.rs](../src-tauri/src/platform/previews/windows/bitmap.rs), `Bitmap` |
 | Shared ICO parser and compositor | [ico.rs](../src-tauri/src/ico.rs) |
-| Apply, repair, launch sync, diagnostics | [commands/registry.rs](../src-tauri/src/commands/registry.rs) and [models.rs](../src-tauri/src/models.rs) |
+| Launch preparation, serialized Apply/repair, diagnostics | [commands/registry.rs](../src-tauri/src/commands/registry.rs) and [models.rs](../src-tauri/src/models.rs) |
+| File Types selection, errors, and Save concurrency guard | [associationsUi.js](../src/js/options/associationsUi.js) and [options.js](../src/js/options/options.js) |
 
 These are implementation owners, not proposed modules. There is no second ICO parser or main-app protocol added for shell previews.
 
@@ -192,7 +193,7 @@ Windows security updates from October 2025 block preview activation for Internet
 
 For a file the user trusts, Properties → Unblock is the per-file Windows action. QuiviT does not automate it. [Microsoft KB5070960](https://support.microsoft.com/en-us/servicing/os/windows/docs/2025/10/file-explorer-automatically-disables-the-preview-feature-for-files-downloaded-from-the-internet)
 
-## Tested release artifact and build requirements
+## Earlier release evidence and build requirements
 
 This is the local artifact used for preview verification before the later File Types error-message change, not a published release. Later builds can replace the executable at this path; the association UI follow-up is recorded below.
 
@@ -208,7 +209,7 @@ This is the local artifact used for preview verification before the later File T
 
 A local clean scan does not establish SmartScreen reputation or guarantee future signatures. The release remains one EXE download, with the proxy embedded and staged at runtime.
 
-Building static libaom on this host requires the MSVC C++ toolchain, CMake, Ninja, and NASM. The recorded build used the Visual Studio developer shell, `CMAKE_GENERATOR=Ninja`, and NASM 2.16.03 under ignored `src-tauri/target/build-tools`. These are build prerequisites, not end-user installations. The PE has no AVIF codec DLL import.
+Building static libaom on this host requires the MSVC C++ toolchain, CMake, Ninja, and NASM. The recorded builds used the Visual Studio developer shell, `CMAKE_GENERATOR=Ninja`, and NASM 2.16.03 under ignored `src-tauri/target/build-tools`. Deleting `target` also deletes that local NASM installation; restore it and enter the developer environment before rebuilding from scratch. These are build prerequisites, not end-user installations. The PE has no AVIF codec DLL import.
 
 Debug linking reports the existing libaom MSVCRTD conflict warning. The release build does not import that debug CRT. Temporary fixtures, logs, and portable proofs remain under ignored `src-tauri/target` rather than release assets.
 
@@ -218,15 +219,34 @@ The user passed the remaining manual preview checks but found that a blocked ass
 
 The user requested concise indicators that retain useful recovery information. Known preview-update lock errors now display:
 
-> File types could not be updated. Previews may still be in use. Close all File Explorer windows, then save again.
+> File types could not be updated. Previews may still be in use. Close all File Explorer windows, restart QuiviT, then save again.
+
+The launch/Apply follow-up below added the restart instruction. Apply now returns a recorded launch failure and does not retry helper preparation itself.
 
 The existing Options save flow prefixes this with "Settings saved." when other settings were saved successfully. Console logging retains the full error. Other failures keep their specific reason, including registry and disk-space errors. The existing missing-release instruction is preserved. options.css allows the status to wrap instead of hiding its ending behind an ellipsis.
 
-Verification covers eleven error/retry cases through the actual association module, all 308 frontend tests, and both existing Options E2E cases. A controlled IPC failure in an isolated release window exercised the actual Save handler and confirmed that the concise message and Save button remain visible at 800 px and the 400 px minimum width. Screenshots were inspected. Diagnostics used isolated config/profile paths and the E2E guard; real helper/proxy hashes stayed unchanged. No permanent test suite or harness was added.
+The original copy-fix verification covered eleven error/retry cases through the actual association module, all 308 frontend tests, and both existing Options E2E cases. A controlled IPC failure in an isolated release window exercised the actual Save handler and confirmed that its message and Save button remained visible at 800 px and the 400 px minimum width. Screenshots were inspected. Diagnostics used isolated config/profile paths and the E2E guard; real helper/proxy hashes stayed unchanged. No permanent test suite or harness was added.
 
-The final debug and release builds pass. The rebuilt release embeds the concise copy and passed the same Save-handler and layout checks. It is 33,270,784 bytes with SHA-256 68352c42b4f9454d706325100f59a79665fa0d7e1550bab81bcc1d773d8723d0. Defender scans of that EXE and the staged bin folder found no new detections with real-time protection enabled and signature 1.461.135.0. The existing debug-only libaom CRT warning remains.
+That copy-fix release passed the Save-handler and layout checks. It was 33,270,784 bytes with SHA-256 68352c42b4f9454d706325100f59a79665fa0d7e1550bab81bcc1d773d8723d0. Defender scans of that EXE and the staged bin folder found no new detections with real-time protection enabled and signature 1.461.135.0. These artifact and scan results describe that earlier build. The existing debug-only libaom CRT warning remains.
 
 The user confirmed the concise error message works at runtime on 2026-10-22. The four preview coverage checks and this follow-up are closed. There is no preview capability bump because the change affects only Options copy and layout.
+
+## Launch preparation and Apply follow-up, 2026-10-22
+
+Helper and icon preparation now belongs to application launch. Saving File Types selections submits one registry batch and reuses the prepared files. A failed launch update still blocks new preview registrations with the recovery message above. Readiness, batching, ownership checks, and removal behavior are defined in the [shared host contract](previews-host-spec.md#launch-preparation-and-association-updates).
+
+The follow-up passed the Rust and frontend checks, Options E2E in portable and split-config layouts, and native registration checks in an isolated registry. The native Apply command completed in 27.60 ms with the helper exclusively locked and all prepared files preserved. The [host verification record](previews-host-spec.md#verification-and-closure) gives the scope and limits of those checks. The user then confirmed all behavior at runtime and requested this documentation update. No preview capability bump was needed; the current host remains at version 8.
+
+Both development and release binaries were rebuilt after restoring the build tools removed with `target`. The rebuilt release recorded for this follow-up is:
+
+| Item | Recorded value |
+| --- | --- |
+| Preview capability | 8 |
+| Local executable | `src-tauri/target/release/tauri-app.exe` |
+| Executable size | 33,412,096 bytes |
+| Executable SHA-256 | `9e4467585bc1fddd689052f6fd6df404d3b75998a80328de9a7499e5e9013ed1` |
+
+The earlier Defender results above apply to their recorded artifacts. No new Defender scan is recorded for this rebuilt release.
 
 ## Research references
 

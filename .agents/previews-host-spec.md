@@ -2,13 +2,13 @@
 
 Validation comparison performed against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md` before finalizing this document.
 
-Status: finalized on 2026-10-22 at the user's request. This is the shared hosting contract for the accepted archive and image preview implementation. Host staging, Apply performance, and the final File Types error-message follow-up have user runtime signoff. No acceptance checks remain open.
+Status: finalized on 2026-10-22 at the user's request. This is the shared hosting contract for the accepted archive and image preview implementation. The user confirmed the launch-only preparation, registry-only Apply, retained blocking guidance, and rebuilt development/release binaries at runtime. No acceptance checks remain open.
 
 [preview-handler.md](preview-handler.md) records the native archive pane and its troubleshooting history. [image-previews-spec.md](image-previews-spec.md) defines image behavior, thumbnail decoding, verification evidence, and the tested release artifact.
 
 ## Release packaging and runtime files
 
-QuiviT remains one downloadable EXE. Its bytes are copied to the stable preview host path when staging is required. The application also embeds the thumbnail proxy DLL and writes it beside that host. The user approved the embedded, staged DLL on 2026-10-21 after Windows rejected EXE-only thumbnail-cache activation.
+QuiviT remains one downloadable EXE. Building QuiviT compiles the preview code and embeds the thumbnail proxy DLL. Application launch stages the already compiled EXE and proxy at the stable paths below when required. Opening Options or applying File Types selections does not build or stage either file. The user approved the embedded, staged DLL on 2026-10-21 after Windows rejected EXE-only thumbnail-cache activation.
 
 | File | Purpose |
 | --- | --- |
@@ -32,7 +32,7 @@ The helper reads preview inputs and draws results. Registration belongs to the m
 
 ## Version and sidecar contract
 
-`PREVIEW_HOST_VERSION: u32` lives in [previews/host.rs](../src-tauri/src/platform/previews/host.rs). Its current value is **5**. It changes for preview capability or contract updates, independently of the app version.
+`PREVIEW_HOST_VERSION: u32` lives in [previews/host.rs](../src-tauri/src/platform/previews/host.rs). Its current value is **8**. It changes for preview capability or contract updates, independently of the app version. The launch-only preparation and registry-only Apply follow-up did not change this version.
 
 The JSON sidecar contains:
 
@@ -46,11 +46,11 @@ The JSON sidecar contains:
 
 Optional fields deserialize with defaults for older sidecars. A current Windows host is healthy only when both executable and proxy bytes match their recorded hashes. The host and proxy are staged before publishing the updated sidecar.
 
-Staging writes sibling `.tmp` files and renames them into place. The executable, proxy, and sidecar are separate file operations, not one filesystem transaction. An interrupted or locked update can leave a mismatch, which subsequent health checks detect. A proxy whose bytes already match the embedded DLL is left untouched, including when Windows has it loaded.
+Staging writes sibling `.tmp` files and renames them into place. A file lock serializes the executable, proxy, and sidecar update across processes. These remain separate file operations, not one filesystem transaction. An interrupted or locked update can leave a mismatch, which subsequent launch health checks detect. A proxy whose bytes already match the embedded DLL is left untouched, including when Windows has it loaded.
 
 ### Update decisions
 
-The following rules apply in order:
+When launch invokes staging, the following rules apply in order:
 
 | Condition | Action |
 | --- | --- |
@@ -62,11 +62,17 @@ The following rules apply in order:
 | Release with a lower staged preview version | Stage the newer capability |
 | Release with an equal or greater healthy release version | Keep staged bytes and synchronize eligible registrations |
 
+Ordinary launches invoke these checks on a background thread. A file-open launch reuses an existing helper without staging, including in debug builds; it invokes staging only when the helper is missing. Helper CLI entry points return before ordinary application startup.
+
 Thus an older release preserves a newer healthy host. Corruption is repaired from the application performing the repair rather than trusted solely because the sidecar advertises a greater version. A healthy equal-version host is kept even when the running application EXE has a different hash.
 
 On a keep decision, `app_path` can change without replacing the executable or proxy. That sidecar-only refresh is best effort.
 
-Windows refuses to replace a running EXE or loaded DLL. Apply returns a retry error asking the user to close the preview pane and Explorer windows. File Types shows concise recovery guidance for known preview-lock errors and retains other specific failure reasons; the status wraps so the instructions remain visible. Startup logs a staging notice and can synchronize against an existing host, subject to capability checks. Product staging never terminates a server process.
+Windows can reject replacement while the EXE or DLL is in use. Startup logs and records that preparation failure. A later Apply that adds preview formats returns the recorded error without repeating staging. File Types retains the blocking safeguard and shows:
+
+> File types could not be updated. Previews may still be in use. Close all File Explorer windows, restart QuiviT, then save again.
+
+Restart is part of recovery because preparation runs at launch. The status wraps so the instructions remain visible. Startup can still synchronize existing registrations against an available host, subject to capability checks. Product staging never terminates a server process.
 
 ## Registration identity
 
@@ -88,18 +94,33 @@ Per-extension shell links live under QuiviT-owned ProgIDs. Eligible formats are 
 
 Image registration checks the staged capability and proxy health. GIF requires version 5; the other image formats require at least version 3. A locked older host must not acquire a GIF registration it cannot serve. SVG external-handler preservation runs before this image capability check.
 
-## Apply, launch, repair, and removal
+## Launch preparation and association updates
 
-[commands/registry.rs](../src-tauri/src/commands/registry.rs) owns these operations:
+[commands/registry.rs](../src-tauri/src/commands/registry.rs) owns preparation and registry coordination. Apply here means saving File Types selections with the Options **Save** button.
 
-1. Apply stages once when the selection includes an eligible preview format, then passes the ensured path to `register_for_extension_with_host` for each extension. Blocking work runs through `spawn_blocking`.
-2. Ordinary startup runs `spawn_launch_previews_sync` on a background thread. Launches without a file-open argument perform normal staging checks. File-open launches reuse an existing host and stage only if it is missing.
-3. Opening File Types calls `sync_preview_associations`. It synchronizes existing registrations and stages only if the host is absent. Apply or ordinary startup performs replacement and hash-based staging repair.
-4. Startup and File Types repair operate only on formats already registered to QuiviT. They do not enable a new association as a side effect of opening the page.
-5. Repair also applies an empty `TypeOverlay` value to active QuiviT image ProgIDs, consistently suppressing Explorer's application badge.
-6. SVG detection captures external preview and thumbnail references before changing the open ProgID. Either external slot causes both QuiviT SVG implementations to be skipped. Any relay is written only under QuiviT.svg; third-party source registrations and class servers stay intact.
-7. Removal deletes a shell link only when it still names the expected QuiviT class. Shared activation entries survive while a supported extension still links that class. External SVG references under QuiviT.svg are preserved when needed. Helper files remain on disk.
-8. Registration synchronization sends SHChangeNotify only when it reports actual changes. The File Types UI catches a sync failure separately from checkbox setup.
+### Launch preparation
+
+`spawn_launch_previews_sync` provisions the format icons in the application's roaming `icons` folder, leaving matching files untouched. It then prepares the helper under the launch and version rules above and synchronizes existing registrations. Icon preparation failures are logged; Apply checks that its selected formats' icons exist before registering them.
+
+A process-local mutex serializes launch preparation, repair, and Apply. `PreviewPreparation` records pending, ready, or failed launch preparation for the session. Apply can wait behind a launch already preparing the files; it never starts another copy or full-EXE hash.
+
+### Apply and removal
+
+The frontend sends changed selections in one `apply_associations` IPC request with `toRegister` and `toUnregister` arrays. BMP selection includes DIB. An unchanged selection sends no Apply request. The legacy `register_associations` and `unregister_associations` commands delegate to the same batch worker.
+
+The worker runs through `spawn_blocking`. A batch that adds preview formats must pass the launch-readiness check before any removals or additions run. Pending or failed preparation blocks that batch. Removals-only batches and registration of formats without QuiviT previews do not require successful preview preparation.
+
+`register_for_extensions_with_host` reuses the prepared path, checks the required image capability and proxy health once per batch, and registers each shared COM class once. It captures external SVG ownership before changing the open ProgID. Either external slot suppresses both QuiviT SVG implementations; relays stay under QuiviT.svg, and third-party source keys and class servers stay intact. Apply does not copy the helper, rewrite its proxy or sidecar, provision icons, or hash the full executable.
+
+`unregister_for_extensions` removes only selected QuiviT-owned shell links and checks shared-class cleanup once after the removals. Shared activation entries survive while another supported extension still links that class. External SVG relays and the staged files remain intact.
+
+A non-empty Apply batch sends one `SHChangeNotify` after attempting the changes, including an error that may follow partial registry writes. The frontend refreshes the actual registration baseline after failure while preserving the selected checkboxes for retry. Options disables Save and Remove while saving, then restores both controls even after an error.
+
+### Repair
+
+Opening File Types calls `sync_preview_associations` to synchronize existing registrations using the prepared host. It never stages a missing helper or retries a failed launch update. Startup and File Types repair operate only on formats already registered to QuiviT, so opening the page does not enable a new association.
+
+Repair also applies an empty `TypeOverlay` value to active QuiviT image ProgIDs, suppressing Explorer's application badge. Repair sends `SHChangeNotify` only when it reports actual changes. The File Types UI catches repair failure separately from checkbox setup.
 
 E2E guards run before staging or registry mutation. Development and test override folders hold config, not another shell host. The explicit early helper CLI entry points are separate from normal app startup.
 
@@ -129,6 +150,10 @@ The recorded host checks cover all 12 existing staging tests, including version 
 
 Normal split-config and real portable release launches used the same global host and proxy. The original release `app_path` was restored after the portable check. Existing configuration E2E cases passed in split and portable modes without changing the real helper/proxy hashes.
 
-Apply performance and the original host slices have user runtime signoff. The final image follow-up also passed its user runtime checks. The final source passed `cargo check --tests`, all 108 Rust tests, all 308 frontend tests, and debug/release builds. Those results were recorded before this docs-only pass.
+The launch/Apply follow-up passed `cargo check --tests`, all 108 Rust tests, all 308 frontend tests, syntax checks for both changed Options modules, and development/release builds. Both existing Options E2E cases passed in portable and split-config layouts. One initial close-window timeout cleared on rerun.
 
-The host specification has no open product or packaging decisions. The image spec records the remaining preview checks, single-slot SVG code verification, and the association error-message fix. The user confirmed that fix at runtime on 2026-10-22, closing the final follow-up. This documentation pass changed no runtime code, registration, config, or installed helper.
+A native probe exercised the production registration functions and Apply command in a process-local registry sandbox. The full Apply command completed in 27.60 ms with an exclusively locked, launch-prepared helper. Helper, proxy, sidecar, and icon bytes stayed unchanged, and the icon modification times stayed unchanged. This is an isolated backend measurement, not an end-to-end UI timing guarantee.
+
+The probe also covered mixed additions/removals, legacy IPC commands, idempotent registration, shared-class retention and final cleanup, external SVG ownership, missing or incompatible helpers, and corrupt proxies. A deliberately blocked launch update produced the retained Apply error while removals remained available. Registry mappings were restored and the temporary registry keys and app icons were removed. Focused frontend checks covered changed-only batching, BMP/DIB pairing, retry after partial failure, retained error details, and duplicate-click protection.
+
+The user confirmed all follow-up behavior at runtime on 2026-10-22 and requested these documentation updates. No acceptance checks remain open. The [image spec](image-previews-spec.md#launch-preparation-and-apply-follow-up-2026-10-22) records the rebuilt release artifact. These results precede this documentation pass; this pass changes no runtime code, registration, config, or installed helper.

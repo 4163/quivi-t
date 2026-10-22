@@ -82,7 +82,7 @@ pub fn run() {
 
             windows::apply_shell_background(&main_window, &config);
             platform::icons::warmup();
-            crate::commands::registry::spawn_launch_previews_sync();
+            crate::commands::registry::spawn_launch_previews_sync(app.handle().clone());
             crate::commands::watchers::spawn_config_file_watcher(app.handle().clone());
             crate::commands::watchers::spawn_library_watcher(app.handle().clone());
             crate::archives::cache::acquire_temp_lock();
@@ -124,6 +124,7 @@ pub fn run() {
         get_format_status,
         get_preview_diagnostics,
         sync_preview_associations,
+        apply_associations,
         register_associations,
         unregister_associations,
         get_initial_args,

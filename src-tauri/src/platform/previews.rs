@@ -17,9 +17,9 @@ mod avif_sequence;
 
 #[cfg(windows)]
 pub use windows::{
-    log_event, register_for_extension, register_for_extension_with_host, run_server,
+    log_event, register_for_extensions_with_host, run_server,
     run_thumbnail_server,
-    unregister_for_extension, PREVIEW_HANDLER_CATEGORY, PREVIEW_HANDLER_CLSID_TEXT,
+    unregister_for_extensions, PREVIEW_HANDLER_CATEGORY, PREVIEW_HANDLER_CLSID_TEXT,
     detect_svg_shell_handlers, preserve_svg_handlers, has_foreign_progid_handlers,
     supports_extension, has_thumbnail, IMAGE_PREVIEW_CLSID_TEXT, IMAGE_THUMBNAIL_CLSID_TEXT,
     THUMBNAIL_CATEGORY,
@@ -30,12 +30,7 @@ pub use host::{
 };
 
 #[cfg(not(windows))]
-pub fn register_for_extension(_extension: &str) -> Result<bool, String> {
-    Ok(false)
-}
-
-#[cfg(not(windows))]
-pub fn unregister_for_extension(_extension: &str) -> Result<bool, String> {
+pub fn unregister_for_extensions(_extensions: &[String]) -> Result<bool, String> {
     Ok(false)
 }
 

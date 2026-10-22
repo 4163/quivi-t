@@ -58,12 +58,7 @@ export async function applyAssociations(statusCallback) {
 
   try {
     if (statusCallback) statusCallback('Updating file types...');
-    if (toUnregister.length > 0) {
-      await invoke('unregister_associations', { extensions: toUnregister });
-    }
-    if (toRegister.length > 0) {
-      await invoke('register_associations', { extensions: toRegister });
-    }
+    await invoke('apply_associations', { toRegister, toUnregister });
     changes.forEach(({ ext, registered }) => { initialState[ext] = registered; });
     if (statusCallback) statusCallback('File types updated.');
     return { ok: true };
@@ -84,7 +79,7 @@ export async function applyAssociations(statusCallback) {
         && /\(os error (?:5|32|33)\)/.test(detail))
       || detail.startsWith('Preview helper update is pending.')
     ) {
-      message = 'File types could not be updated. Previews may still be in use. Close all File Explorer windows, then save again.';
+      message = 'File types could not be updated. Previews may still be in use. Close all File Explorer windows, restart QuiviT, then save again.';
     } else if (detail) {
       message += ` ${detail}`;
     }
