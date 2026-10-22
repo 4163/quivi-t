@@ -15,13 +15,35 @@ const EXT_TO_GROUP = new Map([
   ['zip', 'stoic'], ['rar', 'stoic'], ['7z', 'stoic'], ['tar', 'stoic']
 ]);
 
+function setCheckboxRegistered(checkbox, registered, { preserveSelection = false } = {}) {
+  if (!preserveSelection) checkbox.checked = registered;
+  initialState[checkbox.dataset.ext] = registered;
+  const textSpan = checkbox.closest('label')?.querySelector('.assoc-text');
+  if (textSpan) {
+    textSpan.title = registered
+      ? 'QuiviT is registered for this format.'
+      : 'QuiviT is not registered for this format.';
+  }
+}
+
+async function refreshAssociations(options) {
+  const formats = await invoke('get_format_status');
+  const registeredSet = new Set(formats.filter(format => format.registered).map(format => format.ext));
+  document.querySelectorAll('.assoc-checkbox').forEach(checkbox => {
+    setCheckboxRegistered(checkbox, registeredSet.has(checkbox.dataset.ext), options);
+  });
+  return registeredSet;
+}
+
 export async function applyAssociations(statusCallback) {
-  if (!invoke) return false;
+  if (!invoke) return { ok: false, message: 'File Types is unavailable.' };
   const toRegister = [];
   const toUnregister = [];
+  const changes = [];
   document.querySelectorAll('.assoc-checkbox').forEach(cb => {
     const ext = cb.dataset.ext;
     if (cb.checked !== initialState[ext]) {
+      changes.push({ ext, registered: cb.checked });
       if (cb.checked) {
         toRegister.push(ext);
         if (ext === 'bmp') toRegister.push('dib');
@@ -29,26 +51,40 @@ export async function applyAssociations(statusCallback) {
         toUnregister.push(ext);
         if (ext === 'bmp') toUnregister.push('dib');
       }
-      initialState[ext] = cb.checked; // Update baseline
     }
   });
   
-  if (toRegister.length === 0 && toUnregister.length === 0) return true;
+  if (toRegister.length === 0 && toUnregister.length === 0) return { ok: true };
 
   try {
     if (statusCallback) statusCallback('Updating file types...');
-    if (toUnregister.length > 0) {
-      await invoke('unregister_associations', { extensions: toUnregister });
-    }
-    if (toRegister.length > 0) {
-      await invoke('register_associations', { extensions: toRegister });
-    }
+    await invoke('apply_associations', { toRegister, toUnregister });
+    changes.forEach(({ ext, registered }) => { initialState[ext] = registered; });
     if (statusCallback) statusCallback('File types updated.');
-    return true;
+    return { ok: true };
   } catch (err) {
     console.error('[Assoc] Apply error:', err);
-    if (statusCallback) statusCallback('Could not update file types.');
-    return false;
+    try {
+      await refreshAssociations({ preserveSelection: true });
+    } catch (refreshErr) {
+      changes.forEach(({ ext }) => { delete initialState[ext]; });
+      console.warn('[Assoc] Could not refresh formats after apply error:', refreshErr);
+    }
+    const detail = typeof err === 'string' ? err.trim() : String(err?.message || '').trim();
+    let message = 'File types could not be updated.';
+    if (detail.startsWith('The release build')) {
+      message = 'Release build not found. Start it once, then retry File Types.';
+    } else if (
+      (detail.startsWith('Close the preview pane and Explorer windows, then retry:')
+        && /\(os error (?:5|32|33)\)/.test(detail))
+      || detail.startsWith('Preview helper update is pending.')
+    ) {
+      message = 'File types could not be updated. Previews may still be in use. Close all File Explorer windows, restart QuiviT, then save again.';
+    } else if (detail) {
+      message += ` ${detail}`;
+    }
+    statusCallback?.(message);
+    return { ok: false, message };
   }
 }
 
@@ -57,22 +93,15 @@ export async function initAssociationsUi(containerId, statusCallback) {
   if (!container || !invoke) return;
 
   try {
-    const formats = await invoke('get_format_status');
-    const registeredSet = new Set(formats.filter(f => f.registered).map(f => f.ext));
-    
-    document.querySelectorAll('.assoc-checkbox').forEach(checkbox => {
-      const ext = checkbox.dataset.ext;
-      const isRegistered = registeredSet.has(ext);
-      checkbox.checked = isRegistered;
-      initialState[ext] = isRegistered;
-      
-      const textSpan = checkbox.closest('label').querySelector('.assoc-text');
-      if (textSpan) {
-        textSpan.title = isRegistered 
-          ? 'QuiviT is registered for this format.' 
-          : 'QuiviT is not registered for this format.';
+    const registeredSet = await refreshAssociations();
+    if (registeredSet.size > 0) {
+      try {
+        // Migrate previews for associations created before Explorer preview support.
+        await invoke('sync_preview_associations');
+      } catch (syncErr) {
+        console.warn('[Assoc] Preview migration skipped:', syncErr);
       }
-    });
+    }
   } catch (err) {
     console.error('[Assoc] Error loading formats:', err);
     container.classList.add('is-error');
@@ -92,6 +121,41 @@ export async function initAssociationsUi(containerId, statusCallback) {
 
   const deselectAll = document.getElementById('btn-assoc-deselect-all');
   if (deselectAll) deselectAll.onclick = () => document.querySelectorAll('.assoc-checkbox').forEach(cb => cb.checked = false);
+
+  const removeButton = document.getElementById('btn-assoc-remove');
+  const removeDialog = document.getElementById('assoc-remove-dialog');
+  if (removeButton && removeDialog) {
+    removeButton.onclick = () => {
+      removeDialog.returnValue = '';
+      removeDialog.showModal();
+    };
+    removeDialog.addEventListener('close', async () => {
+      if (removeDialog.returnValue !== 'remove') return;
+      const saveButton = document.getElementById('btn-save-options');
+      removeButton.disabled = true;
+      if (saveButton) saveButton.disabled = true;
+      try {
+        statusCallback?.('Removing QuiviT file registrations...');
+        const formats = await invoke('get_format_status');
+        await invoke('unregister_associations', { extensions: formats.map(format => format.ext) });
+        document.querySelectorAll('.assoc-checkbox').forEach(checkbox => {
+          setCheckboxRegistered(checkbox, false);
+        });
+        statusCallback?.('QuiviT file registrations removed.');
+      } catch (err) {
+        console.error('[Assoc] Removal error:', err);
+        try {
+          await refreshAssociations();
+        } catch (refreshErr) {
+          console.error('[Assoc] Could not refresh formats after removal error:', refreshErr);
+        }
+        statusCallback?.('Could not remove QuiviT file registrations.');
+      } finally {
+        removeButton.disabled = false;
+        if (saveButton) saveButton.disabled = false;
+      }
+    });
+  }
 
   const settingsBtn = document.getElementById('btn-assoc-settings');
   if (settingsBtn) {

@@ -109,6 +109,46 @@ pub struct FormatStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PreviewDiagnostic {
+    pub ext: String,
+    pub registered: bool,
+    pub classes_default: Option<String>,
+    pub userchoice_progid: Option<String>,
+    pub progid_preview_clsid: Option<String>,
+    pub clsid_server: Option<String>,
+    pub hklm_clsid_server: Option<String>,
+    pub in_preview_handlers_list: bool,
+    #[serde(default)]
+    pub host_path: String,
+    #[serde(default)]
+    pub host_exists: bool,
+    #[serde(default)]
+    pub staged_preview_version: Option<u32>,
+    #[serde(default)]
+    pub embedded_preview_version: u32,
+    #[serde(default)]
+    pub stale: bool,
+    #[serde(default)]
+    pub progid_thumbnail_clsid: Option<String>,
+    #[serde(default)]
+    pub thumbnail_server: Option<String>,
+    #[serde(default)]
+    pub thumbnail_proxy_server: Option<String>,
+    #[serde(default)]
+    pub thumbnail_proxy_path: String,
+    #[serde(default)]
+    pub thumbnail_proxy_exists: bool,
+    #[serde(default)]
+    pub thumbnail_proxy_healthy: bool,
+    #[serde(default)]
+    pub external_preview_handler: Option<String>,
+    #[serde(default)]
+    pub external_thumbnail_provider: Option<String>,
+    #[serde(default)]
+    pub svg_skipped: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AnimationInfo {
     pub is_animated: bool,
     pub loop_count: u32,

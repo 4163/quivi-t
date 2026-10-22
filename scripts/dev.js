@@ -22,7 +22,9 @@ if (args.includes('--print-dir')) {
   process.exit(0);
 }
 
-const res = spawnSync('npx', ['tauri', 'dev', ...passthrough], {
+const devConfig = path.join(repoRoot, 'src-tauri', 'tauri.dev.conf.json');
+// Explorer can launch this exe after the dev command exits, so it needs embedded frontend files.
+const res = spawnSync('npx', ['tauri', 'dev', '--no-dev-server', '--config', devConfig, ...passthrough], {
   cwd: repoRoot,
   stdio: 'inherit',
   shell: true,

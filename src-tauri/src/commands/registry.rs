@@ -4,6 +4,32 @@ use crate::models::FormatStatus;
 #[cfg(windows)]
 use winreg::{enums::*, RegKey};
 
+#[cfg(windows)]
+enum PreviewPreparation {
+    Pending,
+    Ready,
+    Failed(String),
+}
+
+#[cfg(windows)]
+static ASSOCIATIONS_LOCK: std::sync::Mutex<PreviewPreparation> =
+    std::sync::Mutex::new(PreviewPreparation::Pending);
+
+#[cfg(windows)]
+fn lock_associations() -> Result<std::sync::MutexGuard<'static, PreviewPreparation>, String> {
+    ASSOCIATIONS_LOCK
+        .lock()
+        .map_err(|_| "File Types worker lock is unavailable.".to_string())
+}
+
+#[cfg(windows)]
+fn notify_associations_changed() {
+    unsafe {
+        use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
+    }
+}
+
 #[tauri::command(async)]
 pub fn get_native_icon(
     path: String,
@@ -33,7 +59,10 @@ pub fn get_format_status() -> Vec<FormatStatus> {
         {
             let mut actually_exists = false;
             let progid_path = format!(r#"Software\Classes\{}"#, expected_progid);
-            if hkcu.open_subkey(&progid_path).is_ok() {
+            if hkcu
+                .open_subkey(format!(r"{}\shell\open\command", progid_path))
+                .is_ok()
+            {
                 actually_exists = true;
             }
 
@@ -79,61 +108,356 @@ pub fn get_format_status() -> Vec<FormatStatus> {
     statuses
 }
 
-const FORMAT_ICONS: &[(&str, &[u8])] = &[
-    ("7z.ico", include_bytes!("../../../icons/formats/7z.ico")),
-    (
-        "apng.ico",
-        include_bytes!("../../../icons/formats/apng.ico"),
-    ),
-    (
-        "avif.ico",
-        include_bytes!("../../../icons/formats/avif.ico"),
-    ),
-    ("bmp.ico", include_bytes!("../../../icons/formats/bmp.ico")),
-    ("cb7.ico", include_bytes!("../../../icons/formats/cb7.ico")),
-    ("cbr.ico", include_bytes!("../../../icons/formats/cbr.ico")),
-    ("cbt.ico", include_bytes!("../../../icons/formats/cbt.ico")),
-    ("cbz.ico", include_bytes!("../../../icons/formats/cbz.ico")),
-    ("dib.ico", include_bytes!("../../../icons/formats/dib.ico")),
-    ("gif.ico", include_bytes!("../../../icons/formats/gif.ico")),
-    ("ico.ico", include_bytes!("../../../icons/formats/ico.ico")),
-    (
-        "jpeg.ico",
-        include_bytes!("../../../icons/formats/jpeg.ico"),
-    ),
-    ("jpg.ico", include_bytes!("../../../icons/formats/jpg.ico")),
-    ("png.ico", include_bytes!("../../../icons/formats/png.ico")),
-    ("rar.ico", include_bytes!("../../../icons/formats/rar.ico")),
-    ("svg.ico", include_bytes!("../../../icons/formats/svg.ico")),
-    ("tar.ico", include_bytes!("../../../icons/formats/tar.ico")),
-    (
-        "webp.ico",
-        include_bytes!("../../../icons/formats/webp.ico"),
-    ),
-    ("zip.ico", include_bytes!("../../../icons/formats/zip.ico")),
-];
+/// Read-only registration and staged-helper diagnostics for Explorer handlers.
+#[tauri::command]
+pub fn get_preview_diagnostics() -> Result<Vec<crate::models::PreviewDiagnostic>, String> {
+    #[cfg(windows)]
+    {
+        use crate::{models::PreviewDiagnostic, platform::previews};
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        let registered: std::collections::HashMap<_, _> = get_format_status()
+            .into_iter()
+            .map(|status| (status.ext, status.registered))
+            .collect();
+        let read = |root: &RegKey, path: &str| -> Option<String> {
+            root.open_subkey(path)
+                .and_then(|key| key.get_value(""))
+                .ok()
+        };
+        let class_server = |root: &RegKey, clsid: &str, server: &str| {
+            read(root, &format!(r"Software\Classes\CLSID\{clsid}\{server}"))
+        };
+        let (host_path, host_exists, sidecar) = previews::host::staged_host_info();
+        let proxy_path = previews::host::proxy_path_for(&host_path);
+        let proxy_healthy = sidecar
+            .as_ref()
+            .is_some_and(|sidecar| previews::host::proxy_is_healthy(&host_path, sidecar));
+        let svg = previews::detect_svg_shell_handlers();
+        let thumbnail_server =
+            class_server(&hkcu, previews::IMAGE_THUMBNAIL_CLSID_TEXT, "LocalServer32").or_else(
+                || class_server(&hklm, previews::IMAGE_THUMBNAIL_CLSID_TEXT, "LocalServer32"),
+            );
+        let thumbnail_proxy_server = class_server(
+            &hkcu,
+            previews::IMAGE_THUMBNAIL_CLSID_TEXT,
+            "InprocServer32",
+        )
+        .or_else(|| {
+            class_server(
+                &hklm,
+                previews::IMAGE_THUMBNAIL_CLSID_TEXT,
+                "InprocServer32",
+            )
+        });
+        let mut rows = Vec::new();
+        for format in SUPPORTED_FORMATS
+            .iter()
+            .filter(|format| previews::supports_extension(format.ext))
+        {
+            let clsid = if is_archive_ext(format.ext) {
+                previews::PREVIEW_HANDLER_CLSID_TEXT
+            } else {
+                previews::IMAGE_PREVIEW_CLSID_TEXT
+            };
+            let clsid_server = class_server(&hkcu, clsid, "LocalServer32");
+            let hklm_clsid_server = class_server(&hklm, clsid, "LocalServer32");
+            let progid_preview_clsid = read(
+                &hkcu,
+                &format!(
+                    r"Software\Classes\QuiviT.{}\shellex\{}",
+                    format.ext,
+                    previews::PREVIEW_HANDLER_CATEGORY
+                ),
+            );
+            let progid_thumbnail_clsid = read(
+                &hkcu,
+                &format!(
+                    r"Software\Classes\QuiviT.{}\shellex\{}",
+                    format.ext,
+                    previews::THUMBNAIL_CATEGORY
+                ),
+            );
+            let owns_thumbnail = progid_thumbnail_clsid.as_deref().is_some_and(|value| {
+                value.eq_ignore_ascii_case(previews::IMAGE_THUMBNAIL_CLSID_TEXT)
+            });
+            let stale = previews::host::is_stale_registration(
+                clsid_server.as_deref().or(hklm_clsid_server.as_deref()),
+                &host_path,
+            ) || (owns_thumbnail
+                && (thumbnail_server.as_deref()
+                    != Some(previews::host::thumb_command_for(&host_path).as_str())
+                    || thumbnail_proxy_server.as_deref()
+                        != Some(proxy_path.to_string_lossy().as_ref())
+                    || !proxy_healthy));
+            let userchoice_progid = hkcu
+                .open_subkey(format!(
+                    r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.{}\UserChoice",
+                    format.ext
+                ))
+                .and_then(|key| key.get_value::<String, _>("ProgId"))
+                .ok();
+            let in_preview_handlers_list = hkcu
+                .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\PreviewHandlers")
+                .and_then(|key| key.get_value::<String, _>(clsid))
+                .is_ok();
+            let classes_path = format!(r"Software\Classes\.{}", format.ext);
+            rows.push(PreviewDiagnostic {
+                ext: format.ext.into(),
+                registered: registered.get(format.ext).copied().unwrap_or(false),
+                classes_default: read(&hkcu, &classes_path).or_else(|| read(&hklm, &classes_path)),
+                userchoice_progid,
+                progid_preview_clsid,
+                clsid_server,
+                hklm_clsid_server,
+                in_preview_handlers_list,
+                host_path: host_path.to_string_lossy().into_owned(),
+                host_exists,
+                staged_preview_version: sidecar.as_ref().map(|sidecar| sidecar.preview_version),
+                embedded_preview_version: previews::PREVIEW_HOST_VERSION,
+                stale,
+                progid_thumbnail_clsid,
+                thumbnail_server: previews::has_thumbnail(format.ext)
+                    .then(|| thumbnail_server.clone())
+                    .flatten(),
+                thumbnail_proxy_server: previews::has_thumbnail(format.ext)
+                    .then(|| thumbnail_proxy_server.clone())
+                    .flatten(),
+                thumbnail_proxy_path: proxy_path.to_string_lossy().into_owned(),
+                thumbnail_proxy_exists: proxy_path.exists(),
+                thumbnail_proxy_healthy: proxy_healthy,
+                external_preview_handler: (format.ext == "svg")
+                    .then(|| svg.preview.as_ref().map(|handler| handler.clsid.clone()))
+                    .flatten(),
+                external_thumbnail_provider: (format.ext == "svg")
+                    .then(|| svg.thumbnail.as_ref().map(|handler| handler.clsid.clone()))
+                    .flatten(),
+                svg_skipped: format.ext == "svg" && svg.is_external(),
+            });
+        }
+        Ok(rows)
+    }
+    #[cfg(not(windows))]
+    Err("File associations are only supported natively on Windows.".into())
+}
 
-pub fn dump_icons(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+#[cfg(windows)]
+fn sync_image_thumbnail_overlay(extension: &str) -> Result<bool, String> {
+    if !is_image_ext(extension) {
+        return Ok(false);
+    }
+    let key = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags(
+            format!(r"Software\Classes\QuiviT.{extension}"),
+            KEY_READ | KEY_WRITE,
+        )
+        .map_err(|error| error.to_string())?;
+    if key
+        .get_value::<String, _>("TypeOverlay")
+        .is_ok_and(|value| value.is_empty())
+    {
+        return Ok(false);
+    }
+    key.set_value("TypeOverlay", &"")
+        .map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+#[cfg(windows)]
+fn sync_preview_associations_impl() -> Result<bool, String> {
+    if crate::config::is_e2e_suite() {
+        return Ok(false);
+    }
+
+    let host = crate::platform::previews::resolve_previews_host_path();
+
+    let exts: Vec<String> = get_format_status()
+        .into_iter()
+        .filter(|status| status.registered)
+        .map(|status| status.ext)
+        .collect();
+
+    if exts.is_empty() || !host.is_file() {
+        return Ok(false);
+    }
+
+    let mut changed = crate::platform::previews::register_for_extensions_with_host(&exts, &host)?;
+    for ext in &exts {
+        changed |= sync_image_thumbnail_overlay(ext)?;
+    }
+
+    Ok(changed)
+}
+
+/// Spawns a background thread on startup to sync preview handlers. Ordinary
+/// launches also stage the preview helper.
+pub fn spawn_launch_previews_sync(app: tauri::AppHandle) {
+    #[cfg(windows)]
+    {
+        if crate::config::is_e2e_suite() {
+            return;
+        }
+        std::thread::spawn(move || {
+            let mut preparation = match lock_associations() {
+                Ok(guard) => guard,
+                Err(err) => {
+                    eprintln!("[previews] Launch sync warning: {err}");
+                    return;
+                }
+            };
+            if let Err(err) = provision_format_icons(&app) {
+                eprintln!("[previews] Icon preparation warning: {err}");
+            }
+            let args: Vec<_> = std::env::args_os().collect();
+            let host = crate::platform::previews::resolve_previews_host_path();
+            *preparation =
+                if !crate::platform::direct_open::has_file_open_arg(&args) || !host.is_file() {
+                    match crate::platform::previews::ensure_previews_host() {
+                        Ok(_) => PreviewPreparation::Ready,
+                        Err(err) => {
+                            eprintln!("[previews] Staging notice: {err}");
+                            PreviewPreparation::Failed(err)
+                        }
+                    }
+                } else {
+                    PreviewPreparation::Ready
+                };
+            match sync_preview_associations_impl() {
+                Ok(true) => notify_associations_changed(),
+                Ok(false) => {}
+                Err(err) => eprintln!("[previews] Launch sync warning: {err}"),
+            }
+        });
+    }
+}
+
+/// Enables Explorer previews for active QuiviT associations when the
+/// File Types page opens, using only the helper prepared at launch.
+#[tauri::command(async)]
+pub async fn sync_preview_associations() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        if crate::config::is_e2e_suite() {
+            return Ok(());
+        }
+        let changed = tauri::async_runtime::spawn_blocking(|| {
+            let _guard = lock_associations()?;
+            sync_preview_associations_impl()
+        })
+        .await
+        .map_err(|err| format!("Preview repair worker failed: {err}"))??;
+
+        if changed {
+            notify_associations_changed();
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    return Err("File associations are only supported natively on Windows.".into());
+}
+
+#[cfg(windows)]
+fn provision_format_icons(app: &tauri::AppHandle) -> Result<(), String> {
     let config_dir = crate::config::roaming_dir(app);
     let icon_dir = config_dir.join("icons");
     std::fs::create_dir_all(&icon_dir).map_err(|e| e.to_string())?;
 
-    for (name, bytes) in FORMAT_ICONS {
-        let _ = std::fs::write(icon_dir.join(name), bytes);
+    for (name, bytes) in crate::formats::FORMAT_ICONS {
+        let path = icon_dir.join(name);
+        if std::fs::read(&path).is_ok_and(|existing| existing == *bytes) {
+            continue;
+        }
+        std::fs::write(&path, bytes)
+            .map_err(|err| format!("Cannot prepare {}: {err}", path.display()))?;
     }
 
-    Ok(icon_dir)
+    Ok(())
 }
 
-#[tauri::command]
-pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> Result<(), String> {
+#[tauri::command(async)]
+pub async fn apply_associations(
+    app: tauri::AppHandle,
+    to_register: Vec<String>,
+    to_unregister: Vec<String>,
+) -> Result<(), String> {
     #[cfg(windows)]
     {
-        let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
-        let exe_str = exe_path.to_string_lossy().into_owned();
-        let icon_dir = dump_icons(&app)?;
+        if crate::config::is_e2e_suite() || (to_register.is_empty() && to_unregister.is_empty()) {
+            return Ok(());
+        }
+        return tauri::async_runtime::spawn_blocking(move || {
+            let preparation = lock_associations()?;
+            if to_register.iter().any(|extension| {
+                crate::platform::previews::supports_extension(&extension.to_lowercase())
+            }) {
+                match &*preparation {
+                    PreviewPreparation::Pending => {
+                        return Err(
+                            "Preview helper is still being prepared. Try saving again in a moment."
+                                .into(),
+                        );
+                    }
+                    PreviewPreparation::Failed(err) => return Err(err.clone()),
+                    PreviewPreparation::Ready => {}
+                }
+            }
+            let result = (|| {
+                if !to_unregister.is_empty() {
+                    unregister_associations_impl(to_unregister)?;
+                }
+                if !to_register.is_empty() {
+                    register_associations_impl(app, to_register)?;
+                }
+                Ok(())
+            })();
+            // A failed batch can still have changed some registrations.
+            notify_associations_changed();
+            result
+        })
+        .await
+        .map_err(|err| format!("File Types worker failed: {err}"))?;
+    }
 
+    #[cfg(not(windows))]
+    Err("File associations are only supported natively on Windows.".into())
+}
+
+#[tauri::command(async)]
+pub async fn register_associations(
+    app: tauri::AppHandle,
+    extensions: Vec<String>,
+) -> Result<(), String> {
+    apply_associations(app, extensions, Vec::new()).await
+}
+
+#[cfg(windows)]
+fn register_associations_impl(
+    app: tauri::AppHandle,
+    extensions: Vec<String>,
+) -> Result<(), String> {
+    if crate::config::is_e2e_suite() {
+        return Ok(());
+    }
+    {
+        let exe_path = crate::platform::direct_open::release_exe()?;
+        let exe_str = exe_path.to_string_lossy().into_owned();
+        let icon_dir = crate::config::roaming_dir_path(&app).join("icons");
+        for ext in &extensions {
+            let icon_name = SUPPORTED_FORMATS
+                .iter()
+                .find(|format| format.ext.eq_ignore_ascii_case(ext))
+                .map(|format| format.icon)
+                .unwrap_or("jpg.ico");
+            if !icon_dir.join(icon_name).is_file() {
+                return Err(
+                    "File Types icons are unavailable. Restart QuiviT, then save again.".into(),
+                );
+            }
+        }
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let host = crate::platform::previews::resolve_previews_host_path();
+        crate::platform::previews::register_for_extensions_with_host(&extensions, &host)?;
 
         for ext in &extensions {
             let lower_ext = ext.to_lowercase();
@@ -162,6 +486,7 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
                 .create_subkey(&progid_path)
                 .map_err(|e| format!("Failed creating progid {}: {}", progid_path, e))?;
             let _ = progid_key.set_value("", &display_name);
+            sync_image_thumbnail_overlay(&lower_ext)?;
 
             // DefaultIcon
             let icon_path_key = format!(r#"Software\Classes\{}\DefaultIcon"#, progid);
@@ -222,23 +547,27 @@ pub fn register_associations(app: tauri::AppHandle, extensions: Vec<String>) -> 
             let _ = app_supported.set_value(format!(".{}", lower_ext), &"");
         }
 
-        // Notify shell to refresh icons
-        unsafe {
-            use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
-            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
-        }
-        return Ok(());
+        Ok(())
     }
-
-    #[cfg(not(windows))]
-    return Err("File associations are only supported natively on Windows.".into());
 }
 
-#[tauri::command]
-pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
+#[tauri::command(async)]
+pub async fn unregister_associations(
+    app: tauri::AppHandle,
+    extensions: Vec<String>,
+) -> Result<(), String> {
+    apply_associations(app, Vec::new(), extensions).await
+}
+
+#[cfg(windows)]
+fn unregister_associations_impl(extensions: Vec<String>) -> Result<(), String> {
     #[cfg(windows)]
     {
+        if crate::config::is_e2e_suite() {
+            return Ok(());
+        }
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        crate::platform::previews::unregister_for_extensions(&extensions)?;
 
         for ext in &extensions {
             let lower_ext = ext.to_lowercase();
@@ -246,7 +575,13 @@ pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
 
             // Remove ProgId class entry
             let progid_path = format!(r#"Software\Classes\{}"#, progid);
-            let _ = hkcu.delete_subkey_all(&progid_path);
+            if crate::platform::previews::has_foreign_progid_handlers(&lower_ext) {
+                // Keep the external shell relay while removing QuiviT's open command.
+                let _ = hkcu.delete_subkey_all(format!(r"{}\shell\open", progid_path));
+                let _ = hkcu.delete_subkey_all(format!(r"{}\DefaultIcon", progid_path));
+            } else {
+                let _ = hkcu.delete_subkey_all(&progid_path);
+            }
 
             // If .ext default is our progid, clear it
             let ext_key_path = format!(r#"Software\Classes\.{}"#, lower_ext);
@@ -304,10 +639,6 @@ pub fn unregister_associations(extensions: Vec<String>) -> Result<(), String> {
             }
         }
 
-        unsafe {
-            use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
-            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None);
-        }
         return Ok(());
     }
 

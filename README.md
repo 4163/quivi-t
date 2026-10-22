@@ -234,6 +234,8 @@ npm run dev                # Launch with isolated settings (.dev-config)
 npm run dev -- --portable  # Portable mode (single-file layout), regardless of frontend config state
 ```
 
+Set [`.quivit-open-dev`](.quivit-open-dev) to `true` for the dev build or `false` for release. Any file opened from Explorer, an archive, or the Preview pane uses that specified binary.
+
 Tests and syntax checks:
 
 ```bash

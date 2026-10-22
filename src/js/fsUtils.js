@@ -100,6 +100,37 @@ function cleanEntryName(name) {
   return name.replace(/^(Password (required[:]?|incorrect[!:]?)|Failed to open archive:)\s*/i, '');
 }
 
+function normalizeArchiveEntryPath(path) {
+  return (path || '').replace(/\\/g, '/').replace(/^\.?\/+/, '').toLowerCase();
+}
+
+function findArchiveTargetIndex(files, targetPath) {
+  const cleanTarget = cleanEntryName(targetPath);
+  const exactIndex = files.findIndex(file =>
+    file.path === targetPath || file.name === targetPath || file.name === cleanTarget || file.path === cleanTarget);
+  if (exactIndex !== -1) return exactIndex;
+
+  const target = normalizeArchiveEntryPath(cleanTarget);
+  if (!target) return -1;
+  let normalizedIndex = -1;
+  let suffixIndex = -1;
+  let suffixCount = 0;
+  for (let index = 0; index < files.length; index++) {
+    const name = normalizeArchiveEntryPath(files[index].name);
+    const path = normalizeArchiveEntryPath(files[index].path);
+    if (name === target || path === target) {
+      if (normalizedIndex !== -1) return -1;
+      normalizedIndex = index;
+    }
+    if (name.endsWith('/' + target) || path.endsWith('/' + target) || path.endsWith('|' + target)) {
+      suffixIndex = index;
+      suffixCount++;
+    }
+  }
+  if (normalizedIndex !== -1) return normalizedIndex;
+  return suffixCount === 1 ? suffixIndex : -1;
+}
+
 function findNearestSurvivingIndex(oldList, oldIndex, newFiles) {
   if (!oldList || !oldList.length || oldIndex < 0) {
     const clamped = Math.min(oldIndex >= 0 ? oldIndex : 0, newFiles.length - 1);
@@ -629,7 +660,7 @@ export const FsUtils = {
       isAnimated,
       loopCount,
       isSiblingNavigation: !!options.isSiblingNavigation,
-      hasTargetEntry,
+      hasTargetEntry: hasTargetEntry && !options.isRefresh,
     });
     recordNavigation(options.previousEntry, Core.getState(), options);
 
@@ -722,14 +753,7 @@ export const FsUtils = {
       let preferredIndex = -1;
 
       if (targetPath) {
-        const cleanTarget = cleanEntryName(targetPath);
-        const normTarget = cleanTarget.replace(/\\/g, '/').toLowerCase();
-        preferredIndex = files.findIndex(f => {
-          if (f.path === targetPath || f.name === targetPath || f.name === cleanTarget || f.path === cleanTarget) return true;
-          const normName = f.name?.replace(/\\/g, '/').toLowerCase();
-          const normPath = f.path?.replace(/\\/g, '/').toLowerCase();
-          return normName === normTarget || normPath === normTarget || normPath?.endsWith('/' + normTarget);
-        });
+        preferredIndex = findArchiveTargetIndex(files, targetPath);
       }
 
       if (preferredIndex === -1 && options?.restoreLastImage && fd.remember_last_image && fd.last_active_image && fd.last_active_image.container === result.archive_path) {
@@ -775,7 +799,7 @@ export const FsUtils = {
         isAnimated: initialAnimated,
         loopCount: 0,
         isSiblingNavigation: !!options.isSiblingNavigation,
-        hasTargetEntry,
+        hasTargetEntry: hasTargetEntry && !options.isRefresh,
       });
       recordNavigation(options.previousEntry, Core.getState(), options);
       if (!_isCurrentGeneration(options.generation)) return;
@@ -886,8 +910,13 @@ export const FsUtils = {
     if (path.includes('|')) {
       const sep = path.indexOf('|');
       const archivePath = path.slice(0, sep);
+      const innerEntry = path.slice(sep + 1);
       if (this.isArchive(archivePath)) {
-        await this.loadArchive(archivePath, path, options);
+        await this.loadArchive(archivePath, innerEntry, {
+          ...options,
+          preferInitial: true,
+          restoreLastImage: false,
+        });
         return;
       }
     }

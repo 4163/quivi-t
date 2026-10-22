@@ -39,11 +39,18 @@ pub fn run() {
     if single_instance {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(main_window) = app.get_webview_window("main") {
+                let _ = main_window.unminimize();
                 let _ = main_window.show();
                 let _ = main_window.set_focus();
-                let path_arg = argv.iter().skip(1).find(|arg| !arg.starts_with('-'));
-                if let Some(path) = path_arg {
-                    let _ = main_window.emit("single-instance-open", path.clone());
+                let path_arg = argv
+                    .iter()
+                    .skip(1)
+                    .filter(|arg| !arg.starts_with('-'))
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join("|");
+                if !path_arg.is_empty() {
+                    let _ = main_window.emit("single-instance-open", path_arg);
                 }
             }
         }));
@@ -75,6 +82,7 @@ pub fn run() {
 
             windows::apply_shell_background(&main_window, &config);
             platform::icons::warmup();
+            crate::commands::registry::spawn_launch_previews_sync(app.handle().clone());
             crate::commands::watchers::spawn_config_file_watcher(app.handle().clone());
             crate::commands::watchers::spawn_library_watcher(app.handle().clone());
             crate::archives::cache::acquire_temp_lock();
@@ -114,6 +122,9 @@ pub fn run() {
         get_native_icon,
         invalidate_native_icon_cache,
         get_format_status,
+        get_preview_diagnostics,
+        sync_preview_associations,
+        apply_associations,
         register_associations,
         unregister_associations,
         get_initial_args,

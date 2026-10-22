@@ -16,13 +16,9 @@ use crate::models::{ArchiveReadResult, FileEntry};
 pub(crate) use cache::archive_entry_temp_path;
 pub(crate) use cache::archive_temp_dir;
 pub use cache::ArchiveCache;
-#[cfg(test)]
 pub(crate) use rar::list_rar_entries;
-#[cfg(test)]
 pub(crate) use sevenz::list_7z_entries;
-#[cfg(test)]
 pub(crate) use tar::list_tar_entries;
-#[cfg(test)]
 pub(crate) use zip::list_zip_entries;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,6 +59,17 @@ pub(crate) fn compare_archive_entry_names(a: &str, b: &str) -> Ordering {
 
 pub(crate) fn sort_archive_entries(files: &mut [FileEntry]) {
     files.sort_by(|a, b| compare_archive_entry_names(&a.name, &b.name));
+}
+
+/// Name-only listing without opening a cache entry or spawning background
+/// extraction. The Explorer preview needs the tree, never entry bytes.
+pub(crate) fn list_archive_names(archive_path: &str) -> Result<Vec<FileEntry>, String> {
+    match ArchiveKind::from_path(archive_path)? {
+        ArchiveKind::Zip => list_zip_entries(archive_path, None).map(|(files, _, _, _)| files),
+        ArchiveKind::Rar => list_rar_entries(archive_path, None).map(|(files, _)| files),
+        ArchiveKind::SevenZ => list_7z_entries(archive_path, None).map(|(files, _)| files),
+        ArchiveKind::Tar => list_tar_entries(archive_path),
+    }
 }
 
 pub enum ArchiveEntryData {
