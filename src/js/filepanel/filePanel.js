@@ -1818,12 +1818,15 @@ function updateEntry(li, item, index) {
   li.style.top = `${index * ROW_HEIGHT}px`;
   li.style.display = '';
   li.dataset.index = index;
+  const state = Core.getState();
   const downloadStatus = getGalleryDownloadStatus(item.path);
   const hasDownloadError = downloadStatus === 'error';
+  // Fade empty disk placeholders before the async download queue resumes.
   const isPendingDownload = !hasDownloadError
     && !item.is_dir
     && !item.is_parent
-    && (downloadStatus === 'pending' || downloadStatus === 'downloading' || item.size === 0);
+    && (downloadStatus === 'pending' || downloadStatus === 'downloading'
+      || (item.size === 0 && state.mode !== 'archive'));
 
   li.title = item.name && item.name !== '..'
     ? (hasDownloadError ? `${item.displayName || item.name}\nDownload failed. Click to retry.` : (item.displayName || item.name))
@@ -1837,7 +1840,6 @@ function updateEntry(li, item, index) {
     delete li.dataset.downloadStatus;
   }
 
-  const state = Core.getState();
   const isThumbnail = state.fileListViewMode === 'thumbnail';
   const slots = li._slots;
   if (!slots) return;
