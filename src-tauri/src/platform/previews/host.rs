@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 
 /// Bump only on preview contract change. App only changes do not bump.
-pub const PREVIEW_HOST_VERSION: u32 = 9;
+pub const PREVIEW_HOST_VERSION: u32 = 10;
 
 pub const PREVIEWS_BIN_NAME: &str = "quivit-previews.exe";
 pub const PREVIEWS_SIDECAR_NAME: &str = "quivit-previews.version";

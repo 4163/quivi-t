@@ -41,6 +41,24 @@ function showNative() {
   image.src = '/media';
 }
 
+function applySvgSize(text) {
+  const svg = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+  image.classList.add('vector');
+  if (svg.localName !== 'svg' || svg.namespaceURI !== 'http://www.w3.org/2000/svg') return;
+  // The wrapper CSP blocks parsed inline styles; this sheet is never attached.
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync('svg {}');
+  const style = sheet.cssRules[0].style;
+  style.cssText = svg.getAttribute('style') || '';
+  for (const dimension of ['width', 'height']) {
+    const value = (style.getPropertyValue(dimension) || svg.getAttribute(dimension) || '').trim();
+    const length = value.match(/^(\+?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(px|cm|mm|q|in|pt|pc)?$/i);
+    if (length) {
+      image.style.setProperty(`--svg-${dimension}`, `${length[1]}${length[2] || 'px'}`);
+    }
+  }
+}
+
 async function paintFrame(index, first = false) {
   const result = await decoder.decode({ frameIndex: index });
   const frame = result.image;
@@ -109,6 +127,9 @@ async function start() {
     if (!response.ok) throw new Error('Image is unavailable.');
     const type = response.headers.get('content-type').split(';')[0];
     if (type === 'image/svg+xml') {
+      const text = await response.text();
+      if (stopped) return;
+      applySvgSize(text);
       showNative();
       return;
     }
