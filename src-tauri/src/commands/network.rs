@@ -864,10 +864,6 @@ mod tests {
         assert_eq!(result.width(), 1600);
         assert_eq!(result.height(), 2182);
 
-        let out_dir = std::path::Path::new("../.agents/scratch");
-        if out_dir.is_dir() {
-            let _ = fs::copy(&tmp, out_dir.join("kmanga-page1-descrambled.jpg"));
-        }
         let _ = fs::remove_file(&tmp);
     }
 }

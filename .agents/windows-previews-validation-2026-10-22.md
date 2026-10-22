@@ -285,7 +285,7 @@ The existing temporary native diagnostic was refreshed from the current source. 
 
 For 100 calls on 100,000 flat entries, the original flattening algorithm made 1,600 allocations or reallocations totaling 419,424,000 cumulative bytes. Cached hover and row reads made zero Rust allocations. This measures the native diagnostic, not Explorer frame times or allocations made by GDI drawing. The actual archive reader also verified the new runtime fixture's 100,000 images and 1,100 folders, and nested collapse and re-expansion preserved the cached row list.
 
-Use `E:/Projects/QuiviT/src-tauri/target/debug/tauri-app.exe`. Fixtures are under `E:/Projects/QuiviT/.agents/scratch/windows-previews-blockers/`.
+Use `E:/Projects/QuiviT/src-tauri/target/debug/tauri-app.exe`. The runtime fixtures were temporary local files and have since been removed. They are not part of the repository.
 
 The user confirmed all five items passed on 2026-10-22.
 
