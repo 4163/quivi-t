@@ -133,6 +133,7 @@ async function loadSvgCanvas(src) {
 
 export function createViewerPipelines(viewportState) {
   let _activeSource = null;
+  let _sourceState = null;
   let _activeIcoRow = false;
   let _icoCompositeKey = null;
   let _icoCompositeCanvas = null;
@@ -181,6 +182,12 @@ export function createViewerPipelines(viewportState) {
     });
   }
 
+  function _getSourceState() {
+    const live = Core.getState();
+    // Container navigation publishes its target before the renderer swaps media.
+    return _activeSource && _sourceState && live.src !== _sourceState.src ? _sourceState : live;
+  }
+
   function _isIcoNode(el) {
     try {
       return !!(el && el.closest && el.closest('.ico-container'));
@@ -208,7 +215,7 @@ export function createViewerPipelines(viewportState) {
   }
 
   async function _ensureIcoComposite() {
-    const live = Core.getState();
+    const live = _getSourceState();
     const sizes = Array.isArray(live?.src) ? live.src : null;
     if (!sizes || sizes.length === 0) return null;
     const key = _icoKeyForLive(live);
@@ -312,7 +319,7 @@ export function createViewerPipelines(viewportState) {
   }
 
   function _applyScaling(incomingFilter, incomingIsAnimated) {
-    const live = Core.getState();
+    const live = _getSourceState();
     const isVideo = isVideoSource(_activeSource);
     const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : !!live?.isAnimated;
     const isSvg = _isActiveSvg(live);
@@ -419,7 +426,7 @@ export function createViewerPipelines(viewportState) {
     const isIco = _activeIcoRow || _isIcoNode(_activeSource);
     if (isIco) {
       if (!pipeline || pipeline.type !== 'webgl') return;
-      const live = Core.getState();
+      const live = _getSourceState();
       const sizes = Array.isArray(live?.src) ? live.src : null;
       if (!sizes || sizes.length === 0) return;
       const total = icoSizesTotal(sizes);
@@ -456,7 +463,7 @@ export function createViewerPipelines(viewportState) {
       }
       return;
     }
-    if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated || isVideoSource(_activeSource) || _isActiveSvg(Core.getState())) return;
+    if (!pipeline || pipeline.type !== 'webgl' || _lastIsAnimated || isVideoSource(_activeSource) || _isActiveSvg(_getSourceState())) return;
     if (!_activeSource || !_activeSource.complete || _activeSource.naturalWidth <= 0 || _activeSource.naturalHeight <= 0) return;
     
     const src = _activeSource.currentSrc || _activeSource.src;
@@ -509,7 +516,7 @@ export function createViewerPipelines(viewportState) {
 
   function _triggerRender() {
     const isIco = _activeIcoRow || _isIcoNode(_activeSource);
-    const live = Core.getState();
+    const live = _getSourceState();
     const isVideo = isVideoSource(_activeSource);
     const liveAnimated = !!live?.isAnimated || isVideo;
     const isSvg = _isActiveSvg(live);
@@ -644,7 +651,7 @@ export function createViewerPipelines(viewportState) {
   }
 
   async function _syncLivePump() {
-    const live = Core.getState();
+    const live = _getSourceState();
     const isVideo = isVideoSource(_activeSource);
     const isAnimated = !!live?.isAnimated;
     const isSvg = _isActiveSvg(live);
@@ -1118,6 +1125,8 @@ export function createViewerPipelines(viewportState) {
       }
     }
 
+    if (_activeSource && state.src !== _sourceState?.src) return;
+    _sourceState = state;
     const newFilter = _resolveActiveFilter(state);
     const isVideo = isVideoSource(_activeSource);
     const newIsAnimated = !!state.isAnimated;
@@ -2400,6 +2409,7 @@ export function createViewerPipelines(viewportState) {
   return {
     setSource(img) {
       if (Core.getState()?.manhwaEnabled) return;
+      _sourceState = Core.getState();
       _activeIcoRow = _isIcoNode(img);
       if (_activeIcoRow) {
         _activeSource = img;
@@ -2446,6 +2456,7 @@ export function createViewerPipelines(viewportState) {
     },
     clear() {
       _activeSource = null;
+      _sourceState = null;
       _activeIcoRow = false;
       _clearIcoComposite();
       _cancelRender();

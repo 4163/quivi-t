@@ -219,6 +219,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
   function _swapInVideo(incoming, state) {
     _clearVideoWait();
+    _clearIcoRow();
     _videoGeneration += 1;
     _pendingVideoEl = null;
     const outgoingVideo = _activeVideoEl && _activeVideoEl !== incoming ? _activeVideoEl : null;
@@ -288,6 +289,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     node.style.removeProperty('--bridge-rot');
     node.style.removeProperty('--bridge-sx');
     node.style.removeProperty('--bridge-sy');
+    if (node.tagName === 'VIDEO' && node.dataset?.borrowedBridge !== 'true') {
+      node.classList.remove('viewer-img');
+      if (imgWrapper && node.parentElement !== imgWrapper) imgWrapper.appendChild(node);
+      return;
+    }
     if (node.dataset?.borrowedBridge === 'true' || node.classList?.contains('ico-container')) {
       node.remove();
     } else if (imgWrapper && node.parentElement !== imgWrapper && !node.classList.contains('is-placeholder')) {
@@ -480,17 +486,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     }
   }
 
-  function _renderIcoRow(sizes, state) {
+  async function _renderIcoRow(sizes, state) {
     const row = document.getElementById('viewer-ico-row');
     if (!row || !imgWrapper || !Array.isArray(sizes) || sizes.length === 0) return null;
-    if (img && img !== null) {
-      img.classList.remove('active');
-      img = null;
-    }
-    for (const src of Array.from(_activeNodes.keys())) _recyclePoolNode(src);
-    _hideVideo();
-    imgWrapper.dataset.ico = 'true';
-    row.replaceChildren();
+    const activation = ++_activationGeneration;
     const container = createIcoContainer();
     const firstImgs = [];
     sizes.forEach((s, idx) => {
@@ -506,6 +505,19 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       }
       container.appendChild(cell);
     });
+    await Promise.all(firstImgs.map(im => im.decode().catch(() => {})));
+    if (activation !== _activationGeneration || Core.getState().src !== state.src || Core.getState().manhwaEnabled) return null;
+
+    const previousRow = row.firstElementChild;
+    if (previousRow) _parkNodeInBridge(previousRow);
+    if (img) {
+      img.classList.remove('active');
+      img = null;
+    }
+    for (const src of Array.from(_activeNodes.keys())) _recyclePoolNode(src);
+    _hideVideo();
+    imgWrapper.dataset.ico = 'true';
+    row.replaceChildren();
     row.appendChild(container);
     if (_retiringNode && _retiringNode !== container) {
       _clearBridgeFallback();
@@ -537,6 +549,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   }
 
   function _activatePoolNode(el, filename, state) {
+    _clearIcoRow();
     if (img && img !== el) {
       _parkNodeInBridge(img);
     } else if (_retiringNode && _retiringNode !== el) {
@@ -691,7 +704,10 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     const archiveChanged = isArchive && currentArchivePath !== _lastRenderedArchivePath;
     const exitedArchive = !isArchive && _lastRenderedArchivePath !== null;
 
-    if (archiveChanged || exitedArchive) {
+    const preserveSiblingImage = state.isSiblingNavigation
+      && state.config?.frontend_data?.open_first_image === true
+      && !!state.src;
+    if ((archiveChanged || exitedArchive) && !preserveSiblingImage) {
       clearDisplayedImage(_retiringNode?.dataset?.borrowedBridge === 'true');
     }
     _lastRenderedArchivePath = currentArchivePath;
@@ -737,8 +753,6 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       }
       return;
     }
-    _clearIcoRow();
-
     if (_isVideoState(state) && videoEls.length > 0) {
       _clearTargetLoadTimer();
       _stopLoadingAnimation();
@@ -822,7 +836,11 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     const isReload = _forceReloadTarget;
     const activeChanged = state.src !== _activeTargetSrc || isReload;
     _lastRenderedIsAnimated = !!state.isAnimated;
-    const hasPreviousBridge = !isReload && !!(img && img !== activeEl && _isVisibleImage(img));
+    const hasPreviousBridge = !isReload && (
+      (img && img !== activeEl && _isVisibleImage(img))
+      || _activeVideoEl?.classList.contains('active')
+      || document.getElementById('viewer-ico-row')?.firstElementChild
+    );
 
     if (activeChanged) {
       _activeTargetSrc = state.src;
