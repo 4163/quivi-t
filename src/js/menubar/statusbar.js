@@ -288,6 +288,7 @@ export const Statusbar = {
     if (this.isCurrentEntryDownloading() || (typeof document !== 'undefined' && document.body?.classList?.contains('is-importing-url'))) {
       return;
     }
+    filename = _flashText || filename;
     if (isLoading) {
       if (statusName && !statusName.textContent) {
         const liveName = filename || Core.getState().filename || '';

@@ -1020,6 +1020,7 @@ export const FsUtils = {
     const state = Core.getState();
     const currentPath = state.mode === 'archive' ? state.archivePath : state.directory;
     if (!currentPath || currentPath === 'Drives') return;
+    const skippedArchives = [];
 
     try {
       const parent = parentOf(currentPath);
@@ -1070,6 +1071,9 @@ export const FsUtils = {
           });
           return;
         } catch (err) {
+          if (!_isCurrentGeneration(generation)) return;
+          const entry = sorted[currentIndexToCheck];
+          if (!entry.is_dir && this.isArchive(entry.name)) skippedArchives.push(entry.name);
           console.error(`[Core] Skipping inaccessible sibling container: ${sorted[currentIndexToCheck].path}`, err);
           attempts++;
         }
@@ -1078,6 +1082,13 @@ export const FsUtils = {
       console.error('[Core] openSibling error: All other sibling containers are inaccessible or corrupted.');
     } catch (err) {
       console.error('[Core] openSibling error:', err);
+    } finally {
+      if (skippedArchives.length && _isCurrentGeneration(generation)) {
+        const label = skippedArchives.length === 1 ? 'Skipped archive' : `Skipped ${skippedArchives.length} archives`;
+        window.dispatchEvent(new CustomEvent('quivit-status-flash', {
+          detail: { message: `${label}: ${skippedArchives.join(', ')}` }
+        }));
+      }
     }
   },
 
