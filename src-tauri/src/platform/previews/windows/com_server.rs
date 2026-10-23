@@ -55,6 +55,7 @@ use windows::{
         },
     },
 };
+use winreg::{enums::HKEY_CURRENT_USER, RegKey};
 
 use super::{
     image_pane::{ImagePane, MediaKind},
@@ -351,7 +352,6 @@ struct PreviewState {
     pane: Option<Box<PreviewPane>>,
     image_pane: Option<ImagePane>,
     background: Option<COLORREF>,
-    dark: bool,
     custom_font: Option<LOGFONTW>,
     custom_text_color: Option<COLORREF>,
     pending_preview: Option<PreviewParams>,
@@ -371,11 +371,9 @@ enum Materialized {
 
 struct PreviewParams {
     materialized: Materialized,
-    dark: bool,
-    background: COLORREF,
+    theme: Theme,
     epoch: u64,
     custom_font: Option<LOGFONTW>,
-    custom_text_color: Option<COLORREF>,
     display_name: String,
 }
 
@@ -547,23 +545,7 @@ impl IOleWindow_Impl for PreviewHandler_Impl {
 impl IPreviewHandlerVisuals_Impl for PreviewHandler_Impl {
     fn SetBackgroundColor(&self, color: COLORREF) -> Result<()> {
         let mut state = self.state.lock().unwrap();
-        // COLORREF stores red in the low byte. Explorer supplies the current
-        // pane background, which lets this native surface choose QuiviT's
-        // matching light or dark palette without reaching into app settings.
-        let red = color.0 & 0xff;
-        let green = (color.0 >> 8) & 0xff;
-        let blue = (color.0 >> 16) & 0xff;
-        state.dark = red + green + blue < 384;
         state.background = Some(color);
-        let dark = state.dark;
-        let custom_text = state.custom_text_color;
-        if let Some(pane) = state.pane.as_mut() {
-            pane.theme = Theme::from_dark(dark);
-            if let Some(text_color) = custom_text {
-                pane.theme.text = text_color;
-            }
-            let _ = unsafe { InvalidateRect(Some(pane.hwnd), None, false) };
-        }
         drop(state);
         post_task(&self.state, TASK_BACKGROUND);
         Ok(())
@@ -583,10 +565,8 @@ impl IPreviewHandlerVisuals_Impl for PreviewHandler_Impl {
     fn SetTextColor(&self, color: COLORREF) -> Result<()> {
         let mut state = lock_state(&self.state);
         state.custom_text_color = Some(color);
-        if let Some(pane) = state.pane.as_mut() {
-            pane.theme.text = color;
-            let _ = unsafe { InvalidateRect(Some(pane.hwnd), None, false) };
-        }
+        drop(state);
+        post_task(&self.state, TASK_BACKGROUND);
         Ok(())
     }
 }
@@ -642,7 +622,7 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
 
     fn DoPreview(&self) -> Result<()> {
         // Record the source here; archive validation and image I/O run on workers.
-        let (file_path, dark, custom_font, custom_text_color, state_display_name) = {
+        let (file_path, theme, custom_font, state_display_name) = {
             let state = lock_state(&self.state);
             if state.file_path.is_none() {
                 preview_log("DoPreview no source");
@@ -653,9 +633,8 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
             }
             (
                 state.file_path.clone(),
-                state.dark,
+                Theme::for_preview(state.background, state.custom_text_color),
                 state.custom_font,
-                state.custom_text_color,
                 state.display_name.clone(),
             )
         };
@@ -679,11 +658,9 @@ impl IPreviewHandler_Impl for PreviewHandler_Impl {
             }
             state.pending_preview = Some(PreviewParams {
                 materialized,
-                dark,
-                background: state.background.unwrap_or(COLORREF(0xffffff)),
+                theme,
                 epoch,
                 custom_font,
-                custom_text_color,
                 display_name,
             });
             preview_log("DoPreview posted");
@@ -750,9 +727,13 @@ fn pump_focus(state: &Arc<Mutex<PreviewState>>) {
 
 fn pump_background(state: &Arc<Mutex<PreviewState>>) {
     let mut state = lock_state(state);
-    let color = state.background.unwrap_or(COLORREF(0xffffff));
+    let theme = Theme::for_preview(state.background, state.custom_text_color);
+    if let Some(pane) = state.pane.as_mut() {
+        pane.theme = theme;
+        let _ = unsafe { InvalidateRect(Some(pane.hwnd), None, false) };
+    }
     if let Some(pane) = state.image_pane.as_mut() {
-        pane.set_background(color);
+        pane.set_background(theme.surface);
     }
 }
 
@@ -810,7 +791,7 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
             let guard = lock_state(state);
             (guard.parent, guard.rect)
         };
-        match ImagePane::create(parent, area, path.clone(), *kind, params.background) {
+        match ImagePane::create(parent, area, path.clone(), *kind, params.theme.surface) {
             Ok(pane) => {
                 let mut guard = lock_state(state);
                 if guard.epoch != params.epoch {
@@ -830,10 +811,9 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
     }
 
     let mut pane = Box::new(PreviewPane::loading(
-        params.dark,
+        params.theme,
         params.epoch,
         params.custom_font,
-        params.custom_text_color,
         params.display_name.clone(),
     ));
     let worker_input = match params.materialized {
@@ -875,6 +855,7 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
         guard.applied_rect = area;
         guard.pane = Some(pane);
     }
+    pump_background(state);
     // A SetRect can land while the child is being built; reconcile once so
     // the pane never sticks at a stale zero size.
     pump_position(state);
@@ -975,6 +956,24 @@ struct Theme {
 }
 
 impl Theme {
+    fn for_preview(background: Option<COLORREF>, text: Option<COLORREF>) -> Self {
+        let background = background.unwrap_or(color(255, 255, 255));
+        // Explorer can supply a white host background even in dark app mode.
+        let dark = RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+            .and_then(|key| key.get_value::<u32, _>("AppsUseLightTheme"))
+            .map(|light| light == 0)
+            .unwrap_or_else(|_| is_dark_color(background));
+        let mut theme = Self::from_dark(dark || is_dark_color(background));
+        if !dark {
+            theme.surface = background;
+        }
+        if let Some(text) = text.filter(|text| is_dark_color(*text) != is_dark_color(theme.surface)) {
+            theme.text = text;
+        }
+        theme
+    }
+
     fn from_dark(dark: bool) -> Self {
         if dark {
             Self {
@@ -1010,6 +1009,10 @@ impl Theme {
             }
         }
     }
+}
+
+fn is_dark_color(color: COLORREF) -> bool {
+    (color.0 & 0xff) + ((color.0 >> 8) & 0xff) + ((color.0 >> 16) & 0xff) < 384
 }
 
 const fn color(red: u8, green: u8, blue: u8) -> COLORREF {
@@ -1673,16 +1676,11 @@ impl Drop for PreviewPane {
 
 impl PreviewPane {
     fn loading(
-        dark: bool,
+        theme: Theme,
         epoch: u64,
         custom_font: Option<LOGFONTW>,
-        custom_text_color: Option<COLORREF>,
         display_name: String,
     ) -> Self {
-        let mut theme = Theme::from_dark(dark);
-        if let Some(tc) = custom_text_color {
-            theme.text = tc;
-        }
         let font = create_default_ui_font(custom_font.as_ref());
         Self {
             hwnd: HWND(std::ptr::null_mut()),
