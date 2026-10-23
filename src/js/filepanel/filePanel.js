@@ -152,6 +152,21 @@ let currentPath = '';
 
 // Virtualization (VS Code RowCache pattern)
 let activeRows = new Map();
+function isPendingDownload(item, downloadStatus, isArchive = false) {
+  return downloadStatus !== 'error'
+    && !item.is_dir
+    && !item.is_parent
+    && (downloadStatus === 'pending' || downloadStatus === 'downloading'
+      || (downloadStatus !== 'completed' && item.size === 0 && !isArchive));
+}
+
+function updateSavedDownloadRow(list, destPath, status) {
+  const row = list?.querySelector(`li[data-path="${CSS.escape(destPath)}"]`);
+  if (!row) return;
+  row.dataset.downloadStatus = status;
+  row.classList.toggle('is-pending-download', status === 'pending' || status === 'downloading');
+}
+
 function updateDownloadRow(destPath, status, size = 0) {
   if (!destPath) return;
   const state = Core.getState();
@@ -174,6 +189,9 @@ function updateDownloadRow(destPath, status, size = 0) {
     }
     break;
   }
+
+  updateSavedDownloadRow(libraryPanelEl, destPath, status);
+  updateSavedDownloadRow(favoritesListUl, destPath, status);
 }
 
 // Completed downloads gain their real size so future renders no longer treat
@@ -622,6 +640,7 @@ function buildSavedEntry(item, { onRemove, onOpen, onHighlight, listUl, removeCl
   li.setAttribute('role', 'option');
   li.setAttribute('tabindex', '0');
   li.classList.toggle('is-hidden-entry', !!item.is_hidden);
+  li.classList.toggle('is-pending-download', isPendingDownload(item, getGalleryDownloadStatus(item.path), item.path.includes('|')));
 
   // List mode elements
   const itemName = document.createElement('span');
@@ -804,6 +823,22 @@ function buildFavoriteEntry(fav) {
   });
 }
 
+async function refreshFavoriteDownloadState(rows) {
+  if (!rows.length || !window.__TAURI__?.core?.invoke) return;
+  try {
+    const sizes = await window.__TAURI__.core.invoke('get_file_sizes', {
+      paths: rows.map(row => row.dataset.path)
+    });
+    for (const row of rows) {
+      if (!row.isConnected) continue;
+      const status = row.dataset.downloadStatus || getGalleryDownloadStatus(row.dataset.path);
+      row.classList.toggle('is-pending-download', isPendingDownload({ size: sizes[row.dataset.path] }, status));
+    }
+  } catch (err) {
+    console.error('[FilePanel] Failed to refresh Favorite download state:', err);
+  }
+}
+
 function renderFavorites(options = {}) {
   if (!favoritesListUl) return;
   const favs = getActiveFavorites();
@@ -844,7 +879,13 @@ function renderFavorites(options = {}) {
   const panel = document.getElementById('file-panel-favorites');
   if (panel) panel.classList.toggle('is-empty', isEmpty);
 
-  favs.forEach(fav => favoritesListUl.appendChild(buildFavoriteEntry(fav)));
+  const downloadRows = [];
+  for (const fav of favs) {
+    const row = buildFavoriteEntry(fav);
+    favoritesListUl.appendChild(row);
+    if (!fav.is_dir && !fav.is_drive && !fav.path.includes('|')) downloadRows.push(row);
+  }
+  refreshFavoriteDownloadState(downloadRows);
 
   if (panel) {
     panel.classList.toggle('collapsed', !favoritesExpanded);
@@ -992,6 +1033,7 @@ function buildLibraryEntry(item, depth = 0) {
   const li = document.createElement('li');
   li.title = item.title ? `${item.title}\n${item.path}` : item.path;
   li.dataset.path = item.path;
+  li.classList.toggle('is-pending-download', isPendingDownload(item, getGalleryDownloadStatus(item.path)));
   li.style.setProperty('--library-indent', `${depth * 12}px`);
   li.setAttribute('role', 'option');
   li.setAttribute('tabindex', '0');
@@ -1813,18 +1855,11 @@ function updateEntry(li, item, index) {
   const state = Core.getState();
   const downloadStatus = getGalleryDownloadStatus(item.path);
   const hasDownloadError = downloadStatus === 'error';
-  // Fade empty disk placeholders before the async download queue resumes.
-  const isPendingDownload = !hasDownloadError
-    && !item.is_dir
-    && !item.is_parent
-    && (downloadStatus === 'pending' || downloadStatus === 'downloading'
-      || (item.size === 0 && state.mode !== 'archive'));
-
   li.title = item.name && item.name !== '..'
     ? (hasDownloadError ? `${item.displayName || item.name}\nDownload failed. Click to retry.` : (item.displayName || item.name))
     : '';
   li.classList.toggle('is-hidden-entry', !!item.is_hidden);
-  li.classList.toggle('is-pending-download', isPendingDownload);
+  li.classList.toggle('is-pending-download', isPendingDownload(item, downloadStatus, state.mode === 'archive'));
   li.classList.toggle('is-download-error', hasDownloadError);
   if (hasDownloadError) {
     li.dataset.downloadStatus = 'error';

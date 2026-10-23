@@ -176,6 +176,8 @@ pub struct LibraryNode {
     pub created_millis: u64,
     pub is_dir: bool,
     pub is_gallery: bool,
+    #[serde(default)]
+    pub size: u64,
     pub image_count: usize,
     pub children: Vec<LibraryNode>,
 }

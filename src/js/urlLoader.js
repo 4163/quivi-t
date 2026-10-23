@@ -2636,6 +2636,9 @@ export function isPlaceholderFile(filePath) {
 
 export function getGalleryDownloadStatus(filePath) {
   if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath || !filePath) return null;
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const separator = normalizedPath.lastIndexOf('/');
+  if (separator >= 0 && !_pathsEqual(normalizedPath.slice(0, separator), _activeGalleryPath)) return null;
   return _activeQueue.getStatus(filePath);
 }
 

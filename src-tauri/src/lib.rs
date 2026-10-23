@@ -114,6 +114,7 @@ pub fn run() {
         watch_directory,
         open_in_explorer,
         get_path_kind,
+        get_file_sizes,
         read_text_file,
         write_text_file,
         get_default_dir,

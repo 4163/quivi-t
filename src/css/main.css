@@ -1370,7 +1370,9 @@ li:hover>.favorite-remove,
   opacity: 0.65;
 }
 
-#file-list .is-pending-download {
+#file-list .is-pending-download,
+#favorites-list .is-pending-download,
+.library-provider-list .is-pending-download {
   opacity: 0.65;
 }
 

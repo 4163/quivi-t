@@ -178,6 +178,17 @@ pub fn get_path_kind(path: &str) -> String {
     }
 }
 
+#[tauri::command(async)]
+pub fn get_file_sizes(paths: Vec<String>) -> std::collections::HashMap<String, u64> {
+    paths
+        .into_iter()
+        .filter_map(|path| {
+            let metadata = fs::metadata(&path).ok()?;
+            metadata.is_file().then(|| (path, metadata.len()))
+        })
+        .collect()
+}
+
 #[tauri::command]
 pub fn read_text_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| e.to_string())
@@ -293,9 +304,9 @@ fn read_library_nodes(dir: &Path) -> Vec<LibraryNode> {
             continue;
         }
 
-        let created_millis = entry
-            .metadata()
-            .ok()
+        let metadata = entry.metadata().ok();
+        let created_millis = metadata
+            .as_ref()
             .and_then(|metadata| metadata.created().or_else(|_| metadata.modified()).ok())
             .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|duration| duration.as_millis() as u64)
@@ -323,6 +334,11 @@ fn read_library_nodes(dir: &Path) -> Vec<LibraryNode> {
             created_millis,
             is_dir,
             is_gallery,
+            size: if is_file {
+                metadata.as_ref().map_or(0, fs::Metadata::len)
+            } else {
+                0
+            },
             image_count,
             children: Vec::new(),
         });
