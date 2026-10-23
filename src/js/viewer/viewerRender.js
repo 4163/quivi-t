@@ -476,6 +476,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     if (imgWrapper) {
       imgWrapper.style.removeProperty('--ico-total-w');
       imgWrapper.style.removeProperty('--ico-total-h');
+      imgWrapper.style.removeProperty('--slot-backdrop-angle');
     }
   }
 
@@ -491,10 +492,9 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     imgWrapper.dataset.ico = 'true';
     row.replaceChildren();
     const container = createIcoContainer();
-    const mirrored = mirroredGrillAngle(viewportState.getGrillAngle());
     const firstImgs = [];
     sizes.forEach((s, idx) => {
-      const { cell, img: im } = createIcoCell(s, idx, sizes.length, mirrored);
+      const { cell, img: im } = createIcoCell(s, idx, sizes.length);
       if (im) {
         im.decoding = 'async';
         im.draggable = false;
@@ -528,6 +528,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     }
     viewportState.applyFitMode(state.fitMode, tw, th);
     imgWrapper.style.setProperty('--grill-angle', viewportState.getGrillAngle());
+    imgWrapper.style.setProperty('--slot-backdrop-angle', mirroredGrillAngle(viewportState.getGrillAngle()));
     Statusbar.setImage({ filename: state.filename || '', dims: `${tw} × ${th}`, zoom: viewportState.getScale() });
     Statusbar.syncSpreadIndicator(state);
     if (firstImgs.length > 0) onActiveImageChanged(firstImgs[0]);
@@ -959,6 +960,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       imgWrapper.style.transform = viewportState.getTransform();
       imgWrapper.style.setProperty('--zoom-scale', viewportState.getScale());
       imgWrapper.style.setProperty('--grill-angle', viewportState.getGrillAngle());
+      imgWrapper.style.setProperty('--slot-backdrop-angle', mirroredGrillAngle(viewportState.getGrillAngle()));
     }
     if ((img && img.src) || _activeVideoEl) {
       Statusbar.setZoom(viewportState.getScale());

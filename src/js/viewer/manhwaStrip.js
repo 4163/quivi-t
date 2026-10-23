@@ -382,11 +382,9 @@ function _claimIcoSlot(imgIdx, item, slot, sizes) {
   const container = createIcoContainer();
   container.dataset.imgIdx = String(imgIdx);
   if (item?.listIndex !== undefined) container.dataset.listIndex = String(item.listIndex);
-  const grillAngle = _viewportState ? _viewportState.getGrillAngle() : '45deg';
-  const mirrored = mirroredGrillAngle(grillAngle);
   let firstImg = null;
   sizes.forEach((s, idx) => {
-    const { cell, img: im } = createIcoCell(s, idx, sizes.length, mirrored);
+    const { cell, img: im } = createIcoCell(s, idx, sizes.length);
     if (im) {
       im.decoding = 'async';
       im.draggable = false;
@@ -775,7 +773,7 @@ function _updateGrillAngles() {
   if (!_strip || !_viewportState) return;
   const grillAngle = _viewportState.getGrillAngle();
   _strip.style.setProperty('--grill-angle', grillAngle);
-  _strip.style.setProperty('--slot-backdrop-angle', grillAngle === '45deg' ? '-45deg' : '45deg');
+  _strip.style.setProperty('--slot-backdrop-angle', mirroredGrillAngle(grillAngle));
 }
 
 /** Zoom scale the column offsets were last built with. */

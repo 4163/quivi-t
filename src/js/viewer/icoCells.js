@@ -17,7 +17,7 @@ export function createIcoContainer() {
   return container;
 }
 
-export function createIcoCell(size, index, total, mirroredAngle) {
+export function createIcoCell(size, index, total) {
   const cell = document.createElement('div');
   cell.className = 'ico-size';
   cell.dataset.ready = 'true';
@@ -30,7 +30,6 @@ export function createIcoCell(size, index, total, mirroredAngle) {
   cell.style.setProperty('--ico-h', `${size.height}px`);
   if (total > 1) cell.style.setProperty('--slot-backdrop-bg', computeSlotHue(index, total));
   else cell.style.removeProperty('--slot-backdrop-bg');
-  cell.style.setProperty('--slot-backdrop-angle', mirroredAngle);
   return { cell, img };
 }
 
