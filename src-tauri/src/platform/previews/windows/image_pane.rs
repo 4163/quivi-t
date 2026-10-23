@@ -21,7 +21,7 @@ use windows::{
         Graphics::Gdi::{
             BeginPaint, DrawTextW, EndPaint, FillRect, GetStockObject, InvalidateRect, SetBkMode,
             SetDCBrushColor, SetTextColor, DC_BRUSH, DT_CENTER, DT_NOPREFIX, DT_WORDBREAK, HBRUSH,
-            PAINTSTRUCT, TRANSPARENT,
+            HDC, PAINTSTRUCT, TRANSPARENT,
         },
         System::{Com::CoTaskMemFree, LibraryLoader::GetModuleHandleW},
         UI::{
@@ -44,7 +44,10 @@ use wry::{
     WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, WebViewExtWindows,
 };
 
-use super::{bitmap::Bitmap, log_event};
+use super::{
+    bitmap::{paint_buffered, Bitmap},
+    log_event,
+};
 
 const MAX_MEDIA_BYTES: u64 = 128 * 1024 * 1024;
 const MEDIA_READ_CHUNK_BYTES: usize = 64 * 1024;
@@ -537,6 +540,37 @@ unsafe fn resize_webview(hwnd: HWND, state: &WindowState) {
     }
 }
 
+unsafe fn paint_content(hdc: HDC, area: RECT, state: &WindowState) {
+    let color = state.background.load(Ordering::Acquire);
+    let bitmap = state.bitmap.borrow();
+    let mut message = state.message.borrow_mut();
+    let fill_background = |target| {
+        SetDCBrushColor(target, COLORREF(color));
+        FillRect(target, &area, HBRUSH(GetStockObject(DC_BRUSH).0));
+    };
+    if bitmap.is_none() && message.is_empty() {
+        fill_background(hdc);
+        return;
+    }
+    paint_buffered(hdc, area, |buffer| {
+        fill_background(buffer);
+        if let Some(bitmap) = bitmap.as_ref() {
+            bitmap.paint(buffer, area);
+        } else {
+            SetBkMode(buffer, TRANSPARENT);
+            let light = (color & 255) + ((color >> 8) & 255) + ((color >> 16) & 255) > 384;
+            SetTextColor(buffer, COLORREF(if light { 0x202020 } else { 0xeeeeee }));
+            let mut text_area = area;
+            text_area.left += 16;
+            text_area.right -= 16;
+            text_area.top += 24;
+            DrawTextW(
+                buffer, &mut message, &mut text_area, DT_CENTER | DT_NOPREFIX | DT_WORDBREAK,
+            );
+        }
+    });
+}
+
 unsafe extern "system" fn window_proc(
     hwnd: HWND,
     message: u32,
@@ -586,9 +620,15 @@ unsafe extern "system" fn window_proc(
             }
             LRESULT(0)
         }
-        WM_ERASEBKGND => LRESULT(1),
+        WM_ERASEBKGND => {
+            let mut area = RECT::default();
+            let _ = GetClientRect(hwnd, &mut area);
+            paint_content(HDC(wparam.0 as _), area, &state);
+            LRESULT(1)
+        }
         WM_SIZE => {
             resize_webview(hwnd, &state);
+            let _ = InvalidateRect(Some(hwnd), None, false);
             LRESULT(0)
         }
         WM_PAINT => {
@@ -596,25 +636,7 @@ unsafe extern "system" fn window_proc(
             let hdc = BeginPaint(hwnd, &mut paint);
             let mut area = RECT::default();
             let _ = GetClientRect(hwnd, &mut area);
-            let color = state.background.load(Ordering::Acquire);
-            SetDCBrushColor(hdc, COLORREF(color));
-            FillRect(hdc, &area, HBRUSH(GetStockObject(DC_BRUSH).0));
-            if let Some(bitmap) = &*state.bitmap.borrow() {
-                bitmap.paint(hdc, area);
-            } else if !state.message.borrow().is_empty() {
-                SetBkMode(hdc, TRANSPARENT);
-                let light = (color & 255) + ((color >> 8) & 255) + ((color >> 16) & 255) > 384;
-                SetTextColor(hdc, COLORREF(if light { 0x202020 } else { 0xeeeeee }));
-                area.left += 16;
-                area.right -= 16;
-                area.top += 24;
-                DrawTextW(
-                    hdc,
-                    &mut state.message.borrow_mut(),
-                    &mut area,
-                    DT_CENTER | DT_NOPREFIX | DT_WORDBREAK,
-                );
-            }
+            paint_content(hdc, area, &state);
             let _ = EndPaint(hwnd, &paint);
             LRESULT(0)
         }

@@ -3,12 +3,40 @@ use windows::{
     Win32::{
         Foundation::{E_FAIL, RECT},
         Graphics::Gdi::{
-            AlphaBlend, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, SelectObject,
-            AC_SRC_ALPHA, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS,
-            HBITMAP, HDC,
+            AlphaBlend, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateDIBSection,
+            DeleteDC, DeleteObject, SelectObject, AC_SRC_ALPHA, BITMAPINFO, BITMAPINFOHEADER,
+            BI_RGB, BLENDFUNCTION, DIB_RGB_COLORS,
+            HBITMAP, HDC, SRCCOPY,
         },
     },
 };
+
+pub(super) unsafe fn paint_buffered(hdc: HDC, area: RECT, paint: impl FnOnce(HDC)) {
+    let width = area.right - area.left;
+    let height = area.bottom - area.top;
+    if hdc.0.is_null() || width <= 0 || height <= 0 {
+        return;
+    }
+    let memory = CreateCompatibleDC(Some(hdc));
+    if memory.0.is_null() {
+        paint(hdc);
+        return;
+    }
+    let bitmap = CreateCompatibleBitmap(hdc, width, height);
+    if bitmap.0.is_null() {
+        let _ = DeleteDC(memory);
+        paint(hdc);
+        return;
+    }
+    let previous = SelectObject(memory, bitmap.into());
+    paint(memory);
+    let _ = BitBlt(
+        hdc, area.left, area.top, width, height, Some(memory), 0, 0, SRCCOPY,
+    );
+    SelectObject(memory, previous);
+    let _ = DeleteObject(bitmap.into());
+    let _ = DeleteDC(memory);
+}
 
 pub(super) struct Bitmap {
     handle: HBITMAP,

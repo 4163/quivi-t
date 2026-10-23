@@ -13,11 +13,11 @@ use windows::{
             LPARAM, LRESULT, POINT, RECT, WPARAM,
         },
         Graphics::Gdi::{
-            BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, CreateFontIndirectW,
-            CreatePen, CreateSolidBrush, DeleteDC, DeleteObject, DrawTextW, EndPaint, FillRect,
+            BeginPaint, CreateFontIndirectW, CreatePen, CreateSolidBrush, DeleteObject,
+            DrawTextW, EndPaint, FillRect,
             GetDC, InvalidateRect, Polyline, ReleaseDC, SelectObject, SetBkMode, SetTextColor,
             DT_CENTER, DT_END_ELLIPSIS, DT_LEFT, DT_SINGLELINE, DT_VCENTER, HFONT, HGDIOBJ,
-            LOGFONTW, PAINTSTRUCT, PS_SOLID, SRCCOPY, TRANSPARENT,
+            HDC, LOGFONTW, PAINTSTRUCT, PS_SOLID, TRANSPARENT,
         },
         Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL},
         System::{
@@ -58,6 +58,7 @@ use windows::{
 use winreg::{enums::HKEY_CURRENT_USER, RegKey};
 
 use super::{
+    bitmap::paint_buffered,
     image_pane::{ImagePane, MediaKind},
     PREVIEW_HANDLER_CLSID,
 };
@@ -876,7 +877,7 @@ fn pump_create(state: &Arc<Mutex<PreviewState>>) {
 /// Repositions the live child on the pump thread. Skips work the host
 /// already has.
 fn pump_position(state: &Arc<Mutex<PreviewState>>) {
-    let (hwnd, parent, area, move_needed) = {
+    let (hwnd, parent, area, parent_changed, move_needed) = {
         let mut guard = lock_state(state);
         let Some(hwnd) = guard
             .pane
@@ -886,19 +887,20 @@ fn pump_position(state: &Arc<Mutex<PreviewState>>) {
         else {
             return;
         };
-        let changed =
-            guard.parent.0 != guard.applied_parent.0 || !rect_equal(guard.rect, guard.applied_rect);
+        let parent_changed = guard.parent != guard.applied_parent;
+        let changed = parent_changed || !rect_equal(guard.rect, guard.applied_rect);
         if changed {
             guard.applied_parent = guard.parent;
             guard.applied_rect = guard.rect;
         }
-        (hwnd, guard.parent, guard.rect, changed)
+        (hwnd, guard.parent, guard.rect, parent_changed, changed)
     };
     if !move_needed || hwnd.0.is_null() {
         return;
     }
-    unsafe {
-        SetParent(hwnd, Some(parent)).ok();
+    if parent_changed {
+        // SetParent hides and re-shows even a child whose parent is unchanged.
+        unsafe { SetParent(hwnd, Some(parent)).ok() };
     }
     if resize_child(hwnd, area).is_ok() {
         repaint_now(state, hwnd);
@@ -1838,7 +1840,12 @@ unsafe extern "system" fn preview_window_proc(
             paint_preview(hwnd, pane);
             LRESULT(0)
         }
-        WM_ERASEBKGND => LRESULT(1),
+        WM_ERASEBKGND => {
+            let mut client = RECT::default();
+            let _ = unsafe { GetClientRect(hwnd, &mut client) };
+            unsafe { paint_double_buffered(HDC(wparam.0 as _), client, pane) };
+            LRESULT(1)
+        }
         WM_SIZE => {
             clamp_scroll(hwnd, pane);
             let _ = unsafe { InvalidateRect(Some(hwnd), None, false) };
@@ -2321,41 +2328,7 @@ unsafe fn paint_double_buffered(
     client: RECT,
     pane: &mut PreviewPane,
 ) {
-    let width = (client.right - client.left).max(1);
-    let height = (client.bottom - client.top).max(1);
-
-    let mem_dc = CreateCompatibleDC(Some(hdc));
-    if mem_dc.0.is_null() {
-        render_content(hdc, client, pane);
-        return;
-    }
-
-    let mem_bm = CreateCompatibleBitmap(hdc, width, height);
-    if mem_bm.0.is_null() {
-        let _ = DeleteDC(mem_dc);
-        render_content(hdc, client, pane);
-        return;
-    }
-
-    let old_bm = SelectObject(mem_dc, mem_bm.into());
-
-    render_content(mem_dc, client, pane);
-
-    let _ = BitBlt(
-        hdc,
-        client.left,
-        client.top,
-        width,
-        height,
-        Some(mem_dc),
-        client.left,
-        client.top,
-        SRCCOPY,
-    );
-
-    SelectObject(mem_dc, old_bm);
-    let _ = DeleteObject(mem_bm.into());
-    let _ = DeleteDC(mem_dc);
+    paint_buffered(hdc, client, |buffer| render_content(buffer, client, pane));
 }
 
 unsafe fn render_content(

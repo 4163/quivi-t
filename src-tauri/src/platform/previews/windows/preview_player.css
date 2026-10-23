@@ -6,10 +6,17 @@
   font-family: "Segoe UI", sans-serif;
   background: var(--preview-background);
   color: var(--preview-foreground);
+  user-select: none;
 }
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
 body { display: flex; align-items: center; justify-content: center; }
-img, canvas { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+img, canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
 img.vector {
   width: min(100%, var(--preview-svg-max-edge), var(--svg-width, var(--preview-svg-max-edge)));
   height: min(100%, var(--preview-svg-max-edge), var(--svg-height, var(--preview-svg-max-edge)));

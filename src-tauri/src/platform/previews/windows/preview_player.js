@@ -15,6 +15,15 @@ let raf = 0;
 let decoding = false;
 let context = null;
 
+function blockDragDrop(event) {
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'none';
+}
+
+for (const type of ['dragover', 'drop']) {
+  document.addEventListener(type, blockDragDrop, true);
+}
+
 function showError(message) {
   status.textContent = message;
   status.classList.remove('hidden');
