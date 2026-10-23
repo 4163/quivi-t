@@ -75,6 +75,7 @@ export function initDropZone({ dropOverlay, FsUtils }) {
     });
     listen('tauri://drag-drop', (e) => {
       _dropOverlay.classList.remove('drag-over');
+      resetDropMessage();
       const paths = e.payload.paths;
       if (paths && paths.length > 0) {
         loadDroppedPath(paths[0], FsUtils).catch(err => {
@@ -102,6 +103,7 @@ export function initDropZone({ dropOverlay, FsUtils }) {
   window.addEventListener('drop', (e) => {
     e.preventDefault();
     _dropOverlay.classList.remove('drag-over');
+    resetDropMessage();
 
     const file = e.dataTransfer.getData('text/plain');
     if (file) {
