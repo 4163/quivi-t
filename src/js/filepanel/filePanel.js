@@ -145,6 +145,8 @@ let lastScrolledSig = '';
 let lastClickTime = 0;
 let lastClickIndex = -1;
 let pendingClickIndex = -1;
+let fileListMouseDownTarget = null;
+let fileListMouseDownPos = null;
 
 let currentPath = '';
 
@@ -2694,8 +2696,24 @@ export function initFilePanel(deps) {
   initializeColumns();
   updateSortIcons();
 
+  fileListUl.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    fileListMouseDownTarget = e.target;
+    fileListMouseDownPos = { x: e.clientX, y: e.clientY };
+  });
+
+  fileListUl.addEventListener('dragstart', (e) => {
+    e.preventDefault();
+  });
+
   fileListUl.addEventListener('click', (e) => {
-    if (e.target === fileListUl) {
+    const isDirectEmptyClick = fileListMouseDownTarget === fileListUl && e.target === fileListUl;
+    const isDrag = fileListMouseDownPos && Math.hypot(e.clientX - fileListMouseDownPos.x, e.clientY - fileListMouseDownPos.y) > 4;
+    fileListMouseDownTarget = null;
+    fileListMouseDownPos = null;
+    pendingClickIndex = -1;
+
+    if (isDirectEmptyClick && !isDrag) {
       fileListUl.focus({ preventScroll: true });
       const state = Core.getState();
       if (state.list?.length === 1 && state.list[0].is_parent) {
