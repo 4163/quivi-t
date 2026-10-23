@@ -57,9 +57,9 @@ function _drawSlotQuad(compositor, texture, draw, item, nodeW, nodeH, vpW, vpH, 
   const quadSampler = (sampler === 'lanczos' && isSlot1to1) ? 'bilinear' : sampler;
 
   _scratchUV.u0 = sx / nodeW;
-  _scratchUV.v0 = sy / nodeH;
+  _scratchUV.v0 = (draw.flipY < 0 ? sy + sh : sy) / nodeH;
   _scratchUV.u1 = (sx + sw) / nodeW;
-  _scratchUV.v1 = (sy + sh) / nodeH;
+  _scratchUV.v1 = (draw.flipY < 0 ? sy : sy + sh) / nodeH;
 
   _scratchDest.x = dx;
   _scratchDest.y = dy;
@@ -1246,7 +1246,7 @@ export function createViewerPipelines(viewportState) {
     _columnIcoPending.clear();
   }
   /** Viewport geometry of the previous column pass. Detects pan/zoom renders. */
-  const _columnLastGeom = { scale: 0, tx: 0, ty: 0, vpW: 0, vpH: 0 };
+  const _columnLastGeom = { scale: 0, tx: 0, ty: 0, flipY: 1, vpW: 0, vpH: 0 };
   let _columnLiveLoopId = 0;
   let _columnHasLive = false;
   let _columnRenderInFlight = false;
@@ -1727,6 +1727,7 @@ export function createViewerPipelines(viewportState) {
     _columnLastGeom.scale = 0;
     _columnLastGeom.tx = 0;
     _columnLastGeom.ty = 0;
+    _columnLastGeom.flipY = 1;
     _columnLastGeom.vpW = 0;
     _columnLastGeom.vpH = 0;
     if (_columnPipeline?.gl) {
@@ -1878,13 +1879,16 @@ export function createViewerPipelines(viewportState) {
     const scale = viewportState.getScale() || 1;
     const tx = viewportState.getTx() || 0;
     const ty = viewportState.getTy() || 0;
+    const columnFlipY = viewportState.getFlipY();
     // A pan/zoom render must track the gesture, not the animation clock.
     // Decoding here stalls the frame behind the finger and reads as ghosting.
     const viewportMoved = _columnLastGeom.scale !== scale || _columnLastGeom.tx !== tx ||
-      _columnLastGeom.ty !== ty || _columnLastGeom.vpW !== vpW || _columnLastGeom.vpH !== vpH;
+      _columnLastGeom.ty !== ty || _columnLastGeom.flipY !== columnFlipY ||
+      _columnLastGeom.vpW !== vpW || _columnLastGeom.vpH !== vpH;
     _columnLastGeom.scale = scale;
     _columnLastGeom.tx = tx;
     _columnLastGeom.ty = ty;
+    _columnLastGeom.flipY = columnFlipY;
     _columnLastGeom.vpW = vpW;
     _columnLastGeom.vpH = vpH;
     const { drawList } = computeColumnComposite({
@@ -1896,6 +1900,7 @@ export function createViewerPipelines(viewportState) {
       scale,
       tx,
       ty,
+      flipY: columnFlipY,
       overscan: 0,
       items: snap.items,
     });

@@ -96,6 +96,14 @@ export function seamOverlapForScale(scale) {
   return s >= 1 ? 1 : 1 / s;
 }
 
+export function columnCenterY(totalHeight, scale, ty, flipY = 1) {
+  return totalHeight / 2 - ty / ((scale || 1) * flipY);
+}
+
+export function columnCenterTy(columnY, totalHeight, scale, flipY = 1) {
+  return (totalHeight / 2 - columnY) * scale * flipY;
+}
+
 /**
  * Find index of item containing centerColY.
  * Clamps to 0 or last index when outside bounds.
@@ -205,14 +213,14 @@ export function firstLastHighlight({ primary = -1, visStart = -1, visEnd = -1, t
  * When the column is shorter than the viewport, pins to the top of the column.
  * When the column is taller, clamps between the top pin and bottom pin.
  */
-export function computeTopAlignTy({ slotTop = 0, totalHeight = 0, scale = 1, viewportHeight = 800 } = {}) {
+export function computeTopAlignTy({ slotTop = 0, totalHeight = 0, scale = 1, viewportHeight = 800, flipY = 1 } = {}) {
   const colVisualH = totalHeight * scale;
   if (colVisualH <= viewportHeight) {
     return -(colVisualH - viewportHeight) / 2;
   }
   const maxTy = (colVisualH - viewportHeight) / 2;
   const minTy = -maxTy;
-  const rawTy = (totalHeight / 2 - slotTop) * scale - viewportHeight / 2;
+  const rawTy = columnCenterTy(slotTop, totalHeight, scale, flipY) - viewportHeight / 2;
   return Math.max(minTy, Math.min(maxTy, rawTy));
 }
 
@@ -221,14 +229,14 @@ export function computeTopAlignTy({ slotTop = 0, totalHeight = 0, scale = 1, vie
  * When the column is shorter than the viewport, moves up towards viewport top.
  * When the column is taller, clamps between the top pin and bottom pin.
  */
-export function computeBottomAlignTy({ slotBottom = 0, totalHeight = 0, scale = 1, viewportHeight = 800 } = {}) {
+export function computeBottomAlignTy({ slotBottom = 0, totalHeight = 0, scale = 1, viewportHeight = 800, flipY = 1 } = {}) {
   const colVisualH = totalHeight * scale;
   if (colVisualH <= viewportHeight) {
     return (colVisualH - viewportHeight) / 2;
   }
   const maxTy = (colVisualH - viewportHeight) / 2;
   const minTy = -maxTy;
-  const rawTy = (totalHeight / 2 - slotBottom) * scale + viewportHeight / 2;
+  const rawTy = columnCenterTy(slotBottom, totalHeight, scale, flipY) + viewportHeight / 2;
   return Math.max(minTy, Math.min(maxTy, rawTy));
 }
 
@@ -240,6 +248,7 @@ export function computeBottomAlignTy({ slotBottom = 0, totalHeight = 0, scale = 
  *   scale: zoom factor (default 1)
  *   ty: vertical pan translation (default 0)
  *   tx: horizontal pan translation (default 0)
+ *   flipY: vertical orientation, 1 or -1 (default 1)
  *   overscan: extra margin in px beyond the viewport (default 0)
  *   totalHeight: total column height (optional, inferred from offsets)
  *   columnWidth: unscaled column width (optional, inferred from offsets/items)
@@ -252,6 +261,7 @@ export function computeBottomAlignTy({ slotBottom = 0, totalHeight = 0, scale = 
  */
 export function computeColumnComposite(options = {}, ...rest) {
   let offsets, totalHeight, columnWidth, widestWidth, viewportWidth, viewportHeight, scale, ty, tx, overscan, items;
+  let flipY = 1;
   if (options && typeof options === 'object' && !Array.isArray(options)) {
     ({
       offsets,
@@ -263,6 +273,7 @@ export function computeColumnComposite(options = {}, ...rest) {
       scale = 1,
       ty = 0,
       tx = 0,
+      flipY = 1,
       overscan = 0,
       items
     } = options);
@@ -290,11 +301,13 @@ export function computeColumnComposite(options = {}, ...rest) {
   const colW = columnWidth ?? offsets?.columnWidth ?? offsets?.widestWidth ?? 0;
 
   const norm0 = (v) => (v === 0 ? 0 : v);
-  const columnYOrigin = norm0((totalH / 2) - ((vph / 2 + ty) / s));
+  const centerY = columnCenterY(totalH, s, ty, flipY);
+  const columnYOrigin = norm0(centerY - (vph / (2 * s)) * flipY);
 
   // Visible window in column coordinates (extended by overscan)
-  const windowTopY = (totalH / 2) - ((vph / 2 + ty + overscan) / s);
-  const windowBottomY = (totalH / 2) - ((ty - vph / 2 - overscan) / s);
+  const halfWindow = (vph / 2 + overscan) / s;
+  const windowTopY = centerY - halfWindow;
+  const windowBottomY = centerY + halfWindow;
 
   const { startIndex, endIndex } = computeWindowRange(offsetsList, windowTopY, windowBottomY);
   if (startIndex === -1 || endIndex === -1) {
@@ -323,7 +336,8 @@ export function computeColumnComposite(options = {}, ...rest) {
     const destW = norm0(itemW * s);
 
     // Unclipped vertical destination on viewport
-    const destY = norm0((vph / 2) + ty + (off.top - totalH / 2) * s);
+    const slotTop = flipY < 0 ? off.bottom : off.top;
+    const destY = norm0((vph / 2) + ty + (slotTop - totalH / 2) * s * flipY);
     const destH = norm0(off.height * s);
 
     // Clip to visible window
@@ -333,13 +347,14 @@ export function computeColumnComposite(options = {}, ...rest) {
 
     const clippedDestH = norm0(clippedDestBottom - clippedDestY);
     const topDeltaScreen = norm0(clippedDestY - destY);
-    const sy = norm0(topDeltaScreen / s);
+    const sy = norm0((flipY < 0 ? destY + destH - clippedDestBottom : topDeltaScreen) / s);
     const sh = norm0(clippedDestH / s);
     const sx = 0;
     const sw = itemW;
 
     drawList.push({
       imgIdx: i,
+      flipY,
       sourceRect: {
         x: sx,
         y: sy,

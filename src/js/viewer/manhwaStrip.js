@@ -12,7 +12,7 @@ import { Core } from '../core.js';
 import { BoundedMap } from '../services/cache.js';
 import { FsUtils } from '../fsUtils.js';
 import { getCachedArchiveBlob } from '../services/archiveImageCache.js';
-import { computeColumnOffsets, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale, firstLastHighlight } from '../services/viewerMath.js';
+import { computeColumnOffsets, columnCenterY, columnCenterTy, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale, firstLastHighlight } from '../services/viewerMath.js';
 import { createIcoCell, createIcoContainer, mirroredGrillAngle } from './icoCells.js';
 import { Statusbar } from '../menubar/statusbar.js';
 import { initManhwaAudio, ManhwaAudio } from './manhwaAudio.js';
@@ -337,6 +337,7 @@ let _lastPanAt = 0;
 let _lastZoomAt = 0;
 let _lastHeartbeatAt = 0;
 let _lastScale = null;
+let _lastFlipY = null;
 let _lastFitMode = null;
 let _lastFitModeGen = -1;
 /** Reapply the current column fit after ICO dimensions replace placeholders. */
@@ -779,6 +780,24 @@ function _updateGrillAngles() {
 /** Zoom scale the column offsets were last built with. */
 let _layoutScale = null;
 
+function _flipY() {
+  return _viewportState?.getFlipY() || 1;
+}
+
+function _slotTopY(imgIdx) {
+  const offset = _layout.offsets[imgIdx];
+  return _flipY() < 0 ? offset.bottom : offset.top;
+}
+
+function _slotBottomY(imgIdx) {
+  const offset = _layout.offsets[imgIdx];
+  return _flipY() < 0 ? offset.top : offset.bottom;
+}
+
+function _isBottomItem(imgIdx) {
+  return imgIdx === (_flipY() < 0 ? 0 : _imageIndex.length - 1);
+}
+
 function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
   _viewportProgram++;
   try {
@@ -787,6 +806,7 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
   const vpH = _viewport?.clientHeight || 800;
   const vw = _viewport?.clientWidth || 800;
   const oldTy = _viewportState?.getTy() || 0;
+  const flipY = _flipY();
   const oldTotalH = _layout.totalHeight || 0;
   const oldMaxTy = Math.abs(oldTotalH * scale - vpH) / 2;
   const wasAtTop = oldTy >= oldMaxTy - 0.5;
@@ -804,21 +824,22 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
     } else if (_anchorHoldover !== null && _layout.offsets[_anchorHoldover]) {
       if (_anchorHoldoverAlignTop) {
         targetTy = computeTopAlignTy({
-          slotTop: _layout.offsets[_anchorHoldover].top,
+          slotTop: _slotTopY(_anchorHoldover),
           totalHeight: newTotalH,
           scale,
           viewportHeight: vpH,
+          flipY,
         });
       } else {
         const isMiddle = 0 < _anchorHoldover && _anchorHoldover < _imageIndex.length - 1;
         if (isMiddle) {
           const centerSlotY = _layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2;
-          targetTy = (newTotalH / 2 - centerSlotY) * scale;
-        } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
+          targetTy = columnCenterTy(centerSlotY, newTotalH, scale, flipY);
+        } else if (_isBottomItem(_anchorHoldover) && _imageIndex.length > 1) {
           targetTy = -Math.abs(colH - vpH) / 2;
         } else {
           const centerSlotY = _layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2;
-          targetTy = (newTotalH / 2 - centerSlotY) * scale;
+          targetTy = columnCenterTy(centerSlotY, newTotalH, scale, flipY);
         }
       }
     } else if (anchorImgIdxToHold !== null && _layout.offsets[anchorImgIdxToHold]) {
@@ -831,9 +852,9 @@ function _updateLayout(anchorImgIdxToHold = null, oldAnchorTop = 0) {
       } else if (_imageIndex.length > 1 && wasAtBottom && !wasAtTop && !panning) {
         targetTy = -Math.abs(colH - vpH) / 2;
       } else {
-        const newAnchorTop = _layout.offsets[anchorImgIdxToHold].top;
+        const newAnchorTop = _slotTopY(anchorImgIdxToHold);
         const deltaAnchorTop = newAnchorTop - oldAnchorTop;
-        targetTy = oldTy + (deltaTotalH * scale) / 2 - deltaAnchorTop * scale;
+        targetTy = oldTy + (deltaTotalH / 2 - deltaAnchorTop) * scale * flipY;
       }
     }
 
@@ -960,7 +981,7 @@ function _computeVisibleRange() {
   const scale = _viewportState.getScale() || 1;
   const ty = _viewportState.getTy() || 0;
   const vpH = _viewport?.clientHeight || 800;
-  const centerColY = (_layout.totalHeight / 2) - (ty / scale);
+  const centerColY = columnCenterY(_layout.totalHeight, scale, ty, _flipY());
   const halfVpH = vpH / (2 * scale);
   const visibleTopY = centerColY - halfVpH;
   const visibleBottomY = centerColY + halfVpH;
@@ -1002,13 +1023,19 @@ function _updateWindow() {
   _lastTy = ty;
 
   const isScaleChange = _lastScale !== null && Math.abs(scale - _lastScale) > 1e-9;
-  if (deltaTy !== 0 && _viewportProgram === 0 && !isScaleChange) {
+  const flipY = _flipY();
+  const isFlipChange = _lastFlipY !== null && flipY !== _lastFlipY;
+  _lastFlipY = flipY;
+  if (isFlipChange) {
+    _disarmEntryRefresh();
+  }
+  if (isFlipChange || (deltaTy !== 0 && _viewportProgram === 0 && !isScaleChange)) {
     _lastPanAt = performance.now();
     _anchorHoldover = null;
   }
 
-  const isPanningDown = deltaTy < 0;
-  const isPanningUp = deltaTy > 0;
+  const isPanningDown = deltaTy * flipY < 0;
+  const isPanningUp = deltaTy * flipY > 0;
 
   // Zooming in reframes the window: warm both sides regardless of direction.
   const zoomedIn = _lastScale !== null && scale > _lastScale + 1e-9;
@@ -1018,7 +1045,7 @@ function _updateWindow() {
   _lastScale = scale;
   const prefetchDir = zoomedIn ? 0 : isPanningDown ? 1 : isPanningUp ? -1 : 0;
 
-  const centerColY = (_layout.totalHeight / 2) - (ty / scale);
+  const centerColY = columnCenterY(_layout.totalHeight, scale, ty, flipY);
 
   const { startIndex: visStart, endIndex: visEnd } = _computeVisibleRange();
   const lastIdx = _imageIndex.length - 1;
@@ -1172,10 +1199,10 @@ function _updateWindow() {
   }
 
   // Anchor follows view movement, not layout drift. Recompute only when the
-  // view (ty, scale, viewport height) moved; decode corrections alone keep it.
+  // view (ty, scale, flip, viewport height) moved; decode corrections alone keep it.
   // An explicit center request holds through decodes until zoom reframes.
   const anchorViewChanged = _lastAnchorTy === null || _lastAnchorScale === null || _lastAnchorVph === null ||
-    ty !== _lastAnchorTy || scale !== _lastAnchorScale || vpH !== _lastAnchorVph;
+    ty !== _lastAnchorTy || scale !== _lastAnchorScale || vpH !== _lastAnchorVph || isFlipChange;
   let newAnchor = -1;
   if (_anchorHoldover !== null && Math.abs(scale - _anchorHoldoverScale) < 1e-4 && _layout.offsets[_anchorHoldover]) {
     newAnchor = _anchorHoldover;
@@ -1188,7 +1215,7 @@ function _updateWindow() {
         // During user panning, the anchor must dynamically track viewport
         // center so the heartbeat follows the scrolled position.
         const primaryImgIdx = _listToImgIdx.get(Core.getState()?.index);
-        const panning = _viewportProgram === 0 && !isScaleChange && (performance.now() - _lastPanAt < 150 || deltaTy !== 0);
+        const panning = isFlipChange || (_viewportProgram === 0 && !isScaleChange && (performance.now() - _lastPanAt < 150 || deltaTy !== 0));
         if (!panning && primaryImgIdx !== undefined && primaryImgIdx >= visStart && primaryImgIdx <= visEnd) {
           newAnchor = primaryImgIdx;
         } else if (visStart === visEnd) {
@@ -1402,7 +1429,7 @@ function _sortMountQueue(anchor, direction) {
   const colH = (_layout.totalHeight || 0) * scale;
   const vpH = _viewport?.clientHeight || 800;
   const maxTy = Math.abs(colH - vpH) / 2;
-  const curTy = _viewportState?.getTy() || 0;
+  const curTy = (_viewportState?.getTy() || 0) * _flipY();
   const isBottomPinned = colH > vpH && curTy <= -maxTy + 0.5;
   const atBottom = _imageIndex.length > 1 && (anchor === _imageIndex.length - 1 || isBottomPinned);
 
@@ -1425,14 +1452,14 @@ function _requestLayout() {
     if (!_active || !_viewportState || !_strip) return;
     const scale = _viewportState.getScale() || 1;
     const ty = _viewportState.getTy() || 0;
-    const centerColY = (_layout.totalHeight / 2) - (ty / scale);
+    const centerColY = columnCenterY(_layout.totalHeight, scale, ty, _flipY());
     const currentAnchor = findAnchorIndex(_layout.offsets, centerColY);
     const anchorToHold = _anchorHoldover !== null && _layout.offsets[_anchorHoldover]
       ? _anchorHoldover
       : (_anchorImgIdx >= 0 && _layout.offsets[_anchorImgIdx]
         ? _anchorImgIdx
         : (currentAnchor !== -1 ? currentAnchor : 0));
-    const oldAnchorTop = _layout.offsets[anchorToHold]?.top || 0;
+    const oldAnchorTop = _layout.offsets[anchorToHold] ? _slotTopY(anchorToHold) : 0;
     _updateLayout(anchorToHold, oldAnchorTop);
     if (_fitRefreshPending && _widthGateKey === null) {
       _fitRefreshPending = false;
@@ -1986,10 +2013,10 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
     const edge = _firstLastEdge();
     if (edge === 'first' && _layout.offsets[0]) {
       targetImgIdx = 0;
-      alignTop = true;
+      alignTop = _flipY() > 0;
     } else if (edge === 'last' && _layout.offsets[_imageIndex.length - 1]) {
       targetImgIdx = _imageIndex.length - 1;
-      alignTop = false;
+      alignTop = _flipY() < 0;
     }
   }
 
@@ -2001,10 +2028,10 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
     const primary = _listToImgIdx.get(Core.getState()?.index);
     if (total > 1 && primary === 0 && _layout.offsets[0]) {
       targetImgIdx = 0;
-      alignTop = true;
+      alignTop = _flipY() > 0;
     } else if (total > 1 && primary === total - 1 && _layout.offsets[total - 1]) {
       targetImgIdx = total - 1;
-      alignTop = false;
+      alignTop = _flipY() < 0;
     }
   }
 
@@ -2065,19 +2092,19 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   }
 
   const preScale = _viewportState.getScale() || 1;
-  const centerColY = (_layout.totalHeight || 0) / 2 - (_viewportState.getTy() || 0) / preScale;
+  const centerColY = columnCenterY(_layout.totalHeight, preScale, _viewportState.getTy(), _flipY());
   _viewportState.zoomTo(targetScale, vw / 2, vh / 2);
 
   if (targetImgIdx !== null) {
     if (alignTop) {
       if (!colFits && _layout.offsets[targetImgIdx]) {
-        _topAlignColumnY(_layout.offsets[targetImgIdx].top, 0);
+        _topAlignColumnY(_slotTopY(targetImgIdx), 0);
       } else {
         _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       }
     } else {
-      if (!colFits && targetImgIdx === _imageIndex.length - 1 && _imageIndex.length > 1) {
-        _bottomAlignColumnY(_layout.offsets[targetImgIdx].bottom, 0);
+      if (!colFits && _isBottomItem(targetImgIdx) && _imageIndex.length > 1) {
+        _bottomAlignColumnY(_slotBottomY(targetImgIdx), 0);
       } else if (_layout.offsets[targetImgIdx]) {
         _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
       } else {
@@ -2097,7 +2124,7 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
       _centerColumnY((_layout.totalHeight || 0) / 2, 0);
     }
   } else if (preserveReadingRow) {
-    _viewportState.panTo(0, (_layout.totalHeight / 2 - centerColY) * targetScale);
+    _viewportState.panTo(0, columnCenterTy(centerColY, _layout.totalHeight, targetScale, _flipY()));
     _lastTy = _viewportState.getTy();
     _lastAnchorTy = _lastTy;
   } else {
@@ -2139,7 +2166,7 @@ export function alignListItemTop(listIndex) {
     _anchorHoldoverAlignTop = true;
     _anchorHoldoverScale = scale;
 
-    _topAlignColumnY(_layout.offsets[mapped].top);
+    _topAlignColumnY(_slotTopY(mapped));
 
     _strip.style.transform = _viewportState.getTransform();
     _updateGrillAngles();
@@ -2172,7 +2199,7 @@ export function alignListItemBottom(listIndex) {
     _anchorHoldoverAlignTop = false;
     _anchorHoldoverScale = scale;
 
-    _bottomAlignColumnY(_layout.offsets[mapped].bottom);
+    _bottomAlignColumnY(_slotBottomY(mapped));
 
     _strip.style.transform = _viewportState.getTransform();
     _updateGrillAngles();
@@ -2210,7 +2237,7 @@ export function centerListItem(listIndex) {
       if (_layout.offsets[mapped]) {
         _centerColumnY(_layout.offsets[mapped].top + _layout.offsets[mapped].height / 2);
       }
-    } else if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
+    } else if (_isBottomItem(mapped) && _imageIndex.length > 1) {
       const targetTy = -Math.abs(colH - vh) / 2;
       _lastTy = targetTy;
       _lastAnchorTy = targetTy;
@@ -2256,7 +2283,7 @@ export function resetZoom(exactScale) {
       // No holdover, no Core selection change, no slot re-pinning.
       const holdScale = _viewportState.getScale() || 1;
       const holdTx = _viewportState.getTx();
-      const holdCenterY = (_layout.totalHeight || 0) / 2 - (_viewportState.getTy() || 0) / holdScale;
+      const holdCenterY = columnCenterY(_layout.totalHeight, holdScale, _viewportState.getTy(), _flipY());
       _anchorHoldover = null;
       _viewportState.resetZoomOnly(exactScale);
       const settledScale = _viewportState.getScale() || 1;
@@ -2264,7 +2291,7 @@ export function resetZoom(exactScale) {
       if (resetColH <= vh + 0.5) {
         _viewportState.panTo(holdTx, 0);
       } else {
-        _viewportState.panTo(holdTx, (_layout.totalHeight / 2 - holdCenterY) * settledScale);
+        _viewportState.panTo(holdTx, columnCenterTy(holdCenterY, _layout.totalHeight, settledScale, _flipY()));
       }
       _lastTy = _viewportState.getTy();
       _lastAnchorTy = _lastTy;
@@ -2277,10 +2304,10 @@ export function resetZoom(exactScale) {
     }
     if (edge === 'first' && _layout.offsets[0]) {
       targetImgIdx = 0;
-      alignTop = true;
+      alignTop = _flipY() > 0;
     } else if (edge === 'last' && _layout.offsets[_imageIndex.length - 1]) {
       targetImgIdx = _imageIndex.length - 1;
-      alignTop = false;
+      alignTop = _flipY() < 0;
     }
 
     const anchorIdx = targetImgIdx !== null ? targetImgIdx : (_anchorImgIdx >= 0 ? _anchorImgIdx : null);
@@ -2305,13 +2332,13 @@ export function resetZoom(exactScale) {
       if (colFits) {
         _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       } else if (_anchorHoldoverAlignTop) {
-        _topAlignColumnY(_layout.offsets[_anchorHoldover].top, 0);
+        _topAlignColumnY(_slotTopY(_anchorHoldover), 0);
       } else {
         const isMiddle = 0 < _anchorHoldover && _anchorHoldover < _imageIndex.length - 1;
         if (isMiddle) {
           _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2, 0);
-        } else if (_anchorHoldover === _imageIndex.length - 1 && _imageIndex.length > 1) {
-          _bottomAlignColumnY(_layout.offsets[_anchorHoldover].bottom, 0);
+        } else if (_isBottomItem(_anchorHoldover) && _imageIndex.length > 1) {
+          _bottomAlignColumnY(_slotBottomY(_anchorHoldover), 0);
         } else {
           _centerColumnY(_layout.offsets[_anchorHoldover].top + _layout.offsets[_anchorHoldover].height / 2, 0);
         }
@@ -2388,7 +2415,7 @@ export function navigateManhwa(delta) {
   const targetIndex = Core.getState().index;
   const mapped = _listToImgIdx.get(targetIndex);
   if (mapped !== undefined) {
-    if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
+    if (_isBottomItem(mapped) && _imageIndex.length > 1) {
       return alignListItemBottom(targetIndex);
     }
     return alignListItemTop(targetIndex);
@@ -2413,13 +2440,14 @@ export function pageStrip(direction, pageMultiplier = 1) {
   const maxTy = (colVisualH - vpH) / 2;
   const minTy = -(colVisualH - vpH) / 2;
   const atBoundary = direction < 0 ? ty >= maxTy - 0.5 : ty <= minTy + 0.5;
+  const indexDirection = direction * _flipY();
 
   if (colVisualH <= vpH || atBoundary) {
-    const targetIdx = direction > 0 ? getLastImageIndex() : getFirstImageIndex();
+    const targetIdx = indexDirection > 0 ? getLastImageIndex() : getFirstImageIndex();
     if (targetIdx !== -1) {
       if (Core.getState().index === targetIdx) {
-        if (_revealBeforeLeavingStrip(direction)) return true;
-        return navigateManhwa(direction);
+        if (_revealBeforeLeavingStrip(indexDirection)) return true;
+        return navigateManhwa(indexDirection);
       }
       Core.selectIndex(targetIdx);
       if (direction > 0) {
@@ -2459,6 +2487,7 @@ function _topAlignColumnY(colY, targetTx = null) {
     totalHeight: _layout.totalHeight || 0,
     scale,
     viewportHeight: vpH,
+    flipY: _flipY(),
   });
   const tx = targetTx !== null ? targetTx : _viewportState.getTx();
   _lastTy = targetTy;
@@ -2482,6 +2511,7 @@ function _bottomAlignColumnY(colY, targetTx = null) {
     totalHeight: _layout.totalHeight || 0,
     scale,
     viewportHeight: vpH,
+    flipY: _flipY(),
   });
   const tx = targetTx !== null ? targetTx : _viewportState.getTx();
   _lastTy = targetTy;
@@ -2497,7 +2527,7 @@ function _bottomAlignColumnY(colY, targetTx = null) {
 function _centerColumnY(colY, targetTx = null) {
   if (!_viewportState || !_layout.offsets.length) return;
   const scale = _viewportState.getScale() || 1;
-  const targetTy = (_layout.totalHeight / 2 - colY) * scale;
+  const targetTy = columnCenterTy(colY, _layout.totalHeight, scale, _flipY());
   const tx = targetTx !== null ? targetTx : _viewportState.getTx();
   _lastTy = targetTy;
   _lastAnchorTy = targetTy;
@@ -2521,6 +2551,7 @@ function _activate(state) {
   _lastArchiveEncryption = state.archiveEncryption;
   _lastTy = null;
   _lastScale = null;
+  _lastFlipY = null;
   _anchorHoldover = null;
   _anchorHoldoverAlignTop = true;
   _lastAnchorTy = null;
@@ -2650,6 +2681,7 @@ function _deactivate() {
 
   _lastTy = null;
   _lastScale = null;
+  _lastFlipY = null;
   _lastFitMode = null;
   _lastFitModeGen = -1;
   _fitRefreshPending = false;
@@ -2715,7 +2747,7 @@ function _onStateChange(state) {
     const anchorPath = _imageIndex[_anchorImgIdx]?.entry.path;
     const hasNewTarget = state.hasTargetEntry && state.list?.[state.index]?.path !== anchorPath;
     const preserveView = !containerChanged && _anchorImgIdx >= 0 && !hasNewTarget;
-    const holdTop = preserveView ? _layout.offsets[_anchorImgIdx]?.top || 0 : 0;
+    const holdTop = preserveView && _layout.offsets[_anchorImgIdx] ? _slotTopY(_anchorImgIdx) : 0;
     const holdTrackedMaxW = _trackedMaxWidth;
     // Same-container reload: carried dims keep slots exact so the refresh
     // remounts without replaying the estimate staircase.
@@ -2744,6 +2776,7 @@ function _onStateChange(state) {
     _lastArchiveEncryption = state.archiveEncryption;
     _lastTy = null;
     _lastScale = null;
+    _lastFlipY = null;
     _anchorHoldover = null;
     _anchorHoldoverAlignTop = true;
     _lastAnchorTy = null;
@@ -2809,7 +2842,7 @@ function _onStateChange(state) {
       const vh = _viewport?.clientHeight || 800;
       const colH = (_layout.totalHeight || 0) * scale;
       if (colH > vh + 0.5) {
-        if (mapped === _imageIndex.length - 1 && _imageIndex.length > 1) {
+        if (_isBottomItem(mapped) && _imageIndex.length > 1) {
           alignListItemBottom(state.index);
         } else {
           alignListItemTop(state.index);
@@ -2839,7 +2872,7 @@ export function setViewportState(vpState) {
       // Offsets are built unzoomed, so only a seam change needs a rebuild.
       // Ordinary pan and zoom ticks at or above 100% keep seam at 1px and
       // stay on the indexed lookup path in _updateWindow.
-      _updateLayout(_anchorImgIdx, _layout.offsets[_anchorImgIdx]?.top || 0);
+      _updateLayout(_anchorImgIdx, _layout.offsets[_anchorImgIdx] ? _slotTopY(_anchorImgIdx) : 0);
     }
     _strip.style.transform = _viewportState.getTransform();
     _strip.style.setProperty('--zoom-scale', scale);
@@ -2883,7 +2916,7 @@ function _admitCompleted(destPath) {
   const anchorListIndex = _anchorImgIdx >= 0 ? _imageIndex[_anchorImgIdx]?.listIndex : undefined;
   // Pre-growth anchor top: the column center moves as the admitted slot
   // lands, so the rebuild must hold the anchor like a decode correction.
-  const holdTop = _anchorImgIdx >= 0 ? _layout.offsets[_anchorImgIdx]?.top || 0 : 0;
+  const holdTop = _layout.offsets[_anchorImgIdx] ? _slotTopY(_anchorImgIdx) : 0;
 
   _imageIndex = _buildImageIndex(list);
   const admitted = _listToImgIdx.get(listIndex);
@@ -3040,7 +3073,7 @@ export function initManhwaStrip(viewportState) {
     if (!_active || !_viewportState) return;
     const scale = _viewportState.getScale() || 1;
     if (_layoutScale === null || seamOverlapForScale(_layoutScale) !== seamOverlapForScale(scale)) {
-      _updateLayout(_anchorImgIdx, _layout.offsets[_anchorImgIdx]?.top || 0);
+      _updateLayout(_anchorImgIdx, _layout.offsets[_anchorImgIdx] ? _slotTopY(_anchorImgIdx) : 0);
     }
     _applyFitMode(Core.getState()?.fitMode || _lastFitMode, _anchorImgIdx, _anchorHoldoverAlignTop);
   });
