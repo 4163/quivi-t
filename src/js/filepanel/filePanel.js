@@ -481,11 +481,11 @@ function fetchNativeIcon(path, ext, size = 'small') {
         img.src = src;
         img.removeAttribute('data-ext');
       } else {
-        const isFolder = ext === '__folder__' || ext.includes('\\') || ext.includes('/');
+        const isDrive = /^[a-zA-Z]:[\\/]?$/.test(ext);
+        const isFolder = !isDrive && (ext === '__folder__' || ext.includes('\\') || ext.includes('/'));
         const svgDim = size === 'large' ? 32 : 14;
-        const svgContent = isFolder
-          ? `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`
-          : `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`;
+        const fallbackType = isDrive ? 'drive' : (isFolder ? 'folder' : 'file');
+        const svgContent = getFallbackSvg(fallbackType, svgDim);
         const svgSlot = img.parentElement?.querySelector('.item-icon-svg');
         if (svgSlot) {
           img.style.display = 'none';
@@ -523,15 +523,9 @@ function getIconHtml(item, size = 'small') {
   const isFolder = item.is_dir || item.is_parent;
   const svgDim = size === 'large' ? 32 : 14;
 
-  let fallbackSvg;
-  if (item.is_drive) {
-    fallbackSvg = `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>`;
-  } else if (isFolder) {
-    fallbackSvg = `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
-  } else {
-    fallbackSvg = `<svg width="${svgDim}" height="${svgDim}" viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`;
-    if (!ext) return fallbackSvg;
-  }
+  const fallbackType = (!item?.is_parent && item?.is_drive) ? 'drive' : (isFolder ? 'folder' : 'file');
+  const fallbackSvg = getFallbackSvg(fallbackType, svgDim);
+  if (!item?.is_drive && !isFolder && !ext) return fallbackSvg;
 
   if (iconCache.has(cacheKey)) {
     const src = iconCache.get(cacheKey);
@@ -1596,6 +1590,7 @@ function getFallbackSvg(type, svgDim = 14) {
 function updateRowIcon(slots, item) {
   const ext = FsUtils.getIconExtKey(item);
   const isFolder = item.is_dir || item.is_parent;
+  const fallbackType = (!item.is_parent && item.is_drive) ? 'drive' : (isFolder ? 'folder' : 'file');
 
   const showSvg = (type) => {
     slots.iconImg.style.display = 'none';
@@ -1622,11 +1617,6 @@ function updateRowIcon(slots, item) {
     }
   };
 
-  if (item.is_drive) {
-    showSvg('drive');
-    return;
-  }
-
   if (iconCache.has(ext)) {
     const cached = iconCache.get(ext);
     if (cached === 'pending') {
@@ -1637,7 +1627,7 @@ function updateRowIcon(slots, item) {
       showImg(cached);
       return;
     }
-    showSvg(isFolder ? 'folder' : 'file');
+    showSvg(fallbackType);
     return;
   }
 
@@ -1648,7 +1638,7 @@ function updateRowIcon(slots, item) {
       showImg(stored);
       return;
     }
-    showSvg(isFolder ? 'folder' : 'file');
+    showSvg(fallbackType);
     return;
   }
 

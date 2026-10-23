@@ -251,10 +251,11 @@ export const FsUtils = {
 
   getIconExtKey(item) {
     if (!item) return '';
-    if (item.is_drive) return item.path;
-    if (item.is_dir || item.is_parent) {
+    if (item.is_parent) return '__folder__';
+    if (item.is_drive || /^[a-zA-Z]:[\\/]?$/.test(item.name || '')) return item.path || item.name;
+    if (item.is_dir) {
       const specialFolders = ['Downloads', 'Pictures', 'Documents', 'Music', 'Videos', 'Desktop'];
-      if (!item.is_parent && specialFolders.includes(item.name)) {
+      if (specialFolders.includes(item.name)) {
         return item.path;
       }
       return '__folder__';
