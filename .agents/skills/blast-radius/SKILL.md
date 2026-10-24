@@ -1,14 +1,14 @@
 ---
 name: blast-radius
-description: "When a change touches shared behavior, IPC contracts, config schemas, archive modules, cross-window state, or protocol URLs: find what it could break beyond the diff and prove safety by running code, not writing it up."
+description: When a change touches shared interfaces, configs, schemas, or cross-cutting code, find what it could break beyond the diff and prove safety by running code, not writing it up.
 argument-hint: "<shared surface or file changed>"
 ---
 
 # Blast radius
 
-Find what a change breaks somewhere else, before it ships. Use it for "blast radius of X", "what could this break", or a small diff in shared behavior that should be checked before it lands.
+Find what a change breaks somewhere else, before it ships. Use it for "blast radius of X", "what could this break", or a diff in shared behavior that must be proven before it lands.
 
-Read the diff first. Then read `.agents/architecture-state.md` for the modules next to that change. Look for a consumer the diff never names: a caller that treats a return value differently, a config file already on disk, an IPC payload the other side still sends, a protocol URL that moved, or one window writing state that another window reads. Grep will list the direct callers. The miss is usually one step past them.
+Read the diff first. Look for consumers the diff never names. Grep will find direct callers. The miss is usually one step past them: an indirect caller, a saved file on disk, an external consumer, or an element queried by string.
 
 ## Don't trust your own writeup
 
@@ -28,25 +28,24 @@ Any safety fact you can't get to step 4, say so out loud. Don't write it up as s
 
 ## What to trace
 
-Start from the diff. For each changed function, type, command, key, token, or URL, find who else interprets it. Typical places:
+Start from the diff. For each changed function, parameter, type, command, token, or key, find who else interprets it. Typical places:
 
-- A caller that reads a return value or payload differently from the writer
-- A config file or other saved file that already exists on disk
-- An IPC name or JSON field the other side still sends
-- A URL, header, or storage key another window or page still requests
-- A CSS token, class, or element id a stylesheet or probe still matches
-- An action id a menu, shortcut, or saved scenario still dispatches
+- Callers that read a return value, argument signature, or error condition differently from the writer
+- Configuration files, state snapshots, or saved data that already exist on disk or in local storage
+- Contracts crossing boundaries: threads, workers, child processes, networks, or IPC payloads
+- Dynamic string matches: CSS selectors, tokens, element IDs, event names, or protocol URLs
+- Structural dependencies: parent and child nesting, object key assumptions, or lifecycle order
 
 Stay inside what the diff reaches.
 
 ## Pick a test
 
-Run the smallest existing test that calls the real code and fails if you are wrong. Search the test directories for the name you changed. A `cargo test` filter, one mocha file, or one e2e spec is the usual fit. `cargo check --tests` is enough while types are still moving. Save the full suite for a change that crosses several of the zones above, or for final signoff.
+Run the smallest existing test, spec, or verification script that calls the real code and fails loud if you are wrong. Search the test directories for the feature or file you changed. A targeted test filter, single spec file, or focused runner command is the usual fit. Avoid running the full test suite during slice iteration. Save full runs for changes that cross multiple zones, or for final signoff.
 
 ## Steps
 
 1. Read the change.
-2. Trace who consumes each modified function, type, command, token, or contract. Go past direct callers to indirect readers: files on disk, other windows, the protocol handler, CSS that matches a class you renamed.
+2. Trace who consumes each modified function, type, command, token, or contract. Go past direct callers to indirect readers: files on disk, external handlers, UI selectors matching an identifier you renamed.
 3. For each consumer, name the failure if the change is wrong.
-4. Climb the confidence ladder. Prove safety with code where that is cheap. Use the test picked above. Flag anything stuck at steps 1 and 2.
+4. Climb the confidence ladder. Prove safety with code where that is cheap. Use the targeted test picked above. Flag anything stuck at steps 1 and 2.
 5. Fix broken downstream consumers in the same slice. If you cannot reach confidence step 4 for a critical safety fact, tell the user what still needs a manual check.
