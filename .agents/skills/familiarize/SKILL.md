@@ -6,13 +6,13 @@ argument-hint: "<low|docs|skim|surface|normal> [task to prepare for]"
 
 # Familiarize
 
-Three tiers control how deep you go. The user specifies the tier, or you infer it from the request. Default is normal.
+Three tiers control how deep you go. The user specifies the tier, or you infer it from the request. Default is docs level.
 
 ## Tiers
 
 ### Low / docs
 
-Read agent guidelines only. No codebase exploration.
+Read agent guidelines and project documentation only. No codebase exploration.
 
 - `.agents/AGENTS.md`
 - `.agents/skills/unslop/SKILL.md`
@@ -20,11 +20,11 @@ Read agent guidelines only. No codebase exploration.
 - `.agents/skills/blast-radius/SKILL.md`
 - `.agents/skills/validate-changes/SKILL.md`
 - `.agents/skills/verify-implementation/SKILL.md`
-- `README.md`
+- `README.md` (if present)
 
 Do not read source files, manifests, or directory trees.
 
-### Skim / Surface
+### Skim / surface
 
 Read guidelines (everything in Low) plus a surface-level pass over the codebase. No deep dives.
 
