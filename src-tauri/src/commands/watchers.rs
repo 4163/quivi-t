@@ -41,7 +41,7 @@ pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String
             match event.kind {
                 notify::EventKind::Create(_)
                 | notify::EventKind::Remove(_)
-                | notify::EventKind::Modify(notify::event::ModifyKind::Name(_)) => {
+                | notify::EventKind::Modify(_) => {
                     let _ = app_clone.emit("directory-changed", ());
                 }
                 _ => {}

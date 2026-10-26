@@ -182,16 +182,17 @@ export function syncPills() {
 async function _probeTrack(rec) {
   const liveState = _Core?.getState?.();
   const archivePath = liveState?.mode === 'archive' ? liveState.archivePath : null;
+  const trackKey = `${archivePath || ''}|${rec.filePath}|${liveState?.mediaRevision || 0}`;
   let hasAudio = false;
-  if (_audioTrackCache.has(rec.filePath)) {
-    hasAudio = _audioTrackCache.get(rec.filePath);
+  if (_audioTrackCache.has(trackKey)) {
+    hasAudio = _audioTrackCache.get(trackKey);
   } else if (_FsUtils?.checkMediaAudio) {
     hasAudio = await _FsUtils.checkMediaAudio(rec.filePath, archivePath);
-    _audioTrackCache.set(rec.filePath, hasAudio);
+    _audioTrackCache.set(trackKey, hasAudio);
   }
   // Slot moved on while probing: drop it.
   const live = _attached.get(rec.imgIdx);
-  if (!live || live.videoNode !== rec.videoNode) return;
+  if (live !== rec) return;
   if (!hasAudio) {
     live.pill?.remove();
     live.pill = null;

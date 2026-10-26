@@ -19,6 +19,7 @@ let _sliderEl = null;
 let _currentMuted = DEFAULT_MUTED;
 let _currentVolume = DEFAULT_VOLUME;
 let _activeAudioPath = null;
+let _activeAudioSrc = null;
 let _hasAudioTrack = false;
 
 function _getFileAudioState(filePath, item = null) {
@@ -94,6 +95,7 @@ function _applyAudioState() {
 
 function _resetAudio() {
   _activeAudioPath = null;
+  _activeAudioSrc = null;
   _hasAudioTrack = false;
   _currentMuted = DEFAULT_MUTED;
   _currentVolume = DEFAULT_VOLUME;
@@ -152,8 +154,10 @@ async function _syncAudioState(state) {
   }
 
   const filePath = item.path;
-  if (filePath === _activeAudioPath) return;
+  const audioSrc = _FsUtils.buildAudioSrc(filePath);
+  if (filePath === _activeAudioPath && audioSrc === _activeAudioSrc) return;
   _activeAudioPath = filePath;
+  _activeAudioSrc = audioSrc;
 
   const fileAudio = _getFileAudioState(filePath, item);
   _currentMuted = fileAudio.muted;
@@ -165,24 +169,24 @@ async function _syncAudioState(state) {
   }
 
   let hasAudio = false;
-  if (_audioTrackCache.has(filePath)) {
-    hasAudio = _audioTrackCache.get(filePath);
+  const trackKey = `${state.archivePath || ''}|${filePath}|${state.mediaRevision || 0}`;
+  if (_audioTrackCache.has(trackKey)) {
+    hasAudio = _audioTrackCache.get(trackKey);
   } else if (_FsUtils?.checkMediaAudio) {
     hasAudio = await _FsUtils.checkMediaAudio(filePath, state.archivePath || null);
-    _audioTrackCache.set(filePath, hasAudio);
+    _audioTrackCache.set(trackKey, hasAudio);
     item.hasSound = hasAudio;
   } else if (item.hasSound !== undefined) {
     hasAudio = Boolean(item.hasSound);
   }
 
   // Guard against race conditions if user navigated while awaiting probe
-  if (filePath !== _activeAudioPath) return;
+  if (filePath !== _activeAudioPath || audioSrc !== _activeAudioSrc) return;
 
   _hasAudioTrack = hasAudio;
   _updateUI();
 
   if (_hasAudioTrack && _audioEl) {
-    const audioSrc = _FsUtils.buildAudioSrc(filePath);
     _audioEl.src = audioSrc;
     _audioEl.currentTime = 0;
     _audioEl.loop = true;

@@ -325,6 +325,7 @@ let _lastMode = null;
 let _lastArchivePath = null;
 let _lastDirectory = null;
 let _lastArchiveEncryption = null;
+let _lastMediaRevision = 0;
 let _anchorUpdateInProgress = false;
 let _settleTimer = null;
 /** Last backend warm key. Skips repeat warms while the window is static. */
@@ -365,7 +366,8 @@ const ICO_CACHE_CAPACITY = 50;
 const _icoCache = new BoundedMap(ICO_CACHE_CAPACITY);
 
 function _getIcoKey(entry, state) {
-  return state.mode === 'archive' ? `${state.archivePath}:${entry.name}` : entry.path;
+  const path = state.mode === 'archive' ? `${state.archivePath}:${entry.name}` : entry.path;
+  return `${path}|${state.mediaRevision || 0}`;
 }
 
 function _resolveIco(entry, state) {
@@ -1333,10 +1335,10 @@ function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, v
     pre.decoding = 'async';
     _prefetching.set(i, pre);
     pre.onload = async () => {
-      _prefetching.delete(i);
+      if (_prefetching.get(i) === pre) _prefetching.delete(i);
       if (!_active) return;
       const cur = _imageIndex[i];
-      if (!cur) return;
+      if (cur !== item) return;
       // Pre-decode gate: force rasterization off-DOM so the node paints on
       // its first frame in the slot. A node that fails the gate drops out
       // and the follow-up pass retries it through the sequential worker.
@@ -1348,7 +1350,7 @@ function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, v
       }
       if (!_active) return;
       const stillCur = _imageIndex[i];
-      if (!stillCur) return;
+      if (stillCur !== item) return;
       if (gated) {
         _prefetchedImages.set(i, pre);
         _trimPrefetchCache();
@@ -1373,6 +1375,7 @@ function _prefetchAhead(startIndex, endIndex, direction, state, visStart = -1, v
       const key = _getIcoKey(item.entry, state);
       if (!_icoCache.has(key)) {
         _resolveIco(item.entry, state).then((sizes) => {
+          if (_imageIndex[i] !== item || _prefetching.get(i) !== pre) return;
           if (sizes && sizes.length > 0) {
             _icoCache.set(key, sizes);
             if (!_active || !_prefetching.has(i)) return;
@@ -1594,7 +1597,7 @@ function _mountFailed(imgIdx, item, slot, img) {
 function _advanceVideoMount(entry) {
   const pre = _acquireVideoNode();
   const drop = () => {
-    if (_mountInFlight === entry.imgIdx) _mountInFlight = -1;
+    if (_mountInFlight === entry.imgIdx && _imageIndex[entry.imgIdx] === entry.item) _mountInFlight = -1;
     _releaseStripNode(pre);
     if (_mountInFlight === -1) _advanceMountQueue();
   };
@@ -1673,7 +1676,7 @@ function _advanceMountQueue() {
     const drop = () => {
       // Only reset if this flight still owns _mountInFlight. Stale decodes
       // from a previous container must not clobber a newer flight.
-      if (_mountInFlight === entry.imgIdx) _mountInFlight = -1;
+      if (_mountInFlight === entry.imgIdx && _imageIndex[entry.imgIdx] === entry.item) _mountInFlight = -1;
       _releaseNode(pre);
       if (_mountInFlight === -1) _advanceMountQueue();
     };
@@ -1757,7 +1760,7 @@ function _advanceMountQueue() {
         _advanceMountQueue();
       } else {
         _resolveIco(entry.item.entry, entry.state).then((sizes) => {
-          if (_mountInFlight !== entry.imgIdx) {
+          if (_mountInFlight !== entry.imgIdx || _imageIndex[entry.imgIdx] !== entry.item) {
             _releaseNode(pre);
             return;
           }
@@ -1782,7 +1785,7 @@ function _advanceMountQueue() {
             fail();
           }
         }).catch(() => {
-          if (_mountInFlight !== entry.imgIdx) {
+          if (_mountInFlight !== entry.imgIdx || _imageIndex[entry.imgIdx] !== entry.item) {
             _releaseNode(pre);
             return;
           }
@@ -2549,6 +2552,7 @@ function _activate(state) {
   _lastArchivePath = state.archivePath;
   _lastDirectory = state.directory;
   _lastArchiveEncryption = state.archiveEncryption;
+  _lastMediaRevision = state.mediaRevision;
   _lastTy = null;
   _lastScale = null;
   _lastFlipY = null;
@@ -2736,12 +2740,13 @@ function _onStateChange(state) {
   const isLocked = state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect';
   const encryptionChanged = state.archiveEncryption !== _lastArchiveEncryption;
   const listChanged = state.list !== _lastList;
+  const mediaChanged = state.mediaRevision !== _lastMediaRevision;
   const containerChanged = state.mode !== _lastMode ||
     state.archivePath !== _lastArchivePath ||
     state.directory !== _lastDirectory ||
     encryptionChanged;
 
-  if (listChanged || containerChanged) {
+  if (listChanged || containerChanged || mediaChanged) {
     // Refreshes keep the reading position; opening another entry must
     // replace the old anchor before the next selection sync.
     const anchorPath = _imageIndex[_anchorImgIdx]?.entry.path;
@@ -2764,16 +2769,17 @@ function _onStateChange(state) {
         if (old && old.decoded) {
           it.naturalWidth = old.naturalWidth;
           it.naturalHeight = old.naturalHeight;
-          it.decoded = true;
+          it.decoded = !mediaChanged;
         }
       }
     }
-    _trackedMaxWidth = preserveView ? holdTrackedMaxW : null;
+    _trackedMaxWidth = preserveView && !mediaChanged ? holdTrackedMaxW : null;
     _lastList = state.list;
     _lastMode = state.mode;
     _lastArchivePath = state.archivePath;
     _lastDirectory = state.directory;
     _lastArchiveEncryption = state.archiveEncryption;
+    _lastMediaRevision = state.mediaRevision;
     _lastTy = null;
     _lastScale = null;
     _lastFlipY = null;
@@ -2805,6 +2811,7 @@ function _onStateChange(state) {
         _lastFitMode = state.fitMode || state.config?.frontend_data?.fit_mode || 'none';
         _lastFitModeGen = state.fitModeGen !== undefined ? state.fitModeGen : -1;
         _updateWindow();
+        if (mediaChanged) _fireScan();
         _scheduleSettle();
         return;
       }
@@ -3090,15 +3097,14 @@ export function getManhwaColumnSnapshot() {
   if (!_active) return null;
   let ico = null;
   if (_mounted.size > 0) {
-    const mode = _lastMode;
-    const archivePath = _lastArchivePath;
+    const state = { mode: _lastMode, archivePath: _lastArchivePath, mediaRevision: _lastMediaRevision };
     for (const [imgIdx, node] of _mounted) {
       if (!node) continue;
       const item = _imageIndex[imgIdx];
       if (!item?.entry) continue;
       const name = item.entry.name || item.entry.path || '';
       if (!name || !FsUtils.isIco(name)) continue;
-      const key = mode === 'archive' ? `${archivePath}:${item.entry.name}` : item.entry.path;
+      const key = _getIcoKey(item.entry, state);
       if (!key) continue;
       const sizes = _icoCache.get(key);
       if (!sizes || sizes.length === 0) continue;

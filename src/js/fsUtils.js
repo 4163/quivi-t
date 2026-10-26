@@ -220,11 +220,16 @@ export const FsUtils = {
     if (src && src.startsWith('blob:')) URL.revokeObjectURL(src);
   },
 
-  buildArchiveSrc(archivePath, entryName) {
+  versionMediaSrc(src, revision = Core.getState().mediaRevision) {
+    if (!revision || !src || /^(blob|data):/.test(src)) return src;
+    return `${src}${src.includes('?') ? '&' : '?'}_media=${revision}`;
+  },
+
+  buildArchiveSrc(archivePath, entryName, revision) {
     const encoded = _base64Encode(archivePath);
     const isWindows = navigator.userAgent.includes('Windows');
     const base = isWindows ? 'http://quivit.localhost' : 'quivit://localhost';
-    return `${base}/archive/${encoded}/${encodeURIComponent(entryName)}`;
+    return this.versionMediaSrc(`${base}/archive/${encoded}/${encodeURIComponent(entryName)}`, revision);
   },
 
   buildNativeIconSrc(path, extKey, size = 'small') {
@@ -246,7 +251,7 @@ export const FsUtils = {
     const encoded = _base64Encode(path);
     const isWindows = navigator.userAgent.includes('Windows');
     const base = isWindows ? 'http://quivit.localhost' : 'quivit://localhost';
-    return `${base}/thumb/${encoded}`;
+    return this.versionMediaSrc(`${base}/thumb/${encoded}`);
   },
 
   getIconExtKey(item) {
@@ -336,37 +341,37 @@ export const FsUtils = {
     return icoSizesTotal(value);
   },
 
-  async buildArchiveEntrySrc(archivePath, entryName) {
+  async buildArchiveEntrySrc(archivePath, entryName, revision) {
     if (this.isIco(entryName) && window.__TAURI__) {
       const sizes = await this.getArchiveIcoSources(archivePath, entryName);
       if (sizes.length > 0) return sizes;
     }
-    return this.buildArchiveSrc(archivePath, entryName);
+    return this.buildArchiveSrc(archivePath, entryName, revision);
   },
 
-  async buildFileSrc(filePath) {
+  async buildFileSrc(filePath, revision) {
     if (filePath.startsWith('blob:')) return filePath;
     if (this.isVideo(filePath)) {
-      return window.__TAURI__.core.convertFileSrc(filePath);
+      return this.buildFileSrcSync(filePath, revision);
     }
     if (this.isIco(filePath) && window.__TAURI__) {
       const sizes = await this.getIcoSources(filePath);
       if (sizes.length > 0) return sizes;
     }
-    return window.__TAURI__.core.convertFileSrc(filePath);
+    return this.buildFileSrcSync(filePath, revision);
   },
 
   // Sync path for the DOM image pool. ICO files need async processing, so the
   // caller handles them through buildFileSrc().
-  buildFileSrcSync(filePath) {
+  buildFileSrcSync(filePath, revision) {
     if (filePath.startsWith('blob:')) return filePath;
     // Video viewer needs the real file URL. Thumbnails use buildThumbnailSrc.
-    return window.__TAURI__.core.convertFileSrc(filePath);
+    return this.versionMediaSrc(window.__TAURI__.core.convertFileSrc(filePath), revision);
   },
 
   buildAudioSrc(filePath) {
     if (!filePath || filePath.startsWith('blob:')) return '';
-    return window.__TAURI__ ? window.__TAURI__.core.convertFileSrc(filePath) : filePath;
+    return window.__TAURI__ ? this.buildFileSrcSync(filePath) : filePath;
   },
 
   async checkMediaAudio(filePath, archivePath = null) {
@@ -621,7 +626,7 @@ export const FsUtils = {
     let selectedSrc = '';
     if (this.isImageEntry(selectedEntry)) {
       if (selectedEntry.size !== 0) {
-        selectedSrc = await this.buildFileSrc(selectedEntry.path);
+        selectedSrc = await this.buildFileSrc(selectedEntry.path, options.mediaRevision);
       }
     }
     if (!_isCurrentGeneration(options.generation)) return;
@@ -658,6 +663,7 @@ export const FsUtils = {
       archiveEncryption,
       filename,
       src: selectedSrc,
+      mediaRevision: options.mediaRevision ?? state.mediaRevision,
       isAnimated,
       loopCount,
       isSiblingNavigation: !!options.isSiblingNavigation,
@@ -701,6 +707,12 @@ export const FsUtils = {
       const result = await invoke('list_archive', { archivePath, password });
       if (!_isCurrentGeneration(options.generation)) return;
 
+      if (window.__TAURI__) {
+        invoke('watch_directory', { path: parentOf(result.archive_path) }).catch(err => {
+          console.warn('[Core] Failed to watch archive directory:', err);
+        });
+      }
+
       if (result.encryption === 'password_incorrect') {
         _unlockedArchivePasswords.delete(result.archive_path);
         _archiveEncryptionCache.set(result.archive_path, 'password_incorrect');
@@ -739,6 +751,7 @@ export const FsUtils = {
           directory: '',
           filename: lockLabel,
           src: '',
+          mediaRevision: options.mediaRevision ?? state.mediaRevision,
           isAnimated: false,
           loopCount: 0,
           isSiblingNavigation: !!options.isSiblingNavigation,
@@ -780,7 +793,7 @@ export const FsUtils = {
 
       const selectedEntry = files[index];
       const selectedSrc = this.isImageEntry(selectedEntry)
-        ? await this.buildArchiveEntrySrc(result.archive_path, selectedEntry.name)
+        ? await this.buildArchiveEntrySrc(result.archive_path, selectedEntry.name, options.mediaRevision)
         : '';
       if (!_isCurrentGeneration(options.generation)) return;
 
@@ -797,6 +810,7 @@ export const FsUtils = {
         directory: '',
         filename: selectedEntry?.name || '',
         src: selectedSrc,
+        mediaRevision: options.mediaRevision ?? state.mediaRevision,
         isAnimated: initialAnimated,
         loopCount: 0,
         isSiblingNavigation: !!options.isSiblingNavigation,
@@ -1134,6 +1148,7 @@ export const FsUtils = {
   async refresh() {
     const generation = _nextNavigationGeneration();
     const state = Core.getState();
+    const mediaRevision = Math.max(Date.now(), state.mediaRevision + 1);
     Core.clearAnimationMemo();
     window.dispatchEvent(new CustomEvent('quivit-refresh-start'));
     try {
@@ -1147,13 +1162,13 @@ export const FsUtils = {
             console.warn('[Core] drop_archive_cache error:', e);
           }
         }
-        await this.loadFile(state.archivePath, { generation, history: 'skip', targetName, isRefresh: true });
+        await this.loadFile(state.archivePath, { generation, history: 'skip', targetName, isRefresh: true, mediaRevision });
       } else if (state.directory === 'Drives') {
         await this.loadFile('__DRIVES__', { generation, history: 'skip' });
       } else if (state.directory) {
         const result = await invoke('read_directory', { path: state.directory, showHidden: this.showHidden(), targetName });
         if (!_isCurrentGeneration(generation)) return;
-        this.applyDirectoryResult(result, { preserveFilename: true, generation, history: 'skip', isRefresh: true });
+        await this.applyDirectoryResult(result, { preserveFilename: true, generation, history: 'skip', isRefresh: true, mediaRevision });
       }
     } catch (err) {
       console.error('[Core] refresh error, navigating to parent:', err);

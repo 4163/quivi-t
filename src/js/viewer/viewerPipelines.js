@@ -199,7 +199,7 @@ export function createViewerPipelines(viewportState) {
   function _icoKeyForLive(live) {
     const entry = live?.list?.[live?.index];
     const p = entry?.path || entry?.name || live?.filename || '';
-    return `${live?.mode || ''}|${live?.archivePath || ''}|${p}`;
+    return `${live?.mode || ''}|${live?.archivePath || ''}|${p}|${live?.mediaRevision || 0}`;
   }
 
   function _loadIcoImage(dataUrl) {
@@ -1192,7 +1192,7 @@ export function createViewerPipelines(viewportState) {
   function _columnKeyFor(state) {
     if (!state) return null;
     const container = state.mode === 'archive' ? (state.archivePath || '') : (state.directory || '');
-    return `${state.mode || ''}|${container}|${state.archiveEncryption || ''}`;
+    return `${state.mode || ''}|${container}|${state.archiveEncryption || ''}|${state.mediaRevision || 0}`;
   }
   let _columnTextureCache = null;
   let _columnQuadCompositor = null;

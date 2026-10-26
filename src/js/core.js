@@ -47,6 +47,7 @@ const invoke = window.__TAURI__?.core?.invoke;
 
 const ANIM_MEMO_CAPACITY = 512;
 const _animMemo = new BoundedMap(ANIM_MEMO_CAPACITY);
+let _animMemoGeneration = 0;
 
 let _placeholderCheck = null;
 
@@ -56,6 +57,9 @@ const _state = {
 
   /** Currently displayed image src (asset:// URL or quivit:// URL) */
   src: '',
+
+  /** Cache generation for media reloaded from disk. */
+  mediaRevision: 0,
 
   /** File name of the currently displayed image */
   filename: '',
@@ -231,11 +235,11 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
       newSrc = '';
     } else {
       newSrc = await FsUtils.buildArchiveEntrySrc(_state.archivePath, file.name);
-      if (_state.index !== index) return;
+      if (_state.index !== index || _state.list[index] !== file) return;
     }
   } else {
     newSrc = await FsUtils.buildFileSrc(file.path);
-    if (_state.index !== index) return;
+    if (_state.index !== index || _state.list[index] !== file) return;
 
     // Image bridging: if the target file is a 0-byte placeholder awaiting
     // download, keep the previous viewer image until the download completes.
@@ -249,7 +253,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   if (_state.mode !== 'archive') {
     if (FsUtils.isArchiveEntry(file)) {
       const enc = await FsUtils.checkArchiveEncryption(file.path);
-      if (_state.index !== index) return;
+      if (_state.index !== index || _state.list[index] !== file) return;
       if (enc === 'password_required' || enc === 'password_incorrect') {
         _state.archivePath = file.path;
         _state.archiveEncryption = enc;
@@ -302,7 +306,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
 
   if (animPromise) {
     animPromise.then(animStatus => {
-      if (_state.index === index && _state.src === newSrc) {
+      if (_state.index === index && _state.list[index] === file && _state.src === newSrc) {
         const changed = _state.isAnimated !== animStatus.is_animated || _state.loopCount !== animStatus.loop_count;
         _state.isAnimated = animStatus.is_animated;
         _state.loopCount = animStatus.loop_count;
@@ -378,9 +382,10 @@ export const Core = {
   async checkIsAnimated(pathArg, archiveArg = null) {
     const cacheKey = `${archiveArg || ''}::${pathArg}`;
     if (_animMemo.has(cacheKey)) return _animMemo.get(cacheKey);
+    const generation = _animMemoGeneration;
     try {
       const animStatus = await invoke('check_is_animated', { path: pathArg, archivePath: archiveArg });
-      _animMemo.set(cacheKey, animStatus);
+      if (generation === _animMemoGeneration) _animMemo.set(cacheKey, animStatus);
       return animStatus;
     } catch (err) {
       console.warn('[Core] Failed to check animation header:', err);
@@ -389,6 +394,7 @@ export const Core = {
   },
 
   clearAnimationMemo(pathArg = null, archiveArg = null) {
+    _animMemoGeneration++;
     if (pathArg) {
       _animMemo.delete(`${archiveArg || ''}::${pathArg}`);
     } else {
