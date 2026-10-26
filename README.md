@@ -177,6 +177,7 @@ What QuiviT ships with. The id in backticks is the value stored in config.
 - **Library location.** `%LOCALAPPDATA%\QuiviT\library`. **Options → General → Library location** dynamically moves the imported folders in session.
 - **Library deletion.** Deleting a Library folder or image from the file panel sends it to the Recycle Bin rather than permanently deleting them.
 - **Missing path.** A  missing path, folder or archive, or deleted directories while the app is open, falls the user back to the nearest existing ancestor, or the Drives view at the root.
+- **External edits.** QuiviT automatically reloads displayed media when another app overwrites the file, in both legacy and manhwa views.
 - **Single instance.** `Enabled`. Paths passed via command line, Explorer, or archives open in the active window session. To launch separate windows instead, toggle **Options → General → Allow only one QuiviT instance** and restart the app.
 - **Hide to tray.** `Ctrl+Shift+H` or **View → Hide to tray** hides every open window and leaves a tray icon. Tray Show or left-click restores all hidden windows, Quit exits.
 - **Default sort.** `name`, ascending. Per-directory sort is kept for 100 folders, oldest dropped first. The global default is configurable in `quivit_config.json` under `frontend_data` as `default_sort`.
