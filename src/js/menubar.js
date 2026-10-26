@@ -434,11 +434,11 @@ function bindMenus() {
       item.addEventListener('click', (e) => {
         if (item.classList.contains('has-submenu')) {
           e.stopPropagation();
-          if (item.classList.contains('open')) {
-            activateItem(null, dropdown);
-          } else {
-            activateItem(item, dropdown);
+          const submenu = item.querySelector(':scope > .submenu');
+          if (submenu && submenu.contains(e.target)) {
+            return;
           }
+          activateItem(item, dropdown);
           return;
         }
         if (e.target.tagName === 'INPUT' || e.target.closest('input') || e.target.closest('button')) {
