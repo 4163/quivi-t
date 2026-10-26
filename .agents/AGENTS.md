@@ -20,7 +20,7 @@ Coding standards, architecture rules, and agent workflow for QuiviT.
 - Read every rule and referenced skill before starting work. Confirm adherence to the user.
 - Keep responses concise and focused on the task.
 - Follow existing code style and formatting for each directory and its associated files.
-- Avoid using browser automation/browser subagent, use mocha when possible, or use e2e for any complex frontend problems that requires debugging.
+- Avoid using browser automation/browser subagent and computer use skill, use mocha when possible, or use e2e for any complex frontend problems that requires debugging.
 - Run e2e through `npm run e2e -- --spec <file>`. Re-run via `--agent` to de-elevate, which includes process cleanup and log capture, only if it reports an elevated shell.
 - For writing work, read `.agents/skills/unslop/SKILL.md` and follow it even if the harness does not auto-load always-active skills. This applies to docs, prompts, comments, and user-facing copy.
 - For changes touching shared code, configs, or interfaces, read `.agents/skills/blast-radius/SKILL.md` to trace downstream consumers and prove safety with code.
