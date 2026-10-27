@@ -335,6 +335,8 @@ document.querySelectorAll('[data-anime4k-variant]').forEach(btn => {
 });
 makeListNavigable(document.querySelectorAll('[data-anime4k-variant]'), { horizontal: true, vertical: false });
 
+let closingAfterRevert = false;
+
 async function closeOptionsWindow() {
   forceClose = true;
   const currentWindow = tauri.window?.getCurrentWindow?.();
@@ -360,9 +362,16 @@ async function revertPreviewChanges() {
 
 const optionsWindow = tauri.window?.getCurrentWindow?.();
 if (optionsWindow?.onCloseRequested) {
-  optionsWindow.onCloseRequested(async () => {
-    if (forceClose || !previewing) return;
-    await revertPreviewChanges();
+  optionsWindow.onCloseRequested(async (event) => {
+    if (forceClose || closingAfterRevert || !previewing) return;
+    event?.preventDefault?.();
+    try {
+      await revertPreviewChanges();
+    } catch (e) {
+      console.error('Failed to revert preview changes on close:', e);
+    }
+    closingAfterRevert = true;
+    await optionsWindow.close();
   });
 }
 
@@ -454,7 +463,6 @@ document.getElementById('btn-export-css').addEventListener('click', async () => 
 
 async function localPreviewCss() {
   const css = document.getElementById('opt-custom-css').value;
-  try { localStorage.setItem('quivit-custom-css', css); } catch(e) {}
   applyCustomCss(css);
   previewCss(css);
   showStatus('Previewing CSS. Apply to save.');

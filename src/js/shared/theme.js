@@ -1,3 +1,5 @@
+let pendingTheme = Promise.resolve();
+
 export function applyTheme(theme) {
   document.documentElement.removeAttribute('data-theme');
   if (theme === 'light' || theme === 'dark') {
@@ -6,8 +8,13 @@ export function applyTheme(theme) {
 
   if (window.__TAURI__ && window.__TAURI__.core) {
     const tauriTheme = (theme === 'light' || theme === 'dark') ? theme : null;
-    window.__TAURI__.core.invoke('update_theme', { theme: tauriTheme }).catch(() => {});
+    pendingTheme = window.__TAURI__.core.invoke('update_theme', { theme: tauriTheme }).catch(() => {});
   }
+  return pendingTheme;
+}
+
+export function waitForTheme() {
+  return pendingTheme;
 }
 
 export function applyCustomCss(cssText) {

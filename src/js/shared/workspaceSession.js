@@ -19,6 +19,16 @@ let configBaseline = {};
 const sessionId = new URLSearchParams(window.location.search).get('session') || crypto.randomUUID();
 let receiveInitial;
 let transportPromise = null;
+let previewStateProvider = null;
+let sessionPreview = null;
+
+export function registerPreviewStateProvider(fn) {
+  previewStateProvider = fn;
+}
+
+export function getSessionPreview() {
+  return sessionPreview;
+}
 
 export function listenWorkspaceEvent(event, handler, { owner = ownLabel } = {}) {
   if (ownLabel !== owner) return Promise.resolve(null);
@@ -106,7 +116,9 @@ function publish(target, full = false, configEvent = false) {
   if (!full && state.src === previous.src) delete snapshot.src;
   if (!full && !configEvent && configJson === previous.configJson) delete snapshot.config;
   peers.set(target, { list: state.list, src: state.src, configJson });
-  send(target, { kind: 'snapshot', snapshot, configEvent }).catch(console.error);
+  const message = { kind: 'snapshot', snapshot, configEvent };
+  if (full) message.preview = previewStateProvider?.() || null;
+  send(target, message).catch(console.error);
 }
 
 async function receive(message) {
@@ -118,6 +130,7 @@ async function receive(message) {
   if (message.kind === 'snapshot' && workspaceSurface && message.source === 'main') {
     const previousConfig = Core.getState().config;
     if (message.snapshot.config) rememberConfig(message.snapshot.config);
+    if (message.preview) sessionPreview = message.preview;
     Core.receiveSnapshot(message.snapshot);
     if (message.snapshot.config && previousConfig?.frontend_data?.favorites !== message.snapshot.config.frontend_data?.favorites) {
       window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));

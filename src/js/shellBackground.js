@@ -13,52 +13,57 @@
  * the real color never arrives. Bypass the wrapper and invoke
  * the command directly with the correct `value` key.
  */
-(function () {
-  if (!window.__TAURI__?.core?.invoke) return;
+import { waitForTheme } from './shared/theme.js';
 
-  let timer = null;
-  function surfaceColor() {
-    const probe = document.getElementById('measure-probe');
-    if (!probe) return null;
-    const bg = getComputedStyle(probe).backgroundColor;
-    const m = bg.match(
-      /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/
-    );
-    if (!m) return null;
-    return {
-      red: +m[1],
-      green: +m[2],
-      blue: +m[3],
-      alpha: m[4] !== undefined ? Math.round(+m[4] * 255) : 255,
-    };
-  }
+const SHELL_BACKGROUND_SYNC_DELAY_MS = 20;
+let timer = null;
+let pendingSync = Promise.resolve();
 
-  function sync() {
-    if (timer) return;
-    timer = setTimeout(async () => {
-      timer = null;
-      const color = surfaceColor();
-      if (!color) return;
-      try {
-        await window.__TAURI__.core.invoke('plugin:window|set_background_color', {
-          value: color,
-        });
-      } catch (err) {
-        console.error('[Shell] Failed to sync background color:', err);
-      }
-    }, 20);
-  }
+function surfaceColor() {
+  const probe = document.getElementById('measure-probe');
+  if (!probe) return null;
+  const bg = getComputedStyle(probe).backgroundColor;
+  const m = bg.match(
+    /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)/
+  );
+  if (!m) return null;
+  return {
+    red: +m[1],
+    green: +m[2],
+    blue: +m[3],
+    alpha: m[4] !== undefined ? Math.round(+m[4] * 255) : 255,
+  };
+}
 
-  sync();
+export function syncShellBackground() {
+  clearTimeout(timer);
+  timer = null;
+  if (!window.__TAURI__?.core?.invoke) return Promise.resolve();
+  // Finish theme and older color writes before applying the first-show color.
+  pendingSync = pendingSync.catch(() => {}).then(async () => {
+    await waitForTheme();
+    const color = surfaceColor();
+    if (color) await window.__TAURI__.core.invoke('plugin:window|set_background_color', { value: color });
+  });
+  return pendingSync;
+}
 
-  if (window.__TAURI__) {
-    window.__TAURI__.event.listen('theme-preview', sync).catch(console.error);
-    window.__TAURI__.event.listen('css-preview', sync).catch(console.error);
-  }
+function scheduleSync() {
+  if (timer !== null) return;
+  timer = setTimeout(() => {
+    syncShellBackground().catch(err => {
+      console.error('[Shell] Failed to sync background color:', err);
+    });
+  }, SHELL_BACKGROUND_SYNC_DELAY_MS);
+}
+
+if (window.__TAURI__?.core?.invoke) {
+  scheduleSync();
+  window.__TAURI__.event.listen('theme-preview', scheduleSync).catch(console.error);
+  window.__TAURI__.event.listen('css-preview', scheduleSync).catch(console.error);
 
   window.addEventListener('storage', (e) => {
-    if (e.key === 'quivit-theme' || e.key === 'quivit-custom-css') {
-      sync();
-    }
+    if (e.key === 'quivit-theme' || e.key === 'quivit-custom-css') scheduleSync();
   });
-})();
+  window.addEventListener('quivit-css-applied', scheduleSync);
+}

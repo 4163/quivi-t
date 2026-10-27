@@ -21,6 +21,7 @@ import {
 } from '../filepanel/filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from '../shortcuts.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
+import { syncShellBackground } from '../shellBackground.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from '../keybinds.js';
 import { Statusbar } from '../menubar/statusbar.js';
 import { initMenuBar, syncViewMenu } from '../menubar.js';
@@ -43,7 +44,7 @@ import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
 import { ManhwaAudio } from '../viewer/manhwaAudio.js';
 import { initWorkspace } from './workspace.js';
 import { workspaceSurface, ViewportCore } from '../shared/workspaceHost.js';
-import { requestWorkspace } from '../shared/workspaceSession.js';
+import { requestWorkspace, getSessionPreview, registerPreviewStateProvider } from '../shared/workspaceSession.js';
 import { createWorkspaceControls } from '../shared/workspaceControls.js';
 import {
   initManhwaStrip,
@@ -290,8 +291,11 @@ if (!workspaceSurface) initLifecycle({ Core, FsUtils, UrlLoader });
 
 workspaceControls.connect({ importActions, UrlLoader });
 
-let previewTheme = null;
-let previewCss = null;
+const initialPreview = getSessionPreview();
+let previewTheme = initialPreview?.theme ?? null;
+let previewCss = initialPreview?.css ?? null;
+
+registerPreviewStateProvider(() => ({ theme: previewTheme, css: previewCss }));
 
 async function reloadConfigAndSyncLibrary(relocation = null) {
   const cachedLibraryPath = relocation?.oldPath || UrlLoader.getCachedLibraryDir();
@@ -321,9 +325,16 @@ if (window.__TAURI__) {
   const { listen } = window.__TAURI__.event;
 
   listen('config-updated', () => {
-    if (workspaceSurface) return;
     previewTheme = null;
     previewCss = null;
+    if (workspaceSurface) {
+      const config = Core.getState().config;
+      const theme = config?.frontend_data?.theme || 'system';
+      const customCss = config?.frontend_data?.custom_css || '';
+      applyTheme(theme);
+      applyCustomCss(customCss);
+      return;
+    }
     resetScrollLatch();
     reloadConfigAndSyncLibrary().catch(err => {
       console.error('[Main] Failed to refresh settings:', err);
@@ -353,6 +364,11 @@ if (window.__TAURI__) {
   listen('css-preview', (e) => {
     previewCss = e.payload;
     applyCustomCss(previewCss);
+  });
+
+  listen('preview-cleared', () => {
+    previewTheme = null;
+    previewCss = null;
   });
 }
 
@@ -385,7 +401,9 @@ window.addEventListener('quivit-config-loaded', () => {
 if (workspaceSurface) {
   Core.receiveSnapshot({});
   window.dispatchEvent(new CustomEvent('quivit-config-loaded'));
-  window.__TAURI__?.core.invoke('show_window').catch(console.error);
+  syncShellBackground()
+    .then(() => window.__TAURI__?.core.invoke('show_window'))
+    .catch(console.error);
 } else {
   Core.init();
 }

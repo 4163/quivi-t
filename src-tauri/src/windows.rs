@@ -79,20 +79,8 @@ pub fn update_theme(app: tauri::AppHandle, theme: Option<String>) {
         _ => None,
     };
 
-    let dark = tauri_theme == Some(tauri::Theme::Dark)
-        || (tauri_theme.is_none()
-            && app.get_webview_window("main").and_then(|w| w.theme().ok())
-                == Some(tauri::Theme::Dark));
-
-    let color = if dark {
-        Color(37, 37, 38, 255)
-    } else {
-        Color(255, 255, 255, 255)
-    };
-
     for (_, window) in app.webview_windows() {
         let _ = window.set_theme(tauri_theme);
-        let _ = window.set_background_color(Some(color));
     }
 }
 
@@ -132,6 +120,17 @@ pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Re
     .build()
     .map_err(|e| e.to_string())?;
     apply_shell_background(&window, &crate::config::load_config(app.clone()));
+    if let Some(main) = app.get_webview_window("main") {
+        if let Ok(theme) = main.theme() {
+            let _ = window.set_theme(Some(theme));
+            let color = if theme == tauri::Theme::Dark {
+                Color(37, 37, 38, 255)
+            } else {
+                Color(255, 255, 255, 255)
+            };
+            let _ = window.set_background_color(Some(color));
+        }
+    }
     #[cfg(windows)]
     if let Err(error) = crate::platform::drop::install(&window) {
         let _ = window.destroy();

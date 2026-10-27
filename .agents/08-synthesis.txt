@@ -1,0 +1,627 @@
+Compared against the repository validation rules.
+
+SYNTHESIS AUDIT REPORT: DETACHED WINDOW SUPPORT
+Target commit: 35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Before snapshot: a473a5c2fbb0eaa93bdbb99cca111327c07104ab
+Allowed commit history: a473a5c2fbb0eaa93bdbb99cca111327c07104ab..35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Commits evaluated:
+- a628e57 Added window relocation and detach support
+- 47b7043 Synchronized detached workspace and window chrome
+- 35f38e9 Coordinated detached workspace drops and actions
+
+================================================================================
+1. TARGET AND SOURCE/REPORT COVERAGE
+================================================================================
+
+Input reports evaluated:
+- 01-input-and-commands.txt (Domain 01: Input routing, commands, and menu mechanics)
+- 02-browsing-favorites-library.txt (Domain 02: Browsing, File List, Favorites, Library, navigation)
+- 03-imports-open-and-prompts.txt (Domain 03: Opening content, imports, native drops, prompt flows)
+- 04-viewer-media-and-modes.txt (Domain 04: Viewer interactions, media, rendering modes, geometry)
+- 05-options-and-settings.txt (Domain 05: All Options controls and workspace effects)
+- 06-session-state-and-events.txt (Domain 06: Session authority, replication, RPC, events, persistence)
+- 07-windows-chrome-and-metadata.txt (Domain 07: Native windows, workspace lifecycle, chrome, metadata UI)
+
+Coverage completeness:
+All seven input reports exist and were analyzed. No input reports were missing.
+Independent code verification was performed on target commit 35f38e9d81cf95cd0534ac33e316291bf26e2f8c.
+Interactive entry points were re-enumerated from:
+- src/index.html (Menubar triggers, dropdown items, file panel controls, breadcrumbs, search, actions, viewport overlays, prompt forms, audio widgets, fullscreen overlays, status bar)
+- src/options.html (Tabs: General, Keys, File Types, Customization, Language; dialog actions, association removal modal)
+- src/metadata.html (Archive Info layout, cover canvas probe, metadata tags)
+- src/js/services/actions.js (All 69 actions in ACTION_REGISTRY and ACTION_MAP)
+- Associated dynamic menu templates and event registrations in frontend modules and Rust backend
+
+================================================================================
+2. COVERAGE MATRIX
+================================================================================
+
+Reviewer Legend:
+R01: Input routing, commands, menubar mechanics
+R02: Browsing, file panel, favorites, library
+R03: Imports, opening content, drag and drop, prompts
+R04: Viewer, media rendering, view modes, geometry
+R05: Options controls, settings persistence, themes
+R06: Session state, replication, RPC, event bus
+R07: Native windows, window chrome, metadata window
+
+Status Values:
+- supported by code: Full delivery path verified in code for both attached and detached modes.
+- confirmed gap: Code inspection confirms broken or missing delivery path.
+- conditional risk: Potential defect dependent on runtime scheduling, OS policy, or load.
+- intentional local behavior: Deliberately scoped to a single window or surface per contract.
+- not established: Insufficient evidence in codebase.
+
+--------------------------------------------------------------------------------
+2.1 ACTIONS AND NAVIGATION (ACTION_REGISTRY & MENUS)
+--------------------------------------------------------------------------------
+Interaction / Control                                  Reviewer  Status
+cmd-next (Select / Open Next)                          R01       supported by code
+cmd-prev (Select / Open Previous)                      R01       supported by code
+cmd-history-back (History Back)                        R01       supported by code
+cmd-history-forward (History Forward)                  R01       supported by code
+cmd-parent (Open Parent Folder)                        R01       supported by code
+cmd-open-next-container (Open Next Directory)          R01       supported by code
+cmd-open-prev-container (Open Previous Directory)      R01       supported by code
+cmd-refresh (Refresh)                                  R01       supported by code
+cmd-fit-none (Fit None 1:1)                            R04       supported by code
+cmd-fit-width (Fit Width)                              R04       supported by code
+cmd-fit-height (Fit Height)                            R04       supported by code
+cmd-fit-best (Fit Window)                              R04       supported by code
+cmd-fit-width-if-larger (Fit Width if Larger)          R04       supported by code
+cmd-fit-height-if-larger (Fit Height if Larger)        R04       supported by code
+cmd-fit-window-if-larger (Fit Window if Larger)        R04       supported by code
+cmd-scale-none (Pixelated Scaling)                     R04       supported by code
+cmd-scale-bilinear (Bilinear Scaling)                  R04       supported by code
+cmd-scale-lanczos (Lanczos Scaling)                    R04       supported by code
+cmd-filter-off (Filter: Off)                           R04       supported by code
+cmd-toggle-anime4k-filter (Anime4K Filter)             R04       supported by code
+cmd-toggle-scanlines-filter (Scanlines Filter)         R04       supported by code
+cmd-toggle-phosphor-filter (Phosphor Filter)           R04       supported by code
+cmd-toggle-crt-filter (Retro CRT Filter)               R04       supported by code
+cmd-toggle-transparent (Toggle Opaque Canvas)          R04       supported by code
+cmd-toggle-manhwa (Toggle Manhwa View)                 R04       supported by code
+cmd-toggle-audio (Mute / Unmute Audio)                 R04       supported by code
+cmd-spread-off (Spread Off)                            R04       supported by code
+cmd-spread-direction-rtl (Spread RTL)                  R04       supported by code
+cmd-spread-direction-ltr (Spread LTR)                  R04       supported by code
+cmd-zoom-in (Zoom In)                                  R01       supported by code
+cmd-zoom-out (Zoom Out)                                R01       supported by code
+cmd-zoom-100 (Zoom 100%)                               R01       supported by code
+cmd-pan-drag (Mouse Pan Drag)                          R04       intentional local behavior
+cmd-pan-up (Pan Up)                                    R01       supported by code
+cmd-pan-left (Pan Left)                                R01       supported by code
+cmd-pan-down (Pan Down)                                R01       supported by code
+cmd-pan-right (Pan Right)                              R01       supported by code
+cmd-rotate-ccw (Rotate Counterclockwise)               R04       supported by code
+cmd-rotate-cw (Rotate Clockwise)                       R04       supported by code
+cmd-flip-horizontal (Flip Horizontal)                  R04       supported by code
+cmd-flip-vertical (Flip Vertical)                      R04       supported by code
+cmd-window-file-list-left (Dock File List Left)        R07       supported by code
+cmd-window-file-list-right (Dock File List Right)      R07       supported by code
+cmd-window-file-list-top (Dock File List Top)          R07       supported by code
+cmd-window-file-list-bottom (Dock File List Bottom)    R07       supported by code
+cmd-window-file-list-detached (Detach File List)       R07       supported by code
+cmd-window-viewport-left (Dock Viewport Left)          R07       supported by code
+cmd-window-viewport-right (Dock Viewport Right)        R07       supported by code
+cmd-window-viewport-top (Dock Viewport Top)            R07       supported by code
+cmd-window-viewport-bottom (Dock Viewport Bottom)      R07       supported by code
+cmd-window-viewport-detached (Detach Viewport)         R07       supported by code
+cmd-options (Open Options)                             R05       supported by code
+cmd-toggle-filelist (Toggle File List Visibility)      R01       intentional local behavior
+cmd-toggle-menubar (Toggle Menu Bar)                   R01       supported by code
+cmd-toggle-statusbar (Toggle Status Bar)               R01       supported by code
+cmd-fullscreen (Toggle Fullscreen)                     R07       supported by code
+cmd-toggle-cursor-autohide (Toggle Cursor Auto-Hide)   R04       supported by code
+cmd-exit-fullscreen-hold (Exit Fullscreen Hold)        R07       intentional local behavior
+cmd-hide-to-tray (Hide to Tray)                        R07       supported by code
+cmd-quit (Quit Application)                            R07       supported by code
+cmd-github (Open GitHub Link)                          R01       supported by code
+cmd-open-dir (Open Directory Dialog)                   R03       conditional risk
+cmd-open-file (Open File Dialog)                       R03       conditional risk
+cmd-use-url (Open URL Prompt)                          R03       conditional risk
+cmd-refresh (Refresh Directory)                        R01       supported by code
+cmd-toggle-file-list-view-mode (Toggle Thumb/List)     R02       supported by code
+cmd-open-explorer (Show in Explorer)                   R02       supported by code
+cmd-open-folder (Open Folder in Explorer)              R02       supported by code
+cmd-toggle-favorite (Toggle Favorite on Current Item)  R02       supported by code
+cmd-open-metadata (Open Archive Info)                  R07       supported by code
+
+--------------------------------------------------------------------------------
+2.2 DIRECT MARKUP CONTROLS AND WORKSPACE GESTURES
+--------------------------------------------------------------------------------
+Interaction / Control                                  Reviewer  Status
+Menubar dropdown mouse/keyboard aim & traversal        R01       supported by code
+Submenu flyout placement & edge flip                   R01       conditional risk
+File panel header column resizers                      R02       supported by code
+File panel width resizer handle (#panel-resize-handle) R02       intentional local behavior
+File panel breadcrumb segment navigation               R02       supported by code
+File panel search text filter input                    R02       supported by code
+File panel row virtualization & DOM recycling          R02       supported by code
+File panel row selection click & double-click          R02       supported by code
+File panel row context menu deletion                   R02       supported by code
+File panel thumbnail rendering & shell icons           R02       supported by code
+File panel toolbar #btn-toggle-view-mode               R02       supported by code
+File panel toolbar #cmd-open-explorer                  R02       supported by code
+File panel toolbar #cmd-open-folder                    R02       supported by code
+File panel toolbar #btn-favorite-current               R02       supported by code
+File panel toolbar #status-metadata-badge click        R07       supported by code
+File panel favorites accordion toggle                  R02       supported by code
+File panel favorites list selection & navigation       R02       supported by code
+File panel favorites in-view markers on scroll settle  R02       confirmed gap
+File panel library tree provider collapse & selection  R02       supported by code
+File panel library active provider sync                R06       confirmed gap
+File panel deletion rollback status toast              R06       confirmed gap
+Drop overlay (#drop-overlay) click to open folder      R03       intentional local behavior
+Drop overlay OLE native file/folder drop on main       R03       supported by code
+Drop overlay OLE native file/folder drop on child      R03       supported by code
+Drop overlay OLE browser image stream drop             R03       supported by code
+Drop overlay OLE URL string drop                       R03       supported by code
+Password overlay display on encrypted archive load     R03       confirmed gap
+Password overlay form submission and unlock retry      R03       supported by code
+Password overlay cancellation focus restoration        R03       confirmed gap
+URL overlay form submission and remote download start  R03       supported by code
+URL overlay cancellation focus restoration             R03       confirmed gap
+Manhwa strip scroll settle index synchronization       R02       confirmed gap
+Manhwa strip row alignment from file list selection    R04       supported by code
+Manhwa strip top boundary reveal parent folder         R04       confirmed gap
+Manhwa strip audio volume pills & mute toggle          R04       supported by code
+Viewer media rendering: static images (PNG/JPG/WEBP)   R04       supported by code
+Viewer media rendering: animated (GIF/APNG/SVG)        R04       supported by code
+Viewer media rendering: multi-resolution ICO frames    R04       supported by code
+Viewer media rendering: video playback & audio         R04       supported by code
+Viewer viewport drag pan gesture                       R04       intentional local behavior
+Viewer wheel zoom with cursor coordinates              R04       supported by code
+Detached window wheel zoom coordinate sanitization     R01       supported by code
+Fullscreen exit hover button & escape hold hint        R07       supported by code
+Status bar image dimensions, index, zoom readouts      R04       supported by code
+Status bar disabled and hidden in detached window      R01       supported by code
+Native window title synchronization across pair        R07       supported by code
+Native window close button on child closing pair       R07       supported by code
+Native window close button on main closing pair        R07       supported by code
+Recombining panels docks child without quitting        R07       supported by code
+Second instance file launch unminimizing windows       R07       conditional risk
+
+--------------------------------------------------------------------------------
+2.3 OPTIONS CONTROLS AND DOWNSTREAM WORKSPACE EFFECTS
+--------------------------------------------------------------------------------
+Interaction / Control                                  Reviewer  Status
+General: Show hidden folders (#opt-show-hidden)        R05       supported by code
+General: Default start directory (#opt-start-dir)      R05       supported by code
+General: Start directory Browse (#btn-browse-start)    R05       supported by code
+General: Continue from last opened dir                 R05       supported by code
+General: Continue from last active image               R05       supported by code
+General: Allow only one instance (#opt-single-instance) R05      intentional local behavior
+General: Auto-hide interface in fullscreen             R05       supported by code
+General: Open first image in directory                 R05       supported by code
+General: Keyboard pan step (#opt-keyboard-pan-step)    R05       supported by code
+General: Wheel pan step (#opt-wheel-pan-step)          R05       supported by code
+General: Hide cursor delay (#opt-hide-cursor-delay)    R05       supported by code
+General: Anime4K quality Normal/Fast segmented buttons R05       supported by code
+General: Library location path (#opt-library-path)     R05       supported by code
+General: Library path Browse (#btn-browse-library)     R05       supported by code
+General: Library path relocation thumbnail cache clear R02       conditional risk
+General: Save config data locally (#opt-portable-mode) R05       supported by code
+General: Open Roaming folder (#btn-open-config-dir)    R05       supported by code
+General: Open Local folder (#btn-open-local-data-dir)  R05       supported by code
+Keys: Reset keybindings to defaults button             R05       supported by code
+Keys: Keybinding capture, edit, and middle-click remove R05      supported by code
+Keys: Keybinding conflict validation badges            R05       supported by code
+Keys: Zoom modifier mode Hold vs Toggle segmented btns R05       supported by code
+Keys: Layout position shortcuts (File List & Viewport) R05       supported by code
+File Types: Recommended associations button            R05       supported by code
+File Types: Select All associations button             R05       supported by code
+File Types: Deselect All associations button           R05       supported by code
+File Types: Format checkboxes (10 image, 8 archive)    R05       supported by code
+File Types: Mascot icon preview hover boxes            R05       supported by code
+File Types: Windows Defaults Settings button           R05       supported by code
+File Types: Remove file registrations button & modal   R05       supported by code
+Customization: Theme buttons (System, Light, Dark)     R05       confirmed gap
+Customization: Theme preview during active detachment  R05       confirmed gap
+Customization: Custom CSS textarea editor              R05       confirmed gap
+Customization: Import CSS button                       R05       supported by code
+Customization: Export CSS button                       R05       supported by code
+Customization: Apply CSS button                        R05       confirmed gap
+Customization: Emergency reset shortcut                R05       supported by code
+Language: English radio button (fixed)                 R05       intentional local behavior
+Dialog Footer: Close button (#btn-cancel)              R05       supported by code
+Dialog Footer: Titlebar close (X) preview reversion    R05       conditional risk
+Dialog Footer: Save button live workspace preservation R05       confirmed gap
+Dialog Footer: Save button preview override clearing   R05       confirmed gap
+Auxiliary: Options window centering when main minimized R07      confirmed gap
+Auxiliary: Metadata window centering when main minimized R07     confirmed gap
+Auxiliary: Metadata loading duplicate extraction race  R07       confirmed gap
+
+================================================================================
+3. RANKED CONFIRMED FINDINGS
+================================================================================
+
+Finding 01: Off-screen placement of auxiliary windows when main window is minimized
+- Priority: P1
+- Confidence: 95%
+- Location: src-tauri/src/windows.rs:276-289, 307, 325; src/js/options/options.js:207; src/js/main/metadataBadge.js:99
+- Attribution: Introduced in a628e57 when secondary window hosting was added without updating auxiliary window centering logic.
+- Affected windows: options, metadata, workspace-file-list
+- Ownership: Native window shell management (domain-specific backend in windows.rs).
+- User sequence:
+  1. Detach File List into a secondary window via Windows > File List > Detached.
+  2. Minimize the main viewer window to the Windows taskbar, leaving the detached File List active.
+  3. From the detached File List, press 5 or click Options in the menu, or click the Archive Info badge button.
+- Expected result: The Options or Archive Info window opens centered on the active monitor or relative to the calling File List window.
+- Actual result: The auxiliary window is placed at coordinate (-32000, -32000) off-screen and is completely unreachable.
+- Causal chain:
+  fit_options_window and fit_metadata_window call center_window_over_main when visible is false.
+  center_window_over_main queries main.outer_position().
+  On Windows Win32, a minimized window returns (-32000, -32000).
+  center_window_over_main does not check main.is_minimized(), computes target coordinates from -32000, and calls window.set_position.
+  The auxiliary window is shown and focused off-screen.
+
+Finding 02: Options Save overwrites live workspace state with stale initial snapshot
+- Priority: P1
+- Confidence: 100%
+- Location: src/js/options/options.js:524, 538-540, 559-562; src/js/core.js:660-675
+- Attribution: Introduced in 47b7043 when selective config preservation was implemented.
+- Affected windows: options, main, workspace-file-list
+- Ownership: Shared configuration persistence (options.js and core.js).
+- User sequence:
+  1. Open Options (cmd-options) and keep the dialog open.
+  2. In either the main viewer or detached File List, change any view mode or navigation state (e.g. switch fit mode to Fit Width via Q, change scaling to Lanczos, toggle Manhwa view via M, switch File List to thumbnail mode via T, or browse to another image or folder).
+  3. Switch back to Options, edit an unrelated field (e.g. keyboard pan step), and click Save.
+- Expected result: Options updates the modified settings while preserving live view modes, scaling, manhwa layout, thumbnail modes, directory sort deviations, and current navigation paths.
+- Actual result: Live workspace preferences and navigation state immediately revert to their state prior to opening Options.
+- Causal chain:
+  options.js flushes main via requestWorkspace('main', 'core', 'flushConfig') and reads live config from disk.
+  options.js lines 538-540 copies only six hardcoded keys from live.frontend_data: favorites, favorites_collapsed, workspace_layout, window_menu_visible, menu_visible, status_visible.
+  Keys omitted from the whitelist (fit_mode, scaling_mode, spread_enabled, spread_direction, spread_step, manhwa_enabled, file_list_view_mode, active_filter, directory_sort, last_opened_path, last_active_image) retain their stale values from formConfig.
+  options.js calls save_config with merged data, overwriting disk config, and emits config-updated.
+  Core.loadConfig on main reads the overwritten disk files, resetting active state to stale values.
+
+Finding 03: Preview theme and CSS overrides never reset in detached File List window upon Save
+- Priority: P1
+- Confidence: 100%
+- Location: src/js/main/main.js:324-327, 349, 381-382; src/js/options/options.js:562
+- Attribution: Introduced in a628e57 when secondary window event guards were added.
+- Affected windows: workspace-file-list, options
+- Ownership: Theme and styling lifecycle (main.js).
+- User sequence:
+  1. Detach File List into a secondary window.
+  2. Open Options dialog.
+  3. Under Customization, click Dark theme (or click Apply on Custom CSS). Both windows preview the styling.
+  4. Click Light theme, then click Save.
+- Expected result: Both windows clear preview overrides and display the saved Light theme.
+- Actual result: The main window displays Light, but the detached File List window remains permanently stuck in Dark.
+- Causal chain:
+  options.js emits config-updated upon saving.
+  In main.js line 324, listen('config-updated') hits 'if (workspaceSurface) return;'.
+  The replica window aborts before lines 325-326 ('previewTheme = null; previewCss = null;').
+  When the config snapshot arrives from main, workspace-file-list fires quivit-config-loaded.
+  Line 381 evaluates applyTheme(previewTheme !== null ? previewTheme : theme).
+  Because previewTheme remains 'dark', the replica evaluates the preview override as active and stays on the preview styling indefinitely.
+
+Finding 04: Detaching File List window during active theme preview opens with mismatched native background and stale theme
+- Priority: P2
+- Confidence: 95%
+- Location: src-tauri/src/windows.rs:134; src/js/options/options.js:317; src/js/main/main.js:381-388
+- Attribution: Introduced in a628e57 and 47b7043.
+- Affected windows: workspace-file-list, main, options
+- Ownership: Window lifecycle and shell styling (windows.rs and main.js).
+- User sequence:
+  1. In combined mode with Light theme active, open Options.
+  2. Click Dark theme. Main viewer and Options preview Dark mode.
+  3. Without clicking Save, select Windows > File List > Detached (or press shortcut).
+  4. Inspect the newly spawned File List window.
+- Expected result: The detached File List window opens with matching Dark native background and theme styling.
+- Actual result: The detached File List window opens with a bright white native background and renders in Light mode.
+- Causal chain:
+  options.js previewTheme emits an ephemeral theme-preview event without writing to disk or localStorage.
+  Core.setWorkspacePosition invokes open_workspace_window.
+  windows.rs line 134 calls apply_shell_background with load_config(app), which reads Light from disk and sets the native background to white.
+  When index.html?surface=fileList loads, themePrePaint.js finds no localStorage override.
+  When the initial snapshot arrives from main, state.config contains Light, and previewTheme in workspace-file-list initializes to null.
+  workspace-file-list renders Light while main and options remain Dark.
+
+Finding 05: Duplicate metadata extraction, canvas downsampling, and event broadcast race condition
+- Priority: P2
+- Confidence: 95%
+- Location: src/js/main/main.js:287; src/js/main/metadataBadge.js:29-95, 115-129; src/js/metadata-window.js:193-200
+- Attribution: Introduced in a628e57 when secondary webview initialization was added without guarding the metadata badge.
+- Affected windows: main, workspace-file-list, metadata
+- Ownership: Metadata extraction and badge UI (main.js and metadataBadge.js).
+- User sequence:
+  1. Detach File List into a secondary window.
+  2. Open the Metadata window (Archive Info).
+  3. Navigate between archives or directories in the File List.
+- Expected result: A single authority window extracts metadata, downsamples the cover image, and emits the payload once.
+- Actual result: Both main and workspace-file-list execute metadata parsers concurrently, allocate separate canvas elements, overwrite localStorage, and emit duplicate metadata-data events.
+- Causal chain:
+  main.js line 287 calls initMetadataBadge unconditionally in both webviews.
+  In main, #file-panel and #status-metadata-badge are hidden via CSS display: none, but the event listener on Core.onStateChange remains active.
+  In workspace-file-list, initMetadataBadge also runs and listens to Core.onStateChange.
+  When container navigation occurs, both windows invoke _loadMetadataForArchive or _loadMetadataForDirectory simultaneously.
+  Both downsample cover images on separate canvas elements, overwrite localStorage under 'quivit-metadata-current', and call emit('metadata-data').
+  Because emit broadcasts to all webviews, the open Metadata window receives duplicate events. Async latency can cause an older payload to overwrite newer data.
+
+Finding 06: Manhwa strip settle event omitted from workspace session event forwarding
+- Priority: P2
+- Confidence: 95%
+- Location: src/js/viewer/manhwaStrip.js:1858; src/js/shared/workspaceSession.js:201-206; src/js/shared/workspaceControls.js:9, 69-70; src/js/filepanel/filePanel.js:3077-3082
+- Attribution: Introduced in a628e57 when workspace event forwarding was established.
+- Affected windows: workspace-file-list, main
+- Ownership: Strip navigation and file list selection sync (workspaceSession.js and filePanel.js).
+- User sequence:
+  1. Detach File List into a secondary window.
+  2. Open an image container in Manhwa view (vertical strip).
+  3. Scroll through the strip in the main viewer until scrolling settles.
+  4. Inspect the detached File List and Favorites panel.
+- Expected result: The settled anchor item is highlighted in the detached File List, and visible strip items receive .in-view markers in Favorites.
+- Actual result: The detached File List selection and Favorites in-view markers do not update upon scroll settle.
+- Causal chain:
+  manhwaStrip.js line 1858 dispatches quivit-manhwa-settle on main when scroll comes to rest.
+  filePanel.js line 3077 listens for quivit-manhwa-settle to call updateSelection and updateFavoritesSelection.
+  workspaceSession.js lines 201-206 omits quivit-manhwa-settle from the forwarded event list.
+  workspaceControls.js line 69 catches quivit-manhwa-settle on main and fires quivit-workspace-strip-info.
+  While quivit-workspace-strip-info is forwarded, workspaceControls.js line 9 on the replica only stores remoteVisibleIndices. It never dispatches quivit-manhwa-settle or notifies filePanel.js.
+  The detached file panel never receives the notification.
+
+Finding 07: Library active provider event omitted from workspace session event forwarding
+- Priority: P2
+- Confidence: 95%
+- Location: src/js/shared/workspaceSession.js:201-206; src/js/filepanel/libraryStore.js:124-144; src/js/filepanel/filePanel.js:2757; src/js/menubar.js:717-756
+- Attribution: Introduced in a628e57 when workspace event forwarding was established.
+- Affected windows: main, workspace-file-list
+- Ownership: Library store and imports menu synchronization (workspaceSession.js and libraryStore.js).
+- User sequence:
+  1. Detach File List into a secondary window.
+  2. Select an import provider filter from the Imports menu in the main window.
+  3. Inspect the detached Library panel in the File List window.
+- Expected result: The detached Library panel updates to display the selected provider entries.
+- Actual result: The detached Library panel remains on the previous provider view.
+- Causal chain:
+  Selecting a provider in main menu invokes setActiveProvider in libraryStore.js line 124.
+  setActiveProvider dispatches quivit-library-active-changed locally on main.
+  workspaceSession.js lines 201-206 omits quivit-library-active-changed from the forwarded events list.
+  filePanel.js line 2757 on workspace-file-list never receives the event.
+  The detached panel does not update until an unrelated reload occurs.
+
+Finding 08: Status flash toast on detached File List deletion failure never reaches Main status bar
+- Priority: P2
+- Confidence: 90%
+- Location: src/js/shared/workspaceSession.js:183-196; src/js/filepanel/filePanel.js:1319-1321; src/js/menubar/statusbar.js:99; src/js/menubar/chrome.js:59; src/css/main.css:497
+- Attribution: Introduced in a628e57 when secondary window status bar was disabled.
+- Affected windows: workspace-file-list, main
+- Ownership: Status bar toast notifications (workspaceSession.js and filePanel.js).
+- User sequence:
+  1. Detach File List into a secondary window.
+  2. Attempt to delete a file that is locked by another process or read-only on disk.
+- Expected result: The deletion fails, the row restores, and a status bar flash message ("Delete failed. The item was restored.") appears on the visible status bar.
+- Actual result: The row disappears and immediately reappears without any explanatory feedback.
+- Causal chain:
+  In detached mode, the status bar is hidden and disabled in workspace-file-list via chrome.js:59 and main.css:497.
+  When deletion fails in filePanel.js line 1319, it dispatches quivit-status-flash on the local replica window.
+  workspaceSession.js replica configuration (lines 183-196) has no reverse event forwarder for quivit-status-flash.
+  The event never reaches main, where statusbar.js line 99 listens for it.
+
+Finding 09: Manhwa strip boundary reveal mutates hidden DOM on main instead of detached File List
+- Priority: P2
+- Confidence: 95%
+- Location: src/js/viewer/viewer.js:31; src/js/viewer/manhwaStrip.js:2377, 2397, 2456, 3124-3132; src/js/main/main.js:259; src/js/filepanel/filePanel.js:3097-3102; src/js/shared/workspaceControls.js:62
+- Attribution: Introduced in a628e57 when window relocation was added without bridging revealListTop.
+- Affected windows: main, workspace-file-list
+- Ownership: Strip boundary navigation and file panel scroll coordination (main.js, manhwaStrip.js, filePanel.js).
+- User sequence:
+  1. In combined mode, open a directory with a parent directory (..) in Manhwa view.
+  2. Detach File List into a secondary window.
+  3. In the main viewer, scroll or pan up past the top of the manhwa strip, or press Home (jumpManhwa(-1)).
+  4. Inspect the detached File List scroll position.
+- Expected result: The visible detached File List scrolls to the top (scrollTop = 0) so the parent directory (..) is visible, and strip navigation pauses at the container boundary.
+- Actual result: The visible detached File List does not scroll, and the strip fails to hold at the boundary.
+- Causal chain:
+  viewer.js line 31 and manhwaStrip.js lines 2377, 2397, 2456 call triggerRevealListTop().
+  triggerRevealListTop() invokes _onRevealListTop, wired in main.js line 259 to revealListTop from filePanel.js.
+  revealListTop mutates fileListUl.scrollTop on the local window.
+  In detached mode, #file-panel on main is hidden with display: none.
+  workspaceControls.js line 62 connects strip RPC methods but omits revealListTop.
+  No message is sent to workspace-file-list.
+  Because the hidden main element's scrollTop is already 0, revealListTop returns wasAtTop: true, causing !triggerRevealListTop() in manhwaStrip.js line 2377 to evaluate false, prematurely failing to hold boundary navigation.
+
+Finding 10: Modal prompt focus hijacking and restoration failures across detached windows
+- Priority: P2
+- Confidence: 95%
+- Location: src/js/main/passwordOverlay.js:36, 103, 108-115; src/js/main/urlOverlay.js:51-53, 150; src/js/shared/workspaceControls.js:58; src/js/services/actions.js:264
+- Attribution: Introduced in a628e57 and omitted from the focus coordination introduced in 35f38e9.
+- Affected windows: main, workspace-file-list
+- Ownership: Modal dialog lifecycle and OS focus coordination (passwordOverlay.js, urlOverlay.js, workspaceControls.js).
+- User sequence:
+  Sequence A (Password overlay):
+  1. Detach File List into a secondary window.
+  2. In the detached File List, select a password-protected archive.
+  3. The password prompt appears in the main viewer window.
+  4. Type the password immediately on the keyboard without manually clicking into the main window.
+  Sequence B (URL / Password prompt cancel):
+  1. Trigger Open URL (Ctrl+I) from the detached File List window. Main acquires focus and displays the URL prompt.
+  2. Press Escape to cancel the prompt.
+- Expected result:
+  In Sequence A, the main window acquires native OS focus so keystrokes type directly into the password field.
+  In Sequence B, cancelling returns native OS keyboard focus to the initiating File List window.
+- Actual result:
+  In Sequence A, the prompt opens in main but main never invokes window.setFocus(). OS focus remains with workspace-file-list. Keystrokes trigger file list search rather than password entry.
+  In Sequence B, cancelling executes _focusFileList() on main, calling fileListUl.focus() on a hidden DOM element (display: none). Focus is lost in a vacuum and is not restored to workspace-file-list.
+- Causal chain:
+  In passwordOverlay.js, _show is triggered by Core.onStateChange, not an action dispatch. It runs requestAnimationFrame(() => _input.focus()). Without calling window.getCurrentWindow().setFocus(), DOM focus cannot steal focus from another native OS window.
+  When cancelled via Escape, both passwordOverlay.js line 103 and urlOverlay.js line 52 invoke _focusFileList(). On main, fileListUl has display: none in detached mode, so the focus call fails silently. Neither overlay transmits an RPC request to focus workspace-file-list.
+
+================================================================================
+4. CONDITIONAL RISKS AND OBSERVATIONS NEEDED
+================================================================================
+
+Risk 01: Inter-window request flood during gallery scroll in detached File List
+- Priority: P2
+- Confidence: Medium
+- Trigger / Location: src/js/filepanel/filePanel.js:2115; src/js/urlLoader.js:2661; src/js/shared/workspaceSession.js:61
+- Condition: Scrolling the detached File List during an active gallery download executes renderVisibleRows, which synchronously calls setDownloadVisibleRange. urlLoader.js forwards this via requestWorkspace('main', 'url', 'setVisibleRange', [start, end]). Each call creates a pending request entry with a 30s timeout. Rapid scrolling generates dozens of requests per second. If pending.size reaches MAX_PENDING_REQUESTS (128), workspaceSession.js rejects with "Too many pending workspace requests", logging errors and dropping range synchronization.
+- Runtime observation needed: In detached mode, open an active downloading gallery with over 200 items. Rapidly scroll the detached File List using a free-spinning mouse wheel or continuous scrollbar drag. Monitor the DevTools console in both windows for "Too many pending workspace requests" rejections.
+
+Risk 02: Replica download status path separator mismatch on Windows
+- Priority: P3
+- Confidence: High
+- Trigger / Location: src/js/urlLoader.js:2640, 2797-2798
+- Condition: In urlLoader.js line 2640, getGalleryDownloadStatus on the replica performs direct map lookup: _workspaceStatuses.get(filePath). Unlike main, it does not normalize backslashes to forward slashes. On Windows, if download status events transmit normalized paths (/), while filePanel queries with Windows native paths (\), the map lookup returns undefined. isPlaceholderFile returns false, potentially treating pending download files as missing.
+- Runtime observation needed: On a Windows machine, start a gallery download in detached mode. Check whether downloading rows in the detached File List display download spinner badges or render broken file icons.
+
+Risk 03: Library relocation event ignored by replica thumbnail caches
+- Priority: P3
+- Confidence: Medium
+- Trigger / Location: src/js/main/main.js:341-346; src/js/filepanel/filePanel.js:85-88
+- Condition: When Library relocation occurs, the backend emits library-relocated. In main.js line 342, the listener aborts early with 'if (workspaceSurface) return;'. The main window calls clearLibraryPathCaches(), but its local cache is unpopulated in detached mode. In workspace-file-list, clearLibraryPathCaches() is never called, leaving thumbnailCache and favoritesThumbnailCache populated with stale path keys until LRU eviction occurs.
+- Runtime observation needed: In detached mode, browse Library items so thumbnails are cached in the detached window. Open Options, relocate the Library folder to a new location, save, and browse Library items again. Check if old thumbnails persist or cause cache collisions.
+
+Risk 04: Initial attachment visible strip range race condition
+- Priority: P3
+- Confidence: Medium
+- Trigger / Location: src/js/shared/workspaceControls.js:7, 20-24; src/js/shared/workspaceSession.js:114-117
+- Condition: When workspace-file-list sends { kind: 'ready' }, main responds with a state snapshot. quivit-workspace-strip-info is not part of the state snapshot; it is an independent event fired only on state changes and scroll settle. Upon initial attachment, remoteVisibleIndices in workspace-file-list is initialized to []. Until the first scroll or selection change on main, .is-visible-in-strip is not applied to multi-image visible ranges.
+- Runtime observation needed: Open a container in Manhwa view, then detach the File List into a secondary window. Observe whether visible strip images immediately have .is-visible-in-strip applied in the detached File List before any interaction.
+
+Risk 05: Windows OS foreground lock on programmatic window focus
+- Priority: P3
+- Confidence: Medium
+- Trigger / Location: src/js/shared/workspaceControls.js:58; src/js/services/actions.js:258-264; src-tauri/src/windows.rs:113
+- Condition: When cmd-use-url (Ctrl+I) is triggered from workspace-file-list, workspaceControls.js line 58 calls window.setFocus() on main. Under Windows LockSetForegroundWindow policy, programmatic focus transfers between windows without direct user interaction on the target window can cause the target taskbar icon to flash rather than taking foreground focus immediately. Furthermore, cmd-open-dir and cmd-open-file do not declare focusOwner: true in actions.js, opening native dialogs parented to main while main may be unfocused or behind the secondary window.
+- Runtime observation needed: In detached mode, activate the File List window and press Ctrl+I and Ctrl+O. Observe whether the main window and native dialog immediately take active foreground keyboard focus or if the taskbar icon flashes.
+
+Risk 06: Native window titlebar close on Options dropping async preview reversion
+- Priority: P2
+- Confidence: Medium
+- Trigger / Location: src/js/options/options.js:363-366; src-tauri/src/windows.rs:202-223
+- Condition: In Options, clicking the Close button explicitly awaits revertPreviewChanges() before closing. However, clicking the native titlebar X fires onCloseRequested without prevent_close() installed. The handler begins an async task awaiting revertPreviewChanges() while the webview process terminates. If the process exits before 'theme-preview' or 'css-preview' are serialized and emitted, preview changes in workspace windows will not revert.
+- Runtime observation needed: Open Options, preview a contrasting theme, and immediately click the native window close button (X). Observe whether the workspace windows revert to the saved theme.
+
+Risk 07: Second application instance launch not unminimizing detached File List window
+- Priority: P3
+- Confidence: Medium
+- Trigger / Location: src-tauri/src/lib.rs:46; src-tauri/src/windows.rs:378-388
+- Condition: In lib.rs line 46, the single instance handler calls main_window.unminimize(), followed by windows::restore_from_tray(app). restore_from_tray calls window.show() on secondary windows. On Windows Win32, calling ShowWindow with SW_SHOW on a minimized window does not unminimize it (SW_RESTORE is required).
+- Runtime observation needed: In detached mode, minimize both main and workspace-file-list to the Windows taskbar. From Windows Explorer, double-click an associated image file. Observe whether workspace-file-list unminimizes alongside main.
+
+================================================================================
+5. REJECTED AND DUPLICATE FINDINGS
+================================================================================
+
+1. Duplicate: Report 06 Finding 3 (Omission of directory_sort in Options save)
+   - Status: Duplicate root cause of Finding 02 (Report 05 GAP-OPT-02).
+   - Reason: Both findings identify the hardcoded whitelist in options.js lines 538-540. Merged into Finding 02 with all eleven affected frontend properties enumerated.
+
+2. Duplicate: Report 03 GAP-01 & GAP-02 (Password overlay focus and URL overlay focus restoration)
+   - Status: Duplicate root cause of Finding 10.
+   - Reason: Both represent facets of modal prompt focus lifecycle in multi-window mode (missing native window focus transfer upon opening and attempting local DOM focus on a hidden element upon cancellation). Merged into Finding 10.
+
+3. Rejected: Report 07 GAP-07-03 (Metadata window failing to clear when navigating to container without metadata)
+   - Status: Rejected as an unrelated legacy defect.
+   - Reason: The behavior existed before snapshot a473a5c and is independent of window detachment. In single-window mode, the metadata window also remained populated when browsing into folders lacking metadata.
+
+4. Rejected: Report 01 CR-02 (Submenu DPI coordinate rounding boundary clipping)
+   - Status: Rejected as an untraced hypothesis.
+   - Reason: Submenu position calculation compares getBoundingClientRect against window.innerWidth within the local webview document. CSS pixels scale consistently within the webview regardless of monitor DPI scaling. No code defect exists.
+
+5. Rejected: Report 05 RISK-OPT-02 (Config file watcher not rebinding across Roaming and Portable toggle)
+   - Status: Rejected as an unrelated legacy defect.
+   - Reason: The file watcher initialization in watchers.rs and lib.rs predates commit a628e57 and was unaddressed in the window relocation range.
+
+6. Rejected: Report 07 RISK-07-02 (Duplicate DOM ID workspace-keybind-note in options.html)
+   - Status: Rejected as a markup hygiene issue without functional impact.
+   - Reason: The two <p class="hint" id="workspace-keybind-note"> elements in options.html are purely presentational hints styled via class .hint. No script queries this ID.
+
+================================================================================
+6. UNASSIGNED OR UNTRACED INTERACTIONS AND FOLLOW-UP ANALYSIS PROMPTS
+================================================================================
+
+All interactive entry points from index.html, options.html, metadata.html, and ACTION_REGISTRY were assigned to reviewer domains and traced.
+No unassigned interactions remain.
+
+Narrowly scoped follow-up analysis prompts for confirmed gaps:
+
+Follow-up Prompt 1 (Auxiliary window placement):
+"Inspect src-tauri/src/windows.rs lines 266-289. Trace whether center_window_over_main can check main.is_minimized() and fall back to centering over the active monitor or the calling secondary window when main is minimized."
+
+Follow-up Prompt 2 (Options save live config merge):
+"Inspect src/js/options/options.js lines 533-543. Trace whether replacing the six-key whitelist with an Object.assign of live.frontend_data over merged.frontend_data (preserving only form-managed fields) safely prevents reverting active view modes, scaling, and navigation state."
+
+Follow-up Prompt 3 (Replica preview override cleanup):
+"Inspect src/js/main/main.js lines 323-331. Trace moving lines 325-327 (previewTheme = null; previewCss = null; resetScrollLatch();) before the 'if (workspaceSurface) return;' guard so replica windows clear preview overrides upon receiving config-updated."
+
+Follow-up Prompt 4 (Session event bridging):
+"Inspect src/js/shared/workspaceSession.js lines 201-206 and lines 183-196. Trace adding 'quivit-manhwa-settle' and 'quivit-library-active-changed' to the forward list, and adding a reverse event bridge for 'quivit-status-flash' from replica to main."
+
+Follow-up Prompt 5 (Manhwa strip boundary reveal RPC):
+"Inspect src/js/shared/workspaceControls.js line 62 and src/js/main/main.js line 259. Trace exposing revealListTop via workspaceControls.stripCall so boundary pan and jump calls invoke revealListTop on workspace-file-list when detached."
+
+Follow-up Prompt 6 (Modal prompt focus management):
+"Inspect src/js/main/passwordOverlay.js lines 35-38 and 102-105, and src/js/main/urlOverlay.js lines 51-53. Trace calling window.__TAURI__.window.getCurrentWindow().setFocus() when opening passwordOverlay, and requesting focus on the initiating peer when closing passwordOverlay or urlOverlay in detached mode."
+
+================================================================================
+7. ORDERED MANUAL RUNTIME CHECKLIST (PROPOSED FOR LATER EXECUTION)
+================================================================================
+
+Do not run these checks now. Use this ordered sequence when performing manual runtime verification:
+
+1. Basic Detach and Layout Integrity:
+   a. Start QuiviT in combined mode.
+   b. Select Windows > File List > Detached.
+   c. Verify two windows open: main (viewer) and workspace-file-list (file panel).
+   d. Verify the detached File List has no visible status bar, and View > Status Bar in its menu is grayed out.
+   e. In the detached File List, press 1. Verify the File List remains visible and does not collapse.
+   f. In the detached File List, press 2. Verify its menubar hides, while main window menubar remains visible. Press 2 again to restore.
+
+2. Auxiliary Window Centering while Main Minimized (Finding 01):
+   a. With workspace detached, minimize the main viewer window to the taskbar.
+   b. Focus the detached File List window on screen.
+   c. Press 5 to open Options.
+   d. Verify the Options window appears visibly on screen, not off-screen. Close Options.
+   e. In the detached File List, browse to an archive containing ComicInfo.xml and click the Archive Info badge button.
+   f. Verify the Archive Info window appears visibly on screen. Close Archive Info.
+   g. Restore the main window from the taskbar.
+
+3. Options Live State Preservation (Finding 02):
+   a. Open Options (cmd-options) and leave it open.
+   b. In the main window, press Q to switch fit mode to Fit Width if Larger, press M to enable Manhwa mode, and press T in the File List to switch to thumbnail view.
+   c. In Options, under General > Viewport, change Keyboard pan step from 72 to 80.
+   d. Click Save in Options.
+   e. Verify that Fit Width if Larger, Manhwa mode, and thumbnail view remain active and were not reverted.
+
+4. Theme Preview and Save Reset (Findings 03 and 04):
+   a. With workspace detached, open Options > Customization.
+   b. Click Dark theme. Verify both main and detached File List preview Dark mode.
+   c. Click Light theme, then click Save.
+   d. Verify both main and detached File List switch to Light theme and do not remain stuck in Dark.
+   e. In combined mode with Light active, open Options, click Dark theme.
+   f. Without saving, select Windows > File List > Detached.
+   g. Verify the new File List window does not flash with a mismatched white background.
+
+5. Manhwa Settle and Boundary Reveal (Findings 06 and 09):
+   a. With workspace detached, open a multi-image comic folder in Manhwa mode.
+   b. Scroll the strip in the main viewer until scrolling settles.
+   c. Check the detached File List to verify the settled image is selected, and check Favorites to verify in-view markers update.
+   d. Scroll to the top of the manhwa strip, then pan upward.
+   e. Verify the detached File List scrolls to the top to show the parent directory (..), and strip navigation pauses.
+
+6. Library Active Provider and Status Flash (Findings 07 and 08):
+   a. With workspace detached, click Imports > [Provider Name] in the main window menubar.
+   b. Verify the detached Library panel filters to the selected provider.
+   c. In the detached File List, attempt to delete a read-only or locked file.
+   d. Verify the file restores in the list and the main window status bar displays "Delete failed. The item was restored."
+
+7. Modal Prompt Focus Routing (Finding 10):
+   a. With workspace detached, click a password-protected archive in the detached File List.
+   b. Without clicking the mouse, immediately type characters on the keyboard.
+   c. Verify keystrokes enter the password field on the main window.
+   d. Press Escape to cancel the password prompt.
+   e. Verify keyboard focus returns to the detached File List window.
+   f. In the detached File List, press Ctrl+I. Verify the URL prompt opens in main with typing focus.
+   g. Press Escape. Verify keyboard focus returns to the detached File List window.
+
+8. Native Window Recombination and Shutdown:
+   a. In the detached File List, select Windows > File List > Left.
+   b. Verify the detached window closes and the File List docks into the main window without quitting the application.
+   c. Select Windows > File List > Detached again.
+   d. Click the native close button (X) on the detached File List window.
+   e. Verify both windows close and the application process terminates cleanly.
