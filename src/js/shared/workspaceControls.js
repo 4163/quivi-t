@@ -1,12 +1,33 @@
 import { ACTION_MAP, dispatch } from '../services/actions.js';
 import { Core } from '../core.js';
 import { workspaceSurface, hostsWorkspaceSurface } from './workspaceHost.js';
-import { registerWorkspaceHandlers, requestWorkspace, createWorkspaceService } from './workspaceSession.js';
+import {
+  registerWorkspaceHandlers,
+  requestWorkspace,
+  createWorkspaceService,
+  registerStripVisibleIndicesProvider,
+  getSessionStripVisibleIndices
+} from './workspaceSession.js';
 
-export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleImageIndices }) {
-  let remoteVisibleIndices = [];
+export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleImageIndices, revealListTop }) {
+  let remoteVisibleIndices = getSessionStripVisibleIndices() || [];
+  let remoteFileListAtTop = false;
+  let localFileListAtTop = true;
+  let fileListDetached = !hostsWorkspaceSurface('fileList');
+  let scrollReportRevision = 0;
+  let revealPending = null;
   let importActivity = { importing: false, phase: 'idle', dropId: null };
-  window.addEventListener('quivit-workspace-strip-info', event => { remoteVisibleIndices = event.detail || []; });
+
+  if (hostsWorkspaceSurface('viewport') && typeof getVisibleImageIndices === 'function') {
+    registerStripVisibleIndicesProvider(getVisibleImageIndices);
+  }
+
+  window.addEventListener('quivit-workspace-strip-info', event => {
+    remoteVisibleIndices = event.detail || [];
+    if (workspaceSurface) {
+      window.dispatchEvent(new CustomEvent('quivit-manhwa-settle'));
+    }
+  });
 
   function dispatchAction(id, payload) {
     const action = ACTION_MAP.get(id);
@@ -18,9 +39,33 @@ export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleIm
   }
 
   function publishStripInfo() {
-    if (!hostsWorkspaceSurface('viewport')) return;
+    if (!hostsWorkspaceSurface('viewport') || typeof getVisibleImageIndices !== 'function') return;
     const indices = getVisibleImageIndices();
     window.dispatchEvent(new CustomEvent('quivit-workspace-strip-info', { detail: indices }));
+  }
+
+  function handleRevealListTop() {
+    if (hostsWorkspaceSurface('fileList')) {
+      return revealListTop?.() ?? true;
+    }
+    if (revealPending) return false;
+    const wasAtTop = remoteFileListAtTop;
+    const revision = scrollReportRevision;
+    const request = requestWorkspace('workspace-file-list', 'filePanel', 'revealListTop');
+    revealPending = request;
+    request.then(() => {
+      if (revealPending === request && revision === scrollReportRevision) remoteFileListAtTop = true;
+    }).catch(console.error).finally(() => {
+      if (revealPending === request) revealPending = null;
+    });
+    return wasAtTop;
+  }
+
+  function reportFileListScroll(isAtTop) {
+    localFileListAtTop = isAtTop;
+    if (hostsWorkspaceSurface('fileList') && workspaceSurface) {
+      requestWorkspace('main', 'filePanel', 'setFileListAtTop', [isAtTop]).catch(console.error);
+    }
   }
 
   return {
@@ -35,6 +80,8 @@ export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleIm
       return true;
     },
     visibleIndices: () => hostsWorkspaceSurface('viewport') ? getVisibleImageIndices() : remoteVisibleIndices,
+    revealListTop: handleRevealListTop,
+    reportFileListScroll,
     createImportActions(createLocal) {
       const local = createLocal();
       if (!workspaceSurface) {
@@ -60,12 +107,36 @@ export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleIm
         } },
         viewer: { panBy: (...args) => Viewer.panBy(...args) },
         strip,
+        filePanel: workspaceSurface ? {
+          revealListTop: () => hostsWorkspaceSurface('fileList') ? revealListTop?.() ?? true : true
+        } : {
+          setFileListAtTop: isAtTop => {
+            if (!hostsWorkspaceSurface('fileList')) {
+              remoteFileListAtTop = isAtTop === true;
+              scrollReportRevision++;
+            }
+          }
+        },
         url: Object.fromEntries(Object.entries(UrlLoader).filter(([method, value]) => method !== 'init' && typeof value === 'function'))
       });
-      if (workspaceSurface) importActions.getActivity().then(activity => {
-        window.dispatchEvent(new CustomEvent('quivit-workspace-import-activity', { detail: activity }));
-      }).catch(console.error);
-      Core.onStateChange(publishStripInfo);
+      if (workspaceSurface) {
+        importActions.getActivity().then(activity => {
+          window.dispatchEvent(new CustomEvent('quivit-workspace-import-activity', { detail: activity }));
+        }).catch(console.error);
+        if (hostsWorkspaceSurface('fileList')) {
+          reportFileListScroll(localFileListAtTop);
+        }
+      }
+      Core.onStateChange(() => {
+        const detached = !hostsWorkspaceSurface('fileList');
+        if (detached !== fileListDetached) {
+          fileListDetached = detached;
+          remoteFileListAtTop = false;
+          scrollReportRevision++;
+          revealPending = null;
+        }
+        publishStripInfo();
+      });
       window.addEventListener('quivit-manhwa-settle', publishStripInfo);
     }
   };

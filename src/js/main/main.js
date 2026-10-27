@@ -164,6 +164,7 @@ const actionCtx = {
 };
 
 const workspaceControls = createWorkspaceControls({ actionCtx, Viewer, getVisibleImageIndices,
+  revealListTop,
   strip: { alignListItemTop, alignListItemBottom, navigateManhwa, pageStrip, jumpManhwa } });
 
 function bindMenuCommands() {
@@ -254,10 +255,11 @@ initFilePanel({
   getVisibleImageIndices: workspaceControls.visibleIndices,
   alignListItemTop: index => workspaceControls.stripCall('alignListItemTop', index),
   alignListItemBottom: index => workspaceControls.stripCall('alignListItemBottom', index),
-  pageStrip: (...args) => workspaceControls.stripCall('pageStrip', ...args)
+  pageStrip: (...args) => workspaceControls.stripCall('pageStrip', ...args),
+  onScrollTopChanged: isAtTop => workspaceControls.reportFileListScroll(isAtTop)
 });
 initManhwaStrip();
-setRevealListTop(revealListTop);
+setRevealListTop(workspaceControls.revealListTop);
 initMenuBar();
 bindMenuCommands();
 initPasswordOverlay({ overlay: passwordOverlay, Core, FsUtils, focusFileList, isFileListFocused });

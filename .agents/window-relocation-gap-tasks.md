@@ -30,7 +30,7 @@ Remove manual checks that code review or E2E can establish. Keep only unresolved
 
 ## Preview group verification, 2026-10-28
 
-Compared against the repository validation rules. This group covers F03, F04, and R06 in the current seven-file working-tree diff from `35f38e9`. The other fourteen tasks remain unchecked. F03's Save path is addressed by review; R06's original single-close premise is ruled out by the installed Tauri implementation. F04's two independent-review findings have now been repaired, as recorded below. These task checkboxes remain `[~]` pending user acceptance; the configuration E2E retry now passes, while detached preview/native first-show frames have not been exercised.
+Compared against the repository validation rules. This earlier group covered F03, F04, and R06 in the seven-file diff from `35f38e9`, now committed in `c1dc66e`. Fourteen tasks were unchecked at that review. F03's Save path is addressed by review; R06's original single-close premise is ruled out by the installed Tauri implementation. F04's two independent-review findings were repaired, as recorded below. All three tasks in this group are accepted (`[x]`); the configuration E2E retry passed, while detached preview/native first-show frames were not exercised.
 
 1. **V01, addressed. Snapshot transport no longer renders previews or resets backgrounds.** `src/js/shared/workspaceSession.js:120` includes preview data only on the full initial snapshot. Receipt at line 133 records it without importing or invoking theme/CSS renderers. `src/js/main/main.js:294` consumes that initial state in the existing UI owner. Ordinary navigation snapshots cannot invoke theme or CSS application through the session transport. In addition, `src-tauri/src/windows.rs:75` retains the existing native theme routing but no longer writes a default background color to every window. CSS background color stays with the existing shell-background owner. This preserves native System theme behavior without disturbing other windows' CSS colors. Review confidence: high; authority and replica module checks passed with mocked transport/DOM boundaries.
 2. **V02, addressed. First show waits for native theme and the effective CSS shell color.** `src/js/shared/theme.js:11` retains the pending native-theme request, exposed by `waitForTheme()` at line 16. `src/js/shellBackground.js:38` exports an immediate sync that cancels a queued timer, waits for prior background writes and the current theme request, reads the current CSS color, and awaits the native background command. `src/js/main/main.js:404` waits for that promise before `show_window`. The existing 20 ms scheduling remains for ordinary style events; it is flushed explicitly for first show. Review confidence: high. A focused module check delayed theme and background promises and verified that show occurred only after they resolved, using the latest CSS color. Actual compositor frames were not observed.
@@ -49,6 +49,24 @@ Executed checks after repair:
 The focused checks establish JS transport and promise ordering with mocked external boundaries. The configuration E2E run now adds live attached-window Options/theme/Save coverage. Detached preview startup and actual compositor frames were not exercised, so their evidence remains code review and the focused module checks. The explicit color-before-show ordering is established without requesting a duplicate manual check.
 
 Next unstarted P1 work is F01 and F02. The remaining F10/R05 conditional manual check belongs to a later group.
+
+## Strip synchronization group verification, 2026-10-28
+
+Compared against the repository validation rules. The current four-module diff from `c1dc66e` covers F06, F09, and R04. Independent review found two remaining ordering defects and repaired them in the existing owners. All three tasks in this group are accepted (`[x]`). Eleven tasks remain unstarted, including F01 and F02.
+
+1. **V03, addressed. Boundary input waits for the detached reveal acknowledgement.** The submitted F09 implementation set the cached top state to `true` immediately after sending a reveal. A second input returned `true` while the reply was still delayed. `src/js/shared/workspaceControls.js:47` now retains one pending reveal, returns `false` while it is pending, and updates confirmed state only after success. Newer scroll reports take precedence over an older reply; docking changes invalidate pending ownership. Failure retains the hold and permits retry. The visible panel reports top-state changes through `src/js/filepanel/filePanel.js:70`, including programmatic scrolling and clamping, without waiting for a browser scroll event. Combined mode retains the direct synchronous boolean. The unused replacement setter was removed and each window exposes only its relevant file-panel RPC method. Review confidence: high for these coordination paths. Main uses the latest delivered scroll report; this is asynchronous state coordination, not a claim of simultaneous cross-window DOM reads.
+2. **V04, addressed. Startup retains range changes received before UI subscription.** The submitted R04 implementation cached only the initial snapshot range. A newer live range arriving between that snapshot and UI import was dispatched before the listener existed and left the initial seed stale. `src/js/shared/workspaceSession.js:163` now retains live ranges before dispatching them. The UI seeds from that latest value. A repeated full snapshot also applies Core state before dispatching its range repaint at line 152, so the settle consumer sees the matching selection. Review confidence: high.
+
+Executed checks after repair:
+
+- `node --check` passed for all four changed JS modules.
+- The nearest Core, actions, and diagnostics-contract tests passed, 35 tests. The subsequent `npm run mocha` verification passed all 308 tests.
+- Two disposable Node stdin checks against the real session/controls modules reproduced V03 and V04 before repair and passed afterward. Mocked Tauri/event boundaries covered delayed reveal acknowledgement, one pending reveal under repeated input, newer scroll reports, docking/reopening, rejection/retry, synchronous combined behavior, authority ready-snapshot publication, startup range updates, unchanged-anchor settle delivery, reconnect state-before-range order, empty ranges, and no replica echo. No test suite or harness files were added. These checks do not claim native window or rendered-row coverage.
+- `npm run e2e -- --spec e2e/specs/03-viewer.e2e.js` passed on retry, 7 tests in 1 spec, exit code 0, and `npm run e2e -- --agent --spec e2e/specs/02-navigation.e2e.js --spec e2e/specs/03-viewer.e2e.js` passed both specs (4 navigation tests and 7 viewer tests, exit code 0). They exercised directory navigation, sorting, parent folder ascent, fit, zoom, pan, spread, manhwa toggling/filter teardown, and ICO continuity in the running combined window. The first direct attempt built successfully, then failed during WebDriver session creation with a timeout and `Chrome instance exited`; no test body ran in that attempt. The retry does not establish the earlier failure's cause. Both builds logged the existing non-fatal LNK4098 warning. The passing run logged a mock cleanup warning after deleting its session; the spec and process passed. Logs remain in the ignored `.e2e-viewer-verification.log`, `.e2e-viewer-verification-retry.log`, and `e2e/.agent-logs/` files.
+- This group adds no config keys or persistence writes. Core remains the authority, and split/portable config routing is unchanged. No Rust source changed, so a separate Cargo type/config test run was not required for this group.
+- Validation comparison found no remaining ownership, CSS/HTML, duplicate-helper, stale-reference, or diagnostics-contract issue in this diff. No replay investigation override, architecture/README edits, or commits were introduced. `git diff --check` passed and the synthesis SHA-256 still matches the fixed fingerprint above.
+
+No additional manual check is required for the reviewed synchronization and acknowledgement paths. Detached native-window/rendered-row E2E coverage is not claimed. The existing conditional F10/R05 foreground check remains outside this group.
 
 ## Confirmed gaps
 
@@ -78,7 +96,7 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Evidence and disposition: pending.
 
-3. [~] **F03, P1. Clear preview overrides in every workspace window after Save.**
+3. [x] **F03, P1. Clear preview overrides in every workspace window after Save.**
 
    Source: `.agents/08-synthesis.txt:279`. Owner and anchors: `src/js/main/main.js:323`, `src/js/main/main.js:348`, `src/js/main/main.js:359`, `src/js/options/options.js:562`.
 
@@ -88,9 +106,9 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Verification: Trace Save, local preview cleanup, authoritative reload, snapshot delivery, and theme/CSS application in both windows. Review the possible event orders and persistence writes. Use E2E to compare final styling or later updates only if an ordering or rendering question remains.
 
-   Evidence and disposition: Independent review confidence: high for the Save path. `src/js/main/main.js:327` clears both overrides before the replica guard. Main reloads authoritative config; `src/js/core.js:683` notifies state and emits `quivit-config-loaded`, which `src/js/shared/workspaceSession.js:211` publishes with `configEvent: true`. Replica receipt at `workspaceSession.js:138` reaches `main.js:375` and applies saved values with null overrides. The replica does not independently load or persist config. Disposition: original persistent Save override addressed by review, awaiting user acceptance. The configuration E2E retry passed for the attached Options/theme/Save flow; detached Save remains established by the source trace rather than this spec.
+   Evidence and disposition: Independent review confidence: high for the Save path. `src/js/main/main.js:327` clears both overrides before the replica guard. Main reloads authoritative config; `src/js/core.js:683` notifies state and emits `quivit-config-loaded`, which `src/js/shared/workspaceSession.js:211` publishes with `configEvent: true`. Replica receipt at `workspaceSession.js:138` reaches `main.js:375` and applies saved values with null overrides. The replica does not independently load or persist config. Disposition: fixed, accepted by user. The configuration E2E retry passed for the attached Options/theme/Save flow; detached Save remains established by the source trace rather than this spec.
 
-4. [~] **F04, P2. Give newly detached windows the active ephemeral preview before showing them.**
+4. [x] **F04, P2. Give newly detached windows the active ephemeral preview before showing them.**
 
    Source: `.agents/08-synthesis.txt:301`. Owner and anchors: `src-tauri/src/windows.rs:109`, `src-tauri/src/windows.rs:134`, `src/js/main/workspaceBoot.js:1`, `src/js/shared/workspaceSession.js:114`, `src/js/main/main.js:385`. Related preview helpers: `src/js/shared/configPreview.js:18`, `src/js/shellBackground.js:1`.
 
@@ -100,7 +118,7 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Verification: Review the full hidden-window startup path through preview transfer, style/background application, and `show_window`. Trace Save/cancel cleanup and all disk/localStorage writes. Use E2E if initial styling or ordering remains uncertain. Eventual matching colors alone do not establish first-show behavior; retain the conditional native flash observation only if review and available E2E leave that question open.
 
-   Evidence and disposition: Review confidence: high after repairing V01/V02. `src/js/shared/workspaceSession.js:120` carries initial preview data and line 133 records it without rendering. `src/js/main/main.js:294` initializes preview overrides, then the config listener at line 375 applies the effective theme/CSS. Before show, `main.js:404` awaits `syncShellBackground()`, whose implementation at `src/js/shellBackground.js:38` waits for native theme and previous background writes before applying the current CSS color. `src-tauri/src/windows.rs:75` no longer overwrites backgrounds in other windows during theme updates. Removing the preview localStorage write in `src/js/options/options.js:464` remains intact. Focused checks, syntax, Rust type checking, and 308 Mocha tests passed; the configuration E2E retry passed both attached-window tests. Disposition: V01/V02 addressed in code, awaiting user acceptance. No detached-preview E2E or observed first-frame result is claimed.
+   Evidence and disposition: Review confidence: high after repairing V01/V02. `src/js/shared/workspaceSession.js:120` carries initial preview data and line 133 records it without rendering. `src/js/main/main.js:294` initializes preview overrides, then the config listener at line 375 applies the effective theme/CSS. Before show, `main.js:404` awaits `syncShellBackground()`, whose implementation at `src/js/shellBackground.js:38` waits for native theme and previous background writes before applying the current CSS color. `src-tauri/src/windows.rs:75` no longer overwrites backgrounds in other windows during theme updates. Removing the preview localStorage write in `src/js/options/options.js:464` remains intact. Focused checks, syntax, Rust type checking, and 308 Mocha tests passed; the configuration E2E retry passed both attached-window tests. Disposition: fixed, accepted by user. No detached-preview E2E or observed first-frame result is claimed.
 
 5. [ ] **F05, P2. Use one metadata producer and reject stale asynchronous results.**
 
@@ -114,7 +132,7 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Evidence and disposition: pending.
 
-6. [ ] **F06, P2. Deliver strip settle updates to the detached File List and Favorites.**
+6. [x] **F06, P2. Deliver strip settle updates to the detached File List and Favorites.**
 
    Source: `.agents/08-synthesis.txt:344`. Owner and anchors: `src/js/viewer/manhwaStrip.js:1858`, `src/js/shared/workspaceSession.js:201`, `src/js/shared/workspaceControls.js:9`, `src/js/shared/workspaceControls.js:69`, `src/js/filepanel/filePanel.js:3077`.
 
@@ -124,7 +142,7 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Verification: Trace settle emission, visible-range publication, forwarding, and the selection/Favorites consumers in delivery order. Include a changed visible range with an unchanged anchor. An event name in the forward list is insufficient without tracing its data and consumer. Use scroll/settle E2E only for unresolved ordering or rendering behavior.
 
-   Evidence and disposition: pending.
+   Evidence and disposition: Independent review confidence: high. `src/js/shared/workspaceControls.js:25` stores the delivered range before dispatching `quivit-manhwa-settle` on the replica. `src/js/filepanel/filePanel.js:3091` updates selection and Favorites from Core and that range, including a range change with an unchanged anchor. Anchor changes also reach the panel through Core snapshots. Main publishes range after its strip state listener and on settle; the viewport-owner guard prevents replica echoes. Repeated full snapshots now apply state before notifying the range consumer. Focused module checks and 308 Mocha tests passed; their boundaries and the E2E result are recorded in the group verification above. Disposition: fixed, accepted by user.
 
 7. [ ] **F07, P2. Synchronize the active Library provider with its visible panel.**
 
@@ -150,7 +168,7 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Evidence and disposition: pending.
 
-9. [ ] **F09, P2. Reveal the parent row in the visible File List and preserve boundary holds.**
+9. [x] **F09, P2. Reveal the parent row in the visible File List and preserve boundary holds.**
 
    Source: `.agents/08-synthesis.txt:404`. Owner and anchors: `src/js/main/main.js:259`, `src/js/shared/workspaceControls.js:32`, `src/js/shared/workspaceControls.js:62`, `src/js/filepanel/filePanel.js:3097`, `src/js/viewer/manhwaStrip.js:2376`, `src/js/viewer/manhwaStrip.js:3130`, `src/js/viewer/viewer.js:31`.
 
@@ -160,7 +178,7 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Verification: Review the boolean contract and all pan, navigation, and jump callers for initially scrolled and already-at-top lists. Trace delayed acknowledgement, repeated input, and docking changes to establish correct boundary holds. Use E2E with delayed replies only if that state/ordering argument remains incomplete.
 
-   Evidence and disposition: pending.
+   Evidence and disposition: Independent review confidence: high after V03 repair. `src/js/main/main.js:262` routes the strip reveal callback through the workspace owner. `src/js/shared/workspaceControls.js:47` preserves the combined synchronous return and routes detached work to the visible panel. An unknown or scrolled-down remote state returns `false`; repeated input stays held while one reveal awaits acknowledgement. Success confirms the top only when no newer scroll report supersedes it. Docking invalidates old pending ownership, and rejection does not release the hold. `src/js/filepanel/filePanel.js:3111` remains the sole scroll writer for reveal; `reportScrollTop()` also reports programmatic selection/clamp changes. Pan, page, and jump callers retain their boolean contract, with delayed detached input conservatively held. Focused module checks and 308 Mocha tests passed. Evidence is asynchronous coordination using the latest delivered state, not a synchronous read of remote DOM. Disposition: fixed, accepted by user.
 
 10. [ ] **F10, P2. Route prompt focus to the owner and restore the initiating window.**
 
@@ -208,7 +226,7 @@ Review each risk to confirm or rule out its causal path, recording confidence an
 
     Evidence and disposition: pending.
 
-14. [ ] **R04, P3. Seed the initial visible strip range without waiting for another gesture.**
+14. [x] **R04, P3. Seed the initial visible strip range without waiting for another gesture.**
 
     Source: `.agents/08-synthesis.txt:478`. Anchors: `src/js/shared/workspaceControls.js:7`, `src/js/shared/workspaceControls.js:20`, `src/js/shared/workspaceControls.js:65`, `src/js/shared/workspaceSession.js:114`.
 
@@ -216,7 +234,7 @@ Review each risk to confirm or rule out its causal path, recording confidence an
 
     Acceptance and verification: Trace initial range availability, listener registration, and first repaint to establish that visible-range classes and Favorites markers match main before another gesture. Review repeated detach/recombine and delayed ready delivery. Use E2E only for any remaining initialization-order question. No manual initial-highlight check.
 
-    Evidence and disposition: pending.
+    Evidence and disposition: Independent review confidence: high after V04 repair. Main registers the current viewport range provider at `src/js/shared/workspaceControls.js:21`; a ready request includes it in the full snapshot at `src/js/shared/workspaceSession.js:133`. Replica receipt caches the seed before UI import. Live range receipt at line 163 now replaces that seed even before controls subscribe. `createWorkspaceControls` reads the latest cached range at line 13 before file-panel initialization and its first render. Repeated full snapshots apply Core state before range notification. Empty ranges clear old data, and fresh detached documents obtain a new ready snapshot. Focused module checks and 308 Mocha tests passed; rendered first-frame behavior was reviewed rather than observed. Disposition: fixed, accepted by user.
 
 15. [ ] **R05, P3. Establish native foreground behavior for URL and file/folder dialogs.**
 
@@ -228,7 +246,7 @@ Review each risk to confirm or rule out its causal path, recording confidence an
 
     Evidence and disposition: pending.
 
-16. [~] **R06, P2. Finish preview reversion before native Options close destroys its webview.**
+16. [x] **R06, P2. Finish preview reversion before native Options close destroys its webview.**
 
     Source: `.agents/08-synthesis.txt:492`. Anchors: `src/js/options/options.js:338`, `src/js/options/options.js:346`, `src/js/options/options.js:361`, `src/js/shared/configPreview.js:10`, `src-tauri/src/windows.rs:202`.
 
@@ -236,7 +254,7 @@ Review each risk to confirm or rule out its causal path, recording confidence an
 
     Acceptance and verification: Trace native close separately from the Close button helper. Establish that reversion precedes destruction for unsaved previews and that saved/forced close cannot recurse, hang, or double-destroy. Use delayed-delivery E2E if lifecycle semantics remain uncertain. No repeated manual X-button race test.
 
-    Evidence and disposition: Independent review confidence: high that the original single-close premise is ruled out. Tauri 2.11.5 is pinned at `src-tauri/Cargo.lock:4643`. Its installed `src/manager/window.rs:170` prevents native default close when a JS close-request listener exists. Installed `@tauri-apps/api` 2.11.1 at `node_modules/@tauri-apps/api/window.js:1632` awaits that callback before destroying the window. Both `a473a5c` and `35f38e9` already awaited `revertPreviewChanges()` in that callback. The current handler at `src/js/options/options.js:365` additionally prevents default and closes again after reversion. A second close can still encounter `!previewing` while reversion is in progress, but this also existed in both baseline versions and is excluded from findings on this diff. Disposition: original risk ruled out by dependency/source review, awaiting user acceptance of that disposition. No manual single-X check is required on the original premise; the passing configuration E2E spec uses the Close button and does not exercise this native close handler.
+    Evidence and disposition: Independent review confidence: high that the original single-close premise is ruled out. Tauri 2.11.5 is pinned at `src-tauri/Cargo.lock:4643`. Its installed `src/manager/window.rs:170` prevents native default close when a JS close-request listener exists. Installed `@tauri-apps/api` 2.11.1 at `node_modules/@tauri-apps/api/window.js:1632` awaits that callback before destroying the window. Both `a473a5c` and `35f38e9` already awaited `revertPreviewChanges()` in that callback. The current handler at `src/js/options/options.js:365` additionally prevents default and closes again after reversion. A second close can still encounter `!previewing` while reversion is in progress, but this also existed in both baseline versions and is excluded from findings on this diff. Disposition: ruled out by dependency/source review, accepted by user. No manual single-X check is required on the original premise; the passing configuration E2E spec uses the Close button and does not exercise this native close handler.
 
 17. [ ] **R07, P3. Restore the minimized detached File List on single-instance handoff.**
 

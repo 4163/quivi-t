@@ -64,6 +64,15 @@ let _getVisibleImageIndices = () => [];
 let _alignListItemTop = null;
 let _alignListItemBottom = null;
 let _pageStrip = null;
+let _onScrollTopChanged = null;
+let _lastReportedAtTop = null;
+
+function reportScrollTop() {
+  const isAtTop = (fileListUl?.scrollTop ?? 0) === 0;
+  if (isAtTop === _lastReportedAtTop) return;
+  _lastReportedAtTop = isAtTop;
+  _onScrollTopChanged?.(isAtTop);
+}
 
 function _firstImageIndex(list) {
   if (!list || !list.length) return -1;
@@ -2093,6 +2102,7 @@ function renderVisibleSlice() {
     fileListUl.scrollTop = maxScroll;
     scrollTop = maxScroll;
   }
+  reportScrollTop();
 
   const rawStart = Math.min(Math.max(0, total - 1), Math.floor(scrollTop / ROW_HEIGHT));
   const visibleCount = Math.ceil(clientH / ROW_HEIGHT);
@@ -2508,6 +2518,7 @@ export function renderFilePanel(state) {
   if (dirChanged && fileListUl) {
     fileListUl.scrollTop = 0;
     lastScrollTop = 0;
+    reportScrollTop();
   }
 
   lastRenderedList = state.list;
@@ -2558,6 +2569,8 @@ export function initFilePanel(deps) {
   if (deps.alignListItemTop) _alignListItemTop = deps.alignListItemTop;
   if (deps.alignListItemBottom) _alignListItemBottom = deps.alignListItemBottom;
   if (deps.pageStrip) _pageStrip = deps.pageStrip;
+  if (deps.onScrollTopChanged) _onScrollTopChanged = deps.onScrollTopChanged;
+  reportScrollTop();
 
   migrateNativeIconStorage();
   ensureSpacer();
@@ -2618,6 +2631,7 @@ export function initFilePanel(deps) {
     const st = fileListUl.scrollTop;
     scrollDirection = st >= lastScrollTop ? 1 : -1;
     lastScrollTop = st;
+    reportScrollTop();
     const state = Core.getState();
     if (state.fileListViewMode === 'thumbnail') {
       isScrolling = true;
@@ -3098,6 +3112,7 @@ export function revealListTop() {
   if (!fileListUl) return true;
   const wasAtTop = fileListUl.scrollTop === 0;
   fileListUl.scrollTop = 0;
+  reportScrollTop();
   return wasAtTop;
 }
 

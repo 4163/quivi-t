@@ -30,6 +30,17 @@ export function getSessionPreview() {
   return sessionPreview;
 }
 
+let stripVisibleIndicesProvider = null;
+let sessionStripVisibleIndices = null;
+
+export function registerStripVisibleIndicesProvider(fn) {
+  stripVisibleIndicesProvider = fn;
+}
+
+export function getSessionStripVisibleIndices() {
+  return sessionStripVisibleIndices;
+}
+
 export function listenWorkspaceEvent(event, handler, { owner = ownLabel } = {}) {
   if (ownLabel !== owner) return Promise.resolve(null);
   return window.__TAURI__.event.listen(event, handler, { target: owner });
@@ -117,7 +128,10 @@ function publish(target, full = false, configEvent = false) {
   if (!full && !configEvent && configJson === previous.configJson) delete snapshot.config;
   peers.set(target, { list: state.list, src: state.src, configJson });
   const message = { kind: 'snapshot', snapshot, configEvent };
-  if (full) message.preview = previewStateProvider?.() || null;
+  if (full) {
+    message.preview = previewStateProvider?.() || null;
+    message.stripVisibleIndices = stripVisibleIndicesProvider?.() || null;
+  }
   send(target, message).catch(console.error);
 }
 
@@ -131,7 +145,13 @@ async function receive(message) {
     const previousConfig = Core.getState().config;
     if (message.snapshot.config) rememberConfig(message.snapshot.config);
     if (message.preview) sessionPreview = message.preview;
+    if (message.stripVisibleIndices) {
+      sessionStripVisibleIndices = message.stripVisibleIndices;
+    }
     Core.receiveSnapshot(message.snapshot);
+    if (message.stripVisibleIndices && !receiveInitial) {
+      window.dispatchEvent(new CustomEvent('quivit-workspace-strip-info', { detail: message.stripVisibleIndices }));
+    }
     if (message.snapshot.config && previousConfig?.frontend_data?.favorites !== message.snapshot.config.frontend_data?.favorites) {
       window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));
     }
@@ -140,6 +160,7 @@ async function receive(message) {
     return;
   }
   if (message.kind === 'event' && workspaceSurface && message.source === 'main') {
+    if (message.name === 'quivit-workspace-strip-info') sessionStripVisibleIndices = message.detail || [];
     window.dispatchEvent(new CustomEvent(message.name, { detail: message.detail }));
     return;
   }
