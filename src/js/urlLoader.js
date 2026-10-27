@@ -30,18 +30,7 @@
 import { BoundedMap } from './services/cache.js';
 import { applySort } from './services/sorting.js';
 import { DirectoryPrefs } from './directoryPrefs.js';
-import { getActiveProvider, setActiveProvider, hasExplicitActiveChoice } from './filepanel/libraryStore.js';
-
-function _autoActivateImportProvider(providerDir) {
-  if (!providerDir || typeof providerDir !== 'string') return;
-  try {
-    const current = getActiveProvider();
-    // All latches only on an explicit click. Until then every import takes
-    // the filter, including the first one.
-    if (current === null && hasExplicitActiveChoice()) return;
-    if (current !== providerDir) setActiveProvider(providerDir);
-  } catch {}
-}
+import { activateImportProvider as _autoActivateImportProvider } from './filepanel/libraryStore.js';
 
 const EXTRACTOR_MODULE_CACHE_CAPACITY = 20;
 export const EXTRACTOR_MANIFEST_VERSION = 1;
@@ -268,6 +257,11 @@ import { expandSvgEntities } from './shared/svgUtils.js';
 
 export async function downloadSanitizedSvg(url, destPath, headers) {
   const text = await fetchRemoteText(url, headers);
+  const clean = sanitizeSvgDocument(text);
+  return await window.__TAURI__.core.invoke('write_text_file', { path: destPath, content: clean });
+}
+
+export function sanitizeSvgDocument(text) {
   // Full-text gate: the ranged sniff can fail open, but these bytes are
   // already in hand, so a document here refuses the import outright.
   // Mirrors the first-tag rule in the Misc extractor.
@@ -277,13 +271,13 @@ export async function downloadSanitizedSvg(url, destPath, headers) {
     .replace(/<!doctype(?:[^[\]>]|\[[^\]]*\])*>/gi, '');
   const first = stripped.match(/<\s*([a-zA-Z][\w.-]*)/);
   if (!first || first[1].toLowerCase() !== 'svg') {
-    throw new Error(`URL serves a document page, not an image file: ${url}`);
+    throw new Error('Content is a document page, not an SVG image');
   }
   const clean = sanitizeSvgText(text);
   if (!clean || !clean.trim()) {
     throw new Error('SVG sanitizer emptied the document');
   }
-  return await window.__TAURI__.core.invoke('write_text_file', { path: destPath, content: clean });
+  return clean;
 }
 
 export async function cancelDownload() {

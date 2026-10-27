@@ -14,6 +14,14 @@ let preFullscreenState = null;
 const menubarEl = document.getElementById('menubar');
 const statusbarEl = document.getElementById('statusbar');
 
+export function initImportActivity(importActions) {
+  importActions.subscribe((activity) => {
+    document.body.classList.toggle('is-importing-url', activity.importing);
+    window.dispatchEvent(new CustomEvent('quivit-import-status', { detail: activity }));
+    if (activity.importing) window.dispatchEvent(new CustomEvent('quivit-reset-held-keys'));
+  });
+}
+
 // Visibility.
 
 export function setMenuBarVisible(visible, { persist = false } = {}) {

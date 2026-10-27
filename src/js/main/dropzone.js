@@ -1,116 +1,102 @@
-let dropMessageTimer = null;
-const DEFAULT_DROP_MESSAGE = 'Drop files here, or click to open a folder';
-let _dropOverlay = null;
+const DEFAULT_DROP_MESSAGE = 'Drop images, links, files, or folders here';
+const FEEDBACK_DURATION_MS = 3000;
 
+export function initDropZone({ dropOverlay, FsUtils, Core, importActions, isUnmappedSelection, onDropAccepted }) {
+  if (!dropOverlay) return;
+  const text = dropOverlay.querySelector('.drop-hint p');
+  let hovering = false;
+  let importing = false;
+  let feedback = false;
+  let feedbackTimer = null;
+  let message = DEFAULT_DROP_MESSAGE;
 
-
-function showDropMessage(message, tone = 'default') {
-  if (!_dropOverlay) return;
-  const textEl = _dropOverlay.querySelector('.drop-hint p');
-  if (!textEl) return;
-  clearTimeout(dropMessageTimer);
-  textEl.textContent = message;
-  _dropOverlay.classList.toggle('unsupported', tone === 'error');
-  if (tone === 'error') {
-    dropMessageTimer = setTimeout(() => {
-      textEl.textContent = DEFAULT_DROP_MESSAGE;
-      _dropOverlay.classList.remove('unsupported');
-    }, 1800);
-  }
-}
-
-function resetDropMessage() {
-  showDropMessage(DEFAULT_DROP_MESSAGE);
-}
-
-async function loadDroppedPath(path, FsUtils) {
-  if (!path) return;
-  if (window.__TAURI__) {
-    const kind = await window.__TAURI__.core.invoke('get_path_kind', { path }).catch(() => 'missing');
-    if (kind === 'file') {
-      const name = FsUtils.basename(path);
-      if (!FsUtils.isImage(name) && !FsUtils.isArchive(name)) {
-        showDropMessage('File type not supported', 'error');
-        return;
-      }
-    } else if (kind === 'missing') {
-      showDropMessage('Path not found', 'error');
-      return;
-    }
-  } else {
-    const name = FsUtils.basename(path);
-    if (name.includes('.') && !FsUtils.isImage(name) && !FsUtils.isArchive(name)) {
-      showDropMessage('File type not supported', 'error');
-      return;
-    }
+  function render() {
+    const state = Core.getState();
+    const blocked = ['password_required', 'password_incorrect'].includes(state.archiveEncryption);
+    const empty = state.mode === 'empty' || !state.src || isUnmappedSelection(state);
+    dropOverlay.classList.toggle('active', !blocked && empty);
+    dropOverlay.classList.toggle('drag-over', hovering);
+    if (text) text.textContent = message;
   }
 
-  FsUtils.loadFile(path, { preferInitial: true, restoreLastImage: false });
-}
+  function showError(err) {
+    clearTimeout(feedbackTimer);
+    feedback = true;
+    message = typeof err === 'string' ? err : err?.message || 'Unable to open dropped content';
+    dropOverlay.classList.add('unsupported');
+    render();
+    feedbackTimer = setTimeout(() => {
+      feedback = false;
+      dropOverlay.classList.remove('unsupported');
+      message = DEFAULT_DROP_MESSAGE;
+      render();
+    }, FEEDBACK_DURATION_MS);
+  }
 
-export function initDropZone({ dropOverlay, FsUtils }) {
-  _dropOverlay = dropOverlay;
+  importActions.subscribe((activity) => {
+    importing = activity.importing;
+    hovering = false;
+    feedback = false;
+    clearTimeout(feedbackTimer);
+    dropOverlay.classList.remove('unsupported');
+    message = importing ? 'Loading...' : DEFAULT_DROP_MESSAGE;
+    render();
+  });
+  Core.onStateChange(render);
+  render();
 
-  if (!_dropOverlay) return;
-
-  _dropOverlay.addEventListener('mousedown', (e) => {
+  dropOverlay.addEventListener('mousedown', (e) => e.stopPropagation());
+  dropOverlay.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (!importing) FsUtils.openDirectoryDialog();
   });
 
-  _dropOverlay.addEventListener('click', (e) => {
-    e.stopPropagation();
-    FsUtils.openDirectoryDialog();
-  });
+  function onNativeDrop(event) {
+    const { phase, dropId, message: error } = event.payload || {};
+    if (phase === 'entered' || phase === 'left') {
+      hovering = phase === 'entered';
+      if (!importing && !feedback) message = hovering ? 'Drop to open' : DEFAULT_DROP_MESSAGE;
+      render();
+    } else if (phase === 'accepted') {
+      hovering = false;
+      try {
+        if (importActions.acceptDrop(dropId)) onDropAccepted();
+      } catch (err) { showError(err); }
+    } else if (phase === 'ready') {
+      importActions.completeDrop(dropId).catch(showError);
+    } else if (phase === 'failed' && importActions.failDrop(dropId)) {
+      showError(error);
+    }
+  }
+
+  // Prevent WebView navigation even when the native target rejects a payload.
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => e.preventDefault());
 
   if (window.__TAURI__) {
     const { listen } = window.__TAURI__.event;
-
-    listen('tauri://drag-enter', () => {
-      _dropOverlay.classList.add('drag-over');
-      showDropMessage('Drop to open');
-    });
-    listen('tauri://drag-leave', () => {
-      _dropOverlay.classList.remove('drag-over');
-      resetDropMessage();
-    });
-    listen('tauri://drag-drop', (e) => {
-      _dropOverlay.classList.remove('drag-over');
-      resetDropMessage();
-      const paths = e.payload.paths;
-      if (paths && paths.length > 0) {
-        loadDroppedPath(paths[0], FsUtils).catch(err => {
-          console.error('[Drop] Failed to open path:', err);
-          showDropMessage('Unable to open file', 'error');
-        });
-      }
+    if (navigator.userAgent.includes('Windows')) {
+      listen('quivit-drop', onNativeDrop)
+        .then(() => window.__TAURI__.core.invoke('enable_native_drop'))
+        .catch(showError);
+      return;
+    }
+    listen('tauri://drag-enter', () => { hovering = true; render(); });
+    listen('tauri://drag-leave', () => { hovering = false; render(); });
+    listen('tauri://drag-drop', (event) => {
+      hovering = false;
+      const path = event.payload?.paths?.[0];
+      if (path) importActions.openPath(path).catch(showError);
+      render();
     });
     return;
   }
 
-  window.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    _dropOverlay.classList.add('drag-over');
-    showDropMessage('Drop to open');
-  });
-
-  window.addEventListener('dragleave', (e) => {
-    if (e.relatedTarget === null) {
-      _dropOverlay.classList.remove('drag-over');
-      resetDropMessage();
-    }
-  });
-
   window.addEventListener('drop', (e) => {
-    e.preventDefault();
-    _dropOverlay.classList.remove('drag-over');
-    resetDropMessage();
-
-    const file = e.dataTransfer.getData('text/plain');
-    if (file) {
-      loadDroppedPath(file, FsUtils).catch(err => {
-        console.error('[Drop] Failed to open path:', err);
-        showDropMessage('Unable to open file', 'error');
-      });
-    }
+    const value = e.dataTransfer?.getData('text/uri-list') || e.dataTransfer?.getData('text/plain');
+    const first = value?.split(/\r?\n/).find((line) => line.trim() && !line.startsWith('#'))?.trim();
+    if (!first) return;
+    const operation = /^https?:\/\//i.test(first) ? importActions.openUrl(first) : importActions.openPath(first);
+    operation.catch(showError);
   });
 }

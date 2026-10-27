@@ -3,6 +3,7 @@ pub mod commands;
 pub mod config;
 pub mod formats;
 pub mod ico;
+pub mod image_import;
 pub mod models;
 pub mod platform;
 pub mod protocol;
@@ -32,7 +33,10 @@ pub fn run() {
             .unwrap_or(true)
     };
     let cache_mb = config.archive_cache_mb.unwrap_or(128);
-    eprintln!("[QuiviT] config: {}", crate::config::describe_config_source());
+    eprintln!(
+        "[QuiviT] config: {}",
+        crate::config::describe_config_source()
+    );
 
     let mut builder = tauri::Builder::default();
 
@@ -66,7 +70,7 @@ pub fn run() {
             // Build the main window in Rust, not tauri.conf.json. That keeps
             // window setup in one path and applies the shell background before
             // first paint.
-            let main_window = tauri::WebviewWindowBuilder::new(
+            let main_builder = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
                 tauri::WebviewUrl::App("index.html".into()),
@@ -76,9 +80,17 @@ pub fn run() {
             .min_inner_size(MAIN_MIN_W, MAIN_MIN_H)
             .visible(false)
             .devtools(true)
-            .general_autofill_enabled(false)
-            .build()
-            .expect("failed to build main window");
+            .general_autofill_enabled(false);
+            #[cfg(windows)]
+            let main_builder = main_builder.disable_drag_drop_handler();
+            let main_window = main_builder.build().expect("failed to build main window");
+
+            #[cfg(windows)]
+            platform::drop::install(&main_window).map_err(std::io::Error::other)?;
+            #[cfg(windows)]
+            std::thread::spawn(|| {
+                let _ = commands::library::cleanup_abandoned_captures();
+            });
 
             windows::apply_shell_background(&main_window, &config);
             platform::icons::warmup();
@@ -153,11 +165,23 @@ pub fn run() {
         cancel_download,
         verify_image_magic,
         scan_container_max_width,
-        cancel_width_scan
+        cancel_width_scan,
+        #[cfg(windows)]
+        enable_native_drop,
+        #[cfg(windows)]
+        describe_drop,
+        #[cfg(windows)]
+        release_drop,
+        #[cfg(windows)]
+        save_dropped_image
     ]);
 
     crate::protocol::register_quivit_protocol(builder)
         .on_window_event(|window, event| {
+            #[cfg(windows)]
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                platform::drop::shutdown();
+            }
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 // The main viewer owns the app lifetime. Closing it also closes
                 // secondary windows so Tauri exits cleanly.
