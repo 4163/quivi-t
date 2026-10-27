@@ -15,7 +15,7 @@
   --hover-bg:      #ece4d4;
   --menu-bg:       #fbf8f2;
   --menu-shadow:   0 2px 8px rgba(62,47,35,0.18);
-  --drag-resize:   #deb76c;
+  --accent-gold:   #deb76c; /* Drag-resize handles and file list search highlight */
   --checker-a:     #ded2bd;
   --checker-b:     #cabfa8;
   --grill-bg:      rgba(200, 215, 175, 0.45);

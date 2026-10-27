@@ -131,6 +131,10 @@ let filePanel = null;
 let breadcrumbEl = null;
 let fileListUl = null;
 let resizeHandle = null;
+let fileSearchInput = null;
+
+const FILE_SEARCH_IGNORE_CASE = true;
+let fileSearchQuery = '';
 
 let isResizingPanel = false;
 let resizingCol = null;
@@ -1834,12 +1838,32 @@ function initDomPool() {
   freePool = [];
 }
 
+function normalizeFileSearchText(text) {
+  return FILE_SEARCH_IGNORE_CASE ? text.toLowerCase() : text;
+}
+
+function updateSearchMatch(li, item) {
+  const matches = fileSearchQuery.length > 0 && item && !item.is_parent
+    && normalizeFileSearchText(item.displayName || item.name || '').includes(fileSearchQuery);
+  li.classList.toggle('search-match', !!matches);
+}
+
+function clearFileSearch() {
+  if (fileSearchInput) fileSearchInput.value = '';
+  fileSearchQuery = '';
+  const list = Core.getState().list;
+  for (const [index, li] of activeRows) {
+    updateSearchMatch(li, list?.[index]);
+  }
+}
+
 function updateEntry(li, item, index) {
   if (!li || !item) return;
   // Restore visibility before src assignment so animated SVGs start SMIL in visible context (disk SVG only)
   li.style.top = `${index * ROW_HEIGHT}px`;
   li.style.display = '';
   li.dataset.index = index;
+  updateSearchMatch(li, item);
   const state = Core.getState();
   const downloadStatus = getGalleryDownloadStatus(item.path);
   const pendingDownload = isPendingDownload(item, downloadStatus, state.mode === 'archive');
@@ -2339,7 +2363,7 @@ function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) 
     }
   }
 
-  if (wasFocused) {
+  if (wasFocused && document.activeElement !== fileSearchInput) {
     fileListUl?.focus({ preventScroll: true });
   }
 }
@@ -2502,7 +2526,7 @@ export function renderFilePanel(state) {
 
   if (state.index >= 0) {
     updateSelection(state.index, forceFocus, wasFocused);
-  } else if (wasFocused) {
+  } else if (wasFocused && document.activeElement !== fileSearchInput) {
     fileListUl?.focus({ preventScroll: true });
   }
 }
@@ -2534,6 +2558,58 @@ export function initFilePanel(deps) {
 
   migrateNativeIconStorage();
   ensureSpacer();
+
+  fileSearchInput = document.getElementById('file-panel-search');
+  const onSearchChange = () => {
+    fileSearchQuery = normalizeFileSearchText(fileSearchInput?.value || '');
+    const list = Core.getState().list;
+    for (const [index, li] of activeRows) {
+      updateSearchMatch(li, list?.[index]);
+    }
+  };
+  fileSearchInput?.addEventListener('input', onSearchChange);
+
+  fileSearchInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      clearFileSearch();
+      fileListUl?.focus({ preventScroll: true });
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      fileListUl?.focus({ preventScroll: true });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!fileSearchQuery) return;
+      const state = Core.getState();
+      const list = state.list;
+      if (!list || !list.length) return;
+
+      const matches = [];
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (item && !item.is_parent && normalizeFileSearchText(item.displayName || item.name || '').includes(fileSearchQuery)) {
+          matches.push(i);
+        }
+      }
+      if (matches.length === 0) return;
+
+      let nextIdx;
+      if (e.shiftKey) {
+        const prevMatches = matches.filter(idx => idx < state.index);
+        nextIdx = prevMatches.length > 0 ? prevMatches[prevMatches.length - 1] : matches[matches.length - 1];
+      } else {
+        nextIdx = matches.find(idx => idx > state.index);
+        if (nextIdx === undefined) {
+          nextIdx = matches[0];
+        }
+      }
+      Core.selectIndex(nextIdx);
+      updateSelection(nextIdx, true, false);
+    }
+  });
 
   fileListUl.addEventListener('scroll', () => {
     const st = fileListUl.scrollTop;
@@ -2759,6 +2835,14 @@ export function initFilePanel(deps) {
 
   // File-list keyboard navigation for virtualized list.
   fileListUl.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+      e.preventDefault();
+      e.stopPropagation();
+      fileSearchInput?.focus();
+      fileSearchInput?.select();
+      return;
+    }
+
     if (e.altKey || e.ctrlKey || e.metaKey) return;
 
     const state = Core.getState();
@@ -2861,6 +2945,10 @@ export function initFilePanel(deps) {
       case 'Escape':
         e.preventDefault();
         e.stopPropagation();
+        if (fileSearchQuery) {
+          clearFileSearch();
+          return;
+        }
         panelKeyboardActive = false;
         Core.selectIndex(-1);
         if (document.activeElement && fileListUl.contains(document.activeElement)) {

@@ -22,7 +22,7 @@
   --hover-bg: #e8f0f8;
   --menu-bg: #ffffff;
   --menu-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
-  --drag-resize: #deb76c;
+  --accent-gold: #deb76c; /* Drag-resize handles and file list search highlight */
   --grill-bg: rgba(120, 180, 160, 0.4);
   --grill-lines: rgba(20, 90, 75, 0.65);
   --grill-border: rgba(20, 90, 75, 0.7);

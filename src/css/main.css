@@ -748,6 +748,33 @@ li:hover>.favorite-remove,
   line-height: 1.35;
 }
 
+.file-panel-search {
+  flex-shrink: 0;
+  display: block;
+  width: 100%;
+  padding: 4.078px 8px;
+  font-size: var(--fs-11);
+  line-height: 1.35;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface-alt);
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.file-panel-search:focus {
+  background: var(--field-bg);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.file-panel-search::placeholder {
+  color: var(--text-muted);
+  font-size: var(--fs-11);
+}
+
 .file-panel-actions {
   display: flex;
   justify-content: space-around;
@@ -1127,7 +1154,7 @@ li:hover>.favorite-remove,
 
 .col-resizer:hover,
 .col-resizer.dragging {
-  background: var(--drag-resize);
+  background: var(--accent-gold);
 }
 
 .sort-icon {
@@ -1319,6 +1346,25 @@ li:hover>.favorite-remove,
 #favorites-list li.in-view:not(.selected),
 .library-provider-list li.in-view:not(.selected) {
   background: color-mix(in srgb, var(--selected-bg) 40%, transparent);
+}
+
+#file-list li.search-match {
+  box-shadow: inset 3px 0 0 var(--accent-gold);
+  background: color-mix(in srgb, var(--accent-gold) 20%, transparent);
+}
+
+#file-list li.search-match:hover {
+  background: color-mix(in srgb, var(--accent-gold) 28%, var(--hover-bg));
+}
+
+#file-list li.search-match.selected {
+  box-shadow: inset 3px 0 0 var(--accent-gold);
+  background: color-mix(in srgb, var(--accent-gold) 25%, var(--selected-bg));
+}
+
+#file-list li.search-match.in-view:not(.selected) {
+  box-shadow: inset 3px 0 0 var(--accent-gold);
+  background: color-mix(in srgb, var(--accent-gold) 22%, color-mix(in srgb, var(--selected-bg) 40%, transparent));
 }
 
 /* The list owns keyboard focus. */
@@ -1619,7 +1665,7 @@ li:hover>.favorite-remove,
 
 #panel-resize-handle:hover,
 #panel-resize-handle.dragging {
-  background: var(--drag-resize);
+  background: var(--accent-gold);
   opacity: 0.5;
 }
 
