@@ -11,7 +11,7 @@
 *Items deliberately deferred until after the initial release. Low priority by design: do not start without re-validating the need.*
 
 ### File List and Viewport Relocation & Detach
-- Add menubar submenus under `View` for `File List >` and `Viewport >` with options `Left`, `Right`, `Top`, `Bottom`, and `Detached`.
+- Add menubar submenus after `View` for `Windows` `File List >` and `Viewport >` with options `Left`, `Right`, `Top`, `Bottom`, and `Detached`.
 - Positions default to `Left` (File List) and `Right` (Viewport).
 - Positions are mutually exclusive: selecting a position for one element automatically updates the other to maintain a balanced layout.
 - `Detached` mode opens a dedicated Tauri window for the selected element (falling back to the `window.open()` API for the planned web build), avoiding third-party docking or drag-and-drop JS libraries.
