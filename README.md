@@ -21,7 +21,7 @@ A lightweight standalone (performance-first*) port of Quivi, built with Tauri us
 - **Archives**: Read compressed files directly as folders, including password-protected archives and archive metadata.
 - **Navigation**: Browse images, folders, archives, and drives with keyboard or mouse, including parent-folder and session-only Back/Forward history.
 - **Favorites**: Save images, folders and archives into named favorite lists for future use.
-- **Web import**: Import manga and galleries from supported sites for offline reading (see [Supported sites](#supported-sites)).
+- **Web import**: Import manga and galleries from supported sites for offline reading (see [Supported sites](#supported-sites)), or drop images and links from a browser.
 - **Viewer controls**: Zoom, pan, rotate, flip, change fit modes, pan with the scroll wheel, and zoom with `Mod`+wheel. Cursor auto-hides after inactivity over the viewport.
 - **Manga spread**: Two-page reading mode for landscape scans with RTL/LTR reading order and half-width fit.
 - **Manhwa view**: Continuous vertical strip reading mode for webtoons and long-strip comics.
@@ -30,7 +30,7 @@ A lightweight standalone (performance-first*) port of Quivi, built with Tauri us
 - **Filters**: WebGL filters for Anime4K (Mode A Fast/HQ), CRT (scanlines, barrel distortion, chromatic aberration), Phosphor (dot-matrix), or Scanlines.
 - **Shortcuts**: Customize keyboard combos, mouse buttons, double-click gestures, and scroll-wheel actions.
 - **Persistent state**: Persists favorites lists, URL Library content and location, single-instance handoff, optional auto-open behavior, and the last opened image.
-- **Windows integration**: Drag and drop supported files to open them. Register or remove file associations per-user for Windows Default Apps. Native window dragging supports PowerToys FancyZones snapping.
+- **Windows integration**: Drag and drop local files, folders, links, or browser images directly into the window. Register or remove file associations per-user for Windows Default Apps. Native window dragging supports PowerToys FancyZones snapping.
 - **Explorer previews & thumbnails**: Display archive trees, preview animated images directly in the Windows Explorer preview pane, and show shell thumbnails for supported media.
 - **Configuration**: Choose roaming user config or portable config stored next to the executable, and move the shared URL Library to an existing empty folder.
 - **Custom theming**: Inject and live-reload custom CSS rules, with native light/dark mode support.
@@ -205,7 +205,7 @@ QuiviT keeps its own data in three places. Imported galleries sit in a fourth fo
 
 **In memory, until quit.** Session-only state, including navigation history, unlocked archive sessions, runtime media controls, and unapplied settings previews.
 
-**Imports.** Web media and galleries downloaded via **File → Open URL** save under `%LOCALAPPDATA%\QuiviT\library` by default. Relocate the Library to any empty writable folder through **Options → General → Library location**.
+**Imports.** Web media and galleries downloaded via **File → Open URL** or dropped into the viewer save under `%LOCALAPPDATA%\QuiviT\library` by default. Relocate the Library to any empty writable folder through **Options → General → Library location**.
 
 ### Architecture
 
@@ -300,7 +300,7 @@ For automated iterative probing, see [`.agents/skills/replay-debugging/SKILL.md`
 | **Image Processing** | [`image`](https://crates.io/crates/image) | Per-size ICO PNG data URLs, and descrambling for protected gallery images |
 | **SVG Sanitization** | [DOMPurify](https://github.com/cure53/DOMPurify) | Cleans an imported SVG before saving it |
 | **Syntax Highlighting** | [Prism.js](https://prismjs.com) | Live CSS syntax highlighting in Options |
-| **Windows APIs** | [`windows`](https://crates.io/crates/windows) / [`windows-core`](https://crates.io/crates/windows-core) / [`winreg`](https://crates.io/crates/winreg) | Icons, shell previews, thumbnails, file attributes, associations, and matching a temp extract back to its archive |
+| **Windows APIs** | [`windows`](https://crates.io/crates/windows) / [`windows-core`](https://crates.io/crates/windows-core) / [`winreg`](https://crates.io/crates/winreg) | Icons, shell previews, thumbnails, file attributes, associations, native drag and drop, and matching a temp extract back to its archive |
 | **Explorer Previews & Thumbnails** | [`resvg`](https://crates.io/crates/resvg) / [`aom-decode`](https://crates.io/crates/aom-decode) / [`wry`](https://crates.io/crates/wry) / [`webview2-com`](https://crates.io/crates/webview2-com) | Shell preview handler, child webview player, SVG thumbnails, and AVIF sequence decoding |
 | **Sorting** | [`natord`](https://crates.io/crates/natord) | Natural sort, so 2 comes before 10 |
 | **File Watching** | [`notify`](https://crates.io/crates/notify) | Refresh when a folder changes |
@@ -378,6 +378,7 @@ QuiviT/
 │     │  ├─ archiveImageCache.js  # Archive image blob cache
 │     │  ├─ cache.js              # Size-capped maps
 │     │  ├─ filterModules.js      # Loads a filter
+│     │  ├─ importActions.js      # Import lifecycle and drop completion
 │     │  ├─ keyCombo.js           # Shortcut parsing
 │     │  ├─ keybindDomain.js      # Shortcut conflicts
 │     │  ├─ metadataFiles.js      # Which metadata file wins
@@ -414,11 +415,12 @@ QuiviT/
 │  ├─ src/
 │  │  ├─ archives/                # Archive reading and the open-archive cache
 │  │  ├─ commands/                # Calls the UI can make into Rust
-│  │  ├─ platform/                # Shell icons, thumbnails, previews, file attributes
+│  │  ├─ platform/                # Shell icons, thumbnails, previews, file attributes, native drop
 │  │  ├─ tests/                   # Rust tests
 │  │  ├─ config.rs                # Load and save settings
 │  │  ├─ formats.rs               # Which extensions open and format icons
 │  │  ├─ ico.rs                   # Per-size ICO PNG data URLs and spritesheets
+│  │  ├─ image_import.rs          # Image decoding, validation, and staging for dropped media
 │  │  ├─ lib.rs                   # App startup
 │  │  ├─ main.rs                  # Executable entry
 │  │  ├─ models.rs                # Data passed across to the UI

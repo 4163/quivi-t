@@ -77,7 +77,7 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 
 ### Rust module ownership
 - The crate root is bootstrap: plugin wiring, command registration, main-window construction, config-watcher start. It does not grow archive, protocol, command, or test bodies.
-- Domain logic lives in `archives/` (readers + `ArchiveCache` facade), `formats.rs`, and `ico.rs`. Callers use facade methods, not another module's internals.
+- Domain logic lives in `archives/` (readers + `ArchiveCache` facade), `formats.rs`, `ico.rs`, and `image_import.rs`. Callers use facade methods, not another module's internals.
 - `commands/` is the Tauri IPC surface. Each command file owns one family and adapts domain modules. It does not grow archive, window, or config internals.
 - Protocol, windows, platform, and config stay out of bootstrap and out of each other. `models.rs` is the IPC contract. Tests live under `tests/` via `#[path]`; do not widen visibility for tests.
 - New backend work extends this layering. The file-by-file map is `.agents/architecture-state.md`. Do not dump new domain into `lib.rs`, new window code into `config.rs`, or a second copy of a helper that already exists. Keep IPC command names, JSON shapes, and `quivit://` URLs stable unless the change is a practical function or performance win.
