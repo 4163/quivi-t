@@ -46,10 +46,6 @@ function _hide(opts = {}) {
   const submitBtn = _overlay.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = false;
   _overlay.classList.remove('active', 'error', 'loading');
-  if (document.body?.classList?.contains('is-importing-url')) {
-    document.body.classList.remove('is-importing-url');
-    window.dispatchEvent?.(new CustomEvent('quivit-import-status', { detail: { importing: false } }));
-  }
   _input.blur();
 
   if (opts.restoreFocus !== false && _focusFileList) {
@@ -86,8 +82,6 @@ async function _handleSubmit() {
   _input.disabled = true;
   if (submitBtn) submitBtn.disabled = true;
   _overlay.classList.add('loading');
-  document.body?.classList?.add('is-importing-url');
-  window.dispatchEvent?.(new CustomEvent('quivit-import-status', { detail: { importing: true } }));
 
   try {
     if (_onSubmit) await _onSubmit(url);
@@ -98,10 +92,6 @@ async function _handleSubmit() {
     _input.disabled = false;
     if (submitBtn) submitBtn.disabled = false;
     _overlay.classList.remove('loading');
-    if (document.body?.classList?.contains('is-importing-url')) {
-      document.body.classList.remove('is-importing-url');
-      window.dispatchEvent?.(new CustomEvent('quivit-import-status', { detail: { importing: false } }));
-    }
   }
 }
 

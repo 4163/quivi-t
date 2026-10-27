@@ -1,6 +1,8 @@
 pub mod animation;
 pub mod archives;
 pub mod directory;
+#[cfg(windows)]
+pub mod drop;
 pub mod library;
 pub mod network;
 pub mod registry;
@@ -10,6 +12,8 @@ pub mod watchers;
 pub use animation::*;
 pub use archives::*;
 pub use directory::*;
+#[cfg(windows)]
+pub use drop::*;
 pub use library::*;
 pub use network::*;
 pub use registry::*;

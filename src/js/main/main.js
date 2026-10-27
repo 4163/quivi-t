@@ -36,7 +36,9 @@ import { initMetadataBadge, openMetadataWindow } from './metadataBadge.js';
 import { initDropZone } from './dropzone.js';
 import { initPasswordOverlay } from './passwordOverlay.js';
 import { initUrlOverlay } from './urlOverlay.js';
-import { UrlLoader } from '../urlLoader.js';
+import { UrlLoader, sanitizeSvgDocument } from '../urlLoader.js';
+import { createImportActions } from '../services/importActions.js';
+import { activateImportProvider, MISC_PROVIDER } from '../filepanel/libraryStore.js';
 import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
 import { ManhwaAudio } from '../viewer/manhwaAudio.js';
 import {
@@ -193,7 +195,6 @@ Core.onStateChange((state) => {
   const isPasswordBlocked = state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect';
 
   if (state.mode === 'empty' && !isPasswordBlocked) {
-    dropOverlay.classList.add('active');
     viewport.classList.add('empty');
     statusbar.classList.add('hidden');
     document.getElementById('img-grill')?.classList.remove('active');
@@ -206,10 +207,8 @@ Core.onStateChange((state) => {
   // covers the viewport. Mapped rows (images and videos alike) clear it.
   const stripUnmappedSelected = isManhwaStripActive() && state.index >= 0 && !isListIndexMapped(state.index);
   if (!state.src || stripUnmappedSelected) {
-    dropOverlay.classList.toggle('active', !isPasswordBlocked);
     viewport.classList.add('empty');
   } else {
-    dropOverlay.classList.remove('active');
     viewport.classList.remove('empty');
   }
 
@@ -266,17 +265,28 @@ initManhwaStrip();
 setRevealListTop(revealListTop);
 initMenuBar();
 bindMenuCommands();
-initDropZone({ dropOverlay, FsUtils });
 initPasswordOverlay({ overlay: passwordOverlay, Core, FsUtils, focusFileList, isFileListFocused });
+const importActions = createImportActions({
+  invoke: (command, args) => window.__TAURI__.core.invoke(command, args),
+  FsUtils,
+  loadUrl: (url) => UrlLoader.loadUrl(url),
+  cancelUrlImport: (path) => UrlLoader.cancelGalleryDownloads(path),
+  sanitizeSvg: sanitizeSvgDocument,
+  activateMisc: () => activateImportProvider(MISC_PROVIDER),
+  libraryUpdated: () => window.dispatchEvent(new CustomEvent('quivit-library-updated'))
+});
+Chrome.initImportActivity(importActions);
 const urlOverlay = initUrlOverlay({
   overlay: urlOverlayEl,
   filePanel,
   Core,
   focusFileList,
-  onSubmit: async (url) => {
-    const { galleryPath, targetName } = await UrlLoader.loadUrl(url);
-    await FsUtils.loadFile(galleryPath, targetName ? { targetName } : {});
-  }
+  onSubmit: (url) => importActions.openUrl(url)
+});
+initDropZone({
+  dropOverlay, FsUtils, Core, importActions,
+  isUnmappedSelection: (state) => isManhwaStripActive() && state.index >= 0 && !isListIndexMapped(state.index),
+  onDropAccepted: () => urlOverlay.hide({ restoreFocus: false })
 });
 UrlLoader.init({ Core, FsUtils, urlOverlay, getFileListViewportRange });
 initMetadataBadge({ Core, FsUtils, badgeEl: metadataBadgeEl });

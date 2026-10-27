@@ -175,6 +175,13 @@ function findNearestSurvivingIndex(oldList, oldIndex, newFiles) {
 }
 
 export const FsUtils = {
+  beginNavigationIntent() {
+    return _nextNavigationGeneration();
+  },
+
+  isNavigationIntentCurrent(generation) {
+    return _isCurrentGeneration(generation);
+  },
   basename,
   registerPendingDeletion,
   unregisterPendingDeletion,
@@ -863,6 +870,7 @@ export const FsUtils = {
   },
 
   async loadFile(pathStr, options = {}) {
+    if (!_isCurrentGeneration(options.generation)) return;
     if (options.generation === undefined) {
       options = { ...options, generation: _nextNavigationGeneration() };
     }

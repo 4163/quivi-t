@@ -151,6 +151,13 @@ export function hasExplicitActiveChoice() {
   }
 }
 
+export function activateImportProvider(providerName) {
+  if (!providerName || typeof providerName !== 'string') return;
+  const current = getActiveProvider();
+  if (current === null && hasExplicitActiveChoice()) return;
+  if (current !== providerName) setActiveProvider(providerName);
+}
+
 export function clearExplicitActiveChoice() {
   try {
     localStorage.removeItem(ACTIVE_EXPLICIT_KEY);

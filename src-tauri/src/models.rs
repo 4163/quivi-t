@@ -82,7 +82,6 @@ pub struct DirectoryMetadataResult {
     pub dir_path: String,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ArchiveEncryptionStatus {
@@ -195,4 +194,27 @@ pub struct LibraryProviderEntry {
 pub struct ActiveConfigInfo {
     pub dir: String,
     pub mode: String,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DropEvent {
+    pub phase: &'static str,
+    pub drop_id: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum DropPayload {
+    Path {
+        path: String,
+    },
+    Url {
+        url: String,
+    },
+    Capture {
+        #[serde(rename = "svgText")]
+        svg_text: Option<String>,
+    },
 }

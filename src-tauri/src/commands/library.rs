@@ -205,6 +205,75 @@ pub fn ensure_library_write_allowed(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn publish_captured_image(
+    image: &crate::image_import::PreparedImage,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<String, String> {
+    let root = config::configured_library_dir()?;
+    ensure_library_root_writable(&root)?;
+    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    if is_reparse_point(&root)? {
+        return Err("The Library cannot be a reparse point".into());
+    }
+    let _lock = LibraryMoveLock::acquire(&root, &root)?;
+    if !same_path(&root, &config::configured_library_dir()?) {
+        return Err("Library location changed while saving the dropped image".into());
+    }
+    let misc = root.join("Misc");
+    if misc.exists() && is_reparse_point(&misc)? {
+        return Err("Misc cannot be a reparse point".into());
+    }
+    fs::create_dir_all(&misc).map_err(|e| e.to_string())?;
+    let dest = misc.join(&image.filename);
+    let pending = misc.join(format!(".{}.{}.tmp", image.filename, std::process::id()));
+    if cancelled.load(Ordering::SeqCst) {
+        return Err("Drop cancelled".into());
+    }
+    if dest.exists() {
+        if is_reparse_point(&dest)?
+            || crate::image_import::file_hash(&dest)?
+                != crate::image_import::file_hash(&image.path)?
+        {
+            return Err("A different file already exists at the capture destination".into());
+        }
+        return Ok(dest.to_string_lossy().into_owned());
+    }
+    let result = (|| {
+        let mut output = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&pending)
+            .map_err(|e| e.to_string())?;
+        let mut input = File::open(&image.path).map_err(|e| e.to_string())?;
+        std::io::copy(&mut input, &mut output).map_err(|e| e.to_string())?;
+        output.sync_all().map_err(|e| e.to_string())?;
+        drop(output);
+        if cancelled.load(Ordering::SeqCst) {
+            return Err("Drop cancelled".into());
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::ffi::OsStrExt;
+            let source: Vec<u16> = pending.as_os_str().encode_wide().chain(Some(0)).collect();
+            let target: Vec<u16> = dest.as_os_str().encode_wide().chain(Some(0)).collect();
+            // MoveFileW refuses replacement and also works on FAT/exFAT Libraries.
+            unsafe {
+                windows::Win32::Storage::FileSystem::MoveFileW(
+                    windows::core::PCWSTR(source.as_ptr()),
+                    windows::core::PCWSTR(target.as_ptr()),
+                )
+            }
+            .map_err(|e| format!("Failed to publish dropped image: {e}"))?;
+        }
+        #[cfg(not(windows))]
+        fs::hard_link(&pending, &dest)
+            .map_err(|e| format!("Failed to publish dropped image: {e}"))?;
+        Ok(dest.to_string_lossy().into_owned())
+    })();
+    let _ = fs::remove_file(&pending);
+    result
+}
+
 fn ensure_empty_writable_destination(source: &Path, destination: &Path) -> Result<(), String> {
     if !destination.is_absolute() {
         return Err("Library location must be an absolute path".into());
@@ -415,10 +484,12 @@ fn remap_library_paths(config: &mut AppConfig, source: &Path, destination: &Path
                         let Some(item_obj) = item.as_object_mut() else {
                             continue;
                         };
-                        let Some(path) = item_obj.get("path").and_then(|value| value.as_str()) else {
+                        let Some(path) = item_obj.get("path").and_then(|value| value.as_str())
+                        else {
                             continue;
                         };
-                        let (filesystem_path, archive_entry) = path.split_once('|').unwrap_or((path, ""));
+                        let (filesystem_path, archive_entry) =
+                            path.split_once('|').unwrap_or((path, ""));
                         if let Some(remapped) = remap_path(filesystem_path, source, destination) {
                             let path = if archive_entry.is_empty() {
                                 remapped
