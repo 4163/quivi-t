@@ -87,6 +87,10 @@ pub fn run() {
 
             #[cfg(windows)]
             platform::drop::install(&main_window).map_err(std::io::Error::other)?;
+            #[cfg(windows)]
+            std::thread::spawn(|| {
+                let _ = commands::library::cleanup_abandoned_captures();
+            });
 
             windows::apply_shell_background(&main_window, &config);
             platform::icons::warmup();

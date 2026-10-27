@@ -12,7 +12,7 @@ use std::{
 };
 use tauri::{Emitter, Manager};
 use windows::core::{implement, AgileReference, Interface, Ref, BOOL, HRESULT};
-use windows::Win32::Foundation::{CloseHandle, HGLOBAL, HWND, LPARAM, POINTL, S_OK};
+use windows::Win32::Foundation::{HGLOBAL, HWND, LPARAM, POINTL, S_OK};
 use windows::Win32::System::Com::{
     CoCreateGuid, CoInitializeEx, CoUninitialize, IDataObject, COINIT_MULTITHREADED,
     DVASPECT_CONTENT, FORMATETC, STGMEDIUM, STREAM_SEEK_SET, TYMED_HGLOBAL, TYMED_ISTREAM,
@@ -24,7 +24,6 @@ use windows::Win32::System::Ole::{
     CF_DIBV5, CF_HDROP, CF_TEXT, CF_UNICODETEXT, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_NONE,
 };
 use windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS;
-use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 use windows::Win32::UI::Shell::{
     DragQueryFileW, IDataObjectAsyncCapability, FILEDESCRIPTORW, FILEGROUPDESCRIPTORW, HDROP,
 };
@@ -95,6 +94,16 @@ struct Pending {
     cancelled: Arc<AtomicBool>,
     payload: Option<Payload>,
     consuming: bool,
+    acknowledged: bool,
+}
+impl Pending {
+    fn expired(&self, worker_running: bool) -> bool {
+        if worker_running {
+            self.created.elapsed() > SOURCE_TIMEOUT
+        } else {
+            !self.acknowledged && self.created.elapsed() > CAPTURE_LIFETIME
+        }
+    }
 }
 enum Payload {
     Path(String),
@@ -165,27 +174,29 @@ pub fn release(id: &str) {
     }
 }
 pub fn describe(id: &str) -> Result<DropPayload, String> {
-    let state = registry().lock().unwrap();
+    let mut state = registry().lock().unwrap();
     let pending = state
         .pending
-        .as_ref()
+        .as_mut()
         .filter(|p| p.id == id && !p.consuming && !p.cancelled.load(Ordering::SeqCst))
         .ok_or("Drop is expired or already consumed")?;
-    match pending
+    let payload = match pending
         .payload
         .as_ref()
         .ok_or("Drop content is not ready")?
     {
-        Payload::Path(path) => Ok(DropPayload::Path { path: path.clone() }),
-        Payload::Url(url) => Ok(DropPayload::Url { url: url.clone() }),
-        Payload::Capture(capture) => Ok(DropPayload::Capture {
+        Payload::Path(path) => DropPayload::Path { path: path.clone() },
+        Payload::Url(url) => DropPayload::Url { url: url.clone() },
+        Payload::Capture(capture) => DropPayload::Capture {
             svg_text: if capture.dib {
                 None
             } else {
                 crate::image_import::svg_text(&capture.path)?
             },
-        }),
-    }
+        },
+    };
+    pending.acknowledged = true;
+    Ok(payload)
 }
 pub fn claim(id: &str) -> Result<CaptureLease, String> {
     let mut state = registry().lock().unwrap();
@@ -201,6 +212,7 @@ pub fn claim(id: &str) -> Result<CaptureLease, String> {
         unreachable!()
     };
     pending.consuming = true;
+    pending.acknowledged = true;
     Ok(CaptureLease {
         capture,
         cancelled: pending.cancelled.clone(),
@@ -225,15 +237,10 @@ pub fn install(window: &tauri::WebviewWindow) -> Result<(), String> {
         std::thread::sleep(Duration::from_secs(1));
         let expired = {
             let mut state = registry().lock().unwrap();
-            let deadline = if state.worker_running {
-                SOURCE_TIMEOUT
-            } else {
-                CAPTURE_LIFETIME
-            };
             if state
                 .pending
                 .as_ref()
-                .is_some_and(|p| p.created.elapsed() > deadline)
+                .is_some_and(|p| p.expired(state.worker_running))
             {
                 state.pending.take().map(|p| {
                     p.cancelled.store(true, Ordering::SeqCst);
@@ -389,6 +396,7 @@ impl IDropTarget_Impl for NativeTarget_Impl {
                 cancelled: cancelled.clone(),
                 payload: None,
                 consuming: false,
+                acknowledged: false,
             });
         }
         // Keep browser-managed downloads alive until their data has been consumed.
@@ -440,6 +448,7 @@ impl IDropTarget_Impl for NativeTarget_Impl {
             match result {
                 Ok(payload) => {
                     pending.payload = Some(payload);
+                    pending.created = Instant::now();
                     drop(state);
                     emit(&app, "ready", Some(id), None);
                 }
@@ -544,14 +553,8 @@ fn cleanup_abandoned_captures() {
         ) {
             continue;
         }
-        match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) } {
-            Ok(handle) => {
-                let _ = unsafe { CloseHandle(handle) };
-            }
-            Err(error) if error.code().0 as u32 & 0xffff == 87 => {
-                let _ = fs::remove_file(entry.path());
-            }
-            Err(_) => {}
+        if !crate::platform::process::is_running(pid) {
+            let _ = fs::remove_file(entry.path());
         }
     }
 }
@@ -641,6 +644,43 @@ fn descriptor_name(object: &IDataObject, formats: &Formats) -> Option<String> {
         .unwrap_or(filename.len());
     Some(String::from_utf16_lossy(&filename[..length]))
 }
+pub(crate) fn parse_local_path(text: &str) -> Option<String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let unquoted = trimmed.trim_matches('"').trim_matches('\'');
+    if let Ok(url) = tauri::Url::parse(unquoted) {
+        if url.scheme().eq_ignore_ascii_case("file") {
+            if let Ok(path) = url.to_file_path() {
+                return Some(path.to_string_lossy().into_owned());
+            }
+            let host = url.host_str().unwrap_or("");
+            let raw_path = url.path();
+            let decoded = crate::utils::url_decode(raw_path);
+            if host.is_empty() || host.eq_ignore_ascii_case("localhost") {
+                let clean = decoded.strip_prefix('/').unwrap_or(&decoded);
+                return Some(clean.replace('/', "\\"));
+            } else {
+                let clean = decoded.strip_prefix('/').unwrap_or(&decoded);
+                return Some(format!(r"\\{}\{}", host, clean.replace('/', "\\")));
+            }
+        }
+    }
+    if let Some(rest) = unquoted.strip_prefix("file:") {
+        let clean = rest.trim_start_matches('/');
+        let decoded = crate::utils::url_decode(clean);
+        let path = Path::new(&decoded);
+        if path.is_absolute() {
+            return Some(decoded.replace('/', "\\"));
+        }
+    }
+    let path = Path::new(unquoted);
+    if path.is_absolute() || unquoted.starts_with(r"\\") {
+        return Some(unquoted.to_string());
+    }
+    None
+}
 fn text_value(object: &IDataObject, formats: &Formats) -> Option<String> {
     for (id, wide) in [
         (formats.url_w, true),
@@ -675,7 +715,8 @@ fn text_value(object: &IDataObject, formats: &Formats) -> Option<String> {
             .filter(|s| !s.is_empty() && !s.starts_with('#'))
         {
             if line.starts_with("data:image/")
-                || tauri::Url::parse(line).is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
+                || parse_local_path(line).is_some()
+                || tauri::Url::parse(line).is_ok_and(|url| matches!(url.scheme(), "http" | "https" | "file"))
             {
                 return Some(line.into());
             }
@@ -691,11 +732,34 @@ fn receive(
     check_cancel(cancelled)?;
     let text = text_value(object, formats);
     let web_content = text.is_some() || offers_global(object, formats.html);
-    if !web_content {
-        if let Some(path) = dropped_path(object) {
-            return Ok(Payload::Path(path));
+    let path = dropped_path(object);
+    if let Some(path) = &path {
+        let local = Path::new(path);
+        if local
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("url"))
+        {
+            if let Some(target) = text {
+                if let Some(local_target) = parse_local_path(&target) {
+                    return Ok(Payload::Path(local_target));
+                }
+                return Ok(Payload::Url(target));
+            }
+            return Err("Dropped shortcut has no supported web URL".into());
+        }
+        if !web_content || local.is_dir() {
+            return Ok(Payload::Path(path.clone()));
+        }
+        if local.is_file() && !crate::image_import::has_image_header(local).unwrap_or(true) {
+            return Ok(Payload::Path(path.clone()));
         }
     }
+    if let Some(ref t) = text {
+        if let Some(local_path) = parse_local_path(t) {
+            return Ok(Payload::Path(local_path));
+        }
+    }
+    let mut image_offered = false;
     if let Some(name) = descriptor_name(object, formats) {
         let extension = Path::new(&name)
             .extension()
@@ -703,6 +767,7 @@ fn receive(
             .unwrap_or("")
             .to_ascii_lowercase();
         if crate::formats::is_image_ext(&extension) && extension != "mp4" {
+            image_offered = true;
             if let Ok(medium) = get(object, formats.contents, TYMED_ISTREAM.0 as u32, 0)
                 .or_else(|_| get(object, formats.contents, TYMED_HGLOBAL.0 as u32, 0))
             {
@@ -716,19 +781,12 @@ fn receive(
         (CF_DIBV5.0, true),
         (CF_DIB.0, true),
     ] {
+        image_offered |= offers_global(object, id);
         if let Ok(medium) = get(object, id, TYMED_HGLOBAL.0 as u32, -1) {
             return stage_medium(medium, dib, cancelled).map(Payload::Capture);
         }
     }
-    if let Some(path) = dropped_path(object) {
-        if Path::new(&path)
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("url"))
-        {
-            return text
-                .map(Payload::Url)
-                .ok_or_else(|| "Dropped shortcut has no supported web URL".into());
-        }
+    if let Some(path) = path {
         if web_content && Path::new(&path).is_file() {
             let (capture, mut output) = new_capture(false)?;
             let mut input = File::open(&path)
@@ -754,6 +812,9 @@ fn receive(
             let (capture, mut file) = new_capture(false)?;
             file.write_all(&bytes).map_err(|e| e.to_string())?;
             return Ok(Payload::Capture(capture));
+        }
+        if image_offered {
+            return Err("The source could not provide the dropped image".into());
         }
         return Ok(Payload::Url(text));
     }

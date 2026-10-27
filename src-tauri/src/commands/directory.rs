@@ -73,7 +73,7 @@ pub fn read_directory_impl(
                     let metadata_res = entry.metadata();
                     let is_hidden = is_hidden_path(&name, metadata_res.as_ref().ok());
 
-                    if !show_hidden && is_hidden {
+                    if !show_hidden && is_hidden && name != target_filename {
                         continue;
                     }
 

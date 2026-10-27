@@ -35,14 +35,13 @@ pub fn save_dropped_image(
         lease.capture.dib,
         sanitized_svg.as_deref(),
     )?;
-    let result = crate::commands::library::publish_captured_image(&image, &lease.cancelled);
-    match result {
-        Err(ref message)
-            if message.contains("relocation") || message.contains("Library location changed") =>
-        {
+    crate::commands::library::publish_captured_image(&image, &lease.cancelled)
+        .or_else(|error| {
+            if !error.is_retryable() {
+                return Err(error);
+            }
             std::thread::sleep(LIBRARY_RETRY_DELAY);
             crate::commands::library::publish_captured_image(&image, &lease.cancelled)
-        }
-        result => result,
-    }
+        })
+        .map_err(|error| error.to_string())
 }

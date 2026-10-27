@@ -1,16 +1,70 @@
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
-use std::io::{Cursor, Read};
+use std::io::{self, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 pub const MAX_CAPTURE_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_BITMAP_BYTES: usize = 256 * 1024 * 1024;
 pub const MAX_SVG_BYTES: usize = 8 * 1024 * 1024;
 const HASH_BUFFER_BYTES: usize = 64 * 1024;
+const DIB_HEADER_BYTES: usize = 124;
+const BMP_HEADER_BYTES: usize = 14;
+
+// An explicit BMP pixel offset avoids headerless decoding skips in V4/V5 bitfield DIBs.
+struct BmpReader {
+    file: File,
+    header: [u8; BMP_HEADER_BYTES],
+    position: u64,
+}
+
+impl Read for BmpReader {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if self.position < self.header.len() as u64 {
+            let offset = self.position as usize;
+            let n = buffer.len().min(self.header.len() - offset);
+            buffer[..n].copy_from_slice(&self.header[offset..offset + n]);
+            self.position += n as u64;
+            return Ok(n);
+        }
+        let n = self.file.read(buffer)?;
+        self.position += n as u64;
+        Ok(n)
+    }
+}
+
+impl Seek for BmpReader {
+    fn seek(&mut self, from: SeekFrom) -> io::Result<u64> {
+        let position = match from {
+            SeekFrom::Start(position) => Some(position),
+            SeekFrom::Current(offset) => self.position.checked_add_signed(offset),
+            SeekFrom::End(offset) => {
+                (self.file.metadata()?.len() + self.header.len() as u64).checked_add_signed(offset)
+            }
+        }
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Invalid bitmap seek"))?;
+        self.file.seek(SeekFrom::Start(
+            position.saturating_sub(self.header.len() as u64),
+        ))?;
+        self.position = position;
+        Ok(position)
+    }
+}
 
 pub struct PreparedImage {
     pub path: PathBuf,
     pub filename: String,
+}
+
+pub fn has_image_header(path: &Path) -> Result<bool, String> {
+    let mut head = [0; 1024];
+    let n = File::open(path)
+        .and_then(|mut file| file.read(&mut head))
+        .map_err(|error| error.to_string())?;
+    Ok(image::guess_format(&head[..n]).is_ok()
+        || String::from_utf8_lossy(&head[..n])
+            .trim_start_matches('\u{feff}')
+            .trim_start()
+            .starts_with('<'))
 }
 
 pub fn svg_text(path: &Path) -> Result<Option<String>, String> {
@@ -54,14 +108,24 @@ pub fn prepare(
     let extension;
     let mut prepared_path = path.to_path_buf();
     if dib {
-        let bytes = fs::read(path).map_err(|e| e.to_string())?;
-        let bmp = dib_to_bmp(&bytes)?;
-        let mut reader = image::ImageReader::with_format(Cursor::new(bmp), image::ImageFormat::Bmp);
-        let mut limits = image::Limits::default();
-        limits.max_alloc = Some(MAX_BITMAP_BYTES as u64);
-        reader.limits(limits);
-        let decoded = reader
-            .decode()
+        use image::ImageDecoder;
+        let mut file = File::open(path).map_err(|e| e.to_string())?;
+        let mut header = [0; DIB_HEADER_BYTES];
+        let header_len = (size as usize).min(header.len());
+        file.read_exact(&mut header[..header_len])
+            .map_err(|e| e.to_string())?;
+        let header = bmp_header_from_dib(&header[..header_len], size as usize)?;
+        file.rewind().map_err(|e| e.to_string())?;
+        let decoder = image::codecs::bmp::BmpDecoder::new(BufReader::new(BmpReader {
+            file,
+            header,
+            position: 0,
+        }))
+        .map_err(|e| format!("Invalid dropped bitmap: {e}"))?;
+        if decoder.total_bytes() > MAX_BITMAP_BYTES as u64 {
+            return Err("Dropped bitmap exceeds the pixel limit".into());
+        }
+        let decoded = image::DynamicImage::from_decoder(decoder)
             .map_err(|e| format!("Invalid dropped bitmap: {e}"))?;
         prepared_path = path.with_extension("png");
         decoded
@@ -168,7 +232,7 @@ fn avif_dimensions(path: &Path) -> Result<(u32, u32), String> {
         .map_err(|e| e.to_string())
 }
 
-fn dib_to_bmp(bytes: &[u8]) -> Result<Vec<u8>, String> {
+fn bmp_header_from_dib(bytes: &[u8], size: usize) -> Result<[u8; BMP_HEADER_BYTES], String> {
     if bytes.len() < 40 {
         return Err("Dropped bitmap header is incomplete".into());
     }
@@ -207,13 +271,11 @@ fn dib_to_bmp(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let offset = header
         .checked_add(masks)
         .and_then(|n| palette.checked_mul(4).and_then(|p| n.checked_add(p)))
-        .filter(|n| *n <= bytes.len())
+        .filter(|n| *n <= size)
         .ok_or("Invalid dropped bitmap layout")?;
-    let mut bmp = Vec::with_capacity(bytes.len() + 14);
-    bmp.extend_from_slice(b"BM");
-    bmp.extend_from_slice(&((bytes.len() + 14) as u32).to_le_bytes());
-    bmp.extend_from_slice(&[0; 4]);
-    bmp.extend_from_slice(&((offset + 14) as u32).to_le_bytes());
-    bmp.extend_from_slice(bytes);
-    Ok(bmp)
+    let mut header = [0; BMP_HEADER_BYTES];
+    header[..2].copy_from_slice(b"BM");
+    header[2..6].copy_from_slice(&((size + BMP_HEADER_BYTES) as u32).to_le_bytes());
+    header[10..14].copy_from_slice(&((offset + BMP_HEADER_BYTES) as u32).to_le_bytes());
+    Ok(header)
 }

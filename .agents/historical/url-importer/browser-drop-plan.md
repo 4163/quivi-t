@@ -10,6 +10,8 @@ Finalized on 2026-10-27. The user confirmed runtime behavior in Chromium and Fir
 - A capture is image content supplied by the source application through a file stream, an image representation, or a browser-managed temporary file. A capture is not a screenshot of the drag preview and is not permission to inspect the browser's cookie store.
 - Capture destination is the active Library's `Misc` directory. Its default is `%LOCALAPPDATA%\QuiviT\library\Misc`; relocation remains authoritative. Captures from recognized providers still go to Misc. URL-only drops retain the existing importer's provider routing.
 - Prefer the first logical item's encoded image contents, then its bitmap representation, then an explicitly supplied HTTP(S) address. Do not import all representations of one item or follow a surrounding gallery link after rejecting its image. Plain link drags must remain distinguishable from virtual `.url` shortcut contents.
+- A dropped `file://` URL (including percent-encoded paths, `localhost`, and UNC network shares) or dropped absolute path string is classified as local navigation (`Payload::Path`). It must never be copied into `Misc` or processed as a remote gallery import. Drops of non-image, non-archive files navigate to that file's parent directory rather than being rejected.
+- Explicitly targeted files in hidden or system folders (e.g. `$Recycle.Bin`) are retained in `read_directory` even when `show_hidden` is false.
 - Preserve supplied encoded raster bytes when supported. A bitmap fallback becomes PNG and can lose animation and metadata. No promise of original resolution beyond the representation actually supplied by the browser.
 - Authentication stays with the source browser. QuiviT accepts the resulting content. URL fallback does not inherit cookies, Authorization headers, or arbitrary browser sessions.
 - Initial scope is the Windows main window and one logical item per operation. Existing local file, archive, and folder opening remains available. No bulk queue, browser extension, cookie extraction, new preference, or arbitrary webpage scraping.
@@ -48,12 +50,13 @@ Explorer verification: a Windows Shell probe reproduced `S_FALSE` for unavailabl
 
 | Owner | Responsibility | Boundary |
 |---|---|---|
-| `src-tauri/src/platform/drop.rs:220` | Native OLE target registration, format enumeration, source-object lifetime, COM marshaling, source temporary-file copying, bounded capture staging, opaque operation tokens, cancellation and cleanup | No provider matching, Library destination selection, network download, durable-file naming, or DOM logic |
+| `src-tauri/src/platform/drop.rs:220` | Native OLE target registration, format enumeration, source-object lifetime, COM marshaling, source temporary-file copying, bounded capture staging, opaque operation tokens, cancellation, cleanup, and `file://`/local path extraction | No provider matching, Library destination selection, network download, durable-file naming, or DOM logic |
 | `src-tauri/src/image_import.rs:40` | Validate staged image content, use existing format helpers, enforce resource limits, preserve encoded rasters, convert bitmap pixels to PNG, compute content identity, and prepare a publishable file | No COM interfaces, Tauri commands/events, config lookup, or gallery sidecars |
 | `src-tauri/src/commands/drop.rs:10` | Main-window-only IPC adapters for readiness, describing/consuming captures, sanitized SVG submission, and release; translate domain results into IPC models | Calls the native facade and Library facade; does not implement image decoders or relocation rules |
 | `src-tauri/src/commands/library.rs:208` | Effective Library root, relocation/write exclusion, destination containment, and safe final publication under Misc | Own the write policy once. Do not copy it into the native adapter or JS |
+| `src-tauri/src/commands/directory.rs:73` | Directory listing, hidden file filtering with target retention, path kind inspection, and drive discovery | Does not paint UI, manage viewer state, or stage browser captures |
 | `src-tauri/src/models.rs:201` | Serializable drop phases and payload variants | No byte arrays, COM pointers, source temporary paths, or caller-selected write destinations in the event contract |
-| `src/js/services/importActions.js:1` | DOM-free foreground admission and dispatch for URL entry and drops; resolve one result, request sanitization where necessary, call existing navigation, and notify subscribers | Does not paint UI, parse native clipboard formats, fetch authenticated bytes itself, or implement site extractors |
+| `src/js/services/importActions.js:1` | DOM-free foreground admission and dispatch for URL entry and drops; parseLocalPath resolution for file:// URLs, resolve one result, request sanitization where necessary, call existing navigation, unconstrained file/directory admission, and notify subscribers | Does not paint UI, parse native clipboard formats, fetch authenticated bytes itself, or implement site extractors |
 | `src/js/main/dropzone.js:4` | Drop overlay, native event subscription, readiness handshake, and dispatch into importActions | Sole drop-overlay writer. Full overlay only for an empty viewer. No download or filesystem policy |
 | `src/js/main/urlOverlay.js:98` | URL form, focus, local loading/error state, and submission into importActions | Does not own global import busy state |
 | `src/js/menubar/chrome.js:17` | Subscribe to import activity and apply the existing global importing class and import-status notification | Sole writer of that global mode. Statusbar still owns status text; shortcuts still own input blocking |
@@ -103,7 +106,9 @@ Dropzone owns overlay visibility, including idle empty-state visibility. It subs
 
 FsUtils retains the only navigation generation. The import controller reserves/checks an intent before a slow capture or URL resolution, then passes its generation into `loadFile`. Newer user or single-instance navigation wins. A file already saved remains in Misc even if its automatic opening becomes stale. Navigating away and back still invalidates an older intent.
 
-For a URL-only payload, accept explicit HTTP(S) through the existing URL importer. Do not apply its permissive input normalization to arbitrary shell protocols or dropped text. Inline raster `data:` content, if offered, is a bounded capture decode rather than a navigable address. An external `blob:` string alone is not a usable capture. Never execute `.url` files, insert transferred HTML, or navigate the WebView to dropped content.
+For a URL-only payload, accept explicit HTTP(S) through the existing URL importer, and convert local `file://` URLs (or raw local path text) into local paths routed to `openPathResult`. Do not apply permissive input normalization to arbitrary shell protocols or dropped text. Inline raster `data:` content, if offered, is a bounded capture decode rather than a navigable address. An external `blob:` string alone is not a usable capture. Never execute `.url` files, insert transferred HTML, or navigate the WebView to dropped content.
+
+Any dropped local file, archive, or folder is admitted. If a dropped file is not an image or archive, `openPathResult` passes it to `loadFile`, which reads the parent directory and navigates there without rejecting the file.
 
 URL fallback retains the current importer's network behavior. This plan does not establish a public-address-only policy or bounded remote downloads. Any change to redirect validation, private-network access, or response limits belongs in the shared network owner and must trace extractor and gallery consumers. Do not present native capture limits as protection for the separate URL fallback path.
 
@@ -159,6 +164,14 @@ URL fallback retains the current importer's network behavior. This plan does not
 
    Acceptance: affected automated checks pass; real browser transfer outcomes and remaining coverage are recorded; portable and split configuration checks pass; no capture source URLs are put into gallery retry records; no temporary diagnostics remain in release code.
 
+7. [x] Support local file drops via URL and unconstrained path navigation.
+
+   Anchors: `src-tauri/src/platform/drop.rs:647`, `src/js/services/importActions.js:1`, `src-tauri/src/commands/directory.rs:73`.
+
+   Decode `file://` URLs (supporting percent-encoding, UNC shares, and `localhost`) into local paths in both the native Windows drop handler and frontend import actions. Route local `file://` URLs and absolute paths directly to `Payload::Path` and `openPathResult`, bypassing capture staging to `Misc`. Remove the image/archive-only restriction in `openPathResult` so dropping any file navigates to its containing directory. Ensure targeted files in hidden folders (such as `$Recycle.Bin`) are retained in `read_directory_impl` when `show_hidden` is false.
+
+   Acceptance: `file://` URLs (with or without percent encoding, including `$Recycle.Bin`) open the target file or navigate to its directory; non-image files navigate to their parent directory without throwing an unsupported file error; 108 Rust tests and 308 frontend Mocha tests pass.
+
 ## Verification and blast radius
 
 The evidence above records executed checks and user signoff. Chromium and Firefox are the accepted browser coverage. Authentication-dependent cases, pixel fidelity, and exhaustive failure/expiry behavior were not separately confirmed by the user.
@@ -172,6 +185,7 @@ The evidence above records executed checks and user signoff. Chromium and Firefo
 | FsUtils navigation intent | File/drive/archive/history navigation and single-instance opens | Existing navigation and archive desktop tests passed; controller probes checked stale navigation and stale URL queue cancellation. |
 | Drop-overlay ownership and global activity writer | Empty viewer, password prompt, manhwa unmapped selection, URL form dismissal | Single-writer source checks, controller/dropzone probes, desktop startup/archive tests, and user runtime acceptance. |
 | Shared SVG sanitizer | URL SVG downloads, entity handling, rendering and malicious content rejection | Existing SVG frontend tests passed. Captured SVG runtime behavior was not separately confirmed. |
+| Local file:// URLs and unconstrained path admission | Direct paths, Explorer drops, URL prompt, hidden folders; false capture to Misc, unsupported-file errors | Targeted Node unit tests for parseLocalPath; Rust parse_local_path tests; all 108 Rust and 308 Mocha tests passed. |
 
 Run `node --check` on every changed JS module. The actual frontend test script is `npm run mocha`; there is no `npm test` script at the inspected baseline. Use filtered Rust tests for existing format/ICO/Library behavior during iteration. Because bootstrap and IPC models change, the final verification scope includes `cargo test --manifest-path src-tauri/Cargo.toml`. Follow the repository E2E runner policy: use `npm run e2e -- --spec <file>` and retry with `--agent` only if the runner reports an elevated shell. Exercise relevant config-backed checks under both layouts, including `--split`.
 
@@ -191,6 +205,8 @@ The user accepted the following runtime coverage on 2026-10-27 and requested fin
 1. [x] Browser image drops work in Chromium and Firefox.
 2. [x] Corrected Explorer drops preserve legacy opening behavior after the local-image and ZIP classification regression.
 3. [x] The user accepted the final interaction behavior after runtime testing.
+4. [x] Dropping a local file via `file://` URL (including percent-encoded paths and files inside `$Recycle.Bin`) opens the target file or navigates to its directory without creating a duplicate in `Misc`.
+5. [x] Dropping any file, directory, or archive via path or `file://` URL acts as a Windows file drop and navigates to the target's containing directory.
 
 Additional cases were not individually reported and are not completion blockers:
 
