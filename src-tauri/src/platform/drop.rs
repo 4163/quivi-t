@@ -412,11 +412,14 @@ impl IDropTarget_Impl for NativeTarget_Impl {
         let formats = self.formats.clone();
         std::thread::spawn(move || {
             let result = ComApartment::new().and_then(|_apartment| {
-                let result = reference
+                // Release marshaled owners before this scope's COM apartment.
+                let data_reference = reference;
+                let operation_reference = async_reference;
+                let result = data_reference
                     .resolve()
                     .map_err(|e| e.to_string())
                     .and_then(|object| receive(&object, &formats, &cancelled));
-                if let Some(a) = async_reference.and_then(|a| a.resolve().ok()) {
+                if let Some(a) = operation_reference.and_then(|a| a.resolve().ok()) {
                     let code = if result.is_ok() {
                         HRESULT(0)
                     } else {

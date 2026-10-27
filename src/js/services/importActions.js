@@ -9,7 +9,7 @@ export function createImportActions({ invoke, FsUtils, loadUrl, cancelUrlImport,
 
   function begin(dropId = null) {
     if (active) throw new Error('Another import is already in progress');
-    active = { dropId, generation: FsUtils.beginNavigationIntent() };
+    active = { dropId, generation: FsUtils.beginNavigationIntent(), completing: false };
     notify(dropId ? 'receiving' : 'resolving');
     return active;
   }
@@ -75,6 +75,8 @@ export function createImportActions({ invoke, FsUtils, loadUrl, cancelUrlImport,
     async completeDrop(dropId) {
       if (!dropId || active?.dropId !== dropId) { await release(dropId); return; }
       const request = active;
+      if (request.completing) return;
+      request.completing = true;
       try {
         notify('preparing');
         const payload = await invoke('describe_drop', { dropId });

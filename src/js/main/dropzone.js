@@ -39,11 +39,7 @@ export function initDropZone({ dropOverlay, FsUtils, Core, importActions, isUnma
     feedback = false;
     clearTimeout(feedbackTimer);
     dropOverlay.classList.remove('unsupported');
-    message = activity.phase === 'receiving' ? 'Receiving image from browser...'
-      : activity.phase === 'preparing' ? 'Saving dropped image...'
-      : activity.phase === 'resolving' ? 'Importing URL...'
-      : activity.phase === 'opening' ? 'Opening...'
-      : DEFAULT_DROP_MESSAGE;
+    message = importing ? 'Loading...' : DEFAULT_DROP_MESSAGE;
     render();
   });
   Core.onStateChange(render);
