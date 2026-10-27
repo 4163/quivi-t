@@ -160,33 +160,111 @@ function isPendingDownload(item, downloadStatus, isArchive = false) {
       || (downloadStatus !== 'completed' && item.size === 0 && !isArchive));
 }
 
+function setThumbnailIcon(thumbWrapper, item) {
+  const ext = FsUtils.getIconExtKey(item);
+  const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
+  const iconSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
+  thumbWrapper.style.setProperty('--thumbnail-icon', `url("${iconSrc}")`);
+  return iconSrc;
+}
+
+function initSavedThumbnail(row, thumbImg, item, cache) {
+  const thumbWrapper = thumbImg.parentElement;
+  thumbWrapper.classList.add('has-native-icon');
+
+  row._refreshThumbnail = (invalidateCache = false) => {
+    const iconSrc = setThumbnailIcon(thumbWrapper, item);
+    const targetSrc = FsUtils.buildThumbnailSrc(item, null);
+    if (invalidateCache) {
+      cache.delete(targetSrc);
+      thumbImg.removeAttribute('src');
+      thumbImg.classList.remove('is-loaded');
+    }
+
+    thumbImg.onerror = () => {
+      thumbImg.onerror = null;
+      const currentSrc = thumbImg.getAttribute('src') || '';
+      if (currentSrc.includes('/thumb/') && !FsUtils.isVideo?.(item.path || '')) {
+        thumbImg.onerror = () => {
+          thumbImg.onerror = null;
+          cache.set(targetSrc, iconSrc);
+          thumbImg.src = iconSrc;
+        };
+        const directSrc = FsUtils.buildFileSrcSync(item.path);
+        cache.set(targetSrc, directSrc);
+        thumbImg.src = directSrc;
+      } else {
+        cache.set(targetSrc, iconSrc);
+        thumbImg.src = iconSrc;
+      }
+    };
+    thumbImg.onload = () => {
+      const src = thumbImg.getAttribute('src');
+      if (src && !src.startsWith('data:image/svg+xml')) {
+        thumbImg.classList.add('is-loaded');
+        if (!row.classList.contains('is-pending-download') && !cache.has(src)) cache.set(src, true);
+      }
+    };
+
+    // Show the shell icon until the downloaded media can be decoded.
+    if (row.classList.contains('is-pending-download')) {
+      thumbImg.onerror = null;
+      return;
+    }
+
+    const cachedThumb = cache.get(targetSrc);
+    if (cachedThumb !== undefined) {
+      if (animatedSvgSrcs.has(targetSrc)) thumbImg.loading = 'eager';
+      thumbImg.src = typeof cachedThumb === 'string' ? cachedThumb : targetSrc;
+    } else {
+      thumbImg.loading = 'lazy';
+      thumbImg.src = targetSrc;
+    }
+    if (thumbImg.complete && thumbImg.naturalWidth > 0) thumbImg.classList.add('is-loaded');
+    if (isSvgSrc(targetSrc) && item.path) {
+      markIfAnimatedSvg(targetSrc, item.path);
+    }
+  };
+
+  row._refreshThumbnail();
+}
+
 function updateSavedDownloadRow(list, destPath, status) {
   const row = list?.querySelector(`li[data-path="${CSS.escape(destPath)}"]`);
   if (!row) return;
   row.dataset.downloadStatus = status;
   row.classList.toggle('is-pending-download', status === 'pending' || status === 'downloading');
+  if (status === 'completed') row._refreshThumbnail?.(true);
+}
+
+function buildListThumbnailSrc(item, state) {
+  const src = FsUtils.buildThumbnailSrc(item, state);
+  if (!thumbRefreshTimestamp || !src || !FsUtils.isImageEntry(item)) return src;
+  return `${src}${src.includes('?') ? '&' : '?'}_t=${thumbRefreshTimestamp}`;
 }
 
 function updateDownloadRow(destPath, status, size = 0) {
   if (!destPath) return;
   const state = Core.getState();
+  if (status === 'completed') {
+    const item = state.list?.find(entry => _pathsEqual(entry.path, destPath));
+    if (item) item.size = size || 1;
+    const thumbnailItem = item || { path: destPath, name: FsUtils.basename(destPath) };
+    thumbnailCache.delete(buildListThumbnailSrc(thumbnailItem, state));
+  }
   for (const [idx, li] of activeRows) {
     if (li.dataset.index === undefined) continue;
     const item = state.list?.[idx];
     if (!item || !_pathsEqual(item.path, destPath)) continue;
 
-    if (status === 'completed') {
-      item.size = size || 1;
+    if (status === 'completed' && li._slots?.thumbImg) {
+      const img = li._slots.thumbImg;
+      img.onerror = null;
+      img.removeAttribute('src');
+      img.classList.remove('is-loaded');
+      delete img.dataset.pendingSrc;
     }
     updateEntry(li, item, idx);
-
-    if (status === 'completed' && state.fileListViewMode === 'thumbnail' && li._slots?.thumbImg) {
-      const targetSrc = FsUtils.buildThumbnailSrc(item, state);
-      if (targetSrc && li._slots.thumbImg.getAttribute('src') !== targetSrc) {
-        li._slots.thumbImg.src = targetSrc;
-        li._slots.thumbImg.classList.add('is-loaded');
-      }
-    }
     break;
   }
 
@@ -665,11 +743,6 @@ function buildSavedEntry(item, { onRemove, onOpen, onHighlight, listUl, removeCl
   const thumbImg = document.createElement('img');
   thumbImg.className = 'item-thumbnail-img';
   thumbImg.draggable = false;
-  thumbImg.onload = () => {
-    if (thumbImg.getAttribute('src') && !thumbImg.getAttribute('src').startsWith('data:image/svg+xml')) {
-      thumbImg.classList.add('is-loaded');
-    }
-  };
   thumbWrapper.appendChild(thumbImg);
 
   const thumbPlaceholder = document.createElement('span');
@@ -698,50 +771,7 @@ function buildSavedEntry(item, { onRemove, onOpen, onHighlight, listUl, removeCl
   thumbInfo.appendChild(thumbTitle);
   thumbInfo.appendChild(thumbMeta);
 
-  const ext = FsUtils.getIconExtKey(item);
-  const targetSrc = FsUtils.buildThumbnailSrc(item, null);
-  thumbImg.onerror = () => {
-    thumbImg.onerror = null;
-    const currentSrc = thumbImg.getAttribute('src') || '';
-    if (currentSrc.includes('/thumb/') && !FsUtils.isVideo?.(item.path || '')) {
-      thumbImg.onerror = () => {
-        thumbImg.onerror = null;
-        const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
-        const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
-        favoritesThumbnailCache.set(targetSrc, fallbackSrc);
-        thumbImg.src = fallbackSrc;
-      };
-      const directSrc = FsUtils.buildFileSrcSync(item.path);
-      favoritesThumbnailCache.set(targetSrc, directSrc);
-      thumbImg.src = directSrc;
-    } else {
-      const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
-      const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
-      favoritesThumbnailCache.set(targetSrc, fallbackSrc);
-      thumbImg.src = fallbackSrc;
-    }
-  };
-  thumbImg.onload = () => {
-    const src = thumbImg.getAttribute('src');
-    if (src && !src.startsWith('data:image/svg+xml')) {
-      thumbImg.classList.add('is-loaded');
-      if (!favoritesThumbnailCache.has(src)) {
-        favoritesThumbnailCache.set(src, true);
-      }
-    }
-  };
-  const cachedFavorite = favoritesThumbnailCache.get(targetSrc);
-  if (cachedFavorite !== undefined) {
-    if (animatedSvgSrcs.has(targetSrc)) thumbImg.loading = 'eager';
-    thumbImg.src = typeof cachedFavorite === 'string' ? cachedFavorite : targetSrc;
-    thumbImg.classList.add('is-loaded');
-  } else {
-    thumbImg.loading = 'lazy';
-    thumbImg.src = targetSrc;
-  }
-  if (isSvgSrc(targetSrc) && item.path) {
-    markIfAnimatedSvg(targetSrc, item.path);
-  }
+  initSavedThumbnail(li, thumbImg, item, favoritesThumbnailCache);
 
   const removeBtn = document.createElement('button');
   removeBtn.className = removeClass;
@@ -832,7 +862,10 @@ async function refreshFavoriteDownloadState(rows) {
     for (const row of rows) {
       if (!row.isConnected) continue;
       const status = row.dataset.downloadStatus || getGalleryDownloadStatus(row.dataset.path);
-      row.classList.toggle('is-pending-download', isPendingDownload({ size: sizes[row.dataset.path] }, status));
+      const wasPending = row.classList.contains('is-pending-download');
+      const pending = isPendingDownload({ size: sizes[row.dataset.path] }, status);
+      row.classList.toggle('is-pending-download', pending);
+      if (wasPending && !pending) row._refreshThumbnail?.(true);
     }
   } catch (err) {
     console.error('[FilePanel] Failed to refresh Favorite download state:', err);
@@ -1062,11 +1095,6 @@ function buildLibraryEntry(item, depth = 0) {
   const thumbImg = document.createElement('img');
   thumbImg.className = 'item-thumbnail-img';
   thumbImg.draggable = false;
-  thumbImg.onload = () => {
-    if (thumbImg.getAttribute('src') && !thumbImg.getAttribute('src').startsWith('data:image/svg+xml')) {
-      thumbImg.classList.add('is-loaded');
-    }
-  };
   thumbWrapper.appendChild(thumbImg);
 
   const thumbPlaceholder = document.createElement('span');
@@ -1092,51 +1120,7 @@ function buildLibraryEntry(item, depth = 0) {
   thumbInfo.appendChild(thumbTitle);
   thumbInfo.appendChild(thumbMeta);
 
-  const ext = FsUtils.getIconExtKey(item);
-  const targetSrc = FsUtils.buildThumbnailSrc(item, null);
-  thumbImg.onerror = () => {
-    thumbImg.onerror = null;
-    const currentSrc = thumbImg.getAttribute('src') || '';
-    if (currentSrc.includes('/thumb/') && !FsUtils.isVideo?.(item.path || '')) {
-      thumbImg.onerror = () => {
-        thumbImg.onerror = null;
-        const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
-        const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
-        libraryThumbnailCache.set(targetSrc, fallbackSrc);
-        thumbImg.src = fallbackSrc;
-      };
-      const directSrc = FsUtils.buildFileSrcSync(item.path);
-      libraryThumbnailCache.set(targetSrc, directSrc);
-      thumbImg.src = directSrc;
-    } else {
-      const iconPath = FsUtils._isPathSpecificIcon(ext) ? item.path : '';
-      const fallbackSrc = FsUtils.buildNativeIconSrc(iconPath, ext, 'large');
-      libraryThumbnailCache.set(targetSrc, fallbackSrc);
-      thumbImg.src = fallbackSrc;
-    }
-  };
-  thumbImg.onload = () => {
-    const src = thumbImg.getAttribute('src');
-    if (src && !src.startsWith('data:image/svg+xml')) {
-      thumbImg.classList.add('is-loaded');
-      if (!libraryThumbnailCache.has(src)) {
-        libraryThumbnailCache.set(src, true);
-      }
-    }
-  };
-
-  const cachedThumb = libraryThumbnailCache.get(targetSrc);
-  if (cachedThumb !== undefined) {
-    if (animatedSvgSrcs.has(targetSrc)) thumbImg.loading = 'eager';
-    thumbImg.src = typeof cachedThumb === 'string' ? cachedThumb : targetSrc;
-    thumbImg.classList.add('is-loaded');
-  } else {
-    thumbImg.loading = 'lazy';
-    thumbImg.src = targetSrc;
-  }
-  if (isSvgSrc(targetSrc) && item.path) {
-    markIfAnimatedSvg(targetSrc, item.path);
-  }
+  initSavedThumbnail(li, thumbImg, item, libraryThumbnailCache);
 
   const canDelete = item.is_gallery || !item.is_dir;
 
@@ -1780,6 +1764,10 @@ function createPoolRow() {
     const src = thumbImg.getAttribute('src');
     if (src && !src.startsWith('data:image/svg+xml')) {
       thumbImg.classList.add('is-loaded');
+      if (src.includes('/icon/')) {
+        staticIconCache.set(src, true);
+        return;
+      }
       if (!thumbnailCache.has(src)) {
         if (isSvgSrc(src)) {
           thumbnailCache.set(src, true);
@@ -1854,12 +1842,13 @@ function updateEntry(li, item, index) {
   li.dataset.index = index;
   const state = Core.getState();
   const downloadStatus = getGalleryDownloadStatus(item.path);
+  const pendingDownload = isPendingDownload(item, downloadStatus, state.mode === 'archive');
   const hasDownloadError = downloadStatus === 'error';
   li.title = item.name && item.name !== '..'
     ? (hasDownloadError ? `${item.displayName || item.name}\nDownload failed. Click to retry.` : (item.displayName || item.name))
     : '';
   li.classList.toggle('is-hidden-entry', !!item.is_hidden);
-  li.classList.toggle('is-pending-download', isPendingDownload(item, downloadStatus, state.mode === 'archive'));
+  li.classList.toggle('is-pending-download', pendingDownload);
   li.classList.toggle('is-download-error', hasDownloadError);
   if (hasDownloadError) {
     li.dataset.downloadStatus = 'error';
@@ -1898,12 +1887,12 @@ function updateEntry(li, item, index) {
     if (slots.thumbImg) {
       const ext = FsUtils.getIconExtKey(item);
       const isImage = FsUtils.isImageEntry(item);
-      let targetSrc = FsUtils.buildThumbnailSrc(item, state);
+      const hasNativeIcon = isImage || pendingDownload;
+      slots.thumbWrapper.classList.toggle('has-native-icon', hasNativeIcon);
+      if (hasNativeIcon) setThumbnailIcon(slots.thumbWrapper, item);
+      const targetSrc = buildListThumbnailSrc(item, state);
       const isConstrained = isImage && FsUtils.isConstrainedThumbnailSrc(targetSrc);
       const outsideViewport = isConstrained && (index < imageViewportStart || index >= imageViewportEnd);
-      if (thumbRefreshTimestamp && isImage && targetSrc) {
-        targetSrc = targetSrc.includes('?') ? `${targetSrc}&_t=${thumbRefreshTimestamp}` : `${targetSrc}?_t=${thumbRefreshTimestamp}`;
-      }
 
       slots.thumbImg.onerror = () => {
         slots.thumbImg.onerror = null;
@@ -1930,7 +1919,12 @@ function updateEntry(li, item, index) {
       const cachedEntry = thumbnailCache.get(targetSrc);
       const isCached = cachedEntry !== undefined;
 
-      if (!isImage) {
+      if (pendingDownload) {
+        delete slots.thumbImg.dataset.pendingSrc;
+        slots.thumbImg.onerror = null;
+        slots.thumbImg.removeAttribute('src');
+        slots.thumbImg.classList.remove('is-loaded');
+      } else if (!isImage) {
         delete slots.thumbImg.dataset.pendingSrc;
         const isStaticCached = staticIconCache.has(targetSrc);
         if (slots.thumbImg.getAttribute('src') !== targetSrc) {
@@ -1938,12 +1932,7 @@ function updateEntry(li, item, index) {
           slots.thumbImg.loading = 'lazy';
           slots.thumbImg.src = targetSrc;
         }
-        if (!isStaticCached) {
-          slots.thumbImg.onload = () => {
-            staticIconCache.set(targetSrc, true);
-            slots.thumbImg.classList.add('is-loaded');
-          };
-        } else {
+        if (isStaticCached) {
           slots.thumbImg.classList.add('is-loaded');
         }
       } else if (isCached) {
@@ -1992,6 +1981,7 @@ function updateEntry(li, item, index) {
             const pendingTarget = targetSrc;
             const pendingItemPath = item.path;
             setTimeout(() => {
+              if (li.classList.contains('is-pending-download')) return;
               if (slots.thumbImg.getAttribute('src') === pendingTarget) return;
               // Check if still relevant (row may have been recycled)
               const currentIdx = parseInt(slots.thumbImg.closest('li')?.dataset.index, 10);
@@ -2002,6 +1992,7 @@ function updateEntry(li, item, index) {
               if (viewerBlobPending) {
                 // Retry after viewer blob settles
                 setTimeout(() => {
+                  if (li.classList.contains('is-pending-download')) return;
                   if (slots.thumbImg.getAttribute('src') !== pendingTarget && parseInt(slots.thumbImg.closest('li')?.dataset.index, 10) === index) {
                     slots.thumbImg.src = pendingTarget;
                     if (isSvgSrc(pendingTarget) && pendingItemPath) markIfAnimatedSvg(pendingTarget, pendingItemPath);
@@ -2219,6 +2210,7 @@ function commitPendingThumbnails() {
           img.loading = 'lazy';
           const pendingSrc = targetSrc;
           setTimeout(() => {
+            if (li.classList.contains('is-pending-download')) return;
             const currentIdx = parseInt(li.dataset.index, 10);
             if (currentIdx !== idx) return;
             if (img.getAttribute('src') === pendingSrc) return;
@@ -2226,6 +2218,7 @@ function commitPendingThumbnails() {
             const viewerBlobPending = viewerSrc && viewerSrc.includes('/archive/') && !hasCachedArchiveBlob(viewerSrc);
             if (viewerBlobPending) {
               setTimeout(() => {
+                if (li.classList.contains('is-pending-download')) return;
                 if (parseInt(li.dataset.index, 10) === idx && img.getAttribute('src') !== pendingSrc) {
                   img.src = pendingSrc;
                   if (isSvgSrc(pendingSrc)) {
