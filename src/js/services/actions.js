@@ -3,7 +3,7 @@
  */
 
 import { FILTERS, activeFilterId } from './registry.js';
-import { WORKSPACE_SURFACES, WORKSPACE_POSITIONS } from './workspaceLayout.js';
+import { WORKSPACE_SURFACES, WORKSPACE_POSITIONS, workspacePositionLabel } from './workspaceLayout.js';
 
 export const ACTION_REGISTRY = [
   // Navigation
@@ -193,9 +193,9 @@ export const ACTION_REGISTRY = [
   // Window & UI
   ...WORKSPACE_SURFACES.flatMap(surface => WORKSPACE_POSITIONS.map(position => ({
     id: `cmd-window-${surface.window}-${position}`,
-    label: `${surface.label}: ${position[0].toUpperCase()}${position.slice(1)}`,
+    label: `${surface.label}: ${workspacePositionLabel(position)}`,
     defaultBinds: [],
-    category: 'Windows',
+    category: `${surface.label} position`,
     run: ctx => ctx.Core.setWorkspacePosition(surface.id, position, { persist: true })
   }))),
   { id: 'cmd-options', label: 'Open Options', defaultBinds: '5', category: 'Window & UI',

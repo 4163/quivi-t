@@ -40,14 +40,14 @@ import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREA
 import { FsUtils } from './fsUtils.js';
 import { DirectoryPrefs } from './directoryPrefs.js';
 import { BoundedMap } from './services/cache.js';
-import { DEFAULT_WORKSPACE_LAYOUT, relocateWorkspace } from './services/workspaceLayout.js';
+import { DEFAULT_WORKSPACE_LAYOUT, relocateWorkspace, isWorkspaceDetached } from './services/workspaceLayout.js';
 
 const invoke = window.__TAURI__?.core?.invoke;
 export const CORE_SESSION_METHODS = ['setListAndIndex', 'setState', 'setFileListVisible', 'toggleTransparentBg',
   'setFitMode', 'setScalingMode', 'setActiveFilter', 'setImageDimensions', 'setSpreadStep',
   'setSpreadEnabled', 'toggleSpreadEnabled', 'setSpreadDirection', 'setSpreadMode', 'toggleSpreadMode',
   'setManhwaMode', 'toggleManhwaMode', 'setFileListViewMode', 'toggleFileListViewMode',
-  'navigate', 'jumpToIndex', 'selectIndex', 'setWorkspacePosition', 'loadConfig', 'flushConfig'];
+  'navigate', 'jumpToIndex', 'selectIndex', 'setWorkspacePosition', 'setWindowMenuVisible', 'loadConfig', 'flushConfig'];
 
 // Internal state.
 
@@ -362,8 +362,18 @@ export const Core = {
 
   setWorkspacePosition(surface, position, options = {}) {
     _state.workspaceLayout = relocateWorkspace(_state.workspaceLayout, surface, position);
+    if (isWorkspaceDetached(_state.workspaceLayout)) _state.fileListVisible = true;
     _state.config.frontend_data.workspace_layout = _state.workspaceLayout;
     if (options.persist) _scheduleConfigFlush();
+    _notify();
+  },
+
+  setWindowMenuVisible(role, visible) {
+    if (!['main', 'fileList'].includes(role)) return;
+    const fd = _state.config.frontend_data;
+    fd.window_menu_visible = { ...fd.window_menu_visible, [role]: !!visible };
+    if (role === 'main') fd.menu_visible = !!visible;
+    _scheduleConfigFlush();
     _notify();
   },
 
@@ -409,7 +419,7 @@ export const Core = {
   },
 
   setFileListVisible(visible, options = {}) {
-    _state.fileListVisible = !!visible;
+    _state.fileListVisible = isWorkspaceDetached(_state.workspaceLayout) || !!visible;
     if (options.notify !== false) _notify();
   },
 
@@ -658,6 +668,7 @@ export const Core = {
       _state.spreadDirection = _state.config.frontend_data.spread_direction || DEFAULT_SPREAD_DIRECTION;
       _state.fileListViewMode = _state.config.frontend_data.file_list_view_mode || DEFAULT_FILE_LIST_VIEW_MODE;
       _state.workspaceLayout = _state.config.frontend_data.workspace_layout;
+      if (isWorkspaceDetached(_state.workspaceLayout)) _state.fileListVisible = true;
       _state.manhwaEnabled = _state.config.frontend_data.manhwa_enabled === true;
       if (oldManhwaEnabled !== _state.manhwaEnabled) _sortCurrentList();
 

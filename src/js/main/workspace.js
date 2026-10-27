@@ -1,13 +1,15 @@
 import { Core } from '../core.js';
-import { WORKSPACE_SURFACES, dockWorkspaceSurface } from '../services/workspaceLayout.js';
+import { dockWorkspaceSurface, isWorkspaceDetached } from '../services/workspaceLayout.js';
 import { workspaceSurface } from '../shared/workspaceHost.js';
 import { forgetWorkspacePeer, windowPopups, workspacePopupUrl } from '../shared/workspaceSession.js';
 
-export function initWorkspace() {
+export function initWorkspace({ onDetachedClose }) {
   const workspace = document.getElementById('workspace');
   let running = false;
   let dirty = false;
-  const opened = new Set();
+  let opened = false;
+  let resolveClose = null;
+  const label = 'workspace-file-list';
 
   function dock(surface) {
     const layout = dockWorkspaceSurface(Core.getState().workspaceLayout, surface);
@@ -21,33 +23,32 @@ export function initWorkspace() {
     try {
       while (dirty) {
         dirty = false;
-        for (const surface of WORKSPACE_SURFACES) {
-          const label = `workspace-${surface.window}`;
-          const detached = Core.getState().workspaceLayout[surface.id] === 'detached';
-          if (detached === opened.has(surface.id)) continue;
-          try {
-            if (detached) {
-              if (window.__TAURI__) {
-                await window.__TAURI__.core.invoke('open_workspace_window', { surface: surface.id });
-              } else {
-                const popup = window.open(workspacePopupUrl(surface.id), label, 'popup,width=900,height=650');
-                if (!popup) throw new Error('Allow popups to detach this panel');
-                windowPopups.set(label, popup);
-              }
-              opened.add(surface.id);
+        const detached = isWorkspaceDetached(Core.getState().workspaceLayout);
+        if (detached === opened) continue;
+        try {
+          if (detached) {
+            if (window.__TAURI__) {
+              await window.__TAURI__.core.invoke('open_workspace_window', { surface: 'fileList' });
             } else {
-              if (window.__TAURI__) await window.__TAURI__.core.invoke('close_workspace_window', { surface: surface.id });
-              else windowPopups.get(label)?.close();
-              windowPopups.delete(label);
-              forgetWorkspacePeer(label);
-              opened.delete(surface.id);
+              const popup = window.open(workspacePopupUrl('fileList'), label, 'popup,width=440,height=650');
+              if (!popup) throw new Error('Allow popups to detach this panel');
+              windowPopups.set(label, popup);
             }
-          } catch (error) {
-            console.error('[Workspace] Unable to change panel window:', error);
-            if (detached) {
-              dock(surface.id);
-              window.alert(`Unable to detach ${surface.label}. ${error}`);
-            }
+          } else {
+            const closed = new Promise(resolve => { resolveClose = resolve; });
+            if (window.__TAURI__) await window.__TAURI__.core.invoke('close_workspace_window', { surface: 'fileList' });
+            else windowPopups.get(label)?.close();
+            await closed;
+            windowPopups.delete(label);
+            forgetWorkspacePeer(label);
+          }
+          opened = detached;
+        } catch (error) {
+          resolveClose = null;
+          console.error('[Workspace] Unable to change panel window:', error);
+          if (detached) {
+            dock('fileList');
+            window.alert(`Unable to detach File List. ${error}`);
           }
         }
       }
@@ -62,10 +63,14 @@ export function initWorkspace() {
   Core.onStateChange(paint);
   paint(Core.getState());
   window.addEventListener('quivit-workspace-closed', event => {
-    const surface = WORKSPACE_SURFACES.find(item => `workspace-${item.window}` === event.detail);
-    if (!surface) return;
-    opened.delete(surface.id);
-    if (Core.getState().workspaceLayout[surface.id] === 'detached') dock(surface.id);
+    if (event.detail !== 'workspace-file-list') return;
+    opened = false;
+    if (resolveClose) {
+      resolveClose();
+      resolveClose = null;
+      return;
+    }
+    if (isWorkspaceDetached(Core.getState().workspaceLayout)) onDetachedClose();
   });
   if (!window.__TAURI__ && !workspaceSurface) {
     const timer = setInterval(() => {

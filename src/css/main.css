@@ -494,14 +494,11 @@ body.resizing-col {
 }
 
 :root[data-workspace-surface="main"] #workspace[data-file-list-position="detached"] > #file-panel,
-:root[data-workspace-surface="main"] #workspace[data-viewport-position="detached"] > #viewport,
-:root[data-workspace-surface="fileList"] #viewport,
-:root[data-workspace-surface="viewport"] #file-panel {
+:root[data-workspace-surface="fileList"] #viewport {
   display: none;
 }
 
-:root[data-workspace-surface="fileList"] #workspace > #file-panel,
-:root[data-workspace-surface="main"] #workspace[data-viewport-position="detached"] > #file-panel {
+:root[data-workspace-surface="fileList"] #workspace > #file-panel {
   flex: 1;
   width: 100%;
   height: 100%;
@@ -511,7 +508,6 @@ body.resizing-col {
 }
 
 :root[data-workspace-surface="fileList"] #panel-resize-handle,
-:root[data-workspace-surface="viewport"] #panel-resize-handle,
 #workspace[data-viewport-position="detached"] #panel-resize-handle {
   display: none;
 }

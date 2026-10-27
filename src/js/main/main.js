@@ -25,7 +25,7 @@ import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from '../keybinds.j
 import { Statusbar } from '../menubar/statusbar.js';
 import { initMenuBar, syncViewMenu } from '../menubar.js';
 import * as Chrome from '../menubar/chrome.js';
-import { initFullscreen, toggleFullscreen, syncFullscreenState, isFullscreenActive, syncKeyLabel } from './fullscreen.js';
+import { initFullscreen, toggleFullscreen, syncFullscreenState, syncKeyLabel } from './fullscreen.js';
 
 import { handleTabJump } from '../keyboardNav.js';
 import { emergencyCssReset } from '../shared/configPreview.js';
@@ -108,7 +108,6 @@ const fileListUl = document.getElementById('file-list');
 const resizeHandle = document.getElementById('panel-resize-handle');
 const metadataBadgeEl = document.getElementById('status-metadata-badge');
 
-let _uiInitialized = false;
 let keyboardPanStep = DEFAULT_KEYBOARD_PAN_STEP;
 let wheelPanStep = DEFAULT_WHEEL_PAN_STEP;
 
@@ -182,21 +181,6 @@ function bindMenuCommands() {
 }
 
 Core.onStateChange((state) => {
-  if (!_uiInitialized && state.config?.frontend_data) {
-    const fd = state.config.frontend_data;
-    if (fd.menu_visible !== undefined) {
-      Chrome.setMenuBarVisible(fd.menu_visible);
-    }
-    if (fd.status_visible !== undefined) {
-      Chrome.setStatusBarVisible(fd.status_visible);
-    }
-    
-    // Sync checkmarks that rely on startup state.
-    document.getElementById('cmd-fullscreen')?.classList.toggle('checked', isFullscreenActive());
-    
-    _uiInitialized = true;
-  }
-
   updateMenuShortcuts(state.config);
   syncViewMenu(state);
 
@@ -254,8 +238,9 @@ window.addEventListener('quivit-history-changed', () => {
 });
 
 // Initialization.
-initWorkspace();
+initWorkspace({ onDetachedClose: () => workspaceControls.dispatchAction('cmd-quit') });
 Statusbar.init();
+Chrome.initChrome();
 initFullscreen();
 initFilePanel({
   filePanel,

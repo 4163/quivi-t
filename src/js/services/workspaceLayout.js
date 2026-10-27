@@ -7,13 +7,24 @@ export const WORKSPACE_POSITIONS = ['left', 'right', 'top', 'bottom', 'detached'
 export const DEFAULT_WORKSPACE_LAYOUT = Object.freeze({ fileList: 'left', viewport: 'right' });
 const OPPOSITE = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' };
 
+export function isWorkspaceDetached(layout) {
+  return layout?.fileList === 'detached' || layout?.viewport === 'detached';
+}
+
+export function workspacePositionLabel(position) {
+  return WORKSPACE_POSITIONS.includes(position) ? position[0].toUpperCase() + position.slice(1) : '';
+}
+
+export function normalizeWindowMenuVisibility(visibility, legacyVisible = true) {
+  return Object.fromEntries(['main', 'fileList'].map(role => [
+    role, typeof visibility?.[role] === 'boolean' ? visibility[role] : legacyVisible !== false
+  ]));
+}
+
 export function normalizeWorkspaceLayout(layout) {
+  if (isWorkspaceDetached(layout)) return { fileList: 'detached', viewport: 'detached' };
   const fileList = WORKSPACE_POSITIONS.includes(layout?.fileList) ? layout.fileList : 'left';
-  if (fileList !== 'detached') {
-    return { fileList, viewport: layout?.viewport === 'detached' ? 'detached' : OPPOSITE[fileList] };
-  }
-  const viewport = OPPOSITE[layout?.viewport] ? layout.viewport : 'right';
-  return { fileList, viewport };
+  return { fileList, viewport: OPPOSITE[fileList] };
 }
 
 export function relocateWorkspace(layout, surface, position) {
@@ -22,7 +33,7 @@ export function relocateWorkspace(layout, surface, position) {
   const other = surface === 'fileList' ? 'viewport' : 'fileList';
   next[surface] = position;
   if (position !== 'detached') next[other] = OPPOSITE[position];
-  else if (next[other] === 'detached') next[other] = DEFAULT_WORKSPACE_LAYOUT[other];
+  else next[other] = 'detached';
   return next;
 }
 

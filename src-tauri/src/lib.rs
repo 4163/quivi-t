@@ -120,6 +120,7 @@ pub fn run() {
         open_options,
         open_workspace_window,
         close_workspace_window,
+        set_workspace_title,
         fit_options_window,
         open_metadata_window,
         fit_metadata_window,

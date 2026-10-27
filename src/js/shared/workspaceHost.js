@@ -1,12 +1,13 @@
 import { Core } from '../core.js';
+import { isWorkspaceDetached } from '../services/workspaceLayout.js';
 
 const requestedSurface = new URLSearchParams(window.location.search).get('surface');
-export const workspaceSurface = ['fileList', 'viewport'].includes(requestedSurface) ? requestedSurface : null;
+export const workspaceSurface = requestedSurface === 'fileList' ? 'fileList' : null;
 const EMPTY_LIST = [];
 
 export function hostsWorkspaceSurface(surface, state = Core.getState()) {
   if (workspaceSurface) return workspaceSurface === surface && state.workspaceLayout?.[surface] === 'detached';
-  return state.workspaceLayout?.[surface] !== 'detached';
+  return surface === 'viewport' || !isWorkspaceDetached(state.workspaceLayout);
 }
 
 function viewportState(state) {

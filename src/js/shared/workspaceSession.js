@@ -5,8 +5,9 @@ import { WORKSPACE_SURFACES } from '../services/workspaceLayout.js';
 
 const REQUEST_TIMEOUT_MS = 30000;
 const MAX_PENDING_REQUESTS = 128;
-const ownLabel = workspaceSurface ? `workspace-${WORKSPACE_SURFACES.find(s => s.id === workspaceSurface).window}` : 'main';
-const allowedLabels = new Set(['main', 'workspace-file-list', 'workspace-viewport']);
+const ownLabel = window.__TAURI__?.window.getCurrentWindow().label
+  || (workspaceSurface ? `workspace-${WORKSPACE_SURFACES.find(s => s.id === workspaceSurface).window}` : 'main');
+const allowedLabels = new Set(['main', 'workspace-file-list', 'options']);
 const coreMethods = new Set(CORE_SESSION_METHODS);
 const fsMethods = new Set(FS_SESSION_METHODS);
 const peers = new Map();
@@ -17,6 +18,7 @@ let sequence = 0;
 let configBaseline = {};
 const sessionId = new URLSearchParams(window.location.search).get('session') || crypto.randomUUID();
 let receiveInitial;
+let transportPromise = null;
 
 export function registerWorkspaceHandlers(next) {
   handlers = next;
@@ -62,9 +64,9 @@ function settle(id, value, error) {
 
 async function execute(message) {
   const { group, method, args } = message;
-  if (group === 'core' && !workspaceSurface && coreMethods.has(method)) return Core[method](...args);
-  if (group === 'fs' && !workspaceSurface && fsMethods.has(method)) return FsUtils[method](...args);
-  if (group === 'config' && !workspaceSurface && method === 'persist') {
+  if (group === 'core' && ownLabel === 'main' && coreMethods.has(method)) return Core[method](...args);
+  if (group === 'fs' && ownLabel === 'main' && fsMethods.has(method)) return FsUtils[method](...args);
+  if (group === 'config' && ownLabel === 'main' && method === 'persist') {
     await Core.patchFrontendConfig(message.patch, args[0]);
     if ('favorites' in message.patch || 'favorites_collapsed' in message.patch) {
       window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));
@@ -82,14 +84,14 @@ function publish(target, full = false, configEvent = false) {
   const snapshot = { ...state };
   if (!full && state.list === previous.list) delete snapshot.list;
   if (!full && state.src === previous.src) delete snapshot.src;
-  if (!full && configJson === previous.configJson) delete snapshot.config;
+  if (!full && !configEvent && configJson === previous.configJson) delete snapshot.config;
   peers.set(target, { list: state.list, src: state.src, configJson });
   send(target, { kind: 'snapshot', snapshot, configEvent }).catch(console.error);
 }
 
 async function receive(message) {
   if (!message || !allowedLabels.has(message.source) || message.target !== ownLabel || message.source === ownLabel) return;
-  if (message.kind === 'ready' && !workspaceSurface && message.source !== 'main') {
+  if (message.kind === 'ready' && ownLabel === 'main' && message.source !== 'main') {
     publish(message.source, true, true);
     return;
   }
@@ -131,13 +133,17 @@ export function workspacePopupUrl(surface) {
   return url.href;
 }
 
-export async function initWorkspaceSession() {
-  document.documentElement.dataset.workspaceSurface = workspaceSurface || 'main';
+export function initWorkspaceClient() {
+  transportPromise ??= connectTransport();
+  return transportPromise;
+}
+
+async function connectTransport() {
   if (window.__TAURI__) {
     const { listen, emitTo } = window.__TAURI__.event;
     send = (target, message) => emitTo(target, 'workspace-message', { ...message, source: ownLabel, target });
     await listen('workspace-message', event => { receive(event.payload).catch(console.error); });
-    if (!workspaceSurface) {
+    if (ownLabel === 'main') {
       await listen('workspace-detached-closed', event => {
         forgetWorkspacePeer(event.payload);
         window.dispatchEvent(new CustomEvent('quivit-workspace-closed', { detail: event.payload }));
@@ -149,6 +155,11 @@ export async function initWorkspaceSession() {
     channel.onmessage = event => { receive(event.data).catch(console.error); };
     window.addEventListener('pagehide', () => channel.close());
   }
+}
+
+export async function initWorkspaceSession() {
+  document.documentElement.dataset.workspaceSurface = workspaceSurface || 'main';
+  await initWorkspaceClient();
   if (workspaceSurface) {
     const forward = (group, method, args) => requestWorkspace('main', group, method, args).catch(error => {
       console.error('[Workspace]', error);

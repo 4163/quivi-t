@@ -11,14 +11,13 @@ const SESSION_ACTIONS = new Set(['cmd-history-back', 'cmd-history-forward', 'cmd
 export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleImageIndices }) {
   let remoteVisibleIndices = [];
   let importActivity = { importing: false, phase: 'idle', dropId: null };
-  const viewportLabel = () => Core.getState().workspaceLayout.viewport === 'detached' ? 'workspace-viewport' : 'main';
   window.addEventListener('quivit-workspace-strip-info', event => { remoteVisibleIndices = event.detail || []; });
 
   function dispatchAction(id, payload) {
     let target = workspaceSurface && SESSION_ACTIONS.has(id) ? 'main' : null;
     const savedItemFocused = !payload?.fileList && (actionCtx.isFavoritesFocused() || actionCtx.isLibraryFocused());
     const stripNavigation = ['cmd-next', 'cmd-prev'].includes(id) && Core.getState().manhwaEnabled && !savedItemFocused;
-    if ((viewportActionIds.has(id) || stripNavigation) && !hostsWorkspaceSurface('viewport')) target = viewportLabel();
+    if ((viewportActionIds.has(id) || stripNavigation) && !hostsWorkspaceSurface('viewport')) target = 'main';
     if (!target) return dispatch(id, payload, actionCtx).catch(console.error);
     const forwarded = payload ? { wheel: payload.wheel, clientX: payload.clientX, clientY: payload.clientY, fileList: payload.fileList } : null;
     if (forwarded?.wheel && ['cmd-zoom-in', 'cmd-zoom-out'].includes(id)) forwarded.wheel = false;
@@ -28,19 +27,18 @@ export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleIm
   function publishStripInfo() {
     if (!hostsWorkspaceSurface('viewport')) return;
     const indices = getVisibleImageIndices();
-    if (workspaceSurface) requestWorkspace('main', 'viewportInfo', 'update', [indices]).catch(console.error);
-    else window.dispatchEvent(new CustomEvent('quivit-workspace-strip-info', { detail: indices }));
+    window.dispatchEvent(new CustomEvent('quivit-workspace-strip-info', { detail: indices }));
   }
 
   return {
     dispatchAction,
     panBy(dx, dy) {
       if (hostsWorkspaceSurface('viewport')) Viewer.panBy(dx, dy);
-      else requestWorkspace(viewportLabel(), 'viewer', 'panBy', [dx, dy]).catch(console.error);
+      else requestWorkspace('main', 'viewer', 'panBy', [dx, dy]).catch(console.error);
     },
     stripCall(method, ...args) {
       if (hostsWorkspaceSurface('viewport')) return strip[method](...args);
-      requestWorkspace(viewportLabel(), 'strip', method, args).catch(console.error);
+      requestWorkspace('main', 'strip', method, args).catch(console.error);
       return true;
     },
     visibleIndices: () => hostsWorkspaceSurface('viewport') ? getVisibleImageIndices() : remoteVisibleIndices,
@@ -69,9 +67,6 @@ export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleIm
         action: { run: (id, payload) => dispatchAction(id, payload) },
         viewer: { panBy: (...args) => Viewer.panBy(...args) },
         strip,
-        viewportInfo: { update: indices => {
-          window.dispatchEvent(new CustomEvent('quivit-workspace-strip-info', { detail: indices }));
-        } },
         import: { openUrl: url => importActions.openUrl(url), openPath: path => importActions.openPath(path), activity: () => importActivity },
         url: Object.fromEntries(['loadUrl', 'retryGalleryDownload', 'setVisibleRange', 'setDisplayOrder',
           'cancelGalleryDownloads', 'forgetDeletedLibraryEntry', 'getWorkspaceDownloadState'].map(method => [method, (...args) => UrlLoader[method](...args)]))

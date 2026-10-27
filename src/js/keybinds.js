@@ -8,7 +8,7 @@ import { normalizeCombo, normalizeList } from './services/keyCombo.js';
 import { activeFilterId, normalizeFilterOptions } from './services/registry.js';
 
 import { DEFAULT_KEYBINDS as REGISTRY_DEFAULTS } from './services/actions.js';
-import { normalizeWorkspaceLayout } from './services/workspaceLayout.js';
+import { normalizeWorkspaceLayout, normalizeWindowMenuVisibility } from './services/workspaceLayout.js';
 
 export const DEFAULT_KEYBINDS = REGISTRY_DEFAULTS;
 
@@ -68,6 +68,7 @@ export function mergeConfig(loaded) {
       show_hidden: fd.show_hidden === true,
       hide_chrome_on_fullscreen: fd.hide_chrome_on_fullscreen !== false,
       menu_visible: fd.menu_visible !== false,
+      window_menu_visible: normalizeWindowMenuVisibility(fd.window_menu_visible, fd.menu_visible),
       status_visible: fd.status_visible !== false,
       file_list_view_mode: fd.file_list_view_mode === 'thumbnail' ? 'thumbnail' : DEFAULT_FILE_LIST_VIEW_MODE,
       workspace_layout: normalizeWorkspaceLayout(fd.workspace_layout),

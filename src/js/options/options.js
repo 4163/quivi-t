@@ -2,6 +2,7 @@ import { mergeConfig, DEFAULT_KEYBINDS, DEFAULT_SPREAD_ENABLED } from '../keybin
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { makeListNavigable, handleTabJump } from '../keyboardNav.js';
 import { initKeybindUi } from './keybindUi.js';
+import { initWorkspaceClient, requestWorkspace } from '../shared/workspaceSession.js';
 import { validateKeybindSafety } from '../services/keybindDomain.js';
 import { initAssociationsUi, applyAssociations } from './associationsUi.js';
 import { previewing, setPreviewing, revertPreviewChanges as _revertPreviewChanges, previewTheme, previewCss, emergencyCssReset } from '../shared/configPreview.js';
@@ -527,13 +528,16 @@ async function saveOptions() {
   try { localStorage.setItem('quivit-custom-css', formConfig.frontend_data.custom_css); } catch(e) {}
   
   const merged = mergeConfig(formConfig);
-  // Options never edits favorites; carry the live disk values so saving
-  // settings does not wipe a favorite added in the main window (stale copy).
+  // Favorites and window preferences can change while Options is open.
+  // Flush their owner before copying the current values into this save.
   try {
-    if (invoke && !libraryPathChanged) {
+    if (invoke) {
+      await initWorkspaceClient();
+      await requestWorkspace('main', 'core', 'flushConfig');
       const live = mergeConfig(await invoke('load_config'));
-      if (live.frontend_data?.favorites !== undefined) merged.frontend_data.favorites = live.frontend_data.favorites;
-      if (live.frontend_data?.favorites_collapsed !== undefined) merged.frontend_data.favorites_collapsed = live.frontend_data.favorites_collapsed;
+      for (const key of ['favorites', 'favorites_collapsed', 'workspace_layout', 'window_menu_visible', 'menu_visible', 'status_visible']) {
+        if (live.frontend_data[key] !== undefined) merged.frontend_data[key] = live.frontend_data[key];
+      }
     }
   } catch { /* fall back to form values */ }
   Object.assign(config, merged);

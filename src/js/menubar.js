@@ -26,7 +26,7 @@ import {
 } from './filepanel/libraryStore.js';
 import { fetchManifest } from './urlLoader.js';
 import { FsUtils } from './fsUtils.js';
-import { WORKSPACE_SURFACES, WORKSPACE_POSITIONS } from './services/workspaceLayout.js';
+import { WORKSPACE_SURFACES, WORKSPACE_POSITIONS, isWorkspaceDetached, workspacePositionLabel } from './services/workspaceLayout.js';
 
 export function initMenuBar() {
   bindMenus();
@@ -796,7 +796,7 @@ function _setMenuItemDisabled(id, disabled, note = '') {
   el.classList.toggle('muted', disabled);
   el.setAttribute('aria-disabled', disabled ? 'true' : 'false');
   if (disabled) {
-    if (!el.dataset.origTitle && el.title) {
+    if (el.dataset.origTitle === undefined) {
       el.dataset.origTitle = el.title;
     }
     el.title = note;
@@ -810,6 +810,8 @@ function _setMenuItemDisabled(id, disabled, note = '') {
 
 export function syncViewMenu(state) {
   for (const surface of WORKSPACE_SURFACES) {
+    const label = document.getElementById(`${surface.window}-position-label`);
+    if (label) label.textContent = workspacePositionLabel(state.workspaceLayout?.[surface.id]);
     for (const position of WORKSPACE_POSITIONS) {
       const item = document.getElementById(`cmd-window-${surface.window}-${position}`);
       const checked = state.workspaceLayout?.[surface.id] === position;
@@ -818,6 +820,7 @@ export function syncViewMenu(state) {
     }
   }
   document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!state.fileListVisible);
+  _setMenuItemDisabled('cmd-toggle-filelist', isWorkspaceDetached(state.workspaceLayout), 'File List stays visible while windows are detached');
   const isAnimated = !!state.isAnimated;
   // The renderer silently falls back to Bilinear for SVGs.
   // Ignore SVG status here so the user's preferred scaling mode remains visually checked (intended UX).
