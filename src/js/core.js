@@ -78,6 +78,7 @@ const _state = {
 
   /** Current directory path (for sibling navigation) */
   directory: '',
+  libraryDir: '',
 
   /** If mode === 'archive', the path to the archive */
   archivePath: '',

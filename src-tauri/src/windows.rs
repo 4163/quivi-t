@@ -18,6 +18,10 @@ const AUTO_FIT_INITIAL_H: f64 = 600.0;
 const FILE_LIST_INITIAL_W: f64 = 440.0;
 const WORKSPACE_WINDOWS: [&str; 2] = ["main", "workspace-file-list"];
 
+pub(crate) fn is_workspace_window(label: &str) -> bool {
+    WORKSPACE_WINDOWS.contains(&label)
+}
+
 // Options window width auto-fits to content (capped at OPTIONS_MAX_W), height fixed.
 pub(crate) const OPTIONS_INITIAL_W: f64 = AUTO_FIT_INITIAL_W;
 pub(crate) const OPTIONS_INITIAL_H: f64 = 620.0;
@@ -121,18 +125,26 @@ pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Re
     .inner_size(FILE_LIST_INITIAL_W, MAIN_INITIAL_H)
     .min_inner_size(META_MIN_W, MAIN_MIN_H)
     .visible(false)
+    .disable_drag_drop_handler()
     .devtools(true)
     .general_autofill_enabled(false)
     .center()
     .build()
     .map_err(|e| e.to_string())?;
     apply_shell_background(&window, &crate::config::load_config(app.clone()));
+    #[cfg(windows)]
+    if let Err(error) = crate::platform::drop::install(&window) {
+        let _ = window.destroy();
+        return Err(error);
+    }
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
             let _ = app.emit_to("main", "workspace-close-requested", ());
         }
         if matches!(event, tauri::WindowEvent::Destroyed) {
+            #[cfg(windows)]
+            crate::platform::drop::uninstall(label);
             let _ = app.emit_to("main", "workspace-detached-closed", label);
         }
     });

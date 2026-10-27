@@ -279,7 +279,6 @@ const urlOverlay = initUrlOverlay({
 });
 initDropZone({
   dropOverlay, FsUtils, Core, importActions,
-  nativeDropOwner: !workspaceSurface,
   isUnmappedSelection: (state) => isManhwaStripActive() && state.index >= 0 && !isListIndexMapped(state.index),
   onDropAccepted: () => urlOverlay.hide({ restoreFocus: false })
 });

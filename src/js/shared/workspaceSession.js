@@ -20,8 +20,28 @@ const sessionId = new URLSearchParams(window.location.search).get('session') || 
 let receiveInitial;
 let transportPromise = null;
 
+export function listenWorkspaceEvent(event, handler, { owner = ownLabel } = {}) {
+  if (ownLabel !== owner) return Promise.resolve(null);
+  return window.__TAURI__.event.listen(event, handler, { target: owner });
+}
+
 export function registerWorkspaceHandlers(next) {
-  handlers = next;
+  Object.assign(handlers, next);
+}
+
+export function createWorkspaceService(group, service, localMethods = []) {
+  const local = new Set(localMethods);
+  const methods = Object.fromEntries(Object.entries(service)
+    .filter(([method, value]) => typeof value === 'function' && !local.has(method)));
+  if (!workspaceSurface) {
+    registerWorkspaceHandlers({ [group]: methods });
+    return service;
+  }
+  return Object.fromEntries(Object.entries(service).map(([method, value]) => [
+    method, typeof value === 'function' && !local.has(method)
+      ? (...args) => requestWorkspace('main', group, method, args)
+      : value
+  ]));
 }
 
 function rememberConfig(config) {
@@ -140,11 +160,11 @@ export function initWorkspaceClient() {
 
 async function connectTransport() {
   if (window.__TAURI__) {
-    const { listen, emitTo } = window.__TAURI__.event;
+    const { emitTo } = window.__TAURI__.event;
     send = (target, message) => emitTo(target, 'workspace-message', { ...message, source: ownLabel, target });
-    await listen('workspace-message', event => { receive(event.payload).catch(console.error); });
+    await listenWorkspaceEvent('workspace-message', event => { receive(event.payload).catch(console.error); });
     if (ownLabel === 'main') {
-      await listen('workspace-detached-closed', event => {
+      await listenWorkspaceEvent('workspace-detached-closed', event => {
         forgetWorkspacePeer(event.payload);
         window.dispatchEvent(new CustomEvent('quivit-workspace-closed', { detail: event.payload }));
       });

@@ -1,7 +1,9 @@
+import { listenWorkspaceEvent } from '../shared/workspaceSession.js';
+
 const DEFAULT_DROP_MESSAGE = 'Drop images, links, files, or folders here';
 const FEEDBACK_DURATION_MS = 3000;
 
-export function initDropZone({ dropOverlay, FsUtils, Core, importActions, isUnmappedSelection, onDropAccepted, nativeDropOwner = true }) {
+export function initDropZone({ dropOverlay, FsUtils, Core, importActions, isUnmappedSelection, onDropAccepted }) {
   if (!dropOverlay) return;
   const text = dropOverlay.querySelector('.drop-hint p');
   let hovering = false;
@@ -51,7 +53,7 @@ export function initDropZone({ dropOverlay, FsUtils, Core, importActions, isUnma
     if (!importing) FsUtils.openDirectoryDialog();
   });
 
-  function onNativeDrop(event) {
+  async function onNativeDrop(event) {
     const { phase, dropId, message: error } = event.payload || {};
     if (phase === 'entered' || phase === 'left') {
       hovering = phase === 'entered';
@@ -60,11 +62,11 @@ export function initDropZone({ dropOverlay, FsUtils, Core, importActions, isUnma
     } else if (phase === 'accepted') {
       hovering = false;
       try {
-        if (importActions.acceptDrop(dropId)) onDropAccepted();
+        if (await importActions.acceptDrop(dropId)) onDropAccepted();
       } catch (err) { showError(err); }
     } else if (phase === 'ready') {
-      importActions.completeDrop(dropId).catch(showError);
-    } else if (phase === 'failed' && importActions.failDrop(dropId)) {
+      await importActions.completeDrop(dropId).catch(showError);
+    } else if (phase === 'failed' && await importActions.failDrop(dropId)) {
       showError(error);
     }
   }
@@ -74,16 +76,17 @@ export function initDropZone({ dropOverlay, FsUtils, Core, importActions, isUnma
   window.addEventListener('drop', (e) => e.preventDefault());
 
   if (window.__TAURI__) {
-    const { listen } = window.__TAURI__.event;
-    if (navigator.userAgent.includes('Windows') && nativeDropOwner) {
-      listen('quivit-drop', onNativeDrop)
-        .then(() => window.__TAURI__.core.invoke('enable_native_drop'))
+    if (navigator.userAgent.includes('Windows')) {
+      listenWorkspaceEvent('quivit-drop', onNativeDrop, { owner: 'main' })
+        .then(unlisten => {
+          if (unlisten) return window.__TAURI__.core.invoke('enable_native_drop');
+        })
         .catch(showError);
       return;
     }
-    listen('tauri://drag-enter', () => { hovering = true; render(); });
-    listen('tauri://drag-leave', () => { hovering = false; render(); });
-    listen('tauri://drag-drop', (event) => {
+    listenWorkspaceEvent('tauri://drag-enter', () => { hovering = true; render(); });
+    listenWorkspaceEvent('tauri://drag-leave', () => { hovering = false; render(); });
+    listenWorkspaceEvent('tauri://drag-drop', (event) => {
       hovering = false;
       const path = event.payload?.paths?.[0];
       if (path) importActions.openPath(path).catch(showError);

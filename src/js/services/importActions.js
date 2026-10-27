@@ -76,9 +76,12 @@ export function createImportActions({ invoke, FsUtils, loadUrl, cancelUrlImport,
   }
 
   return {
+    getActivity() {
+      return { importing: Boolean(active), phase: active ? 'receiving' : 'idle', dropId: active?.dropId || null };
+    },
     subscribe(listener) {
       listeners.add(listener);
-      listener({ importing: Boolean(active), phase: active ? 'receiving' : 'idle', dropId: active?.dropId || null });
+      listener(this.getActivity());
       return () => listeners.delete(listener);
     },
     async openUrl(url) {
@@ -93,6 +96,8 @@ export function createImportActions({ invoke, FsUtils, loadUrl, cancelUrlImport,
       try { await openPathResult(request, normalized); } finally { finish(request); }
     },
     acceptDrop(dropId) {
+      if (!dropId) return false;
+      if (active?.dropId === dropId) return true;
       try { begin(dropId); return true; } catch (err) { release(dropId); throw err; }
     },
     failDrop(dropId) {

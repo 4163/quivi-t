@@ -1,24 +1,24 @@
 use crate::models::DropPayload;
 const LIBRARY_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(150);
-fn main_only(window: &tauri::WebviewWindow) -> Result<(), String> {
-    if window.label() != "main" {
-        return Err("Only the main window accepts drops".into());
+fn workspace_only(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if !crate::windows::is_workspace_window(window.label()) {
+        return Err("Only workspace windows accept drops".into());
     }
     Ok(())
 }
 #[tauri::command]
 pub fn enable_native_drop(window: tauri::WebviewWindow) -> Result<(), String> {
-    main_only(&window)?;
+    workspace_only(&window)?;
     crate::platform::drop::enable()
 }
 #[tauri::command(async)]
 pub fn describe_drop(window: tauri::WebviewWindow, drop_id: String) -> Result<DropPayload, String> {
-    main_only(&window)?;
+    workspace_only(&window)?;
     crate::platform::drop::describe(&drop_id)
 }
 #[tauri::command]
 pub fn release_drop(window: tauri::WebviewWindow, drop_id: String) -> Result<(), String> {
-    main_only(&window)?;
+    workspace_only(&window)?;
     crate::platform::drop::release(&drop_id);
     Ok(())
 }
@@ -28,7 +28,7 @@ pub fn save_dropped_image(
     drop_id: String,
     sanitized_svg: Option<String>,
 ) -> Result<String, String> {
-    main_only(&window)?;
+    workspace_only(&window)?;
     let lease = crate::platform::drop::claim(&drop_id)?;
     let image = crate::image_import::prepare(
         &lease.capture.path,

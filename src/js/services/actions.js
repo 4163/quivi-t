@@ -5,9 +5,13 @@
 import { FILTERS, activeFilterId } from './registry.js';
 import { WORKSPACE_SURFACES, WORKSPACE_POSITIONS, workspacePositionLabel } from './workspaceLayout.js';
 
+function navigationOwner(ctx, payload) {
+  return !payload?.fileList && (ctx.isFavoritesFocused?.() || ctx.isLibraryFocused?.()) ? 'window' : 'main';
+}
+
 export const ACTION_REGISTRY = [
   // Navigation
-  { id: 'cmd-next', label: 'Next Item', defaultBinds: ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'], category: 'Navigation',
+  { id: 'cmd-next', label: 'Next Item', defaultBinds: ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'], category: 'Navigation', owner: navigationOwner,
     run: (ctx, payload) => {
       if (!payload?.fileList && ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(1);
       else if (!payload?.fileList && ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(1);
@@ -24,7 +28,7 @@ export const ACTION_REGISTRY = [
       else ctx.Core.navigate(1);
     }
   },
-  { id: 'cmd-prev', label: 'Previous Item', defaultBinds: ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'], category: 'Navigation',
+  { id: 'cmd-prev', label: 'Previous Item', defaultBinds: ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'], category: 'Navigation', owner: navigationOwner,
     run: (ctx, payload) => {
       if (!payload?.fileList && ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(-1);
       else if (!payload?.fileList && ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(-1);
@@ -133,13 +137,13 @@ export const ACTION_REGISTRY = [
   // Zoom
   { id: 'cmd-zoom-in', label: 'Zoom In', defaultBinds: ['c', 'Ctrl+ScrollUp'], category: 'Zoom',
     run: (ctx, payload) => {
-      if (payload?.wheel) ctx.Viewer.zoomAt(1, payload.clientX, payload.clientY);
+      if (payload?.wheel && Number.isFinite(payload.clientX) && Number.isFinite(payload.clientY)) ctx.Viewer.zoomAt(1, payload.clientX, payload.clientY);
       else ctx.Viewer.zoomCenter(1);
     }
   },
   { id: 'cmd-zoom-out', label: 'Zoom Out', defaultBinds: ['z', 'Ctrl+ScrollDown'], category: 'Zoom',
     run: (ctx, payload) => {
-      if (payload?.wheel) ctx.Viewer.zoomAt(-1, payload.clientX, payload.clientY);
+      if (payload?.wheel && Number.isFinite(payload.clientX) && Number.isFinite(payload.clientY)) ctx.Viewer.zoomAt(-1, payload.clientX, payload.clientY);
       else ctx.Viewer.zoomCenter(-1);
     }
   },
@@ -209,13 +213,13 @@ export const ACTION_REGISTRY = [
       ctx.Core.setFileListVisible(visible);
     }
   },
-  { id: 'cmd-toggle-menubar', label: 'Toggle Menu Bar', defaultBinds: '2', category: 'Window & UI',
+  { id: 'cmd-toggle-menubar', label: 'Toggle Menu Bar', defaultBinds: '2', category: 'Window & UI', owner: 'window',
     run: (ctx) => ctx.Chrome.toggleMenuBar()
   },
-  { id: 'cmd-toggle-statusbar', label: 'Toggle Status Bar', defaultBinds: '3', category: 'Window & UI',
+  { id: 'cmd-toggle-statusbar', label: 'Toggle Status Bar', defaultBinds: '3', category: 'Window & UI', owner: 'window',
     run: (ctx) => ctx.Chrome.toggleStatusBar()
   },
-  { id: 'cmd-fullscreen', label: 'Toggle Fullscreen', defaultBinds: ['4', 'Alt+Enter', 'F11'], category: 'Window & UI',
+  { id: 'cmd-fullscreen', label: 'Toggle Fullscreen', defaultBinds: ['4', 'Alt+Enter', 'F11'], category: 'Window & UI', owner: 'window',
     run: (ctx) => ctx.toggleFullscreen()
   },
   { id: 'cmd-toggle-cursor-autohide', label: 'Toggle Cursor Auto-Hide', defaultBinds: [], category: 'Window & UI',
@@ -257,7 +261,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-open-file', label: 'Open File / Archive', defaultBinds: 'Ctrl+Shift+o', category: 'File Operations',
     run: (ctx) => ctx.FsUtils.openFileDialog()
   },
-  { id: 'cmd-use-url', label: 'Open URL...', defaultBinds: 'Ctrl+i', category: 'File Operations',
+  { id: 'cmd-use-url', label: 'Open URL...', defaultBinds: 'Ctrl+i', category: 'File Operations', focusOwner: true,
     run: (ctx) => ctx.UrlLoader?.openPrompt()
   },
   { id: 'cmd-refresh', label: 'Refresh', defaultBinds: ['6', 'Ctrl+r'], category: 'File Operations',
@@ -266,7 +270,7 @@ export const ACTION_REGISTRY = [
   { id: 'cmd-toggle-file-list-view-mode', label: 'Toggle Thumbnail / List View', defaultBinds: 't', category: 'File Operations',
     run: (ctx) => ctx.Core.toggleFileListViewMode({ persist: true })
   },
-  { id: 'cmd-open-explorer', label: 'Show in Explorer', defaultBinds: [], category: 'File Operations',
+  { id: 'cmd-open-explorer', label: 'Show in Explorer', defaultBinds: [], category: 'File Operations', owner: 'window',
     run: async (ctx) => {
       const state = ctx.Core.getState();
       if (!window.__TAURI__) return;
@@ -309,7 +313,7 @@ export const ACTION_REGISTRY = [
       }
     }
   },
-  { id: 'cmd-open-folder', label: 'Open Folder', defaultBinds: [], category: 'File Operations',
+  { id: 'cmd-open-folder', label: 'Open Folder', defaultBinds: [], category: 'File Operations', owner: 'window',
     run: async (ctx) => {
       const state = ctx.Core.getState();
       if (!window.__TAURI__) return;

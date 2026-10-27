@@ -296,6 +296,7 @@ export async function getLibraryDir() {
   }
   const dir = await window.__TAURI__.core.invoke('get_library_dir');
   _libraryDirCache = dir;
+  _Core?.setState({ libraryDir: dir });
   return dir;
 }
 
@@ -305,7 +306,7 @@ export async function reloadLibraryDir() {
 }
 
 export function getCachedLibraryDir() {
-  return _libraryDirCache;
+  return _Core?.getState().libraryDir || _libraryDirCache || '';
 }
 
 // -- Path comparison helper --
@@ -2722,6 +2723,7 @@ export function handleLibraryRelocation({ oldPath, libraryPath } = {}) {
   const previousPath = oldPath || _libraryDirCache;
   const nextPath = libraryPath || _libraryDirCache;
   _libraryDirCache = nextPath || null;
+  _Core?.setState({ libraryDir: nextPath || '' });
 
   if (!previousPath || !nextPath || _pathsEqual(previousPath, nextPath)) {
     window.dispatchEvent(new CustomEvent('quivit-library-updated'));

@@ -1,3 +1,5 @@
+import { listenWorkspaceEvent } from '../shared/workspaceSession.js';
+
 let _lastTitle = '';
 
 function updateWindowTitle(state, FsUtils) {
@@ -48,7 +50,7 @@ export function initLifecycle({ Core, FsUtils, UrlLoader }) {
     });
 
     const mainWindow = window.__TAURI__.window.getCurrentWindow();
-    listen('workspace-close-requested', () => mainWindow.close()).catch(console.error);
+    listenWorkspaceEvent('workspace-close-requested', () => mainWindow.close()).catch(console.error);
     let closingAfterFlush = false;
     mainWindow.onCloseRequested(async (event) => {
       if (closingAfterFlush) return;

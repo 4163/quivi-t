@@ -7,7 +7,9 @@ import { icoSizesTotal } from './services/viewerMath.js';
 
 const { invoke } = window.__TAURI__.core;
 export const FS_SESSION_METHODS = ['loadFile', 'loadArchive', 'openParent', 'openSibling', 'refresh',
-  'loadHistoryEntry', 'loadFallbackAncestor', 'applyDirectoryResult', 'checkArchiveEncryption', 'scanContainerMaxWidth'];
+  'loadHistoryEntry', 'loadFallbackAncestor', 'applyDirectoryResult', 'checkArchiveEncryption', 'scanContainerMaxWidth',
+  'registerPendingDeletion', 'unregisterPendingDeletion'];
+const OPTIMISTIC_SESSION_METHODS = new Set(['registerPendingDeletion', 'unregisterPendingDeletion']);
 
 export const SUPPORTED_IMAGES = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'apng', 'svg', 'bmp', 'dib', 'ico', 'avif', 'mp4'
@@ -179,7 +181,11 @@ function findNearestSurvivingIndex(oldList, oldIndex, newFiles) {
 export const FsUtils = {
   configureReplica(send) {
     for (const method of FS_SESSION_METHODS) {
-      this[method] = (...args) => send('fs', method, args);
+      const local = this[method];
+      this[method] = (...args) => {
+        if (OPTIMISTIC_SESSION_METHODS.has(method)) local(...args);
+        return send('fs', method, args);
+      };
     }
   },
   beginNavigationIntent() {
