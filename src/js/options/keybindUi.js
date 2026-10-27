@@ -133,6 +133,7 @@ export function initKeybindUi(containerId, config, showStatus) {
     };
   
     const updateState = () => {
+      if (wheelTimer) return;
       if ((activeKeys.size + activeButtons.size) > (maxKeys.size + maxButtons.size)) {
         maxKeys = new Set(activeKeys);
         maxButtons = new Set(activeButtons);
@@ -258,11 +259,7 @@ export function initKeybindUi(containerId, config, showStatus) {
       if (isFinalizing) return;
       if (singleOnly) return;
       const scrollDir = e.deltaY < 0 ? 'ScrollUp' : 'ScrollDown';
-      // Only modifier keys combine with the scroll direction. Non-modifier
-      // keys and mouse buttons are ignored so scroll combos stay consistent
-      // with the double-click gestures (no key/button + gesture).
-      const mods = new Set(Array.from(activeKeys).filter(k => ['control', 'shift', 'alt', 'meta'].includes(k.toLowerCase())));
-      const wheelCombo = formatKeysCombo(mods, new Set(), scrollDir);
+      const wheelCombo = formatKeysCombo(activeKeys, new Set(), scrollDir);
       element.textContent = wheelCombo;
       clearWheelTimer();
       wheelTimer = setTimeout(() => {

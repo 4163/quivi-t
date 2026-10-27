@@ -65,6 +65,7 @@ export function formatKeysCombo(keysSet, buttonsSet, scrollDir) {
   if (lowerKeys.includes('control')) combo.push('Ctrl');
   if (lowerKeys.includes('alt')) combo.push('Alt');
   if (lowerKeys.includes('shift')) combo.push('Shift');
+  if (lowerKeys.includes('meta')) combo.push('Meta');
 
   const modifiers = ['control', 'alt', 'shift', 'meta'];
   const others = [];

@@ -124,11 +124,12 @@ function _updateScrollIndicator(config) {
   Statusbar.setScrollIndicatorState(text, held, latched);
 }
 
-// The wheel should never hijack scrolling over UI chrome, overlays, or the file list.
+// Only the main file list accepts wheel navigation over UI chrome.
 function isWheelOverUI(e) {
   if (document.getElementById('url-overlay')?.classList.contains('active')) return true;
   if (document.getElementById('password-overlay')?.classList.contains('active')) return true;
   const el = e.target;
+  if (el.closest?.('#file-list')) return false;
   return !!(el.closest?.('#file-panel, #menubar, .menu-dropdown, #statusbar, #quivit-recorder-badge, #url-overlay, #password-overlay, [data-ui]'));
 }
 
@@ -510,14 +511,16 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
   // Route wheel events through the keybind table so scroll bindings stay
   // remappable. Hold mode uses held modifiers. Toggle mode uses the latch.
   window.addEventListener('wheel', (e) => {
-    if (document.body?.classList?.contains('is-importing-url') || isWheelOverUI(e)) return;
+    if (e.deltaY === 0 || document.body?.classList?.contains('is-importing-url') || isWheelOverUI(e)) return;
 
+    syncModifierKeys(e);
+    const fileList = !!e.target.closest?.('#file-list');
     const config = Core.getState().config;
     const toggleMode = isToggleModifier(config);
     const keys = new Set(activeKeys);
     const scrollDir = e.deltaY < 0 ? 'ScrollUp' : 'ScrollDown';
 
-    if (toggleMode) {
+    if (toggleMode && !fileList) {
       // Synthesize the primary toggle key to satisfy the bind matching.
       const primaryActiveKey = _cachedToggleKeysLower[0] || 'control';
       if (_toggleLatched) {
@@ -525,17 +528,18 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
       } else {
         _cachedToggleKeysLower.forEach(k => keys.delete(k));
       }
-      // A wheel event while a toggle key is held means the press wasn't a
-      // clean tap, so releasing it must not toggle the latch.
-      if (_cachedToggleKeysLower.some(k => activeKeys.has(k))) _toggleChordBroken = true;
     }
+    // A held modifier used with the wheel is not a tap, including over the list.
+    if (toggleMode && _cachedToggleKeysLower.some(k => activeKeys.has(k))) _toggleChordBroken = true;
 
     const combo = formatKeysCombo(keys, activeButtons, scrollDir);
     const actionId = findAction(config, combo);
     if (!actionId) return;
+    const listNavigation = actionId === 'cmd-next' || actionId === 'cmd-prev';
+    if (fileList !== listNavigation) return;
 
     e.preventDefault();
     closeMenus();
-    dispatchAction(actionId, { wheel: true, clientX: e.clientX, clientY: e.clientY });
+    dispatchAction(actionId, { wheel: true, fileList, clientX: e.clientX, clientY: e.clientY });
   }, { passive: false });
 }

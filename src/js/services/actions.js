@@ -7,9 +7,9 @@ import { FILTERS, activeFilterId } from './registry.js';
 export const ACTION_REGISTRY = [
   // Navigation
   { id: 'cmd-next', label: 'Next Item', defaultBinds: ['Shift+d', 'Shift+ArrowRight', 'Shift+s', 'Shift+ArrowDown'], category: 'Navigation',
-    run: (ctx) => {
-      if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(1);
-      else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(1);
+    run: (ctx, payload) => {
+      if (!payload?.fileList && ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(1);
+      else if (!payload?.fileList && ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(1);
       else if (ctx.Core.getState().manhwaEnabled) {
         if (ctx.pageStrip) {
           ctx.pageStrip(1);
@@ -24,9 +24,9 @@ export const ACTION_REGISTRY = [
     }
   },
   { id: 'cmd-prev', label: 'Previous Item', defaultBinds: ['Shift+a', 'Shift+ArrowLeft', 'Shift+w', 'Shift+ArrowUp'], category: 'Navigation',
-    run: (ctx) => {
-      if (ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(-1);
-      else if (ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(-1);
+    run: (ctx, payload) => {
+      if (!payload?.fileList && ctx.isFavoritesFocused?.()) ctx.navigateHighlightedFavorite(-1);
+      else if (!payload?.fileList && ctx.isLibraryFocused?.()) ctx.navigateHighlightedLibrary(-1);
       else if (ctx.Core.getState().manhwaEnabled) {
         if (ctx.pageStrip) {
           ctx.pageStrip(-1);
