@@ -146,6 +146,32 @@
       </ul>
     </div>
 
+    <div class="menu-item" id="menu-windows">
+      <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Windows</button>
+      <ul class="menu-dropdown" role="menu">
+        <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
+          <span>File List</span><span class="submenu-arrow">›</span>
+          <ul class="menu-dropdown submenu" role="menu">
+            <li role="menuitemradio" id="cmd-window-file-list-left" tabindex="0" aria-checked="true">Left<span class="shortcut"></span></li>
+            <li role="menuitemradio" id="cmd-window-file-list-right" tabindex="0" aria-checked="false">Right<span class="shortcut"></span></li>
+            <li role="menuitemradio" id="cmd-window-file-list-top" tabindex="0" aria-checked="false">Top<span class="shortcut"></span></li>
+            <li role="menuitemradio" id="cmd-window-file-list-bottom" tabindex="0" aria-checked="false">Bottom<span class="shortcut"></span></li>
+            <li role="menuitemradio" id="cmd-window-file-list-detached" tabindex="0" aria-checked="false">Detached<span class="shortcut"></span></li>
+          </ul>
+        </li>
+        <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
+          <span>Viewport</span><span class="submenu-arrow">›</span>
+          <ul class="menu-dropdown submenu" role="menu">
+            <li role="menuitemradio" id="cmd-window-viewport-left" tabindex="0" aria-checked="false">Left<span class="shortcut"></span></li>
+            <li role="menuitemradio" id="cmd-window-viewport-right" tabindex="0" aria-checked="true">Right<span class="shortcut"></span></li>
+            <li role="menuitemradio" id="cmd-window-viewport-top" tabindex="0" aria-checked="false">Top<span class="shortcut"></span></li>
+            <li role="menuitemradio" id="cmd-window-viewport-bottom" tabindex="0" aria-checked="false">Bottom<span class="shortcut"></span></li>
+            <li role="menuitemradio" id="cmd-window-viewport-detached" tabindex="0" aria-checked="false">Detached<span class="shortcut"></span></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+
     <div class="menu-item" id="menu-favorites">
       <button class="menu-trigger" aria-haspopup="true" aria-expanded="false">Favorites</button>
       <ul class="menu-dropdown" role="menu" id="favorites-menu-dropdown">
@@ -492,7 +518,7 @@
   <script src="js/vendors/pica.js"></script>
   <script src="js/vendors/purify.min.js"></script>
   <script type="module" src="/js/shellBackground.js"></script>
-  <script type="module" src="/js/main/main.js"></script>
+  <script type="module" src="/js/main/workspaceBoot.js"></script>
 </body>
 
 </html>

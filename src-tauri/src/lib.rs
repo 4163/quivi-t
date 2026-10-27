@@ -44,8 +44,7 @@ pub fn run() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(main_window) = app.get_webview_window("main") {
                 let _ = main_window.unminimize();
-                let _ = main_window.show();
-                let _ = main_window.set_focus();
+                windows::restore_from_tray(app);
                 let path_arg = argv
                     .iter()
                     .skip(1)
@@ -119,6 +118,8 @@ pub fn run() {
         open_local_data_dir,
         save_config,
         open_options,
+        open_workspace_window,
+        close_workspace_window,
         fit_options_window,
         open_metadata_window,
         fit_metadata_window,
@@ -178,24 +179,12 @@ pub fn run() {
 
     crate::protocol::register_quivit_protocol(builder)
         .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                windows::close_secondary_windows(window.app_handle());
+            }
             #[cfg(windows)]
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
                 platform::drop::shutdown();
-            }
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
-                // The main viewer owns the app lifetime. Closing it also closes
-                // secondary windows so Tauri exits cleanly.
-                if window.label() == "main" {
-                    if let Some(options_window) = window.app_handle().get_webview_window("options")
-                    {
-                        let _ = options_window.close();
-                    }
-                    if let Some(metadata_window) =
-                        window.app_handle().get_webview_window("metadata")
-                    {
-                        let _ = metadata_window.close();
-                    }
-                }
             }
         })
         .build(tauri::generate_context!())

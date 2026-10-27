@@ -3,6 +3,7 @@
  */
 
 import { FILTERS, activeFilterId } from './registry.js';
+import { WORKSPACE_SURFACES, WORKSPACE_POSITIONS } from './workspaceLayout.js';
 
 export const ACTION_REGISTRY = [
   // Navigation
@@ -190,6 +191,13 @@ export const ACTION_REGISTRY = [
   },
 
   // Window & UI
+  ...WORKSPACE_SURFACES.flatMap(surface => WORKSPACE_POSITIONS.map(position => ({
+    id: `cmd-window-${surface.window}-${position}`,
+    label: `${surface.label}: ${position[0].toUpperCase()}${position.slice(1)}`,
+    defaultBinds: [],
+    category: 'Windows',
+    run: ctx => ctx.Core.setWorkspacePosition(surface.id, position, { persist: true })
+  }))),
   { id: 'cmd-options', label: 'Open Options', defaultBinds: '5', category: 'Window & UI',
     run: async () => {
       if (window.__TAURI__) await window.__TAURI__.core.invoke('open_options').catch(console.error);
@@ -199,7 +207,6 @@ export const ACTION_REGISTRY = [
     run: (ctx) => {
       const visible = !ctx.Core.getState().fileListVisible;
       ctx.Core.setFileListVisible(visible);
-      document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', visible);
     }
   },
   { id: 'cmd-toggle-menubar', label: 'Toggle Menu Bar', defaultBinds: '2', category: 'Window & UI',

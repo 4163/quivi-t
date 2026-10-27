@@ -1,4 +1,4 @@
-import { Core } from '../core.js';
+import { ViewportCore as Core } from '../shared/workspaceHost.js';
 import { FsUtils } from '../fsUtils.js';
 import { getCachedArchiveBlob, hasCachedArchiveBlob } from '../services/archiveImageCache.js';
 import { createIcoCell, createIcoContainer, mirroredGrillAngle } from './icoCells.js';

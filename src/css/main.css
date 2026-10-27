@@ -12,6 +12,10 @@ body.resizing-panel {
   cursor: ew-resize !important;
 }
 
+body.resizing-panel-vertical {
+  cursor: ns-resize !important;
+}
+
 body.resizing-col {
   cursor: col-resize !important;
 }
@@ -128,7 +132,7 @@ body.resizing-col {
   display: block;
 }
 
-.menu-dropdown li[role="menuitem"] {
+.menu-dropdown li[role^="menuitem"] {
   position: relative;
   display: flex;
   justify-content: space-between;
@@ -141,7 +145,7 @@ body.resizing-col {
   direction: ltr;
 }
 
-#menu-view .menu-dropdown li[role="menuitem"] {
+#menu-view .menu-dropdown li[role^="menuitem"] {
   padding-left: var(--fs-24);
 }
 
@@ -226,49 +230,49 @@ body.resizing-col {
 }
 
 /* Keep sibling hover clear while moving to a submenu. */
-.menu-dropdown.submenu-aiming>li[role="menuitem"]:not(.open):hover {
+.menu-dropdown.submenu-aiming>li[role^="menuitem"]:not(.open):hover {
   background: transparent;
   color: var(--text);
 }
 
-.menu-dropdown.submenu-aiming>li[role="menuitem"]:not(.open):hover>.shortcut {
+.menu-dropdown.submenu-aiming>li[role^="menuitem"]:not(.open):hover>.shortcut {
   color: var(--text);
   opacity: 0.65;
 }
 
-.menu-dropdown li[role="menuitem"].checked::before {
+.menu-dropdown li[role^="menuitem"].checked::before {
   content: '✓';
   position: absolute;
   left: var(--fs-8);
 }
 
-.menu-dropdown li[role="menuitem"]:hover,
-.menu-dropdown li[role="menuitem"]:focus-visible {
+.menu-dropdown li[role^="menuitem"]:hover,
+.menu-dropdown li[role^="menuitem"]:focus-visible {
   background: var(--accent);
   color: #fff;
   outline: none;
 }
 
-.menu-dropdown li[role="menuitem"].muted {
+.menu-dropdown li[role^="menuitem"].muted {
   color: var(--text-muted);
   opacity: 0.55;
   cursor: not-allowed;
 }
 
-.menu-dropdown li[role="menuitem"].muted:hover,
-.menu-dropdown li[role="menuitem"].muted:focus-visible {
+.menu-dropdown li[role^="menuitem"].muted:hover,
+.menu-dropdown li[role^="menuitem"].muted:focus-visible {
   background: transparent;
   color: var(--text-muted);
 }
 
-.menu-dropdown li[role="menuitem"]:hover>.shortcut,
-.menu-dropdown li[role="menuitem"]:focus-visible>.shortcut {
+.menu-dropdown li[role^="menuitem"]:hover>.shortcut,
+.menu-dropdown li[role^="menuitem"]:focus-visible>.shortcut {
   color: #fff;
   opacity: 1;
 }
 
-.menu-dropdown li[role="menuitem"].muted:hover>.shortcut,
-.menu-dropdown li[role="menuitem"].muted:focus-visible>.shortcut {
+.menu-dropdown li[role^="menuitem"].muted:hover>.shortcut,
+.menu-dropdown li[role^="menuitem"].muted:focus-visible>.shortcut {
   color: var(--text);
   opacity: 0.35;
 }
@@ -289,7 +293,7 @@ body.resizing-col {
 }
 
 /* Menubar Favorites Loadouts */
-.menu-dropdown li[role="menuitem"].loadout-item {
+.menu-dropdown li[role^="menuitem"].loadout-item {
   padding: 2px 8px 2px 24px;
   gap: 6px;
   position: relative;
@@ -429,7 +433,7 @@ body.resizing-col {
 }
 
 /* Menubar Imports providers. Same row rhythm as favorites loadouts. */
-.menu-dropdown li[role="menuitem"].import-provider-item {
+.menu-dropdown li[role^="menuitem"].import-provider-item {
   padding: 2px 8px 2px 24px;
   gap: 6px;
   position: relative;
@@ -456,6 +460,60 @@ body.resizing-col {
   min-height: 0;
   /* Allow inner scrollers to shrink */
   overflow: hidden;
+}
+
+#workspace[data-file-list-position="right"] {
+  flex-direction: row-reverse;
+}
+
+#workspace[data-file-list-position="top"] {
+  flex-direction: column;
+}
+
+#workspace[data-file-list-position="bottom"] {
+  flex-direction: column-reverse;
+}
+
+#workspace[data-file-list-position="right"] > #file-panel {
+  border-right: 0;
+  border-left: 1px solid var(--border);
+}
+
+#workspace:is([data-file-list-position="top"], [data-file-list-position="bottom"]) > #file-panel {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: clamp(120px, var(--panel-h), 70%);
+  border-right: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+#workspace[data-file-list-position="bottom"] > #file-panel {
+  border-bottom: 0;
+  border-top: 1px solid var(--border);
+}
+
+:root[data-workspace-surface="main"] #workspace[data-file-list-position="detached"] > #file-panel,
+:root[data-workspace-surface="main"] #workspace[data-viewport-position="detached"] > #viewport,
+:root[data-workspace-surface="fileList"] #viewport,
+:root[data-workspace-surface="viewport"] #file-panel {
+  display: none;
+}
+
+:root[data-workspace-surface="fileList"] #workspace > #file-panel,
+:root[data-workspace-surface="main"] #workspace[data-viewport-position="detached"] > #file-panel {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  max-width: none;
+  border: 0;
+}
+
+:root[data-workspace-surface="fileList"] #panel-resize-handle,
+:root[data-workspace-surface="viewport"] #panel-resize-handle,
+#workspace[data-viewport-position="detached"] #panel-resize-handle {
+  display: none;
 }
 
 /* File panel */
@@ -1663,6 +1721,25 @@ li:hover>.favorite-remove,
   z-index: 10;
 }
 
+#workspace[data-file-list-position="right"] #panel-resize-handle {
+  right: auto;
+  left: 0;
+}
+
+#workspace:is([data-file-list-position="top"], [data-file-list-position="bottom"]) #panel-resize-handle {
+  top: auto;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: var(--resize-handle-w);
+  cursor: ns-resize;
+}
+
+#workspace[data-file-list-position="bottom"] #panel-resize-handle {
+  top: 0;
+  bottom: auto;
+}
+
 #panel-resize-handle:hover,
 #panel-resize-handle.dragging {
   background: var(--accent-gold);
@@ -1672,6 +1749,8 @@ li:hover>.favorite-remove,
 /* Viewport */
 #viewport {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   position: relative;
   overflow: hidden;
   background-color: var(--checker-b);

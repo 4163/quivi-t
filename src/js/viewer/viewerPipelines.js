@@ -1,4 +1,4 @@
-import { Core } from '../core.js';
+import { ViewportCore as Core } from '../shared/workspaceHost.js';
 import { getEffectiveScaling, computeColumnComposite, icoSizesTotal } from '../services/viewerMath.js';
 import { buildIcoCompositeCanvas } from './icoCells.js';
 import { createLanczosPipeline } from '../services/scaling/lanczos.js';

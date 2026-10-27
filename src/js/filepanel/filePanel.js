@@ -30,6 +30,7 @@ import {
   MISC_PROVIDER
 } from './libraryStore.js';
 import { Core } from '../core.js';
+import { hostsWorkspaceSurface } from '../shared/workspaceHost.js';
 import { FsUtils } from '../fsUtils.js';
 import { ensureArchiveBlob, hasCachedArchiveBlob, clearArchiveBlobCache } from '../services/archiveImageCache.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
@@ -2040,6 +2041,7 @@ function updateEntry(li, item, index) {
 }
 
 function renderVisibleSlice() {
+  if (!hostsWorkspaceSurface('fileList')) return;
   if (!fileListUl) return;
   ensureSpacer();
 
@@ -2405,6 +2407,7 @@ function setRefreshingVisual(active) {
 
 export function renderFilePanel(state) {
   if (!filePanel) return;
+  if (!hostsWorkspaceSurface('fileList', state)) return;
 
 
   filePanel.classList.toggle('hidden', !state.fileListVisible);
@@ -2634,6 +2637,13 @@ export function initFilePanel(deps) {
     renderVisibleSlice();
     commitPendingThumbnails();
   }, { passive: true });
+
+  new ResizeObserver(() => {
+    if (!hostsWorkspaceSurface('fileList') || !filePanel.clientWidth) return;
+    normalizeColumnWidths('name');
+    renderVisibleSlice();
+    commitPendingThumbnails();
+  }).observe(filePanel);
 
   Core.onStateChange(() => renderFilePanel(Core.getState()));
 
@@ -2976,6 +2986,8 @@ export function initFilePanel(deps) {
     isResizingPanel = true;
     resizeHandle.classList.add('dragging');
     document.body.classList.toggle('resizing-panel', true);
+    const position = Core.getState().workspaceLayout.fileList;
+    document.body.classList.toggle('resizing-panel-vertical', position === 'top' || position === 'bottom');
     e.preventDefault();
   });
 
@@ -3020,10 +3032,17 @@ export function initFilePanel(deps) {
 
   window.addEventListener('mousemove', (e) => {
     if (isResizingPanel) {
+      const position = Core.getState().workspaceLayout.fileList;
+      const bounds = filePanel.parentElement.getBoundingClientRect();
       const oldWidth = filePanel.getBoundingClientRect().width;
-      const newWidth = Math.min(480, Math.max(120, e.clientX));
-      document.documentElement.style.setProperty('--panel-w', `${newWidth}px`);
-      normalizeColumnWidths('name', getColumnWidth('name') + (newWidth - oldWidth));
+      const vertical = position === 'top' || position === 'bottom';
+      const desired = vertical
+        ? (position === 'top' ? e.clientY - bounds.top : bounds.bottom - e.clientY)
+        : (position === 'left' ? e.clientX - bounds.left : bounds.right - e.clientX);
+      const max = vertical ? bounds.height * 0.7 : Math.min(480, bounds.width - 120);
+      const size = Math.min(max, Math.max(120, desired));
+      document.documentElement.style.setProperty(vertical ? '--panel-h' : '--panel-w', `${size}px`);
+      if (!vertical) normalizeColumnWidths('name', getColumnWidth('name') + (size - oldWidth));
     }
 
     if (resizingCol) {
@@ -3045,6 +3064,7 @@ export function initFilePanel(deps) {
       isResizingPanel = false;
       resizeHandle.classList.remove('dragging');
       document.body.classList.toggle('resizing-panel', false);
+      document.body.classList.remove('resizing-panel-vertical');
     }
 
     if (resizingCol) {

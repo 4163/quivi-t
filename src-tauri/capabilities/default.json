@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main", "options", "metadata"],
+  "windows": ["main", "options", "metadata", "workspace-file-list", "workspace-viewport"],
   "permissions": [
     "core:default",
     "core:window:allow-close",

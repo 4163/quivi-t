@@ -1,7 +1,7 @@
 const DEFAULT_DROP_MESSAGE = 'Drop images, links, files, or folders here';
 const FEEDBACK_DURATION_MS = 3000;
 
-export function initDropZone({ dropOverlay, FsUtils, Core, importActions, isUnmappedSelection, onDropAccepted }) {
+export function initDropZone({ dropOverlay, FsUtils, Core, importActions, isUnmappedSelection, onDropAccepted, nativeDropOwner = true }) {
   if (!dropOverlay) return;
   const text = dropOverlay.querySelector('.drop-hint p');
   let hovering = false;
@@ -75,7 +75,7 @@ export function initDropZone({ dropOverlay, FsUtils, Core, importActions, isUnma
 
   if (window.__TAURI__) {
     const { listen } = window.__TAURI__.event;
-    if (navigator.userAgent.includes('Windows')) {
+    if (navigator.userAgent.includes('Windows') && nativeDropOwner) {
       listen('quivit-drop', onNativeDrop)
         .then(() => window.__TAURI__.core.invoke('enable_native_drop'))
         .catch(showError);

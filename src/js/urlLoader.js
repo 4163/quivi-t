@@ -51,6 +51,10 @@ const GENERIC_COVER_FILENAMES = new Set(['cover.jpg', 'cover.png']);
 let _urlOverlay = null;
 let _Core = null;
 let _FsUtils = null;
+let _workspaceRequest = null;
+let _workspaceGalleryPath = null;
+const WORKSPACE_STATUS_CACHE_CAPACITY = 512;
+const _workspaceStatuses = new BoundedMap(WORKSPACE_STATUS_CACHE_CAPACITY);
 let _manifestCache = null;
 let _libraryDirCache = null;
 let _activeQueue = null;
@@ -1668,6 +1672,7 @@ export async function cleanupMatchingProviderEntries(providerPath, result) {
 // -- Main orchestrator --
 
 export async function loadUrl(urlString) {
+  if (_workspaceRequest) return _workspaceRequest('loadUrl', [urlString]);
   const url = normalizeUrl(urlString);
   if (!isValidUrl(url)) {
     throw new Error('Please enter a valid URL');
@@ -2587,6 +2592,7 @@ export async function resumeGalleryDownloads(galleryPath, list) {
 // gallery sidecar so resume and reimport stop treating it as missing and
 // refetching it. Directories need nothing: their sidecar goes with them.
 export async function forgetDeletedLibraryEntry(deletedPath) {
+  if (_workspaceRequest) return _workspaceRequest('forgetDeletedLibraryEntry', [deletedPath]);
   if (!window.__TAURI__ || !deletedPath) return false;
   const normalized = String(deletedPath).replace(/\//g, '\\');
   const sepIdx = normalized.lastIndexOf('\\');
@@ -2617,6 +2623,7 @@ export async function forgetDeletedLibraryEntry(deletedPath) {
 }
 
 export function isPlaceholderFile(filePath) {
+  if (_workspaceRequest) return ['pending', 'downloading'].includes(getGalleryDownloadStatus(filePath));
   if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath) return false;
   if (!filePath) return false;
   const cleanPath = String(filePath).replace(/\\/g, '/').toLowerCase();
@@ -2629,6 +2636,7 @@ export function isPlaceholderFile(filePath) {
 }
 
 export function getGalleryDownloadStatus(filePath) {
+  if (_workspaceRequest) return _workspaceStatuses.get(filePath) || null;
   if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath || !filePath) return null;
   const normalizedPath = filePath.replace(/\\/g, '/');
   const separator = normalizedPath.lastIndexOf('/');
@@ -2637,6 +2645,11 @@ export function getGalleryDownloadStatus(filePath) {
 }
 
 export function retryGalleryDownload(filePath) {
+  if (_workspaceRequest) {
+    if (getGalleryDownloadStatus(filePath) !== 'error') return false;
+    _workspaceRequest('retryGalleryDownload', [filePath]);
+    return true;
+  }
   if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath || !filePath) return false;
   if (_activeQueue.getStatus(filePath) !== 'error') return false;
   _activeQueue.prioritize(filePath);
@@ -2644,12 +2657,14 @@ export function retryGalleryDownload(filePath) {
 }
 
 export function setVisibleRange(start, end) {
+  if (_workspaceRequest) { _workspaceRequest('setVisibleRange', [start, end]); return; }
   if (_activeQueue) {
     _activeQueue.setVisibleRange(start, end);
   }
 }
 
 export function setDisplayOrder(dirPath, filenames) {
+  if (_workspaceRequest) { _workspaceRequest('setDisplayOrder', [dirPath, filenames]); return; }
   if (_activeQueue) {
     _activeQueue.setDisplayOrder(dirPath, filenames);
   }
@@ -2664,12 +2679,14 @@ export function openPrompt() {
 }
 
 export function isGalleryDownloading(dirPath) {
+  if (_workspaceRequest) return !!_workspaceGalleryPath && _pathsEqual(dirPath, _workspaceGalleryPath);
   if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath) return false;
   if (!dirPath) return false;
   return _pathsEqual(dirPath, _activeGalleryPath);
 }
 
 export function cancelGalleryDownloads(deletedPath) {
+  if (_workspaceRequest) { _workspaceRequest('cancelGalleryDownloads', [deletedPath]); return; }
   if (!deletedPath) return;
   if (_galleryPathOverlapsActive(deletedPath)) {
     _teardownActiveQueue();
@@ -2684,6 +2701,7 @@ function _galleryPathOverlapsActive(path) {
 }
 
 export function isGalleryDownloadingWithin(dirPath) {
+  if (_workspaceRequest) return !!_workspaceGalleryPath && (_pathsEqual(dirPath, _workspaceGalleryPath) || _isPathWithin(_workspaceGalleryPath, dirPath));
   if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath) return false;
   return _galleryPathOverlapsActive(dirPath);
 }
@@ -2764,11 +2782,24 @@ export async function prepareGalleryDirectory(galleryPath, options = {}) {
 let _getFileListViewportRange = null;
 
 export const UrlLoader = {
-  init({ Core, FsUtils, urlOverlay, getFileListViewportRange }) {
+  init({ Core, FsUtils, urlOverlay, getFileListViewportRange, session = null }) {
     _Core = Core;
     _FsUtils = FsUtils;
     _urlOverlay = urlOverlay;
     _getFileListViewportRange = typeof getFileListViewportRange === 'function' ? getFileListViewportRange : null;
+    _workspaceRequest = session;
+    if (session) {
+      const update = ({ galleryPath, destPath, status, statuses } = {}) => {
+        if (galleryPath) _workspaceGalleryPath = galleryPath;
+        if (status === 'cancelled') { _workspaceGalleryPath = null; _workspaceStatuses.clear(); }
+        if (destPath) _workspaceStatuses.set(destPath, status);
+        for (const [path, value] of statuses || []) _workspaceStatuses.set(path, value);
+      };
+      window.addEventListener('quivit-download-status', event => update(event.detail));
+      session('getWorkspaceDownloadState', []).then(update);
+      Core.setPlaceholderCheck(path => isPlaceholderFile(path));
+      return;
+    }
     getLibraryDir().catch(() => {});
 
     if (!_downloadThresholdUnlisten && window.__TAURI__?.event?.listen) {
@@ -2853,6 +2884,12 @@ export const UrlLoader = {
         }
       });
     }
+  },
+  getWorkspaceDownloadState() {
+    return {
+      galleryPath: _activeGalleryPath,
+      statuses: _activeQueue?._items.map(item => [item.destPath, _activeQueue.getStatus(item.destPath)]) || []
+    };
   },
   openPrompt,
   loadUrl,

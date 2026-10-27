@@ -40,8 +40,14 @@ import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREA
 import { FsUtils } from './fsUtils.js';
 import { DirectoryPrefs } from './directoryPrefs.js';
 import { BoundedMap } from './services/cache.js';
+import { DEFAULT_WORKSPACE_LAYOUT, relocateWorkspace } from './services/workspaceLayout.js';
 
 const invoke = window.__TAURI__?.core?.invoke;
+export const CORE_SESSION_METHODS = ['setListAndIndex', 'setState', 'setFileListVisible', 'toggleTransparentBg',
+  'setFitMode', 'setScalingMode', 'setActiveFilter', 'setImageDimensions', 'setSpreadStep',
+  'setSpreadEnabled', 'toggleSpreadEnabled', 'setSpreadDirection', 'setSpreadMode', 'toggleSpreadMode',
+  'setManhwaMode', 'toggleManhwaMode', 'setFileListViewMode', 'toggleFileListViewMode',
+  'navigate', 'jumpToIndex', 'selectIndex', 'setWorkspacePosition', 'loadConfig', 'flushConfig'];
 
 // Internal state.
 
@@ -96,6 +102,7 @@ const _state = {
 
   /** File list panel visibility. */
   fileListVisible: true,
+  workspaceLayout: { ...DEFAULT_WORKSPACE_LAYOUT },
 
   /** Current image fit mode. */
   fitMode: DEFAULT_FIT_MODE,
@@ -333,6 +340,33 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
 // Public API.
 
 export const Core = {
+  configureReplica(send) {
+    for (const method of CORE_SESSION_METHODS) {
+      this[method] = (...args) => send('core', method, args);
+    }
+    this.persistConfig = options => send('config', 'persist', [options]);
+  },
+
+  receiveSnapshot(snapshot) {
+    if (snapshot.mediaRevision !== undefined && snapshot.mediaRevision !== _state.mediaRevision) this.clearAnimationMemo();
+    Object.assign(_state, snapshot);
+    _notify();
+  },
+
+  patchFrontendConfig(patch, options = {}) {
+    Object.assign(_state.config.frontend_data, patch);
+    const persisted = this.persistConfig(options);
+    _notify();
+    return persisted;
+  },
+
+  setWorkspacePosition(surface, position, options = {}) {
+    _state.workspaceLayout = relocateWorkspace(_state.workspaceLayout, surface, position);
+    _state.config.frontend_data.workspace_layout = _state.workspaceLayout;
+    if (options.persist) _scheduleConfigFlush();
+    _notify();
+  },
+
   onStateChange(fn) {
     _listeners.push(fn);
   },
@@ -623,6 +657,7 @@ export const Core = {
       _state.spreadEnabled = _state.config.frontend_data.spread_enabled === true;
       _state.spreadDirection = _state.config.frontend_data.spread_direction || DEFAULT_SPREAD_DIRECTION;
       _state.fileListViewMode = _state.config.frontend_data.file_list_view_mode || DEFAULT_FILE_LIST_VIEW_MODE;
+      _state.workspaceLayout = _state.config.frontend_data.workspace_layout;
       _state.manhwaEnabled = _state.config.frontend_data.manhwa_enabled === true;
       if (oldManhwaEnabled !== _state.manhwaEnabled) _sortCurrentList();
 

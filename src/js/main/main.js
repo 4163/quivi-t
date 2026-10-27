@@ -29,7 +29,7 @@ import { initFullscreen, toggleFullscreen, syncFullscreenState, isFullscreenActi
 
 import { handleTabJump } from '../keyboardNav.js';
 import { emergencyCssReset } from '../shared/configPreview.js';
-import { ACTION_REGISTRY, dispatch } from '../services/actions.js';
+import { ACTION_REGISTRY } from '../services/actions.js';
 
 import { initLifecycle } from './lifecycle.js';
 import { initMetadataBadge, openMetadataWindow } from './metadataBadge.js';
@@ -41,6 +41,10 @@ import { createImportActions } from '../services/importActions.js';
 import { activateImportProvider, MISC_PROVIDER } from '../filepanel/libraryStore.js';
 import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
 import { ManhwaAudio } from '../viewer/manhwaAudio.js';
+import { initWorkspace } from './workspace.js';
+import { workspaceSurface, ViewportCore } from '../shared/workspaceHost.js';
+import { requestWorkspace } from '../shared/workspaceSession.js';
+import { createWorkspaceControls } from '../shared/workspaceControls.js';
 import {
   initManhwaStrip,
   isManhwaStripActive,
@@ -56,7 +60,7 @@ import {
 } from '../viewer/manhwaStrip.js';
 
 // Reset the options tab on startup so each session starts on General.
-localStorage.removeItem('options-active-tab');
+if (!workspaceSurface) localStorage.removeItem('options-active-tab');
 
 // Emergency CSS reset (Ctrl+Shift+Alt+C).
 window.addEventListener('keydown', (e) => {
@@ -116,8 +120,9 @@ function setMenuItemMuted(id, muted) {
 }
 
 function updateHistoryMenu() {
-  setMenuItemMuted('cmd-history-back', !NavigationHistory.canGoBack());
-  setMenuItemMuted('cmd-history-forward', !NavigationHistory.canGoForward());
+  const history = workspaceSurface ? Core.getState().historyAvailable : null;
+  setMenuItemMuted('cmd-history-back', !(history ? history.back : NavigationHistory.canGoBack()));
+  setMenuItemMuted('cmd-history-forward', !(history ? history.forward : NavigationHistory.canGoForward()));
 }
 
 function updatePanSteps(config = Core.getState().config) {
@@ -128,7 +133,7 @@ function updatePanSteps(config = Core.getState().config) {
 
 function dispatchKeyboardPan(dx, dy) {
   if (dx === 0 && dy === 0) return;
-  Viewer.panBy(dx * keyboardPanStep, dy * keyboardPanStep);
+  workspaceControls.panBy(dx * keyboardPanStep, dy * keyboardPanStep);
 }
 
 const actionCtx = {
@@ -152,11 +157,14 @@ const actionCtx = {
   isLibraryFocused: () => !!document.activeElement?.closest('#file-panel-library, .library-provider-list'),
   get keyboardPanStep() { return keyboardPanStep; },
   get wheelPanStep() { return wheelPanStep; },
-  get centerListItem() { return centerListItem; },
+  get alignListItemTop() { return alignListItemTop; },
   get alignListItemBottom() { return alignListItemBottom; },
   get navigateManhwa() { return navigateManhwa; },
   get pageStrip() { return pageStrip; }
 };
+
+const workspaceControls = createWorkspaceControls({ actionCtx, Viewer, getVisibleImageIndices,
+  strip: { alignListItemTop, alignListItemBottom, navigateManhwa, pageStrip, jumpManhwa } });
 
 function bindMenuCommands() {
   for (const action of ACTION_REGISTRY) {
@@ -164,7 +172,7 @@ function bindMenuCommands() {
     if (el) {
       el.addEventListener('click', (e) => {
         if (el.classList.contains('muted') || el.getAttribute('aria-disabled') === 'true') return;
-        dispatch(action.id, e, actionCtx);
+        workspaceControls.dispatchAction(action.id, e);
       });
     }
   }
@@ -184,13 +192,13 @@ Core.onStateChange((state) => {
     }
     
     // Sync checkmarks that rely on startup state.
-    document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!state.fileListVisible);
     document.getElementById('cmd-fullscreen')?.classList.toggle('checked', isFullscreenActive());
     
     _uiInitialized = true;
   }
 
   updateMenuShortcuts(state.config);
+  syncViewMenu(state);
 
   const isPasswordBlocked = state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect';
 
@@ -237,15 +245,16 @@ Core.onStateChange((state) => {
   // Update standard statusbar fields.
   Statusbar.update(state);
 
-  syncViewMenu(state);
   updateHistoryMenu();
 });
 
 window.addEventListener('quivit-history-changed', () => {
+  if (!workspaceSurface) Core.setState({ historyAvailable: { back: NavigationHistory.canGoBack(), forward: NavigationHistory.canGoForward() } });
   updateHistoryMenu();
 });
 
 // Initialization.
+initWorkspace();
 Statusbar.init();
 initFullscreen();
 initFilePanel({
@@ -255,18 +264,18 @@ initFilePanel({
   resizeHandle,
   Core,
   FsUtils,
-  isManhwaActive: isManhwaStripActive,
-  getVisibleImageIndices,
-  alignListItemTop,
-  alignListItemBottom,
-  pageStrip
+  isManhwaActive: () => !!Core.getState().manhwaEnabled,
+  getVisibleImageIndices: workspaceControls.visibleIndices,
+  alignListItemTop: index => workspaceControls.stripCall('alignListItemTop', index),
+  alignListItemBottom: index => workspaceControls.stripCall('alignListItemBottom', index),
+  pageStrip: (...args) => workspaceControls.stripCall('pageStrip', ...args)
 });
 initManhwaStrip();
 setRevealListTop(revealListTop);
 initMenuBar();
 bindMenuCommands();
 initPasswordOverlay({ overlay: passwordOverlay, Core, FsUtils, focusFileList, isFileListFocused });
-const importActions = createImportActions({
+const importActions = workspaceControls.createImportActions(() => createImportActions({
   invoke: (command, args) => window.__TAURI__.core.invoke(command, args),
   FsUtils,
   loadUrl: (url) => UrlLoader.loadUrl(url),
@@ -274,7 +283,7 @@ const importActions = createImportActions({
   sanitizeSvg: sanitizeSvgDocument,
   activateMisc: () => activateImportProvider(MISC_PROVIDER),
   libraryUpdated: () => window.dispatchEvent(new CustomEvent('quivit-library-updated'))
-});
+}));
 Chrome.initImportActivity(importActions);
 const urlOverlay = initUrlOverlay({
   overlay: urlOverlayEl,
@@ -285,13 +294,17 @@ const urlOverlay = initUrlOverlay({
 });
 initDropZone({
   dropOverlay, FsUtils, Core, importActions,
+  nativeDropOwner: !workspaceSurface,
   isUnmappedSelection: (state) => isManhwaStripActive() && state.index >= 0 && !isListIndexMapped(state.index),
   onDropAccepted: () => urlOverlay.hide({ restoreFocus: false })
 });
-UrlLoader.init({ Core, FsUtils, urlOverlay, getFileListViewportRange });
+UrlLoader.init({ Core, FsUtils, urlOverlay, getFileListViewportRange,
+  session: workspaceSurface ? (method, args) => requestWorkspace('main', 'url', method, args).catch(console.error) : null });
 initMetadataBadge({ Core, FsUtils, badgeEl: metadataBadgeEl });
-initViewerAudio({ Core, FsUtils });
-initLifecycle({ Core, FsUtils, UrlLoader });
+initViewerAudio({ Core: ViewportCore, FsUtils });
+if (!workspaceSurface) initLifecycle({ Core, FsUtils, UrlLoader });
+
+workspaceControls.connect({ importActions, UrlLoader });
 
 let previewTheme = null;
 let previewCss = null;
@@ -318,12 +331,13 @@ async function reloadConfigAndSyncLibrary(relocation = null) {
   }
 }
 
-bindKeyboardShortcuts({ Core, dispatchAction: (id, payload) => dispatch(id, payload, actionCtx), dispatchKeyboardPan });
+bindKeyboardShortcuts({ Core, dispatchAction: workspaceControls.dispatchAction, dispatchKeyboardPan });
 
 if (window.__TAURI__) {
   const { listen } = window.__TAURI__.event;
 
   listen('config-updated', () => {
+    if (workspaceSurface) return;
     previewTheme = null;
     previewCss = null;
     resetScrollLatch();
@@ -333,6 +347,7 @@ if (window.__TAURI__) {
   });
 
   listen('config-changed', () => {
+    if (workspaceSurface) return;
     resetScrollLatch();
     reloadConfigAndSyncLibrary().catch(err => {
       console.error('[Main] Failed to refresh settings:', err);
@@ -340,6 +355,7 @@ if (window.__TAURI__) {
   });
 
   listen('library-relocated', (event) => {
+    if (workspaceSurface) return;
     reloadConfigAndSyncLibrary(event.payload).catch(err => {
       console.error('[Main] Failed to activate relocated Library:', err);
     });
@@ -382,4 +398,10 @@ window.addEventListener('quivit-config-loaded', () => {
   applyCustomCss(previewCss !== null ? previewCss : customCss);
 });
 
-Core.init();
+if (workspaceSurface) {
+  Core.receiveSnapshot({});
+  window.dispatchEvent(new CustomEvent('quivit-config-loaded'));
+  window.__TAURI__?.core.invoke('show_window').catch(console.error);
+} else {
+  Core.init();
+}

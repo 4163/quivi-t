@@ -1,6 +1,6 @@
 use crate::config::AppConfig;
 use tauri::window::Color;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 // Window size constants
 // Initial/min sizes in logical pixels. Named for easy tweaking.
@@ -91,6 +91,61 @@ pub fn update_theme(app: tauri::AppHandle, theme: Option<String>) {
 }
 
 // Secondary window creation and fitting
+
+fn workspace_window(surface: &str) -> Result<(&'static str, &'static str, f64), String> {
+    match surface {
+        "fileList" => Ok(("workspace-file-list", "File List", 440.0)),
+        "viewport" => Ok(("workspace-viewport", "Viewport", 1000.0)),
+        _ => Err("Unknown workspace surface".into()),
+    }
+}
+
+#[tauri::command]
+pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Result<(), String> {
+    let (label, title, width) = workspace_window(&surface)?;
+    if let Some(window) = app.get_webview_window(label) {
+        window.show().map_err(|e| e.to_string())?;
+        return window.set_focus().map_err(|e| e.to_string());
+    }
+    let window = tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::App(format!("index.html?surface={surface}").into()),
+    )
+    .title(format!("{title} ◦ QuiviT"))
+    .inner_size(width, MAIN_INITIAL_H)
+    .min_inner_size(META_MIN_W, MAIN_MIN_H)
+    .visible(false)
+    .devtools(true)
+    .general_autofill_enabled(false)
+    .center()
+    .build()
+    .map_err(|e| e.to_string())?;
+    apply_shell_background(&window, &crate::config::load_config(app.clone()));
+    window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            let _ = app.emit_to("main", "workspace-detached-closed", label);
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn close_workspace_window(app: tauri::AppHandle, surface: String) -> Result<(), String> {
+    let (label, _, _) = workspace_window(&surface)?;
+    if let Some(window) = app.get_webview_window(label) {
+        window.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+pub fn close_secondary_windows(app: &tauri::AppHandle) {
+    for label in SECONDARY_WINDOWS {
+        if let Some(window) = app.get_webview_window(label) {
+            let _ = window.close();
+        }
+    }
+}
 
 #[tauri::command]
 pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
@@ -284,9 +339,14 @@ fn ensure_tray(app: &tauri::AppHandle) -> Result<(), String> {
 
 // Secondary windows owned by this app. Closed windows are gone, so only
 // windows hidden by hide_to_tray (or mid-open) can exist here on restore.
-const SECONDARY_WINDOWS: [&str; 2] = ["options", "metadata"];
+const SECONDARY_WINDOWS: [&str; 4] = [
+    "options",
+    "metadata",
+    "workspace-file-list",
+    "workspace-viewport",
+];
 
-fn restore_from_tray(app: &tauri::AppHandle) {
+pub(crate) fn restore_from_tray(app: &tauri::AppHandle) {
     for label in SECONDARY_WINDOWS {
         if let Some(window) = app.get_webview_window(label) {
             let _ = window.show();

@@ -8,7 +8,7 @@
  * around the anchor mounts images before they scroll into view.
  */
 
-import { Core } from '../core.js';
+import { ViewportCore as Core, hostsWorkspaceSurface } from '../shared/workspaceHost.js';
 import { BoundedMap } from '../services/cache.js';
 import { FsUtils } from '../fsUtils.js';
 import { getCachedArchiveBlob } from '../services/archiveImageCache.js';
@@ -82,12 +82,7 @@ function _fireScan() {
   const container = isArchive ? _lastArchivePath : _lastDirectory;
   if (!container) return;
   _scanContainerKey = container;
-  const password = isArchive ? FsUtils.getUnlockedPassword?.(container) ?? null : null;
-  window.__TAURI__?.core?.invoke('scan_container_max_width', {
-    container,
-    isArchive,
-    password,
-  }).catch(() => {});
+  FsUtils.scanContainerMaxWidth(container, isArchive).catch(() => {});
 }
 
 function _onMaxWidthReport(container, maxWidth, done = false) {
@@ -2410,12 +2405,14 @@ export function jumpManhwa(direction) {
 export function navigateManhwa(delta) {
   if (!_active || _imageIndex.length === 0) return false;
   const state = Core.getState();
+  const targetIndex = state.index < 0
+    ? (delta < 0 ? getLastImageIndex() : getFirstImageIndex())
+    : (state.index + delta + state.list.length) % state.list.length;
   if (state.index < 0) {
     Core.selectIndex(delta < 0 ? getLastImageIndex() : getFirstImageIndex());
   } else {
     Core.navigate(delta);
   }
-  const targetIndex = Core.getState().index;
   const mapped = _listToImgIdx.get(targetIndex);
   if (mapped !== undefined) {
     if (_isBottomItem(mapped) && _imageIndex.length > 1) {
@@ -2715,7 +2712,7 @@ function _deactivate() {
   _lastArchiveEncryption = null;
   _trackedMaxWidth = null;
   _scanContainerKey = null;
-  window.__TAURI__?.core?.invoke('cancel_width_scan').catch(() => {});
+  if (hostsWorkspaceSurface('viewport')) window.__TAURI__?.core?.invoke('cancel_width_scan').catch(() => {});
 }
 
 function _onStateChange(state) {
