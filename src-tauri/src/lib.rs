@@ -42,9 +42,8 @@ pub fn run() {
 
     if single_instance {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            windows::restore_from_tray(app);
             if let Some(main_window) = app.get_webview_window("main") {
-                let _ = main_window.unminimize();
-                windows::restore_from_tray(app);
                 let path_arg = argv
                     .iter()
                     .skip(1)

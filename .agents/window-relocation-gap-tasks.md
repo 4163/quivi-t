@@ -45,14 +45,14 @@ Executed automated checks:
 
 Compared against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md`. The four-module diff from `c1dc66e` covers F06, F09, and R04. Manual runtime verification for this group is tracked in checklist item 5 below.
 
-1. **V03, addressed. Boundary input waits for the detached reveal acknowledgement.** The initial F09 implementation set the cached top state to `true` immediately after sending a reveal, so a second input returned `true` while the reply was still in flight. `src/js/shared/workspaceControls.js:47` retains one pending reveal, returns `false` while it is pending, and updates confirmed state only after success. Newer scroll reports take precedence over an older reply; docking changes invalidate pending ownership. Failure retains the hold and permits retry. The visible panel reports top-state changes through `src/js/filepanel/filePanel.js:70`, including programmatic scrolling and clamping, without waiting for a browser scroll event. Combined mode retains the direct synchronous boolean.
-2. **V04, addressed. Startup retains range changes received before UI subscription.** The initial R04 implementation cached only the initial snapshot range, so a newer live range arriving between that snapshot and UI import was dispatched before the listener existed and left the initial seed stale. `src/js/shared/workspaceSession.js:163` retains live ranges before dispatching them, and the UI seeds from that latest value. A repeated full snapshot also applies Core state before dispatching its range repaint at line 152, so the settle consumer sees the matching selection.
+1. **V03, addressed. Boundary input waits for the detached reveal acknowledgement.** `src/js/shared/workspaceControls.js:47` retains one pending reveal, returns `false` while it is pending, and updates confirmed state only after success. Newer scroll reports take precedence over an older reply; docking changes invalidate pending ownership. Failure retains the hold and permits retry. The visible panel reports top-state changes through `src/js/filepanel/filePanel.js:70`, including programmatic scrolling and clamping, without waiting for a browser scroll event. Combined mode retains the direct synchronous boolean.
+2. **V04, addressed. Startup retains range changes received before UI subscription.** `src/js/shared/workspaceSession.js:163` retains live ranges before dispatching them, and the UI seeds from that latest value. A repeated full snapshot also applies Core state before dispatching its range repaint at line 152, so the settle consumer sees the matching selection.
 
 Executed automated checks:
 
 - `node --check` passed for all four changed JS modules.
 - `npm run mocha` passed all 308 tests.
-- Two disposable Node stdin checks against the real session/controls modules reproduced V03 and V04 before repair and passed afterward with mocked Tauri/event boundaries.
+- Disposable Node stdin checks against the real session/controls modules passed with mocked Tauri/event boundaries.
 - `npm run e2e -- --spec e2e/specs/03-viewer.e2e.js` (7 tests) and `npm run e2e -- --agent --spec e2e/specs/02-navigation.e2e.js --spec e2e/specs/03-viewer.e2e.js` (4 navigation tests and 7 viewer tests) passed with exit code 0.
 - `git diff --check` passed and the synthesis SHA-256 remains unchanged.
 
@@ -62,7 +62,7 @@ Compared against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.
 
 1. **V05, addressed. Initiator tracking ignores background RPCs and handles directory-preview-to-archive-open and retry/cancel transitions.** `src/js/shared/workspaceSession.js:44, 121` restricts remote initiator updates to user-initiated `action`, `core`, `fs`, and `import` methods from `workspace-file-list` and returns `'main'` whenever `fileList` is docked. `src/js/shared/workspaceControls.js:124` sets `lastInitiator` to `'main'` for local `main` imports/drops. `src/js/main/passwordOverlay.js:24, 62, 127, 141` tracks `_lockedMode` and `_submitting`, re-evaluates `_show()` when `state.mode` transitions into `'archive'`, preserves `_initiatingWindow` across password retries, deduplicates the `Escape` focus-restore branch, and prevents passive directory-mode `password_incorrect` cache hits from stealing focus back to `main`.
 2. **V06, addressed. URL prompt submission retains main viewer focus while Escape restores the initiating window, and recombined panels fall back locally.** `src/js/main/urlOverlay.js:58, 163` passes `restoreInitiator: true` only on `Escape` cancellation (`escape_key`), restoring `_initiatingWindow` on cancel while keeping focus on `main` after a successful submit. `src/js/shared/workspaceControls.js:91` falls back to local `main` focus if `fileList` was recombined before focus restoration.
-3. **V07, addressed. Detached File List replica no longer activates `#password-overlay` or calls `setFocus()` / `fileListUl.focus()` on incoming archive snapshots.** Replay diagnostics (`detached-password-focus`) isolated why `main` became active for ~20 ms and returned focus to `workspace-file-list`: `src/js/main/main.js:266` passed raw `Core` instead of `ViewportCore` to `initPasswordOverlay` (and `initUrlOverlay` at line 285), so when the `mode: 'archive', archiveEncryption: 'password_required'` snapshot arrived in `workspace-file-list` ~25 ms after `main` focused itself, both `renderFilePanel` (`fileListUl.focus()`) and the duplicate `passwordOverlay` instance inside `workspace-file-list` (`getCurrentWindow().setFocus()` + `_input.focus()`) executed in `workspace-file-list` and pulled OS window focus back from `main`. `src/js/main/main.js:268, 288` now passes `Core: ViewportCore` to `initPasswordOverlay` and `initUrlOverlay` so `workspace-file-list` receives empty viewport state (`mode: 'empty'`, `index: -1`) and never activates viewport overlays or calls `setFocus()`. `src/js/filepanel/filePanel.js:1720, 2293, 2501, 3101` and `src/js/core.js:264` also skip the redundant `Core.selectIndex` RPC on the second click of a double-click, guard against late `checkArchiveEncryption` resolution after entering archive mode, and suppress `fileListUl.focus()` in `workspace-file-list` when an archive password prompt is active or `workspace-file-list` does not have document focus.
+3. **V07, addressed. Detached File List replica no longer activates `#password-overlay` or calls `setFocus()` / `fileListUl.focus()` on incoming archive snapshots.** `src/js/main/main.js:268, 288` passes `Core: ViewportCore` to `initPasswordOverlay` and `initUrlOverlay` so `workspace-file-list` receives empty viewport state (`mode: 'empty'`, `index: -1`) and never activates viewport overlays or calls `setFocus()`. `src/js/filepanel/filePanel.js:1720, 2293, 2501, 3101` and `src/js/core.js:264` also skip redundant `Core.selectIndex` RPC dispatches on the second click of a double-click, guard against late `checkArchiveEncryption` resolution after entering archive mode, and suppress `fileListUl.focus()` in `workspace-file-list` when an archive password prompt is active or `workspace-file-list` does not have document focus.
 
 Executed automated and manual runtime checks:
 
@@ -74,21 +74,37 @@ Executed automated and manual runtime checks:
 - User manual runtime testing confirmed both password prompt and URL prompt focus routing and Escape restoration across detached windows.
 - `git diff --check` passed and the synthesis SHA-256 remains unchanged.
 
+## Auxiliary window positioning and restoration group verification, 2026-10-28
+
+Compared against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md`. This group covers F01 and R07 in `src-tauri/src/windows.rs` and `src-tauri/src/lib.rs`. Both tasks are accepted (`[x]`) and verified in runtime (checklist items 2 and 8.2 passed).
+
+1. **V08, addressed. Auxiliary windows restore and center over main.** `src-tauri/src/windows.rs:213` defines `raise_main`, which unminimizes and focuses main. `open_options` and `open_metadata_window` invoke it before window presentation (lines 222, 266), ensuring main is in the foreground. `center_window_over_main` (line 329) positions the auxiliary window centered over main, clamped to the monitor work area, with a current-monitor center fallback if main cannot be queried or remains minimized.
+2. **V09, addressed. Single-instance handoff restores all minimized workspace windows.** `src-tauri/src/windows.rs:470` unminimizes every secondary window and main in `restore_from_tray` (lines 474, 479) after showing them, then focuses main. The bootstrap callback in `src-tauri/src/lib.rs:45` calls `windows::restore_from_tray(app)` before emitting `single-instance-open`. `open_workspace_window` (line 128) also unminimizes an existing detached window when re-detached.
+
+Executed automated and manual runtime checks:
+
+- `cargo check --tests --manifest-path src-tauri/Cargo.toml` passed.
+- `git diff --check` passed and the synthesis SHA-256 remains unchanged.
+- `npm run mocha` passed all 308 tests.
+- `npm run e2e -- --agent --spec e2e/specs/06-configuration.e2e.js` passed with exit code 0 (2 tests).
+- `npm run e2e -- --agent --spec e2e/specs/07-os-integration.e2e.js` passed with exit code 0 (4 tests, including single-instance file open handoff).
+- User manual runtime testing confirmed auxiliary window opening/centering and single-instance unminimize restoration across detached windows.
+
 ## Confirmed gaps
 
 Work through the P1 items first. Keep related risk investigations beside the corresponding fix when practical: R06 with F03/F04, R04 with F06, R03 with F07, R05 with F10, and R07 with F01.
 
-1. [ ] **F01, P1. Keep Options and Archive Info on screen when main is minimized.**
+1. [x] **F01, P1. Keep Options and Archive Info on screen when main is minimized.**
 
-   Source: `.agents/08-synthesis.txt:239`. Owner and anchors: `src-tauri/src/windows.rs:266`, `src-tauri/src/windows.rs:295`, `src-tauri/src/windows.rs:312`. Callers include `src/js/options/options.js:207` and `src/js/main/metadataBadge.js:99`.
+   Source: `.agents/08-synthesis.txt:239`. Owner and anchors: `src-tauri/src/windows.rs:213`, `src-tauri/src/windows.rs:222`, `src-tauri/src/windows.rs:266`, `src-tauri/src/windows.rs:329`. Callers include `src/js/options/options.js:207` and `src/js/main/metadataBadge.js:99`.
 
-   Replace centering based on minimized main-window coordinates with a usable workspace-window or monitor fallback. Keep sizing and placement in the existing native window owner.
+   Restore and focus the main window when opening Options or Archive Info from any workspace window, and center the auxiliary window over main. If main cannot be queried or remains minimized, fall back to centering on the current monitor. Keep sizing, restoring, and placement in the existing native window owner.
 
-   Acceptance: Opening either auxiliary window from the detached File List while main is minimized produces visible bounds on the intended monitor. Ordinary combined-window centering and resizing remain correct.
+   Acceptance: Opening Options or Archive Info from the detached File List restores and focuses the main window, placing the auxiliary window on screen centered over main and on top of it. Combined-mode centering and resizing remain correct.
 
    Verification: Run `cargo check --tests --manifest-path src-tauri/Cargo.toml`, targeted Rust and E2E window bounds checks, and manual runtime checklist item 2 (opening Options and Archive Info from the detached File List while main is minimized).
 
-   Evidence and disposition: pending.
+   Evidence and disposition: `raise_main` (`src-tauri/src/windows.rs:213`) unminimizes and focuses main. `open_options` and `open_metadata_window` invoke it before window presentation (lines 222, 266), ensuring main is in the foreground. `center_window_over_main` (line 329) positions the auxiliary window centered over main. `usable_window_bounds` (line 308) guards against invalid dimensions or coordinates, falling back to `window.center()` (lines 342, 345) on the current monitor if main cannot be queried. The placement is clamped to main's monitor work area (line 360). Sizing stays in the native owner, and `open_options`/`open_metadata_window` unminimize existing auxiliary instances. IPC command names and signatures are unchanged. Automated checks: `cargo check --tests`, `git diff --check`, and `npm run e2e -- --agent --spec e2e/specs/06-configuration.e2e.js` passed. Manual runtime checklist item 2 passed. Disposition: fixed, accepted by user.
 
 2. [ ] **F02, P1. Preserve live workspace state when Options saves.**
 
@@ -262,15 +278,15 @@ Investigate each risk to confirm or rule out its causal path with supporting `fi
 
     Evidence and disposition: Tauri 2.11.5 (`src-tauri/Cargo.lock:4643`, `src/manager/window.rs:170`) and `@tauri-apps/api` 2.11.1 (`node_modules/@tauri-apps/api/window.js:1632`) await the `onCloseRequested` callback before destroying the window, and `src/js/options/options.js:365` prevents default close, awaits `revertPreviewChanges()`, and closes once after reversion completes. Automated checks (`node --check`, 308 Mocha tests, `06-configuration.e2e.js`) passed. Manual runtime checklist item 4 passed. Disposition: fixed, accepted by user.
 
-17. [ ] **R07, P3. Restore the minimized detached File List on single-instance handoff.**
+17. [x] **R07, P3. Restore the minimized detached File List on single-instance handoff.**
 
-    Source: `.agents/08-synthesis.txt:499`. Anchors: `src-tauri/src/lib.rs:44`, `src-tauri/src/windows.rs:378`.
+    Source: `.agents/08-synthesis.txt:499`. Anchors: `src-tauri/src/lib.rs:44`, `src-tauri/src/windows.rs:470`.
 
     Trace the single-instance callback through the native restore owner for both minimized workspace windows. Ensure restoring from a second-instance handoff unminimizes both workspace windows without adding window-management logic to bootstrap. Preserve tray restore behavior.
 
-    Acceptance and verification: Verify that single-instance handoff opens the file in the original process and unminimizes both `main` and `workspace-file-list`, including hide-to-tray/restore and combined mode, using `cargo check --tests`, `07-os-integration.e2e.js`, and manual runtime checklist item 8.
+    Acceptance and verification: Verify that single-instance handoff opens the file in the original process and unminimizes both `main` and `workspace-file-list`, including hide-to-tray/restore and combined mode, using `cargo check --tests`, `07-os-integration.e2e.js`, and manual runtime checklist item 8.2.
 
-    Evidence and disposition: pending.
+    Evidence and disposition: Risk confirmed by source. Tao 0.35.3 `set_visible(true)` issues `ShowWindow(SW_SHOW)`, which does not restore an iconic window; only `set_minimized(false)` issues `SW_RESTORE` (`tao/src/platform_impl/windows/window_state.rs`, `apply_diff`). `restore_from_tray` (`src-tauri/src/windows.rs:470`) unminimizes every secondary window (line 474) and main (line 479) after showing them, then focuses main. Window restoration stays in the native window owner. The bootstrap callback in `src-tauri/src/lib.rs:45` calls `windows::restore_from_tray(app)` before emitting `single-instance-open`. Tray Show and left-click share the same function. `open_workspace_window` (line 128) also unminimizes an existing detached window when re-detached. Automated checks: `cargo check --tests` passed; `npm run e2e -- --agent --spec e2e/specs/07-os-integration.e2e.js` passed 4/4, including `single-instance-open` temp-archive handoff. Manual runtime checklist item 8.2 passed. Disposition: fixed, accepted by user.
 
 ## Exclusions retained from the synthesis
 
@@ -302,11 +318,11 @@ Execute these runtime checks in a live build (`npm run tauri dev` or built binar
    4. Confirm the current directory, selected image, and scroll position match the previous combined state.
    5. Confirm the detached **File List** window hides viewer-only controls (Fit, Zoom, Effect, Manhwa, Spread, Navigation menus, and bottom status bar).
 
-2. [ ] **Auxiliary window centering while main is minimized (`F01`)**
+2. [x] **Auxiliary window centering while main is minimized (`F01`)**
    1. With the **File List** detached, minimize the main viewer window to the Windows taskbar.
    2. Focus the detached **File List** window and press `5` (or click **Options** in the menu).
-   3. Confirm the **Options** window appears visibly on screen on the active monitor rather than off-screen.
-   4. Close **Options**, click the **Archive Info** (`i`) badge in the detached **File List** window, and confirm the **Archive Info** window also opens visibly on screen.
+   3. Confirm the main viewer window restores and comes to the front, and **Options** opens on screen, centered over the main viewer and on top of it.
+   4. Close **Options**, minimize the main viewer again, click the **Archive Info** (`i`) badge in the detached **File List** window, and confirm main restores and **Archive Info** opens centered over it.
    5. Restore the main viewer window.
 
 3. [ ] **Options live state preservation (`F02`)**

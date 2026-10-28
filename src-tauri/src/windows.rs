@@ -125,6 +125,7 @@ pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Re
     let label = workspace_window(&surface)?;
     if let Some(window) = app.get_webview_window(label) {
         window.show().map_err(|e| e.to_string())?;
+        let _ = window.unminimize();
         return window.set_focus().map_err(|e| e.to_string());
     }
     let title = app
@@ -207,8 +208,18 @@ pub fn close_secondary_windows(app: &tauri::AppHandle) {
     }
 }
 
+// Auxiliary windows open over main, so a request from the detached File List
+// restores and raises main first. The auxiliary window then shows on top of it.
+fn raise_main(app: &tauri::AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.unminimize();
+        let _ = main.set_focus();
+    }
+}
+
 #[tauri::command]
 pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
+    raise_main(&app);
     if let Some(window) = app.get_webview_window("options") {
         // The window can exist but be hidden (hide to tray), so show it, not just focus it.
         if !window
@@ -219,6 +230,7 @@ pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
                 .show()
                 .map_err(|e| format!("Failed to show options window: {e}"))?;
         }
+        let _ = window.unminimize();
         window
             .set_focus()
             .map_err(|e| format!("Failed to focus options window: {e}"))?;
@@ -251,6 +263,7 @@ pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
+    raise_main(&app);
     if let Some(window) = app.get_webview_window("metadata") {
         // The window can exist but be hidden (hide to tray), so show it, not just focus it.
         if !window
@@ -261,6 +274,7 @@ pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
                 .show()
                 .map_err(|e| format!("Failed to show metadata window: {e}"))?;
         }
+        let _ = window.unminimize();
         window
             .set_focus()
             .map_err(|e| format!("Failed to focus metadata window: {e}"))?;
@@ -291,26 +305,66 @@ pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+fn usable_window_bounds(
+    window: &tauri::WebviewWindow,
+) -> Option<(tauri::PhysicalPosition<i32>, tauri::PhysicalSize<u32>, f64)> {
+    if !window.is_visible().unwrap_or(false) || window.is_minimized().unwrap_or(false) {
+        return None;
+    }
+    let pos = window.outer_position().ok()?;
+    let size = window.outer_size().ok()?;
+    let scale = window.scale_factor().ok()?;
+    if pos.x <= -30_000
+        || pos.y <= -30_000
+        || size.width == 0
+        || size.height == 0
+        || !scale.is_finite()
+        || scale <= 0.0
+    {
+        return None;
+    }
+    Some((pos, size, scale))
+}
+
 pub fn center_window_over_main(
     app: &tauri::AppHandle,
     window: &tauri::WebviewWindow,
     target_width: f64,
     target_height: f64,
 ) -> Result<(), String> {
-    let main = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main window not found".to_string())?;
-
-    let pos = main.outer_position().map_err(|e| e.to_string())?;
-    let size = main.outer_size().map_err(|e| e.to_string())?;
-    let scale = main.scale_factor().map_err(|e| e.to_string())?;
-
-    let x = pos.x + (size.width as i32 - (target_width * scale) as i32) / 2;
-    let y = pos.y + (size.height as i32 - (target_height * scale) as i32) / 2;
-
     window
         .set_size(tauri::LogicalSize::new(target_width, target_height))
         .map_err(|e| e.to_string())?;
+
+    // A minimized main reports the Win32 parking origin, so fall back to the
+    // current monitor rather than placing the window off-screen.
+    let Some(main) = app.get_webview_window("main") else {
+        return window.center().map_err(|e| e.to_string());
+    };
+    let Some((pos, size, scale)) = usable_window_bounds(&main) else {
+        return window.center().map_err(|e| e.to_string());
+    };
+
+    let target_w = (target_width * scale) as i32;
+    let target_h = (target_height * scale) as i32;
+    let mut x = pos.x + (size.width as i32 - target_w) / 2;
+    let mut y = pos.y + (size.height as i32 - target_h) / 2;
+
+    if let Some(monitor) = main
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.current_monitor().ok().flatten())
+        .or_else(|| app.primary_monitor().ok().flatten())
+    {
+        let area = monitor.work_area();
+        let min_x = area.position.x;
+        let min_y = area.position.y;
+        let max_x = (area.position.x + area.size.width as i32 - target_w).max(min_x);
+        let max_y = (area.position.y + area.size.height as i32 - target_h).max(min_y);
+        x = x.clamp(min_x, max_x);
+        y = y.clamp(min_y, max_y);
+    }
 
     window
         .set_position(tauri::PhysicalPosition::new(x, y))
@@ -407,10 +461,12 @@ pub(crate) fn restore_from_tray(app: &tauri::AppHandle) {
     for label in SECONDARY_WINDOWS {
         if let Some(window) = app.get_webview_window(label) {
             let _ = window.show();
+            let _ = window.unminimize();
         }
     }
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
+        let _ = window.unminimize();
         let _ = window.set_focus();
     }
 }
