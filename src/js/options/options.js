@@ -25,6 +25,8 @@ let initialSingleInstance = true;
 let initialLibraryDir = '';
 let initialLibraryPath = '';
 let defaultLibraryDir = '';
+let savingOptions = false;
+let refreshGen = 0;
 
 // Emergency CSS reset (Ctrl+Shift+Alt+C).
 window.addEventListener('keydown', (e) => {
@@ -124,8 +126,10 @@ async function refreshActiveConfigHint() {
 }
 
 async function refreshLiveConfigState() {
-  if (!invoke) return;
+  if (!invoke || savingOptions) return;
+  const gen = ++refreshGen;
   const latest = mergeConfig(await invoke('load_config'));
+  if (savingOptions || gen !== refreshGen) return;
   const latestTheme = latest.frontend_data.theme || 'system';
   const latestCss = latest.frontend_data.custom_css || '';
 
@@ -526,6 +530,8 @@ async function saveOptions() {
     return;
   }
   showStatus('');
+  savingOptions = true;
+  refreshGen++;
   const associationsResult = await applyAssociations(showStatus);
   
   const isSingleInstanceModified = document.getElementById('opt-single-instance').checked !== initialSingleInstance;
@@ -533,7 +539,13 @@ async function saveOptions() {
   const requestedLibraryPath = document.getElementById('opt-library-path').value.trim();
   const selectedLibraryPath = requestedLibraryPath || defaultLibraryDir;
   const libraryPathChanged = !pathsMatch(selectedLibraryPath, initialLibraryDir);
-  try { localStorage.setItem('quivit-custom-css', formConfig.frontend_data.custom_css); } catch(e) {}
+  try {
+    const savedTheme = formConfig.frontend_data.theme;
+    if (savedTheme === 'light' || savedTheme === 'dark') localStorage.setItem('quivit-theme', savedTheme);
+    else localStorage.removeItem('quivit-theme');
+    if (formConfig.frontend_data.custom_css) localStorage.setItem('quivit-custom-css', formConfig.frontend_data.custom_css);
+    else localStorage.removeItem('quivit-custom-css');
+  } catch(e) {}
   
   const merged = mergeConfig(formConfig);
   // Favorites and window preferences can change while Options is open.
@@ -567,6 +579,8 @@ async function saveOptions() {
       await invoke('save_config', { config });
     }
     setPreviewing(false);
+    applyTheme(config.frontend_data.theme || 'system');
+    applyCustomCss(config.frontend_data.custom_css || '');
     await emit?.('config-updated');
     
     const relocationWarning = relocationWarningMessage(relocation);
@@ -582,6 +596,8 @@ async function saveOptions() {
   } catch (err) {
     console.error('Failed to save config:', err);
     showStatus(saveErrorMessage(err));
+  } finally {
+    savingOptions = false;
   }
 }
 

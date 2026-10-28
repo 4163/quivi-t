@@ -1,9 +1,12 @@
 let pendingTheme = Promise.resolve();
 
 export function applyTheme(theme) {
-  document.documentElement.removeAttribute('data-theme');
   if (theme === 'light' || theme === 'dark') {
-    document.documentElement.setAttribute('data-theme', theme);
+    if (document.documentElement.getAttribute('data-theme') !== theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  } else if (document.documentElement.hasAttribute('data-theme')) {
+    document.documentElement.removeAttribute('data-theme');
   }
 
   if (window.__TAURI__ && window.__TAURI__.core) {
@@ -20,7 +23,10 @@ export function waitForTheme() {
 export function applyCustomCss(cssText) {
   const styleEl = document.getElementById('custom-css');
   if (styleEl) {
-    styleEl.textContent = cssText || '';
-    window.dispatchEvent(new CustomEvent('quivit-css-applied'));
+    const nextCss = cssText || '';
+    if (styleEl.textContent !== nextCss) {
+      styleEl.textContent = nextCss;
+      window.dispatchEvent(new CustomEvent('quivit-css-applied'));
+    }
   }
 }

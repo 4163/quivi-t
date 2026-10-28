@@ -1,6 +1,25 @@
 use crate::config::AppConfig;
+use std::sync::atomic::{AtomicU8, Ordering};
 use tauri::window::Color;
 use tauri::{Emitter, Manager};
+
+static ACTIVE_THEME: AtomicU8 = AtomicU8::new(0);
+
+fn encode_tauri_theme(theme: Option<tauri::Theme>) -> u8 {
+    match theme {
+        Some(tauri::Theme::Light) => 1,
+        Some(tauri::Theme::Dark) => 2,
+        _ => 0,
+    }
+}
+
+fn active_tauri_theme() -> Option<tauri::Theme> {
+    match ACTIVE_THEME.load(Ordering::Relaxed) {
+        1 => Some(tauri::Theme::Light),
+        2 => Some(tauri::Theme::Dark),
+        _ => None,
+    }
+}
 
 // Window size constants
 // Initial/min sizes in logical pixels. Named for easy tweaking.
@@ -52,9 +71,16 @@ pub fn apply_shell_background(window: &tauri::WebviewWindow, config: &AppConfig)
         .and_then(|v| v.as_str())
         .unwrap_or("system");
 
-    let dark = match theme {
-        "dark" => true,
-        "light" => false,
+    let tauri_theme = match theme {
+        "dark" => Some(tauri::Theme::Dark),
+        "light" => Some(tauri::Theme::Light),
+        _ => None,
+    };
+    ACTIVE_THEME.store(encode_tauri_theme(tauri_theme), Ordering::Relaxed);
+
+    let dark = match tauri_theme {
+        Some(tauri::Theme::Dark) => true,
+        Some(tauri::Theme::Light) => false,
         _ => window
             .theme()
             .map(|theme| theme == tauri::Theme::Dark)
@@ -78,6 +104,7 @@ pub fn update_theme(app: tauri::AppHandle, theme: Option<String>) {
         Some("light") => Some(tauri::Theme::Light),
         _ => None,
     };
+    ACTIVE_THEME.store(encode_tauri_theme(tauri_theme), Ordering::Relaxed);
 
     for (_, window) in app.webview_windows() {
         let _ = window.set_theme(tauri_theme);
@@ -120,9 +147,9 @@ pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Re
     .build()
     .map_err(|e| e.to_string())?;
     apply_shell_background(&window, &crate::config::load_config(app.clone()));
+    let _ = window.set_theme(active_tauri_theme());
     if let Some(main) = app.get_webview_window("main") {
         if let Ok(theme) = main.theme() {
-            let _ = window.set_theme(Some(theme));
             let color = if theme == tauri::Theme::Dark {
                 Color(37, 37, 38, 255)
             } else {
@@ -214,9 +241,10 @@ pub async fn open_options(app: tauri::AppHandle) -> Result<(), String> {
     .general_autofill_enabled(false)
     .center();
 
-    builder
+    let window = builder
         .build()
         .map_err(|e| format!("Failed to open options window: {e}"))?;
+    let _ = window.set_theme(active_tauri_theme());
 
     Ok(())
 }
@@ -255,9 +283,10 @@ pub async fn open_metadata_window(app: tauri::AppHandle) -> Result<(), String> {
     .general_autofill_enabled(false)
     .center();
 
-    builder
+    let window = builder
         .build()
         .map_err(|e| format!("Failed to open metadata window: {e}"))?;
+    let _ = window.set_theme(active_tauri_theme());
 
     Ok(())
 }

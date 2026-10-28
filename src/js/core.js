@@ -56,6 +56,7 @@ const _animMemo = new BoundedMap(ANIM_MEMO_CAPACITY);
 let _animMemoGeneration = 0;
 
 let _placeholderCheck = null;
+let _loadConfigGen = 0;
 
 const _state = {
   /** @type {'empty'|'image'|'archive'} */
@@ -652,8 +653,10 @@ export const Core = {
    * Load app configuration from the Rust backend.
    */
   async loadConfig() {
+    const gen = ++_loadConfigGen;
     try {
       const loaded = await invoke('load_config');
+      if (gen !== _loadConfigGen) return;
       
       const oldShowHidden = _state.config?.frontend_data?.show_hidden;
       const oldManhwaEnabled = _state.manhwaEnabled;

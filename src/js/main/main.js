@@ -307,14 +307,15 @@ workspaceControls.connect({ importActions, UrlLoader });
 const initialPreview = getSessionPreview();
 let previewTheme = initialPreview?.theme ?? null;
 let previewCss = initialPreview?.css ?? null;
+let pendingSnapshotThemeSync = false;
 
 registerPreviewStateProvider(() => ({ theme: previewTheme, css: previewCss }));
 
-async function reloadConfigAndSyncLibrary(relocation = null) {
+async function reloadConfigAndSyncLibrary(relocation = null, { flush = true } = {}) {
   const cachedLibraryPath = relocation?.oldPath || UrlLoader.getCachedLibraryDir();
   // Flush dirty prefs first so a watcher-triggered reload never wipes an
   // unsaved change inside the debounce window (lost-update).
-  await Core.flushConfig().catch(() => {});
+  if (flush) await Core.flushConfig().catch(() => {});
   await Core.loadConfig();
   // Another QuiviT process receives the config watcher event but not the
   // in-process relocation event, so it must replace its old root watcher too.
@@ -338,18 +339,20 @@ if (window.__TAURI__) {
   const { listen } = window.__TAURI__.event;
 
   listen('config-updated', () => {
+    const hadPreview = previewTheme !== null || previewCss !== null;
     previewTheme = null;
     previewCss = null;
     if (workspaceSurface) {
-      const config = Core.getState().config;
-      const theme = config?.frontend_data?.theme || 'system';
-      const customCss = config?.frontend_data?.custom_css || '';
-      applyTheme(theme);
-      applyCustomCss(customCss);
+      if (hadPreview && pendingSnapshotThemeSync) {
+        pendingSnapshotThemeSync = false;
+        const config = Core.getState().config;
+        applyTheme(config?.frontend_data?.theme || 'system');
+        applyCustomCss(config?.frontend_data?.custom_css || '');
+      }
       return;
     }
     resetScrollLatch();
-    reloadConfigAndSyncLibrary().catch(err => {
+    reloadConfigAndSyncLibrary(null, { flush: false }).catch(err => {
       console.error('[Main] Failed to refresh settings:', err);
     });
   });
@@ -364,24 +367,27 @@ if (window.__TAURI__) {
 
   listen('library-relocated', (event) => {
     if (workspaceSurface) return;
-    reloadConfigAndSyncLibrary(event.payload).catch(err => {
+    reloadConfigAndSyncLibrary(event.payload, { flush: false }).catch(err => {
       console.error('[Main] Failed to activate relocated Library:', err);
     });
   });
 
   listen('theme-preview', (e) => {
     previewTheme = e.payload;
+    pendingSnapshotThemeSync = false;
     applyTheme(previewTheme);
   });
   
   listen('css-preview', (e) => {
     previewCss = e.payload;
+    pendingSnapshotThemeSync = false;
     applyCustomCss(previewCss);
   });
 
   listen('preview-cleared', () => {
     previewTheme = null;
     previewCss = null;
+    pendingSnapshotThemeSync = false;
   });
 }
 
@@ -399,13 +405,18 @@ window.addEventListener('quivit-config-loaded', () => {
 
   const theme = config?.frontend_data?.theme || 'system';
   const customCss = config?.frontend_data?.custom_css || '';
+  if (workspaceSurface) {
+    pendingSnapshotThemeSync = previewTheme !== null || previewCss !== null;
+  }
 
-  try {
-    if (theme === 'light' || theme === 'dark') localStorage.setItem('quivit-theme', theme);
-    else localStorage.removeItem('quivit-theme');
-    if (customCss) localStorage.setItem('quivit-custom-css', customCss);
-    else localStorage.removeItem('quivit-custom-css');
-  } catch (e) {}
+  if (!workspaceSurface) {
+    try {
+      if (theme === 'light' || theme === 'dark') localStorage.setItem('quivit-theme', theme);
+      else localStorage.removeItem('quivit-theme');
+      if (customCss) localStorage.setItem('quivit-custom-css', customCss);
+      else localStorage.removeItem('quivit-custom-css');
+    } catch (e) {}
+  }
 
   applyTheme(previewTheme !== null ? previewTheme : theme);
   applyCustomCss(previewCss !== null ? previewCss : customCss);

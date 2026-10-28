@@ -18,6 +18,15 @@ import { waitForTheme } from './shared/theme.js';
 const SHELL_BACKGROUND_SYNC_DELAY_MS = 20;
 let timer = null;
 let pendingSync = Promise.resolve();
+let lastColor = null;
+
+function sameColor(a, b) {
+  return !!a && !!b
+    && a.red === b.red
+    && a.green === b.green
+    && a.blue === b.blue
+    && a.alpha === b.alpha;
+}
 
 function surfaceColor() {
   const probe = document.getElementById('measure-probe');
@@ -43,7 +52,10 @@ export function syncShellBackground() {
   pendingSync = pendingSync.catch(() => {}).then(async () => {
     await waitForTheme();
     const color = surfaceColor();
-    if (color) await window.__TAURI__.core.invoke('plugin:window|set_background_color', { value: color });
+    if (color && !sameColor(color, lastColor)) {
+      lastColor = color;
+      await window.__TAURI__.core.invoke('plugin:window|set_background_color', { value: color });
+    }
   });
   return pendingSync;
 }

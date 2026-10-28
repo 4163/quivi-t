@@ -547,7 +547,6 @@ fn write_split_config(dir: &Path, config: &mut AppConfig) -> Result<(), String> 
     config.frontend_data = fd;
 
     let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    atomic_write(&dir.join("quivit_config.json"), data).map_err(|e| e.to_string())?;
     atomic_write(
         &dir.join("quivit_state.json"),
         serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?,
@@ -563,8 +562,9 @@ fn write_split_config(dir: &Path, config: &mut AppConfig) -> Result<(), String> 
         serde_json::to_string_pretty(&favorites).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
+    atomic_write(&dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())?;
 
-    atomic_write(&dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())
+    atomic_write(&dir.join("quivit_config.json"), data).map_err(|e| e.to_string())
 }
 
 /// Save into the override folder only. One layout per folder: a single-file
