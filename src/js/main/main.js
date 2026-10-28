@@ -165,6 +165,7 @@ const actionCtx = {
 
 const workspaceControls = createWorkspaceControls({ actionCtx, Viewer, getVisibleImageIndices,
   revealListTop,
+  focusFileList,
   strip: { alignListItemTop, alignListItemBottom, navigateManhwa, pageStrip, jumpManhwa } });
 
 function bindMenuCommands() {
@@ -262,7 +263,15 @@ initManhwaStrip();
 setRevealListTop(workspaceControls.revealListTop);
 initMenuBar();
 bindMenuCommands();
-initPasswordOverlay({ overlay: passwordOverlay, Core, FsUtils, focusFileList, isFileListFocused });
+initPasswordOverlay({
+  overlay: passwordOverlay,
+  Core: ViewportCore,
+  FsUtils,
+  focusFileList,
+  isFileListFocused,
+  restoreFocus: (target) => workspaceControls.restoreFocus(target),
+  getLastInitiator: () => workspaceControls.getLastInitiator()
+});
 const importActions = workspaceControls.createImportActions(() => createImportActions({
   invoke: (command, args) => window.__TAURI__.core.invoke(command, args),
   FsUtils,
@@ -276,9 +285,11 @@ Chrome.initImportActivity(importActions);
 const urlOverlay = initUrlOverlay({
   overlay: urlOverlayEl,
   filePanel,
-  Core,
+  Core: ViewportCore,
   focusFileList,
-  onSubmit: (url) => importActions.openUrl(url)
+  onSubmit: (url) => importActions.openUrl(url),
+  restoreFocus: (target) => workspaceControls.restoreFocus(target),
+  getLastInitiator: () => workspaceControls.getLastInitiator()
 });
 initDropZone({
   dropOverlay, FsUtils, Core, importActions,

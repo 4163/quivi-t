@@ -261,7 +261,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   if (_state.mode !== 'archive') {
     if (FsUtils.isArchiveEntry(file)) {
       const enc = await FsUtils.checkArchiveEncryption(file.path);
-      if (_state.index !== index || _state.list[index] !== file) return;
+      if (_state.mode === 'archive' || _state.index !== index || _state.list[index] !== file) return;
       if (enc === 'password_required' || enc === 'password_incorrect') {
         _state.archivePath = file.path;
         _state.archiveEncryption = enc;

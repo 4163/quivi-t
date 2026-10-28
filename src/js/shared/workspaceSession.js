@@ -41,6 +41,20 @@ export function getSessionStripVisibleIndices() {
   return sessionStripVisibleIndices;
 }
 
+const initiatorCoreMethods = new Set(['navigate', 'jumpToIndex', 'selectIndex']);
+const initiatorFsMethods = new Set(['loadFile', 'loadArchive', 'openParent', 'openSibling', 'refresh',
+  'loadHistoryEntry', 'loadFallbackAncestor', 'applyDirectoryResult']);
+const initiatorImportMethods = new Set(['openUrl', 'openPath', 'acceptDrop', 'completeDrop']);
+let lastInitiator = 'main';
+
+export function getLastInitiator() {
+  return Core.getState().workspaceLayout?.fileList === 'detached' ? lastInitiator : 'main';
+}
+
+export function setLastInitiator(initiator) {
+  lastInitiator = initiator === 'workspace-file-list' ? 'workspace-file-list' : 'main';
+}
+
 export function listenWorkspaceEvent(event, handler, { owner = ownLabel } = {}) {
   if (ownLabel !== owner) return Promise.resolve(null);
   return window.__TAURI__.event.listen(event, handler, { target: owner });
@@ -104,6 +118,14 @@ function settle(id, value, error) {
 }
 
 async function execute(message) {
+  if (message.source === 'workspace-file-list' && (
+    (message.group === 'action' && message.method === 'run') ||
+    (message.group === 'core' && initiatorCoreMethods.has(message.method)) ||
+    (message.group === 'fs' && initiatorFsMethods.has(message.method)) ||
+    (message.group === 'import' && initiatorImportMethods.has(message.method))
+  )) {
+    lastInitiator = 'workspace-file-list';
+  }
   const { group, method, args } = message;
   if (group === 'core' && ownLabel === 'main' && coreMethods.has(method)) return Core[method](...args);
   if (group === 'fs' && ownLabel === 'main' && fsMethods.has(method)) return FsUtils[method](...args);

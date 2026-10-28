@@ -30,7 +30,7 @@ import {
   MISC_PROVIDER
 } from './libraryStore.js';
 import { Core } from '../core.js';
-import { hostsWorkspaceSurface } from '../shared/workspaceHost.js';
+import { workspaceSurface, hostsWorkspaceSurface } from '../shared/workspaceHost.js';
 import { FsUtils } from '../fsUtils.js';
 import { ensureArchiveBlob, hasCachedArchiveBlob, clearArchiveBlobCache } from '../services/archiveImageCache.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
@@ -1717,12 +1717,13 @@ function wireRowListeners(li) {
     if (Core.getState().manhwaEnabled && _isManhwaActive()) {
       _alignListItemTop?.(index);
     }
-    if (Core.getState().index !== index) {
+    const now = Date.now();
+    const isDoubleClick = lastClickIndex === index && (now - lastClickTime < 400);
+    if (!isDoubleClick && Core.getState().index !== index) {
       Core.selectIndex(index);
     }
     updateSelection(index, false, true);
-    const now = Date.now();
-    if (lastClickIndex === index && (now - lastClickTime < 400)) {
+    if (isDoubleClick) {
       panelKeyboardActive = true;
       Core.jumpToIndex(index);
       lastClickTime = 0;
@@ -2290,13 +2291,13 @@ function stripVisibleIndices(list, index, manhwaOn) {
   return new Set(_getVisibleImageIndices());
 }
 
-function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) {
+function updateSelection(selectedIndex, forceFocus = false, wasFocused = false, suppressFocus = false) {
   if (!lastRenderedList) return;
 
   const isDefaultFocus = !document.activeElement || document.activeElement === document.body;
-  wasFocused = wasFocused || panelKeyboardActive || forceFocus ||
+  wasFocused = !suppressFocus && (wasFocused || panelKeyboardActive || forceFocus ||
     (document.activeElement && fileListUl.contains(document.activeElement)) ||
-    (isDefaultFocus && Core.getState().fileListVisible);
+    (isDefaultFocus && Core.getState().fileListVisible));
 
   const visibleIndices = stripVisibleIndices(lastRenderedList, selectedIndex, Core.getState().manhwaEnabled);
   const visibleListIndices = visibleIndices ? Array.from(visibleIndices) : null;
@@ -2498,10 +2499,19 @@ export function renderFilePanel(state) {
 
   const forceFocus = focusMainListOnNextRender;
   focusMainListOnNextRender = false;
+  const archivePromptActive = state.mode === 'archive' && !state.isSiblingNavigation &&
+    (state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect');
+  if (archivePromptActive) {
+    panelKeyboardActive = false;
+    if (workspaceSurface === 'fileList' && document.activeElement && filePanel.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
+  }
+  const suppressFocus = archivePromptActive || (workspaceSurface === 'fileList' && typeof document.hasFocus === 'function' && !document.hasFocus());
   const isDefaultFocus = !document.activeElement || document.activeElement === document.body;
-  const wasFocused = panelKeyboardActive || forceFocus ||
+  const wasFocused = !suppressFocus && (panelKeyboardActive || forceFocus ||
     (document.activeElement && filePanel.contains(document.activeElement)) ||
-    (isDefaultFocus && state.fileListVisible);
+    (isDefaultFocus && state.fileListVisible));
 
   // If only the selection index changed (same list)
   if (lastRenderedList === state.list) {
@@ -2510,7 +2520,7 @@ export function renderFilePanel(state) {
     lastRenderedVisible = state.fileListVisible;
     lastRenderedDirectory = currentDir;
     lastRenderedManhwa = state.manhwaEnabled;
-    updateSelection(state.index, forceFocus, wasFocused);
+    updateSelection(state.index, forceFocus, wasFocused, suppressFocus);
     return;
   }
 
@@ -2539,7 +2549,7 @@ export function renderFilePanel(state) {
   renderVisibleSlice();
 
   if (state.index >= 0) {
-    updateSelection(state.index, forceFocus, wasFocused);
+    updateSelection(state.index, forceFocus, wasFocused, suppressFocus);
   } else if (wasFocused && document.activeElement !== fileSearchInput) {
     fileListUl?.focus({ preventScroll: true });
   }
@@ -3090,7 +3100,8 @@ export function initFilePanel(deps) {
 
   window.addEventListener('quivit-manhwa-settle', () => {
     if (Core.getState().fileListVisible && _isManhwaActive()) {
-      updateSelection(Core.getState().index);
+      const suppress = workspaceSurface === 'fileList' && typeof document.hasFocus === 'function' && !document.hasFocus();
+      updateSelection(Core.getState().index, false, false, suppress);
       updateFavoritesSelection(Core.getState());
     }
   });

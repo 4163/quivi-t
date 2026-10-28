@@ -2673,9 +2673,9 @@ export function setDisplayOrder(dirPath, filenames) {
 
 // -- UI integration --
 
-export function openPrompt() {
+export function openPrompt(opts = {}) {
   if (_urlOverlay) {
-    _urlOverlay.show();
+    _urlOverlay.show(opts);
   }
 }
 

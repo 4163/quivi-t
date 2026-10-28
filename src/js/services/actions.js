@@ -255,14 +255,14 @@ export const ACTION_REGISTRY = [
   },
 
   // File Operations
-  { id: 'cmd-open-dir', label: 'Open Directory', defaultBinds: 'Ctrl+o', category: 'File Operations',
+  { id: 'cmd-open-dir', label: 'Open Directory', defaultBinds: 'Ctrl+o', category: 'File Operations', owner: 'window',
     run: (ctx) => ctx.FsUtils.openDirectoryDialog()
   },
-  { id: 'cmd-open-file', label: 'Open File / Archive', defaultBinds: 'Ctrl+Shift+o', category: 'File Operations',
+  { id: 'cmd-open-file', label: 'Open File / Archive', defaultBinds: 'Ctrl+Shift+o', category: 'File Operations', owner: 'window',
     run: (ctx) => ctx.FsUtils.openFileDialog()
   },
   { id: 'cmd-use-url', label: 'Open URL...', defaultBinds: 'Ctrl+i', category: 'File Operations', focusOwner: true,
-    run: (ctx) => ctx.UrlLoader?.openPrompt()
+    run: (ctx, payload) => ctx.UrlLoader?.openPrompt(payload)
   },
   { id: 'cmd-refresh', label: 'Refresh', defaultBinds: ['6', 'Ctrl+r'], category: 'File Operations',
     run: (ctx) => ctx.FsUtils.refresh()

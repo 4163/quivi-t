@@ -6,10 +6,12 @@ import {
   requestWorkspace,
   createWorkspaceService,
   registerStripVisibleIndicesProvider,
-  getSessionStripVisibleIndices
+  getSessionStripVisibleIndices,
+  getLastInitiator,
+  setLastInitiator
 } from './workspaceSession.js';
 
-export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleImageIndices, revealListTop }) {
+export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleImageIndices, revealListTop, focusFileList }) {
   let remoteVisibleIndices = getSessionStripVisibleIndices() || [];
   let remoteFileListAtTop = false;
   let localFileListAtTop = true;
@@ -32,9 +34,13 @@ export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleIm
   function dispatchAction(id, payload) {
     const action = ACTION_MAP.get(id);
     const owner = typeof action?.owner === 'function' ? action.owner(actionCtx, payload) : action?.owner || 'main';
-    if (!workspaceSurface || owner === 'window') return dispatch(id, payload, actionCtx).catch(console.error);
-    const forwarded = payload ? { wheel: payload.wheel, clientX: payload.clientX, clientY: payload.clientY, fileList: payload.fileList } : null;
-    if (forwarded?.wheel) forwarded.clientX = forwarded.clientY = undefined;
+    if (!workspaceSurface || owner === 'window') {
+      if (!workspaceSurface) setLastInitiator('main');
+      return dispatch(id, payload, actionCtx).catch(console.error);
+    }
+    const forwarded = payload ? { wheel: payload.wheel, clientX: payload.clientX, clientY: payload.clientY, fileList: payload.fileList } : {};
+    if (forwarded.wheel) forwarded.clientX = forwarded.clientY = undefined;
+    forwarded.initiator = 'workspace-file-list';
     return requestWorkspace('main', 'action', 'run', [id, forwarded]).catch(console.error);
   }
 
@@ -82,6 +88,22 @@ export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleIm
     visibleIndices: () => hostsWorkspaceSurface('viewport') ? getVisibleImageIndices() : remoteVisibleIndices,
     revealListTop: handleRevealListTop,
     reportFileListScroll,
+    restoreFocus(target = 'main') {
+      if (target !== 'workspace-file-list' || hostsWorkspaceSurface('fileList')) {
+        if (hostsWorkspaceSurface('fileList')) {
+          focusFileList?.();
+        } else {
+          document.getElementById('viewport')?.focus();
+        }
+        return Promise.resolve();
+      }
+      if (!workspaceSurface) {
+        window.__TAURI__?.core?.invoke?.('plugin:window|set_focus', { label: target }).catch(() => {});
+        return requestWorkspace('workspace-file-list', 'filePanel', 'focus').catch(console.error);
+      }
+      return Promise.resolve();
+    },
+    getLastInitiator,
     createImportActions(createLocal) {
       const local = createLocal();
       if (!workspaceSurface) {
@@ -97,18 +119,35 @@ export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleIm
           return () => window.removeEventListener('quivit-workspace-import-activity', onActivity);
         };
       }
-      return createWorkspaceService('import', local, ['subscribe']);
+      const service = createWorkspaceService('import', local, ['subscribe']);
+      if (workspaceSurface) return service;
+      return {
+        ...service,
+        openUrl: (...args) => { setLastInitiator('main'); return service.openUrl(...args); },
+        openPath: (...args) => { setLastInitiator('main'); return service.openPath(...args); },
+        acceptDrop: (...args) => { setLastInitiator('main'); return service.acceptDrop(...args); },
+        completeDrop: (...args) => { setLastInitiator('main'); return service.completeDrop(...args); }
+      };
     },
     connect({ importActions, UrlLoader }) {
       registerWorkspaceHandlers({
         action: { run: async (id, payload) => {
+          if (payload?.initiator) setLastInitiator(payload.initiator);
           if (ACTION_MAP.get(id)?.focusOwner) await window.__TAURI__?.window.getCurrentWindow().setFocus().catch(console.error);
           return dispatchAction(id, payload);
         } },
         viewer: { panBy: (...args) => Viewer.panBy(...args) },
         strip,
         filePanel: workspaceSurface ? {
-          revealListTop: () => hostsWorkspaceSurface('fileList') ? revealListTop?.() ?? true : true
+          revealListTop: () => hostsWorkspaceSurface('fileList') ? revealListTop?.() ?? true : true,
+          focus: async () => {
+            if (window.__TAURI__) {
+              await window.__TAURI__.window.getCurrentWindow().setFocus().catch(console.error);
+            } else {
+              window.focus?.();
+            }
+            focusFileList?.();
+          }
         } : {
           setFileListAtTop: isAtTop => {
             if (!hostsWorkspaceSurface('fileList')) {
