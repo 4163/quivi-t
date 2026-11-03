@@ -1,4 +1,4 @@
-import { mergeConfig, DEFAULT_KEYBINDS, DEFAULT_SPREAD_ENABLED } from '../keybinds.js';
+import { mergeConfig, DEFAULT_KEYBINDS } from '../keybinds.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { makeListNavigable, handleTabJump } from '../keyboardNav.js';
 import { initKeybindUi } from './keybindUi.js';
@@ -27,6 +27,7 @@ let initialLibraryPath = '';
 let defaultLibraryDir = '';
 let savingOptions = false;
 let refreshGen = 0;
+let scrollLatchReset = false;
 
 // Emergency CSS reset (Ctrl+Shift+Alt+C).
 window.addEventListener('keydown', (e) => {
@@ -158,6 +159,7 @@ async function init() {
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
     config = mergeConfig(await invoke('load_config'));
+    scrollLatchReset = false;
     if (configDirLabel) configDirLabel.textContent = await invoke('get_config_dir');
     if (localDataDirLabel) localDataDirLabel.textContent = await invoke('get_local_data_dir');
     await refreshActiveConfigHint();
@@ -248,6 +250,7 @@ document.getElementById('btn-reset-keybinds').addEventListener('click', () => {
   config.frontend_data.scroll_zoom_modifier = 'hold';
   // Latch is runtime state (quivit_state.json) tied to the modifier. Clear both so toggle starts unlatched.
   config.frontend_data.scroll_zoom_latched = false;
+  scrollLatchReset = true;
   if (keybindUiInstance) {
     keybindUiInstance.renderKeybinds();
     keybindUiInstance.syncScrollModeToggle?.();
@@ -482,8 +485,30 @@ document.getElementById('opt-custom-css').addEventListener('keydown', (e) => {
 });
 
 // Save.
-function buildConfigFromForm(baseConfig) {
-  const newConfig = { ...baseConfig };
+function mergeFilterOptions(baseOptions, dialogOptions) {
+  const base = (baseOptions && typeof baseOptions === 'object')
+    ? JSON.parse(JSON.stringify(baseOptions))
+    : {};
+  if (!dialogOptions || typeof dialogOptions !== 'object') return base;
+  for (const [key, value] of Object.entries(dialogOptions)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      base[key] = mergeFilterOptions(base[key], value);
+    } else if (value !== undefined) {
+      base[key] = value;
+    }
+  }
+  return base;
+}
+
+function buildConfigFromForm(baseConfig, dialogConfig = baseConfig) {
+  const baseFd = baseConfig?.frontend_data || {};
+  const dialogFd = dialogConfig?.frontend_data || baseFd;
+  const newConfig = {
+    ...baseConfig,
+    frontend_data: {
+      ...baseFd
+    }
+  };
   newConfig.portable_mode = document.getElementById('opt-portable-mode').checked;
   newConfig.frontend_data.continue_last = document.getElementById('opt-continue-last').checked;
   newConfig.frontend_data.remember_last_image = document.getElementById('opt-remember-last-image').checked;
@@ -502,19 +527,15 @@ function buildConfigFromForm(baseConfig) {
   } else {
     delete newConfig.frontend_data.library_path;
   }
-  // Wheel Behaviour (Keys tab) is owned by keybindUi.js and mutated directly on `config`.
-  // Preserve the current value through the shallow copy so Save persists the toggle.
-  newConfig.frontend_data.scroll_zoom_modifier = baseConfig.frontend_data.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold';
+  newConfig.frontend_data.keybinds = JSON.parse(JSON.stringify(dialogFd.keybinds || baseFd.keybinds || DEFAULT_KEYBINDS));
+  newConfig.frontend_data.scroll_zoom_modifier = dialogFd.scroll_zoom_modifier === 'toggle' ? 'toggle' : 'hold';
+  if (scrollLatchReset || newConfig.frontend_data.scroll_zoom_modifier !== 'toggle') {
+    newConfig.frontend_data.scroll_zoom_latched = false;
+  }
   newConfig.frontend_data.theme = currentTheme;
   newConfig.frontend_data.custom_css = document.getElementById('opt-custom-css').value;
-  // Spread View settings are controlled via the View menu; preserve them across Options saves.
-  newConfig.frontend_data.spread_enabled = baseConfig.frontend_data?.spread_enabled ?? DEFAULT_SPREAD_ENABLED;
-  newConfig.frontend_data.spread_direction = baseConfig.frontend_data?.spread_direction || 'rtl';
-  // Manhwa View is controlled via the View menu; preserve it across Options saves.
-  newConfig.frontend_data.manhwa_enabled = baseConfig.frontend_data?.manhwa_enabled === true;
-  // Preserve filter options which are mutated in memory directly.
-  newConfig.frontend_data.filter_options = JSON.parse(JSON.stringify(baseConfig.frontend_data.filter_options || {}));
-  
+  newConfig.frontend_data.filter_options = mergeFilterOptions(baseFd.filter_options, dialogFd.filter_options);
+
   if (!newConfig.frontend_data.continue_last) {
     delete newConfig.frontend_data.last_opened_path;
   }
@@ -533,12 +554,27 @@ async function saveOptions() {
   savingOptions = true;
   refreshGen++;
   const associationsResult = await applyAssociations(showStatus);
-  
+
   const isSingleInstanceModified = document.getElementById('opt-single-instance').checked !== initialSingleInstance;
-  const formConfig = buildConfigFromForm(config);
   const requestedLibraryPath = document.getElementById('opt-library-path').value.trim();
   const selectedLibraryPath = requestedLibraryPath || defaultLibraryDir;
   const libraryPathChanged = !pathsMatch(selectedLibraryPath, initialLibraryDir);
+
+  // Flush the main window's live state and reload the authoritative config before
+  // applying Options-owned form values so viewer, library, and layout state added
+  // while Options was open is preserved.
+  let liveConfig = config;
+  if (invoke) {
+    try {
+      await initWorkspaceClient();
+      await requestWorkspace('main', 'core', 'flushConfig');
+    } catch {}
+    try {
+      liveConfig = mergeConfig(await invoke('load_config'));
+    } catch {}
+  }
+
+  const formConfig = buildConfigFromForm(liveConfig, config);
   try {
     const savedTheme = formConfig.frontend_data.theme;
     if (savedTheme === 'light' || savedTheme === 'dark') localStorage.setItem('quivit-theme', savedTheme);
@@ -546,22 +582,10 @@ async function saveOptions() {
     if (formConfig.frontend_data.custom_css) localStorage.setItem('quivit-custom-css', formConfig.frontend_data.custom_css);
     else localStorage.removeItem('quivit-custom-css');
   } catch(e) {}
-  
+
   const merged = mergeConfig(formConfig);
-  // Favorites and window preferences can change while Options is open.
-  // Flush their owner before copying the current values into this save.
-  try {
-    if (invoke) {
-      await initWorkspaceClient();
-      await requestWorkspace('main', 'core', 'flushConfig');
-      const live = mergeConfig(await invoke('load_config'));
-      for (const key of ['favorites', 'favorites_collapsed', 'workspace_layout', 'window_menu_visible', 'menu_visible', 'status_visible']) {
-        if (live.frontend_data[key] !== undefined) merged.frontend_data[key] = live.frontend_data[key];
-      }
-    }
-  } catch { /* fall back to form values */ }
   Object.assign(config, merged);
-  
+
   try {
     if (!invoke) throw new Error('Tauri invoke API is unavailable.');
     let relocation = null;
@@ -578,6 +602,7 @@ async function saveOptions() {
     } else {
       await invoke('save_config', { config });
     }
+    scrollLatchReset = false;
     setPreviewing(false);
     applyTheme(config.frontend_data.theme || 'system');
     applyCustomCss(config.frontend_data.custom_css || '');

@@ -156,6 +156,7 @@ const _state = {
 const _listeners = [];
 let _configDirty = false;
 let _persistTimer = null;
+let _persistPromise = null;
 
 // Helpers.
 
@@ -177,16 +178,27 @@ async function _persistConfig() {
   clearTimeout(_persistTimer);
   _persistTimer = null;
   _configDirty = false;
+  const run = (async () => {
+    try {
+      await invoke('save_config', { config: _state.config });
+    } catch (err) {
+      console.error('[Core] Failed to persist config:', err);
+    }
+  })();
+  _persistPromise = run;
   try {
-    await invoke('save_config', { config: _state.config });
-  } catch (err) {
-    console.error('[Core] Failed to persist config:', err);
+    await run;
+  } finally {
+    if (_persistPromise === run) _persistPromise = null;
   }
 }
 
 async function _flushConfig() {
-  if (!_configDirty) return;
-  await _persistConfig();
+  if (_configDirty) {
+    await _persistConfig();
+  } else if (_persistPromise) {
+    await _persistPromise;
+  }
 }
 
 function _scheduleConfigFlush(delayMs = 1500) {
@@ -457,8 +469,10 @@ export const Core = {
   setFitMode(mode, options = {}) {
     _state.fitMode = mode;
     _state.fitModeGen++;
-    if (options.persist) {
+    if (_state.config?.frontend_data) {
       _state.config.frontend_data.fit_mode = mode;
+    }
+    if (options.persist) {
       _scheduleConfigFlush(1500);
     }
     _notify();
@@ -466,8 +480,10 @@ export const Core = {
 
   setScalingMode(mode, options = {}) {
     _state.scalingMode = mode;
-    if (options.persist) {
+    if (_state.config?.frontend_data) {
       _state.config.frontend_data.scaling_mode = mode;
+    }
+    if (options.persist) {
       _scheduleConfigFlush(1500);
     }
     _notify();

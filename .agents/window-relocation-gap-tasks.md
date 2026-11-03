@@ -90,6 +90,24 @@ Executed automated and manual runtime checks:
 - `npm run e2e -- --agent --spec e2e/specs/07-os-integration.e2e.js` passed with exit code 0 (4 tests, including single-instance file open handoff).
 - User manual runtime testing confirmed auxiliary window opening/centering and single-instance unminimize restoration across detached windows.
 
+## Options live state preservation verification, 2026-11-04
+
+Compared against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md`. This slice covers F02 across `src/js/options/options.js`, `src/js/core.js`, `src/js/keybinds.js`, and `src-tauri/src/commands/library.rs`. Accepted (`[x]`) and verified in runtime (checklist item 3 passed).
+
+1. **V10, addressed. Options flushes and reloads authoritative config before applying Options-owned form and in-memory mutations.** `src/js/options/options.js:546-605` flushes `main` via `requestWorkspace('main', 'core', 'flushConfig')` and reloads `liveConfig` before calling `buildConfigFromForm(liveConfig, config)` (`src/js/options/options.js:503-544`). `buildConfigFromForm` clones `liveConfig` and `liveConfig.frontend_data`, overlays only Options-owned DOM inputs and in-memory dialog mutations (`keybinds`, `scroll_zoom_modifier`, `scroll_zoom_latched` reset on `scrollLatchReset` or `'hold'`, and recursive `mergeFilterOptions` at `src/js/options/options.js:488-501`), preserves live viewer/layout/library/unknown keys, and honors intentional deletions (`last_opened_path` when `!continue_last`, default `library_path`, and `e2e_suite`).
+2. **V11, addressed. Core flush awaits in-flight saves and keeps view-mode config fields synchronized.** `src/js/core.js:159, 177-202, 469-490` tracks `_persistPromise` so `_flushConfig()` awaits active `save_config` writes and updates `_state.config.frontend_data.fit_mode` / `scaling_mode` in `setFitMode` and `setScalingMode`. `src/js/keybinds.js:48` preserves top-level `archive_cache_mb`, and `src-tauri/src/commands/library.rs:643-654` drops `last_opened_path` during `move_library` when `continue_last` is `false`.
+
+Executed automated and manual runtime checks:
+
+- `node --check` passed for `src/js/options/options.js`, `src/js/core.js`, and `src/js/keybinds.js`.
+- `cargo check --tests --manifest-path src-tauri/Cargo.toml` passed.
+- `npm run mocha` passed all 308 tests.
+- Focused `node --input-type=module` stdin check against `options.js`, `core.js`, and `keybinds.js` passed.
+- `cargo test --manifest-path src-tauri/Cargo.toml config::tests` (14 tests) and `commands::library::tests` (1 test) passed.
+- `npm run e2e -- --agent --spec e2e/specs/06-configuration.e2e.js` (2 tests) and `npm run e2e -- --agent --spec e2e/specs/05-persistence.e2e.js` (4 tests) passed with exit code 0.
+- User manual runtime testing confirmed checklist item 3 across `main`, detached `workspace-file-list`, and `options`.
+- `git diff --check` passed and the synthesis SHA-256 remains unchanged.
+
 ## Confirmed gaps
 
 Work through the P1 items first. Keep related risk investigations beside the corresponding fix when practical: R06 with F03/F04, R04 with F06, R03 with F07, R05 with F10, and R07 with F01.
@@ -106,9 +124,9 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Evidence and disposition: `raise_main` (`src-tauri/src/windows.rs:213`) unminimizes and focuses main. `open_options` and `open_metadata_window` invoke it before window presentation (lines 222, 266), ensuring main is in the foreground. `center_window_over_main` (line 329) positions the auxiliary window centered over main. `usable_window_bounds` (line 308) guards against invalid dimensions or coordinates, falling back to `window.center()` (lines 342, 345) on the current monitor if main cannot be queried. The placement is clamped to main's monitor work area (line 360). Sizing stays in the native owner, and `open_options`/`open_metadata_window` unminimize existing auxiliary instances. IPC command names and signatures are unchanged. Automated checks: `cargo check --tests`, `git diff --check`, and `npm run e2e -- --agent --spec e2e/specs/06-configuration.e2e.js` passed. Manual runtime checklist item 2 passed. Disposition: fixed, accepted by user.
 
-2. [ ] **F02, P1. Preserve live workspace state when Options saves.**
+2. [x] **F02, P1. Preserve live workspace state when Options saves.**
 
-   Source: `.agents/08-synthesis.txt:259`. Owner and anchors: `src/js/options/options.js:473`, `src/js/options/options.js:513`, `src/js/options/options.js:538`, `src/js/core.js:654`.
+   Source: `.agents/08-synthesis.txt:259`. Owner and anchors: `src/js/options/options.js:488`, `src/js/options/options.js:503`, `src/js/options/options.js:546`, `src/js/core.js:177`, `src/js/core.js:469`, `src/js/keybinds.js:36`, `src-tauri/src/commands/library.rs:631`.
 
    Replace the six-key preservation whitelist with a merge based on current authoritative configuration and the fields Options actually edits. Account for controls that mutate the dialog's in-memory config directly, including keybindings, wheel modifier, and nested filter options. Preserve unknown keys and intentional deletions, such as disabling Continue from last opened directory.
 
@@ -116,7 +134,7 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Verification: Run `node --check`, `npm run mocha`, `cargo test --manifest-path src-tauri/Cargo.toml config::tests`, `npm run e2e -- --spec e2e/specs/06-configuration.e2e.js` (and `05-persistence.e2e.js` where applicable), and manual runtime checklist item 3.
 
-   Evidence and disposition: pending.
+   Evidence and disposition: `saveOptions` (`src/js/options/options.js:546-605`) flushes `main` via `requestWorkspace('main', 'core', 'flushConfig')` and loads the current authoritative config before calling `buildConfigFromForm(liveConfig, config)` (`src/js/options/options.js:503-544`). `buildConfigFromForm` starts from a clone of `liveConfig` and `liveConfig.frontend_data`, applies only Options-owned form fields and in-memory dialog mutations (`keybinds`, `scroll_zoom_modifier`, `scroll_zoom_latched` reset on `scrollLatchReset` or `'hold'`, and recursive `mergeFilterOptions` at `src/js/options/options.js:488-501`), preserves all live viewer/layout/library/unknown keys, and honors intentional deletions (`last_opened_path` when `!continue_last`, default `library_path`, and `e2e_suite`). `Core` (`src/js/core.js:159, 177-202, 469-490`) tracks in-flight `_persistPromise` so `_flushConfig()` awaits active disk writes and updates `_state.config.frontend_data.fit_mode` / `scaling_mode` in `setFitMode` and `setScalingMode`. `mergeConfig` (`src/js/keybinds.js:48`) preserves top-level `archive_cache_mb`, and `carry_live_library_state` (`src-tauri/src/commands/library.rs:643-654`) drops `last_opened_path` when `continue_last` is `false`. Automated checks (`node --check`, `git diff --check`, `npm run mocha`, `cargo check --tests`, `config::tests`, `commands::library::tests`, focused Node module verification, `06-configuration.e2e.js`, and `05-persistence.e2e.js`) passed. Manual runtime checklist item 3 passed. Disposition: fixed, accepted by user.
 
 3. [x] **F03, P1. Clear preview overrides in every workspace window after Save.**
 
@@ -325,7 +343,7 @@ Execute these runtime checks in a live build (`npm run tauri dev` or built binar
    4. Close **Options**, minimize the main viewer again, click the **Archive Info** (`i`) badge in the detached **File List** window, and confirm main restores and **Archive Info** opens centered over it.
    5. Restore the main viewer window.
 
-3. [ ] **Options live state preservation (`F02`)**
+3. [x] **Options live state preservation (`F02`)**
    1. Open **Options** (`5`) and keep it open alongside the main viewer and detached **File List**.
    2. In the main viewer, press `Q` to change Fit Mode, press `M` to toggle Manhwa mode, and in the detached **File List** press `T` to toggle Thumbnail view and navigate to a different image or folder.
    3. In **Options**, change an unrelated setting (such as Keyboard Pan Step) and click **Save**.

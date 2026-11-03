@@ -45,6 +45,7 @@ export function mergeConfig(loaded) {
   const result = {
     portable_mode: !!loaded?.portable_mode,
     hidden: loaded?.hidden === true, // Preserve hidden field (config-file-only)
+    ...(loaded?.archive_cache_mb !== undefined ? { archive_cache_mb: loaded.archive_cache_mb } : {}),
     frontend_data: {
       ...fdBase,
       continue_last: fd.continue_last !== false,
