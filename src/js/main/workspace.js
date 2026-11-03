@@ -3,7 +3,7 @@ import { dockWorkspaceSurface, isWorkspaceDetached } from '../services/workspace
 import { workspaceSurface } from '../shared/workspaceHost.js';
 import { forgetWorkspacePeer, windowPopups, workspacePopupUrl } from '../shared/workspaceSession.js';
 
-export function initWorkspace({ onDetachedClose }) {
+export function initWorkspace() {
   const workspace = document.getElementById('workspace');
   let running = false;
   let dirty = false;
@@ -70,7 +70,7 @@ export function initWorkspace({ onDetachedClose }) {
       resolveClose = null;
       return;
     }
-    if (isWorkspaceDetached(Core.getState().workspaceLayout)) onDetachedClose();
+    if (isWorkspaceDetached(Core.getState().workspaceLayout)) dock('fileList');
   });
   if (!window.__TAURI__ && !workspaceSurface) {
     const timer = setInterval(() => {

@@ -241,7 +241,7 @@ window.addEventListener('quivit-history-changed', () => {
 });
 
 // Initialization.
-initWorkspace({ onDetachedClose: () => workspaceControls.dispatchAction('cmd-quit') });
+initWorkspace();
 Statusbar.init();
 Chrome.initChrome();
 initFullscreen();

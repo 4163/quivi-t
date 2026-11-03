@@ -124,6 +124,7 @@ fn workspace_window(surface: &str) -> Result<&'static str, String> {
 pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Result<(), String> {
     let label = workspace_window(&surface)?;
     if let Some(window) = app.get_webview_window(label) {
+        let _ = window.set_closable(false);
         window.show().map_err(|e| e.to_string())?;
         let _ = window.unminimize();
         return window.set_focus().map_err(|e| e.to_string());
@@ -140,6 +141,7 @@ pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Re
     .title(title)
     .inner_size(FILE_LIST_INITIAL_W, MAIN_INITIAL_H)
     .min_inner_size(META_MIN_W, MAIN_MIN_H)
+    .closable(false)
     .visible(false)
     .disable_drag_drop_handler()
     .devtools(true)
@@ -167,7 +169,6 @@ pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Re
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
-            let _ = app.emit_to("main", "workspace-close-requested", ());
         }
         if matches!(event, tauri::WindowEvent::Destroyed) {
             #[cfg(windows)]
