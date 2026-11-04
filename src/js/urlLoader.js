@@ -2731,6 +2731,9 @@ export function handleLibraryRelocation({ oldPath, libraryPath } = {}) {
   }
 
   _teardownActiveQueue();
+  window.dispatchEvent(new CustomEvent('quivit-library-relocated', {
+    detail: { oldPath: previousPath, libraryPath: nextPath }
+  }));
   window.dispatchEvent(new CustomEvent('quivit-library-updated'));
 
   const state = _Core?.getState?.();

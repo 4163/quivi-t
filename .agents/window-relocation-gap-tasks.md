@@ -108,6 +108,24 @@ Executed automated and manual runtime checks:
 - User manual runtime testing confirmed checklist item 3 across `main`, detached `workspace-file-list`, and `options`.
 - `git diff --check` passed and the synthesis SHA-256 remains unchanged.
 
+## Metadata badge, Library active provider, relocation cache clear, and status flash group verification, 2026-11-04
+
+Compared against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md`. This slice covers F05, F07, F08, and R03 across `src/js/shared/workspaceSession.js`, `src/js/main/metadataBadge.js`, `src/js/filepanel/libraryStore.js`, `src/js/filepanel/filePanel.js`, `src/js/menubar.js`, and `src/js/urlLoader.js`. All four tasks in this group are accepted (`[x]`) and verified in runtime (checklist item 6 passed).
+
+1. **V12, addressed. Single metadata producer on main, monotonic sequence guard after asynchronous cover/src work, and badge/action availability across docking states (`F05`).** `src/js/main/metadataBadge.js:172-204` makes `main` (`!workspaceSurface`) the sole session producer for metadata extraction (`fetchMetadata`, `fetchDirectoryMetadata`), cover downsampling (`_generateCoverThumbnail`), `localStorage` caching (`quivit-metadata-current`), and `metadata-data` emission. `src/js/main/metadataBadge.js:64-138` guards every `await` boundary (`fetchMetadata`, `_generateCoverThumbnail`, `fetchDirectoryMetadata`, `FsUtils.buildFileSrc`) with a monotonic `_loadSeq` counter and container-path identity check so out-of-order cover completions never overwrite current container metadata, and skips archive metadata extraction while `state.archiveEncryption` is `password_required` or `password_incorrect` so unlocking triggers extraction. `src/js/shared/workspaceSession.js:50-56, 170, 188-190, 200-202, 211, 297` carries `metadataAvailable` on full snapshots and forwards `quivit-metadata-changed` to `workspace-file-list`. Both windows paint `_badgeEl.classList.toggle('is-visible', Boolean(_hasMetadata && hostsWorkspaceSurface('fileList', state)))` (`src/js/main/metadataBadge.js:12-15`) and allow `openMetadataWindow()` (`src/js/main/metadataBadge.js:140-143`) when `_hasMetadata` is true.
+2. **V13, addressed. Active Library provider synchronization across main and detached File List (`F07`).** `src/js/filepanel/libraryStore.js:124-169` includes `explicit: hasExplicitActiveChoice()` in `quivit-library-active-changed` event details and exports `syncActiveProvider(detail)` to update `ACTIVE_PROVIDER_KEY` and `ACTIVE_EXPLICIT_KEY` without re-dispatching. `src/js/shared/workspaceSession.js:58-59, 206-218, 275-280, 296-301` forwards `quivit-library-active-changed` in both directions (`main` <-> `workspace-file-list`) with a `dispatchingRemoteEvent` guard to prevent echo loops. `src/js/filepanel/filePanel.js:2788-2791` and `src/js/menubar.js:760-763` invoke `syncActiveProvider(e?.detail)` before `renderLibrary()` and `renderImportsMenu()`, and `src/js/menubar.js:664` clears the explicit choice when the Library becomes empty.
+3. **V14, addressed. Narrowly scoped replica-to-main forwarding for detached deletion failure feedback (`F08`).** `src/js/shared/workspaceSession.js:58, 206-218, 275-280` forwards `quivit-status-flash` from `workspace-file-list` to `main` via the `replicaEvents` allowlist (`quivit-status-flash`, `quivit-library-active-changed`), where `Statusbar` (`src/js/menubar/statusbar.js:99`) renders the message once in `main`'s visible status bar while `workspace-file-list`'s status bar remains hidden.
+4. **V15, addressed. Library thumbnail cache invalidation in the owning window after relocation (`R03`).** `src/js/urlLoader.js:2734-2736` dispatches `quivit-library-relocated` before `quivit-library-updated` when the Library path changes, and `src/js/shared/workspaceSession.js:296` forwards `quivit-library-relocated` from `main` to `workspace-file-list` before `quivit-library-updated`. `src/js/filepanel/filePanel.js:95-100, 2780-2782` listens for `quivit-library-relocated` and updates `clearLibraryPathCaches()` to clear `thumbnailCache`, `favoritesThumbnailCache`, and `libraryThumbnailCache` and re-render Favorites (`renderFavorites()`), while `main` retains sole ownership of import, `NavigationHistory.remapLibraryPaths`, and `rebind_library_watcher`.
+
+Executed automated and manual runtime checks:
+
+- `node --check` passed for all six changed JS modules (`src/js/shared/workspaceSession.js`, `src/js/main/metadataBadge.js`, `src/js/filepanel/libraryStore.js`, `src/js/filepanel/filePanel.js`, `src/js/menubar.js`, `src/js/urlLoader.js`).
+- `npm run mocha` passed all 308 tests.
+- Focused Node module verification checks against `workspaceSession.js`, `metadataBadge.js`, `libraryStore.js`, `filePanel.js`, and `urlLoader.js` passed, covering single metadata producer on `main`, stale out-of-order cover completion rejection, badge/action behavior across attach/detach/recombine, bidirectional `quivit-library-active-changed` synchronization without echo loops, `quivit-status-flash` forwarding and allowlist enforcement, and `quivit-library-relocated` ordering and thumbnail cache invalidation.
+- `npm run e2e -- --agent --spec e2e/specs/04-archives.e2e.js` passed with exit code 0 (6 tests).
+- User manual runtime testing confirmed checklist item 6 across `main`, detached `workspace-file-list`, `metadata`, and `options`.
+- `git diff --check` passed and the synthesis SHA-256 remains unchanged.
+
 ## Confirmed gaps
 
 Work through the P1 items first. Keep related risk investigations beside the corresponding fix when practical: R06 with F03/F04, R04 with F06, R03 with F07, R05 with F10, and R07 with F01.
@@ -160,9 +178,9 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Evidence and disposition: `src/js/shared/workspaceSession.js:126` carries initial preview data on `full` snapshots and line 139 records it without rendering. `src/js/main/main.js:307-310` initializes preview overrides, then `quivit-config-loaded` (`main.js:396-426`) applies the effective theme/CSS while only `main` writes `localStorage`. Before show, `main.js:431` awaits `syncShellBackground()` (`src/js/shellBackground.js:51-60`), which awaits `waitForTheme()` (`src/js/shared/theme.js:21`) and skips `plugin:window|set_background_color` (`InvalidateRect`/`UpdateWindow`) when the computed `--surface` color is unchanged. `src/js/shared/theme.js:3-10, 26-30` skips no-op DOM mutations, and `src-tauri/src/windows.rs:74-112, 150, 247, 289` tracks `ACTIVE_THEME` (`Option<tauri::Theme>`) across windows without forcing `Some(theme)` when `"system"` is active. Automated checks (`node --check`, `cargo check --tests`, `config::tests`, 308 Mocha tests, focused module checks, and `06-configuration.e2e.js`) passed. Manual runtime checklist item 4 passed. Disposition: fixed, accepted by user.
 
-5. [ ] **F05, P2. Use one metadata producer and reject stale asynchronous results.**
+5. [x] **F05, P2. Use one metadata producer and reject stale asynchronous results.**
 
-   Source: `.agents/08-synthesis.txt:323`. Owner and anchors: `src/js/main/main.js:287`, `src/js/main/metadataBadge.js:29`, `src/js/main/metadataBadge.js:62`, `src/js/main/metadataBadge.js:102`, `src/js/metadata-window.js:193`.
+   Source: `.agents/08-synthesis.txt:323`. Owner and anchors: `src/js/main/main.js:301`, `src/js/main/metadataBadge.js:12`, `src/js/main/metadataBadge.js:64`, `src/js/main/metadataBadge.js:101`, `src/js/main/metadataBadge.js:145`, `src/js/shared/workspaceSession.js:50`, `src/js/shared/workspaceSession.js:170`, `src/js/metadata-window.js:193`.
 
    Select one session producer for extraction, cover downsampling, the metadata payload cache, and publication. Keep badge painting in the window hosting the badge, including after docking changes. Recheck the current container after asynchronous cover work before publishing. Simply skipping replica initialization must not disable its badge or Archive Info action.
 
@@ -170,7 +188,7 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Verification: Run `node --check`, `npm run mocha`, targeted archive/metadata E2E checks (`04-archives.e2e.js`), and manual runtime verification of Archive Info and badge updates across attached, detached, and recombined modes. Leave the rejected legacy metadata-clearing issue outside this fix.
 
-   Evidence and disposition: pending.
+   Evidence and disposition: `src/js/main/metadataBadge.js:172-204` restricts metadata extraction (`fetchMetadata`, `fetchDirectoryMetadata`), cover downsampling (`_generateCoverThumbnail`), `localStorage` payload caching (`quivit-metadata-current`), and `metadata-data` emission to `main` (`!workspaceSurface`). `src/js/main/metadataBadge.js:64-138` tracks a monotonic `_loadSeq` counter and container identity across every `await` boundary (`fetchMetadata`, `_generateCoverThumbnail`, `fetchDirectoryMetadata`, `FsUtils.buildFileSrc`) so out-of-order cover completions never overwrite current container metadata, and skips archive metadata extraction while `state.archiveEncryption` is `password_required` or `password_incorrect`. `src/js/shared/workspaceSession.js:50-56, 170, 188-190, 200-202, 211, 297` carries `metadataAvailable` on full snapshots and forwards `quivit-metadata-changed` from `main` to `workspace-file-list`. Both windows paint `_badgeEl.classList.toggle('is-visible', Boolean(_hasMetadata && hostsWorkspaceSurface('fileList', state)))` (`src/js/main/metadataBadge.js:12-15`) and keep `openMetadataWindow()` (`src/js/main/metadataBadge.js:140-143`) active whenever `_hasMetadata` is true. Automated checks (`node --check`, 308 Mocha tests, focused module verification, and `04-archives.e2e.js`) passed. Manual runtime checklist item 6 passed. Disposition: fixed, accepted by user.
 
 6. [x] **F06, P2. Deliver strip settle updates to the detached File List and Favorites.**
 
@@ -184,9 +202,9 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Evidence and disposition: `src/js/shared/workspaceControls.js:25` stores the delivered range before dispatching `quivit-manhwa-settle` on the replica. `src/js/filepanel/filePanel.js:3091` updates selection and Favorites from Core and that range, including a range change with an unchanged anchor. Anchor changes also reach the panel through Core snapshots. Main publishes range after its strip state listener and on settle; the viewport-owner guard prevents replica echoes. Repeated full snapshots apply state before notifying the range consumer. Automated checks (`node --check`, 308 Mocha tests, focused module checks, and `02-navigation.e2e.js` / `03-viewer.e2e.js`) passed. Disposition: fixed, pending full manual runtime verification in checklist item 5.
 
-7. [ ] **F07, P2. Synchronize the active Library provider with its visible panel.**
+7. [x] **F07, P2. Synchronize the active Library provider with its visible panel.**
 
-   Source: `.agents/08-synthesis.txt:366`. Owner and anchors: `src/js/shared/workspaceSession.js:201`, `src/js/filepanel/libraryStore.js:113`, `src/js/filepanel/libraryStore.js:124`, `src/js/filepanel/filePanel.js:2757`, `src/js/menubar.js:717`.
+   Source: `.agents/08-synthesis.txt:366`. Owner and anchors: `src/js/shared/workspaceSession.js:58`, `src/js/shared/workspaceSession.js:206`, `src/js/shared/workspaceSession.js:275`, `src/js/shared/workspaceSession.js:296`, `src/js/filepanel/libraryStore.js:124`, `src/js/filepanel/libraryStore.js:147`, `src/js/filepanel/filePanel.js:2788`, `src/js/menubar.js:664`, `src/js/menubar.js:760`.
 
    Deliver `quivit-library-active-changed` to the affected owner and ensure the receiver reads the updated provider state before repainting. Preserve the explicit-choice latch, the All selection, and automatic import activation semantics. Keep provider persistence in the existing store.
 
@@ -194,11 +212,11 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Verification: Run `node --check`, `npm run mocha`, targeted E2E checks, and manual runtime checklist item 6 (switching Library providers from both `main` and `workspace-file-list`).
 
-   Evidence and disposition: pending.
+   Evidence and disposition: `src/js/filepanel/libraryStore.js:124-169` includes `explicit: hasExplicitActiveChoice()` in `quivit-library-active-changed` event details and exports `syncActiveProvider(detail)` to update `ACTIVE_PROVIDER_KEY` and `ACTIVE_EXPLICIT_KEY` without re-dispatching. `src/js/shared/workspaceSession.js:58-59, 206-218, 275-280, 296-301` forwards `quivit-library-active-changed` between `main` and `workspace-file-list` with a `dispatchingRemoteEvent` guard to prevent echo loops. `src/js/filepanel/filePanel.js:2788-2791` and `src/js/menubar.js:760-763` invoke `syncActiveProvider(e?.detail)` before `renderLibrary()` and `renderImportsMenu()`, and `src/js/menubar.js:664` clears the explicit choice when the Library becomes empty. Automated checks (`node --check`, 308 Mocha tests, and focused module verification) passed. Manual runtime checklist item 6 passed. Disposition: fixed, accepted by user.
 
-8. [ ] **F08, P2. Route detached deletion failure feedback to the visible status bar.**
+8. [x] **F08, P2. Route detached deletion failure feedback to the visible status bar.**
 
-   Source: `.agents/08-synthesis.txt:386`. Owner and anchors: `src/js/filepanel/filePanel.js:1319`, `src/js/shared/workspaceSession.js:129`, `src/js/shared/workspaceSession.js:183`, `src/js/menubar/statusbar.js:99`. Detached chrome rules: `src/js/menubar/chrome.js:59`, `src/css/main.css:497`.
+   Source: `.agents/08-synthesis.txt:386`. Owner and anchors: `src/js/filepanel/filePanel.js:1333`, `src/js/shared/workspaceSession.js:58`, `src/js/shared/workspaceSession.js:206`, `src/js/shared/workspaceSession.js:275`, `src/js/menubar/statusbar.js:99`. Detached chrome rules: `src/js/menubar/chrome.js:59`, `src/css/main.css:497`.
 
    Add a narrowly scoped replica-to-main notification path for `quivit-status-flash`. Keep status rendering in its existing owner and preserve the detached status bar's disabled/hidden behavior. Avoid a general unrestricted event relay.
 
@@ -206,7 +224,7 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
    Verification: Run `node --check`, `npm run mocha`, targeted E2E or controlled IPC failure checks, and manual runtime checklist item 6.
 
-   Evidence and disposition: pending.
+   Evidence and disposition: `src/js/shared/workspaceSession.js:58, 206-218, 275-280` forwards `quivit-status-flash` from `workspace-file-list` to `main` via the `replicaEvents` allowlist (`quivit-status-flash`, `quivit-library-active-changed`), where `Statusbar` (`src/js/menubar/statusbar.js:99`) displays the message once in `main`'s visible status bar while `workspace-file-list`'s status bar stays hidden. Automated checks (`node --check`, 308 Mocha tests, and focused module verification) passed. Manual runtime checklist item 6 passed. Disposition: fixed, accepted by user.
 
 9. [x] **F09, P2. Reveal the parent row in the visible File List and preserve boundary holds.**
 
@@ -256,15 +274,15 @@ Investigate each risk to confirm or rule out its causal path with supporting `fi
 
     Evidence and disposition: pending.
 
-13. [ ] **R03, P3. Invalidate Library thumbnails in the window that owns them after relocation.**
+13. [x] **R03, P3. Invalidate Library thumbnails in the window that owns them after relocation.**
 
-    Source: `.agents/08-synthesis.txt:471`. Anchors: `src/js/main/main.js:296`, `src/js/main/main.js:341`, `src/js/filepanel/filePanel.js:85`.
+    Source: `.agents/08-synthesis.txt:471`. Anchors: `src/js/main/main.js:314`, `src/js/main/main.js:368`, `src/js/urlLoader.js:2722`, `src/js/shared/workspaceSession.js:296`, `src/js/filepanel/filePanel.js:95`, `src/js/filepanel/filePanel.js:2780`.
 
     Establish whether the replica misses invalidation when the Library root changes. If so, notify the owning file panel through the existing relocation/session flow. Retain main's import, history, and watcher responsibilities; do not run those independently on the replica.
 
     Acceptance and verification: Verify relocation notification to ordinary and Favorites cache invalidation/remapping in the visible owner across split and portable config paths using automated checks and runtime observation after relocating the Library folder in Options while detached.
 
-    Evidence and disposition: pending.
+    Evidence and disposition: Risk confirmed by source. Previously, `listen('library-relocated')` (`src/js/main/main.js:368`) returned early on `workspaceSurface`, `reloadConfigAndSyncLibrary` (`src/js/main/main.js:330`) only called `clearLibraryPathCaches()` on `main` after `quivit-library-updated`, and `clearLibraryPathCaches()` (`src/js/filepanel/filePanel.js:95`) omitted `libraryThumbnailCache`. `src/js/urlLoader.js:2734-2736` now dispatches `quivit-library-relocated` before `quivit-library-updated` when the Library path changes, `src/js/shared/workspaceSession.js:296` forwards `quivit-library-relocated` from `main` to `workspace-file-list`, and `src/js/filepanel/filePanel.js:95-100, 2780-2782` clears `thumbnailCache`, `favoritesThumbnailCache`, and `libraryThumbnailCache` and re-renders Favorites (`renderFavorites()`) on `quivit-library-relocated`. `main` retains sole ownership of import, `NavigationHistory.remapLibraryPaths`, and `rebind_library_watcher`. Automated checks (`node --check`, 308 Mocha tests, and focused module verification) passed. Manual runtime checklist item 6 passed. Disposition: fixed, accepted by user.
 
 14. [x] **R04, P3. Seed the initial visible strip range without waiting for another gesture.**
 
@@ -361,7 +379,7 @@ Execute these runtime checks in a live build (`npm run tauri dev` or built binar
    4. In the detached **File List**, scroll the file list downward so the top `..` row is scrolled out of view.
    5. In the main viewer, scroll/pan up past the very top of the first image (or press `Home` / `Up` / `PageUp` at the top boundary). Confirm the first boundary action scrolls the detached **File List** back to the very top so `..` is visible while holding navigation inside the current folder, and a second boundary gesture navigates as expected (`F09`).
 
-6. [ ] **Metadata badge, Library active provider, relocation cache clear, and deletion failure status flash (`F05`, `F07`, `F08`, `R03`)**
+6. [x] **Metadata badge, Library active provider, relocation cache clear, and deletion failure status flash (`F05`, `F07`, `F08`, `R03`)**
    1. With the **File List** detached and **Archive Info** open, navigate between archives/folders with metadata and confirm **Archive Info** updates cleanly once per container without stale cover overwrites, and the badge works when attached, detached, and recombined (`F05`).
    2. With the **File List** detached and the **Library** panel visible, select a specific provider from the **Imports** menu in the main viewer window. Confirm the detached **Library** panel immediately filters to that provider (`F07`).
    3. Browse **Library** items in Thumbnail view in the detached **File List**, relocate the Library folder in **Options**, save, and confirm thumbnails refresh cleanly in the detached **File List** (`R03`).

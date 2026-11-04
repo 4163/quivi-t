@@ -137,10 +137,32 @@ export function setActiveProvider(nameOrNull, options = {}) {
       localStorage.setItem(ACTIVE_EXPLICIT_KEY, 'true');
     }
   } catch {}
+  const explicit = hasExplicitActiveChoice();
   if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-    window.dispatchEvent(new CustomEvent('quivit-library-active-changed', { detail: { active: next } }));
+    window.dispatchEvent(new CustomEvent('quivit-library-active-changed', { detail: { active: next, explicit } }));
   }
   return next;
+}
+
+export function syncActiveProvider(detail) {
+  if (!detail || typeof detail !== 'object' || !('active' in detail)) return;
+  const next = (typeof detail.active === 'string' && detail.active.trim())
+    ? detail.active.trim()
+    : null;
+  try {
+    if (next === null) {
+      localStorage.removeItem(ACTIVE_PROVIDER_KEY);
+    } else {
+      localStorage.setItem(ACTIVE_PROVIDER_KEY, next);
+    }
+    if (typeof detail.explicit === 'boolean') {
+      if (detail.explicit) {
+        localStorage.setItem(ACTIVE_EXPLICIT_KEY, 'true');
+      } else {
+        localStorage.removeItem(ACTIVE_EXPLICIT_KEY);
+      }
+    }
+  } catch {}
 }
 
 export function hasExplicitActiveChoice() {

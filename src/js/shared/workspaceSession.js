@@ -41,6 +41,20 @@ export function getSessionStripVisibleIndices() {
   return sessionStripVisibleIndices;
 }
 
+let metadataStateProvider = null;
+let sessionMetadataAvailable = null;
+
+export function registerMetadataStateProvider(fn) {
+  metadataStateProvider = fn;
+}
+
+export function getSessionMetadataState() {
+  return sessionMetadataAvailable;
+}
+
+const replicaEvents = new Set(['quivit-status-flash', 'quivit-library-active-changed']);
+let dispatchingRemoteEvent = false;
+
 const initiatorCoreMethods = new Set(['navigate', 'jumpToIndex', 'selectIndex']);
 const initiatorFsMethods = new Set(['loadFile', 'loadArchive', 'openParent', 'openSibling', 'refresh',
   'loadHistoryEntry', 'loadFallbackAncestor', 'applyDirectoryResult']);
@@ -153,6 +167,7 @@ function publish(target, full = false, configEvent = false) {
   if (full) {
     message.preview = previewStateProvider?.() || null;
     message.stripVisibleIndices = stripVisibleIndicesProvider?.() || null;
+    if (metadataStateProvider) message.metadataAvailable = Boolean(metadataStateProvider());
   }
   send(target, message).catch(console.error);
 }
@@ -170,9 +185,15 @@ async function receive(message) {
     if (message.stripVisibleIndices) {
       sessionStripVisibleIndices = message.stripVisibleIndices;
     }
+    if (typeof message.metadataAvailable === 'boolean') {
+      sessionMetadataAvailable = message.metadataAvailable;
+    }
     Core.receiveSnapshot(message.snapshot);
     if (message.stripVisibleIndices && !receiveInitial) {
       window.dispatchEvent(new CustomEvent('quivit-workspace-strip-info', { detail: message.stripVisibleIndices }));
+    }
+    if (typeof message.metadataAvailable === 'boolean' && !receiveInitial) {
+      window.dispatchEvent(new CustomEvent('quivit-metadata-changed', { detail: { hasMetadata: message.metadataAvailable } }));
     }
     if (message.snapshot.config && previousConfig?.frontend_data?.favorites !== message.snapshot.config.frontend_data?.favorites) {
       window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));
@@ -181,9 +202,18 @@ async function receive(message) {
     receiveInitial?.();
     return;
   }
-  if (message.kind === 'event' && workspaceSurface && message.source === 'main') {
+  if (message.kind === 'event' && (
+    (workspaceSurface && message.source === 'main') ||
+    (ownLabel === 'main' && message.source === 'workspace-file-list' && replicaEvents.has(message.name))
+  )) {
     if (message.name === 'quivit-workspace-strip-info') sessionStripVisibleIndices = message.detail || [];
-    window.dispatchEvent(new CustomEvent(message.name, { detail: message.detail }));
+    if (message.name === 'quivit-metadata-changed') sessionMetadataAvailable = Boolean(message.detail?.hasMetadata);
+    dispatchingRemoteEvent = true;
+    try {
+      window.dispatchEvent(new CustomEvent(message.name, { detail: message.detail }));
+    } finally {
+      dispatchingRemoteEvent = false;
+    }
     return;
   }
   if (message.kind === 'response') {
@@ -242,6 +272,12 @@ export async function initWorkspaceSession() {
     });
     Core.configureReplica(forward);
     FsUtils.configureReplica(forward);
+    for (const name of replicaEvents) {
+      window.addEventListener(name, event => {
+        if (dispatchingRemoteEvent) return;
+        send('main', { kind: 'event', name, detail: event.detail }).catch(console.error);
+      });
+    }
     const initial = new Promise(resolve => { receiveInitial = resolve; });
     const timeout = setTimeout(() => receiveInitial?.(), REQUEST_TIMEOUT_MS);
     await send('main', { kind: 'ready' });
@@ -254,9 +290,11 @@ export async function initWorkspaceSession() {
   window.addEventListener('quivit-config-loaded', () => {
     for (const label of peers.keys()) publish(label, false, true);
   });
-  for (const name of ['quivit-favorites-changed', 'quivit-library-updated', 'quivit-download-complete',
+  for (const name of ['quivit-favorites-changed', 'quivit-library-relocated', 'quivit-library-updated',
+    'quivit-library-active-changed', 'quivit-metadata-changed', 'quivit-download-complete',
     'quivit-download-status', 'quivit-refresh-start', 'quivit-refresh-end', 'quivit-workspace-import-activity', 'quivit-workspace-strip-info']) {
     window.addEventListener(name, event => {
+      if (dispatchingRemoteEvent) return;
       for (const label of peers.keys()) send(label, { kind: 'event', name, detail: event.detail }).catch(console.error);
     });
   }

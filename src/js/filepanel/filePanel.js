@@ -20,6 +20,7 @@ import {
   getLibraryTree,
   hasLibraryEntries,
   getActiveProvider,
+  syncActiveProvider,
   deleteLibraryEntry,
   getProviderCollapsed,
   saveProviderCollapsed,
@@ -94,6 +95,8 @@ export const favoritesThumbnailCache = new BoundedMap(FAVORITES_CACHE_CAPACITY, 
 export function clearLibraryPathCaches() {
   thumbnailCache.clear();
   favoritesThumbnailCache.clear();
+  libraryThumbnailCache.clear();
+  renderFavorites();
 }
 
 // Canonical large format/folder icons (~20 entries).
@@ -2774,11 +2777,16 @@ export function initFilePanel(deps) {
 
   renderLibrary();
 
+  window.addEventListener('quivit-library-relocated', () => {
+    clearLibraryPathCaches();
+  });
+
   window.addEventListener('quivit-library-updated', () => {
     renderLibrary();
   });
 
-  window.addEventListener('quivit-library-active-changed', () => {
+  window.addEventListener('quivit-library-active-changed', (e) => {
+    syncActiveProvider(e?.detail);
     renderLibrary();
   });
 

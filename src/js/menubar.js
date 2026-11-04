@@ -21,6 +21,8 @@ import {
   orderProviders,
   getProviderOrder,
   setActiveProvider,
+  syncActiveProvider,
+  clearExplicitActiveChoice,
   resolveActiveProvider,
   MISC_PROVIDER
 } from './filepanel/libraryStore.js';
@@ -659,6 +661,7 @@ export async function renderImportsMenu() {
   const prevOrder = getProviderOrder();
   const tree = orderProviders(Array.isArray(treeRaw) ? treeRaw : []);
   const hasAny = hasLibraryEntries(tree);
+  if (!hasAny) clearExplicitActiveChoice();
   // Only providers holding actual imports render. Stale provider dirs with
   // no galleries stay out. Misc renders on the same terms, pinned last.
   const miscEntry = tree.find((p) => p?.name === MISC_PROVIDER && hasProviderNodes(p));
@@ -753,7 +756,10 @@ function bindImportsDropdown() {
     }
   });
 
-  window.addEventListener('quivit-library-active-changed', renderImportsMenu);
+  window.addEventListener('quivit-library-active-changed', (e) => {
+    syncActiveProvider(e?.detail);
+    renderImportsMenu();
+  });
   window.addEventListener('quivit-library-updated', renderImportsMenu);
   window.addEventListener('quivit-config-loaded', renderImportsMenu);
   if (window.__TAURI__?.event?.listen) {
