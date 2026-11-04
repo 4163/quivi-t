@@ -1,0 +1,348 @@
+Compared against the repository validation rules.
+
+Domain: 02 - Browsing, File List, Favorites, Library, and navigation
+Audited target: 35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Branch: feature/window-relocation
+HEAD: 35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Working tree: clean (0 differences)
+History inspected: a473a5c2fbb0eaa93bdbb99cca111327c07104ab..35f38e9d81cf95cd0534ac33e316291bf26e2f8c (commits a628e57, 47b7043, 35f38e9)
+
+Inspected code paths:
+- src/js/filepanel/filePanel.js
+- src/js/filepanel/favoritesStore.js
+- src/js/filepanel/libraryStore.js
+- src/js/fsUtils.js
+- src/js/directoryPrefs.js
+- src/js/navigationHistory.js
+- src/js/services/sorting.js
+- src/js/services/actions.js
+- src/js/shared/workspaceHost.js
+- src/js/shared/workspaceSession.js
+- src/js/shared/workspaceControls.js
+- src/js/main/workspace.js
+- src/js/main/workspaceBoot.js
+- src/js/main/main.js
+- src/js/core.js
+- src/js/menubar.js
+- src/js/menubar/chrome.js
+- src/js/menubar/statusbar.js
+- src/js/viewer/manhwaStrip.js
+- src/css/main.css
+- src/css/global.css
+- src-tauri/src/windows.rs
+
+Excluded and unread paths:
+- Excluded Markdown documentation (*.md) per scope instructions.
+- Input event routing, keybinds, and shortcut dispatch engine left to reviewer 01.
+- URL downloader engine, download tasks, archive decoders, and import workers left to reviewer 03.
+- Media decoders, WebGL shaders, canvas transforms, and viewer rendering left to reviewer 04.
+- Options UI layout, form binding, and config persistence engine left to reviewer 05.
+- Metadata badge rendering and native window lifetime/close mechanics left to reviewer 07.
+
+Coverage ledger:
+
+1. File panel DOM lifecycle and row pool recycling:
+- Container and host elements:
+  Entry points: DOM bootstrap in src/js/filepanel/filePanel.js (initFilePanel).
+  Mutation owner: Local window when hostsWorkspaceSurface('fileList') is true.
+  Visible UI owner: workspace-file-list window (or main window when docked).
+  Update path: In detached mode, hostsWorkspaceSurface('fileList', state) returns false on main and true on workspace-file-list. Main silences DOM row rendering and updates. Detached window mounts the file panel across the full viewport (.workspace-surface-fileList #file-panel).
+  Result: supported by code.
+- Row pool recycling and virtualization:
+  Entry points: Scroll events on #file-list-ul, resize events, directory state changes.
+  Mutation owner: Local window filePanel.js.
+  Visible UI owner: Local #file-list-ul.
+  Update path: Bounded row pool (rowPool) allocates list items based on viewport capacity. Scroll handler calculates start/end slice indices and updates textContent, title, dataset attributes, and icons. Reuses existing nodes without rebuilding container.
+  Result: supported by code.
+- Column resizing:
+  Entry points: Mouse down/drag on .col-resizer in file panel header.
+  Mutation owner: Local window filePanel.js.
+  Visible UI owner: Local file panel header and rows.
+  Update path: Updates CSS custom properties (--col-name-w, --col-size-w, --col-date-w) on filePanelEl host element. Adheres to CSS source of truth rule with zero inline style injections on row cells.
+  Result: supported by code.
+- Panel resizing:
+  Entry points: Drag on #file-panel-resizer.
+  Mutation owner: Local window filePanel.js and Core.persistConfig.
+  Visible UI owner: Main window (when docked) or detached window layout.
+  Update path: In detached mode, panel resizer is hidden via CSS (.workspace-surface-fileList #file-panel-resizer { display: none; }) because the panel occupies the full detached native window.
+  Result: supported by code.
+
+2. View mode toggling (list, thumbnail, dual):
+- Mode state switching:
+  Entry points: Toolbar button #btn-toggle-view-mode, menu items (View > View Mode).
+  Mutation owner: main (Core.setFileViewMode or action dispatch).
+  Visible UI owner: workspace-file-list (file panel layout and icon presentation) and both windows (menubar checked item).
+  Update path: Core.setFileViewMode updates state.fileViewMode. State snapshot publishes new state to detached peer. filePanel.js receives state change, updates layout classes, and invokes renderVirtualSlice().
+  Result: supported by code.
+- Thumbnail decoding and caching:
+  Entry points: renderVirtualSlice() in thumbnail or dual view mode.
+  Mutation owner: Local window filePanel.js.
+  Visible UI owner: Local list row thumbnails.
+  Update path: Decodes thumbnails on demand. Shell formats query native shell icons. Image formats decode one at a time. Cached in thumbnailCache (capacity 250 entries) and favoritesThumbnailCache.
+  Result: supported by code.
+
+3. Breadcrumbs and path navigation:
+- Segment clicks:
+  Entry points: Click on .breadcrumb-segment in #file-panel-breadcrumbs.
+  Mutation owner: main (FsUtils.loadFile or FsUtils.loadArchive).
+  Visible UI owner: workspace-file-list (file list and breadcrumbs) and main (viewer media).
+  Update path: When in detached window, FsUtils forwards load request via send('main', { kind: 'session', method: 'loadFile', args: [segmentPath] }). Main executes load, mutates state, and publishes state snapshot to detached window.
+  Result: supported by code.
+- Path text entry:
+  Entry points: Double click on breadcrumbs bar or focus on path input field.
+  Mutation owner: main (FsUtils.loadFile).
+  Visible UI owner: Both windows.
+  Update path: Esc cancels edit. Enter submits path. In detached window, sends session loadFile request to main. Main loads directory or archive and broadcasts snapshot.
+  Result: supported by code.
+
+4. Search and filter:
+- Instant search filtering:
+  Entry points: Input events on #file-filter-input in file panel toolbar.
+  Mutation owner: Local window filePanel.js.
+  Visible UI owner: Local #file-list-ul.
+  Update path: Mutates local filterQuery string. Filters state.list in memory, maintaining natural sort ordering. Recalculates total height and invokes renderVirtualSlice(). Clearing input restores full directory listing without re-reading filesystem.
+  Result: supported by code.
+
+5. Directory sorting preferences and deviations:
+- Preference resolution:
+  Entry points: Directory loading in FsUtils, sort menu selection (Sort by Name, Size, Date, Ascending, Descending).
+  Mutation owner: main (directoryPrefs.js and Core.persistConfig).
+  Visible UI owner: workspace-file-list (row order) and both windows (sort menu checkmarks).
+  Update path: FsUtils resolves sort preference via directoryPrefs.getDirectorySortPref(dir). Applies sort using naturalCompare in services/sorting.js. User menu changes record deviations via directoryPrefs.setDirectorySortPref(dir, sortMode) and persist config.
+  Result: supported by code.
+
+6. Defensive deletion and optimistic updates:
+- Single and multiple item deletion:
+  Entry points: Delete key, context menu Delete, toolbar button.
+  Mutation owner: main (FsUtils.deleteCurrentFile or deleteLibraryEntry via native remove_file / remove_directory).
+  Visible UI owner: workspace-file-list (row removal) and main (viewport navigation if active file deleted).
+  Update path: Registers tombstone in _pendingDeletions. In detached window, FsUtils.registerPendingDeletion syncs tombstone to peer. Row is optimistically spliced from state.list. If active file is deleted, viewer navigates to next sibling or parent directory. If active library entry is deleted, viewport resets to provider root.
+  Result: supported by code.
+
+7. Navigation generation tracking:
+- Stale async request prevention:
+  Entry points: FsUtils.loadFile, FsUtils.loadArchive, openParent, openSibling, refresh.
+  Mutation owner: Local and main FsUtils session state.
+  Visible UI owner: Both windows.
+  Update path: Each navigation increments internal _navGeneration counter. When asynchronous IPC payload returns, if response generation does not match current _navGeneration, payload is discarded. Protects against out-of-order resolution during rapid navigation.
+  Result: supported by code.
+
+8. Container traversal:
+- Parent directory traversal (cmd-parent / Backspace):
+  Entry points: Backspace shortcut, breadcrumb parent segment, Menubar (Go > Parent Directory).
+  Mutation owner: main (FsUtils.openParent).
+  Visible UI owner: Both windows.
+  Update path: Action forwarded to main. FsUtils.openParent resolves parent directory or extracts out of archive. State snapshot updates detached list and main viewer.
+  Result: supported by code.
+- Sibling container traversal (cmd-open-next-container / cmd-open-prev-container):
+  Entry points: Ctrl+X / Ctrl+Z shortcuts, Menubar (Go > Next/Previous Folder or Archive).
+  Mutation owner: main (FsUtils.openSibling).
+  Visible UI owner: Both windows.
+  Update path: Action forwarded to main. FsUtils.openSibling scans parent folder for adjacent directory or archive, loads container, and broadcasts updated state to detached peer.
+  Result: supported by code.
+
+9. Navigation history stacks:
+- History traversal (cmd-history-back / cmd-history-forward):
+  Entry points: Alt+Left / Alt+Right, Alt+A / Alt+D, mouse back/forward buttons, Menubar (Go > Back / Forward).
+  Mutation owner: main (NavigationHistory and FsUtils).
+  Visible UI owner: Both windows (media display and Go menu item muted states).
+  Update path: Main maintains back/forward history stacks. When history changes, quivit-history-changed event updates historyAvailable state on Core. Snapshot synchronizes historyAvailable to detached window, updating Go menu item disabled states.
+  Result: supported by code.
+
+10. Favorites data store and configuration:
+- Loadout and item mutation:
+  Entry points: Menubar (Favorites > Add to Favorites, New Loadout, Rename Loadout, Delete Loadout), toolbar star button #btn-favorite-current.
+  Mutation owner: Local window favoritesStore.js and Core.persistConfig({ immediate: true }).
+  Visible UI owner: workspace-file-list (Favorites list view) and both windows (Favorites menu).
+  Update path: favoritesStore mutates loadout items in config.favorites. Immediately flushes config. Emits quivit-favorites-changed event, which is bridged across windows via workspaceSession.js. Both windows re-render Favorites UI and menubar.
+  Result: supported by code.
+- Favorites list focus and keyboard navigation:
+  Entry points: Focus on #favorites-list-ul, Up/Down arrow keys, Enter.
+  Mutation owner: Local window filePanel.js (highlight) and main (loading target favorite path).
+  Visible UI owner: workspace-file-list (selected row) and main (loaded item).
+  Update path: Keyboard navigation updates highlightedFavoritePath locally. Enter triggers FsUtils.loadFile on selected item path.
+  Result: supported by code.
+- Favorites in-view tracking:
+  Entry points: Scroll events, page navigation, manhwa strip scrolling.
+  Mutation owner: Local window filePanel.js.
+  Visible UI owner: workspace-file-list (#favorites-list-ul row .in-view class).
+  Update path: Queries visible indices and marks favorite items whose paths match currently displayed viewport images with class .in-view.
+  Result: conditional gap (see Finding 02-01).
+
+11. Library tree and provider hierarchy:
+- Provider tree rendering and collapse states:
+  Entry points: Imports tab selection in file panel, provider header click.
+  Mutation owner: Local window libraryStore.js and Core.persistConfig.
+  Visible UI owner: workspace-file-list (#library-list-ul).
+  Update path: libraryStore fetches tree data from backend. Tracks collapsed provider state in config. Clicking provider header toggles collapsed state and saves config.
+  Result: supported by code.
+- Library entry deletion:
+  Entry points: Context menu Delete on library item.
+  Mutation owner: Local libraryStore.js and backend native filesystem.
+  Visible UI owner: workspace-file-list and main.
+  Update path: Calls deleteLibraryEntry, performs optimistic row removal, invokes remove_directory command, and re-indexes provider tree.
+  Result: supported by code.
+
+12. Download and import activity indicators:
+- Download progress badges:
+  Entry points: quivit-download-status and quivit-download-complete events from native downloader.
+  Mutation owner: main (UrlLoader and download state).
+  Visible UI owner: workspace-file-list (toolbar download badge and list item status icons).
+  Update path: Events bridged across windows via workspaceSession.js. Detached window receives events and updates download progress indicators and completed badges on affected rows.
+  Result: supported by code.
+- Import activity overlay:
+  Entry points: Drag and drop files/URLs into drop zone.
+  Mutation owner: main (importActions).
+  Visible UI owner: Both windows.
+  Update path: importActivity state shared via workspaceControls.createImportActions. Broadcasts quivit-workspace-import-activity event across windows.
+  Result: supported by code.
+
+13. Toolbar action buttons:
+- Open in File Explorer (cmd-open-explorer):
+  Entry points: Toolbar folder button #cmd-open-explorer, context menu.
+  Mutation owner: Local window (when favorite or library item selected) or main (when viewing media).
+  Visible UI owner: System file explorer.
+  Update path: Action definition uses owner: 'window'. When executed in detached window with a highlighted favorite, reveals highlighted favorite path. Otherwise reveals current container path.
+  Result: supported by code.
+- Open parent folder in viewer (cmd-open-folder):
+  Entry points: Toolbar button #cmd-open-folder.
+  Mutation owner: Local window or main.
+  Visible UI owner: Main viewer.
+  Update path: Action definition uses owner: 'window'. Resolves target path locally in detached window and forwards load request to main.
+  Result: supported by code.
+- Toggle favorite status (btn-favorite-current):
+  Entry points: Toolbar star button.
+  Mutation owner: Local window favoritesStore.js.
+  Visible UI owner: Toolbar star icon fill state and #favorites-list-ul.
+  Update path: Toggles active container or highlighted item in favorites. Persists config and dispatches quivit-favorites-changed.
+  Result: supported by code.
+
+14. Competing writers and window role isolation:
+- Main vs detached surface exclusivity:
+  Entry points: hostsWorkspaceSurface('fileList', state) checks in filePanel.js.
+  Mutation owner: workspaceHost.js.
+  Visible UI owner: Either main or workspace-file-list, never both concurrently.
+  Update path: When detached, hostsWorkspaceSurface('fileList', state) returns false on main. filePanel.js on main skips row rendering, virtualization calculations, and selection updates. Detached window acts as the sole DOM writer for the file panel.
+  Result: supported by code.
+
+Detailed findings:
+
+Finding 02-01: Manhwa strip settle event omitted from workspace session event forwarding
+Priority: P2
+Confidence: Confirmed
+Trigger and failure location:
+- src/js/viewer/manhwaStrip.js:1858
+- src/js/shared/workspaceSession.js:201-206
+- src/js/shared/workspaceControls.js:9, 20-24, 69-70
+- src/js/filepanel/filePanel.js:3077-3082
+
+User interaction sequence:
+1. User detaches the File List window (Windows > File List > Detached).
+2. User opens a folder or archive in Manhwa mode (vertical continuous strip).
+3. User scrolls through the strip in the main viewer window until scrolling decelerates and comes to rest (settles).
+4. User observes the detached File List and Favorites panel.
+
+Expected behavior:
+When scrolling settles in the main viewer strip, the settled anchor item should be selected in the detached file list, and all visible images currently displayed in the strip should be marked with the in-view highlight (.in-view class) in the detached Favorites list.
+
+Actual behavior:
+The detached File List does not update its selection, and the detached Favorites list does not update its in-view highlights when strip scrolling settles. The highlights only update if the user performs an explicit navigation command (e.g., arrow keys) or another state snapshot is pushed over IPC.
+
+Causal chain:
+1. In src/js/viewer/manhwaStrip.js:1858, when the strip scroll comes to a complete rest, manhwaStrip dispatches the custom event quivit-manhwa-settle on the main window.
+2. In src/js/filepanel/filePanel.js:3077-3082, the file panel attaches an event listener:
+   window.addEventListener('quivit-manhwa-settle', () => {
+     if (Core.getState().fileListVisible && _isManhwaActive()) {
+       updateSelection(Core.getState().index);
+       updateFavoritesSelection(Core.getState());
+     }
+   });
+3. In attached mode, this listener executes locally on the main window and updates both the file list selection and the favorites in-view markers.
+4. In detached mode, the file panel DOM runs inside the workspace-file-list replica window.
+5. In src/js/shared/workspaceSession.js:201-206, the main window bridges custom events to peers:
+   for (const name of ['quivit-favorites-changed', 'quivit-library-updated', 'quivit-download-complete',
+     'quivit-download-status', 'quivit-refresh-start', 'quivit-refresh-end', 'quivit-workspace-import-activity', 'quivit-workspace-strip-info']) {
+     window.addEventListener(name, event => {
+       for (const label of peers.keys()) send(label, { kind: 'event', name, detail: event.detail }).catch(console.error);
+     });
+   }
+   Notice quivit-manhwa-settle is omitted from this list.
+6. In src/js/shared/workspaceControls.js:69-70, workspaceControls listens for quivit-manhwa-settle on main and calls publishStripInfo(), which dispatches quivit-workspace-strip-info with visible indices.
+7. While quivit-workspace-strip-info is forwarded to the replica window, src/js/shared/workspaceControls.js:9 only records event.detail into a local variable (remoteVisibleIndices). It neither re-dispatches quivit-manhwa-settle nor notifies filePanel.js.
+8. Because filePanel.js does not listen for quivit-workspace-strip-info and never receives quivit-manhwa-settle in the detached window, updateSelection and updateFavoritesSelection are never invoked upon scroll settle.
+
+Commit attribution:
+Introduced in commit a628e57 when workspace event forwarding was established, and unaddressed in commits 47b7043 and 35f38e9.
+
+
+Finding 02-02: Library relocation listener early returns on replica windows, bypassing thumbnail cache invalidation
+Priority: P3
+Confidence: Conditional Risk
+Trigger and failure location:
+- src/js/main/main.js:341-346
+- src/js/filepanel/filePanel.js:85-88
+
+User interaction sequence:
+1. User detaches the File List window (Windows > File List > Detached).
+2. User browses image files and favorites in the detached File List, populating thumbnailCache and favoritesThumbnailCache in the detached window.
+3. User opens Options (Windows > Options or 5) and relocates the Library folder to a new path on disk.
+4. The backend completes relocation and emits the library-relocated Tauri IPC event to all open frontend windows.
+
+Expected behavior:
+Both windows receive the library-relocated event. The detached File List window (which actively renders and caches thumbnails) invokes clearLibraryPathCaches() to invalidate existing cached thumbnails associated with old library paths.
+
+Actual behavior:
+The listener in src/js/main/main.js:341-346 contains an explicit guard that aborts execution on any window where workspaceSurface is defined:
+listen('library-relocated', (event) => {
+  if (workspaceSurface) return;
+  reloadConfigAndSyncLibrary(event.payload).catch(err => {
+    console.error('[Main] Failed to activate relocated Library:', err);
+  });
+});
+Because the detached File List window runs with workspaceSurface = 'fileList', it immediately returns without executing reloadConfigAndSyncLibrary. Consequently, clearLibraryPathCaches() is only called in the main window (where the file panel is hidden and thumbnail caches are unpopulated). The detached window retains stale thumbnail cache entries until natural LRU eviction occurs.
+
+Causal chain:
+1. When Library relocation occurs, src-tauri/src/commands/options.rs emits library-relocated to all windows.
+2. In the main window, workspaceSurface is null. Main executes reloadConfigAndSyncLibrary, calls UrlLoader.handleLibraryRelocation, and runs clearLibraryPathCaches().
+3. However, main is not hosting the file list DOM (hostsWorkspaceSurface('fileList', state) is false), so main's local thumbnailCache is empty.
+4. In the detached window, workspaceSurface is 'fileList'. The guard if (workspaceSurface) return; causes the detached window to ignore the event completely.
+5. In the detached window, clearLibraryPathCaches() is never called, leaving thumbnailCache and favoritesThumbnailCache containing stale path keys from the previous library location.
+
+Commit attribution:
+Introduced in commit a628e57 when replica window event guards were added in main.js, and preserved in commits 47b7043 and 35f38e9.
+
+
+Intentional local and coordinated behaviors:
+
+1. File list surface exclusivity and suppression of background rendering:
+In src/js/filepanel/filePanel.js:2410, filePanel.js checks hostsWorkspaceSurface('fileList', state) before executing DOM updates, row pool measurements, or scroll event calculations. While detached, this returns false in the main window and true in the workspace-file-list window. This prevents dual rendering, unnecessary layout thrashing, and DOM desynchronization between the hidden main file panel and the visible detached window.
+
+2. Context-aware file exploration commands (owner: 'window'):
+In src/js/services/actions.js, commands cmd-open-explorer and cmd-open-folder are registered with owner: 'window'. When triggered inside the detached window, the action executes locally in that window's context. If a user has clicked or navigated to a favorite in the detached window's Favorites list, getHighlightedFavorite() resolves that local highlight directly and opens Explorer on that specific favorite, rather than falling back to whatever image the main viewer window happens to be displaying.
+
+3. Cross-window defensive deletion synchronization:
+When a file, directory, or library item is deleted in the detached window, FsUtils records the deletion in its local _pendingDeletions set and calls FsUtils.registerPendingDeletion to transmit the tombstone over IPC to the main session. If the deleted item was currently being viewed in the main window, the main window immediately falls back to the adjacent sibling or parent container, preventing broken viewports or missing image errors.
+
+4. Detached window close intercept and session pair lifecycle:
+In src-tauri/src/windows.rs and src/js/main/workspace.js, closing the detached File List window intercepts the native close event and emits workspace-close-requested. This triggers a coordinated teardown of the detached window while returning the workspace layout to the docked position on main, preventing orphan sessions or crashed IPC pipes.
+
+
+Cross-domain dependencies:
+
+- Reviewer 01 (Input routing and shortcuts):
+  The file list relies on shortcut forwarding and owner resolution from actions.js. Navigation actions (cmd-next, cmd-prev) must continue delegating to local list highlights when the detached list is focused.
+- Reviewer 03 (URL loader, downloads, and import engine):
+  The file panel subscribes to quivit-download-status and quivit-download-complete events forwarded across workspaceSession.js to render progress rings and badges on active list rows.
+- Reviewer 05 (Options and config persistence):
+  Changes to Library root path in Options trigger library-relocated. Reconciling Finding 02-02 requires coordinating how library relocation events and cache invalidation are propagated to replica surfaces.
+- Reviewer 07 (Window lifetimes and layout docking):
+  Reconciling detached window closure and redocking relies on window event listeners in windows.rs and workspace.js to ensure the file panel DOM rebinds seamlessly to the main window container when docked.
+
+
+Bounded follow-up verification checks:
+
+1. Verify Manhwa settle event bridging:
+   Inspect src/js/shared/workspaceSession.js line 201. Adding 'quivit-manhwa-settle' to the forwarded event list, or triggering updateFavoritesSelection on quivit-workspace-strip-info reception in workspaceControls.js, can be tested by dispatching quivit-manhwa-settle on main and asserting that updateFavoritesSelection is called in the detached window.
+
+2. Verify Library relocation cache clearing in replica:
+   Inspect src/js/main/main.js line 342. Replacing if (workspaceSurface) return; with a replica-specific branch that calls clearLibraryPathCaches() ensures thumbnail caches are purged in the detached window upon library relocation.

@@ -1,0 +1,419 @@
+Compared against the repository validation rules.
+
+Domain: 01 - Input routing, commands, and menu mechanics
+Audited target: 35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Branch: feature/window-relocation
+HEAD: 35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Working tree: clean (0 differences)
+History inspected: a473a5c2fbb0eaa93bdbb99cca111327c07104ab..35f38e9d81cf95cd0534ac33e316291bf26e2f8c (commits a628e57, 47b7043, 35f38e9)
+
+Inspected code paths:
+- src/js/services/actions.js
+- src/js/shared/workspaceControls.js
+- src/js/shortcuts.js
+- src/js/keybinds.js
+- src/js/services/keybindDomain.js
+- src/js/services/keyCombo.js
+- src/js/keyboardNav.js
+- src/js/main/main.js
+- src/js/menubar.js
+- src/js/menubar/chrome.js
+- src/js/menubar/statusbar.js
+- src/index.html
+- src/css/main.css
+- src/css/global.css
+- src/js/shared/workspaceHost.js
+- src/js/shared/workspaceSession.js
+- src/js/main/workspace.js
+- src/js/main/workspaceBoot.js
+- src/js/services/workspaceLayout.js
+- src/js/filepanel/filePanel.js
+- src/js/filepanel/favoritesStore.js
+- src/js/main/metadataBadge.js
+- src/js/fsUtils.js
+- src/js/core.js
+- src/js/viewer/viewer.js
+- src-tauri/src/windows.rs
+- src-tauri/src/lib.rs
+- src-tauri/capabilities/default.json
+- mocha/actions.test.js
+
+Excluded and unread paths:
+- Excluded Markdown files (*.md) per scope instructions.
+- Dynamic Favorites and Imports data store mutations left to reviewer 02.
+- Fullscreen native platform implementation left to reviewer 07.
+- Viewer media decoding and WebGL rendering implementation left to reviewer 04.
+- Options key capture and saving workflow left to reviewer 05.
+
+Coverage ledger:
+
+1. Navigation actions:
+- cmd-next:
+  Entry points: Menu click, shortcuts (Shift+D, Shift+Right, Shift+S, Shift+Down), wheel over #file-list.
+  Mutation owner: Local window when Favorites or Library is focused, main window when file list is focused or when wheel is used.
+  Visible UI owner: workspace-file-list (list selection) and main (viewer image).
+  Update path: navigationOwner delegates locally to navigateHighlightedFavorite or navigateHighlightedLibrary, or forwards to main Core.navigate(1) or pageStrip(1). State snapshot updates detached list.
+  Result: supported by code.
+- cmd-prev:
+  Entry points: Menu click, shortcuts (Shift+A, Shift+Left, Shift+W, Shift+Up), wheel over #file-list.
+  Mutation owner: Local window when Favorites or Library is focused, main window when file list is focused or when wheel is used.
+  Visible UI owner: workspace-file-list (list selection) and main (viewer image).
+  Update path: navigationOwner delegates locally or forwards to main Core.navigate(-1) or pageStrip(-1). State snapshot updates detached list.
+  Result: supported by code.
+- cmd-history-back:
+  Entry points: Menu click, shortcuts (Alt+A, Alt+W, Alt+Left, Alt+Up, MouseBack).
+  Mutation owner: main (NavigationHistory and FsUtils).
+  Visible UI owner: main (viewer image) and both windows (menu muted state via historyAvailable snapshot).
+  Update path: Forwards to main, NavigationHistory.goBack loads entry, quivit-history-changed writes historyAvailable, snapshot updates menu state in both windows.
+  Result: supported by code.
+- cmd-history-forward:
+  Entry points: Menu click, shortcuts (Alt+D, Alt+S, Alt+Right, Alt+Down, MouseForward).
+  Mutation owner: main (NavigationHistory and FsUtils).
+  Visible UI owner: main (viewer image) and both windows (menu muted state via historyAvailable snapshot).
+  Update path: Forwards to main, NavigationHistory.goForward loads entry, snapshot updates menu state in both windows.
+  Result: supported by code.
+- cmd-parent:
+  Entry points: Menu click, shortcut (Backspace).
+  Mutation owner: main (FsUtils.openParent).
+  Visible UI owner: Both windows (new directory listing in detached window, first image in viewer).
+  Update path: Forwards to main, openParent mutates session, snapshot publishes new list to detached peer.
+  Result: supported by code.
+- cmd-open-next-container:
+  Entry points: Menu click, shortcut (Ctrl+X).
+  Mutation owner: main (FsUtils.openSibling).
+  Visible UI owner: Both windows.
+  Update path: Forwards to main, openSibling(1) loads next folder or archive, snapshot updates both windows.
+  Result: supported by code.
+- cmd-open-prev-container:
+  Entry points: Menu click, shortcut (Ctrl+Z).
+  Mutation owner: main (FsUtils.openSibling).
+  Visible UI owner: Both windows.
+  Update path: Forwards to main, openSibling(-1) loads previous folder or archive, snapshot updates both windows.
+  Result: supported by code.
+
+2. View and fit mode actions:
+- cmd-fit-none, cmd-fit-width, cmd-fit-height, cmd-fit-best, cmd-fit-width-if-larger, cmd-fit-height-if-larger, cmd-fit-window-if-larger:
+  Entry points: Menu click, shortcuts (R, Shift+Q, Shift+E, Shift+F, Q, E, F).
+  Mutation owner: main (Core.setFitMode).
+  Visible UI owner: main (viewer layout) and both windows (checked menu items and fit-current-label).
+  Update path: Forwards to main, Core.setFitMode updates state, syncViewMenu in both windows updates checkmarks and label.
+  Result: supported by code.
+- cmd-scale-none, cmd-scale-bilinear, cmd-scale-lanczos:
+  Entry points: Menu click (View > Scale submenu).
+  Mutation owner: main (Core.setScalingMode).
+  Visible UI owner: main (viewer scaling) and both windows (checked menu items and scaling-current-label).
+  Update path: Forwards to main, Core.setScalingMode updates state, syncViewMenu updates checkmarks and label.
+  Result: supported by code.
+- cmd-filter-off, cmd-toggle-anime4k-filter, cmd-toggle-scanlines-filter, cmd-toggle-phosphor-filter, cmd-toggle-crt-filter:
+  Entry points: Menu click (View > Filter submenu).
+  Mutation owner: main (Core.setActiveFilter).
+  Visible UI owner: main (GL canvas shader) and both windows (checked menu items and filter-current-label).
+  Update path: Forwards to main, Core.setActiveFilter updates state, syncViewMenu updates checkmarks and label.
+  Result: supported by code.
+- cmd-toggle-transparent:
+  Entry points: Menu click.
+  Mutation owner: main (Core.toggleTransparentBg).
+  Visible UI owner: main (viewer background) and both windows (menu checked state).
+  Update path: Forwards to main, Core.toggleTransparentBg updates state, syncViewMenu updates checkmark.
+  Result: supported by code.
+- cmd-toggle-manhwa:
+  Entry points: Menu click, shortcut (M, tap or hold).
+  Mutation owner: main (Core.setManhwaMode or Core.toggleManhwaMode).
+  Visible UI owner: main (manhwa strip layout) and both windows (checked menu item, rotation menu disabled state).
+  Update path: Forwards to main, Core.setManhwaMode updates state, syncViewMenu disables rotation and updates checkmark in both windows.
+  Result: supported by code.
+- cmd-toggle-audio:
+  Entry points: Configured keybind.
+  Mutation owner: main (ManhwaAudio or ViewerAudio).
+  Visible UI owner: main (audio playback state).
+  Update path: Forwards to main, mutes or unmutes active media audio.
+  Result: supported by code.
+- cmd-spread-off, cmd-spread-direction-rtl, cmd-spread-direction-ltr:
+  Entry points: Menu click (View > Spread View submenu).
+  Mutation owner: main (Core.setSpreadMode or toggleSpreadMode).
+  Visible UI owner: main (spread layout) and both windows (checked menu items and spread-current-label).
+  Update path: Forwards to main, updates state, syncViewMenu updates checkmarks and label.
+  Result: supported by code.
+
+3. Zoom actions:
+- cmd-zoom-in, cmd-zoom-out:
+  Entry points: Menu click, shortcuts (C, Z), wheel over viewer with Ctrl or toggle latch.
+  Mutation owner: main (Viewer.zoomAt or Viewer.zoomCenter).
+  Visible UI owner: main (viewer canvas scale and status bar zoom display).
+  Update path: Keyboard shortcuts and menu clicks forward to main with sanitized payload, calling zoomCenter. Wheel over main viewer calls zoomAt with local pointer coordinates. Forwarded wheel events have client coordinates cleared to avoid cross-window coordinate corruption.
+  Result: supported by code.
+- cmd-zoom-100:
+  Entry points: Menu click, shortcut (X).
+  Mutation owner: main (Viewer.setZoom).
+  Visible UI owner: main (viewer canvas scale).
+  Update path: Forwards to main, resets zoom to 1.0.
+  Result: supported by code.
+
+4. Pan actions:
+- cmd-pan-drag:
+  Entry points: Mouse drag (Left, Middle, Space+Left) on viewer canvas.
+  Mutation owner: main (Viewer gestures).
+  Visible UI owner: main (viewer canvas offset).
+  Update path: Handled locally by viewer gestures in main window. Ignored over UI elements and file panel.
+  Result: intentional local behavior.
+- cmd-pan-up, cmd-pan-down, cmd-pan-left, cmd-pan-right:
+  Entry points: Keyboard pan keys (W, A, S, D, Arrow keys), wheel over viewer (if bound to pan).
+  Mutation owner: main (Viewer.panBy).
+  Visible UI owner: main (viewer canvas offset).
+  Update path: Keyboard shortcuts calculate vector and call workspaceControls.panBy. In detached window, panBy forwards request to main. Main executes Viewer.panBy with keyboardPanStep. Wheel pan in main executes Viewer.panBy with wheelPanStep.
+  Result: supported by code.
+
+5. Rotation and flip actions:
+- cmd-rotate-cw, cmd-rotate-ccw:
+  Entry points: Menu click, shortcuts (H, G).
+  Mutation owner: main (Viewer.rotate).
+  Visible UI owner: main (viewer orientation).
+  Update path: Guarded against execution when manhwa mode is active. When active, menu items are disabled with note and shortcut execution is blocked. When valid, forwards to main and rotates canvas by 90 degrees.
+  Result: supported by code.
+- cmd-flip-horizontal, cmd-flip-vertical:
+  Entry points: Menu click, shortcuts (V, B).
+  Mutation owner: main (Viewer.flipHorizontal, Viewer.flipVertical).
+  Visible UI owner: main (viewer canvas flip).
+  Update path: Forwards to main, toggles horizontal or vertical axis flip.
+  Result: supported by code.
+
+6. Window and layout actions:
+- cmd-window-file-list-[left|right|top|bottom|detached]:
+  Entry points: Menu click (Windows > File List submenu).
+  Mutation owner: main (Core.setWorkspacePosition).
+  Visible UI owner: Both windows (layout structure, menu checkmarks, and position labels).
+  Update path: Forwards to main, Core.setWorkspacePosition updates workspaceLayout, reconcile in main docks or opens detached window, snapshot updates position labels and radio checkmarks in both windows.
+  Result: supported by code.
+- cmd-window-viewport-[left|right|top|bottom|detached]:
+  Entry points: Menu click (Windows > Viewport submenu).
+  Mutation owner: main (Core.setWorkspacePosition).
+  Visible UI owner: Both windows.
+  Update path: Forwards to main, updates workspaceLayout, reconcile updates window arrangement, snapshot updates both windows.
+  Result: supported by code.
+- cmd-options:
+  Entry points: Menu click, shortcut (5).
+  Mutation owner: Native shell (open_options Tauri command).
+  Visible UI owner: Options window.
+  Update path: Forwards to main, invokes open_options, opens or focuses options window.
+  Result: supported by code.
+- cmd-toggle-filelist:
+  Entry points: Menu click, shortcut (1).
+  Mutation owner: main (Core.setFileListVisible).
+  Visible UI owner: Both windows.
+  Update path: While detached, menu item is muted and aria-disabled with tooltip note. Menu clicks and Enter activation are blocked. Shortcut 1 calls Core.setFileListVisible, which enforces fileListVisible=true while detached.
+  Result: intentional local behavior.
+- cmd-toggle-menubar:
+  Entry points: Menu click, shortcut (2).
+  Mutation owner: Local window (Chrome.toggleMenuBar) and main config.
+  Visible UI owner: Originating native window menubar.
+  Update path: owner is window. Toggles local window menubar visibility and persists to window_menu_visible[role].
+  Result: supported by code.
+- cmd-toggle-statusbar:
+  Entry points: Menu click, shortcut (3).
+  Mutation owner: Local window (Chrome.toggleStatusBar) and main config.
+  Visible UI owner: Main window statusbar.
+  Update path: owner is window. In detached window, status bar is forced hidden, menu item is disabled and muted, and toggleStatusBar returns early without action. In main window, toggles status bar visibility.
+  Result: supported by code.
+- cmd-fullscreen:
+  Entry points: Menu click, shortcuts (4, Alt+Enter, F11).
+  Mutation owner: Local window (toggleFullscreen).
+  Visible UI owner: Originating native window.
+  Update path: owner is window. Toggles native fullscreen on the window where triggered.
+  Result: supported by code.
+- cmd-toggle-cursor-autohide:
+  Entry points: Configured keybind.
+  Mutation owner: main (Viewer.toggleCursorAutoHide).
+  Visible UI owner: Main window viewer cursor.
+  Update path: Forwards to main, toggles cursor auto-hide timer.
+  Result: supported by code.
+- cmd-exit-fullscreen-hold:
+  Entry points: Escape hold.
+  Mutation owner: Local window fullscreen controller.
+  Visible UI owner: Originating native window.
+  Update path: Handled by fullscreen controller gesture.
+  Result: intentional local behavior.
+- cmd-hide-to-tray:
+  Entry points: Menu click, shortcut (Ctrl+Shift+H).
+  Mutation owner: Native shell (hide_to_tray Tauri command).
+  Visible UI owner: All application windows.
+  Update path: Forwards to main, invokes hide_to_tray, hides main, workspace-file-list, options, and metadata windows together.
+  Result: supported by code.
+- cmd-quit:
+  Entry points: Menu click, window close button on either window.
+  Mutation owner: Native shell (window close).
+  Visible UI owner: All application windows.
+  Update path: Forwards to main, triggers close event on main window, which flushes config, closes secondary windows, and terminates application. Closing detached window also quits application. Recombining panels closes detached window without quitting.
+  Result: supported by code.
+- cmd-github:
+  Entry points: Menu button click.
+  Mutation owner: External default browser.
+  Visible UI owner: External browser.
+  Update path: Forwards to main, invokes opener.openUrl to display repository in system browser.
+  Result: supported by code.
+
+7. File operations:
+- cmd-open-dir, cmd-open-file:
+  Entry points: Menu click, shortcuts (Ctrl+O, Ctrl+Shift+O).
+  Mutation owner: main (FsUtils dialog and loadFile).
+  Visible UI owner: Native file picker dialog and both workspace windows.
+  Update path: Forwards to main, opens native dialog, loads chosen directory or archive in main, snapshot updates detached list.
+  Result: supported by code.
+- cmd-use-url:
+  Entry points: Menu click, shortcut (Ctrl+I).
+  Mutation owner: main (UrlLoader.openPrompt).
+  Visible UI owner: Main window URL prompt overlay.
+  Update path: focusOwner is true. Forwards to main, main brings itself to focus via setFocus, opens URL overlay in viewer window.
+  Result: supported by code.
+- cmd-refresh:
+  Entry points: Menu click, shortcuts (6, Ctrl+R).
+  Mutation owner: main (FsUtils.refresh).
+  Visible UI owner: Both windows (refresh spinners and reloaded directory contents).
+  Update path: Forwards to main, clears caches and re-reads container, dispatches quivit-refresh-start and quivit-refresh-end events across workspace session, snapshot updates list in detached window.
+  Result: supported by code.
+- cmd-toggle-file-list-view-mode:
+  Entry points: Menu click, shortcut (T).
+  Mutation owner: main (Core.toggleFileListViewMode).
+  Visible UI owner: Both windows (file panel thumbnail or list mode).
+  Update path: Forwards to main, toggles file_list_view_mode in frontend_data, snapshot updates view mode class on file panel in both windows.
+  Result: supported by code.
+- cmd-open-explorer, cmd-open-folder:
+  Entry points: File panel header icon buttons, configured keybinds.
+  Mutation owner: Local window shell invocation (open_in_explorer or opener.revealItemInDir).
+  Visible UI owner: Windows Explorer.
+  Update path: owner is window. In detached window, resolves highlighted favorite if present, otherwise resolves state.list[state.index]. In main window, resolves state.list[state.index]. Invokes native explorer command.
+  Result: supported by code.
+- cmd-toggle-favorite:
+  Entry points: Configured keybind, star button in file panel header.
+  Mutation owner: main (Core config patch and favoritesStore).
+  Visible UI owner: Both windows (favorite star icon and favorites list).
+  Update path: Forwards to main, toggles favorite state of currently viewed item, persists config, broadcasts quivit-favorites-changed event, updates file panel favorites in detached window.
+  Result: supported by code.
+- cmd-open-metadata:
+  Entry points: Configured keybind, status bar metadata badge click.
+  Mutation owner: Native shell (open_metadata_window Tauri command).
+  Visible UI owner: Archive Info window.
+  Update path: Forwards to main, reads current archive metadata, invokes open_metadata_window.
+  Result: supported by code.
+
+8. Input entry mechanisms and edge cases:
+- Menubar trigger keyboard and mouse interactions:
+  Entry points: Click, mouseenter while menu open, Enter, Space, ArrowDown, ArrowRight, ArrowLeft, Escape.
+  Mutation owner: Local window activeMenu and aimState.
+  Visible UI owner: Local window menubar dropdowns.
+  Update path: bindMenus manages focus and dropdown open state. Submenus use safe aiming triangle to prevent premature dismissal during diagonal mouse movement. Arrow keys traverse triggers and submenus with wrapping.
+  Result: supported by code.
+- Nested submenu navigation:
+  Entry points: Mouse hover into submenu trigger, ArrowRight, Enter, Space, ArrowLeft, Escape.
+  Mutation owner: Local window aimState.
+  Visible UI owner: Submenu flyouts in View and Windows menus.
+  Update path: activateItem sets custom properties for top, left, and maxHeight. Submenu items matching role^="menuitem" handle keyboard traversal. ArrowLeft and Escape return focus to parent trigger.
+  Result: supported by code.
+- Mouse button bindings and side button presses:
+  Entry points: Mousedown for buttons 0 (left), 1 (middle), 2 (right), 3 (back), 4 (forward).
+  Mutation owner: shortcuts.js activeButtons.
+  Visible UI owner: None (trigger for actions).
+  Update path: Side buttons (3 and 4) dispatch immediately before UI element checks, routing back and forward actions from either window. Buttons 0 and 2 are suppressed over file panel and menubar UI, and only run over viewer canvas in main window.
+  Result: supported by code.
+- Double click gestures:
+  Entry points: Double left click, double right click within 350ms window.
+  Mutation owner: shortcuts.js clickState.
+  Visible UI owner: None (triggers DoubleClick or DoubleRightClick action).
+  Update path: Deferral timer allows double click detection over viewer canvas. Ignored over UI elements in file list window.
+  Result: supported by code.
+- Scroll wheel modifier modes (hold vs toggle):
+  Entry points: Keydown of toggle modifier key, wheel rotation.
+  Mutation owner: shortcuts.js _toggleLatched and statusbar indicator.
+  Visible UI owner: Main window status bar scroll zoom indicator.
+  Update path: Clean tap of toggle modifier toggles _toggleLatched and persists scroll_zoom_latched. Wheel over viewer uses latch in toggle mode or held modifier in hold mode. Wheel over file list ignores toggle mode and only advances file list rows.
+  Result: supported by code.
+- Keyboard pan vector calculation:
+  Entry points: Keydown of pan keys (W, A, S, D, Arrow keys).
+  Mutation owner: shortcuts.js activeKeys.
+  Visible UI owner: Main window viewer position.
+  Update path: KEYBOARD_PAN_VECTORS intercepts pan keys before single action dispatch. Computes combined vector and dispatches via dispatchKeyboardPan, routing through workspaceControls.panBy.
+  Result: supported by code.
+- Input field typing guards:
+  Entry points: Keydown on input, textarea, select, or editable elements.
+  Mutation owner: Native browser input handling.
+  Visible UI owner: Active input element.
+  Update path: isInteractiveKeyTarget returns true for text inputs and dialog buttons (unless alt/ctrl modifier present). Bypasses shortcut dispatch, allowing normal text entry in file search, loadout renaming, and URL prompt.
+  Result: supported by code.
+- Held-state cleanup and focus switching:
+  Entry points: Window blur event, focusin on interactive target, paste event, quivit-reset-held-keys event.
+  Mutation owner: shortcuts.js activeKeys and activeButtons.
+  Visible UI owner: Scroll indicator in status bar.
+  Update path: clearHeldKeys clears activeKeys, activeButtons, and commits any in-flight hold toggles. Switching focus between native workspace windows triggers blur, preventing stuck modifier keys.
+  Result: supported by code.
+- Multi-instance session isolation:
+  Entry points: Application startup and window messaging.
+  Mutation owner: Tauri single-instance plugin and process-scoped IPC.
+  Visible UI owner: Main application window.
+  Update path: Single instance plugin enforces primary process authority. Tauri emitTo is in-process and targets specific window labels within the current application. Non-Tauri fallback uses BroadcastChannel keyed by session UUID. Multiple instances cannot cross-talk or hijack workspace actions.
+  Result: supported by code.
+
+Findings:
+
+Confirmed gaps: None.
+Code analysis across all 69 actions, input listeners, menubar mechanics, and window coordination found complete delivery and routing paths in both combined and detached modes.
+
+Conditional risks:
+
+ID: CR-01
+Priority: P3
+Confidence: High
+Trigger: src/js/shared/workspaceControls.js:58
+Failure location: src-tauri/src/windows.rs:113
+Minimal user sequence:
+1. Run application with workspace windows detached.
+2. Focus the detached File List window.
+3. Press Ctrl+I or click File > Open URL... in the File List menubar.
+Expected behavior: The main viewer window appears in the foreground with keyboard focus placed directly into the URL prompt input field.
+Actual behavior: The action forwards to main, where setFocus is invoked on the main window. If the operating system foreground lock rule (such as Windows LockSetForegroundWindow or ASFW) prevents programmatic window activation from a secondary window without direct user shell interaction, the main window taskbar icon may flash rather than immediately taking active keyboard focus.
+Causal chain: workspaceControls.dispatchAction forwards cmd-use-url to main -> main runs action handler with focusOwner flag -> invokes window.getCurrentWindow().setFocus() -> Windows OS evaluates foreground activation policy -> if restricted, focus remains in the originating window until clicked.
+Relocation commit: Introduced in a628e57 (workspaceControls.js focusOwner handling).
+Unresolved assumption: Assumes Windows OS allows window.setFocus() between windows belonging to the same process without foreground lock interference.
+Runtime observation needed: Verify on a live Windows desktop whether pressing Ctrl+I from the detached File List immediately moves typing caret to the URL overlay input without requiring a manual window click.
+
+ID: CR-02
+Priority: P3
+Confidence: Medium
+Trigger: src/js/menubar.js:153
+Failure location: src/js/menubar.js:154
+Minimal user sequence:
+1. Run application with workspace windows detached.
+2. Move the detached File List window to a secondary monitor positioned to the right of the primary display.
+3. Open the View or Windows menu and hover over a submenu near the right edge of the window.
+Expected behavior: Submenu flyouts open towards the left when there is insufficient space on the right, keeping all options visible within the window boundaries.
+Actual behavior: Submenu position calculation compares rect.right + subW against window.innerWidth. Because window.innerWidth reflects the webview viewport width, layout works within the local window. However, if mixed monitor DPI scaling differences exist, client coordinate rounding could cause slight boundary clipping before switching sides.
+Causal chain: menubar.js activateItem computes rect from getBoundingClientRect() -> compares against window.innerWidth -> sets custom properties --submenu-left and --submenu-top.
+Relocation commit: Unchanged layout logic in menubar.js, exercised in new detached window context by a628e57.
+Unresolved assumption: Assumes webview getBoundingClientRect and window.innerWidth remain strictly synchronized under multi-monitor mixed DPI display configurations.
+Runtime observation needed: Verify on multi-monitor setup with different DPI scaling (for example 100% on primary and 150% on secondary) that submenu flyouts pop out correctly on both sides of the detached window.
+
+Previously fixed cases accounted for:
+1. Remote wheel coordinates sanitization:
+   In commit 35f38e9, src/js/shared/workspaceControls.js line 16 added explicit sanitization of clientX and clientY when forwarding wheel payloads (forwarded.clientX = forwarded.clientY = undefined). Additionally, src/js/services/actions.js lines 140 and 146 guarded zoomAt calls with Number.isFinite(payload.clientX). This prevents remote mouse coordinates from the File List window from distorting viewer zoom in the main window.
+2. Radio menuitem keyboard navigation:
+   In commit 47b7043, src/js/menubar.js line 745 changed dropdown item query selector from li[role="menuitem"] to li[role^="menuitem"]. This fixed keyboard navigation and styling for li[role="menuitemradio"] elements in the new Windows submenu.
+3. File List toggle menu item disabling:
+   In commit 47b7043, src/js/menubar.js line 823 added _setMenuItemDisabled('cmd-toggle-filelist', isWorkspaceDetached(...)) to ensure the menu item displays as muted and aria-disabled while detached, preserving the invariant that File List stays visible while detached.
+4. History navigation availability synchronization:
+   In commit 47b7043, src/js/main/main.js lines 122 and 236 introduced historyAvailable state synchronization between main and detached replicas so that Back and Forward menu items reflect history state accurately in both windows.
+5. Navigation ownership delegation:
+   In commit a628e57, src/js/services/actions.js lines 8-10 added navigationOwner to check isFavoritesFocused and isLibraryFocused, allowing Shift+D and Shift+A to navigate within focused lists locally while routing viewer navigation to main when the file list or viewer is active.
+
+Cross-domain dependencies:
+- Reviewer 02 (File Panel, Favorites, Library): Owns data store operations and mutation flows for Favorites and Library. Action routing relies on isFavoritesFocused and isLibraryFocused to branch between local list navigation and main session navigation.
+- Reviewer 04 (Viewer Gestures & Rendering): Owns viewer canvas gesture handling, GL shader filters, and manhwa strip rendering. Action routing dispatches zoom, pan, rotation, and strip paging commands to viewer methods.
+- Reviewer 05 (Options & Persistence): Owns keybinding capture, conflict validation, and saving. Action routing consumes normalized keybinding maps via rebuildBindMap and executes commands once configured.
+- Reviewer 07 (Window Management & Fullscreen): Owns native window lifecycle, window positioning, and fullscreen state. Action routing delegates cmd-fullscreen and cmd-options to native window commands.
+
+Bounded follow-up checks:
+1. Open application, detach File List via Windows > File List > Detached. Confirm both windows open.
+2. In File List window, press 1. Confirm File List remains visible and does not collapse.
+3. In File List window, verify View > Status Bar is grayed out and disabled.
+4. In File List window, press 2. Confirm File List menubar hides. Press 2 again to restore. Confirm main window menubar visibility was unaffected.
+5. In File List window, focus a favorite item. Press Shift+D. Confirm highlight advances to next favorite.
+6. In File List window, focus a row in the file list. Press Shift+D. Confirm main viewer image advances to next item.
+7. In File List window, press Ctrl+I. Confirm main window activates and URL prompt appears with typing focus.
+8. In File List window, select Windows > File List > Left. Confirm detached window closes and File List docks back into main window without quitting the application.

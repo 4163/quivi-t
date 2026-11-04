@@ -1,0 +1,459 @@
+Compared against the repository validation rules.
+
+================================================================================
+DETACHED WINDOW AUDIT REPORT: 05 - OPTIONS AND SETTINGS
+================================================================================
+Domain: All Options controls and their effects throughout the application
+Audited Target: 35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Before Snapshot: a473a5c2fbb0eaa93bdbb99cca111327c07104ab
+Allowed History: a473a5c2fbb0eaa93bdbb99cca111327c07104ab..35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Commits Inspected: a628e57, 47b7043, 35f38e9
+
+Inspected Code Paths:
+- src/options.html
+- src/js/options/options.js
+- src/js/options/keybindUi.js
+- src/js/options/associationsUi.js
+- src/css/options.css
+- src/js/shared/configPreview.js
+- src/js/shared/theme.js
+- src/js/shared/themePrePaint.js
+- src/js/shellBackground.js
+- src/js/keybinds.js
+- src/js/services/keybindDomain.js
+- src/js/services/keyCombo.js
+- src/js/services/actions.js
+- src/js/services/workspaceLayout.js
+- src/js/shared/workspaceHost.js
+- src/js/shared/workspaceSession.js
+- src/js/shared/workspaceControls.js
+- src/js/shared/windowFit.js
+- src/js/main/main.js
+- src/js/main/workspaceBoot.js
+- src/js/main/workspace.js
+- src/js/main/fullscreen.js
+- src/js/menubar.js
+- src/js/menubar/chrome.js
+- src/js/menubar/statusbar.js
+- src/js/core.js
+- src/js/fsUtils.js
+- src/js/directoryPrefs.js
+- src/js/filepanel/filePanel.js
+- src/js/filepanel/favoritesStore.js
+- src/js/filepanel/libraryStore.js
+- src/js/viewer/viewer.js
+- src/js/viewer/viewerGestures.js
+- src/js/viewer/viewerPipelines.js
+- src/js/viewer/viewerRender.js
+- src/js/viewer/manhwaStrip.js
+- src/js/metadata-window.js
+- src/js/keyboardNav.js
+- src/js/urlLoader.js
+- src/index.html
+- src-tauri/src/windows.rs
+- src-tauri/src/config.rs
+- src-tauri/src/commands/library.rs
+- src-tauri/src/commands/registry.rs
+- src-tauri/src/commands/watchers.rs
+- src-tauri/src/lib.rs
+
+Excluded / Unread Paths:
+- Markdown documentation files (*.md)
+- Other reviewers' report files in .agents/scratch/detached-audit-reports/
+- Git history outside the allowed commit range
+
+================================================================================
+COVERAGE LEDGER: OPTIONS CONTROLS AND WORKSPACE EFFECTS
+================================================================================
+
+1. GENERAL TAB - STARTUP CONTROLS
+- Show hidden folders and files (#opt-show-hidden)
+  Entry point: Checkbox click in options.html
+  Mutation owner: options.js buildConfigFromForm -> config.frontend_data.show_hidden
+  Visible UI owner: filePanel.js (File List panel in main or workspace-file-list)
+  Update path: saveOptions -> save_config -> emit('config-updated') -> main.js reloadConfigAndSyncLibrary -> Core.loadConfig -> FsUtils.refresh -> snapshot broadcast to workspace-file-list
+  Result: Supported by code. Directory list refreshes and snapshot synchronizes both windows.
+
+- Default start directory (#opt-start-dir, #btn-browse-start)
+  Entry point: Text input edit or Browse button click (invoke('pick_folder'))
+  Mutation owner: options.js buildConfigFromForm -> config.frontend_data.start_dir
+  Visible UI owner: None during active session (startup parameter only)
+  Update path: saveOptions -> save_config -> persisted to quivit_config.json; read at launch by core.js resolveStartupTarget
+  Result: Supported by code. Correct startup-only semantics.
+
+- Continue from last opened directory (#opt-continue-last)
+  Entry point: Checkbox click
+  Mutation owner: options.js buildConfigFromForm -> config.frontend_data.continue_last
+  Visible UI owner: None during active session (startup resume policy)
+  Update path: saveOptions -> save_config. When unchecked, deletes last_opened_path from persisted configuration
+  Result: Supported by code.
+
+- Continue from last active image (#opt-remember-last-image)
+  Entry point: Checkbox click
+  Mutation owner: options.js buildConfigFromForm -> config.frontend_data.remember_last_image
+  Visible UI owner: Viewer image selection upon opening directories/containers
+  Update path: saveOptions -> save_config. Respected by fsUtils.js loadFile
+  Result: Supported by code.
+
+- Allow only one QuiviT instance (#opt-single-instance)
+  Entry point: Checkbox click
+  Mutation owner: options.js buildConfigFromForm -> config.frontend_data.pending_single_instance
+  Visible UI owner: Options status message ('Settings saved. Restart QuiviT to apply this change.')
+  Update path: saveOptions -> save_config. Promoted to single_instance on next launch via config.rs apply_pending_to_config
+  Result: Intentional local behavior. Documented restart-required semantics.
+
+2. GENERAL TAB - INTERFACE CONTROLS
+- Auto-hide interface in fullscreen (#opt-hide-chrome-fullscreen)
+  Entry point: Checkbox click
+  Mutation owner: options.js buildConfigFromForm -> config.frontend_data.hide_chrome_on_fullscreen
+  Visible UI owner: fullscreen.js, Chrome (menubar and statusbar in active window)
+  Update path: saveOptions -> save_config -> emit('config-updated') -> Core.loadConfig -> quivit-config-loaded -> fullscreen.js syncFullscreenState
+  Result: Supported by code.
+
+- Open first image (#opt-open-first-image)
+  Entry point: Checkbox click
+  Mutation owner: options.js buildConfigFromForm -> config.frontend_data.open_first_image
+  Visible UI owner: Viewer viewport and manhwa strip
+  Update path: saveOptions -> save_config -> emit('config-updated') -> Core.loadConfig; checked by fsUtils.js, viewerRender.js, and urlLoader.js
+  Result: Supported by code.
+
+3. GENERAL TAB - VIEWPORT CONTROLS
+- Keyboard pan step (#opt-keyboard-pan-step)
+  Entry point: Number input edit (1-500 px)
+  Mutation owner: options.js buildConfigFromForm -> config.frontend_data.keyboard_pan_step
+  Visible UI owner: main.js pan distance handler
+  Update path: saveOptions -> save_config -> emit('config-updated') -> Core.loadConfig -> quivit-config-loaded -> main.js updatePanSteps
+  Result: Supported by code. Forwarded through workspaceControls.panBy when initiated in replica.
+
+- Wheel pan step (#opt-wheel-pan-step)
+  Entry point: Number input edit (1-500 px)
+  Mutation owner: options.js buildConfigFromForm -> config.frontend_data.wheel_pan_step
+  Visible UI owner: main.js and viewerGestures.js
+  Update path: saveOptions -> save_config -> emit('config-updated') -> Core.loadConfig -> quivit-config-loaded -> updatePanSteps
+  Result: Supported by code.
+
+- Hide cursor delay (#opt-hide-cursor-delay)
+  Entry point: Number input edit (0-60 sec)
+  Mutation owner: options.js buildConfigFromForm -> config.frontend_data.hide_cursor_delay_sec
+  Visible UI owner: viewerGestures.js inactivity timer over viewport
+  Update path: saveOptions -> save_config -> emit('config-updated') -> Core.loadConfig; read by viewerGestures.js
+  Result: Supported by code.
+
+4. GENERAL TAB - FILTERS
+- Anime4K quality (#anime4k-variant-controls: Normal vs Fast)
+  Entry point: Segmented button click (data-anime4k-variant="normal"|"fast")
+  Mutation owner: options.js -> config.frontend_data.filter_options.anime4k.variant
+  Visible UI owner: WebGL viewport pipeline (viewerPipelines.js) in main window
+  Update path: saveOptions -> save_config -> emit('config-updated') -> Core.loadConfig -> Core.onStateChange -> viewerPipelines.js variant check -> shader pipeline recompile
+  Result: Supported by code.
+
+5. GENERAL TAB - LIBRARY LOCATION
+- Imported URLs path (#opt-library-path, #btn-browse-library, #link-supported-sites)
+  Entry point: Path text edit or Browse button (invoke('pick_folder'))
+  Mutation owner: library.rs move_library command
+  Visible UI owner: File List Library panel in main or workspace-file-list
+  Update path: saveOptions -> invoke('move_library') -> acquires process publication mutex and file lock, halts in-flight downloads, moves files to staging and renames, remaps config paths, rebinds watcher, emits 'library-relocated' -> main.js rebinds watcher, clears path caches, notifies 'quivit-library-updated' -> forwarded to workspace-file-list
+  Result: Supported by code. Downstream caches and history remap correctly.
+
+6. GENERAL TAB - CONFIGURATION PERSISTENCE
+- Save config data locally (#opt-portable-mode)
+  Entry point: Checkbox click
+  Mutation owner: config.rs save_config_unchecked
+  Visible UI owner: Options directory label paths
+  Update path: saveOptions -> save_config -> config.rs detects mode switch -> writes exe-dir or roaming files, cleans obsolete files, updates Win32 hidden file attribute
+  Result: Supported by code.
+
+- Open Roaming config folder (#btn-open-config-dir, #config-dir-label)
+  Entry point: Button click
+  Mutation owner: Read-only opener invocation (invoke('open_config_dir') or 'open_active_config_dir')
+  Visible UI owner: Windows File Explorer
+  Update path: Dispatches shell open command
+  Result: Supported by code.
+
+- Open Local data folder (#btn-open-local-data-dir, #local-data-dir-label)
+  Entry point: Button click
+  Mutation owner: Read-only opener invocation (invoke('open_local_data_dir') or 'open_active_config_dir')
+  Visible UI owner: Windows File Explorer
+  Update path: Dispatches shell open command
+  Result: Supported by code.
+
+7. KEYS TAB - SHORTCUT MANAGEMENT
+- Reset to defaults (#btn-reset-keybinds)
+  Entry point: Button click
+  Mutation owner: options.js in-memory config.frontend_data.keybinds = DEFAULT_KEYBINDS
+  Visible UI owner: keybindUi.js tags container
+  Update path: In-memory reset until Save; re-renders tag slots and scroll mode toggle
+  Result: Supported by code.
+
+- Keybinding capture, edit, remove, reset, conflicts
+  Entry point: Click tag slot, press key/button combo, middle-click tag, or click remove button
+  Mutation owner: keybindUi.js -> config.frontend_data.keybinds
+  Visible UI owner: Tag badges with conflict color borders/text
+  Update path: options.js validateKeybindSafety -> saveOptions -> save_config -> emit('config-updated') -> Core.loadConfig -> updateMenuShortcuts and rebuildBindMap across windows
+  Result: Supported by code.
+
+- Zoom modifier mode (#scroll-mode-toggle: Hold vs Toggle)
+  Entry point: Segmented button click (data-mode="hold"|"toggle")
+  Mutation owner: keybindUi.js -> config.frontend_data.scroll_zoom_modifier
+  Visible UI owner: Status bar scroll zoom indicator in main window
+  Update path: options.js buildConfigFromForm -> save_config -> emit('config-updated') -> shortcuts.js syncScrollLatch
+  Result: Supported by code.
+
+- Relocation and panel position shortcuts (File List & Viewport Left/Right/Top/Bottom/Detached)
+  Entry point: Options Keys tab slots cmd-window-file-list-* and cmd-window-viewport-*
+  Mutation owner: actions.js cmd-window-* actions
+  Visible UI owner: Workspace window layout and panel arrangement
+  Update path: Dispatch action -> Core.setWorkspacePosition -> workspace.js reconcile
+  Result: Supported by code. Added in commit 47b7043.
+
+8. FILE TYPES TAB - ASSOCIATIONS AND PREVIEWS
+- Recommended, Select All, Deselect All (#btn-assoc-recommended, #btn-assoc-select-all, #btn-assoc-deselect-all)
+  Entry point: Button clicks
+  Mutation owner: associationsUi.js checkbox state
+  Visible UI owner: Format checkboxes
+  Update path: Toggles checkbox states in form DOM
+  Result: Supported by code.
+
+- Format checkboxes (10 image types, 8 archive types) & Mascot preview hover
+  Entry point: Checkbox clicks and pointerover events
+  Mutation owner: registry.rs apply_associations
+  Visible UI owner: Mascot format icon boxes and system file registration
+  Update path: saveOptions -> applyAssociations -> invoke('apply_associations') -> writes HKCU Software\Classes\QuiviT.* and shellex preview/thumbnail handlers -> SHChangeNotify
+  Result: Supported by code.
+
+- Windows Defaults Settings (#btn-assoc-settings)
+  Entry point: Button click
+  Mutation owner: Read-only system shell command
+  Visible UI owner: Windows Settings app (ms-settings:defaultapps)
+  Update path: invoke('open_in_explorer')
+  Result: Supported by code.
+
+- Remove QuiviT file registrations (#btn-assoc-remove, #assoc-remove-dialog)
+  Entry point: Button click -> confirmation dialog submission
+  Mutation owner: registry.rs unregister_associations
+  Visible UI owner: Checkboxes uncheck, system registrations deleted
+  Update path: invoke('unregister_associations') -> clears HKCU registry entries -> SHChangeNotify
+  Result: Supported by code.
+
+9. CUSTOMIZATION TAB - THEME AND STYLING
+- Theme selection (System, Light, Dark)
+  Entry point: Button click (data-theme="system"|"light"|"dark")
+  Mutation owner: options.js currentTheme, previewTheme
+  Visible UI owner: document.documentElement data-theme attribute and native window background
+  Update path: previewTheme -> emit('theme-preview') -> main.js and metadata-window.js applyTheme; saveOptions -> config.frontend_data.theme -> save_config -> emit('config-updated')
+  Result: Confirmed gap in detached window (GAP-OPT-01) and upon mid-preview detachment (GAP-OPT-03).
+
+- Custom CSS editor, Import, Export, Apply, and Emergency Reset
+  Entry point: Textarea input, #btn-import-css, #btn-export-css, #btn-save-apply-css (Ctrl+S), Ctrl+Shift+Alt+C
+  Mutation owner: options.js, configPreview.js, config.rs
+  Visible UI owner: #custom-css style tag in all open windows
+  Update path: previewCss -> emit('css-preview') -> applyCustomCss; saveOptions -> config.frontend_data.custom_css -> save_config -> emit('config-updated')
+  Result: Confirmed gap in detached window (GAP-OPT-01).
+
+10. LANGUAGE TAB
+- Language selection
+  Entry point: Radio button
+  Mutation owner: None (single supported language)
+  Visible UI owner: English radio (checked, disabled)
+  Update path: None
+  Result: Intentional local behavior. Static placeholder.
+
+11. FOOTER AND DIALOG LIFECYCLE
+- Close button (#btn-cancel)
+  Entry point: Button click
+  Mutation owner: options.js revertPreviewChanges -> closeOptionsWindow
+  Visible UI owner: Reverts active theme/CSS preview and closes options window
+  Update path: emit('theme-preview', savedTheme), emit('css-preview', savedCss)
+  Result: Supported by code.
+
+- Native window close button (X)
+  Entry point: Titlebar close
+  Mutation owner: optionsWindow.onCloseRequested -> revertPreviewChanges
+  Visible UI owner: Window destruction
+  Update path: Async emission without prevent_close
+  Result: Conditional risk (RISK-OPT-01).
+
+- Save button (#btn-save-options)
+  Entry point: Button click
+  Mutation owner: options.js saveOptions -> save_config
+  Visible UI owner: Persists settings and updates all windows
+  Update path: requestWorkspace('main', 'core', 'flushConfig') -> save_config -> emit('config-updated')
+  Result: Confirmed gap overwriting workspace state (GAP-OPT-02) and failing to clear preview state in replica (GAP-OPT-01).
+
+================================================================================
+FINDINGS
+================================================================================
+
+--------------------------------------------------------------------------------
+Finding GAP-OPT-01: Confirmed Gap
+--------------------------------------------------------------------------------
+Priority: P1
+Confidence: 100%
+Trigger Reference: src/js/options/options.js:562
+Failure Reference: src/js/main/main.js:324-326, 381-382
+Introduced by: a628e57 (Added window relocation and detach support)
+
+Minimal User Sequence:
+1. Detach workspace panels into separate windows (File List in workspace-file-list).
+2. Open Options dialog (cmd-options).
+3. Select Theme "Dark" (or click Apply on Custom CSS). Both windows preview the dark theme.
+4. Select Theme "Light" (or keep default) and click "Save".
+5. Observe the main viewer window and the detached File List window.
+
+Expected Behavior:
+Options emits 'config-updated'. Both the main window and the detached File List window clear their preview state overrides (previewTheme = null, previewCss = null). When the newly saved configuration is applied, both windows display the saved "Light" theme.
+
+Actual Behavior:
+The main window clears its preview override and switches to "Light". The detached File List window hits line 324 ('if (workspaceSurface) return;'), skipping lines 325-327 where previewTheme and previewCss are set to null. When workspace-file-list receives the replicated configuration snapshot from main and fires 'quivit-config-loaded', lines 381-382 check 'previewTheme !== null ? previewTheme : theme'. Because previewTheme was never reset to null, workspace-file-list evaluates the preview override as active and remains permanently stuck in "Dark" mode.
+
+Complete Causal Chain:
+1. options.js:317 dispatches previewTheme(currentTheme), emitting Tauri event 'theme-preview' with 'dark'.
+2. In workspace-file-list (running main.js), listen('theme-preview') sets module variable previewTheme = 'dark' (line 349) and calls applyTheme('dark').
+3. User clicks Save. options.js:560 invokes save_config, clears previewing flag in Options, and emits 'config-updated' (line 562).
+4. listen('config-updated') fires in workspace-file-list.
+5. Line 324 executes: 'if (workspaceSurface) return;'. Because workspaceSurface is 'fileList', execution terminates immediately.
+6. Lines 325-327 ('previewTheme = null; previewCss = null; resetScrollLatch();') are bypassed.
+7. Meanwhile, main processes 'config-updated', sets its own previewTheme = null, loads config from disk, and sends a configuration snapshot to workspace-file-list with configEvent = true.
+8. workspaceSession.js:125 receives the snapshot and dispatches 'quivit-config-loaded' on workspace-file-list.
+9. The listener in main.js:381 executes:
+   applyTheme(previewTheme !== null ? previewTheme : theme);
+   applyCustomCss(previewCss !== null ? previewCss : customCss);
+10. Since previewTheme in workspace-file-list is still 'dark' (not null), it applies 'dark' rather than the newly saved theme 'light'. The replica remains stuck on the previewed styling across all subsequent config reloads.
+
+--------------------------------------------------------------------------------
+Finding GAP-OPT-02: Confirmed Gap
+--------------------------------------------------------------------------------
+Priority: P1
+Confidence: 100%
+Trigger Reference: src/js/options/options.js:538-540
+Failure Reference: src/js/options/options.js:524-543, src/js/core.js:660-675
+Introduced by: 47b7043 (Synchronized detached workspace and window chrome)
+
+Minimal User Sequence:
+1. Open QuiviT.
+2. Open Options (cmd-options) and leave the dialog open.
+3. Switch to either workspace window (main viewer or detached File List).
+4. Change any view mode or navigation state: switch fit mode (e.g. Fit Width via Q), change scaling method (Lanczos), toggle Manhwa view (cmd-toggle-manhwa), switch File List to thumbnail mode (cmd-toggle-file-list-view-mode), or navigate into subdirectories/images.
+5. Switch back to Options, change an unrelated setting (such as Keyboard pan step), and click "Save".
+
+Expected Behavior:
+Options preserves the active workspace state (view modes, scaling, navigation resume path, and per-directory sort preferences) that changed while Options was open, merging only the explicitly configured Options fields into disk storage.
+
+Actual Behavior:
+Options flushes main's dirty state to disk, but then copies ONLY a narrow whitelist of 6 properties: favorites, favorites_collapsed, workspace_layout, window_menu_visible, menu_visible, and status_visible. All other frontend properties (fit_mode, scaling_mode, spread_enabled, spread_direction, spread_step, manhwa_enabled, file_list_view_mode, active_filter, directory_sort, last_opened_path, and last_active_image) are populated from formConfig, which was built from the stale snapshot taken when Options first opened. Options writes this stale snapshot back to disk and emits 'config-updated', causing Core.loadConfig in main to reload and immediately revert the user's active fit mode, scaling mode, manhwa mode, thumbnail view, and navigation location.
+
+Complete Causal Chain:
+1. options.js init() calls load_config and assigns the loaded object to config.
+2. While Options sits open, user triggers workspace actions in main or detached File List (e.g. Core.setFitMode('width'), Core.setManhwaMode(true), or FsUtils.loadFile). These mutate _state.config.frontend_data and schedule a flush.
+3. User clicks Save in Options.
+4. options.js:524 runs buildConfigFromForm(config). This function copies properties from baseConfig (the stale config loaded in step 1).
+5. options.js:536 calls requestWorkspace('main', 'core', 'flushConfig'), forcing main to persist its live state to disk.
+6. options.js:537 loads the flushed config from disk into live.
+7. options.js:538-540 iterates through a hardcoded list:
+   for (const key of ['favorites', 'favorites_collapsed', 'workspace_layout', 'window_menu_visible', 'menu_visible', 'status_visible']) {
+     if (live.frontend_data[key] !== undefined) merged.frontend_data[key] = live.frontend_data[key];
+   }
+8. Properties absent from this whitelist (fit_mode, scaling_mode, spread_enabled, spread_direction, spread_step, manhwa_enabled, file_list_view_mode, active_filter, directory_sort, last_opened_path, last_active_image) retain their stale values from step 1 in merged.
+9. options.js:559 calls save_config with merged. This writes the stale values over the freshly flushed live files (quivit_config.json, quivit_state.json, quivit_directory_sort.json).
+10. options.js:562 emits 'config-updated'.
+11. main.js catches 'config-updated' and runs reloadConfigAndSyncLibrary -> Core.loadConfig.
+12. Core.loadConfig reads the overwritten disk files into _state, resetting _state.fitMode, _state.scalingMode, _state.manhwaEnabled, _state.fileListViewMode, and sorting to their stale states.
+
+--------------------------------------------------------------------------------
+Finding GAP-OPT-03: Confirmed Gap
+--------------------------------------------------------------------------------
+Priority: P2
+Confidence: 100%
+Trigger Reference: src-tauri/src/windows.rs:134, src/js/options/options.js:317
+Failure Reference: src-tauri/src/windows.rs:134, src/js/shared/themePrePaint.js:3-4, src/js/main/main.js:385-388
+Introduced by: a628e57 / 47b7043 (Window relocation and detached chrome synchronization)
+
+Minimal User Sequence:
+1. Start QuiviT in combined mode with default "Light" theme.
+2. Open Options dialog (cmd-options).
+3. Click "Dark" theme button under Customization tab. The main window and Options preview Dark mode.
+4. Do not click Save. In main window, select View -> File List position -> Detached (or press shortcut).
+5. Inspect the newly spawned detached File List window.
+
+Expected Behavior:
+The detached File List window should open with the active preview theme ("Dark") and matching dark native shell background.
+
+Actual Behavior:
+The detached File List window opens with a bright white shell background and renders in "Light" mode. The main viewer window and Options window display "Dark", while the File List window displays "Light", desynchronizing the workspace appearance.
+
+Complete Causal Chain:
+1. options.js:317 calls previewTheme('dark'), emitting Tauri event 'theme-preview'. Theme previews are non-persistent and do not write to localStorage.quivit-theme or disk config.
+2. User detaches File List. Core.setWorkspacePosition triggers open_workspace_window in Rust (windows.rs:109).
+3. windows.rs:134 builds the window and calls apply_shell_background(&window, &crate::config::load_config(app.clone())).
+4. Because the preview was not saved to disk, load_config returns theme: "light". Rust sets the native window background color to white (255, 255, 255).
+5. The webview loads index.html?surface=fileList. themePrePaint.js checks localStorage.getItem('quivit-theme'), which is unset.
+6. workspaceBoot.js initializes the workspace session and requests the initial snapshot from main.
+7. In main.js, previewTheme is a local UI variable and is not reflected in state.config.
+8. workspace-file-list receives state.config with theme: "light".
+9. In workspace-file-list, previewTheme is initialized to null.
+10. Line 381 applies previewTheme !== null ? previewTheme : theme, evaluating to "light".
+11. The detached window paints in Light mode, mismatched with the main window's Dark preview.
+
+--------------------------------------------------------------------------------
+Finding RISK-OPT-01: Conditional Risk
+--------------------------------------------------------------------------------
+Priority: P2
+Confidence: 85%
+Trigger Reference: src/js/options/options.js:363-366
+Failure Reference: src/js/options/options.js:363-366, src-tauri/src/windows.rs:202-223
+Introduced by: 47b7043
+
+Unresolved Assumption:
+Whether the Tauri webview runtime guarantees that an asynchronous listener registered via window.onCloseRequested completes its async IPC emissions before native window destruction destroys the webview process.
+
+Description:
+When the user closes Options using the "Close" button (#btn-cancel), revertPreviewChanges() is explicitly awaited before closeOptionsWindow() is called. However, when the user clicks the native OS close button (X) on the titlebar, optionsWindow.onCloseRequested fires without event.preventDefault() (nor is api.prevent_close() installed on the options window in windows.rs). The handler starts an async function awaiting revertPreviewChanges(), while the operating system proceeds with window destruction. If the webview runtime terminates before the asynchronous 'theme-preview' or 'css-preview' events are serialized and emitted through the Tauri event bus, the previewed changes in main and workspace-file-list will not be reverted.
+
+Specific Runtime Observation Needed:
+Instrument an automated run to click native titlebar close on the Options window with an active theme preview under system load, and monitor whether emit('theme-preview') reliably arrives at the main window before the Options webview process terminates.
+
+--------------------------------------------------------------------------------
+Finding RISK-OPT-02: Conditional Risk
+--------------------------------------------------------------------------------
+Priority: P3
+Confidence: 80%
+Trigger Reference: src/js/options/options.js:475, src-tauri/src/config.rs:603-634
+Failure Reference: src-tauri/src/commands/watchers.rs:155-193
+Introduced by: a473a5c (Pre-existing in base, unaddressed by relocation)
+
+Unresolved Assumption:
+Whether the configuration file watcher (WatcherState.config_watcher) is intended to track runtime directory migrations across Roaming and Portable storage modes without requiring an application restart.
+
+Description:
+When the user toggles "Save config data locally" (#opt-portable-mode) and saves, config.rs:607-633 migrates the configuration files between the Roaming %APPDATA% directory and the portable executable directory. However, spawn_config_file_watcher in watchers.rs:155 runs only once during application startup in lib.rs:125. The background file watcher continues watching the original directory. If another instance or external editor modifies quivit_config.json in the newly active directory, the file modification is never detected, and 'config-changed' is never emitted to update the running application.
+
+Specific Runtime Observation Needed:
+Toggle portable mode in Options, save settings, externally edit quivit_config.json in the exe folder, and observe whether Options or main receives 'config-changed'.
+
+================================================================================
+CROSS-DOMAIN DEPENDENCIES AND BOUNDED FOLLOW-UP CHECKS
+================================================================================
+
+1. Replication Mechanics (Reviewer 06 Dependency):
+Options relies on requestWorkspace('main', 'core', 'flushConfig') to flush debounced writes before loading config from disk. However, the whitelist merge in options.js:538 omits 11 frontend configuration keys. Reviewer 06 should review whether Core.flushConfig should return the active state directly or whether options.js should merge live.frontend_data in its entirety rather than using a whitelist.
+
+2. Workspace Lifecycle (Reviewer 07 Dependency):
+In main.js:324, listen('config-updated') returns early for replica windows ('if (workspaceSurface) return;'). This was intended to prevent duplicate reloads, but it incorrectly bypassed the reset of local preview flags (previewTheme = null, previewCss = null) and scroll latch state (resetScrollLatch()). Reviewer 07 should check whether other window-level lifecycle listeners in main.js possess similar replica bypass bugs.
+
+3. Import Actions (Reviewer 03 Dependency):
+When the Library location is moved via options.js and move_library, DownloadCancelFlag is incremented to abort active downloads. Reviewer 03 should confirm whether active gallery streams in UrlLoader cleanly abort without corrupting directory trees during the 750ms staging migration window.
+
+4. Session State Preservation (Reviewer 02 Dependency):
+When Options is saved, the omission of last_opened_path, last_active_image, and directory_sort from options.js:538 overwrites session state with stale paths. Reviewer 02 should verify whether history restoration on next application startup is impacted when Options is saved after extensive navigation.
+
+================================================================================
+AUDIT SUMMARY
+================================================================================
+Confirmed Gaps: 3
+- GAP-OPT-01: Preview theme and CSS overrides never reset in detached workspace window upon Save.
+- GAP-OPT-02: Options Save overwrites live workspace state (view modes, scaling, sorting, navigation) with stale form snapshot.
+- GAP-OPT-03: Detaching File List window during active theme preview opens with mismatched native background and stale theme.
+
+Conditional Risks: 2
+- RISK-OPT-01: Native window close button (X) on Options risks dropping preview reversion due to unprevented async destruction.
+- RISK-OPT-02: Migrating between Roaming and Portable config does not rebind config file watcher to new folder until restart.

@@ -1,0 +1,448 @@
+Compared against the repository validation rules.
+
+Domain: 07 - Native windows, workspace lifecycle, chrome, and auxiliary metadata UI
+Audited Target: 35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Before Snapshot: a473a5c2fbb0eaa93bdbb99cca111327c07104ab
+Allowed History Range: a473a5c2fbb0eaa93bdbb99cca111327c07104ab..35f38e9d81cf95cd0534ac33e316291bf26e2f8c (commits a628e57, 47b7043, 35f38e9)
+
+Git checkout verification:
+Branch: feature/window-relocation
+HEAD: 35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Working tree: clean (0 uncommitted differences)
+
+Inspected code paths:
+- src-tauri/src/windows.rs
+- src-tauri/src/lib.rs
+- src-tauri/src/main.rs
+- src-tauri/tauri.conf.json
+- src-tauri/capabilities/default.json
+- src-tauri/src/platform/drop.rs
+- src-tauri/src/commands/drop.rs
+- src-tauri/src/config.rs
+- src/js/main/workspace.js
+- src/js/services/workspaceLayout.js
+- src/js/main/lifecycle.js
+- src/js/main/fullscreen.js
+- src/js/menubar/chrome.js
+- src/js/main/metadataBadge.js
+- src/js/metadata-window.js
+- src/js/metadata.js
+- src/js/shared/windowFit.js
+- src/metadata.html
+- src/index.html
+- src/css/main.css
+- src/css/metadata.css
+- src/css/global.css
+- src/js/main/workspaceBoot.js
+- src/js/shared/workspaceHost.js
+- src/js/shared/workspaceSession.js
+- src/js/shared/workspaceControls.js
+- src/js/main/main.js
+- src/js/menubar.js
+- src/js/menubar/statusbar.js
+- src/js/services/actions.js
+- src/js/core.js
+- src/js/keybinds.js
+- src/options.html
+- src/js/options/options.js
+- src/js/filepanel/filePanel.js
+- mocha/actions.test.js, mocha/core.test.js, mocha/metadata.test.js
+- e2e/specs/01-startup.e2e.js, e2e/specs/06-configuration.e2e.js, e2e/specs/07-os-integration.e2e.js
+- src-tauri/src/tests/config_tests.rs
+
+Excluded and unread paths:
+- All *.md documentation files
+- Other reviewers' reports in .agents/scratch/detached-audit-reports/
+- Standalone Explorer shell preview/thumbnail COM binary internals (not app-facing)
+- Internal rendering pipelines and gesture math (owned by Reviewer 04)
+- Drop payload parsing logic (owned by Reviewer 03)
+- Pure session transport wire codec details (owned by Reviewer 06)
+
+
+================================================================================
+Coverage ledger
+================================================================================
+
+1. Workspace layout position selection (File List: Left, Right, Top, Bottom, Detached)
+   - Entry point: Menubar "Windows" -> "File List" submenus, or configured shortcut
+   - Mutation owner: Core.setWorkspacePosition in src/js/core.js (relocateWorkspace in src/js/services/workspaceLayout.js)
+   - Visible UI owner: workspace dataset attributes in src/js/main/workspace.js, menubar radio checkmarks in src/js/menubar.js
+   - Update path: UI event -> workspaceControls.dispatchAction -> requestWorkspace('main') if replica -> Core.setWorkspacePosition -> reconcile() -> CSS dataset update
+   - Result: Supported by code
+
+2. Workspace layout position selection (Viewport: Left, Right, Top, Bottom, Detached)
+   - Entry point: Menubar "Windows" -> "Viewport" submenus, or configured shortcut
+   - Mutation owner: Core.setWorkspacePosition in src/js/core.js
+   - Visible UI owner: workspace dataset attributes in src/js/main/workspace.js, menubar radio checkmarks in src/js/menubar.js
+   - Update path: UI event -> workspaceControls.dispatchAction -> requestWorkspace('main') if replica -> Core.setWorkspacePosition -> reconcile() -> CSS dataset update
+   - Result: Supported by code
+
+3. Paired workspace panel detach initiation
+   - Entry point: Windows menu "Detached", or binding for cmd-window-*-detached
+   - Mutation owner: Core.setWorkspacePosition -> reconcile() in src/js/main/workspace.js
+   - Visible UI owner: native main window (viewport) and native workspace-file-list window (file panel)
+   - Update path: Core state change -> reconcile() -> Tauri IPC open_workspace_window -> WebviewWindowBuilder ("workspace-file-list") -> show_window after handshake
+   - Result: Supported by code
+
+4. Detached window native creation and properties
+   - Entry point: Tauri command open_workspace_window in src-tauri/src/windows.rs:109
+   - Mutation owner: Rust Tauri runtime
+   - Visible UI owner: Native WebviewWindow "workspace-file-list"
+   - Update path: WebviewWindowBuilder(440x720 initial, 320x400 min, centered, hidden, drop target installed) -> load index.html?surface=fileList -> shell background applied
+   - Result: Supported by code
+
+5. Programmatic recombination (docking) to combined mode
+   - Entry point: Windows menu position selection (Left, Right, Top, Bottom)
+   - Mutation owner: Core.setWorkspacePosition -> reconcile() in src/js/main/workspace.js
+   - Visible UI owner: Native main window (both panels visible via CSS dataset)
+   - Update path: reconcile() sets resolveClose promise -> invokes close_workspace_window -> secondary window destroyed -> WindowEvent::Destroyed emits workspace-detached-closed -> resolveClose resolves -> layout docks without quitting
+   - Result: Supported by code
+
+6. User close of secondary detached window ('X' button)
+   - Entry point: Title bar close button on workspace-file-list
+   - Mutation owner: Rust on_window_event in src-tauri/src/windows.rs:141
+   - Visible UI owner: App shutdown
+   - Update path: CloseRequested event -> api.prevent_close() -> emit_to('main', 'workspace-close-requested') -> lifecycle.js listenWorkspaceEvent -> mainWindow.close() -> Core.flushConfig() -> clean exit
+   - Result: Supported by code
+
+7. User close of main window while detached ('X' button)
+   - Entry point: Title bar close button on main
+   - Mutation owner: lifecycle.js onCloseRequested in src/js/main/lifecycle.js:55
+   - Visible UI owner: App shutdown
+   - Update path: onCloseRequested -> Core.flushConfig() -> mainWindow.close() -> WindowEvent::Destroyed -> windows::close_secondary_windows() destroys workspace-file-list
+   - Result: Supported by code
+
+8. Detached window abnormal termination fallback
+   - Entry point: workspace-file-list destroyed externally
+   - Mutation owner: workspace.js quivit-workspace-closed listener in src/js/main/workspace.js:65
+   - Visible UI owner: App shutdown
+   - Update path: WindowEvent::Destroyed emits workspace-detached-closed -> quivit-workspace-closed fires with resolveClose null -> isWorkspaceDetached is true -> calls onDetachedClose() -> dispatches cmd-quit
+   - Result: Supported by code
+
+9. Native window title synchronization
+   - Entry point: Core navigation/selection state change
+   - Mutation owner: lifecycle.js updateWindowTitle in src/js/main/lifecycle.js:5
+   - Visible UI owner: Native title bars of main and workspace-file-list
+   - Update path: Core state change on main -> updateWindowTitle -> set_workspace_title IPC -> iterates WORKSPACE_WINDOWS ("main", "workspace-file-list") -> window.set_title
+   - Result: Supported by code
+
+10. Menu bar visibility toggling and per-window persistence
+    - Entry point: cmd-toggle-menubar (shortcut 2, or menu click)
+    - Mutation owner: chrome.js setMenuBarVisible in src/js/menubar/chrome.js:44
+    - Visible UI owner: #menubar element per native window
+    - Update path: dispatchAction (owner: 'window') -> local setMenuBarVisible -> Core.setWindowMenuVisible(windowRole) -> persisted to frontend_data.window_menu_visible[role] -> snapshot sync
+    - Result: Supported by code
+
+11. Status bar visibility and suppression in File List window
+    - Entry point: cmd-toggle-statusbar (shortcut 3, or menu click)
+    - Mutation owner: chrome.js setStatusBarVisible in src/js/menubar/chrome.js:67
+    - Visible UI owner: #statusbar in main window; hidden and disabled in workspace-file-list
+    - Update path: In workspace-file-list: toggleStatusBar early-returns, checkmark is muted/disabled, statusbar has class hidden. In main: toggles and persists to status_visible
+    - Result: Supported by code
+
+12. File list visibility toggle suppression while detached
+    - Entry point: cmd-toggle-filelist (shortcut 1, or menu click)
+    - Mutation owner: Core.setFileListVisible in src/js/core.js:422
+    - Visible UI owner: #cmd-toggle-filelist in View menu
+    - Update path: syncViewMenu calls _setMenuItemDisabled('cmd-toggle-filelist', true). If triggered via shortcut, Core.setFileListVisible enforces isWorkspaceDetached() || !!visible, preventing hiding
+    - Result: Supported by code
+
+13. Fullscreen entry, exit, and chrome state restoration
+    - Entry point: cmd-fullscreen (shortcut 4, Alt+Enter, F11)
+    - Mutation owner: fullscreen.js toggleFullscreen in src/js/main/fullscreen.js:173
+    - Visible UI owner: Triggering window (owner: 'window')
+    - Update path: snapshotPreFullscreenChrome -> hide chrome if configured -> window.setFullscreen(true) -> on exit: restorePreFullscreenChrome -> syncChromeState
+    - Result: Supported by code
+
+14. Fullscreen exit gestures and hold hint
+    - Entry point: Keyboard hold (Escape / cmd-exit-fullscreen-hold), pointer hover top edge (<= 5px), exit button click
+    - Mutation owner: fullscreen.js gesture listeners in src/js/main/fullscreen.js:117-171
+    - Visible UI owner: #fullscreen-exit-hint, #fullscreen-exit-region, #fullscreen-exit-btn
+    - Update path: Key hold >= 1500ms or exit button click -> toggleFullscreen -> restores windowed display
+    - Result: Supported by code
+
+15. System tray hide and restore
+    - Entry point: cmd-hide-to-tray (Ctrl+Shift+h), tray icon left click, tray menu "Show"
+    - Mutation owner: windows.rs hide_to_tray / restore_from_tray in src-tauri/src/windows.rs:378, 390
+    - Visible UI owner: All open application windows and system tray icon
+    - Update path: hide_to_tray hides SECONDARY_WINDOWS ("options", "metadata", "workspace-file-list") and main. restore_from_tray shows all existing secondary windows, shows and focuses main
+    - Result: Supported by code
+
+16. Second application instance launch handling
+    - Entry point: External execution with file arguments while app is running
+    - Mutation owner: tauri_plugin_single_instance in src-tauri/src/lib.rs:44
+    - Visible UI owner: Native main window and native workspace-file-list
+    - Update path: Plugin hook -> main_window.unminimize() -> restore_from_tray() -> emit single-instance-open to main -> loadFile
+    - Result: Conditional risk (workspace-file-list window is not unminimized if it was minimized to taskbar)
+
+17. Auxiliary Options window creation, routing, and sizing
+    - Entry point: cmd-options (shortcut 5, or menu click)
+    - Mutation owner: windows.rs open_options in src-tauri/src/windows.rs:184
+    - Visible UI owner: Native "options" window
+    - Update path: dispatchAction forwards to main -> invoke open_options -> WebviewWindowBuilder -> options.html loads -> fitContentWidth() -> fit_options_window
+    - Result: Supported by code
+
+18. Auxiliary Options window centering over main
+    - Entry point: fit_options_window initial fit in src-tauri/src/windows.rs:307
+    - Mutation owner: center_window_over_main in src-tauri/src/windows.rs:266
+    - Visible UI owner: Native "options" window physical position
+    - Update path: center_window_over_main queries main.outer_position(). When main is minimized to taskbar on Windows, returns (-32000, -32000), placing options off-screen
+    - Result: Confirmed gap
+
+19. Options settings persistence and session flush
+    - Entry point: Save button in Options window
+    - Mutation owner: options.js saveOptions in src/js/options/options.js:528
+    - Visible UI owner: Shared app configuration
+    - Update path: initWorkspaceClient -> requestWorkspace('main', 'core', 'flushConfig') -> load live config -> preserve live favorites and workspace_layout -> save_config IPC -> reloadConfigAndSyncLibrary on main -> snapshot published to workspace-file-list
+    - Result: Supported by code
+
+20. Auxiliary Metadata window creation, routing, and sizing
+    - Entry point: #status-metadata-badge click or cmd-open-metadata action
+    - Mutation owner: windows.rs open_metadata_window in src-tauri/src/windows.rs:225
+    - Visible UI owner: Native "metadata" window
+    - Update path: openMetadataWindow -> open_metadata_window IPC -> WebviewWindowBuilder -> metadata.html loads -> fitContentHeight() -> fit_metadata_window
+    - Result: Supported by code
+
+21. Auxiliary Metadata window centering over main
+    - Entry point: fit_metadata_window initial fit in src-tauri/src/windows.rs:325
+    - Mutation owner: center_window_over_main in src-tauri/src/windows.rs:266
+    - Visible UI owner: Native "metadata" window physical position
+    - Update path: center_window_over_main queries main.outer_position(). When main is minimized on Windows, returns (-32000, -32000), placing metadata window off-screen
+    - Result: Confirmed gap
+
+22. Metadata badge invocation and visibility
+    - Entry point: #status-metadata-badge in file panel breadcrumb toolbar
+    - Mutation owner: metadataBadge.js initMetadataBadge in src/js/main/metadataBadge.js:102
+    - Visible UI owner: #status-metadata-badge in workspace-file-list
+    - Update path: Click/Enter on badge -> openMetadataWindow() -> open_metadata_window IPC
+    - Result: Supported by code
+
+23. Metadata loading and cover thumbnail generation
+    - Entry point: Container navigation (archive or directory with metadata)
+    - Mutation owner: metadataBadge.js _loadMetadataForArchive / _loadMetadataForDirectory
+    - Visible UI owner: Local memory state and thumbnail canvas
+    - Update path: Core.onStateChange runs in BOTH main and workspace-file-list -> duplicate metadata fetch -> duplicate HTML canvas cover resize -> duplicate write to localStorage -> duplicate emit of metadata-data event
+    - Result: Confirmed gap
+
+24. Metadata clearing on navigation to container without metadata
+    - Entry point: Navigating from container with metadata to one without metadata
+    - Mutation owner: metadataBadge.js lines 55-59, 90-94, 123-128
+    - Visible UI owner: Open metadata window
+    - Update path: _currentMeta set to null -> quivit-metadata-current removed from localStorage -> no event emitted -> metadata-window.js render() ignores null -> open metadata window retains old container data
+    - Result: Confirmed gap (legacy defect unaddressed in detached range)
+
+25. Theme and custom CSS live preview and synchronization across all windows
+    - Entry point: Options window theme/CSS inputs
+    - Mutation owner: options.js previewTheme / previewCss in src/js/shared/configPreview.js
+    - Visible UI owner: main, workspace-file-list, options, metadata webviews
+    - Update path: Options emits theme-preview and css-preview Tauri events -> listened by main.js, metadata-window.js, shellBackground.js -> applyTheme / applyCustomCss. Finalized via localStorage storage event
+    - Result: Supported by code
+
+26. Native drop target installation and lifecycle as window resource
+    - Entry point: open_workspace_window in src-tauri/src/windows.rs:136
+    - Mutation owner: platform::drop::install / uninstall / shutdown in src-tauri/src/platform/drop.rs
+    - Visible UI owner: Windows OLE IDropTarget on HWND
+    - Update path: Window creation calls drop::install with owner label -> tracks in TARGETS -> window destruction calls drop::uninstall(label) -> main destruction calls drop::shutdown()
+    - Result: Supported by code
+
+27. Startup from saved detached configuration
+    - Entry point: Application start with frontend_data.workspace_layout set to detached
+    - Mutation owner: Core.init in src/js/core.js:693 -> reconcile in src/js/main/workspace.js:19
+    - Visible UI owner: Both native windows displayed on launch
+    - Update path: main boots hidden -> loadConfig reads detached layout -> reconcile detects detached !== opened -> invokes open_workspace_window -> workspace-file-list boots hidden -> workspaceBoot handshake retrieves snapshot -> show_window displays both windows
+    - Result: Supported by code
+
+28. Layout error recovery and child window creation failure
+    - Entry point: open_workspace_window failure (e.g. system resource exhaustion)
+    - Mutation owner: workspace.js reconcile catch block in src/js/main/workspace.js:46
+    - Visible UI owner: main window file panel
+    - Update path: Catch block catches error -> logs error -> dock('fileList') -> Core.setWorkspacePosition restores combined layout -> alert displayed to user
+    - Result: Supported by code
+
+29. Rapid layout change serialization
+    - Entry point: Fast repeated switching of workspace layout options
+    - Mutation owner: workspace.js reconcile() state machine in src/js/main/workspace.js:20
+    - Visible UI owner: Native windows and DOM positions
+    - Update path: running and dirty flags serialize transitions inside while(dirty) loop -> in-flight creation/destruction completes before next change begins
+    - Result: Supported by code
+
+
+================================================================================
+Detailed findings
+================================================================================
+
+--------------------------------------------------------------------------------
+Finding GAP-07-01: Off-screen placement of auxiliary windows (Options and Metadata) when main window is minimized
+--------------------------------------------------------------------------------
+Priority: P1
+Confidence: 0.95
+Trigger references:
+  - src/js/options/options.js:207 (cmd-options invocation)
+  - src/js/main/metadataBadge.js:99, 106 (metadata badge click or cmd-open-metadata)
+Failure references:
+  - src-tauri/src/windows.rs:276-289 (center_window_over_main coordinate calculation)
+  - src-tauri/src/windows.rs:307 (fit_options_window initial fit path)
+  - src-tauri/src/windows.rs:325 (fit_metadata_window initial fit path)
+Relocation commit: a628e57 (Added window relocation and detach support)
+
+Minimal user sequence:
+1. Detach workspace panels into separate windows (Windows -> File List -> Detached).
+2. Minimize the main window (viewer) to the Windows taskbar, leaving the File List window active on screen.
+3. From the File List window, press shortcut '5' (or select Options from the menu), or click the Archive Info metadata badge button.
+
+Expected behavior:
+The Options or Metadata window opens centered on the active display monitor or over the active File List window where the user interacted.
+
+Actual behavior:
+The auxiliary window is created off-screen at coordinate (-32000, -32000) and becomes invisible and unreachable to user clicks.
+
+Causal chain:
+1. In single-window mode prior to commit a628e57, user interaction while main was minimized was impossible because only one window existed. Commit a628e57 introduced the detached File List window without updating auxiliary window positioning logic.
+2. In detached mode, main can be minimized while workspace-file-list remains active.
+3. When open_options or open_metadata_window is called, the window is created hidden (visible: false) and fitted via fitContentWidth() / fitContentHeight().
+4. In src-tauri/src/windows.rs, fit_options_window and fit_metadata_window call center_window_over_main(&app, &window, w, h) when the window is not yet visible.
+5. center_window_over_main invokes main.outer_position(). On Windows, when a window is minimized to the taskbar, Windows Win32 API returns minimized placeholder coordinates of (-32000, -32000).
+6. center_window_over_main does not check main.is_minimized(), calculates x = -32000 + ... and y = -32000 + ..., and calls window.set_position(PhysicalPosition::new(x, y)).
+7. The auxiliary window then executes window.show() and window.set_focus(), but is located off-screen at (-32000, -32000). The user sees no window appear.
+
+
+--------------------------------------------------------------------------------
+Finding GAP-07-02: Duplicate metadata extraction, thumbnail decoding, and event broadcasting race condition
+--------------------------------------------------------------------------------
+Priority: P2
+Confidence: 0.95
+Trigger references:
+  - src/js/main/main.js:287 (unconditional initMetadataBadge in all webviews)
+Failure references:
+  - src/js/main/metadataBadge.js:29-60 (_loadMetadataForArchive)
+  - src/js/main/metadataBadge.js:62-95 (_loadMetadataForDirectory)
+  - src/js/main/metadataBadge.js:115-129 (Core.onStateChange listener)
+  - src/js/metadata-window.js:193-200 (event listener for metadata-data)
+Relocation commit: a628e57 (Added window relocation and detach support)
+
+Minimal user sequence:
+1. Detach workspace panels into two separate windows.
+2. Open the Metadata window (Archive Info).
+3. Navigate between different comic archives or image directories in the File List.
+
+Expected behavior:
+A single designated window (either the main authority or the active File List panel host) extracts metadata, resizes the cover image, and publishes the payload once to the Metadata window.
+
+Actual behavior:
+Both the main window and the workspace-file-list window concurrently run metadata parsers, instantiate separate HTML canvas elements to downsample cover thumbnails, write competing payloads into localStorage, and emit duplicate metadata-data broadcast events to Tauri.
+
+Causal chain:
+1. main.js is loaded by both native main and workspace-file-list (via workspaceBoot.js).
+2. While other window-specific initializers in main.js check if (!workspaceSurface) (e.g. line 63, line 289, line 324), initMetadataBadge at line 287 is executed unconditionally in both webviews.
+3. When container navigation occurs, main updates its state and pushes a snapshot to workspace-file-list.
+4. Core.onStateChange fires in both webviews.
+5. In main, _loadMetadataForArchive / _loadMetadataForDirectory runs despite #file-panel and #status-metadata-badge having display: none via CSS rule :root[data-workspace-surface="main"] #workspace[data-file-list-position="detached"] > #file-panel in src/css/main.css:495.
+6. In workspace-file-list, the same functions run concurrently.
+7. Both windows fetch archive text, draw cover images onto off-screen canvas elements, overwrite localStorage under 'quivit-metadata-current', and call window.__TAURI__.event.emit('metadata-data', payload).
+8. Because emit broadcasts to all Tauri webviews, the open Metadata window receives duplicate events. During rapid container navigation, slower async canvas execution or IPC responses from one window can arrive out of order and overwrite newer metadata in the open window.
+
+
+--------------------------------------------------------------------------------
+Finding GAP-07-03: Open metadata window fails to clear or close when navigating to containers without metadata
+--------------------------------------------------------------------------------
+Priority: P3
+Confidence: 0.90
+Trigger references:
+  - src/js/main/metadataBadge.js:115-129 (Core.onStateChange handling empty/no-meta mode)
+Failure references:
+  - src/js/main/metadataBadge.js:55-59, 90-94, 123-128 (silent localStorage removal without event emit)
+  - src/js/metadata-window.js:39 (early return on missing meta: if (!meta) return)
+Relocation commit: Pre-existing / unaddressed across range a473a5c..35f38e9
+
+Minimal user sequence:
+1. Open an archive containing ComicInfo.xml and open the Metadata window (Archive Info).
+2. Leaving the Metadata window open, browse in the File List to an archive or directory that contains no metadata files, or an empty directory.
+
+Expected behavior:
+The Metadata window either closes automatically or updates to display an empty/cleared state indicating no metadata is available.
+
+Actual behavior:
+The Metadata window continues displaying the full metadata, credits, and cover image from the previous archive.
+
+Causal chain:
+1. When navigating to a container without metadata, _loadMetadataForArchive / _loadMetadataForDirectory evaluates meta as null.
+2. The else branch (src/js/main/metadataBadge.js:55, 90, 123) sets _currentMeta = null, toggles the badge visibility off, and removes 'quivit-metadata-current' from localStorage.
+3. No event is emitted to Tauri to inform open secondary windows.
+4. In src/js/metadata-window.js:39, render(payload) immediately executes if (!meta) return. Even if a null event were dispatched, it would not clear the DOM nodes.
+5. The window remains open with stale information from the previous file until closed manually or replaced by an archive that does contain metadata.
+
+
+--------------------------------------------------------------------------------
+Finding RISK-07-01: Second instance launch does not unminimize detached File List window
+--------------------------------------------------------------------------------
+Priority: P3
+Confidence: 0.85
+Trigger references:
+  - src-tauri/src/lib.rs:44-59 (tauri_plugin_single_instance init)
+Failure references:
+  - src-tauri/src/lib.rs:46-47 (unminimize called only on main_window)
+  - src-tauri/src/windows.rs:380 (restore_from_tray calls show() but not unminimize())
+Relocation commit: a628e57 (Added window relocation and detach support)
+
+Minimal user sequence:
+1. Run QuiviT in detached mode.
+2. Minimize both the main window and the File List window to the Windows taskbar.
+3. In Windows Explorer, double-click an associated image file to open it in QuiviT.
+
+Expected behavior:
+Both workspace windows unminimize and restore to the desktop, with the new image displayed.
+
+Actual behavior:
+The main window unminimizes and displays the image, but the detached File List window remains minimized on the taskbar.
+
+Causal chain and unresolved assumption:
+1. In src-tauri/src/lib.rs:46, single_instance handler explicitly calls main_window.unminimize(), followed by windows::restore_from_tray(app).
+2. restore_from_tray in src-tauri/src/windows.rs:378 iterates SECONDARY_WINDOWS ("options", "metadata", "workspace-file-list") and calls window.show().
+3. On Windows Win32, calling ShowWindow with SW_SHOW on a window that is currently minimized on the taskbar does not restore it; SW_RESTORE (which unminimize() calls) is required.
+4. Unresolved assumption: Requires runtime check to verify if Tauri's WebviewWindow::show() internally triggers SW_RESTORE on minimized Windows top-level windows or leaves them in the minimized taskbar state.
+
+
+--------------------------------------------------------------------------------
+Finding RISK-07-02: Duplicate DOM ID 'workspace-keybind-note' in Options dialog
+--------------------------------------------------------------------------------
+Priority: P3
+Confidence: 0.95
+Trigger references:
+  - src/options.html:365 (<p class="hint" id="workspace-keybind-note">)
+Failure references:
+  - src/options.html:387 (<p class="hint" id="workspace-keybind-note">)
+Relocation commit: a628e57 (Added window relocation and detach support)
+
+Minimal user sequence:
+1. Open Options -> Keybinds tab.
+2. Inspect the DOM elements for File List position and Viewport position hint paragraphs.
+
+Expected behavior:
+All element IDs in options.html are unique per the HTML specification.
+
+Actual behavior:
+Two distinct hint paragraphs share the identical attribute id="workspace-keybind-note".
+
+Causal chain:
+Commit a628e57 copied the paragraph block for "File List position" into "Viewport position" without renaming the id attribute. While benign for CSS class-based styling, querySelector('#workspace-keybind-note') only resolves the first element, breaking script-based targeting if attempted.
+
+
+================================================================================
+Cross-domain dependencies and follow-up checks
+================================================================================
+
+1. Dependency on Reviewer 05 (Options and Settings):
+   - Options saveOptions in src/js/options/options.js:534 requests requestWorkspace('main', 'core', 'flushConfig') to ensure in-memory preferences from both workspace windows flush to disk before Options merges its configuration. Confirm that Reviewer 05's audit verifies options.js preserves workspace_layout and window_menu_visible when updating settings.
+
+2. Dependency on Reviewer 06 (Session Transport and Events):
+   - Detached window native shutdown depends on Tauri IPC message delivery:
+     - CloseRequested on workspace-file-list emits 'workspace-close-requested' to main.
+     - WindowEvent::Destroyed emits 'workspace-detached-closed' to main.
+   - Confirm Reviewer 06 verifies that listenWorkspaceEvent and emitTo correctly route between main and workspace-file-list across all platform configurations.
+
+3. Dependency on Reviewer 03 (Drop Coordination):
+   - Native drop target installation in src-tauri/src/windows.rs:136 (crate::platform::drop::install) attaches an OLE IDropTarget to the HWND of workspace-file-list, and src-tauri/src/windows.rs:147 uninstalls it on window destruction. Reviewer 03 should confirm drop acceptance coordinates properly when dropping files directly onto the detached File List window.
+
+4. Bounded follow-up checks:
+   - Verify that adding a check for main.is_minimized() in center_window_over_main (or centering over the active monitor or caller window) resolves off-screen positioning for auxiliary windows.
+   - Verify that guarding initMetadataBadge with if (!workspaceSurface) eliminates duplicate metadata extraction while delegating badge clicks from workspace-file-list via workspaceControls dispatch.
