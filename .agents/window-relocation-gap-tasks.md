@@ -126,6 +126,22 @@ Executed automated and manual runtime checks:
 - User manual runtime testing confirmed checklist item 6 across `main`, detached `workspace-file-list`, `metadata`, and `options`.
 - `git diff --check` passed and the synthesis SHA-256 remains unchanged.
 
+## URL gallery range coalescing and replica status path normalization group verification, 2026-11-04
+
+Compared against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md`. This slice covers R01 and R02 across `src/js/urlLoader.js` and `src/js/filepanel/filePanel.js`. Both tasks in this group are accepted (`[x]`) and verified in runtime (checklist item 8.1 passed).
+
+1. **V16, addressed. Bounded visible-range synchronization and sender-side coalescing during rapid gallery scrolling (`R01`).** `src/js/urlLoader.js:59-65, 2736-2780` bounds replica `setVisibleRange(start, end)` RPCs to at most one in-flight request (`_rangeRequestInFlight`), deduplicates unchanged `(start, end)` pairs against `_lastSentRangeStart` / `_lastSentRangeEnd`, overwrites `_pendingRangeStart` / `_pendingRangeEnd` while a request is in flight, and flushes only the latest coalesced range in `.finally()` once the active RPC settles, keeping `MAX_PENDING_REQUESTS` (`128` at `src/js/shared/workspaceSession.js:7, 110`) free for ordinary workspace commands. On `main`, `setVisibleRange` records `_lastVisibleStart` / `_lastVisibleEnd` (`src/js/urlLoader.js:2775-2776`) and `_startGalleryQueue` (`src/js/urlLoader.js:2317-2320`) uses that range when `getFileListViewportRange()` (`src/js/filepanel/filePanel.js:3158-3159`) returns `{ start: 0, end: 0 }` because `fileList` is detached.
+2. **V17, addressed. Consistent replica download-status path keys on Windows and synchronized status updates before row rendering (`R02`).** `src/js/urlLoader.js:2642-2653` normalizes replica status keys via `_normalizeStatusKey(filePath, galleryPath)` (converting `\` to `/`, stripping trailing slashes, lowercasing, and resolving bare filenames against `_workspaceGalleryPath`), matching `main`'s `_pathsEqual` and `DownloadQueue._findItem` semantics across `getGalleryDownloadStatus` (`src/js/urlLoader.js:2704-2720`), `isPlaceholderFile` (`src/js/urlLoader.js:2691-2702`), and `retryGalleryDownload` (`src/js/urlLoader.js:2722-2734`). `_startGalleryQueue` (`src/js/urlLoader.js:2358-2364`) includes initial `statuses` in the `queue_started` event so a detached `workspace-file-list` receives pending item states immediately. `syncWorkspaceDownloadStatus` (`src/js/urlLoader.js:2655-2689`, guarded by `_lastSyncedStatusDetail`) runs at the start of `filePanel.js`'s `quivit-download-complete` and `quivit-download-status` listeners (`src/js/filepanel/filePanel.js:304-323`) as well as in `UrlLoader.init` (`src/js/urlLoader.js:2920-2957`), ensuring `_workspaceStatuses` is updated before `updateDownloadRow` reads `getGalleryDownloadStatus(item.path)`. Initial `getWorkspaceDownloadState` resolution (`src/js/urlLoader.js:2930-2955`) seeds only keys not already updated by live events and dispatches `quivit-download-status` so already-rendered rows repaint, and `updateSavedDownloadRow` (`src/js/filepanel/filePanel.js:250-265`) falls back to `_pathsEqual` when path separators or casing differ.
+
+Executed automated and manual runtime checks:
+
+- `node --check` passed for `src/js/urlLoader.js` and `src/js/filepanel/filePanel.js`.
+- `npm run mocha` passed all 308 tests.
+- Focused Node module verification against `src/js/urlLoader.js` passed, covering 500 rapid `setVisibleRange` calls with a held session promise (at most 1 in-flight RPC, intermediate range coalescing, single trailing `[499, 519]` flush on settle, duplicate suppression), Windows/POSIX/uppercase/bare-filename key equivalence across `getGalleryDownloadStatus`, `isPlaceholderFile`, and `retryGalleryDownload`, pre-snapshot live status preservation, `quivit-download-complete` handling, and `queue_started` gallery switching.
+- `npm run e2e -- --agent --spec e2e/specs/08-url-loader.e2e.js` passed with exit code 0 (1 spec, 1 passing).
+- User manual runtime testing confirmed checklist item 8.1 in detached `workspace-file-list`.
+- `git diff --check` passed and the synthesis SHA-256 remains unchanged.
+
 ## Confirmed gaps
 
 Work through the P1 items first. Keep related risk investigations beside the corresponding fix when practical: R06 with F03/F04, R04 with F06, R03 with F07, R05 with F10, and R07 with F01.
@@ -254,7 +270,7 @@ Work through the P1 items first. Keep related risk investigations beside the cor
 
 Investigate each risk to confirm or rule out its causal path with supporting `file:line` references, automated tests, and runtime verification. Keep the audit classification until the evidence and disposition are recorded. These investigations may run beside related findings without changing their IDs.
 
-11. [ ] **R01, P2. Bound visible-range synchronization during rapid gallery scrolling.**
+11. [x] **R01, P2. Bound visible-range synchronization during rapid gallery scrolling.**
 
     Source: `.agents/08-synthesis.txt:457`. Anchors: `src/js/filepanel/filePanel.js:2115`, `src/js/urlLoader.js:2660`, `src/js/shared/workspaceSession.js:59`.
 
@@ -262,9 +278,9 @@ Investigate each risk to confirm or rule out its causal path with supporting `fi
 
     Acceptance and verification: Verify bounded in-flight work, delivery of the final visible range, and no starvation of ordinary workspace commands using unit/module tests, delayed-reply E2E or replay diagnostics, and runtime observation during rapid scrolling in detached mode.
 
-    Evidence and disposition: pending.
+    Evidence and disposition: Confirmed and fixed in `src/js/urlLoader.js:59-65, 2317-2320, 2736-2780, 2915-2919` and `src/js/filepanel/filePanel.js:3158-3159`. Previously, `renderVisibleSlice()` (`src/js/filepanel/filePanel.js:2129`) invoked `setVisibleRange(start, end)` on every scroll/resize render without deduplication or in-flight coalescing on the replica, allowing rapid scrolling or delayed replies to accumulate unbounded `requestWorkspace` entries against `MAX_PENDING_REQUESTS = 128` (`src/js/shared/workspaceSession.js:7, 110`). `setVisibleRange` now deduplicates unchanged `(start, end)` pairs, allows at most one `setVisibleRange` RPC in flight (`_rangeRequestInFlight`), coalesces intermediate scroll ranges into `_pendingRangeStart` / `_pendingRangeEnd`, and flushes the latest range in `.finally()` when the active request settles. On `main`, `setVisibleRange` records `_lastVisibleStart` / `_lastVisibleEnd` and `_startGalleryQueue` uses that range when `getFileListViewportRange()` returns `{ start: 0, end: 0 }` because `fileList` is detached. Automated checks (`node --check`, 308 Mocha tests, focused 500-scroll-step coalescing verification, and `08-url-loader.e2e.js`) passed. Manual runtime checklist item 8.1 passed. Disposition: fixed, accepted by user.
 
-12. [ ] **R02, P3. Establish consistent replica download-status path keys on Windows.**
+12. [x] **R02, P3. Establish consistent replica download-status path keys on Windows.**
 
     Source: `.agents/08-synthesis.txt:464`. Anchors: `src/js/urlLoader.js:2639`, `src/js/urlLoader.js:2794`. Existing related coverage: `mocha/urlLoader.test.js`, `mocha/urlLoaderFlows.test.js`, `e2e/specs/08-url-loader.e2e.js`.
 
@@ -272,7 +288,7 @@ Investigate each risk to confirm or rule out its causal path with supporting `fi
 
     Acceptance and verification: Verify that pending/downloading/error/completed states and placeholder checks use equivalent keys on attachment and later updates using `npm run mocha`, `08-url-loader.e2e.js`, and runtime observation of downloading gallery rows in detached mode on Windows.
 
-    Evidence and disposition: pending.
+    Evidence and disposition: Confirmed and fixed in `src/js/urlLoader.js:58, 2358-2364, 2642-2734, 2912-2957, 3097` and `src/js/filepanel/filePanel.js:46, 250-265, 304-323`. `_normalizeStatusKey` normalizes replica status keys (converting `\` to `/`, stripping trailing slashes, lowercasing, and resolving bare filenames against `_workspaceGalleryPath`) across `syncWorkspaceDownloadStatus`, `getGalleryDownloadStatus`, `isPlaceholderFile`, and `retryGalleryDownload`. `_startGalleryQueue` includes `statuses` on `queue_started` so detached windows receive initial pending statuses when a gallery starts. `filePanel.js` calls `syncWorkspaceDownloadStatus` at the start of its `quivit-download-status` and `quivit-download-complete` listeners so `_workspaceStatuses` is updated before `updateDownloadRow` queries `getGalleryDownloadStatus(item.path)`, initial `getWorkspaceDownloadState` resolution preserves newer live statuses and dispatches `quivit-download-status` to repaint already-rendered rows, and `updateSavedDownloadRow` falls back to `_pathsEqual`. Automated checks (`node --check`, 308 Mocha tests, focused Windows/POSIX/case/filename module verification, and `08-url-loader.e2e.js`) passed. Manual runtime checklist item 8.1 passed. Disposition: fixed, accepted by user.
 
 13. [x] **R03, P3. Invalidate Library thumbnails in the window that owns them after relocation.**
 
@@ -390,7 +406,7 @@ Execute these runtime checks in a live build (`npm run tauri dev` or built binar
    2. Click the detached **File List** window, press `Ctrl+I` to open the **Open URL** prompt, and type a few letters without clicking the viewer window. Confirm the letters appear inside the URL box in the viewer window, then press `Esc` and press the Up or Down arrow key to confirm selection moves in the detached **File List** window.
    3. From the detached **File List** window, trigger **Open File** (`Ctrl+O`) or **Open Folder** (`Ctrl+Shift+O`) and confirm the native dialog opens in front of the active window.
 
-8. [ ] **Native window recombination, single-instance restore, URL gallery scroll/status, and shutdown (`R01`, `R02`, `R07`)**
+8. [x] **Native window recombination, single-instance restore, URL gallery scroll/status, and shutdown (`R01`, `R02`, `R07`)**
    1. In detached mode, start a multi-item gallery download via **Open URL** (`Ctrl+I`), confirm downloading rows in the detached **File List** show spinner badges rather than broken icons (`R02`), and rapidly scroll the detached **File List** during download without console `"Too many pending workspace requests"` errors (`R01`).
    2. With the **File List** detached, minimize both the main viewer window and the detached **File List** window, then open an image from Windows Explorer (single-instance handoff) and confirm both windows unminimize and restore (`R07`).
    3. Confirm the detached **File List** window's titlebar `X` close button is muted (disabled), and recombine the File List via **Windows ? File List ? Left** or **Right**.

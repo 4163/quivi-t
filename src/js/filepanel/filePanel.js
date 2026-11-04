@@ -43,6 +43,7 @@ import {
   isGalleryDownloadingWithin,
   fetchManifest,
   getGalleryDownloadStatus,
+  syncWorkspaceDownloadStatus,
   retryGalleryDownload,
   reloadLibraryDir,
   getCachedLibraryDir,
@@ -247,7 +248,16 @@ function initSavedThumbnail(row, thumbImg, item, cache) {
 }
 
 function updateSavedDownloadRow(list, destPath, status) {
-  const row = list?.querySelector(`li[data-path="${CSS.escape(destPath)}"]`);
+  if (!list || !destPath) return;
+  let row = list.querySelector(`li[data-path="${CSS.escape(destPath)}"]`);
+  if (!row) {
+    for (const candidate of list.querySelectorAll('li[data-path]')) {
+      if (_pathsEqual(candidate.dataset.path, destPath)) {
+        row = candidate;
+        break;
+      }
+    }
+  }
   if (!row) return;
   row.dataset.downloadStatus = status;
   row.classList.toggle('is-pending-download', status === 'pending' || status === 'downloading');
@@ -292,13 +302,23 @@ function updateDownloadRow(destPath, status, size = 0) {
 // Completed downloads gain their real size so future renders no longer treat
 // them as placeholders. Queue status events repaint the visible row in place.
 window.addEventListener('quivit-download-complete', (e) => {
+  if (e.detail?.destPath) {
+    syncWorkspaceDownloadStatus({ destPath: e.detail.destPath, status: 'completed' });
+  }
   updateDownloadRow(e.detail?.destPath, 'completed', e.detail?.size);
 });
 
 window.addEventListener('quivit-download-status', (e) => {
-  const { destPath, status } = e.detail || {};
-  if (destPath && status) {
+  const detail = e.detail || {};
+  syncWorkspaceDownloadStatus(detail);
+  const { destPath, status, statuses } = detail;
+  if (destPath && status && status !== 'queue_started' && status !== 'cancelled') {
     updateDownloadRow(destPath, status);
+  }
+  for (const entry of statuses || []) {
+    if (Array.isArray(entry) && entry[0] && entry[1]) {
+      updateDownloadRow(entry[0], entry[1]);
+    }
   }
 });
 let freePool = [];
@@ -3136,7 +3156,7 @@ export function revealListTop() {
 }
 
 export function getFileListViewportRange() {
-  if (!fileListUl) return { start: 0, end: 0 };
+  if (!fileListUl || !hostsWorkspaceSurface('fileList')) return { start: 0, end: 0 };
   if (!ROW_HEIGHT) measureRowHeight();
   const total = Core.getState().list?.length || 0;
   const scrollTop = fileListUl.scrollTop;

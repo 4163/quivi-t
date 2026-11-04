@@ -55,6 +55,14 @@ let _workspaceRequest = null;
 let _workspaceGalleryPath = null;
 const WORKSPACE_STATUS_CACHE_CAPACITY = 512;
 const _workspaceStatuses = new BoundedMap(WORKSPACE_STATUS_CACHE_CAPACITY);
+let _lastSyncedStatusDetail = null;
+let _lastVisibleStart = 0;
+let _lastVisibleEnd = 0;
+let _rangeRequestInFlight = false;
+let _pendingRangeStart = null;
+let _pendingRangeEnd = null;
+let _lastSentRangeStart = null;
+let _lastSentRangeEnd = null;
 let _manifestCache = null;
 let _libraryDirCache = null;
 let _activeQueue = null;
@@ -2306,6 +2314,10 @@ function _startGalleryQueue(galleryPath, items, options = {}) {
       }
     } catch {}
   }
+  if (initialVisibleEnd <= initialVisibleStart && _lastVisibleEnd > _lastVisibleStart) {
+    initialVisibleStart = _lastVisibleStart;
+    initialVisibleEnd = Math.min(items.length, _lastVisibleEnd);
+  }
   if (initialVisibleEnd <= initialVisibleStart) {
     const state = _Core?.getState?.();
     const activeIdx = (state?.directory && _pathsEqual(state.directory, galleryPath) && typeof state.index === 'number' && state.index >= 0)
@@ -2344,7 +2356,11 @@ function _startGalleryQueue(galleryPath, items, options = {}) {
   });
 
   window.dispatchEvent(new CustomEvent('quivit-download-status', {
-    detail: { galleryPath, status: 'queue_started' }
+    detail: {
+      galleryPath,
+      status: 'queue_started',
+      statuses: _activeQueue._items.map(item => [item.destPath, _activeQueue.getStatus(item.destPath)])
+    }
   }));
 
   // Seed the display order when already viewing this gallery (reimport or
@@ -2623,6 +2639,55 @@ export async function forgetDeletedLibraryEntry(deletedPath) {
   return true;
 }
 
+function _normalizeStatusKey(filePath, galleryPath = _workspaceGalleryPath) {
+  if (!filePath) return '';
+  const clean = String(filePath).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  if (!clean) return '';
+  if (!clean.includes('/')) {
+    const base = galleryPath
+      ? String(galleryPath).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+      : '';
+    return base ? `${base}/${clean}` : clean;
+  }
+  return clean;
+}
+
+export function syncWorkspaceDownloadStatus(detail = {}) {
+  if (!_workspaceRequest || !detail || typeof detail !== 'object') return;
+  if (detail === _lastSyncedStatusDetail) return;
+  _lastSyncedStatusDetail = detail;
+  const { galleryPath, destPath, status, statuses } = detail;
+  const firstPath = destPath || (Array.isArray(statuses) && Array.isArray(statuses[0]) ? statuses[0][0] : null);
+  if (galleryPath) {
+    if (_workspaceGalleryPath && !_pathsEqual(_workspaceGalleryPath, galleryPath)) {
+      _workspaceStatuses.clear();
+    }
+    _workspaceGalleryPath = galleryPath;
+  } else if (!_workspaceGalleryPath && firstPath) {
+    const cleanDest = String(firstPath).replace(/\\/g, '/');
+    const slash = cleanDest.lastIndexOf('/');
+    if (slash > 0) _workspaceGalleryPath = String(firstPath).slice(0, slash);
+  }
+  if (status === 'cancelled') {
+    _workspaceGalleryPath = null;
+    _workspaceStatuses.clear();
+    return;
+  }
+  if (status === 'queue_started') {
+    _workspaceStatuses.clear();
+  }
+  if (destPath && status && status !== 'queue_started') {
+    const key = _normalizeStatusKey(destPath, galleryPath || _workspaceGalleryPath);
+    if (key) _workspaceStatuses.set(key, status);
+  }
+  for (const entry of statuses || []) {
+    if (!Array.isArray(entry) || entry.length < 2) continue;
+    const [path, value] = entry;
+    const key = _normalizeStatusKey(path, galleryPath || _workspaceGalleryPath);
+    if (key && value) _workspaceStatuses.set(key, value);
+  }
+}
+
 export function isPlaceholderFile(filePath) {
   if (_workspaceRequest) return ['pending', 'downloading'].includes(getGalleryDownloadStatus(filePath));
   if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath) return false;
@@ -2637,7 +2702,16 @@ export function isPlaceholderFile(filePath) {
 }
 
 export function getGalleryDownloadStatus(filePath) {
-  if (_workspaceRequest) return _workspaceStatuses.get(filePath) || null;
+  if (_workspaceRequest) {
+    if (!filePath) return null;
+    if (_workspaceGalleryPath) {
+      const normalizedPath = String(filePath).replace(/\\/g, '/').replace(/\/+$/, '');
+      const separator = normalizedPath.lastIndexOf('/');
+      if (separator >= 0 && !_pathsEqual(normalizedPath.slice(0, separator), _workspaceGalleryPath)) return null;
+    }
+    const key = _normalizeStatusKey(filePath, _workspaceGalleryPath);
+    return key ? (_workspaceStatuses.get(key) || null) : null;
+  }
   if (!_activeQueue || !_activeQueue.isActive || !_activeGalleryPath || !filePath) return null;
   const normalizedPath = filePath.replace(/\\/g, '/');
   const separator = normalizedPath.lastIndexOf('/');
@@ -2648,6 +2722,8 @@ export function getGalleryDownloadStatus(filePath) {
 export function retryGalleryDownload(filePath) {
   if (_workspaceRequest) {
     if (getGalleryDownloadStatus(filePath) !== 'error') return false;
+    const key = _normalizeStatusKey(filePath, _workspaceGalleryPath);
+    if (key) _workspaceStatuses.set(key, 'downloading');
     _workspaceRequest('retryGalleryDownload', [filePath]);
     return true;
   }
@@ -2657,8 +2733,47 @@ export function retryGalleryDownload(filePath) {
   return true;
 }
 
+function _sendPendingVisibleRange() {
+  if (!_workspaceRequest || _rangeRequestInFlight || _pendingRangeStart === null || _pendingRangeEnd === null) return;
+  const nextStart = _pendingRangeStart;
+  const nextEnd = _pendingRangeEnd;
+  _pendingRangeStart = null;
+  _pendingRangeEnd = null;
+  if (nextStart === _lastSentRangeStart && nextEnd === _lastSentRangeEnd) return;
+  _rangeRequestInFlight = true;
+  _lastSentRangeStart = nextStart;
+  _lastSentRangeEnd = nextEnd;
+  Promise.resolve(_workspaceRequest('setVisibleRange', [nextStart, nextEnd]))
+    .catch(() => {})
+    .finally(() => {
+      _rangeRequestInFlight = false;
+      if (_pendingRangeStart !== null && _pendingRangeEnd !== null) {
+        _sendPendingVisibleRange();
+      }
+    });
+}
+
 export function setVisibleRange(start, end) {
-  if (_workspaceRequest) { _workspaceRequest('setVisibleRange', [start, end]); return; }
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+  if (_workspaceRequest) {
+    if (!_rangeRequestInFlight && start === _lastSentRangeStart && end === _lastSentRangeEnd) return;
+    if (_rangeRequestInFlight) {
+      if (start === _lastSentRangeStart && end === _lastSentRangeEnd) {
+        _pendingRangeStart = null;
+        _pendingRangeEnd = null;
+      } else {
+        _pendingRangeStart = start;
+        _pendingRangeEnd = end;
+      }
+      return;
+    }
+    _pendingRangeStart = start;
+    _pendingRangeEnd = end;
+    _sendPendingVisibleRange();
+    return;
+  }
+  _lastVisibleStart = start;
+  _lastVisibleEnd = end;
   if (_activeQueue) {
     _activeQueue.setVisibleRange(start, end);
   }
@@ -2785,6 +2900,7 @@ export async function prepareGalleryDirectory(galleryPath, options = {}) {
 }
 
 let _getFileListViewportRange = null;
+let _workspaceListenersBound = false;
 
 export const UrlLoader = {
   init({ Core, FsUtils, urlOverlay, getFileListViewportRange, session = null }) {
@@ -2793,16 +2909,51 @@ export const UrlLoader = {
     _urlOverlay = urlOverlay;
     _getFileListViewportRange = typeof getFileListViewportRange === 'function' ? getFileListViewportRange : null;
     _workspaceRequest = session;
+    _workspaceGalleryPath = null;
+    _workspaceStatuses.clear();
+    _lastSyncedStatusDetail = null;
+    _rangeRequestInFlight = false;
+    _pendingRangeStart = null;
+    _pendingRangeEnd = null;
+    _lastSentRangeStart = null;
+    _lastSentRangeEnd = null;
     if (session) {
-      const update = ({ galleryPath, destPath, status, statuses } = {}) => {
-        if (galleryPath) _workspaceGalleryPath = galleryPath;
-        if (status === 'cancelled') { _workspaceGalleryPath = null; _workspaceStatuses.clear(); }
-        if (destPath) _workspaceStatuses.set(destPath, status);
-        for (const [path, value] of statuses || []) _workspaceStatuses.set(path, value);
-      };
-      window.addEventListener('quivit-download-status', event => update(event.detail));
-      session('getWorkspaceDownloadState', []).then(update);
-      Core.setPlaceholderCheck(path => isPlaceholderFile(path));
+      if (!_workspaceListenersBound && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        _workspaceListenersBound = true;
+        window.addEventListener('quivit-download-status', event => syncWorkspaceDownloadStatus(event?.detail));
+        window.addEventListener('quivit-download-complete', event => {
+          if (event?.detail?.destPath) {
+            syncWorkspaceDownloadStatus({ destPath: event.detail.destPath, status: 'completed' });
+          }
+        });
+      }
+      Promise.resolve(session('getWorkspaceDownloadState', [])).then((snapshot) => {
+        if (_workspaceRequest !== session || !snapshot || typeof snapshot !== 'object') return;
+        const { galleryPath, statuses } = snapshot;
+        if (galleryPath && !_workspaceGalleryPath) {
+          _workspaceGalleryPath = galleryPath;
+        } else if (!_workspaceGalleryPath && Array.isArray(statuses) && Array.isArray(statuses[0]) && statuses[0][0]) {
+          const cleanDest = String(statuses[0][0]).replace(/\\/g, '/');
+          const slash = cleanDest.lastIndexOf('/');
+          if (slash > 0) _workspaceGalleryPath = String(statuses[0][0]).slice(0, slash);
+        }
+        const seeded = [];
+        for (const entry of statuses || []) {
+          if (!Array.isArray(entry) || entry.length < 2) continue;
+          const [path, value] = entry;
+          const key = _normalizeStatusKey(path, galleryPath || _workspaceGalleryPath);
+          if (key && value && !_workspaceStatuses.has(key)) {
+            _workspaceStatuses.set(key, value);
+            seeded.push([path, value]);
+          }
+        }
+        if (seeded.length > 0 && typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+          const detail = { galleryPath: _workspaceGalleryPath, statuses: seeded };
+          _lastSyncedStatusDetail = detail;
+          window.dispatchEvent(new CustomEvent('quivit-download-status', { detail }));
+        }
+      }).catch(() => {});
+      Core?.setPlaceholderCheck?.(path => isPlaceholderFile(path));
       return;
     }
     getLibraryDir().catch(() => {});
@@ -2909,6 +3060,7 @@ export const UrlLoader = {
   cancelGalleryDownloads,
   isPlaceholderFile,
   getGalleryDownloadStatus,
+  syncWorkspaceDownloadStatus,
   retryGalleryDownload,
   setVisibleRange,
   setDisplayOrder,
