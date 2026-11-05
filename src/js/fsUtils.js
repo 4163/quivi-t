@@ -6,6 +6,10 @@ import { createHistoryEntry, recordNavigation } from './navigationHistory.js';
 import { icoSizesTotal } from './services/viewerMath.js';
 
 const { invoke } = window.__TAURI__.core;
+export const FS_SESSION_METHODS = ['loadFile', 'loadArchive', 'openParent', 'openSibling', 'refresh',
+  'loadHistoryEntry', 'loadFallbackAncestor', 'applyDirectoryResult', 'checkArchiveEncryption', 'scanContainerMaxWidth',
+  'registerPendingDeletion', 'unregisterPendingDeletion'];
+const OPTIMISTIC_SESSION_METHODS = new Set(['registerPendingDeletion', 'unregisterPendingDeletion']);
 
 export const SUPPORTED_IMAGES = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'webp', 'apng', 'svg', 'bmp', 'dib', 'ico', 'avif', 'mp4'
@@ -175,6 +179,15 @@ function findNearestSurvivingIndex(oldList, oldIndex, newFiles) {
 }
 
 export const FsUtils = {
+  configureReplica(send) {
+    for (const method of FS_SESSION_METHODS) {
+      const local = this[method];
+      this[method] = (...args) => {
+        if (OPTIMISTIC_SESSION_METHODS.has(method)) local(...args);
+        return send('fs', method, args);
+      };
+    }
+  },
   beginNavigationIntent() {
     return _nextNavigationGeneration();
   },
@@ -220,6 +233,14 @@ export const FsUtils = {
 
   getUnlockedPassword(archivePath) {
     return _unlockedArchivePasswords.get(archivePath) ?? null;
+  },
+
+  scanContainerMaxWidth(container, isArchive) {
+    return invoke('scan_container_max_width', {
+      container,
+      isArchive,
+      password: isArchive ? this.getUnlockedPassword(container) : null
+    });
   },
 
   revokeIfObjectURL(src) {

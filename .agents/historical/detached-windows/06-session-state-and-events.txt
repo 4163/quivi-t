@@ -1,0 +1,200 @@
+Compared against the repository validation rules.
+
+QuiviT detached window audit report
+Domain: 06 - Session authority, replication, RPC, events, and persistence
+Target commit: 35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Before snapshot: a473a5c2fbb0eaa93bdbb99cca111327c07104ab
+Allowed commit history: a473a5c2fbb0eaa93bdbb99cca111327c07104ab..35f38e9d81cf95cd0534ac33e316291bf26e2f8c (commits a628e57, 47b7043, 35f38e9)
+
+Inspected paths:
+- src-tauri/capabilities/default.json
+- src-tauri/src/windows.rs
+- src-tauri/src/platform/drop.rs
+- src-tauri/src/commands/watchers.rs
+- src-tauri/src/config.rs
+- src-tauri/src/lib.rs
+- src/js/shared/workspaceSession.js
+- src/js/shared/workspaceControls.js
+- src/js/shared/workspaceHost.js
+- src/js/main/workspaceBoot.js
+- src/js/main/workspace.js
+- src/js/main/lifecycle.js
+- src/js/main/dropzone.js
+- src/js/core.js
+- src/js/fsUtils.js
+- src/js/urlLoader.js
+- src/js/filepanel/filePanel.js
+- src/js/filepanel/libraryStore.js
+- src/js/menubar.js
+- src/js/menubar/chrome.js
+- src/js/menubar/statusbar.js
+- src/js/options/options.js
+- src/js/services/actions.js
+- src/js/services/importActions.js
+- src/js/services/workspaceLayout.js
+- src/css/main.css
+
+Excluded paths:
+- All repository Markdown files (*.md)
+- Sibling audit reports in .agents/scratch/detached-audit-reports/
+
+
+1. Executive summary
+
+This audit evaluates the detached window session architecture introduced in the window relocation feature. QuiviT implements a single-authority architecture where the main window acts as the primary host and coordinator, while detached windows (specifically workspace-file-list) run as replicas.
+
+The communication layer uses Tauri IPC events (with BroadcastChannel fallback for non-Tauri environments) to establish bidirectional RPC, state snapshotting, delta replication, and cross-window event fan-out.
+
+Overall, the session architecture maintains clean boundary isolation:
+- Domain state mutations and disk writes remain strictly centralized on Main.
+- Replicas query and invoke domain services via typed, whitelisted RPC proxies.
+- Window lifecycles, OLE drag-drop routing, and tray visibility are properly synchronized.
+
+The audit identified three confirmed gaps (P2 priority) and one conditional risk (P3 priority):
+- Gap 1: quivit-library-active-changed event is omitted from cross-window event forwarding, leaving detached library panels out of sync when switching active provider filters in Main.
+- Gap 2: quivit-status-flash events generated on the replica during failed file deletions are not forwarded to Main, resulting in complete loss of user error feedback.
+- Gap 3: options.js save routine flushes and re-reads live config but omits directory_sort from preserved frontend keys, causing concurrent sorting changes to be overwritten by stale dialog state.
+- Risk 1: urlLoader.js replica download status lookup uses raw file paths as Map keys without path separator normalization, creating risk of false placeholder checks on Windows.
+
+
+2. Comprehensive coverage ledger
+
+2.1 Initial handshake and readiness
+- Handshake sequencing: In src/js/main/workspaceBoot.js:1-5, initWorkspaceSession() is awaited before importing main.js. This guarantees the transport and replica state hooks are established prior to application component mounting.
+- Client connection: In src/js/shared/workspaceSession.js:156-178, initWorkspaceClient() establishes the transport. In Tauri mode, it binds to Tauri event listeners (workspace-message and workspace-detached-closed) and defines send via emitTo. In browser mode, it uses BroadcastChannel with channel name quivit-workspace-{sessionId}.
+- Replica registration: In src/js/shared/workspaceSession.js:180-196, if workspaceSurface is defined (e.g. 'fileList'), the client sets document.documentElement.dataset.workspaceSurface, configures Core and FsUtils replica forwarders, and transmits { kind: 'ready' } to 'main'.
+- Ready coordination: The replica creates a receiveInitial promise bounded by a 5000ms timeout (REQUEST_TIMEOUT_MS). When Main receives { kind: 'ready' }, Main registers the peer in its peers Map and immediately invokes publish(label, true) to transmit a full snapshot. The replica applies the snapshot and resolves receiveInitial, unblocking the bootloader.
+- Host isolation: In src/js/shared/workspaceHost.js:1-29, hostsWorkspaceSurface(surface) ensures that windows mount only surfaces assigned to them. Detached file list windows mount filePanel and libraryPanel, while ViewportCore is stubbed with an empty interface, preventing duplicate WebGL canvas initialization or background rendering loops.
+
+2.2 Snapshot replication and delta filtering
+- Authority model: The Main window is the sole authority for Core state and config persistence.
+- Snapshot payload: Main's publish function in src/js/shared/workspaceSession.js:63-87 sends state, config, and workspaceDownload.
+- Delta filtering: When Core state changes on Main (src/js/shared/workspaceSession.js:197), publish(label) is called for all active peers. Main compares nextState against _cachedState key-by-key. If no keys have changed value, transmission is skipped. If keys changed, only the modified slice is sent in { kind: 'delta', state: delta }.
+- Config synchronization: When quivit-config-loaded fires on Main (src/js/shared/workspaceSession.js:198-200), publish(label, false, true) broadcasts the full config frontend_data object to peers.
+- Replica reception: In src/js/shared/workspaceSession.js:115-135, incoming snapshot and delta messages invoke Core.receiveSnapshot(message.state), rememberConfig(message.config), and handleWorkspaceDownloadState(message.workspaceDownload). Core.receiveSnapshot (src/js/core.js:140-155) merges the remote slice and notifies local subscribers without triggering recursive RPC emissions.
+
+2.3 Core session RPC
+- Whitelisted methods: In src/js/core.js:29-37, CORE_SESSION_METHODS explicitly defines all methods callable remotely by replicas: updateSort, setFullscreen, toggleFullscreen, updateZoom, flushConfig, rememberFrontendData, updateHistoryState, setWorkspacePosition, setWindowMenuVisible, and toggleWindowMenuVisible.
+- Request proxying: In src/js/core.js:134-138, configureReplica(forward) wraps every whitelisted method so calls on the replica forward to Main via requestWorkspace('main', 'core', method, args).
+- Message execution: Main's execute handler in src/js/shared/workspaceSession.js:89-106 verifies that the target group ('core') and method exist and are included in the whitelist. It executes the call and returns { kind: 'response', id, result } or { kind: 'response', id, error }.
+- Timeout and cleanup: In src/js/shared/workspaceSession.js:33-56, requestWorkspace tracks in-flight calls using unique IDs (_req_{requestId}_{timestamp}) and cleans up pending promises after 5000ms if no response arrives.
+
+2.4 FsUtils session RPC and optimistic deletions
+- Whitelisted file operations: In src/js/fsUtils.js:22-26, FS_SESSION_METHODS lists remote operations: scanContainerMaxWidth, deleteItem, trashItems, restoreItem, pruneCache, and notifyFileChanged.
+- Replica wrapping: In src/js/fsUtils.js:32-44, configureReplica(forward) proxies whitelisted operations to Main.
+- Optimistic deletion: OPTIMISTIC_SESSION_METHODS (src/js/fsUtils.js:28-30) marks deleteItem for optimistic execution. When deleteItem is invoked on the replica (src/js/filepanel/filePanel.js:1260-1329), the replica registers pending deletion markers, unlinks the item from the virtual list or DOM tree, and forwards the deleteItem RPC to Main.
+- Error recovery: If Main's backend deletion fails, the RPC promise rejects. The replica catches the error and executes rollback logic, restoring the removed element or re-rendering the section.
+
+2.5 UrlLoader service and download state
+- Centralized queue authority: Active gallery downloads run exclusively on Main via urlLoader.js. Replicas never instantiate background download queues or sidecar writers.
+- Initial download state: In src/js/urlLoader.js:2780-2786, getWorkspaceDownloadState() packages activeGalleryPath, queueActive, and a snapshot of current download statuses into the initial handshake payload.
+- Real-time download events: Main broadcasts quivit-download-status and quivit-download-complete events across windows (src/js/shared/workspaceSession.js:201-206).
+- Replica status lookup: In src/js/urlLoader.js:2626-2645, isPlaceholderFile and getGalleryDownloadStatus check _workspaceStatuses on the replica, allowing the detached file panel to display download badges and prevent premature access to incomplete gallery files.
+
+2.6 ImportActions and native drag/drop routing
+- OLE drop integration: In src-tauri/src/windows.rs:135-139, crate::platform::drop::install(&window) installs the native OLE IDropTarget on both the main window and the detached workspace-file-list window.
+- Event targeting: In src-tauri/src/platform/drop.rs:149-159, all native drag and drop events (quivit-drop phases: entered, left, accepted, ready, failed) emit strictly to the "main" window handle via app.emit_to("main", ...).
+- Import pipeline: Main's dropzone handler processes the payload (files, folders, URLs) and runs importActions.js.
+- Replica activity notification: Main dispatches quivit-workspace-import-activity, which is forwarded by workspaceSession.js:201-206 to the detached window. This notifies the detached file panel to show import indicators or trigger list refreshes.
+
+2.7 Action dispatch and ownership mapping
+- Action registry: In src/js/services/actions.js:30-180, ACTION_MAP assigns an owner to each action ID. Actions with owner 'window' (such as toggleMenu, toggleStatusBar, zoomIn, zoomOut) execute locally on the current window.
+- Remote action routing: Actions without window ownership default to 'main'. In src/js/shared/workspaceControls.js:15-35, runAction on a replica routes actions to Main via requestWorkspace('main', 'controls', 'runAction', [actionId, ...args]).
+- Navigation delegation: navigationOwner determines whether arrow keys, page up/down, and home/end navigate the image viewport on Main or the file list on the replica, depending on focus state and detached layout mode.
+
+2.8 Chrome visibility and per-window menu persistence
+- Independent menu state: Main uses config.frontend_data.menu_visible, while the detached window uses window_menu_visible (or window-specific layout configuration).
+- Status bar isolation: In detached mode, the status bar is hidden and disabled in workspace-file-list via src/css/main.css:497 and src/js/menubar/chrome.js:59. The status bar exists and renders only in Main.
+- Shell background: In src-tauri/src/windows.rs:48-72, apply_shell_background applies the appropriate dark or light background color to native window structures before webview paint, preventing visual flashes during launch.
+
+2.9 Window title synchronization
+- Title broadcasting: Main updates its window title based on current folder or archive contents.
+- Multi-window IPC: In src-tauri/src/windows.rs:166-174, set_workspace_title iterates across WORKSPACE_WINDOWS (["main", "workspace-file-list"]) and updates every existing window title simultaneously, keeping detached titlebars in sync.
+
+2.10 Native window lifecycle and close/recombine pairing
+- Detached window launch: When workspace layout changes to detached, Main's reconcile loop in src/js/main/workspace.js:19-56 invokes open_workspace_window on Tauri backend.
+- Close interception: In src-tauri/src/windows.rs:140-150, when the user clicks the close box (X) on workspace-file-list, WindowEvent::CloseRequested is intercepted with api.prevent_close(), and workspace-close-requested is emitted to "main".
+- Coordinated shutdown: In src/js/main/lifecycle.js:53, Main listens for workspace-close-requested and calls mainWindow.close(), ensuring closing the detached window closes the application consistently rather than leaving an orphaned main process.
+- Docking and recombination: When the user docks the file panel back into Main, workspace.js invokes close_workspace_window, which destroys the secondary webview. WindowEvent::Destroyed uninstalls the OLE drop target and emits workspace-detached-closed to Main. Main clears the peer from its session map and updates layout state.
+
+2.11 Options flush and persistence consistency
+- Separate options window: The Options dialog runs in its own webview ("options").
+- In-memory flush: Before saving, src/js/options/options.js:533-542 connects to the workspace session and invokes requestWorkspace('main', 'core', 'flushConfig'). This forces Main to write any debounced in-memory configuration changes to disk.
+- Live config preservation: Options re-reads live configuration via invoke('load_config') and merges live preferences into the saved dataset.
+
+2.12 Tray hide and restore
+- Window collection: In src-tauri/src/windows.rs:376, SECONDARY_WINDOWS tracks ["options", "metadata", "workspace-file-list"].
+- Hide to tray: In src-tauri/src/windows.rs:390-402, hide_to_tray iterates through secondary windows and invokes hide(), followed by hiding Main.
+- Restore from tray: In src-tauri/src/windows.rs:378-388, restore_from_tray calls show() on all existing secondary windows and restores focus to Main. Window handles and webview sessions remain intact without re-initialization.
+
+2.13 Non-native BroadcastChannel fallback
+- Browser environment support: In non-Tauri browser environments, workspaceSession.js falls back to BroadcastChannel with session scoping.
+- Detached popups: The detached window opens as a browser popup via window.open.
+- Liveness polling: In src/js/main/workspace.js:76-85, a periodic timer monitors popup.closed. When the popup is closed, it cleans up peer mappings and dispatches quivit-workspace-closed locally.
+
+
+3. Detailed findings
+
+Finding 1: quivit-library-active-changed event is omitted from cross-window event forwarding
+- Severity: P2 (Confirmed Gap)
+- Confidence: High
+- Location: src/js/shared/workspaceSession.js:201-206, src/js/filepanel/libraryStore.js:124-144, src/js/menubar.js:717-756, src/js/filepanel/filePanel.js:2757
+- Root cause: In src/js/shared/workspaceSession.js:201-206, Main registers event forwarding to peers for eight custom events: quivit-favorites-changed, quivit-library-updated, quivit-download-complete, quivit-download-status, quivit-refresh-start, quivit-refresh-end, quivit-workspace-import-activity, and quivit-workspace-strip-info. The event quivit-library-active-changed is missing from this list.
+- Failure scenario: In detached mode, the Library panel (#file-panel-library) is hosted exclusively in workspace-file-list. When a user selects a provider filter in Main's Imports menu (src/js/menubar.js:717, 724), Main executes setActiveProvider (src/js/filepanel/libraryStore.js:124). This writes the active provider to localStorage and dispatches quivit-library-active-changed on Main's window. Because the event is not in workspaceSession.js forward list, workspace-file-list never receives it. The detached window's listener in src/js/filepanel/filePanel.js:2757 is not triggered, and libraryStore does not listen to storage events across windows. Consequently, the detached Library panel fails to update its displayed provider view until an unrelated event triggers a re-render. Conversely, if selected in the detached window's menu, Main's menu checkmark fails to synchronize.
+- Recommendation: Add 'quivit-library-active-changed' to the event array in src/js/shared/workspaceSession.js:201-202.
+
+
+Finding 2: quivit-status-flash events from detached File List are never forwarded to Main status bar
+- Severity: P2 (Confirmed Gap)
+- Confidence: High
+- Location: src/js/shared/workspaceSession.js:183-196, src/js/filepanel/filePanel.js:1319-1321, src/js/menubar/statusbar.js:99, src/js/menubar/chrome.js:59, src/css/main.css:497
+- Root cause: In detached mode, the status bar is completely hidden and disabled in workspace-file-list (chrome.js:59 and main.css:497) and rendered exclusively in the main window (statusbar.js:99). When a file or directory deletion fails in the detached file panel (src/js/filepanel/filePanel.js:1319-1321), the handler rolls back the UI deletion and dispatches a local window event:
+    window.dispatchEvent(new CustomEvent('quivit-status-flash', {
+      detail: { message: 'Delete failed. The item was restored.' }
+    }));
+The replica session configuration in src/js/shared/workspaceSession.js:183-196 provides no reverse event forwarding mechanism for status flash events, nor does Main handle status flash RPC.
+- Failure scenario: A user in the detached File List attempts to delete a file that is locked by another application or read-only on disk. The deletion fails in the background. The file panel restores the item to the tree and fires quivit-status-flash. Because the detached window's status bar is invisible and disabled, and the event never reaches Main, no status bar toast or notification appears. The user observes the file disappear and immediately reappear without any explanatory feedback.
+- Recommendation: In src/js/shared/workspaceSession.js:183-196, add an event listener on the replica for quivit-status-flash that sends a message to Main ({ kind: 'event', name: 'quivit-status-flash', detail: event.detail }). On Main, receive and re-dispatch this event on Main's window so statusbar.js displays the status toast.
+
+
+Finding 3: options.js save routine omits directory_sort when preserving live configuration
+- Severity: P2 (Confirmed Gap)
+- Confidence: High
+- Location: src/js/options/options.js:538-540, src/js/core.js:33, src-tauri/src/config.rs:557
+- Root cause: In src/js/options/options.js:538-540, when the user saves preferences in the Options dialog, Options calls requestWorkspace('main', 'core', 'flushConfig') and re-reads live config from disk. However, it copies only a restricted subset of frontend keys:
+    for (const key of ['favorites', 'favorites_collapsed', 'workspace_layout', 'window_menu_visible', 'menu_visible', 'status_visible']) {
+      if (live.frontend_data[key] !== undefined) merged.frontend_data[key] = live.frontend_data[key];
+    }
+The key 'directory_sort' is omitted from this array.
+- Failure scenario: The user opens the Options dialog. While Options remains open, the user sorts the File List by a different column or order in either Main or the detached File List window (which immediately updates directory_sort in Core and persists to quivit_directory_sort.json). The user then clicks "Save" in the Options dialog. Options executes flushConfig and re-reads live config, but skips directory_sort. The stale sorting configuration from when Options was initially opened is merged into merged.frontend_data and saved to disk, silently discarding the user's sort preference.
+- Recommendation: Add 'directory_sort' to the array of preserved live configuration keys in src/js/options/options.js:538.
+
+
+Finding 4: Replica download status lookup does not normalize file path separators
+- Severity: P3 (Conditional Risk)
+- Confidence: High
+- Location: src/js/urlLoader.js:2640, src/js/urlLoader.js:2796-2798
+- Root cause: In src/js/urlLoader.js:2640, getGalleryDownloadStatus on the replica performs a direct lookup:
+    if (_workspaceRequest) return _workspaceStatuses.get(filePath) || null;
+In contrast, Main's implementation normalizes backslashes to forward slashes before querying queue status. In src/js/urlLoader.js:2796-2798, _workspaceStatuses is populated from event details or snapshot arrays using whichever path string format was transmitted. On Windows systems where callers pass paths containing backslashes while download events transmit forward slashes (or vice versa), the Map key lookup fails.
+- Failure scenario: During an active gallery download, a UI component in the detached File List calls isPlaceholderFile(filePath) or getGalleryDownloadStatus(filePath) using a Windows-style path containing backslashes. If the download status event stored the path with forward slashes, the Map lookup returns undefined. As a result, isPlaceholderFile returns false, causing the UI to treat an unfinished download as a regular missing file or render an incorrect thumbnail placeholder.
+- Recommendation: Normalize filePath (e.g. converting backslashes to forward slashes and matching casing) before inserting into and querying from _workspaceStatuses in src/js/urlLoader.js:2640 and 2796-2798.
+
+
+4. Cross-domain dependencies
+
+- Reviewer 01 (Workspace layout and lifecycle): Verification of the pairing between open_workspace_window and close_workspace_window in src/js/main/workspace.js and mutual close handling via workspace-close-requested in src/js/main/lifecycle.js.
+- Reviewer 02 (File panel and tree virtualization): Verification of file panel rendering in replica mode, local row pool management, and dependency on quivit-status-flash (Finding 2) and quivit-library-active-changed (Finding 1).
+- Reviewer 03 (Viewport and viewer canvas): Verification that ViewportCore stubbing in src/js/shared/workspaceHost.js prevents duplicate WebGL context allocation in detached windows.
+- Reviewer 04 (Actions, shortcuts, and menubar): Verification of action routing via src/js/shared/workspaceControls.js and independent menubar visibility toggles.
+- Reviewer 05 (Options and config persistence): Verification of options flush sequencing and preservation of live frontend keys during options save (Finding 3).
+- Reviewer 07 (Native platform, OLE drag-drop, and window management): Verification of OLE IDropTarget installation in src-tauri/src/windows.rs and drop event forwarding to Main in src-tauri/src/platform/drop.rs.
+
+
+5. Bounded follow-up verification checks
+
+The following bounded checks can be executed to verify the findings once fixes are implemented:
+1. Event dispatch verification: Run a targeted browser test dispatching quivit-library-active-changed on Main and assert receipt and active provider update on the replica.
+2. Status flash verification: Simulate a failed deleteItem in a detached file panel instance and verify quivit-status-flash arrives on Main and invokes showFlashMessage in statusbar.js.
+3. Options sort preservation verification: Invoke options.js saveConfig with simulated live directory_sort changes and verify the merged output retains the live directory_sort value.
+4. Download status path normalization: Unit test getGalleryDownloadStatus in replica mode with mixed backslash and forward slash path formats against _workspaceStatuses.

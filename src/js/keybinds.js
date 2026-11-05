@@ -8,6 +8,7 @@ import { normalizeCombo, normalizeList } from './services/keyCombo.js';
 import { activeFilterId, normalizeFilterOptions } from './services/registry.js';
 
 import { DEFAULT_KEYBINDS as REGISTRY_DEFAULTS } from './services/actions.js';
+import { normalizeWorkspaceLayout, normalizeWindowMenuVisibility } from './services/workspaceLayout.js';
 
 export const DEFAULT_KEYBINDS = REGISTRY_DEFAULTS;
 
@@ -44,6 +45,7 @@ export function mergeConfig(loaded) {
   const result = {
     portable_mode: !!loaded?.portable_mode,
     hidden: loaded?.hidden === true, // Preserve hidden field (config-file-only)
+    ...(loaded?.archive_cache_mb !== undefined ? { archive_cache_mb: loaded.archive_cache_mb } : {}),
     frontend_data: {
       ...fdBase,
       continue_last: fd.continue_last !== false,
@@ -67,8 +69,10 @@ export function mergeConfig(loaded) {
       show_hidden: fd.show_hidden === true,
       hide_chrome_on_fullscreen: fd.hide_chrome_on_fullscreen !== false,
       menu_visible: fd.menu_visible !== false,
+      window_menu_visible: normalizeWindowMenuVisibility(fd.window_menu_visible, fd.menu_visible),
       status_visible: fd.status_visible !== false,
       file_list_view_mode: fd.file_list_view_mode === 'thumbnail' ? 'thumbnail' : DEFAULT_FILE_LIST_VIEW_MODE,
+      workspace_layout: normalizeWorkspaceLayout(fd.workspace_layout),
       active_filter: activeFilterId(fd),
       filter_options: normalizeFilterOptions(fd.filter_options),
       keybinds: (() => {

@@ -1,4 +1,4 @@
-import { Core } from '../core.js';
+import { ViewportCore as Core } from '../shared/workspaceHost.js';
 import { activeKeys } from '../shortcuts.js';
 import { MOUSE_BUTTON_NAMES } from '../services/keyCombo.js';
 export function createViewerGestures(viewportState, panBy) {

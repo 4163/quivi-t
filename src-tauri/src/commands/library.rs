@@ -640,6 +640,7 @@ fn carry_live_library_state(config: &mut AppConfig, current: &AppConfig) {
     // while the Options dialog is open. Start from the persisted state so a
     // relocation preserves the current session's resume point, Favorites, and
     // per-folder sort choices before their paths are rewritten below.
+    let drop_last_opened = target.get("continue_last") == Some(&serde_json::Value::Bool(false));
     for key in [
         "last_opened_path",
         "last_active_image",
@@ -647,6 +648,10 @@ fn carry_live_library_state(config: &mut AppConfig, current: &AppConfig) {
         "favorites_collapsed",
         "directory_sort",
     ] {
+        if key == "last_opened_path" && drop_last_opened {
+            target.remove(key);
+            continue;
+        }
         match source.get(key) {
             Some(value) => {
                 target.insert(key.to_string(), value.clone());

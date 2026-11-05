@@ -1,0 +1,296 @@
+Compared against the repository validation rules.
+
+Domain: 03 - Opening content, imports, native drops, and prompt flows
+Audited target: 35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Before snapshot: a473a5c2fbb0eaa93bdbb99cca111327c07104ab
+Allowed history: a473a5c2fbb0eaa93bdbb99cca111327c07104ab..35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Checkout status: Clean at HEAD 35f38e9d81cf95cd0534ac33e316291bf26e2f8c on branch feature/window-relocation.
+
+Inspected code paths:
+- src/js/services/importActions.js
+- src/js/main/dropzone.js
+- src/js/main/urlOverlay.js
+- src/js/main/passwordOverlay.js
+- src/js/urlLoader.js
+- src/js/fsUtils.js
+- src/js/shared/workspaceControls.js
+- src/js/shared/workspaceSession.js
+- src/js/shared/workspaceHost.js
+- src/js/main/workspaceBoot.js
+- src/js/main/workspace.js
+- src/js/main/lifecycle.js
+- src/js/main/main.js
+- src/js/services/actions.js
+- src/js/shortcuts.js
+- src/js/menubar/chrome.js
+- src/js/menubar/statusbar.js
+- src/js/filepanel/filePanel.js
+- src-tauri/src/platform/drop.rs
+- src-tauri/src/commands/drop.rs
+- src-tauri/src/platform/dialog.rs
+- src-tauri/src/commands/shell.rs
+- src-tauri/src/commands/library.rs
+- src-tauri/src/image_import.rs
+- src-tauri/src/windows.rs
+- src-tauri/capabilities/default.json
+- src/index.html
+- src/css/main.css
+- e2e/specs/04-archives.e2e.js
+- e2e/specs/08-url-loader.e2e.js
+
+Excluded / unread paths:
+- Markdown documentation under .agents/ and historical plan directories (per audit instructions).
+- Other reviewers' reports under .agents/scratch/detached-audit-reports/.
+- Unrelated image decoder bodies (LZMA/7z internals, WebGL shaders, comic book metadata parsing).
+
+
+Previously fixed cases accounted for:
+1. Duplicate native-drop event: In 35f38e9, emit in src-tauri/src/platform/drop.rs was scoped via app.emit_to("main", "quivit-drop", ...), and listenWorkspaceEvent in src/js/main/dropzone.js was locked to owner "main". Target HWND registrations now track owner window labels and drop targets uninstall upon window destruction. Workers initialize once through a static Once primitive.
+2. Defensive Library-delete sidecar update: In 35f38e9, forgetDeletedLibraryEntry in src/js/urlLoader.js and registerPendingDeletion in src/js/fsUtils.js were wired through the workspaceSession RPC bridge, ensuring deletes initiated from detached secondary surfaces prune sidecar metadata on the session authority.
+
+
+Coverage ledger:
+
+1. Interaction: Open Directory Dialog
+   - Entry point: cmd-open-dir (Menubar File -> Open Directory..., shortcut Ctrl+O)
+   - Mutation owner: main (via actions.js default routing to main)
+   - Visible UI owner: Native Windows folder picker parented to main HWND; image/directory state rendered in main viewer and detached File List
+   - Update path: workspaceControls.dispatchAction -> requestWorkspace('main', 'action', 'run', ['cmd-open-dir']) -> ctx.FsUtils.openDirectoryDialog() -> invoke('pick_folder') -> FsUtils.loadFile -> Core.setState -> publish snapshot
+   - Result: Supported by code (conditional risk noted for missing focusOwner on secondary trigger)
+
+2. Interaction: Open File / Archive Dialog
+   - Entry point: cmd-open-file (Menubar File -> Open File / Archive..., shortcut Ctrl+Shift+O)
+   - Mutation owner: main (via actions.js default routing to main)
+   - Visible UI owner: Native dialog open prompt; viewer viewport in main; file list in workspace-file-list
+   - Update path: workspaceControls.dispatchAction -> requestWorkspace('main', 'action', 'run', ['cmd-open-file']) -> ctx.FsUtils.openFileDialog() -> window.__TAURI__.dialog.open -> FsUtils.loadFile -> Core.setState -> publish snapshot
+   - Result: Supported by code (conditional risk noted for missing focusOwner on secondary trigger)
+
+3. Interaction: Blank-View Dropzone Click
+   - Entry point: Click on #drop-overlay ("Or click to open a folder")
+   - Mutation owner: main
+   - Visible UI owner: main (#drop-overlay lives inside #viewport, which is display: none in workspace-file-list)
+   - Update path: dropOverlay.click -> FsUtils.openDirectoryDialog() -> invoke('pick_folder') -> FsUtils.loadFile -> Core.setState -> publish snapshot
+   - Result: Intentional local behavior
+
+4. Interaction: Native File / Folder Drag & Drop onto Main Window
+   - Entry point: Dropping file, directory, or archive onto main window
+   - Mutation owner: main
+   - Visible UI owner: main (drop overlay feedback and viewer display); workspace-file-list (file list selection)
+   - Update path: platform::drop IDropTarget -> emit_to("main", "quivit-drop") -> dropzone.js onNativeDrop -> importActions.acceptDrop -> completeDrop -> openPathResult -> FsUtils.loadFile -> Core.setState -> publish snapshot
+   - Result: Supported by code
+
+5. Interaction: Native File / Folder Drag & Drop onto Detached File List Window
+   - Entry point: Dropping file, directory, or archive onto workspace-file-list window
+   - Mutation owner: main (drop target on workspace-file-list emits to main)
+   - Visible UI owner: main (viewer viewport); workspace-file-list (file list selection)
+   - Update path: workspace-file-list HWND IDropTarget -> emit_to("main", "quivit-drop") -> main onNativeDrop -> importActions.acceptDrop -> completeDrop -> FsUtils.loadFile on main -> Core.setState -> publish snapshot
+   - Result: Supported by code
+
+6. Interaction: Browser Image Drag & Drop (DIB / Stream / SVG / Image)
+   - Entry point: Dragging raw image or browser selection onto main or workspace-file-list
+   - Mutation owner: main
+   - Visible UI owner: main (viewer viewport); workspace-file-list (Misc provider selection)
+   - Update path: platform::drop receives payload -> writes %TEMP% bin -> emits to main -> importActions.completeDrop -> save_dropped_image -> image_import::prepare -> publish_captured_image -> libraryUpdated -> activateMisc -> FsUtils.loadFile -> Core.setState -> publish snapshot
+   - Result: Supported by code
+
+7. Interaction: URL Drag & Drop
+   - Entry point: Dragging link or image URL from browser onto main or workspace-file-list
+   - Mutation owner: main
+   - Visible UI owner: main (viewer viewport and status bar); workspace-file-list (file list selection)
+   - Update path: platform::drop resolves Payload::Url -> emits to main -> importActions.completeDrop -> importActions.openUrl -> UrlLoader.loadUrl -> download queue -> FsUtils.loadFile -> Core.setState -> publish snapshot
+   - Result: Supported by code
+
+8. Interaction: Open URL Prompt (Shortcut & Menu)
+   - Entry point: cmd-use-url (Menubar File -> Open URL..., shortcut Ctrl+I)
+   - Mutation owner: main
+   - Visible UI owner: main (#url-overlay in viewport)
+   - Update path: workspaceControls.dispatchAction -> requestWorkspace('main', 'action', 'run', ['cmd-use-url']) -> window.setFocus() on main -> UrlLoader.openPrompt() -> urlOverlay.show()
+   - Result: Supported by code
+
+9. Interaction: Open URL Submission and Validation
+   - Entry point: Form submission on #url-overlay in main
+   - Mutation owner: main
+   - Visible UI owner: main (#url-overlay error/loading state; viewer image); workspace-file-list (download status icons)
+   - Update path: urlOverlay._handleSubmit -> importActions.openUrl -> UrlLoader.loadUrl -> FsUtils.loadFile -> Core.setState -> publish snapshot
+   - Result: Supported by code
+
+10. Interaction: Open URL Dismissal and Focus Restoration
+    - Entry point: Escape key or backdrop click on #url-overlay
+    - Mutation owner: main
+    - Visible UI owner: main (#url-overlay hides)
+    - Update path: urlOverlay._hide -> opts.restoreFocus -> _focusFileList()
+    - Result: Confirmed gap (GAP-02, attempts to focus hidden local panel instead of remote peer)
+
+11. Interaction: Encrypted Archive Detection and Password Prompt Flow
+    - Entry point: Selecting encrypted archive in File List, Open dialog, or native drop
+    - Mutation owner: main
+    - Visible UI owner: main (#password-overlay in viewport)
+    - Update path: FsUtils.loadFile -> checkArchiveEncryption -> Core.setState({ archiveEncryption: 'password_required' }) -> passwordOverlay.js Core.onStateChange -> _show()
+    - Result: Confirmed gap (GAP-01, prompt appears in main without native window focus when initiated from detached File List)
+
+12. Interaction: Encrypted Archive Password Submission and Retry
+    - Entry point: Form submit on #password-overlay in main
+    - Mutation owner: main
+    - Visible UI owner: main (#password-overlay error state or dismiss; viewport image); workspace-file-list (entry list unlock)
+    - Update path: passwordOverlay._submit -> FsUtils.loadArchive(path, '', { password }) -> list_archive -> Core.setState -> publish snapshot
+    - Result: Supported by code
+
+13. Interaction: Encrypted Archive Password Cancellation
+    - Entry point: Escape key or pointerdown backdrop on #password-overlay
+    - Mutation owner: main
+    - Visible UI owner: main (navigates parent or resets index)
+    - Update path: passwordOverlay keydown Escape -> mode === 'archive' ? FsUtils.openParent() : (Core.selectIndex(-1), _focusFileList())
+    - Result: Confirmed gap (GAP-01, _focusFileList targets hidden local panel)
+
+14. Interaction: Gallery Download Resume, Status Sync, and Retry
+    - Entry point: Entering gallery directory; File List item retry button
+    - Mutation owner: main
+    - Visible UI owner: workspace-file-list (status icons, placeholder badges); main (status bar)
+    - Update path: UrlLoader.init replica listens to quivit-download-status and gets initial state -> retryGalleryDownload forwards to main -> _activeQueue.prioritize -> status update emitted to peers
+    - Result: Supported by code
+
+15. Interaction: Gallery Download Cancellation on Deletion
+    - Entry point: Deleting downloading gallery folder in File List
+    - Mutation owner: main
+    - Visible UI owner: workspace-file-list and main
+    - Update path: filePanel delete -> UrlLoader.cancelGalleryDownloads -> requestWorkspace('main', 'url', 'cancelGalleryDownloads', [path]) -> _teardownActiveQueue -> quivit-download-status cancelled emitted to peers
+    - Result: Supported by code
+
+16. Interaction: Viewport Download Range Synchronization during Scroll
+    - Entry point: Scrolling fileListUl in detached window
+    - Mutation owner: main (download queue admission)
+    - Visible UI owner: workspace-file-list
+    - Update path: fileListUl scroll -> renderVisibleSlice -> renderVisibleRows -> setDownloadVisibleRange -> UrlLoader.setVisibleRange -> requestWorkspace('main', 'url', 'setVisibleRange', [start, end])
+    - Result: Conditional risk (RISK-01, unthrottled requestWorkspace calls per scroll frame)
+
+17. Interaction: Busy-State Menubar and Panel Gating
+    - Entry point: Import activity active (importing: true)
+    - Mutation owner: main
+    - Visible UI owner: Both windows (body.is-importing-url)
+    - Update path: importActions.begin -> notify -> quivit-workspace-import-activity event sent to peers -> chrome.js syncs is-importing-url class -> pointer-events: none on menubar and file panel
+    - Result: Supported by code
+
+18. Interaction: Status Bar Import and Download Readout
+    - Entry point: Active import or downloading entry
+    - Mutation owner: main
+    - Visible UI owner: main (Status bar visible); workspace-file-list (Status bar disabled and hidden)
+    - Update path: statusbar.js updates during state changes and image lifecycle
+    - Result: Supported by code / Intentional local behavior
+
+19. Interaction: Options Library Relocation while Import or Download Active
+    - Entry point: Changing Library root path in Options window
+    - Mutation owner: main
+    - Visible UI owner: Both windows (re-rendered library paths and rebased active view)
+    - Update path: library-relocated event -> main reloadConfigAndSyncLibrary -> UrlLoader.handleLibraryRelocation -> _teardownActiveQueue -> Core.setState({ libraryDir }) -> publish snapshot -> rebind_library_watcher
+    - Result: Supported by code
+
+20. Interaction: Clipboard / Paste Input
+    - Entry point: Paste event (Ctrl+V)
+    - Mutation owner: Local window
+    - Visible UI owner: Active input field (urlOverlay or passwordOverlay)
+    - Update path: Input fields allow text paste; window listener calls clearHeldKeys(); no global paste-to-import action exists
+    - Result: Supported by code / Intentional local behavior
+
+
+Findings:
+
+ID: GAP-01
+Priority: P2
+Confidence: High
+Trigger: src/js/filepanel/filePanel.js:710 and src/js/filepanel/filePanel.js:2951
+Failure: src/js/main/passwordOverlay.js:36 and src/js/main/passwordOverlay.js:103
+Minimal user sequence:
+1. Run QuiviT with panels detached (main window viewing content, workspace-file-list window showing the file panel).
+2. In the detached File List window, navigate to and click (or press Enter on) a password-protected archive.
+3. The password modal prompt appears over the viewer in the main window.
+4. Immediately type the archive password on the keyboard without manually clicking into the main window.
+Expected behavior:
+The password prompt in the main window acquires native OS focus so that keyboard input is directed into the password input field. On cancellation via Escape, keyboard focus returns to the initiating File List window.
+Actual behavior:
+The prompt opens on the viewer in the main window, but the main window never calls window.setFocus(). OS window focus remains with the detached File List window. Keystrokes are received by the detached File List (triggering file search or navigation) rather than the password field. If Escape is pressed while the password prompt is open in non-container mode, _focusFileList() executes on the main window and calls fileListUl.focus() on a hidden element, leaving the interface in a focus vacuum without returning focus to the detached File List window.
+Causal chain:
+1. User activates an archive row in workspace-file-list, triggering FsUtils.loadFile(path) in filePanel.js:710.
+2. In workspace-file-list, FsUtils.configureReplica intercepts the call and sends a workspace request: requestWorkspace('main', 'fs', 'loadFile', [path]).
+3. The main window executes FsUtils.loadFile, which invokes list_archive and receives encryption: "password_required".
+4. The main window sets Core.setState({ archiveEncryption: 'password_required', ... }) and publishes a snapshot to workspace-file-list.
+5. In passwordOverlay.js:108, Core.onStateChange runs on the main window. With state.mode === 'archive', shouldFocus is true, so it executes _show(state.archivePath, enc, shouldFocus).
+6. In passwordOverlay.js:36, _show runs requestAnimationFrame(() => _input.focus()).
+7. Because the main window does not possess native OS window focus, the DOM focus call cannot steal keyboard focus from the active secondary window without calling window.__TAURI__.window.getCurrentWindow().setFocus().
+8. When the prompt is dismissed with Escape in passwordOverlay.js:103, _focusFileList() runs on the main window, calling fileListUl.focus() on #file-panel, which has display: none via main.css:496. No message is sent to focus the detached File List window.
+Relocation commit:
+Introduced in a628e57 when secondary window hosting was added, and omitted from the focus coordination introduced for cmd-use-url in 35f38e9.
+
+
+ID: GAP-02
+Priority: P3
+Confidence: High
+Trigger: src/js/main/urlOverlay.js:88 and src/js/main/urlOverlay.js:150
+Failure: src/js/main/urlOverlay.js:52
+Minimal user sequence:
+1. In detached mode, focus the detached File List window.
+2. Press Ctrl+I or select File -> Open URL from the detached window menu bar.
+3. The main window acquires focus and opens the URL prompt overlay.
+4. Press Escape to cancel the URL prompt.
+Expected behavior:
+Closing the URL prompt restores keyboard focus to the detached File List window that initiated the command.
+Actual behavior:
+urlOverlay._hide() calls _focusFileList() locally on the main window. Because #file-panel is hidden with display: none on the main window, fileListUl.focus() does not focus any active element. Focus remains dropped on the main window and is not returned to the secondary File List window.
+Causal chain:
+1. cmd-use-url carries focusOwner: true in actions.js:264.
+2. When triggered from workspace-file-list, workspaceControls.js:58 focuses the main window before dispatching UrlLoader.openPrompt().
+3. On Escape, urlOverlay.js:150 calls _hide({ restoreFocus: true }).
+4. In urlOverlay.js:51-53, _hide executes if (opts.restoreFocus !== false && _focusFileList) _focusFileList().
+5. On the main window, _focusFileList() points to filePanel.js:3085, which calls fileListUl.focus().
+6. In detached mode, :root[data-workspace-surface="main"] #workspace[data-file-list-position="detached"] > #file-panel is set to display: none in main.css:496. The focus target is non-focusable, leaving focus unhandled on the main window with no message sent back to workspace-file-list.
+Relocation commit:
+Introduced in a628e57 and retained when action focus routing was added in 35f38e9.
+
+
+ID: RISK-01
+Priority: P2
+Confidence: Medium
+Trigger: src/js/filepanel/filePanel.js:2115
+Failure: src/js/urlLoader.js:2661 and src/js/shared/workspaceSession.js:61
+Minimal user sequence:
+1. In detached mode, open an active gallery directory with a large list of images.
+2. Rapidly scroll the detached File List using a high-resolution mouse wheel or scrollbar drag.
+Expected behavior:
+Viewport scroll bounds are communicated to the main download queue smoothly without saturating the inter-window request queue.
+Actual behavior:
+renderVisibleRows runs on every scroll event and synchronously calls setDownloadVisibleRange. In detached mode, urlLoader.js:2661 forwards this call via _workspaceRequest('setVisibleRange', [start, end]). Each call creates an entry in pending with a 30 second timeout and sends an emitTo IPC message. Rapid scrolling generates dozens of requests per second. If pending.size reaches MAX_PENDING_REQUESTS (128), workspaceSession.js:61 rejects the promise with "Too many pending workspace requests", logging errors and dropping range synchronization.
+Unresolved assumption / Required runtime check:
+Requires runtime observation under fast scrolling to determine whether IPC roundtrip latency allows requests to settle before pending.size exceeds 128 on varying hardware.
+Relocation commit:
+Introduced in a628e57 and retained in 35f38e9.
+
+
+ID: RISK-02
+Priority: P3
+Confidence: Medium
+Trigger: src/js/services/actions.js:258-262
+Failure: src/js/shared/workspaceControls.js:58
+Minimal user sequence:
+1. In detached mode, activate the detached File List window.
+2. Trigger File -> Open Directory (Ctrl+O) or File -> Open File / Archive (Ctrl+Shift+O).
+Expected behavior:
+The native dialog appears centered and modal over the initiating window, or the main window is brought to the foreground before displaying its dialog modal.
+Actual behavior:
+Neither cmd-open-dir nor cmd-open-file declares focusOwner: true in actions.js. When triggered from workspace-file-list, the action is forwarded via requestWorkspace to main. The main window invokes the native dialog (invoke('pick_folder') or tauri.dialog.open) using main's HWND without focusing main. The native dialog opens owned by main, while the detached window remains enabled and unparented.
+Unresolved assumption / Required runtime check:
+Requires runtime testing on Windows to verify if the modal dialog can be obscured behind the detached window if the detached window was positioned directly over the main window.
+Relocation commit:
+Introduced in a628e57 and retained in 35f38e9.
+
+
+Cross-domain dependencies:
+1. Reviewer 01 (Input and Commands): Focus management conventions for routed actions. cmd-use-url implements focusOwner: true in actions.js, but password overlay is event-driven through state rather than action-driven, bypassing that mechanism. Focus restoration on modal dismiss has no cross-window primitive.
+2. Reviewer 02 (Browsing and Delete): File list scroll telemetry (setDownloadVisibleRange) in filePanel.js invokes urlLoader.js services during virtualization updates, bridging virtual DOM rendering into the inter-window RPC session.
+3. Reviewer 05 (Options and Library): Library relocation events dispatched by Options trigger cleanup and re-homing in urlLoader.js. Active queues teardown, and retryable errors handle transient file lock conditions.
+4. Reviewer 06 (IPC and Session Protocol): High-frequency telemetry via requestWorkspace shares the 128-item MAX_PENDING_REQUESTS ceiling with user commands and file operations. Fire-and-forget notification semantics would eliminate queue exhaustion risks.
+
+
+Bounded follow-up checks:
+1. In the running application under detached mode, click an encrypted archive in the detached File List and verify whether keyboard strokes register in the main window password box without a preliminary mouse click.
+2. In detached mode, trigger cmd-use-url via Ctrl+I from the detached File List, press Escape, and observe active document focus in both windows.
+3. Rapidly scroll an active downloading gallery in the detached File List and observe devtools console for "Too many pending workspace requests" errors.
+4. Open a folder dialog via Ctrl+O from the detached window while the detached window is placed directly over the main window, verifying dialog z-order and click modality.

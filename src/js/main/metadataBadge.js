@@ -1,9 +1,45 @@
 import { fetchMetadata, fetchDirectoryMetadata } from '../metadata.js';
+import { workspaceSurface, hostsWorkspaceSurface } from '../shared/workspaceHost.js';
+import { registerMetadataStateProvider, getSessionMetadataState } from '../shared/workspaceSession.js';
 
 let _lastMetadataArchive = null;
 let _lastMetadataDir = null;
 let _currentMeta = null;
+let _hasMetadata = false;
+let _loadSeq = 0;
 let _badgeEl = null;
+
+function _syncBadgeVisibility(state) {
+  if (!_badgeEl) return;
+  _badgeEl.classList.toggle('is-visible', Boolean(_hasMetadata && hostsWorkspaceSurface('fileList', state)));
+}
+
+function _notifyMetadataAvailability(hasMetadata, state) {
+  const next = Boolean(hasMetadata);
+  const changed = _hasMetadata !== next;
+  _hasMetadata = next;
+  _syncBadgeVisibility(state);
+  if (changed && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('quivit-metadata-changed', { detail: { hasMetadata: next } }));
+  }
+}
+
+function _clearMetadataState(state) {
+  _currentMeta = null;
+  try { localStorage.removeItem('quivit-metadata-current'); } catch (_) {}
+  _notifyMetadataAvailability(false, state);
+}
+
+function _readStoredMetadataAvailability() {
+  try {
+    const raw = localStorage.getItem('quivit-metadata-current');
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return Boolean(parsed && parsed.meta);
+  } catch (_) {
+    return false;
+  }
+}
 
 function _generateCoverThumbnail(src, usePng) {
   return new Promise((resolve, reject) => {
@@ -26,17 +62,21 @@ function _generateCoverThumbnail(src, usePng) {
   });
 }
 
-async function _loadMetadataForArchive(archivePath, metaFiles, fileList, FsUtils) {
+async function _loadMetadataForArchive(archivePath, metaFiles, fileList, FsUtils, Core) {
   if (archivePath === _lastMetadataArchive) return;
   _lastMetadataArchive = archivePath;
+  _lastMetadataDir = null;
   _currentMeta = null;
+  const seq = ++_loadSeq;
 
   const meta = await fetchMetadata(archivePath, metaFiles);
-  if (_lastMetadataArchive !== archivePath) return;
+  if (seq !== _loadSeq || _lastMetadataArchive !== archivePath) return;
 
   if (meta) {
     _currentMeta = meta;
-    if (_badgeEl) _badgeEl.classList.toggle('is-visible', true);
+    try { localStorage.setItem('quivit-metadata-current', JSON.stringify({ meta, coverSrc: null })); } catch (_) {}
+    _notifyMetadataAvailability(true, Core?.getState?.());
+
     const firstImage = fileList.find(f => FsUtils.isImageEntry(f));
     const coverSrc = firstImage ? FsUtils.buildArchiveSrc(archivePath, firstImage.name) : null;
 
@@ -47,32 +87,37 @@ async function _loadMetadataForArchive(archivePath, metaFiles, fileList, FsUtils
         coverDataUrl = await _generateCoverThumbnail(coverSrc, isIco);
       } catch (_) {}
     }
+    if (seq !== _loadSeq || _lastMetadataArchive !== archivePath) return;
+
     const payload = { meta, coverSrc: coverDataUrl || coverSrc };
     try { localStorage.setItem('quivit-metadata-current', JSON.stringify(payload)); } catch (_) {}
     if (window.__TAURI__) {
       window.__TAURI__.event.emit('metadata-data', payload).catch(() => {});
     }
   } else {
-    _currentMeta = null;
-    if (_badgeEl) _badgeEl.classList.toggle('is-visible', false);
-    try { localStorage.removeItem('quivit-metadata-current'); } catch (_) {}
+    _clearMetadataState(Core?.getState?.());
   }
 }
 
-async function _loadMetadataForDirectory(directory, fileList, FsUtils) {
+async function _loadMetadataForDirectory(directory, fileList, FsUtils, Core) {
   if (directory === _lastMetadataDir) return;
   _lastMetadataDir = directory;
+  _lastMetadataArchive = null;
   _currentMeta = null;
+  const seq = ++_loadSeq;
 
   const res = await fetchDirectoryMetadata(directory);
-  if (_lastMetadataDir !== directory) return;
+  if (seq !== _loadSeq || _lastMetadataDir !== directory) return;
 
   if (res && res.meta) {
     _currentMeta = res.meta;
-    if (_badgeEl) _badgeEl.classList.toggle('is-visible', true);
+    try { localStorage.setItem('quivit-metadata-current', JSON.stringify({ meta: res.meta, coverSrc: null })); } catch (_) {}
+    _notifyMetadataAvailability(true, Core?.getState?.());
 
     const firstImage = fileList.find(f => FsUtils.isImageEntry(f));
     const rawCoverSrc = firstImage ? await FsUtils.buildFileSrc(firstImage.path) : null;
+    if (seq !== _loadSeq || _lastMetadataDir !== directory) return;
+
     const coverSrc = rawCoverSrc ? FsUtils.firstIcoSrc(rawCoverSrc) : null;
 
     let coverDataUrl = null;
@@ -81,6 +126,7 @@ async function _loadMetadataForDirectory(directory, fileList, FsUtils) {
         coverDataUrl = await _generateCoverThumbnail(coverSrc, Array.isArray(rawCoverSrc));
       } catch (_) {}
     }
+    if (seq !== _loadSeq || _lastMetadataDir !== directory) return;
 
     const payload = { meta: res.meta, coverSrc: coverDataUrl || coverSrc };
     try { localStorage.setItem('quivit-metadata-current', JSON.stringify(payload)); } catch (_) {}
@@ -88,14 +134,12 @@ async function _loadMetadataForDirectory(directory, fileList, FsUtils) {
       window.__TAURI__.event.emit('metadata-data', payload).catch(() => {});
     }
   } else {
-    _currentMeta = null;
-    if (_badgeEl) _badgeEl.classList.toggle('is-visible', false);
-    try { localStorage.removeItem('quivit-metadata-current'); } catch (_) {}
+    _clearMetadataState(Core?.getState?.());
   }
 }
 
 export async function openMetadataWindow() {
-  if (!_currentMeta || !window.__TAURI__) return;
+  if ((!_hasMetadata && !_currentMeta) || !window.__TAURI__) return;
   await window.__TAURI__.core.invoke('open_metadata_window').catch(console.error);
 }
 
@@ -112,19 +156,38 @@ export function initMetadataBadge({ Core, FsUtils, badgeEl }) {
     });
   }
 
+  if (workspaceSurface) {
+    const sessionAvailable = getSessionMetadataState();
+    _hasMetadata = typeof sessionAvailable === 'boolean'
+      ? sessionAvailable
+      : _readStoredMetadataAvailability();
+    _syncBadgeVisibility(Core.getState());
+    window.addEventListener('quivit-metadata-changed', (e) => {
+      _hasMetadata = Boolean(e?.detail?.hasMetadata);
+      _syncBadgeVisibility(Core.getState());
+    });
+    Core.onStateChange((state) => {
+      _syncBadgeVisibility(state);
+    });
+    return;
+  }
+
+  registerMetadataStateProvider(() => _hasMetadata);
+
   Core.onStateChange((state) => {
-    if (state.mode === 'archive' && state.archivePath) {
+    _syncBadgeVisibility(state);
+    const archiveLocked = state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect';
+    if (state.mode === 'archive' && state.archivePath && !archiveLocked) {
       _lastMetadataDir = null;
-      _loadMetadataForArchive(state.archivePath, state.archiveMetadataFiles || [], state.list, FsUtils).catch(console.error);
+      _loadMetadataForArchive(state.archivePath, state.archiveMetadataFiles || [], state.list, FsUtils, Core).catch(console.error);
     } else if (state.mode === 'image' && state.directory) {
       _lastMetadataArchive = null;
-      _loadMetadataForDirectory(state.directory, state.list, FsUtils).catch(console.error);
+      _loadMetadataForDirectory(state.directory, state.list, FsUtils, Core).catch(console.error);
     } else {
+      ++_loadSeq;
       _lastMetadataArchive = null;
       _lastMetadataDir = null;
-      _currentMeta = null;
-      if (_badgeEl) _badgeEl.classList.toggle('is-visible', false);
-      try { localStorage.removeItem('quivit-metadata-current'); } catch (_) {}
+      _clearMetadataState(state);
     }
   });
 }

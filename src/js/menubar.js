@@ -21,11 +21,14 @@ import {
   orderProviders,
   getProviderOrder,
   setActiveProvider,
+  syncActiveProvider,
+  clearExplicitActiveChoice,
   resolveActiveProvider,
   MISC_PROVIDER
 } from './filepanel/libraryStore.js';
 import { fetchManifest } from './urlLoader.js';
 import { FsUtils } from './fsUtils.js';
+import { WORKSPACE_SURFACES, WORKSPACE_POSITIONS, isWorkspaceDetached, workspacePositionLabel } from './services/workspaceLayout.js';
 
 export function initMenuBar() {
   bindMenus();
@@ -227,7 +230,7 @@ function bindMenus() {
         menu.classList.add('open');
         activeMenu = menu;
         // Focus the first dropdown item.
-        const firstItem = menu.querySelector('.menu-dropdown > li[role="menuitem"]');
+        const firstItem = menu.querySelector('.menu-dropdown > li[role^="menuitem"]');
         if (firstItem) firstItem.focus();
       }
       if (e.key === 'Escape') {
@@ -299,7 +302,7 @@ function bindMenus() {
       }
     });
 
-    const items = Array.from(dropdown.children).filter(el => el.matches('li[role="menuitem"]'));
+    const items = Array.from(dropdown.children).filter(el => el.matches('li[role^="menuitem"]'));
     items.forEach((item, index) => {
       const isSubmenuTrigger = item.classList.contains('has-submenu');
       const submenuEl = isSubmenuTrigger ? item.querySelector(':scope > .submenu') : null;
@@ -362,7 +365,7 @@ function bindMenus() {
           e.stopPropagation();
           if (isSubmenuTrigger) {
             activateItem(item, dropdown);
-            item.querySelector('.submenu > li[role="menuitem"]')?.focus();
+            item.querySelector('.submenu > li[role^="menuitem"]')?.focus();
           } else {
             item.click();
           }
@@ -400,7 +403,7 @@ function bindMenus() {
           e.stopPropagation();
           if (isSubmenuTrigger) {
             activateItem(item, dropdown);
-            item.querySelector('.submenu > li[role="menuitem"]')?.focus();
+            item.querySelector('.submenu > li[role^="menuitem"]')?.focus();
           } else if (!parentSubmenu) {
             // Pass control back to the top-level menubar triggers.
             const trigger = item.closest('.menu-item')?.querySelector('.menu-trigger');
@@ -592,9 +595,9 @@ function bindFavoritesDropdown() {
         if (activeItem) activeItem.focus();
       }
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      const row = e.target.closest('li[role="menuitem"]');
+      const row = e.target.closest('li[role^="menuitem"]');
       if (row) {
-        const items = Array.from(dropdown.querySelectorAll('li[role="menuitem"]'));
+        const items = Array.from(dropdown.querySelectorAll('li[role^="menuitem"]'));
         const idx = items.indexOf(row);
         if (idx !== -1) {
           e.preventDefault();
@@ -658,6 +661,7 @@ export async function renderImportsMenu() {
   const prevOrder = getProviderOrder();
   const tree = orderProviders(Array.isArray(treeRaw) ? treeRaw : []);
   const hasAny = hasLibraryEntries(tree);
+  if (!hasAny) clearExplicitActiveChoice();
   // Only providers holding actual imports render. Stale provider dirs with
   // no galleries stay out. Misc renders on the same terms, pinned last.
   const miscEntry = tree.find((p) => p?.name === MISC_PROVIDER && hasProviderNodes(p));
@@ -727,7 +731,7 @@ function bindImportsDropdown() {
 
   dropdown.addEventListener('keydown', (e) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
-    const row = e.target.closest('li[role="menuitem"]');
+    const row = e.target.closest('li[role^="menuitem"]');
     if (!row) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -741,7 +745,7 @@ function bindImportsDropdown() {
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       e.stopPropagation();
-      const items = Array.from(dropdown.querySelectorAll('li[role="menuitem"]'));
+      const items = Array.from(dropdown.querySelectorAll('li[role^="menuitem"]'));
       const idx = items.indexOf(row);
       if (idx !== -1) {
         const nextIdx = e.key === 'ArrowDown'
@@ -752,7 +756,10 @@ function bindImportsDropdown() {
     }
   });
 
-  window.addEventListener('quivit-library-active-changed', renderImportsMenu);
+  window.addEventListener('quivit-library-active-changed', (e) => {
+    syncActiveProvider(e?.detail);
+    renderImportsMenu();
+  });
   window.addEventListener('quivit-library-updated', renderImportsMenu);
   window.addEventListener('quivit-config-loaded', renderImportsMenu);
   if (window.__TAURI__?.event?.listen) {
@@ -795,7 +802,7 @@ function _setMenuItemDisabled(id, disabled, note = '') {
   el.classList.toggle('muted', disabled);
   el.setAttribute('aria-disabled', disabled ? 'true' : 'false');
   if (disabled) {
-    if (!el.dataset.origTitle && el.title) {
+    if (el.dataset.origTitle === undefined) {
       el.dataset.origTitle = el.title;
     }
     el.title = note;
@@ -808,6 +815,18 @@ function _setMenuItemDisabled(id, disabled, note = '') {
 }
 
 export function syncViewMenu(state) {
+  for (const surface of WORKSPACE_SURFACES) {
+    const label = document.getElementById(`${surface.window}-position-label`);
+    if (label) label.textContent = workspacePositionLabel(state.workspaceLayout?.[surface.id]);
+    for (const position of WORKSPACE_POSITIONS) {
+      const item = document.getElementById(`cmd-window-${surface.window}-${position}`);
+      const checked = state.workspaceLayout?.[surface.id] === position;
+      item?.classList.toggle('checked', checked);
+      item?.setAttribute('aria-checked', String(checked));
+    }
+  }
+  document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!state.fileListVisible);
+  _setMenuItemDisabled('cmd-toggle-filelist', isWorkspaceDetached(state.workspaceLayout), 'File List stays visible while windows are detached');
   const isAnimated = !!state.isAnimated;
   // The renderer silently falls back to Bilinear for SVGs.
   // Ignore SVG status here so the user's preferred scaling mode remains visually checked (intended UX).

@@ -1,0 +1,293 @@
+Compared against the repository validation rules.
+
+Domain: 04 - Viewer interactions, media, rendering modes, and geometry
+Audited Target: 35f38e9d81cf95cd0534ac33e316291bf26e2f8c
+Before Snapshot: a473a5c2fbb0eaa93bdbb99cca111327c07104ab
+Allowed History Range: a473a5c2fbb0eaa93bdbb99cca111327c07104ab..35f38e9d81cf95cd0534ac33e316291bf26e2f8c (Commits a628e57, 47b7043, 35f38e9)
+
+Inspected Code Paths:
+- src/js/viewer/viewer.js
+- src/js/viewer/viewerGestures.js
+- src/js/viewer/viewerRender.js
+- src/js/viewer/viewerPipelines.js
+- src/js/viewer/manhwaStrip.js
+- src/js/viewer/viewerAudio.js
+- src/js/viewer/manhwaAudio.js
+- src/js/viewer/icoCells.js
+- src/js/shared/workspaceHost.js
+- src/js/shared/workspaceControls.js
+- src/js/shared/workspaceSession.js
+- src/js/services/workspaceLayout.js
+- src/js/services/actions.js
+- src/js/services/viewerMath.js
+- src/js/menubar/statusbar.js
+- src/js/menubar/chrome.js
+- src/js/menubar.js
+- src/js/main/main.js
+- src/js/main/workspace.js
+- src/js/main/fullscreen.js
+- src/js/main/dropzone.js
+- src/js/filepanel/filePanel.js
+- src/js/core.js
+- src/js/fsUtils.js
+- src/js/shortcuts.js
+- src/index.html
+- src/options.html
+- src/css/main.css
+- src/css/global.css
+- src-tauri/capabilities/default.json
+- src-tauri/src/windows.rs
+- mocha/ (test inventory)
+- e2e/specs/03-viewer.e2e.js (test inventory)
+
+Excluded / Unread Paths:
+- Other reviewers' reports in .agents/scratch/detached-audit-reports/
+- Commit history outside the allowed range
+- Markdown documentation files outside .agents guidelines
+
+================================================================================
+COVERAGE LEDGER
+================================================================================
+
+1. Media Rendering: Static Images (PNG, JPEG, WebP, AVIF, SVG)
+   - Entry point: Core.selectIndex / Core.setListAndIndex / IPC single-instance-open
+   - Mutation owner: Main Core / viewerRender.js
+   - Visible UI owner: Main #viewport (DOM img elements, SVG pump)
+   - Update path: Core state change -> ViewportCore -> viewerRender.js _onStateChange -> _activatePoolNode -> transform matrix
+   - Result: Supported by code
+
+2. Media Rendering: Animated Media (GIF, Animated WebP, APNG, Animated SVG)
+   - Entry point: Core.selectIndex / Core.setListAndIndex
+   - Mutation owner: Main Core / viewerPipelines.js
+   - Visible UI owner: Main #viewport (#viewer-svg-pump, #viewer-filter-canvas, webgl2)
+   - Update path: Core.checkIsAnimated -> viewerPipelines.js _syncLivePump / WebGL animation clock
+   - Result: Supported by code
+
+3. Media Rendering: Multi-Resolution Icons (ICO)
+   - Entry point: Core.selectIndex -> FsUtils.isIco
+   - Mutation owner: Main viewerRender.js / icoCells.js / manhwaStrip.js
+   - Visible UI owner: Main #viewport (#viewer-ico-row, .ico-container, .ico-size)
+   - Update path: FsUtils.loadIcoSizes -> _renderIco -> icoCells.js -> Core.setImageDimensions -> viewportState.applyFitMode
+   - Result: Supported by code
+
+4. Media Rendering: Video Playback & Single-View Audio
+   - Entry point: Core.selectIndex -> FsUtils.isVideo
+   - Mutation owner: Main viewerRender.js (_swapInVideo) and viewerAudio.js
+   - Visible UI owner: Main #viewport (#viewer-video, #viewer-audio, .audio-control-container)
+   - Update path: viewerRender.js _swapInVideo -> viewerAudio.js _syncAudioState -> HTMLAudioElement play/pause
+   - Result: Supported by code
+
+5. Fit Modes (None, Width, Height, Window, Width-if-larger, Height-if-larger, Window-if-larger)
+   - Entry point: View menu, shortcuts (R, Shift+Q, Shift+E, Shift+F, Q, E, F), Options
+   - Mutation owner: Main Core (setFitMode)
+   - Visible UI owner: Main #viewport (#viewer-img-wrapper, #manhwa-strip)
+   - Update path: ACTION_MAP (default owner: 'main') -> requestWorkspace('main', 'action', 'run') -> Core.setFitMode -> snapshot -> ViewportCore -> viewportState.applyFitMode
+   - Result: Supported by code
+
+6. Zoom (In, Out, 100%, Mouse Wheel Zoom)
+   - Entry point: View menu, shortcuts (C, Z, X), Ctrl+Wheel
+   - Mutation owner: Main Viewer (zoomAt, zoomCenter, setZoom)
+   - Visible UI owner: Main #viewport (#viewer-img-wrapper)
+   - Update path:
+     * When triggered on main viewport: clientX/clientY passed to Viewer.zoomAt -> zoom at cursor
+     * When forwarded from detached window: clientX/clientY stripped by workspaceControls.js -> Viewer.zoomCenter -> zoom at viewport center
+   - Result: Supported by code (intentional coordinate sanitization)
+
+7. Pan: Keyboard Pan & Gestures
+   - Entry point: Shortcuts (W, A, S, D, Arrow keys), Drag Pan (MouseLeft, MouseMiddle, Space+Drag)
+   - Mutation owner: Main Viewer (panBy) / viewportState
+   - Visible UI owner: Main #viewport
+   - Update path:
+     * Keyboard pan from detached file list: workspaceControls.panBy -> requestWorkspace('main', 'viewer', 'panBy') -> Viewer.panBy on main
+     * Drag gestures on main: viewerGestures.js onMouseDown / onMouseMove / _pollCursor -> viewportState.panByStep
+     * Gestures on secondary window: _isMouseOverViewportNow returns false (mode: 'empty'); pan gestures do not activate
+   - Result: Supported by code
+
+8. Rotation & Flip (Rotate CW, Rotate CCW, Flip Horizontal, Flip Vertical)
+   - Entry point: Shortcuts (H, G, V, B), View menu
+   - Mutation owner: Main Viewer (rotate, flipHorizontal, flipVertical)
+   - Visible UI owner: Main #viewport
+   - Update path: ACTION_MAP (default owner: 'main') -> requestWorkspace('main', 'action', 'run') -> Viewer.rotate / Viewer.flip -> viewportState -> transform
+   - Result: Supported by code
+
+9. Scaling Modes (Pixelated, Bilinear, Lanczos) & Filter Shaders (Anime4K, Scanlines)
+   - Entry point: View menu submenus, Options dialog
+   - Mutation owner: Main Core (setScalingMode, setActiveFilter)
+   - Visible UI owner: Main #viewport (#viewer-lanczos-canvas, #viewer-filter-canvas, #manhwa-filter-canvas)
+   - Update path: Core.setScalingMode / setActiveFilter -> viewerPipelines.js _onStateChange -> _applyScaling / WebGL shader pass
+   - Result: Supported by code
+
+10. Opaque Canvas / Transparent Background Toggle
+    - Entry point: View menu (cmd-toggle-transparent)
+    - Mutation owner: Main Core (toggleTransparentBg)
+    - Visible UI owner: Main #viewport (#img-grill, #img-grill-border, #viewer-img-wrapper, #manhwa-strip)
+    - Update path: ACTION_MAP -> Core.toggleTransparentBg -> snapshot -> main.js onStateChange -> toggle grill classes on main
+    - Result: Supported by code
+
+11. Spread View (Off, RTL, LTR) & Spread Indicator
+    - Entry point: View menu (cmd-spread-off, cmd-spread-direction-rtl, cmd-spread-direction-ltr)
+    - Mutation owner: Main Core (setSpreadMode, toggleSpreadMode)
+    - Visible UI owner: Main #viewport (#spread-indicator, #viewer-img-wrapper)
+    - Update path: Core state change -> viewerRender.js _onStateChange -> viewportState.setSpreadEnabled / setSpreadDirection -> statusbar.js syncSpreadIndicator
+    - Result: Supported by code
+
+12. Manhwa Mode Toggle & Strip Layout
+    - Entry point: View menu, shortcut (M)
+    - Mutation owner: Main Core (toggleManhwaMode)
+    - Visible UI owner: Main #viewport (#manhwa-strip, #manhwa-filter-canvas, #manhwa-indicator)
+    - Update path: Core.toggleManhwaMode -> snapshot -> manhwaStrip.js _onStateChange -> _activate / _deactivate -> ResizeObserver reflow
+    - Result: Supported by code
+
+13. Manhwa Strip Row Alignment from File List Selection
+    - Entry point: File list click, arrow keys in file panel
+    - Mutation owner: Main manhwaStrip.js (alignListItemTop, alignListItemBottom)
+    - Visible UI owner: Main #viewport (#manhwa-strip)
+    - Update path: filePanel.js -> workspaceControls.stripCall('alignListItemTop', index) -> requestWorkspace('main', 'strip', 'alignListItemTop', [index]) -> manhwaStrip.js alignListItemTop
+    - Result: Supported by code
+
+14. Manhwa Strip Visible Range Broadcast to Detached File List
+    - Entry point: manhwaStrip.js _syncAnchorToCore / _scheduleSettle
+    - Mutation owner: Main workspaceControls.js (publishStripInfo)
+    - Visible UI owner: Detached #file-list (.is-visible-in-strip row class)
+    - Update path: quivit-manhwa-settle -> workspaceControls.js -> quivit-workspace-strip-info event -> secondary window listener -> remoteVisibleIndices -> filePanel.js updateSelection
+    - Result: Conditional risk on initial attachment (RISK-VIEW-01)
+
+15. Manhwa Strip Top-Edge Pan / Boundary Parent Reveal (triggerRevealListTop)
+    - Entry point: Panning past strip top in main viewer, jumpManhwa(-1), navigateManhwa(-1)
+    - Mutation owner: Main viewer.js (_revealListTopOnPan) / manhwaStrip.js
+    - Visible UI owner: Detached #file-list (fileListUl scroll to top)
+    - Update path: viewer.js -> triggerRevealListTop -> main.js _onRevealListTop -> filePanel.js revealListTop -> local DOM fileListUl.scrollTop = 0
+    - Result: Confirmed gap (GAP-VIEW-01)
+
+16. Manhwa Audio: Per-Slot Volume Pills & Audio Coordination
+    - Entry point: Manhwa slot mount, click volume pill, wheel volume, cmd-toggle-audio
+    - Mutation owner: Main manhwaAudio.js
+    - Visible UI owner: Main #viewport (#manhwa-audio-overlay, .manhwa-volume-toggle, .manhwa-volume-slider)
+    - Update path: manhwaStrip.js attachSlotAudio -> _positionPill -> transform translate/scale relative to #viewport
+    - Result: Supported by code
+
+17. Audio Mute / Unmute Command (cmd-toggle-audio)
+    - Entry point: Shortcut, View menu
+    - Mutation owner: Main ViewerAudio / ManhwaAudio
+    - Visible UI owner: Main audio pill / statusbar audio state
+    - Update path: ACTION_MAP (default owner: 'main') -> requestWorkspace('main', 'action', 'run') -> ctx.ManhwaAudio.toggleStripMute / ctx.ViewerAudio.toggleAudioMute
+    - Result: Supported by code
+
+18. Cursor Auto-Hide & Idle Timeout
+    - Entry point: Mouse idle timer, cmd-toggle-cursor-autohide
+    - Mutation owner: Main viewerGestures.js
+    - Visible UI owner: Main #viewport (.cursor-hidden class)
+    - Update path: viewerGestures.js _armIdleCursorTimer -> _hideCursor -> vp.classList.add('cursor-hidden')
+    - Result: Supported by code
+
+19. Viewport Geometry on Panel Detach / Relocate / Recombine
+    - Entry point: Window menu, Options layout shortcuts
+    - Mutation owner: Core (setWorkspacePosition) / workspace.js
+    - Visible UI owner: Main #viewport
+    - Update path: setWorkspacePosition -> #workspace[data-file-list-position="detached"] -> :root[data-workspace-surface="main"] #file-panel display:none -> #viewport expands -> ResizeObserver on #viewport -> viewportState.handleViewportResize -> pipelines.forceRender
+    - Result: Supported by code
+
+20. Viewport Geometry on Native / DOM Fullscreen
+    - Entry point: cmd-fullscreen (4, Alt+Enter, F11), Escape hold
+    - Mutation owner: fullscreen.js / native window
+    - Visible UI owner: Window-local (#viewport on main, #file-panel on secondary)
+    - Update path: cmd-fullscreen (owner: 'window') -> toggleFullscreen -> ResizeObserver on #viewport -> handleViewportResize
+    - Result: Supported by code (intentional window-local ownership)
+
+21. Status Bar Readouts & Indicators (Dims, Zoom, Index, Fit, Scale, Filter, Spread, Manhwa)
+    - Entry point: State change, viewerRender.js, statusbar.js
+    - Mutation owner: Main Statusbar
+    - Visible UI owner: Main #statusbar, #spread-indicator, #manhwa-indicator
+    - Update path: viewerRender.js / Core.onStateChange -> Statusbar.setImage / Statusbar.update -> textContent updates
+    - Result: Supported by code (secondary window status bar is disabled and hidden by chrome.js)
+
+22. Overlays: Drop Overlay, Password Overlay, URL Overlay
+    - Entry point: Empty state, drag drop, encrypted archive open, Ctrl+i
+    - Mutation owner: Main overlay controllers (dropzone.js, passwordOverlay.js, urlOverlay.js)
+    - Visible UI owner: Main #viewport
+    - Update path: Retained exclusively in main viewport as required by single-viewer architecture
+    - Result: Supported by code
+
+================================================================================
+FINDINGS
+================================================================================
+
+--------------------------------------------------------------------------------
+Finding GAP-VIEW-01
+--------------------------------------------------------------------------------
+Priority: P2
+Confidence: High (95%)
+Trigger Reference: src/js/viewer/manhwaStrip.js:3130 (invoked at src/js/viewer/viewer.js:31, src/js/viewer/manhwaStrip.js:2377, src/js/viewer/manhwaStrip.js:2397, src/js/viewer/manhwaStrip.js:2456)
+Failure Reference: src/js/main/main.js:259, src/js/filepanel/filePanel.js:3097-3102, and src/js/shared/workspaceControls.js:62
+Relocation Commit: a628e57 (Added window relocation and detach support)
+
+Minimal User Sequence:
+1. Open a folder containing images along with a parent directory (..) or preceding folders.
+2. Enable Manhwa view mode (shortcut 'm').
+3. Detach the File List into a secondary window via 'Window -> File List: Detached Window'.
+4. In the main window's viewport, scroll the manhwa strip to the very top, then pan upward further, or press Home (jumpManhwa(-1)).
+5. Inspect the scroll position of the detached File List window.
+
+Expected Behavior:
+In combined mode, when the user scrolls or jumps past the top of the manhwa strip, triggerRevealListTop() executes revealListTop(), which scrolls fileListUl.scrollTop to 0 so the parent directory item (..) is visible to the user, and pauses strip navigation at the container boundary. This reveal must happen on the visible File List in the secondary window.
+
+Actual Behavior:
+triggerRevealListTop() calls the function registered in main.js:259 (setRevealListTop(revealListTop)), which executes revealListTop() from filePanel.js on the main window's DOM. In detached mode, the main window's #file-panel is hidden via CSS (display: none;), while the visible file list is in the secondary native window workspace-file-list.
+The call sets fileListUl.scrollTop = 0 on the hidden main DOM element and has zero effect on the visible detached file list.
+Furthermore, because the hidden main element's fileListUl.scrollTop is already 0, revealListTop() returns wasAtTop: true. In manhwaStrip.js:2377, _revealBeforeLeavingStrip evaluates !triggerRevealListTop() as false, prematurely failing to hold at the top boundary.
+
+Complete Causal Chain:
+1. In viewer.js:29-32, _revealListTopOnPan(dy) detects dy > 0 && isManhwaStripActive() && isStripAtTop() and calls triggerRevealListTop().
+2. In manhwaStrip.js:3130-3132, triggerRevealListTop() delegates to _onRevealListTop().
+3. In main.js:259, setRevealListTop(revealListTop) wires this callback directly to revealListTop from filePanel.js.
+4. In filePanel.js:3097-3102, revealListTop() mutates the local document node fileListUl.scrollTop = 0.
+5. In detached mode, :root[data-workspace-surface="main"] #workspace[data-file-list-position="detached"] > #file-panel is hidden with display: none (main.css:496).
+6. workspaceControls.js:62 connects strip RPC handlers (alignListItemTop, alignListItemBottom, navigateManhwa, pageStrip, jumpManhwa), but omits revealListTop.
+7. No RPC call or event is sent to workspace-file-list. The visible detached file list never scrolls to reveal the parent folder entry.
+
+--------------------------------------------------------------------------------
+Finding RISK-VIEW-01
+--------------------------------------------------------------------------------
+Priority: P3
+Confidence: Medium (75%)
+Trigger Reference: src/js/shared/workspaceControls.js:20-24, src/js/shared/workspaceControls.js:68-69, src/js/shared/workspaceSession.js:7-10
+Relocation Commit: a628e57 (Added window relocation and detach support)
+
+Unresolved Assumption:
+When the secondary window connects by sending { kind: 'ready' }, workspaceSession.js receives this on the main window and responds by publishing the state snapshot (publish(message.source, true, true)).
+However, quivit-workspace-strip-info is not part of Core.getState() snapshot. It is an independent DOM event fired by publishStripInfo().
+publishStripInfo() is subscribed only to Core.onStateChange and quivit-manhwa-settle.
+When the secondary window attaches without an immediate state change or strip scroll on main, remoteVisibleIndices in the secondary window initializes to [].
+In filePanel.js:2280-2300 (updateSelection), if visibleListIndices is empty, updateSelection falls back to minActiveIdx = selectedIndex and maxActiveIdx = selectedIndex.
+
+Specific Runtime Observation Needed:
+Observe whether immediately after detaching a workspace into a secondary window while in Manhwa mode, the file list items corresponding to the multi-image visible range fail to receive the .is-visible-in-strip class until the user performs the first scroll or selection change in the viewer window.
+
+================================================================================
+EXISTING TEST COVERAGE
+================================================================================
+
+1. Mocha Tests:
+   - mocha/actions.test.js: Verifies action registry lookups, default keybind generation, and dispatch structure. Contains no assertions for detached workspace RPC routing.
+   - mocha/viewerMath.test.js: Extensive mathematical test coverage for viewport transforms, pan clamping, fit mode calculations, spread geometry, and ICO coordinate layouts. Does not test DOM lifecycle or IPC.
+   - mocha/core.test.js: Validates Core state transitions, fit modes, scaling modes, and encryption flags. Does not test secondary window replica snapshots or workspaceLayout persistence.
+
+2. E2E Specs:
+   - e2e/specs/03-viewer.e2e.js: Tests fit mode transitions (None, Width, Height, Window), zoom shortcuts, and transform matrix updates in the single main window.
+   - Detached Mode E2E Coverage: There are currently zero E2E tests executing multi-window or detached workspace flows. The only mention of "detached" in e2e/ is a code comment in record.e2e.js regarding recorder shims.
+
+================================================================================
+CROSS-DOMAIN DEPENDENCIES AND BOUNDED FOLLOW-UP CHECKS
+================================================================================
+
+1. Dependency on Reviewer 01 (Input & Commands):
+   - Reviewer 01 owns dispatchAction and keyboard shortcuts. Our domain confirmed that navigationOwner properly scopes favorites and library navigation locally while forwarding list and viewer commands to main.
+   - Follow-up check: Verify that when search input (#file-panel-search) has focus in the detached window, global navigation shortcuts continue to be blocked by isInteractiveKeyTarget.
+
+2. Dependency on Reviewer 02 (Browsing & File List):
+   - Reviewer 02 owns filePanel.js rendering and selection synchronization.
+   - Follow-up check: Align with Reviewer 02 regarding GAP-VIEW-01 to ensure that when a revealListTop RPC is added to workspaceControls.js, filePanel.js in the secondary window properly handles the scroll mutation without stealing keyboard focus from the main viewport.
+
+3. Dependency on Reviewer 07 (Fullscreen & Window Chrome):
+   - Reviewer 07 owns fullscreen lifetime. Our domain verified that main viewport geometry smoothly recalculates on fullscreen enter/exit via ResizeObserver.
+   - Follow-up check: Confirm whether entering fullscreen on workspace-file-list preserves menubar visibility rules established in chrome.js.

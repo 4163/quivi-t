@@ -21,15 +21,16 @@ import {
 } from '../filepanel/filePanel.js';
 import { bindKeyboardShortcuts, updateMenuShortcuts, resetScrollLatch, syncScrollLatch } from '../shortcuts.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
+import { syncShellBackground } from '../shellBackground.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from '../keybinds.js';
 import { Statusbar } from '../menubar/statusbar.js';
 import { initMenuBar, syncViewMenu } from '../menubar.js';
 import * as Chrome from '../menubar/chrome.js';
-import { initFullscreen, toggleFullscreen, syncFullscreenState, isFullscreenActive, syncKeyLabel } from './fullscreen.js';
+import { initFullscreen, toggleFullscreen, syncFullscreenState, syncKeyLabel } from './fullscreen.js';
 
 import { handleTabJump } from '../keyboardNav.js';
 import { emergencyCssReset } from '../shared/configPreview.js';
-import { ACTION_REGISTRY, dispatch } from '../services/actions.js';
+import { ACTION_REGISTRY } from '../services/actions.js';
 
 import { initLifecycle } from './lifecycle.js';
 import { initMetadataBadge, openMetadataWindow } from './metadataBadge.js';
@@ -41,6 +42,10 @@ import { createImportActions } from '../services/importActions.js';
 import { activateImportProvider, MISC_PROVIDER } from '../filepanel/libraryStore.js';
 import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
 import { ManhwaAudio } from '../viewer/manhwaAudio.js';
+import { initWorkspace } from './workspace.js';
+import { workspaceSurface, ViewportCore } from '../shared/workspaceHost.js';
+import { requestWorkspace, getSessionPreview, registerPreviewStateProvider } from '../shared/workspaceSession.js';
+import { createWorkspaceControls } from '../shared/workspaceControls.js';
 import {
   initManhwaStrip,
   isManhwaStripActive,
@@ -56,7 +61,7 @@ import {
 } from '../viewer/manhwaStrip.js';
 
 // Reset the options tab on startup so each session starts on General.
-localStorage.removeItem('options-active-tab');
+if (!workspaceSurface) localStorage.removeItem('options-active-tab');
 
 // Emergency CSS reset (Ctrl+Shift+Alt+C).
 window.addEventListener('keydown', (e) => {
@@ -104,7 +109,6 @@ const fileListUl = document.getElementById('file-list');
 const resizeHandle = document.getElementById('panel-resize-handle');
 const metadataBadgeEl = document.getElementById('status-metadata-badge');
 
-let _uiInitialized = false;
 let keyboardPanStep = DEFAULT_KEYBOARD_PAN_STEP;
 let wheelPanStep = DEFAULT_WHEEL_PAN_STEP;
 
@@ -116,8 +120,9 @@ function setMenuItemMuted(id, muted) {
 }
 
 function updateHistoryMenu() {
-  setMenuItemMuted('cmd-history-back', !NavigationHistory.canGoBack());
-  setMenuItemMuted('cmd-history-forward', !NavigationHistory.canGoForward());
+  const history = workspaceSurface ? Core.getState().historyAvailable : null;
+  setMenuItemMuted('cmd-history-back', !(history ? history.back : NavigationHistory.canGoBack()));
+  setMenuItemMuted('cmd-history-forward', !(history ? history.forward : NavigationHistory.canGoForward()));
 }
 
 function updatePanSteps(config = Core.getState().config) {
@@ -128,7 +133,7 @@ function updatePanSteps(config = Core.getState().config) {
 
 function dispatchKeyboardPan(dx, dy) {
   if (dx === 0 && dy === 0) return;
-  Viewer.panBy(dx * keyboardPanStep, dy * keyboardPanStep);
+  workspaceControls.panBy(dx * keyboardPanStep, dy * keyboardPanStep);
 }
 
 const actionCtx = {
@@ -152,11 +157,16 @@ const actionCtx = {
   isLibraryFocused: () => !!document.activeElement?.closest('#file-panel-library, .library-provider-list'),
   get keyboardPanStep() { return keyboardPanStep; },
   get wheelPanStep() { return wheelPanStep; },
-  get centerListItem() { return centerListItem; },
+  get alignListItemTop() { return alignListItemTop; },
   get alignListItemBottom() { return alignListItemBottom; },
   get navigateManhwa() { return navigateManhwa; },
   get pageStrip() { return pageStrip; }
 };
+
+const workspaceControls = createWorkspaceControls({ actionCtx, Viewer, getVisibleImageIndices,
+  revealListTop,
+  focusFileList,
+  strip: { alignListItemTop, alignListItemBottom, navigateManhwa, pageStrip, jumpManhwa } });
 
 function bindMenuCommands() {
   for (const action of ACTION_REGISTRY) {
@@ -164,7 +174,7 @@ function bindMenuCommands() {
     if (el) {
       el.addEventListener('click', (e) => {
         if (el.classList.contains('muted') || el.getAttribute('aria-disabled') === 'true') return;
-        dispatch(action.id, e, actionCtx);
+        workspaceControls.dispatchAction(action.id, e);
       });
     }
   }
@@ -174,23 +184,8 @@ function bindMenuCommands() {
 }
 
 Core.onStateChange((state) => {
-  if (!_uiInitialized && state.config?.frontend_data) {
-    const fd = state.config.frontend_data;
-    if (fd.menu_visible !== undefined) {
-      Chrome.setMenuBarVisible(fd.menu_visible);
-    }
-    if (fd.status_visible !== undefined) {
-      Chrome.setStatusBarVisible(fd.status_visible);
-    }
-    
-    // Sync checkmarks that rely on startup state.
-    document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!state.fileListVisible);
-    document.getElementById('cmd-fullscreen')?.classList.toggle('checked', isFullscreenActive());
-    
-    _uiInitialized = true;
-  }
-
   updateMenuShortcuts(state.config);
+  syncViewMenu(state);
 
   const isPasswordBlocked = state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect';
 
@@ -237,16 +232,18 @@ Core.onStateChange((state) => {
   // Update standard statusbar fields.
   Statusbar.update(state);
 
-  syncViewMenu(state);
   updateHistoryMenu();
 });
 
 window.addEventListener('quivit-history-changed', () => {
+  if (!workspaceSurface) Core.setState({ historyAvailable: { back: NavigationHistory.canGoBack(), forward: NavigationHistory.canGoForward() } });
   updateHistoryMenu();
 });
 
 // Initialization.
+initWorkspace();
 Statusbar.init();
+Chrome.initChrome();
 initFullscreen();
 initFilePanel({
   filePanel,
@@ -255,18 +252,27 @@ initFilePanel({
   resizeHandle,
   Core,
   FsUtils,
-  isManhwaActive: isManhwaStripActive,
-  getVisibleImageIndices,
-  alignListItemTop,
-  alignListItemBottom,
-  pageStrip
+  isManhwaActive: () => !!Core.getState().manhwaEnabled,
+  getVisibleImageIndices: workspaceControls.visibleIndices,
+  alignListItemTop: index => workspaceControls.stripCall('alignListItemTop', index),
+  alignListItemBottom: index => workspaceControls.stripCall('alignListItemBottom', index),
+  pageStrip: (...args) => workspaceControls.stripCall('pageStrip', ...args),
+  onScrollTopChanged: isAtTop => workspaceControls.reportFileListScroll(isAtTop)
 });
 initManhwaStrip();
-setRevealListTop(revealListTop);
+setRevealListTop(workspaceControls.revealListTop);
 initMenuBar();
 bindMenuCommands();
-initPasswordOverlay({ overlay: passwordOverlay, Core, FsUtils, focusFileList, isFileListFocused });
-const importActions = createImportActions({
+initPasswordOverlay({
+  overlay: passwordOverlay,
+  Core: ViewportCore,
+  FsUtils,
+  focusFileList,
+  isFileListFocused,
+  restoreFocus: (target) => workspaceControls.restoreFocus(target),
+  getLastInitiator: () => workspaceControls.getLastInitiator()
+});
+const importActions = workspaceControls.createImportActions(() => createImportActions({
   invoke: (command, args) => window.__TAURI__.core.invoke(command, args),
   FsUtils,
   loadUrl: (url) => UrlLoader.loadUrl(url),
@@ -274,33 +280,42 @@ const importActions = createImportActions({
   sanitizeSvg: sanitizeSvgDocument,
   activateMisc: () => activateImportProvider(MISC_PROVIDER),
   libraryUpdated: () => window.dispatchEvent(new CustomEvent('quivit-library-updated'))
-});
+}));
 Chrome.initImportActivity(importActions);
 const urlOverlay = initUrlOverlay({
   overlay: urlOverlayEl,
   filePanel,
-  Core,
+  Core: ViewportCore,
   focusFileList,
-  onSubmit: (url) => importActions.openUrl(url)
+  onSubmit: (url) => importActions.openUrl(url),
+  restoreFocus: (target) => workspaceControls.restoreFocus(target),
+  getLastInitiator: () => workspaceControls.getLastInitiator()
 });
 initDropZone({
   dropOverlay, FsUtils, Core, importActions,
   isUnmappedSelection: (state) => isManhwaStripActive() && state.index >= 0 && !isListIndexMapped(state.index),
   onDropAccepted: () => urlOverlay.hide({ restoreFocus: false })
 });
-UrlLoader.init({ Core, FsUtils, urlOverlay, getFileListViewportRange });
+UrlLoader.init({ Core, FsUtils, urlOverlay, getFileListViewportRange,
+  session: workspaceSurface ? (method, args) => requestWorkspace('main', 'url', method, args).catch(console.error) : null });
 initMetadataBadge({ Core, FsUtils, badgeEl: metadataBadgeEl });
-initViewerAudio({ Core, FsUtils });
-initLifecycle({ Core, FsUtils, UrlLoader });
+initViewerAudio({ Core: ViewportCore, FsUtils });
+if (!workspaceSurface) initLifecycle({ Core, FsUtils, UrlLoader });
 
-let previewTheme = null;
-let previewCss = null;
+workspaceControls.connect({ importActions, UrlLoader });
 
-async function reloadConfigAndSyncLibrary(relocation = null) {
+const initialPreview = getSessionPreview();
+let previewTheme = initialPreview?.theme ?? null;
+let previewCss = initialPreview?.css ?? null;
+let pendingSnapshotThemeSync = false;
+
+registerPreviewStateProvider(() => ({ theme: previewTheme, css: previewCss }));
+
+async function reloadConfigAndSyncLibrary(relocation = null, { flush = true } = {}) {
   const cachedLibraryPath = relocation?.oldPath || UrlLoader.getCachedLibraryDir();
   // Flush dirty prefs first so a watcher-triggered reload never wipes an
   // unsaved change inside the debounce window (lost-update).
-  await Core.flushConfig().catch(() => {});
+  if (flush) await Core.flushConfig().catch(() => {});
   await Core.loadConfig();
   // Another QuiviT process receives the config watcher event but not the
   // in-process relocation event, so it must replace its old root watcher too.
@@ -318,21 +333,32 @@ async function reloadConfigAndSyncLibrary(relocation = null) {
   }
 }
 
-bindKeyboardShortcuts({ Core, dispatchAction: (id, payload) => dispatch(id, payload, actionCtx), dispatchKeyboardPan });
+bindKeyboardShortcuts({ Core, dispatchAction: workspaceControls.dispatchAction, dispatchKeyboardPan });
 
 if (window.__TAURI__) {
   const { listen } = window.__TAURI__.event;
 
   listen('config-updated', () => {
+    const hadPreview = previewTheme !== null || previewCss !== null;
     previewTheme = null;
     previewCss = null;
+    if (workspaceSurface) {
+      if (hadPreview && pendingSnapshotThemeSync) {
+        pendingSnapshotThemeSync = false;
+        const config = Core.getState().config;
+        applyTheme(config?.frontend_data?.theme || 'system');
+        applyCustomCss(config?.frontend_data?.custom_css || '');
+      }
+      return;
+    }
     resetScrollLatch();
-    reloadConfigAndSyncLibrary().catch(err => {
+    reloadConfigAndSyncLibrary(null, { flush: false }).catch(err => {
       console.error('[Main] Failed to refresh settings:', err);
     });
   });
 
   listen('config-changed', () => {
+    if (workspaceSurface) return;
     resetScrollLatch();
     reloadConfigAndSyncLibrary().catch(err => {
       console.error('[Main] Failed to refresh settings:', err);
@@ -340,19 +366,28 @@ if (window.__TAURI__) {
   });
 
   listen('library-relocated', (event) => {
-    reloadConfigAndSyncLibrary(event.payload).catch(err => {
+    if (workspaceSurface) return;
+    reloadConfigAndSyncLibrary(event.payload, { flush: false }).catch(err => {
       console.error('[Main] Failed to activate relocated Library:', err);
     });
   });
 
   listen('theme-preview', (e) => {
     previewTheme = e.payload;
+    pendingSnapshotThemeSync = false;
     applyTheme(previewTheme);
   });
   
   listen('css-preview', (e) => {
     previewCss = e.payload;
+    pendingSnapshotThemeSync = false;
     applyCustomCss(previewCss);
+  });
+
+  listen('preview-cleared', () => {
+    previewTheme = null;
+    previewCss = null;
+    pendingSnapshotThemeSync = false;
   });
 }
 
@@ -370,16 +405,29 @@ window.addEventListener('quivit-config-loaded', () => {
 
   const theme = config?.frontend_data?.theme || 'system';
   const customCss = config?.frontend_data?.custom_css || '';
+  if (workspaceSurface) {
+    pendingSnapshotThemeSync = previewTheme !== null || previewCss !== null;
+  }
 
-  try {
-    if (theme === 'light' || theme === 'dark') localStorage.setItem('quivit-theme', theme);
-    else localStorage.removeItem('quivit-theme');
-    if (customCss) localStorage.setItem('quivit-custom-css', customCss);
-    else localStorage.removeItem('quivit-custom-css');
-  } catch (e) {}
+  if (!workspaceSurface) {
+    try {
+      if (theme === 'light' || theme === 'dark') localStorage.setItem('quivit-theme', theme);
+      else localStorage.removeItem('quivit-theme');
+      if (customCss) localStorage.setItem('quivit-custom-css', customCss);
+      else localStorage.removeItem('quivit-custom-css');
+    } catch (e) {}
+  }
 
   applyTheme(previewTheme !== null ? previewTheme : theme);
   applyCustomCss(previewCss !== null ? previewCss : customCss);
 });
 
-Core.init();
+if (workspaceSurface) {
+  Core.receiveSnapshot({});
+  window.dispatchEvent(new CustomEvent('quivit-config-loaded'));
+  syncShellBackground()
+    .then(() => window.__TAURI__?.core.invoke('show_window'))
+    .catch(console.error);
+} else {
+  Core.init();
+}

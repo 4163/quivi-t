@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex, OnceLock,
+        Arc, Mutex, Once, OnceLock,
     },
     time::{Duration, Instant},
 };
@@ -220,6 +220,7 @@ pub fn claim(id: &str) -> Result<CaptureLease, String> {
     })
 }
 struct RegisteredTarget {
+    owner: String,
     hwnd: HWND,
     _target: IDropTarget,
 }
@@ -232,37 +233,42 @@ thread_local! { static TARGETS: RefCell<Vec<RegisteredTarget>> = const { RefCell
 pub fn install(window: &tauri::WebviewWindow) -> Result<(), String> {
     let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as usize;
     let app = window.app_handle().clone();
-    let watchdog_app = app.clone();
-    std::thread::spawn(move || loop {
-        std::thread::sleep(Duration::from_secs(1));
-        let expired = {
-            let mut state = registry().lock().unwrap();
-            if state
-                .pending
-                .as_ref()
-                .is_some_and(|p| p.expired(state.worker_running))
-            {
-                state.pending.take().map(|p| {
-                    p.cancelled.store(true, Ordering::SeqCst);
-                    p.id
-                })
-            } else {
-                None
+    static WORKERS: Once = Once::new();
+    WORKERS.call_once(|| {
+        let watchdog_app = app.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_secs(1));
+            let expired = {
+                let mut state = registry().lock().unwrap();
+                if state
+                    .pending
+                    .as_ref()
+                    .is_some_and(|p| p.expired(state.worker_running))
+                {
+                    state.pending.take().map(|p| {
+                        p.cancelled.store(true, Ordering::SeqCst);
+                        p.id
+                    })
+                } else {
+                    None
+                }
+            };
+            if let Some(id) = expired {
+                emit(
+                    &watchdog_app,
+                    "failed",
+                    Some(id),
+                    Some("Image transfer timed out".into()),
+                );
             }
-        };
-        if let Some(id) = expired {
-            emit(
-                &watchdog_app,
-                "failed",
-                Some(id),
-                Some("Image transfer timed out".into()),
-            );
-        }
+        });
+        std::thread::spawn(cleanup_abandoned_captures);
     });
-    std::thread::spawn(cleanup_abandoned_captures);
+    let owner = window.label().to_owned();
     window
         .with_webview(move |_| {
             let mut context = InstallContext {
+                owner,
                 app,
                 formats: Arc::new(Formats::new()),
                 targets: Vec::new(),
@@ -276,10 +282,13 @@ pub fn install(window: &tauri::WebviewWindow) -> Result<(), String> {
                     LPARAM(&mut context as *mut _ as isize),
                 );
             }
-            registry().lock().unwrap().installed = !context.targets.is_empty();
+            registry().lock().unwrap().installed |= !context.targets.is_empty();
             TARGETS.with(|targets| targets.borrow_mut().extend(context.targets));
         })
         .map_err(|e| e.to_string())
+}
+pub fn uninstall(owner: &str) {
+    TARGETS.with(|targets| targets.borrow_mut().retain(|target| target.owner != owner));
 }
 pub fn shutdown() {
     let mut state = registry().lock().unwrap();
@@ -291,6 +300,7 @@ pub fn shutdown() {
     TARGETS.with(|targets| targets.borrow_mut().clear());
 }
 struct InstallContext {
+    owner: String,
     app: tauri::AppHandle,
     formats: Arc<Formats>,
     targets: Vec<RegisteredTarget>,
@@ -309,6 +319,7 @@ unsafe fn install_target(hwnd: HWND, context: &mut InstallContext) {
     let _ = RevokeDragDrop(hwnd);
     if RegisterDragDrop(hwnd, &target).is_ok() {
         context.targets.push(RegisteredTarget {
+            owner: context.owner.clone(),
             hwnd,
             _target: target,
         });
@@ -716,7 +727,8 @@ fn text_value(object: &IDataObject, formats: &Formats) -> Option<String> {
         {
             if line.starts_with("data:image/")
                 || parse_local_path(line).is_some()
-                || tauri::Url::parse(line).is_ok_and(|url| matches!(url.scheme(), "http" | "https" | "file"))
+                || tauri::Url::parse(line)
+                    .is_ok_and(|url| matches!(url.scheme(), "http" | "https" | "file"))
             {
                 return Some(line.into());
             }

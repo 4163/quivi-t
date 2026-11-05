@@ -20,6 +20,7 @@ import {
   getLibraryTree,
   hasLibraryEntries,
   getActiveProvider,
+  syncActiveProvider,
   deleteLibraryEntry,
   getProviderCollapsed,
   saveProviderCollapsed,
@@ -30,6 +31,7 @@ import {
   MISC_PROVIDER
 } from './libraryStore.js';
 import { Core } from '../core.js';
+import { workspaceSurface, hostsWorkspaceSurface } from '../shared/workspaceHost.js';
 import { FsUtils } from '../fsUtils.js';
 import { ensureArchiveBlob, hasCachedArchiveBlob, clearArchiveBlobCache } from '../services/archiveImageCache.js';
 import { BoundedMap, BoundedSet } from '../services/cache.js';
@@ -41,6 +43,7 @@ import {
   isGalleryDownloadingWithin,
   fetchManifest,
   getGalleryDownloadStatus,
+  syncWorkspaceDownloadStatus,
   retryGalleryDownload,
   reloadLibraryDir,
   getCachedLibraryDir,
@@ -63,6 +66,15 @@ let _getVisibleImageIndices = () => [];
 let _alignListItemTop = null;
 let _alignListItemBottom = null;
 let _pageStrip = null;
+let _onScrollTopChanged = null;
+let _lastReportedAtTop = null;
+
+function reportScrollTop() {
+  const isAtTop = (fileListUl?.scrollTop ?? 0) === 0;
+  if (isAtTop === _lastReportedAtTop) return;
+  _lastReportedAtTop = isAtTop;
+  _onScrollTopChanged?.(isAtTop);
+}
 
 function _firstImageIndex(list) {
   if (!list || !list.length) return -1;
@@ -84,6 +96,8 @@ export const favoritesThumbnailCache = new BoundedMap(FAVORITES_CACHE_CAPACITY, 
 export function clearLibraryPathCaches() {
   thumbnailCache.clear();
   favoritesThumbnailCache.clear();
+  libraryThumbnailCache.clear();
+  renderFavorites();
 }
 
 // Canonical large format/folder icons (~20 entries).
@@ -234,7 +248,16 @@ function initSavedThumbnail(row, thumbImg, item, cache) {
 }
 
 function updateSavedDownloadRow(list, destPath, status) {
-  const row = list?.querySelector(`li[data-path="${CSS.escape(destPath)}"]`);
+  if (!list || !destPath) return;
+  let row = list.querySelector(`li[data-path="${CSS.escape(destPath)}"]`);
+  if (!row) {
+    for (const candidate of list.querySelectorAll('li[data-path]')) {
+      if (_pathsEqual(candidate.dataset.path, destPath)) {
+        row = candidate;
+        break;
+      }
+    }
+  }
   if (!row) return;
   row.dataset.downloadStatus = status;
   row.classList.toggle('is-pending-download', status === 'pending' || status === 'downloading');
@@ -279,13 +302,23 @@ function updateDownloadRow(destPath, status, size = 0) {
 // Completed downloads gain their real size so future renders no longer treat
 // them as placeholders. Queue status events repaint the visible row in place.
 window.addEventListener('quivit-download-complete', (e) => {
+  if (e.detail?.destPath) {
+    syncWorkspaceDownloadStatus({ destPath: e.detail.destPath, status: 'completed' });
+  }
   updateDownloadRow(e.detail?.destPath, 'completed', e.detail?.size);
 });
 
 window.addEventListener('quivit-download-status', (e) => {
-  const { destPath, status } = e.detail || {};
-  if (destPath && status) {
+  const detail = e.detail || {};
+  syncWorkspaceDownloadStatus(detail);
+  const { destPath, status, statuses } = detail;
+  if (destPath && status && status !== 'queue_started' && status !== 'cancelled') {
     updateDownloadRow(destPath, status);
+  }
+  for (const entry of statuses || []) {
+    if (Array.isArray(entry) && entry[0] && entry[1]) {
+      updateDownloadRow(entry[0], entry[1]);
+    }
   }
 });
 let freePool = [];
@@ -1707,12 +1740,13 @@ function wireRowListeners(li) {
     if (Core.getState().manhwaEnabled && _isManhwaActive()) {
       _alignListItemTop?.(index);
     }
-    if (Core.getState().index !== index) {
+    const now = Date.now();
+    const isDoubleClick = lastClickIndex === index && (now - lastClickTime < 400);
+    if (!isDoubleClick && Core.getState().index !== index) {
       Core.selectIndex(index);
     }
     updateSelection(index, false, true);
-    const now = Date.now();
-    if (lastClickIndex === index && (now - lastClickTime < 400)) {
+    if (isDoubleClick) {
       panelKeyboardActive = true;
       Core.jumpToIndex(index);
       lastClickTime = 0;
@@ -2040,6 +2074,7 @@ function updateEntry(li, item, index) {
 }
 
 function renderVisibleSlice() {
+  if (!hostsWorkspaceSurface('fileList')) return;
   if (!fileListUl) return;
   ensureSpacer();
 
@@ -2091,6 +2126,7 @@ function renderVisibleSlice() {
     fileListUl.scrollTop = maxScroll;
     scrollTop = maxScroll;
   }
+  reportScrollTop();
 
   const rawStart = Math.min(Math.max(0, total - 1), Math.floor(scrollTop / ROW_HEIGHT));
   const visibleCount = Math.ceil(clientH / ROW_HEIGHT);
@@ -2278,13 +2314,13 @@ function stripVisibleIndices(list, index, manhwaOn) {
   return new Set(_getVisibleImageIndices());
 }
 
-function updateSelection(selectedIndex, forceFocus = false, wasFocused = false) {
+function updateSelection(selectedIndex, forceFocus = false, wasFocused = false, suppressFocus = false) {
   if (!lastRenderedList) return;
 
   const isDefaultFocus = !document.activeElement || document.activeElement === document.body;
-  wasFocused = wasFocused || panelKeyboardActive || forceFocus ||
+  wasFocused = !suppressFocus && (wasFocused || panelKeyboardActive || forceFocus ||
     (document.activeElement && fileListUl.contains(document.activeElement)) ||
-    (isDefaultFocus && Core.getState().fileListVisible);
+    (isDefaultFocus && Core.getState().fileListVisible));
 
   const visibleIndices = stripVisibleIndices(lastRenderedList, selectedIndex, Core.getState().manhwaEnabled);
   const visibleListIndices = visibleIndices ? Array.from(visibleIndices) : null;
@@ -2405,6 +2441,7 @@ function setRefreshingVisual(active) {
 
 export function renderFilePanel(state) {
   if (!filePanel) return;
+  if (!hostsWorkspaceSurface('fileList', state)) return;
 
 
   filePanel.classList.toggle('hidden', !state.fileListVisible);
@@ -2485,10 +2522,19 @@ export function renderFilePanel(state) {
 
   const forceFocus = focusMainListOnNextRender;
   focusMainListOnNextRender = false;
+  const archivePromptActive = state.mode === 'archive' && !state.isSiblingNavigation &&
+    (state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect');
+  if (archivePromptActive) {
+    panelKeyboardActive = false;
+    if (workspaceSurface === 'fileList' && document.activeElement && filePanel.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
+  }
+  const suppressFocus = archivePromptActive || (workspaceSurface === 'fileList' && typeof document.hasFocus === 'function' && !document.hasFocus());
   const isDefaultFocus = !document.activeElement || document.activeElement === document.body;
-  const wasFocused = panelKeyboardActive || forceFocus ||
+  const wasFocused = !suppressFocus && (panelKeyboardActive || forceFocus ||
     (document.activeElement && filePanel.contains(document.activeElement)) ||
-    (isDefaultFocus && state.fileListVisible);
+    (isDefaultFocus && state.fileListVisible));
 
   // If only the selection index changed (same list)
   if (lastRenderedList === state.list) {
@@ -2497,7 +2543,7 @@ export function renderFilePanel(state) {
     lastRenderedVisible = state.fileListVisible;
     lastRenderedDirectory = currentDir;
     lastRenderedManhwa = state.manhwaEnabled;
-    updateSelection(state.index, forceFocus, wasFocused);
+    updateSelection(state.index, forceFocus, wasFocused, suppressFocus);
     return;
   }
 
@@ -2505,6 +2551,7 @@ export function renderFilePanel(state) {
   if (dirChanged && fileListUl) {
     fileListUl.scrollTop = 0;
     lastScrollTop = 0;
+    reportScrollTop();
   }
 
   lastRenderedList = state.list;
@@ -2525,7 +2572,7 @@ export function renderFilePanel(state) {
   renderVisibleSlice();
 
   if (state.index >= 0) {
-    updateSelection(state.index, forceFocus, wasFocused);
+    updateSelection(state.index, forceFocus, wasFocused, suppressFocus);
   } else if (wasFocused && document.activeElement !== fileSearchInput) {
     fileListUl?.focus({ preventScroll: true });
   }
@@ -2555,6 +2602,8 @@ export function initFilePanel(deps) {
   if (deps.alignListItemTop) _alignListItemTop = deps.alignListItemTop;
   if (deps.alignListItemBottom) _alignListItemBottom = deps.alignListItemBottom;
   if (deps.pageStrip) _pageStrip = deps.pageStrip;
+  if (deps.onScrollTopChanged) _onScrollTopChanged = deps.onScrollTopChanged;
+  reportScrollTop();
 
   migrateNativeIconStorage();
   ensureSpacer();
@@ -2615,6 +2664,7 @@ export function initFilePanel(deps) {
     const st = fileListUl.scrollTop;
     scrollDirection = st >= lastScrollTop ? 1 : -1;
     lastScrollTop = st;
+    reportScrollTop();
     const state = Core.getState();
     if (state.fileListViewMode === 'thumbnail') {
       isScrolling = true;
@@ -2634,6 +2684,13 @@ export function initFilePanel(deps) {
     renderVisibleSlice();
     commitPendingThumbnails();
   }, { passive: true });
+
+  new ResizeObserver(() => {
+    if (!hostsWorkspaceSurface('fileList') || !filePanel.clientWidth) return;
+    normalizeColumnWidths('name');
+    renderVisibleSlice();
+    commitPendingThumbnails();
+  }).observe(filePanel);
 
   Core.onStateChange(() => renderFilePanel(Core.getState()));
 
@@ -2740,11 +2797,16 @@ export function initFilePanel(deps) {
 
   renderLibrary();
 
+  window.addEventListener('quivit-library-relocated', () => {
+    clearLibraryPathCaches();
+  });
+
   window.addEventListener('quivit-library-updated', () => {
     renderLibrary();
   });
 
-  window.addEventListener('quivit-library-active-changed', () => {
+  window.addEventListener('quivit-library-active-changed', (e) => {
+    syncActiveProvider(e?.detail);
     renderLibrary();
   });
 
@@ -2976,6 +3038,8 @@ export function initFilePanel(deps) {
     isResizingPanel = true;
     resizeHandle.classList.add('dragging');
     document.body.classList.toggle('resizing-panel', true);
+    const position = Core.getState().workspaceLayout.fileList;
+    document.body.classList.toggle('resizing-panel-vertical', position === 'top' || position === 'bottom');
     e.preventDefault();
   });
 
@@ -3020,10 +3084,17 @@ export function initFilePanel(deps) {
 
   window.addEventListener('mousemove', (e) => {
     if (isResizingPanel) {
+      const position = Core.getState().workspaceLayout.fileList;
+      const bounds = filePanel.parentElement.getBoundingClientRect();
       const oldWidth = filePanel.getBoundingClientRect().width;
-      const newWidth = Math.min(480, Math.max(120, e.clientX));
-      document.documentElement.style.setProperty('--panel-w', `${newWidth}px`);
-      normalizeColumnWidths('name', getColumnWidth('name') + (newWidth - oldWidth));
+      const vertical = position === 'top' || position === 'bottom';
+      const desired = vertical
+        ? (position === 'top' ? e.clientY - bounds.top : bounds.bottom - e.clientY)
+        : (position === 'left' ? e.clientX - bounds.left : bounds.right - e.clientX);
+      const max = vertical ? bounds.height * 0.7 : Math.min(480, bounds.width - 120);
+      const size = Math.min(max, Math.max(120, desired));
+      document.documentElement.style.setProperty(vertical ? '--panel-h' : '--panel-w', `${size}px`);
+      if (!vertical) normalizeColumnWidths('name', getColumnWidth('name') + (size - oldWidth));
     }
 
     if (resizingCol) {
@@ -3045,6 +3116,7 @@ export function initFilePanel(deps) {
       isResizingPanel = false;
       resizeHandle.classList.remove('dragging');
       document.body.classList.toggle('resizing-panel', false);
+      document.body.classList.remove('resizing-panel-vertical');
     }
 
     if (resizingCol) {
@@ -3056,7 +3128,8 @@ export function initFilePanel(deps) {
 
   window.addEventListener('quivit-manhwa-settle', () => {
     if (Core.getState().fileListVisible && _isManhwaActive()) {
-      updateSelection(Core.getState().index);
+      const suppress = workspaceSurface === 'fileList' && typeof document.hasFocus === 'function' && !document.hasFocus();
+      updateSelection(Core.getState().index, false, false, suppress);
       updateFavoritesSelection(Core.getState());
     }
   });
@@ -3078,11 +3151,12 @@ export function revealListTop() {
   if (!fileListUl) return true;
   const wasAtTop = fileListUl.scrollTop === 0;
   fileListUl.scrollTop = 0;
+  reportScrollTop();
   return wasAtTop;
 }
 
 export function getFileListViewportRange() {
-  if (!fileListUl) return { start: 0, end: 0 };
+  if (!fileListUl || !hostsWorkspaceSurface('fileList')) return { start: 0, end: 0 };
   if (!ROW_HEIGHT) measureRowHeight();
   const total = Core.getState().list?.length || 0;
   const scrollTop = fileListUl.scrollTop;

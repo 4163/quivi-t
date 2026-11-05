@@ -2,8 +2,6 @@ let _lastTitle = '';
 
 function updateWindowTitle(state, FsUtils) {
   if (!window.__TAURI__) return;
-  const win = window.__TAURI__.window?.getCurrentWindow?.();
-  if (!win?.setTitle) return;
 
   let title = 'QuiviT';
   if (state.mode !== 'empty' && state.src) {
@@ -19,7 +17,7 @@ function updateWindowTitle(state, FsUtils) {
 
   if (title !== _lastTitle) {
     _lastTitle = title;
-    win.setTitle(title).catch(() => {});
+    window.__TAURI__.core.invoke('set_workspace_title', { title }).catch(console.error);
   }
 }
 

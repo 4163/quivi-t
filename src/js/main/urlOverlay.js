@@ -10,14 +10,18 @@ let _overlay = null;
 let _input = null;
 let _errorEl = null;
 let _focusFileList = null;
+let _restoreFocus = null;
+let _getLastInitiator = null;
+let _initiatingWindow = 'main';
 let _onSubmit = null;
 let _filePanel = null;
 let _Core = null;
 let _lastObservedSrc = null;
 let _lastObservedDirectory = null;
 
-function _show() {
+function _show(opts = {}) {
   if (!_overlay) return;
+  _initiatingWindow = opts?.initiator || (typeof _getLastInitiator === 'function' ? _getLastInitiator() : 'main');
   _input.disabled = false;
   const submitBtn = _overlay.querySelector('button[type="submit"]');
   if (submitBtn) submitBtn.disabled = false;
@@ -37,7 +41,10 @@ function _show() {
     _lastObservedDirectory = state.directory || state.archivePath || '';
   }
 
-  requestAnimationFrame(() => _input.focus());
+  const focusNative = window.__TAURI__?.window?.getCurrentWindow?.()?.setFocus?.() ?? Promise.resolve();
+  focusNative.catch(console.error).finally(() => {
+    requestAnimationFrame(() => _input?.focus());
+  });
 }
 
 function _hide(opts = {}) {
@@ -48,8 +55,12 @@ function _hide(opts = {}) {
   _overlay.classList.remove('active', 'error', 'loading');
   _input.blur();
 
-  if (opts.restoreFocus !== false && _focusFileList) {
-    _focusFileList();
+  if (opts.restoreFocus !== false) {
+    if (_restoreFocus) {
+      _restoreFocus(opts.restoreInitiator ? _initiatingWindow : 'main');
+    } else if (_focusFileList) {
+      _focusFileList();
+    }
   }
 }
 
@@ -95,12 +106,14 @@ async function _handleSubmit() {
   }
 }
 
-export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubmit }) {
+export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubmit, restoreFocus, getLastInitiator }) {
   _overlay = overlay;
   _filePanel = filePanel || null;
   _Core = Core || null;
   _focusFileList = focusFileList || (() => {});
   _onSubmit = onSubmit || null;
+  _restoreFocus = restoreFocus || null;
+  _getLastInitiator = getLastInitiator || null;
   _input = overlay.querySelector('#url-input');
   _errorEl = overlay.querySelector('.url-error');
 
@@ -147,7 +160,7 @@ export function initUrlOverlay({ overlay, filePanel, Core, focusFileList, onSubm
     if (e.key === 'Escape') {
       if (_overlay?.classList.contains('loading')) return;
       e.preventDefault();
-      _hide({ restoreFocus: true }, 'escape_key');
+      _hide({ restoreFocus: true, restoreInitiator: true }, 'escape_key');
     }
   });
 

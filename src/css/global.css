@@ -41,6 +41,7 @@
 
   /* Layout */
   --panel-w: 260px;
+  --panel-h: 240px;
   --panel-min-w: 120px;
   --panel-max-w: 480px;
   --resize-handle-w: 4px;

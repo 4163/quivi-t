@@ -11,7 +11,11 @@ export async function revertPreviewChanges(savedTheme, savedCss) {
   if (!previewing) return;
   previewing = false;
   if (emit) {
-    await Promise.all([emit('theme-preview', savedTheme), emit('css-preview', savedCss)]);
+    await Promise.all([
+      emit('theme-preview', savedTheme),
+      emit('css-preview', savedCss),
+      emit('preview-cleared')
+    ]);
   }
 }
 

@@ -40,8 +40,14 @@ import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREA
 import { FsUtils } from './fsUtils.js';
 import { DirectoryPrefs } from './directoryPrefs.js';
 import { BoundedMap } from './services/cache.js';
+import { DEFAULT_WORKSPACE_LAYOUT, relocateWorkspace, isWorkspaceDetached } from './services/workspaceLayout.js';
 
 const invoke = window.__TAURI__?.core?.invoke;
+export const CORE_SESSION_METHODS = ['setListAndIndex', 'setState', 'setFileListVisible', 'toggleTransparentBg',
+  'setFitMode', 'setScalingMode', 'setActiveFilter', 'setImageDimensions', 'setSpreadStep',
+  'setSpreadEnabled', 'toggleSpreadEnabled', 'setSpreadDirection', 'setSpreadMode', 'toggleSpreadMode',
+  'setManhwaMode', 'toggleManhwaMode', 'setFileListViewMode', 'toggleFileListViewMode',
+  'navigate', 'jumpToIndex', 'selectIndex', 'setWorkspacePosition', 'setWindowMenuVisible', 'loadConfig', 'flushConfig'];
 
 // Internal state.
 
@@ -50,6 +56,7 @@ const _animMemo = new BoundedMap(ANIM_MEMO_CAPACITY);
 let _animMemoGeneration = 0;
 
 let _placeholderCheck = null;
+let _loadConfigGen = 0;
 
 const _state = {
   /** @type {'empty'|'image'|'archive'} */
@@ -72,6 +79,7 @@ const _state = {
 
   /** Current directory path (for sibling navigation) */
   directory: '',
+  libraryDir: '',
 
   /** If mode === 'archive', the path to the archive */
   archivePath: '',
@@ -96,6 +104,7 @@ const _state = {
 
   /** File list panel visibility. */
   fileListVisible: true,
+  workspaceLayout: { ...DEFAULT_WORKSPACE_LAYOUT },
 
   /** Current image fit mode. */
   fitMode: DEFAULT_FIT_MODE,
@@ -147,6 +156,7 @@ const _state = {
 const _listeners = [];
 let _configDirty = false;
 let _persistTimer = null;
+let _persistPromise = null;
 
 // Helpers.
 
@@ -168,16 +178,27 @@ async function _persistConfig() {
   clearTimeout(_persistTimer);
   _persistTimer = null;
   _configDirty = false;
+  const run = (async () => {
+    try {
+      await invoke('save_config', { config: _state.config });
+    } catch (err) {
+      console.error('[Core] Failed to persist config:', err);
+    }
+  })();
+  _persistPromise = run;
   try {
-    await invoke('save_config', { config: _state.config });
-  } catch (err) {
-    console.error('[Core] Failed to persist config:', err);
+    await run;
+  } finally {
+    if (_persistPromise === run) _persistPromise = null;
   }
 }
 
 async function _flushConfig() {
-  if (!_configDirty) return;
-  await _persistConfig();
+  if (_configDirty) {
+    await _persistConfig();
+  } else if (_persistPromise) {
+    await _persistPromise;
+  }
 }
 
 function _scheduleConfigFlush(delayMs = 1500) {
@@ -253,7 +274,7 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
   if (_state.mode !== 'archive') {
     if (FsUtils.isArchiveEntry(file)) {
       const enc = await FsUtils.checkArchiveEncryption(file.path);
-      if (_state.index !== index || _state.list[index] !== file) return;
+      if (_state.mode === 'archive' || _state.index !== index || _state.list[index] !== file) return;
       if (enc === 'password_required' || enc === 'password_incorrect') {
         _state.archivePath = file.path;
         _state.archiveEncryption = enc;
@@ -333,6 +354,43 @@ async function _selectEntry(index, activate = false, clampPreview = false, direc
 // Public API.
 
 export const Core = {
+  configureReplica(send) {
+    for (const method of CORE_SESSION_METHODS) {
+      this[method] = (...args) => send('core', method, args);
+    }
+    this.persistConfig = options => send('config', 'persist', [options]);
+  },
+
+  receiveSnapshot(snapshot) {
+    if (snapshot.mediaRevision !== undefined && snapshot.mediaRevision !== _state.mediaRevision) this.clearAnimationMemo();
+    Object.assign(_state, snapshot);
+    _notify();
+  },
+
+  patchFrontendConfig(patch, options = {}) {
+    Object.assign(_state.config.frontend_data, patch);
+    const persisted = this.persistConfig(options);
+    _notify();
+    return persisted;
+  },
+
+  setWorkspacePosition(surface, position, options = {}) {
+    _state.workspaceLayout = relocateWorkspace(_state.workspaceLayout, surface, position);
+    if (isWorkspaceDetached(_state.workspaceLayout)) _state.fileListVisible = true;
+    _state.config.frontend_data.workspace_layout = _state.workspaceLayout;
+    if (options.persist) _scheduleConfigFlush();
+    _notify();
+  },
+
+  setWindowMenuVisible(role, visible) {
+    if (!['main', 'fileList'].includes(role)) return;
+    const fd = _state.config.frontend_data;
+    fd.window_menu_visible = { ...fd.window_menu_visible, [role]: !!visible };
+    if (role === 'main') fd.menu_visible = !!visible;
+    _scheduleConfigFlush();
+    _notify();
+  },
+
   onStateChange(fn) {
     _listeners.push(fn);
   },
@@ -375,7 +433,7 @@ export const Core = {
   },
 
   setFileListVisible(visible, options = {}) {
-    _state.fileListVisible = !!visible;
+    _state.fileListVisible = isWorkspaceDetached(_state.workspaceLayout) || !!visible;
     if (options.notify !== false) _notify();
   },
 
@@ -411,8 +469,10 @@ export const Core = {
   setFitMode(mode, options = {}) {
     _state.fitMode = mode;
     _state.fitModeGen++;
-    if (options.persist) {
+    if (_state.config?.frontend_data) {
       _state.config.frontend_data.fit_mode = mode;
+    }
+    if (options.persist) {
       _scheduleConfigFlush(1500);
     }
     _notify();
@@ -420,8 +480,10 @@ export const Core = {
 
   setScalingMode(mode, options = {}) {
     _state.scalingMode = mode;
-    if (options.persist) {
+    if (_state.config?.frontend_data) {
       _state.config.frontend_data.scaling_mode = mode;
+    }
+    if (options.persist) {
       _scheduleConfigFlush(1500);
     }
     _notify();
@@ -607,8 +669,10 @@ export const Core = {
    * Load app configuration from the Rust backend.
    */
   async loadConfig() {
+    const gen = ++_loadConfigGen;
     try {
       const loaded = await invoke('load_config');
+      if (gen !== _loadConfigGen) return;
       
       const oldShowHidden = _state.config?.frontend_data?.show_hidden;
       const oldManhwaEnabled = _state.manhwaEnabled;
@@ -623,6 +687,8 @@ export const Core = {
       _state.spreadEnabled = _state.config.frontend_data.spread_enabled === true;
       _state.spreadDirection = _state.config.frontend_data.spread_direction || DEFAULT_SPREAD_DIRECTION;
       _state.fileListViewMode = _state.config.frontend_data.file_list_view_mode || DEFAULT_FILE_LIST_VIEW_MODE;
+      _state.workspaceLayout = _state.config.frontend_data.workspace_layout;
+      if (isWorkspaceDetached(_state.workspaceLayout)) _state.fileListVisible = true;
       _state.manhwaEnabled = _state.config.frontend_data.manhwa_enabled === true;
       if (oldManhwaEnabled !== _state.manhwaEnabled) _sortCurrentList();
 
