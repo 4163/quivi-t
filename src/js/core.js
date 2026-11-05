@@ -36,7 +36,7 @@
  *   ephemeral within a session     -> in-memory state (or cleared localStorage)
  */
 
-import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_DIRECTION, DEFAULT_FILE_LIST_VIEW_MODE, DEFAULT_MANHWA_ENABLED, mergeConfig } from './keybinds.js';
+import { DEFAULT_FIT_MODE, DEFAULT_KEYBINDS, DEFAULT_SCALING_MODE, DEFAULT_SPREAD_ENABLED, DEFAULT_SPREAD_DIRECTION, DEFAULT_FILE_LIST_VIEW_MODE, DEFAULT_MANHWA_ENABLED, DEFAULT_FILE_LIST_COLUMNS, normalizeFileListColumns, mergeConfig } from './keybinds.js';
 import { FsUtils } from './fsUtils.js';
 import { DirectoryPrefs } from './directoryPrefs.js';
 import { BoundedMap } from './services/cache.js';
@@ -47,6 +47,7 @@ export const CORE_SESSION_METHODS = ['setListAndIndex', 'setState', 'setFileList
   'setFitMode', 'setScalingMode', 'setActiveFilter', 'setImageDimensions', 'setSpreadStep',
   'setSpreadEnabled', 'toggleSpreadEnabled', 'setSpreadDirection', 'setSpreadMode', 'toggleSpreadMode',
   'setManhwaMode', 'toggleManhwaMode', 'setFileListViewMode', 'toggleFileListViewMode',
+  'setFileListColumn', 'toggleFileListColumn',
   'navigate', 'jumpToIndex', 'selectIndex', 'setWorkspacePosition', 'setWindowMenuVisible', 'loadConfig', 'flushConfig'];
 
 // Internal state.
@@ -146,6 +147,7 @@ const _state = {
       spread_enabled: DEFAULT_SPREAD_ENABLED,
       spread_direction: DEFAULT_SPREAD_DIRECTION,
       file_list_view_mode: DEFAULT_FILE_LIST_VIEW_MODE,
+      file_list_columns: { ...DEFAULT_FILE_LIST_COLUMNS },
       manhwa_enabled: DEFAULT_MANHWA_ENABLED,
       keybinds: { ...DEFAULT_KEYBINDS },
     }
@@ -502,6 +504,11 @@ export const Core = {
     if (!_state.isSpread) {
       _state.spreadStep = 1;
     }
+    const currentEntry = _state.index >= 0 ? _state.list?.[_state.index] : null;
+    if (currentEntry && !currentEntry.is_dir && !currentEntry.is_parent && natW > 0 && natH > 0) {
+      currentEntry.width = natW;
+      currentEntry.height = natH;
+    }
     _notify();
   },
 
@@ -601,6 +608,34 @@ export const Core = {
   toggleFileListViewMode(options = {}) {
     const next = _state.fileListViewMode === 'thumbnail' ? 'list' : 'thumbnail';
     this.setFileListViewMode(next, options);
+  },
+
+  setFileListColumn(col, enabled, options = {}) {
+    if (!['ext', 'date', 'size', 'dims'].includes(col)) return;
+    const fd = _state.config.frontend_data;
+    const currentCols = normalizeFileListColumns(fd.file_list_columns);
+    const nextEnabled = !!enabled;
+    if (currentCols[col] === nextEnabled) return;
+    const path = _state.mode === 'archive' ? _state.archivePath : _state.directory;
+    const prevSort = DirectoryPrefs.getSortPrefs(path);
+    fd.file_list_columns = { ...currentCols, [col]: nextEnabled };
+    if (!nextEnabled && prevSort.col === col) {
+      const nextSort = DirectoryPrefs.getSortPrefs(path);
+      if (path) {
+        DirectoryPrefs.setSortPrefs(path, nextSort.col, nextSort.desc);
+      }
+      _sortCurrentList();
+    }
+    if (options.persist) {
+      _scheduleConfigFlush(1500);
+    }
+    _notify();
+  },
+
+  toggleFileListColumn(col, options = {}) {
+    if (!['ext', 'date', 'size', 'dims'].includes(col)) return;
+    const currentCols = normalizeFileListColumns(_state.config?.frontend_data?.file_list_columns);
+    this.setFileListColumn(col, !currentCols[col], options);
   },
 
   /**

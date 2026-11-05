@@ -195,13 +195,25 @@ export const ACTION_REGISTRY = [
   },
 
   // Window & UI
-  ...WORKSPACE_SURFACES.flatMap(surface => WORKSPACE_POSITIONS.map(position => ({
+  ...WORKSPACE_SURFACES.filter(surface => surface.id === 'fileList').flatMap(surface => WORKSPACE_POSITIONS.map(position => ({
     id: `cmd-window-${surface.window}-${position}`,
     label: `${surface.label}: ${workspacePositionLabel(position)}`,
     defaultBinds: [],
     category: `${surface.label} position`,
     run: ctx => ctx.Core.setWorkspacePosition(surface.id, position, { persist: true })
   }))),
+  { id: 'cmd-col-ext', label: 'Column: Ext', defaultBinds: [], category: 'Window & UI',
+    run: (ctx) => ctx.Core.toggleFileListColumn('ext', { persist: true })
+  },
+  { id: 'cmd-col-dims', label: 'Column: Dims', defaultBinds: [], category: 'Window & UI',
+    run: (ctx) => ctx.Core.toggleFileListColumn('dims', { persist: true })
+  },
+  { id: 'cmd-col-date', label: 'Column: Modified', defaultBinds: [], category: 'Window & UI',
+    run: (ctx) => ctx.Core.toggleFileListColumn('date', { persist: true })
+  },
+  { id: 'cmd-col-size', label: 'Column: Size', defaultBinds: [], category: 'Window & UI',
+    run: (ctx) => ctx.Core.toggleFileListColumn('size', { persist: true })
+  },
   { id: 'cmd-options', label: 'Open Options', defaultBinds: '5', category: 'Window & UI',
     run: async () => {
       if (window.__TAURI__) await window.__TAURI__.core.invoke('open_options').catch(console.error);

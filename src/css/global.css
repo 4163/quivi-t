@@ -48,6 +48,9 @@
   --col-name-w: 134px;
   --col-ext-w: 46px;
   --col-date-w: 92px;
+  --col-size-w: 68px;
+  --col-dims-w: 84px;
+  --file-grid-cols: var(--col-name-w) var(--col-ext-w) var(--col-date-w);
 
   color-scheme: light dark;
 

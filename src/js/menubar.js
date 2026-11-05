@@ -136,11 +136,18 @@ function activateItem(item, dropdown) {
     });
   }
 
-  if (item && item.classList.contains('has-submenu')) {
+  const activeSubmenu = item
+    && item.classList.contains('has-submenu')
+    && !item.classList.contains('muted')
+    && item.getAttribute('aria-disabled') !== 'true'
+    ? item.querySelector(':scope > .submenu')
+    : null;
+
+  if (activeSubmenu) {
     item.classList.add('open');
     item.setAttribute('aria-expanded', 'true');
     aimState.activeSubmenuItem = item;
-    aimState.activeSubmenu = item.querySelector(':scope > .submenu');
+    aimState.activeSubmenu = activeSubmenu;
     aimState.activeDropdown = dropdown;
 
     if (aimState.activeSubmenu) {
@@ -304,8 +311,8 @@ function bindMenus() {
 
     const items = Array.from(dropdown.children).filter(el => el.matches('li[role^="menuitem"]'));
     items.forEach((item, index) => {
-      const isSubmenuTrigger = item.classList.contains('has-submenu');
-      const submenuEl = isSubmenuTrigger ? item.querySelector(':scope > .submenu') : null;
+      const submenuEl = item.classList.contains('has-submenu') ? item.querySelector(':scope > .submenu') : null;
+      const isSubmenuTrigger = !!submenuEl && !item.classList.contains('muted') && item.getAttribute('aria-disabled') !== 'true';
 
       if (isSubmenuTrigger) {
         item.addEventListener('mouseleave', (e) => {
@@ -435,20 +442,19 @@ function bindMenus() {
       });
 
       item.addEventListener('click', (e) => {
-        if (item.classList.contains('has-submenu')) {
+        if (item.classList.contains('muted') || item.getAttribute('aria-disabled') === 'true') {
           e.stopPropagation();
-          const submenu = item.querySelector(':scope > .submenu');
-          if (submenu && submenu.contains(e.target)) {
+          return;
+        }
+        if (isSubmenuTrigger) {
+          e.stopPropagation();
+          if (submenuEl && submenuEl.contains(e.target)) {
             return;
           }
           activateItem(item, dropdown);
           return;
         }
         if (e.target.tagName === 'INPUT' || e.target.closest('input') || e.target.closest('button')) {
-          return;
-        }
-        if (item.classList.contains('muted') || item.getAttribute('aria-disabled') === 'true') {
-          e.stopPropagation();
           return;
         }
         closeMenus();
@@ -827,6 +833,18 @@ export function syncViewMenu(state) {
   }
   document.getElementById('cmd-toggle-filelist')?.classList.toggle('checked', !!state.fileListVisible);
   _setMenuItemDisabled('cmd-toggle-filelist', isWorkspaceDetached(state.workspaceLayout), 'File List stays visible while windows are detached');
+  const cols = state.config?.frontend_data?.file_list_columns;
+  const colChecks = {
+    'cmd-col-ext': cols ? cols.ext !== false : true,
+    'cmd-col-dims': Boolean(cols?.dims),
+    'cmd-col-date': cols ? cols.date !== false : true,
+    'cmd-col-size': Boolean(cols?.size)
+  };
+  for (const [id, checked] of Object.entries(colChecks)) {
+    const item = document.getElementById(id);
+    item?.classList.toggle('checked', checked);
+    item?.setAttribute('aria-checked', String(checked));
+  }
   const isAnimated = !!state.isAnimated;
   // The renderer silently falls back to Bilinear for SVGs.
   // Ignore SVG status here so the user's preferred scaling mode remains visually checked (intended UX).

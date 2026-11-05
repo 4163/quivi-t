@@ -161,8 +161,8 @@ body.resizing-col {
   opacity: 0.7;
 }
 
-.menu-dropdown li.has-submenu:hover>.submenu-arrow,
-.menu-dropdown li.has-submenu:focus-visible>.submenu-arrow,
+.menu-dropdown li.has-submenu:not(.muted):hover>.submenu-arrow,
+.menu-dropdown li.has-submenu:not(.muted):focus-visible>.submenu-arrow,
 .menu-dropdown li.has-submenu.open>.submenu-arrow {
   color: inherit;
   opacity: 1;
@@ -1145,7 +1145,7 @@ li:hover>.favorite-remove,
 
 #file-panel-header {
   display: grid;
-  grid-template-columns: var(--col-name-w) var(--col-ext-w) var(--col-date-w);
+  grid-template-columns: var(--file-grid-cols);
   align-items: stretch;
   background: var(--surface-alt);
   border-bottom: 1px solid var(--border-light);
@@ -1223,8 +1223,22 @@ li:hover>.favorite-remove,
   white-space: nowrap;
 }
 
-.col-date {
+.col-date,
+.col-size,
+.col-dims {
   font-size: var(--fs-10);
+  font-variant-numeric: tabular-nums;
+}
+
+#file-panel.col-hide-ext .header-cell.col-ext,
+#file-panel.col-hide-ext #file-list .item-ext,
+#file-panel.col-hide-date .header-cell.col-date,
+#file-panel.col-hide-date #file-list .item-date,
+#file-panel.col-hide-size .header-cell.col-size,
+#file-panel.col-hide-size #file-list .item-size,
+#file-panel.col-hide-dims .header-cell.col-dims,
+#file-panel.col-hide-dims #file-list .item-dims {
+  display: none;
 }
 
 #file-list {
@@ -1275,7 +1289,7 @@ li:hover>.favorite-remove,
 #favorites-list li,
 .library-provider-list li {
   display: grid;
-  grid-template-columns: var(--col-name-w) var(--col-ext-w) var(--col-date-w);
+  grid-template-columns: var(--file-grid-cols);
   align-items: center;
   padding: 1.6015px 0;
   gap: 0;
@@ -1508,6 +1522,8 @@ li:hover>.favorite-remove,
 }
 
 #file-list .item-date,
+#file-list .item-size,
+#file-list .item-dims,
 #favorites-list .item-date,
 .library-provider-list .item-date {
   min-width: 0;
@@ -1515,6 +1531,7 @@ li:hover>.favorite-remove,
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--fs-10);
+  font-variant-numeric: tabular-nums;
   color: var(--text-dim);
   padding-left: 8px;
 }
@@ -1552,6 +1569,8 @@ li:hover>.favorite-remove,
 #file-panel.view-mode-thumbnail #file-list li .item-name,
 #file-panel.view-mode-thumbnail #file-list li .item-ext,
 #file-panel.view-mode-thumbnail #file-list li .item-date,
+#file-panel.view-mode-thumbnail #file-list li .item-size,
+#file-panel.view-mode-thumbnail #file-list li .item-dims,
 #file-panel.view-mode-thumbnail #favorites-list li .item-name,
 #file-panel.view-mode-thumbnail #favorites-list li .item-ext,
 #file-panel.view-mode-thumbnail #favorites-list li .item-date,

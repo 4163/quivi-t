@@ -159,14 +159,17 @@
             <li role="menuitemradio" id="cmd-window-file-list-detached" tabindex="0" aria-checked="false">Detached<span class="shortcut"></span></li>
           </ul>
         </li>
-        <li role="menuitem" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
-          <span>Viewport: <span id="viewport-position-label">Right</span></span><span class="submenu-arrow">›</span>
+        <li role="menuitem" id="menu-window-viewport" class="muted" tabindex="0" aria-disabled="true">
+          <span>Viewport: <span id="viewport-position-label">Right</span></span>
+        </li>
+        <li role="menuitem" id="menu-window-columns" class="has-submenu" tabindex="0" aria-haspopup="true" aria-expanded="false">
+          <span>Columns</span><span class="submenu-arrow">›</span>
           <ul class="menu-dropdown submenu" role="menu">
-            <li role="menuitemradio" id="cmd-window-viewport-left" tabindex="0" aria-checked="false">Left<span class="shortcut"></span></li>
-            <li role="menuitemradio" id="cmd-window-viewport-right" tabindex="0" aria-checked="true">Right<span class="shortcut"></span></li>
-            <li role="menuitemradio" id="cmd-window-viewport-top" tabindex="0" aria-checked="false">Top<span class="shortcut"></span></li>
-            <li role="menuitemradio" id="cmd-window-viewport-bottom" tabindex="0" aria-checked="false">Bottom<span class="shortcut"></span></li>
-            <li role="menuitemradio" id="cmd-window-viewport-detached" tabindex="0" aria-checked="false">Detached<span class="shortcut"></span></li>
+            <li role="menuitemcheckbox" id="cmd-col-name" class="checked muted" tabindex="0" aria-checked="true" aria-disabled="true">Name<span class="shortcut"></span></li>
+            <li role="menuitemcheckbox" id="cmd-col-ext" class="checked" tabindex="0" aria-checked="true">Ext<span class="shortcut"></span></li>
+            <li role="menuitemcheckbox" id="cmd-col-dims" tabindex="0" aria-checked="false">Dims<span class="shortcut"></span></li>
+            <li role="menuitemcheckbox" id="cmd-col-date" class="checked" tabindex="0" aria-checked="true">Modified<span class="shortcut"></span></li>
+            <li role="menuitemcheckbox" id="cmd-col-size" tabindex="0" aria-checked="false">Size<span class="shortcut"></span></li>
           </ul>
         </li>
       </ul>
@@ -214,7 +217,7 @@
   <div id="workspace">
 
     <!-- File list panel -->
-    <aside id="file-panel" aria-label="File list">
+    <aside id="file-panel" class="col-hide-size col-hide-dims" aria-label="File list">
       <div id="file-panel-header-top">
         <div id="file-panel-breadcrumb" aria-label="Current location" title=""></div>
       </div>
@@ -234,8 +237,16 @@
           Ext <span class="sort-icon"></span>
           <div class="col-resizer"></div>
         </div>
+        <div class="header-cell col-dims" data-sort="dims" tabindex="0">
+          Dims <span class="sort-icon"></span>
+          <div class="col-resizer"></div>
+        </div>
         <div class="header-cell col-date" data-sort="date" tabindex="0">
           Modified <span class="sort-icon"></span>
+          <div class="col-resizer"></div>
+        </div>
+        <div class="header-cell col-size" data-sort="size" tabindex="0">
+          Size <span class="sort-icon"></span>
           <div class="col-resizer"></div>
         </div>
       </div>
@@ -244,7 +255,9 @@
         <li id="file-list-sentinel" aria-hidden="true">
           <span class="item-name"><span class="item-label">&nbsp;</span></span>
           <span class="item-ext">&nbsp;</span>
+          <span class="item-dims">&nbsp;</span>
           <span class="item-date">&nbsp;</span>
+          <span class="item-size">&nbsp;</span>
         </li>
         <li id="file-list-thumbnail-sentinel" class="thumbnail-sentinel" aria-hidden="true">
           <div class="item-thumbnail-wrapper"></div>

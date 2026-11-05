@@ -45,32 +45,52 @@ export function applySort(list, col, desc, groupArchives = false) {
   }
 
   const sortLogic = (a, b) => {
-    let valA, valB;
     if (col === 'name') {
-      valA = a.name.toLowerCase();
-      valB = b.name.toLowerCase();
-    } else if (col === 'ext') {
-      valA = a.ext.toLowerCase();
-      valB = b.ext.toLowerCase();
+      const cmp = compareNames(a, b);
+      return desc ? -cmp : cmp;
+    }
+    if (col === 'ext') {
+      const valA = (a.ext || '').toLowerCase();
+      const valB = (b.ext || '').toLowerCase();
       if (valA === valB) {
-        valA = a.name.toLowerCase();
-        valB = b.name.toLowerCase();
+        const cmp = naturalCompare(a.name.toLowerCase(), b.name.toLowerCase());
+        return desc ? -cmp : cmp;
       }
-    } else if (col === 'date') {
+      return valA < valB ? (desc ? 1 : -1) : (desc ? -1 : 1);
+    }
+    if (col === 'date') {
       const dA = a.rawDate || 0;
       const dB = b.rawDate || 0;
       if (dA !== dB) return desc ? dB - dA : dA - dB;
-      valA = a.name.toLowerCase();
-      valB = b.name.toLowerCase();
-    }
-
-    if (col === 'name' || (col === 'ext' && a.ext.toLowerCase() === b.ext.toLowerCase()) || (col === 'date' && a.rawDate === b.rawDate)) {
-      const cmp = col === 'name' ? compareNames(a, b) : naturalCompare(valA, valB);
+      const cmp = naturalCompare(a.name.toLowerCase(), b.name.toLowerCase());
       return desc ? -cmp : cmp;
     }
-
-    if (valA < valB) return desc ? 1 : -1;
-    if (valA > valB) return desc ? -1 : 1;
+    if (col === 'size') {
+      const sA = a.size || 0;
+      const sB = b.size || 0;
+      if (sA !== sB) return desc ? sB - sA : sA - sB;
+      const cmp = compareNames(a, b);
+      return desc ? -cmp : cmp;
+    }
+    if (col === 'dims') {
+      const wA = a.width || 0;
+      const hA = a.height || 0;
+      const wB = b.width || 0;
+      const hB = b.height || 0;
+      const areaA = (wA > 0 && hA > 0) ? (wA * hA) : 0;
+      const areaB = (wB > 0 && hB > 0) ? (wB * hB) : 0;
+      if (areaA === 0 && areaB === 0) {
+        const cmp = compareNames(a, b);
+        return desc ? -cmp : cmp;
+      }
+      if (areaA === 0) return 1;
+      if (areaB === 0) return -1;
+      if (areaA !== areaB) return desc ? areaB - areaA : areaA - areaB;
+      if (wA !== wB) return desc ? wB - wA : wA - wB;
+      if (hA !== hB) return desc ? hB - hA : hA - hB;
+      const cmp = compareNames(a, b);
+      return desc ? -cmp : cmp;
+    }
     return 0;
   };
 

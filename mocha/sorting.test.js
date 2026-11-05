@@ -47,12 +47,14 @@ describe('Sorting service', () => {
     });
 
     beforeEach(() => {
-      Core.getState().config = {
-        frontend_data: {
-          default_sort: { col: 'name', desc: false },
-          directory_sort: {},
+      Core.setState({
+        config: {
+          frontend_data: {
+            default_sort: { col: 'name', desc: false },
+            directory_sort: {},
+          },
         },
-      };
+      });
     });
 
     it('returns default sort when no custom preference is stored', () => {

@@ -8,6 +8,7 @@ import { icoSizesTotal } from './services/viewerMath.js';
 const { invoke } = window.__TAURI__.core;
 export const FS_SESSION_METHODS = ['loadFile', 'loadArchive', 'openParent', 'openSibling', 'refresh',
   'loadHistoryEntry', 'loadFallbackAncestor', 'applyDirectoryResult', 'checkArchiveEncryption', 'scanContainerMaxWidth',
+  'scanContainerDimensions', 'cancelDimsScan', 'probeMediaDimensions',
   'registerPendingDeletion', 'unregisterPendingDeletion'];
 const OPTIMISTIC_SESSION_METHODS = new Set(['registerPendingDeletion', 'unregisterPendingDeletion']);
 
@@ -241,6 +242,25 @@ export const FsUtils = {
       isArchive,
       password: isArchive ? this.getUnlockedPassword(container) : null
     });
+  },
+
+  scanContainerDimensions(container, isArchive) {
+    if (!window.__TAURI__?.core?.invoke) return Promise.resolve();
+    return invoke('scan_container_dimensions', {
+      container,
+      isArchive: !!isArchive,
+      password: isArchive ? this.getUnlockedPassword(container) : null
+    });
+  },
+
+  cancelDimsScan() {
+    if (!window.__TAURI__?.core?.invoke) return Promise.resolve();
+    return invoke('cancel_dims_scan');
+  },
+
+  probeMediaDimensions(path) {
+    if (!window.__TAURI__?.core?.invoke || !path) return Promise.resolve(null);
+    return invoke('probe_media_dimensions', { path });
   },
 
   revokeIfObjectURL(src) {

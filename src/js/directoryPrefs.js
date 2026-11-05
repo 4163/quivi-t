@@ -7,7 +7,36 @@ function normalizePathKey(p) {
   return String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
+function isColumnEnabled(col, fd) {
+  if (!col || col === 'name') return true;
+  if (!['ext', 'date', 'size', 'dims'].includes(col)) return false;
+  const cols = fd?.file_list_columns;
+  if (!cols || typeof cols !== 'object') {
+    return true;
+  }
+  if (col === 'ext' || col === 'date') {
+    return cols[col] !== false;
+  }
+  return Boolean(cols[col]);
+}
+
+function resolveEnabledSortPref(pref, fd) {
+  if (pref && isColumnEnabled(pref.col, fd)) {
+    return pref;
+  }
+  const def = fd?.default_sort || { col: 'name', desc: false };
+  if (isColumnEnabled(def.col, fd)) {
+    return def;
+  }
+  return { col: 'name', desc: false };
+}
+
 export const DirectoryPrefs = {
+  isColumnEnabled(col) {
+    const fd = Core.getState()?.config?.frontend_data;
+    return isColumnEnabled(col, fd);
+  },
+
   sortList(list, col, desc) {
     return applySort(list, col, desc, Core.getState().manhwaEnabled);
   },
@@ -23,16 +52,16 @@ export const DirectoryPrefs = {
 
     if (directoryPath) {
       if (fd.directory_sort[directoryPath]) {
-        return fd.directory_sort[directoryPath];
+        return resolveEnabledSortPref(fd.directory_sort[directoryPath], fd);
       }
       const norm = normalizePathKey(directoryPath);
       for (const [key, pref] of Object.entries(fd.directory_sort)) {
         if (normalizePathKey(key) === norm) {
-          return pref;
+          return resolveEnabledSortPref(pref, fd);
         }
       }
     }
-    return fd.default_sort;
+    return resolveEnabledSortPref(fd.default_sort, fd);
   },
 
   setSortPrefs(directoryPath, col, desc) {

@@ -27,6 +27,22 @@ export const DEFAULT_SPREAD_ENABLED = false;
 export const DEFAULT_SPREAD_DIRECTION = 'rtl';
 export const DEFAULT_FILE_LIST_VIEW_MODE = 'list';
 export const DEFAULT_MANHWA_ENABLED = false;
+export const DEFAULT_FILE_LIST_COLUMNS = Object.freeze({
+  ext: true,
+  dims: false,
+  date: true,
+  size: false,
+});
+
+export function normalizeFileListColumns(raw) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  return {
+    ext: src.ext !== undefined ? Boolean(src.ext) : DEFAULT_FILE_LIST_COLUMNS.ext,
+    dims: src.dims !== undefined ? Boolean(src.dims) : DEFAULT_FILE_LIST_COLUMNS.dims,
+    date: src.date !== undefined ? Boolean(src.date) : DEFAULT_FILE_LIST_COLUMNS.date,
+    size: src.size !== undefined ? Boolean(src.size) : DEFAULT_FILE_LIST_COLUMNS.size,
+  };
+}
 
 
 // persistence: frontend_data is merged here with normalized defaults. Preference
@@ -72,6 +88,7 @@ export function mergeConfig(loaded) {
       window_menu_visible: normalizeWindowMenuVisibility(fd.window_menu_visible, fd.menu_visible),
       status_visible: fd.status_visible !== false,
       file_list_view_mode: fd.file_list_view_mode === 'thumbnail' ? 'thumbnail' : DEFAULT_FILE_LIST_VIEW_MODE,
+      file_list_columns: normalizeFileListColumns(fd.file_list_columns),
       workspace_layout: normalizeWorkspaceLayout(fd.workspace_layout),
       active_filter: activeFilterId(fd),
       filter_options: normalizeFilterOptions(fd.filter_options),

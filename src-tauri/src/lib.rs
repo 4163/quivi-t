@@ -167,6 +167,9 @@ pub fn run() {
         verify_image_magic,
         scan_container_max_width,
         cancel_width_scan,
+        scan_container_dimensions,
+        cancel_dims_scan,
+        probe_media_dimensions,
         #[cfg(windows)]
         enable_native_drop,
         #[cfg(windows)]

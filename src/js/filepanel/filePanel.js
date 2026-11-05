@@ -31,6 +31,7 @@ import {
   MISC_PROVIDER
 } from './libraryStore.js';
 import { Core } from '../core.js';
+import { normalizeFileListColumns } from '../keybinds.js';
 import { workspaceSurface, hostsWorkspaceSurface } from '../shared/workspaceHost.js';
 import { FsUtils } from '../fsUtils.js';
 import { ensureArchiveBlob, hasCachedArchiveBlob, clearArchiveBlobCache } from '../services/archiveImageCache.js';
@@ -113,6 +114,84 @@ function isSvgSrc(src) {
 const ANIMATED_SVG_CACHE_CAPACITY = 512;
 const animatedSvgSrcs = new BoundedSet(ANIMATED_SVG_CACHE_CAPACITY);
 
+export const DIMS_CACHE_CAPACITY = 10000;
+const dimsCache = new BoundedMap(DIMS_CACHE_CAPACITY);
+let activeDimsScanKey = '';
+
+const ALL_COLS = ['name', 'ext', 'dims', 'date', 'size'];
+const OPTIONAL_COLS = ['ext', 'dims', 'date', 'size'];
+
+function getEnabledColumns(state = Core?.getState()) {
+  const cols = normalizeFileListColumns(state?.config?.frontend_data?.file_list_columns);
+  return ['name', ...OPTIONAL_COLS.filter(c => cols[c])];
+}
+
+function applyColumnVisibilityClasses(state = Core?.getState()) {
+  const cols = normalizeFileListColumns(state?.config?.frontend_data?.file_list_columns);
+  if (filePanel) {
+    for (const col of OPTIONAL_COLS) {
+      filePanel.classList.toggle(`col-hide-${col}`, !cols[col]);
+    }
+  }
+  return `${cols.ext ? 1 : 0}${cols.dims ? 1 : 0}${cols.date ? 1 : 0}${cols.size ? 1 : 0}`;
+}
+
+function syncGridTemplateColumns(activeCols = getEnabledColumns()) {
+  const template = activeCols.map(c => `var(--col-${c}-w)`).join(' ');
+  document.documentElement.style.setProperty('--file-grid-cols', template);
+}
+
+function formatByteSize(item, pendingDownload = false) {
+  if (!item || item.is_dir || item.is_parent || item.is_drive || pendingDownload) return '';
+  const bytes = Number(item.size);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) {
+    const kb = bytes / 1024;
+    return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  }
+  if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
+  return `${(bytes / 1073741824).toFixed(2)} GB`;
+}
+
+function formatDimsText(item, pendingDownload = false) {
+  if (!item || item.is_dir || item.is_parent || item.is_drive || pendingDownload) return '';
+  const w = item.width || 0;
+  const h = item.height || 0;
+  return (w > 0 && h > 0) ? `${w}x${h}` : '';
+}
+
+function _dimsCacheKey(container, item, mediaRevision = 0) {
+  if (!container || !item || item.is_dir || item.is_parent || item.is_drive) return '';
+  return `${container.toLowerCase()}::${item.name}::${item.size || 0}::${item.rawDate || 0}::${mediaRevision || 0}`;
+}
+
+function hydrateCachedDimensions(container, list, mediaRevision = 0) {
+  if (!container || !Array.isArray(list)) return { needsScan: false, hydratedCount: 0 };
+  let needsScan = false;
+  let hydratedCount = 0;
+  for (const item of list) {
+    if (!item || item.is_dir || item.is_parent || item.is_drive || !FsUtils.isImageEntry(item)) continue;
+    if (item.size === 0) continue;
+    const key = _dimsCacheKey(container, item, mediaRevision);
+    if (item.width > 0 && item.height > 0) {
+      if (key && !dimsCache.has(key)) {
+        dimsCache.set(key, { width: item.width, height: item.height });
+      }
+      continue;
+    }
+    const cached = key ? dimsCache.get(key) : undefined;
+    if (cached && cached.width > 0 && cached.height > 0) {
+      item.width = cached.width;
+      item.height = cached.height;
+      hydratedCount++;
+    } else {
+      needsScan = true;
+    }
+  }
+  return { needsScan, hydratedCount };
+}
+
 async function markIfAnimatedSvg(targetSrc, filePath) {
   if (animatedSvgSrcs.has(targetSrc)) return;
   try {
@@ -123,8 +202,13 @@ async function markIfAnimatedSvg(targetSrc, filePath) {
 
 let MIN_COL_WIDTHS = {};
 
+const MIN_COL_SAMPLE_TEXT = {
+  dims: '1920x1080',
+  size: '999.9 MB',
+};
+
 function recalculateMinColWidths() {
-  ['name', 'ext', 'date'].forEach(col => {
+  ALL_COLS.forEach(col => {
     const el = document.querySelector(`.header-cell.col-${col}`);
     if (el) {
       const clone = el.cloneNode(true);
@@ -135,7 +219,12 @@ function recalculateMinColWidths() {
       if (icon) icon.textContent = '▼';
       
       document.body.appendChild(clone);
-      MIN_COL_WIDTHS[col] = Math.ceil(clone.getBoundingClientRect().width);
+      let minWidth = Math.ceil(clone.getBoundingClientRect().width);
+      if (MIN_COL_SAMPLE_TEXT[col]) {
+        clone.textContent = MIN_COL_SAMPLE_TEXT[col];
+        minWidth = Math.max(minWidth, Math.ceil(clone.getBoundingClientRect().width) + 4);
+      }
+      MIN_COL_WIDTHS[col] = minWidth;
       document.body.removeChild(clone);
     }
   });
@@ -273,9 +362,13 @@ function buildListThumbnailSrc(item, state) {
 function updateDownloadRow(destPath, status, size = 0) {
   if (!destPath) return;
   const state = Core.getState();
+  let completedItem = null;
   if (status === 'completed') {
     const item = state.list?.find(entry => _pathsEqual(entry.path, destPath));
-    if (item) item.size = size || 1;
+    if (item) {
+      item.size = size || 1;
+      completedItem = item;
+    }
     const thumbnailItem = item || { path: destPath, name: FsUtils.basename(destPath) };
     thumbnailCache.delete(buildListThumbnailSrc(thumbnailItem, state));
   }
@@ -293,6 +386,33 @@ function updateDownloadRow(destPath, status, size = 0) {
     }
     updateEntry(li, item, idx);
     break;
+  }
+
+  if (completedItem && normalizeFileListColumns(state.config?.frontend_data?.file_list_columns).dims) {
+    const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
+    FsUtils.probeMediaDimensions(destPath).then(dims => {
+      if (!Array.isArray(dims) || dims.length < 2) return;
+      const [w, h] = dims;
+      if (!(w > 0 && h > 0)) return;
+      completedItem.width = w;
+      completedItem.height = h;
+      const latest = Core.getState();
+      const latestDir = latest.mode === 'archive' ? latest.archivePath : latest.directory;
+      const key = _dimsCacheKey(latestDir || currentDir, completedItem, latest.mediaRevision);
+      if (key) dimsCache.set(key, { width: w, height: h });
+      for (const [idx, li] of activeRows) {
+        if (latest.list?.[idx] === completedItem) {
+          updateEntry(li, completedItem, idx);
+          break;
+        }
+      }
+      if (latestDir && DirectoryPrefs.getSortPrefs(latestDir).col === 'dims') {
+        const prefs = DirectoryPrefs.getSortPrefs(latestDir);
+        const selected = latest.list?.[latest.index];
+        const sortedList = DirectoryPrefs.sortList(latest.list, prefs.col, prefs.desc);
+        Core.setListAndIndex(sortedList, sortedList.indexOf(selected));
+      }
+    }).catch(() => {});
   }
 
   updateSavedDownloadRow(libraryPanelEl, destPath, status);
@@ -357,6 +477,7 @@ let lastRenderedViewMode = null;
 let lastRenderedVisible = null;
 let lastRenderedDirectory = null;
 let lastRenderedManhwa = null;
+let lastRenderedColsSig = null;
 
 // Favorites
 let favoritesExpanded = false;
@@ -432,53 +553,75 @@ function setColumnWidth(col, width) {
 
 function getColumnWidth(col) {
   const value = getComputedStyle(document.documentElement).getPropertyValue(`--col-${col}-w`).trim();
-  const parsed = parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : MIN_COL_WIDTHS[col];
+  const parsed = value.endsWith('px') ? parseFloat(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : (MIN_COL_WIDTHS[col] || 48);
 }
 
 function normalizeColumnWidths(preferredCol = 'name', preferredWidth = null) {
+  const activeCols = getEnabledColumns();
+  if (!activeCols.includes(preferredCol)) preferredCol = 'name';
   const panelWidth = Math.max(filePanel.getBoundingClientRect().width - 8, 120);
-  const cols = {
-    name: getColumnWidth('name'),
-    ext: getColumnWidth('ext'),
-    date: getColumnWidth('date'),
-  };
+  const cols = {};
+  for (const col of activeCols) {
+    cols[col] = getColumnWidth(col);
+  }
 
   if (preferredWidth !== null) cols[preferredCol] = preferredWidth;
 
-  cols.name = Math.max(MIN_COL_WIDTHS.name, cols.name);
-  cols.ext = Math.max(MIN_COL_WIDTHS.ext, cols.ext);
-  cols.date = Math.max(MIN_COL_WIDTHS.date, cols.date);
+  for (const col of activeCols) {
+    cols[col] = Math.max(MIN_COL_WIDTHS[col] || 40, cols[col]);
+  }
 
-  const fixedOthers = Object.entries(cols)
-    .filter(([col]) => col !== preferredCol)
-    .reduce((sum, [, width]) => sum + width, 0);
+  const minOthers = activeCols
+    .filter(col => col !== preferredCol)
+    .reduce((sum, col) => sum + (MIN_COL_WIDTHS[col] || 40), 0);
 
   cols[preferredCol] = Math.max(
-    MIN_COL_WIDTHS[preferredCol],
-    Math.min(cols[preferredCol], panelWidth - fixedOthers),
+    MIN_COL_WIDTHS[preferredCol] || 40,
+    Math.min(cols[preferredCol], panelWidth - minOthers),
   );
 
-  let total = cols.name + cols.ext + cols.date;
+  let total = activeCols.reduce((sum, col) => sum + cols[col], 0);
   if (total > panelWidth) {
-    const order = preferredCol === 'date'
-      ? ['name', 'ext']
-      : preferredCol === 'ext'
-        ? ['name', 'date']
-        : ['ext', 'date'];
+    const order = [
+      ...(preferredCol !== 'name' ? ['name'] : []),
+      ...activeCols.filter(c => c !== 'name' && c !== preferredCol)
+    ];
 
     for (const col of order) {
       const overflow = total - panelWidth;
       if (overflow <= 0) break;
-      const shrink = Math.min(overflow, cols[col] - MIN_COL_WIDTHS[col]);
+      const minW = MIN_COL_WIDTHS[col] || 40;
+      const shrink = Math.min(overflow, cols[col] - minW);
       cols[col] -= shrink;
       total -= shrink;
     }
   }
 
-  setColumnWidth('name', cols.name);
-  setColumnWidth('ext', cols.ext);
-  setColumnWidth('date', cols.date);
+  for (const col of activeCols) {
+    setColumnWidth(col, cols[col]);
+  }
+  syncGridTemplateColumns(activeCols);
+}
+
+function fitColumnsToPanel(state = Core?.getState()) {
+  recalculateMinColWidths();
+  const panelWidth = Math.max(filePanel.getBoundingClientRect().width - 8, 120);
+  for (const col of OPTIONAL_COLS) {
+    if (MIN_COL_WIDTHS[col]) {
+      const current = getColumnWidth(col);
+      if (!Number.isFinite(current) || current < MIN_COL_WIDTHS[col]) {
+        setColumnWidth(col, MIN_COL_WIDTHS[col]);
+      }
+    }
+  }
+  const activeCols = getEnabledColumns(state);
+  const otherWidth = activeCols
+    .filter(col => col !== 'name')
+    .reduce((sum, col) => sum + getColumnWidth(col), 0);
+  const nameWidth = Math.max(MIN_COL_WIDTHS.name || 64, panelWidth - otherWidth);
+  setColumnWidth('name', nameWidth);
+  normalizeColumnWidths('name', nameWidth);
 }
 
 function initializeColumns() {
@@ -487,12 +630,10 @@ function initializeColumns() {
 
   recalculateMinColWidths();
 
-  const panelWidth = Math.max(filePanel.getBoundingClientRect().width - 8, 120);
-  const date = MIN_COL_WIDTHS.date;
-  const ext = MIN_COL_WIDTHS.ext;
-  setColumnWidth('date', date);
-  setColumnWidth('ext', ext);
-  setColumnWidth('name', Math.max(MIN_COL_WIDTHS.name, panelWidth - date - ext));
+  for (const col of OPTIONAL_COLS) {
+    if (MIN_COL_WIDTHS[col]) setColumnWidth(col, MIN_COL_WIDTHS[col]);
+  }
+  fitColumnsToPanel();
 }
 
 function updateSortIcons() {
@@ -1785,12 +1926,20 @@ function createPoolRow() {
   const itemExt = document.createElement('span');
   itemExt.className = 'item-ext';
 
+  const itemDims = document.createElement('span');
+  itemDims.className = 'item-dims';
+
   const itemDate = document.createElement('span');
   itemDate.className = 'item-date';
 
+  const itemSize = document.createElement('span');
+  itemSize.className = 'item-size';
+
   li.appendChild(itemName);
   li.appendChild(itemExt);
+  li.appendChild(itemDims);
   li.appendChild(itemDate);
+  li.appendChild(itemSize);
 
   // Thumbnail mode elements
   const thumbWrapper = document.createElement('div');
@@ -1845,7 +1994,9 @@ function createPoolRow() {
     iconSvg,
     label: itemLabel,
     ext: itemExt,
+    dims: itemDims,
     date: itemDate,
+    size: itemSize,
     thumbWrapper,
     thumbImg,
     thumbPlaceholder,
@@ -1930,8 +2081,22 @@ function updateEntry(li, item, index) {
       } else if (hasDownloadError) {
         slots.thumbMeta.textContent = 'Download failed. Click to retry.';
       } else {
-        const ext = (item.ext || '').toUpperCase();
-        slots.thumbMeta.textContent = ext ? (item.date ? `${ext} • ${item.date}` : ext) : (item.date || '');
+        const cols = normalizeFileListColumns(state.config?.frontend_data?.file_list_columns);
+        const metaParts = [];
+        if (cols.ext) {
+          const ext = (item.ext || '').toUpperCase();
+          if (ext) metaParts.push(ext);
+        }
+        if (cols.dims) {
+          const dimsStr = formatDimsText(item, pendingDownload);
+          if (dimsStr) metaParts.push(dimsStr);
+        }
+        if (cols.date && item.date) metaParts.push(item.date);
+        if (cols.size) {
+          const sizeStr = formatByteSize(item, pendingDownload);
+          if (sizeStr) metaParts.push(sizeStr);
+        }
+        slots.thumbMeta.textContent = metaParts.join(' • ');
       }
     }
 
@@ -2069,7 +2234,9 @@ function updateEntry(li, item, index) {
     updateRowIcon(slots, item);
     if (slots.label) slots.label.textContent = item.displayName || item.name || '';
     if (slots.ext) slots.ext.textContent = hasDownloadError ? 'FAILED' : (item.is_dir ? 'DIR' : (item.ext || ''));
+    if (slots.dims) slots.dims.textContent = formatDimsText(item, pendingDownload);
     if (slots.date) slots.date.textContent = item.date || '';
+    if (slots.size) slots.size.textContent = formatByteSize(item, pendingDownload);
   }
 }
 
@@ -2439,6 +2606,55 @@ function setRefreshingVisual(active) {
   }, remaining);
 }
 
+function syncContainerDimensions(state) {
+  const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
+  const currentEntry = state.index >= 0 ? state.list?.[state.index] : null;
+  if (currentEntry && !currentEntry.is_dir && !currentEntry.is_parent && state.naturalWidth > 0 && state.naturalHeight > 0) {
+    const changed = currentEntry.width !== state.naturalWidth || currentEntry.height !== state.naturalHeight;
+    currentEntry.width = state.naturalWidth;
+    currentEntry.height = state.naturalHeight;
+    const key = _dimsCacheKey(currentDir, currentEntry, state.mediaRevision);
+    if (key) dimsCache.set(key, { width: state.naturalWidth, height: state.naturalHeight });
+    if (changed && activeRows.has(state.index)) {
+      updateEntry(activeRows.get(state.index), currentEntry, state.index);
+    }
+  }
+
+  const cols = normalizeFileListColumns(state.config?.frontend_data?.file_list_columns);
+  const archiveBlocked = state.mode === 'archive' && (state.archiveEncryption === 'password_required' || state.archiveEncryption === 'password_incorrect');
+  if (!cols.dims || !currentDir || currentDir === 'Drives' || !state.list?.length || archiveBlocked) {
+    if (activeDimsScanKey) {
+      activeDimsScanKey = '';
+      FsUtils.cancelDimsScan().catch(() => {});
+    }
+    return;
+  }
+
+  const { needsScan, hydratedCount } = hydrateCachedDimensions(currentDir, state.list, state.mediaRevision);
+  if (hydratedCount > 0) {
+    for (const [idx, li] of activeRows) {
+      if (state.list[idx]) updateEntry(li, state.list[idx], idx);
+    }
+    const prefs = DirectoryPrefs.getSortPrefs(currentDir);
+    if (prefs.col === 'dims') {
+      const selected = state.list[state.index];
+      const sortedList = DirectoryPrefs.sortList(state.list, prefs.col, prefs.desc);
+      const sameOrder = sortedList.length === state.list.length && sortedList.every((item, i) => item === state.list[i]);
+      if (!sameOrder) {
+        Core.setListAndIndex(sortedList, sortedList.indexOf(selected));
+      }
+    }
+  }
+
+  const scanKey = `${currentDir}::${state.mediaRevision || 0}::${state.list.length}`;
+  if (needsScan && activeDimsScanKey !== scanKey) {
+    activeDimsScanKey = scanKey;
+    FsUtils.scanContainerDimensions(currentDir, state.mode === 'archive').catch(err => {
+      console.warn('[FilePanel] Failed to scan container dimensions:', err);
+    });
+  }
+}
+
 export function renderFilePanel(state) {
   if (!filePanel) return;
   if (!hostsWorkspaceSurface('fileList', state)) return;
@@ -2475,6 +2691,25 @@ export function renderFilePanel(state) {
   }
 
   const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
+  const colsSig = applyColumnVisibilityClasses(state);
+  if (colsSig !== lastRenderedColsSig) {
+    const hadPrevColsSig = lastRenderedColsSig !== null;
+    lastRenderedColsSig = colsSig;
+    if (hadPrevColsSig) {
+      fitColumnsToPanel(state);
+    } else {
+      syncGridTemplateColumns(getEnabledColumns(state));
+    }
+    updateSortIcons();
+    if (state.list) {
+      for (const [idx, li] of activeRows) {
+        if (state.list[idx]) updateEntry(li, state.list[idx], idx);
+      }
+    }
+  }
+
+  syncContainerDimensions(state);
+  updateSortIcons();
 
   // Deduplication guard: if file list state has not changed, exit early.
   // Mode changes also clear secondary highlights when the list stays the same.
@@ -2821,6 +3056,55 @@ export function initFilePanel(deps) {
     window.__TAURI__.event.listen('directory-changed', () => {
       refreshFilesystemState();
     }).catch(console.error);
+
+    window.__TAURI__.event.listen('container-dimensions', (event) => {
+      const payload = event?.payload;
+      if (!payload || !payload.container) return;
+      const state = Core.getState();
+      const currentDir = state.mode === 'archive' ? state.archivePath : state.directory;
+      if (!currentDir || !_pathsEqual(payload.container, currentDir)) return;
+      if (!Array.isArray(state.list) || state.list.length === 0) return;
+
+      const entries = Array.isArray(payload.entries) ? payload.entries : [];
+      let updated = 0;
+      if (entries.length > 0) {
+        const byName = new Map();
+        for (let i = 0; i < state.list.length; i++) {
+          const item = state.list[i];
+          if (item && !item.is_dir && !item.is_parent) {
+            byName.set(item.name, i);
+            byName.set(item.name.toLowerCase(), i);
+          }
+        }
+        for (const d of entries) {
+          if (!d || !(d.width > 0 && d.height > 0)) continue;
+          const idx = byName.get(d.name) ?? byName.get(String(d.name || '').toLowerCase());
+          if (idx === undefined) continue;
+          const item = state.list[idx];
+          if (!item) continue;
+          if (item.width !== d.width || item.height !== d.height) {
+            item.width = d.width;
+            item.height = d.height;
+            updated++;
+          }
+          const key = _dimsCacheKey(currentDir, item, state.mediaRevision);
+          if (key) dimsCache.set(key, { width: d.width, height: d.height });
+          if (activeRows.has(idx)) {
+            updateEntry(activeRows.get(idx), item, idx);
+          }
+        }
+      }
+
+      if ((updated > 0 || payload.done) && DirectoryPrefs.getSortPrefs(currentDir).col === 'dims') {
+        const prefs = DirectoryPrefs.getSortPrefs(currentDir);
+        const selected = state.list[state.index];
+        const sortedList = DirectoryPrefs.sortList(state.list, prefs.col, prefs.desc);
+        const sameOrder = sortedList.length === state.list.length && sortedList.every((item, i) => item === state.list[i]);
+        if (!sameOrder) {
+          Core.setListAndIndex(sortedList, sortedList.indexOf(selected));
+        }
+      }
+    }).catch(console.error);
   }
 
   window.addEventListener('focus', () => {
@@ -3105,8 +3389,12 @@ export function initFilePanel(deps) {
         normalizeColumnWidths('name', startWidth + delta);
       } else if (resizingCol.classList.contains('col-ext')) {
         normalizeColumnWidths('ext', startWidth + delta);
+      } else if (resizingCol.classList.contains('col-dims')) {
+        normalizeColumnWidths('dims', startWidth + delta);
       } else if (resizingCol.classList.contains('col-date')) {
         normalizeColumnWidths('date', startWidth + delta);
+      } else if (resizingCol.classList.contains('col-size')) {
+        normalizeColumnWidths('size', startWidth + delta);
       }
     }
   });
