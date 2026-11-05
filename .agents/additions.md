@@ -10,12 +10,6 @@
 
 *Items deliberately deferred until after the initial release. Low priority by design: do not start without re-validating the need.*
 
-### File List and Viewport Relocation & Detach
-- Add a `Windows` menu after `View` with `File List` and `Viewport` submenus offering `Left`, `Right`, `Top`, `Bottom`, and `Detached`.
-- Positions default to `Left` (File List) and `Right` (Viewport).
-- Positions are mutually exclusive: selecting a position for one element automatically updates the other to maintain a balanced layout.
-- `Detached` mode opens a dedicated Tauri window for the selected element (falling back to the `window.open()` API for the planned web build), avoiding third-party docking or drag-and-drop JS libraries.
-
 ### Update Availability Indicator
 - Add a lightweight GitHub releases check on startup that displays an update notice in the `.menubar-spacer` area (right-aligned, pointing toward the GitHub button).
 - When an update is available: show a sentence like "Version X.Y.Z is available: you are X versions behind" inside the menubar spacer. Temporarily reroute the GitHub button to the releases page for that session.
@@ -42,9 +36,6 @@
 
 ### Documentation & GitHub (Project Health)
 - **Contributing Guide:** Add a general contributing guide (`CONTRIBUTING.md`) based on the active architecture state and repository guidelines at the time of writing.
-
-### Favorites List Reorder
-- Allow manual reorder of items in each favorites loadout (Favorites, Bookmarks, and the rest) with a grip SVG handle and Sortable-based drag. Order persists through the existing `favoritesStore.js` save path with `filePanel.js` staying the sole list owner. Keep add, remove, and loadout switching as is, with a keyboard accessible fallback.
 
 ## Out of Scope
 

@@ -36,6 +36,7 @@ A lightweight standalone (performance-first*) port of Quivi, built with Tauri us
 - **Custom theming**: Inject and live-reload custom CSS rules, with native light/dark mode support.
 - **ICO rows**: Render each size inside a `.ico` file side by side in one row, largest first.
 - **File panel**: Switchable list and thumbnail view modes with virtualized card grid layout, Favorites, and provider-organized URL Library galleries.
+- **Workspace layout**: Dock the file list to any edge, or detach it into a separate synchronized window.
 - **Performance**: Fast O(1) virtualized rendering handles folders and archives with thousands of items instantly. Caching native shell icons and thumbnails eliminates UI pop-in.
 
 > QuiviT is strictly an image/manga reader for the time being. Zero-flicker navigation, WebGL shader filtering (including Lanczos) are already implemented and optimized for video formats, but general local video playback is intentionally deferred. Video playback is currently only enabled for galleries from provider-specific sites.
@@ -171,7 +172,7 @@ What QuiviT ships with. The id in backticks is the value stored in config.
 - **Pan steps.** Keyboard `72px` per step, wheel `120px` per step. **Options → General → Panning**.
 - **Cursor auto-hide.** `2` seconds with no movement over the viewport. `0` disables auto-hide. **Options → General → Viewport**.
 - **Window title.** `filename.ext (current/total) ◦ container ◦ QuiviT` for archive pages. While folder pages omit the container. The count is images only, natural ascending, and ignores the active file list sort.
-- **Secondary windows.** Options and Archive Info size to their content and open centered on the main window.
+- **Secondary windows & layout.** **Windows → File List** docks `left` by default, and the viewport adjusts to the opposite edge accordingly. Secondary windows, including Options and Archive Info, size to their content and open centered over the main window.
 - **Shell background.** The native window shell background copies CSS var `--surface`.
 - **History.** **Folder → Back / Forward** (`Alt+arrow`, `Alt+A`, `Alt+W`, `Alt+D`, `Alt+S`, `MouseBack`, `MouseForward`) navigation tracks folders, archives, or drives. Session only, capped at 100.
 - **Library location.** `%LOCALAPPDATA%\QuiviT\library`. **Options → General → Library location** dynamically moves the imported folders in session.
@@ -193,7 +194,7 @@ QuiviT keeps its own data in three places. Imported galleries sit in a fourth fo
 
 **Config files.** By default these live in `C:\Users\<user>\AppData\Roaming\com.x4163.quivit`:
 
-- `quivit_config.json`: preferences. theme, keybinds, fit and scale, sort, spread, manhwa view, library location, and the rest of options.
+- `quivit_config.json`: preferences. theme, keybinds, fit and scale, sort, spread, manhwa view, workspace layout, library location, and the rest of options.
 - `quivit_state.json`: last opened path, last image, and whether scroll-zoom is latched.
 - `quivit_directory_sort.json`: sort column and direction for each folder.
 - `quivit_favorites.json`: favorites lists, items, and section collapse.
@@ -359,13 +360,15 @@ QuiviT/
 │     │  ├─ favoritesStore.js     # Favorites lists and items
 │     │  └─ libraryStore.js       # Imported library
 │     ├─ main/
+│     │  ├─ workspaceBoot.js      # Window session bootstrap
 │     │  ├─ main.js               # Startup
 │     │  ├─ fullscreen.js         # Fullscreen
 │     │  ├─ dropzone.js           # Drag and drop
 │     │  ├─ lifecycle.js          # Title bar and single-instance handoff
 │     │  ├─ metadataBadge.js      # Archive Info button
 │     │  ├─ passwordOverlay.js    # Archive password prompt
-│     │  └─ urlOverlay.js         # Open URL prompt
+│     │  ├─ urlOverlay.js         # Open URL prompt
+│     │  └─ workspace.js          # Panel docking and detachment reconciliation
 │     ├─ menubar/
 │     │  ├─ chrome.js             # Show or hide the menu and status bar
 │     │  └─ statusbar.js          # Status bar text
@@ -385,6 +388,7 @@ QuiviT/
 │     │  ├─ registry.js           # Filter and scale choices
 │     │  ├─ sorting.js            # Sort comparison and saved items grouping
 │     │  ├─ viewerMath.js         # Zoom, pan, and fit math
+│     │  ├─ workspaceLayout.js    # Panel docking positions and layout normalization
 │     │  ├─ filters/              # Filter definitions
 │     │  ├─ pipelines/            # WebGL
 │     │  └─ scaling/              # Lanczos
@@ -394,7 +398,10 @@ QuiviT/
 │     │  ├─ svgUtils.js           # SVG entity expansion and canvas sanitization
 │     │  ├─ theme.js              # Apply theme and custom CSS
 │     │  ├─ themePrePaint.js      # Theme before the first paint
-│     │  └─ windowFit.js          # Size Options and Archive Info to their content
+│     │  ├─ windowFit.js          # Size Options and Archive Info to their content
+│     │  ├─ workspaceControls.js  # Cross-window action dispatch and input routing
+│     │  ├─ workspaceHost.js      # Surface host detection and inactive viewport stubbing
+│     │  └─ workspaceSession.js   # Multi-window state synchronization and RPC transport
 │     ├─ vendors/
 │     │  ├─ pica.js               # Lanczos resizer
 │     │  ├─ prism.min.js          # CSS syntax highlighter
@@ -426,7 +433,7 @@ QuiviT/
 │  │  ├─ models.rs                # Data passed across to the UI
 │  │  ├─ protocol.rs              # quivit:// pages, thumbnails, and icons
 │  │  ├─ utils.rs                 # Encoding helpers
-│  │  └─ windows.rs               # Window sizes
+│  │  └─ windows.rs               # Window lifecycle, sizing, and workspace windows
 │  ├─ build.rs                    # Compiles embedded thumbnail proxy DLL
 │  ├─ Cargo.toml
 │  └─ tauri.conf.json

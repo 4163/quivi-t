@@ -72,7 +72,7 @@ Keep the codebase from drifting into mixed patterns. Apply these on every change
 - Domain logic lives in pure service modules (no `document`). Action ids, labels, defaults, and handlers have one registry; other files derive from it. Filter and scaler methods live under `services/filters` and `services/scaling`; the GL runtime does not know their names; overlay canvases have one UI owner.
 - Each UI feature owns its DOM and self-subscribes. Bootstrap stays thin: init + a slim state fan-out. It does not render another module's surface.
 - A coordinator such as `urlLoader.js` owns its domain and has no DOM. The file that paints a surface, such as `filePanel.js`, is the only writer for that surface. The file-by-file map is `.agents/architecture-state.md`.
-- Shared cross-window helpers (theme, preview, window fit) stay out of the state machine and out of feature UI files.
+- Shared cross-window helpers (theme, preview, window fit, workspace session) stay out of the state machine and out of feature UI files.
 - New frontend work extends this layering. Do not dump new DOM into bootstrap or new domain logic into a UI file. Frontend unit tests live in `mocha/`, while E2E tests, action recorder shims, and replay diagnostic probes live in `e2e/`, strictly outside `src/` to prevent embedding test or diagnostic machinery into the release bundle via `frontendDist: "../src"`.
 
 ### Rust module ownership

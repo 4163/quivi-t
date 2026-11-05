@@ -38,7 +38,16 @@ If any change touches config-backed or persistent features:
 
 Skip this step when the change has no config surface.
 
-### 3. Manual runtime verification handoff
+### 3. Docked and detached workspace verification
+
+If any change touches UI, navigation, or workspace features:
+
+- Verify the feature works under both docked and detached workspace layouts.
+- Confirm state sync, cross-window focus, and event routing between windows.
+
+Skip this step when the change has no UI or workspace surface.
+
+### 4. Manual runtime verification handoff
 
 Produce a numbered checklist of things that genuinely require human eyes or interaction in the running application:
 
@@ -56,7 +65,7 @@ Each checklist item must be human-readable and self-contained so a tester with n
 - Do not assume the tester knows file names, function names, or internal implementation details; keep code references out of the checklist itself.
 - Keep each item to 1 to 3 short sentences. Use plain verbs (Open, Click, Press, Observe, Confirm).
 
-### 4. Report and await user signoff
+### 5. Report and await user signoff
 
 Do not declare the slice finished.
 
