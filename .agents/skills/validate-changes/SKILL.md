@@ -29,12 +29,12 @@ Use this skill to run a strict compliance check of code changes against the repo
     - **Rust encapsulation:** Are facade methods used instead of public field reach-in? Is there exactly one concern per module? Is test visibility restricted correctly using `#[path]`?
     - **Diagnostics and telemetry integrity:** Did changes alter viewer DOM classes or elements queried by probes in `e2e/replay-diagnostics/probes/viewerPipelineProbe.js`? Did action ID updates preserve scenario contracts in `e2e/scenarios/`? If `investigation.js` is present, is its override intentional across sessions?
     - **Redundant code and shared helpers:** Did the diff inline repeated lines of code for identical operations across callsites instead of using or extracting an intuitive shared helper? Did it miss an existing helper that already does the job?
-    - **Stale code and references:** Are there unused imports, dead functions, orphaned files, outdated comments, or stale paths that point to moved or renamed modules? Does the diff leave behind code that is no longer reachable? Use grep for old names, check imports, and verify every moved file has its callers updated.
+    - **Stale code and references:** Are there unused imports or variables, dead functions, orphaned files, outdated comments, or stale paths that point to moved or renamed modules? Does the diff leave behind code that is no longer reachable? Use grep for old names, check imports, and verify every moved file has its callers updated.
 
     For every finding, mark severity:
     - `[Blocking]`: Direct rule breaks, broken module boundaries (such as DOM reach-in or IPC contract drift), or regression risks.
     - `[Warning]`: Architectural drift, premature abstractions, duplicated logic, or hot-path allocations.
-    - `[Nit]`: Dead code, unused imports, stale comments, or minor hygiene issues.
+    - `[Nit]`: Dead code, unused imports or variables, stale comments, or minor hygiene issues.
 
 3. **Synthesize the verdict:**
    Output your findings in a structured Markdown format for the user:
@@ -54,7 +54,7 @@ Use this skill to run a strict compliance check of code changes against the repo
     - [File:Line] [Blocking|Warning|Nit] Describe the duplicated logic and the recommended shared helper.
 
     ### Stale code and references
-    (List unused imports, dead functions, orphaned files, outdated comments, or stale paths that point to moved or renamed modules. If none, explicitly state "None".)
+    (List unused imports or variables, dead functions, orphaned files, outdated comments, or stale paths that point to moved or renamed modules. If none, explicitly state "None".)
     - [File:Line] [Blocking|Warning|Nit] Describe the stale reference and why it is no longer needed.
     
     ### Verdict
