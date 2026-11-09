@@ -124,7 +124,7 @@ fn workspace_window(surface: &str) -> Result<&'static str, String> {
 pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Result<(), String> {
     let label = workspace_window(&surface)?;
     if let Some(window) = app.get_webview_window(label) {
-        let _ = window.set_closable(false);
+        let _ = window.set_closable(true);
         window.show().map_err(|e| e.to_string())?;
         let _ = window.unminimize();
         return window.set_focus().map_err(|e| e.to_string());
@@ -141,7 +141,7 @@ pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Re
     .title(title)
     .inner_size(FILE_LIST_INITIAL_W, MAIN_INITIAL_H)
     .min_inner_size(META_MIN_W, MAIN_MIN_H)
-    .closable(false)
+    .closable(true)
     .visible(false)
     .disable_drag_drop_handler()
     .devtools(true)
@@ -150,6 +150,7 @@ pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Re
     .build()
     .map_err(|e| e.to_string())?;
     apply_shell_background(&window, &crate::config::load_config(app.clone()));
+    let _ = center_window_over_main(&app, &window, FILE_LIST_INITIAL_W, MAIN_INITIAL_H);
     let _ = window.set_theme(active_tauri_theme());
     if let Some(main) = app.get_webview_window("main") {
         if let Ok(theme) = main.theme() {
@@ -167,9 +168,6 @@ pub async fn open_workspace_window(app: tauri::AppHandle, surface: String) -> Re
         return Err(error);
     }
     window.on_window_event(move |event| {
-        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
-        }
         if matches!(event, tauri::WindowEvent::Destroyed) {
             #[cfg(windows)]
             crate::platform::drop::uninstall(label);

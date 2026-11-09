@@ -21,8 +21,15 @@ export function normalizeWindowMenuVisibility(visibility, legacyVisible = true) 
   ]));
 }
 
+const DOCKED_POSITIONS = ['left', 'right', 'top', 'bottom'];
+
 export function normalizeWorkspaceLayout(layout) {
-  if (isWorkspaceDetached(layout)) return { fileList: 'detached', viewport: 'detached' };
+  if (isWorkspaceDetached(layout)) {
+    // `docked` remembers where the File List sat before detaching so closing
+    // the detached window can put it back there.
+    const docked = DOCKED_POSITIONS.includes(layout?.docked) ? layout.docked : DEFAULT_WORKSPACE_LAYOUT.fileList;
+    return { fileList: 'detached', viewport: 'detached', docked };
+  }
   const fileList = WORKSPACE_POSITIONS.includes(layout?.fileList) ? layout.fileList : 'left';
   return { fileList, viewport: OPPOSITE[fileList] };
 }
@@ -30,14 +37,16 @@ export function normalizeWorkspaceLayout(layout) {
 export function relocateWorkspace(layout, surface, position) {
   const next = normalizeWorkspaceLayout(layout);
   if (!WORKSPACE_SURFACES.some(item => item.id === surface) || !WORKSPACE_POSITIONS.includes(position)) return next;
-  const other = surface === 'fileList' ? 'viewport' : 'fileList';
-  next[surface] = position;
-  if (position !== 'detached') next[other] = OPPOSITE[position];
-  else next[other] = 'detached';
-  return next;
+  if (position === 'detached') {
+    if (isWorkspaceDetached(next)) return next;
+    return { fileList: 'detached', viewport: 'detached', docked: next.fileList };
+  }
+  const fileList = surface === 'fileList' ? position : OPPOSITE[position];
+  return { fileList, viewport: OPPOSITE[fileList] };
 }
 
 export function dockWorkspaceSurface(layout, surface) {
-  const other = surface === 'fileList' ? 'viewport' : 'fileList';
-  return relocateWorkspace(layout, surface, OPPOSITE[layout?.[other]] || DEFAULT_WORKSPACE_LAYOUT[surface]);
+  const current = normalizeWorkspaceLayout(layout);
+  const fileList = isWorkspaceDetached(current) ? current.docked : current.fileList;
+  return relocateWorkspace(current, 'fileList', fileList);
 }
