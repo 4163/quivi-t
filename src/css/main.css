@@ -2408,12 +2408,15 @@ body.is-importing-url .header-cell:hover {
   pointer-events: none;
 }
 
-#viewport[data-scaling="none"] .viewer-img {
+#viewport[data-scaling="none"] .viewer-img,
+#viewport[data-scaling="none"] .ico-size > img {
   image-rendering: pixelated;
 }
 
 #viewport[data-scaling="bilinear"] .viewer-img,
-#viewport[data-scaling="lanczos"] .viewer-img {
+#viewport[data-scaling="lanczos"] .viewer-img,
+#viewport[data-scaling="bilinear"] .ico-size > img,
+#viewport[data-scaling="lanczos"] .ico-size > img {
   image-rendering: auto;
 }
 
