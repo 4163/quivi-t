@@ -394,6 +394,7 @@ QuiviT/
 │     │  └─ scaling/              # Lanczos
 │     ├─ shared/
 │     │  ├─ blobImage.js          # Shared decoded images
+│     │  ├─ clipboard.js          # Plain text clipboard helper
 │     │  ├─ configPreview.js      # Options preview and the CSS emergency reset
 │     │  ├─ svgUtils.js           # SVG entity expansion and canvas sanitization
 │     │  ├─ theme.js              # Apply theme and custom CSS
