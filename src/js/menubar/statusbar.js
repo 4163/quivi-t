@@ -2,6 +2,7 @@ import { FsUtils } from '../fsUtils.js';
 import { Core } from '../core.js';
 import { activeFilterId, FILTER_BY_ID } from '../services/registry.js';
 import { getEffectiveScaling } from '../services/viewerMath.js';
+import { copyTextToClipboard } from '../shared/clipboard.js';
 
 const FIT_LABELS = Object.freeze({
   'window': 'Window',
@@ -43,6 +44,7 @@ let _refreshTimer = null;
 let _refreshStartTime = 0;
 let _flashText = '';
 let _flashTimer = null;
+let _lastMediaFilename = '';
 
 export const Statusbar = {
   init() {
@@ -62,6 +64,22 @@ export const Statusbar = {
     this.syncSpreadIndicator(Core.getState());
     this.syncManhwaIndicator(Core.getState());
     this.update(Core.getState());
+
+    if (statusName) {
+      statusName.addEventListener('click', async () => {
+        const item = this.getCopyableStatusItem(Core.getState());
+        if (!item || !item.text) return;
+        const ok = await copyTextToClipboard(item.text);
+        if (ok) {
+          const message = item.type === 'folder'
+            ? 'Folder copied to clipboard'
+            : 'Filename copied to clipboard';
+          window.dispatchEvent(new CustomEvent('quivit-status-flash', {
+            detail: { message }
+          }));
+        }
+      });
+    }
 
     if (typeof window !== 'undefined' && window.addEventListener) {
       window.addEventListener('quivit-download-complete', () => {
@@ -100,10 +118,11 @@ export const Statusbar = {
         _flashText = e?.detail?.message || '';
         clearTimeout(_flashTimer);
         if (!_flashText) return;
+        const duration = Number.isFinite(e?.detail?.duration) ? e.detail.duration : FLASH_MESSAGE_DURATION_MS;
         _flashTimer = setTimeout(() => {
           _flashText = '';
           this.update(Core.getState());
-        }, FLASH_MESSAGE_DURATION_MS);
+        }, duration);
         this.update(Core.getState());
       });
     }
@@ -268,12 +287,22 @@ export const Statusbar = {
       if (statusDims && statusDims.textContent !== 'N/A') statusDims.textContent = 'N/A';
       if (statusZoom && statusZoom.textContent !== 'N/A') statusZoom.textContent = 'N/A';
       if (statusName) {
-        if (statusName.textContent !== (state.filename || '')) statusName.textContent = state.filename || '';
-        if (statusName.title !== (state.filename || '')) statusName.title = state.filename || '';
+        const target = state.filename || '';
+        if (statusName.textContent !== target) statusName.textContent = target;
+        if (target) {
+          if (statusName.title !== target) statusName.title = target;
+        } else if (statusName.hasAttribute('title')) {
+          statusName.removeAttribute('title');
+        }
       }
-    } else if (statusName && state.filename && statusName.textContent !== state.filename) {
-      statusName.textContent = state.filename;
-      statusName.title = state.filename;
+    } else if (statusName) {
+      const target = state.filename || _lastMediaFilename || '';
+      if (statusName.textContent !== target) statusName.textContent = target;
+      if (target) {
+        if (statusName.title !== target) statusName.title = target;
+      } else if (statusName.hasAttribute('title')) {
+        statusName.removeAttribute('title');
+      }
     }
 
     if (_flashText && statusName) {
@@ -282,18 +311,65 @@ export const Statusbar = {
     }
   },
 
+  getCopyableStatusItem(state = Core.getState()) {
+    if (_flashText) return null;
+    if (typeof document !== 'undefined' && document.body?.classList?.contains('is-importing-url')) return null;
+    if (this.isCurrentEntryDownloading(state)) return null;
+
+    const rawText = statusName?.textContent?.trim() || '';
+    if (!rawText || rawText === 'Loading...' || rawText.startsWith('Loading') || rawText.startsWith('Failed to ') || rawText.startsWith('Failed to open archive:')) {
+      return null;
+    }
+
+    let entry = null;
+    const currentEntry = state?.list?.[state?.index];
+    if (currentEntry && (currentEntry.name === rawText || rawText.startsWith(`${currentEntry.name}:`))) {
+      entry = currentEntry;
+    } else if (Array.isArray(state?.list)) {
+      entry = state.list.find(e => e.name === rawText || rawText.startsWith(`${e.name}:`)) || null;
+    }
+
+    if (entry) {
+      if (entry.is_parent) return null;
+      if (entry.is_dir) {
+        return { text: entry.name, type: 'folder' };
+      }
+      return { text: entry.name, type: 'filename' };
+    }
+
+    let cleanText = rawText;
+    if (cleanText.includes(': password required') || cleanText.includes(': password incorrect')) {
+      cleanText = cleanText.split(':')[0].trim();
+    }
+    if (!cleanText || cleanText === '..') return null;
+
+    const hasExt = cleanText.lastIndexOf('.') > 0;
+    if (state?.mode === 'image' || state?.mode === 'archive' || hasExt) {
+      return { text: cleanText, type: 'filename' };
+    }
+    if (state?.mode === 'directory') {
+      return { text: cleanText, type: 'folder' };
+    }
+
+    return null;
+  },
+
   // Called by viewer.js to report image lifecycle events. Writes filename,
   // dims, and zoom at the exact moment they become valid.
   setImage({ filename, dims, zoom, isError, isLoading }) {
     if (this.isCurrentEntryDownloading() || (typeof document !== 'undefined' && document.body?.classList?.contains('is-importing-url'))) {
       return;
     }
+    if (!_flashText && filename !== undefined) {
+      _lastMediaFilename = filename;
+    }
     filename = _flashText || filename;
     if (isLoading) {
       if (statusName && !statusName.textContent) {
         const liveName = filename || Core.getState().filename || '';
         statusName.textContent = liveName;
-        statusName.title = liveName;
+        if (liveName) statusName.title = liveName;
+        else statusName.removeAttribute('title');
       }
       return;
     }
@@ -302,13 +378,15 @@ export const Statusbar = {
       if (statusZoom && statusZoom.textContent !== 'N/A') statusZoom.textContent = 'N/A';
       if (statusName && filename !== undefined && statusName.textContent !== filename) {
         statusName.textContent = filename;
-        statusName.title = filename;
+        if (filename) statusName.title = filename;
+        else statusName.removeAttribute('title');
       }
       return;
     }
     if (statusName && filename !== undefined && statusName.textContent !== filename) {
       statusName.textContent = filename;
-      statusName.title = filename;
+      if (filename) statusName.title = filename;
+      else statusName.removeAttribute('title');
     }
     if (statusDims && dims && statusDims.textContent !== dims) {
       statusDims.textContent = dims;

@@ -2,6 +2,7 @@
  * filePanel.js: file list rendering, sorting, and column resizing.
  */
 import { DirectoryPrefs } from '../directoryPrefs.js';
+import { copyTextToClipboard } from '../shared/clipboard.js';
 import { makeListNavigable, makeContainerNavigable } from '../keyboardNav.js';
 import {
   getActiveFavorites,
@@ -653,7 +654,11 @@ function renderBreadcrumb(state) {
   if (!breadcrumbEl) return;
   const path = state.mode === 'archive' ? state.archivePath : state.directory;
   breadcrumbEl.textContent = formatBreadcrumbPath(path);
-  breadcrumbEl.title = path || '';
+  if (path) {
+    breadcrumbEl.title = path;
+  } else {
+    breadcrumbEl.removeAttribute('title');
+  }
 }
 
 // Favorites rendering.
@@ -2842,6 +2847,20 @@ export function initFilePanel(deps) {
 
   migrateNativeIconStorage();
   ensureSpacer();
+
+  if (breadcrumbEl) {
+    breadcrumbEl.addEventListener('click', async () => {
+      const state = Core.getState();
+      const path = (state.mode === 'archive' ? state.archivePath : state.directory) || breadcrumbEl.title || '';
+      if (!path || path === '__DRIVES__') return;
+      const ok = await copyTextToClipboard(path);
+      if (ok) {
+        window.dispatchEvent(new CustomEvent('quivit-status-flash', {
+          detail: { message: 'Directory path copied to clipboard' }
+        }));
+      }
+    });
+  }
 
   fileSearchInput = document.getElementById('file-panel-search');
   const onSearchChange = () => {
