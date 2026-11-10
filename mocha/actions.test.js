@@ -261,4 +261,159 @@ describe('Actions registry and keybindings', () => {
       assert.deepEqual(panByDeltas.pop(), { dx: 0, dy: -50 });
     });
   });
+
+  describe('archive path handling in explorer actions', () => {
+    let originalWindow;
+    let originalTauri;
+    let invoked = [];
+    let revealed = [];
+
+    beforeEach(() => {
+      originalWindow = globalThis.window;
+      invoked = [];
+      revealed = [];
+
+      const mockTauri = {
+        core: {
+          invoke: async (cmd, args) => {
+            invoked.push({ cmd, args });
+          }
+        },
+        opener: {
+          revealItemInDir: async (targetPath) => {
+            revealed.push(targetPath);
+          }
+        }
+      };
+
+      if (typeof globalThis.window === 'undefined') {
+        globalThis.window = { __TAURI__: mockTauri };
+      } else {
+        originalTauri = globalThis.window.__TAURI__;
+        globalThis.window.__TAURI__ = mockTauri;
+      }
+    });
+
+    afterEach(() => {
+      if (originalWindow === undefined) {
+        delete globalThis.window;
+      } else {
+        globalThis.window = originalWindow;
+        if (originalTauri !== undefined) {
+          globalThis.window.__TAURI__ = originalTauri;
+        } else {
+          delete globalThis.window.__TAURI__;
+        }
+      }
+    });
+
+    describe('cmd-open-explorer', () => {
+      it('reveals archive path without pipe entry for highlighted favorite', async () => {
+        const fakeCtx = {
+          Core: { getState: () => ({ list: [], index: -1 }) },
+          getHighlightedFavorite: () => ({ path: 'C:\\books\\sample.zip|01.jpg' })
+        };
+
+        await dispatch('cmd-open-explorer', null, fakeCtx);
+        assert.deepEqual(revealed, ['C:\\books\\sample.zip']);
+        assert.equal(invoked.length, 0);
+      });
+
+      it('reveals archive path without pipe entry for selected item', async () => {
+        const fakeCtx = {
+          Core: {
+            getState: () => ({
+              list: [{ path: 'C:\\comics\\volume1.cbz|page_001.png' }],
+              index: 0,
+              mode: 'archive'
+            })
+          }
+        };
+
+        await dispatch('cmd-open-explorer', null, fakeCtx);
+        assert.deepEqual(revealed, ['C:\\comics\\volume1.cbz']);
+        assert.equal(invoked.length, 0);
+      });
+
+      it('reveals regular file path for selected item', async () => {
+        const fakeCtx = {
+          Core: {
+            getState: () => ({
+              list: [{ path: 'C:\\photos\\image.png' }],
+              index: 0,
+              mode: 'folder'
+            })
+          }
+        };
+
+        await dispatch('cmd-open-explorer', null, fakeCtx);
+        assert.deepEqual(revealed, ['C:\\photos\\image.png']);
+        assert.equal(invoked.length, 0);
+      });
+
+      it('opens directory when selected item is parent entry outside archive mode', async () => {
+        const fakeCtx = {
+          Core: {
+            getState: () => ({
+              directory: 'C:\\photos',
+              list: [{ path: 'C:\\', is_parent: true }],
+              index: 0,
+              mode: 'folder'
+            })
+          }
+        };
+
+        await dispatch('cmd-open-explorer', null, fakeCtx);
+        assert.deepEqual(invoked, [{ cmd: 'open_in_explorer', args: { path: 'C:\\photos' } }]);
+        assert.equal(revealed.length, 0);
+      });
+    });
+
+    describe('cmd-open-folder', () => {
+      it('strips archive file to compute container directory for highlighted favorite', async () => {
+        const fakeCtx = {
+          Core: { getState: () => ({ list: [], index: -1 }) },
+          getHighlightedFavorite: () => ({ path: 'C:\\books\\sample.zip|01.jpg' })
+        };
+
+        await dispatch('cmd-open-folder', null, fakeCtx);
+        assert.deepEqual(invoked, [{ cmd: 'open_in_explorer', args: { path: 'C:\\books' } }]);
+        assert.equal(revealed.length, 0);
+      });
+
+      it('strips archive file to compute container directory for selected archive item', async () => {
+        const fakeCtx = {
+          Core: {
+            getState: () => ({
+              directory: 'C:\\books\\sample.zip',
+              list: [{ path: 'C:\\books\\sample.zip|02.jpg' }],
+              index: 0,
+              mode: 'archive'
+            })
+          }
+        };
+
+        await dispatch('cmd-open-folder', null, fakeCtx);
+        assert.deepEqual(invoked, [{ cmd: 'open_in_explorer', args: { path: 'C:\\books' } }]);
+        assert.equal(revealed.length, 0);
+      });
+
+      it('opens directory path directly when selected item is directory', async () => {
+        const fakeCtx = {
+          Core: {
+            getState: () => ({
+              directory: 'C:\\books',
+              list: [{ path: 'C:\\books\\manga', is_dir: true }],
+              index: 0,
+              mode: 'folder'
+            })
+          }
+        };
+
+        await dispatch('cmd-open-folder', null, fakeCtx);
+        assert.deepEqual(invoked, [{ cmd: 'open_in_explorer', args: { path: 'C:\\books\\manga' } }]);
+        assert.equal(revealed.length, 0);
+      });
+    });
+  });
 });

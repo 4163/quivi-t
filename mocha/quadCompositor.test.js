@@ -49,11 +49,15 @@ describe('QuadCompositor pipeline module', () => {
       LINK_STATUS: 35714,
 
       createShader(type) {
-        const s = { id: nextId++, type };
+        const s = { id: nextId++, type, source: '' };
         createdShaders.push(s);
         return s;
       },
-      shaderSource(_shader, _source) {},
+      shaderSource(shader, source) {
+        if (shader) {
+          shader.source = source;
+        }
+      },
       compileShader(_shader) {},
       getShaderParameter(_shader, _param) {
         return true;
@@ -341,6 +345,120 @@ describe('QuadCompositor pipeline module', () => {
       const compositor = new QuadCompositor(gl);
       const ok = compositor.drawQuad({ id: 1 }, { x: 0, y: 0, w: 10, h: 10 }, {}, 0, 0);
       assert.equal(ok, false);
+      assert.equal(gl.calls.length, 0);
+    });
+
+    it('compiles both standard texture and lanczos fragment shaders and caches uniform locations', () => {
+      const gl = createMockGl();
+      const compositor = new QuadCompositor(gl);
+
+      assert.equal(gl.createdPrograms.length, 2);
+      assert.equal(gl.createdShaders.length, 4);
+
+      const fragShaders = gl.createdShaders.filter((s) => s.type === gl.FRAGMENT_SHADER);
+      assert.equal(fragShaders.length, 2);
+
+      const standardFrag = fragShaders.find((s) => s.source.includes('fragColor = texture(u_texture, v_texCoord)'));
+      const lanczosFrag = fragShaders.find((s) => s.source.includes('lanczos3') && s.source.includes('u_sourceSize'));
+      assert.ok(standardFrag, 'Standard texture fragment shader must compile');
+      assert.ok(lanczosFrag, 'Lanczos fragment shader must compile');
+
+      assert.equal(compositor._uViewportLoc.name, 'u_viewport');
+      assert.equal(compositor._uTextureLoc.name, 'u_texture');
+      assert.equal(compositor._lanczosUSourceSizeLoc.name, 'u_sourceSize');
+      assert.equal(compositor._lanczosUTextureLoc.name, 'u_texture');
+    });
+
+    it('reuses compiled programs across repeated drawQuad calls without recompilation', () => {
+      const gl = createMockGl();
+      const compositor = new QuadCompositor(gl);
+      const texture = { id: 10 };
+      const destRect = { x: 0, y: 0, width: 100, height: 100 };
+      const sourceUV = { u0: 0, v0: 0, u1: 1, v1: 1 };
+
+      const progCount = gl.createdPrograms.length;
+      const shaderCount = gl.createdShaders.length;
+      assert.equal(progCount, 2);
+      assert.equal(shaderCount, 4);
+
+      for (let i = 0; i < 4; i++) {
+        compositor.drawQuad(texture, destRect, sourceUV, 800, 600, 1.0, 'texture');
+        compositor.drawQuad(texture, destRect, sourceUV, 800, 600, 1.0, 'lanczos', { w: 100, h: 100 });
+      }
+
+      assert.equal(gl.createdPrograms.length, progCount);
+      assert.equal(gl.createdShaders.length, shaderCount);
+      assert.equal(gl.calls.length, 8);
+    });
+
+    it('switches active programs when switching between texture and lanczos samplers', () => {
+      const gl = createMockGl();
+      const compositor = new QuadCompositor(gl);
+      const texture = { id: 20 };
+      const destRect = { x: 0, y: 0, width: 100, height: 100 };
+      const sourceUV = { u0: 0, v0: 0, u1: 1, v1: 1 };
+
+      const standardProg = compositor._program;
+      const lanczosProg = compositor._lanczosProgram;
+      assert.notEqual(standardProg, lanczosProg);
+
+      // Draw with sampler = "texture" (uses standard texture program)
+      compositor.drawQuad(texture, destRect, sourceUV, 800, 600, 1.0, 'texture');
+      assert.equal(gl.calls[0].currentProgram, standardProg);
+
+      // Switch to sampler = "lanczos"
+      compositor.drawQuad(texture, destRect, sourceUV, 800, 600, 1.0, 'lanczos', { w: 400, h: 300 });
+      assert.equal(gl.calls[1].currentProgram, lanczosProg);
+
+      // Switch back to sampler = "texture"
+      compositor.drawQuad(texture, destRect, sourceUV, 800, 600, 1.0, 'texture');
+      assert.equal(gl.calls[2].currentProgram, standardProg);
+    });
+
+    it('sets u_sourceSize uniform with expected float values for lanczos sampler', () => {
+      const gl = createMockGl();
+      const compositor = new QuadCompositor(gl);
+      const texture = { id: 30 };
+      const destRect = { x: 0, y: 0, width: 200, height: 150 };
+      const sourceUV = { u0: 0, v0: 0, u1: 1, v1: 1 };
+
+      // With { w, h } floats
+      compositor.drawQuad(texture, destRect, sourceUV, 1920, 1080, 1.0, 'lanczos', { w: 1280.5, h: 720.25 });
+      assert.deepEqual(gl.calls[0].uniforms.get('u_sourceSize'), [1280.5, 720.25]);
+
+      // With { width, height } floats
+      compositor.drawQuad(texture, destRect, sourceUV, 1920, 1080, 1.0, 'lanczos', { width: 3840.0, height: 2160.0 });
+      assert.deepEqual(gl.calls[1].uniforms.get('u_sourceSize'), [3840.0, 2160.0]);
+
+      // Fallback float values when sourceSize is null
+      compositor.drawQuad(texture, destRect, sourceUV, 1920, 1080, 1.0, 'lanczos', null);
+      assert.deepEqual(gl.calls[2].uniforms.get('u_sourceSize'), [1, 1]);
+    });
+
+    it('returns false without error for invalid or unsupported viewport bounds', () => {
+      const gl = createMockGl();
+      const compositor = new QuadCompositor(gl);
+      const texture = { id: 40 };
+      const destRect = { x: 0, y: 0, width: 50, height: 50 };
+      const sourceUV = { u0: 0, v0: 0, u1: 1, v1: 1 };
+
+      const invalidBounds = [
+        { vpW: 0, vpH: 600 },
+        { vpW: 800, vpH: 0 },
+        { vpW: 0, vpH: 0 },
+        { vpW: -100, vpH: 600 },
+        { vpW: 800, vpH: -200 },
+        { vpW: -50, vpH: -50 },
+      ];
+
+      for (const { vpW, vpH } of invalidBounds) {
+        let ok;
+        assert.doesNotThrow(() => {
+          ok = compositor.drawQuad(texture, destRect, sourceUV, vpW, vpH);
+        });
+        assert.equal(ok, false);
+      }
+
       assert.equal(gl.calls.length, 0);
     });
 

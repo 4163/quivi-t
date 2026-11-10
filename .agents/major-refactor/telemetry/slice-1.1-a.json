@@ -1,0 +1,2322 @@
+{
+  "stats": {
+    "suites": 34,
+    "tests": 128,
+    "passes": 128,
+    "pending": 0,
+    "failures": 0,
+    "start": "2026-11-10T10:31:10.494Z",
+    "end": "2026-11-10T10:31:10.548Z",
+    "duration": 54
+  },
+  "tests": [
+    {
+      "title": "contains unique actions with required properties",
+      "fullTitle": "Actions registry and keybindings ACTION_REGISTRY integrity contains unique actions with required properties",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "contains all expected core command categories",
+      "fullTitle": "Actions registry and keybindings ACTION_REGISTRY integrity contains all expected core command categories",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "maps registered actions to valid key combo strings",
+      "fullTitle": "Actions registry and keybindings default keybinding mappings maps registered actions to valid key combo strings",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "normalizes key combos according to keyCombo rules",
+      "fullTitle": "Actions registry and keybindings default keybinding mappings normalizes key combos according to keyCombo rules",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "binds manhwa to m with no default conflicts and leaves audio mute unassigned",
+      "fullTitle": "Actions registry and keybindings default keybinding mappings binds manhwa to m with no default conflicts and leaves audio mute unassigned",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "dispatches registered actions to context handlers",
+      "fullTitle": "Actions registry and keybindings dispatch function dispatches registered actions to context handlers",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "gracefully ignores unknown action IDs without throwing",
+      "fullTitle": "Actions registry and keybindings dispatch function gracefully ignores unknown action IDs without throwing",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "routes audio toggle to the strip coordinator when manhwa is active",
+      "fullTitle": "Actions registry and keybindings dispatch function routes audio toggle to the strip coordinator when manhwa is active",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "routes navigation to navigateManhwa and pan/zoom to Viewer when manhwa is active",
+      "fullTitle": "Actions registry and keybindings dispatch function routes navigation to navigateManhwa and pan/zoom to Viewer when manhwa is active",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "routes to standard handlers when manhwa is inactive",
+      "fullTitle": "Actions registry and keybindings dispatch function routes to standard handlers when manhwa is inactive",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reveals archive path without pipe entry for highlighted favorite",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-explorer reveals archive path without pipe entry for highlighted favorite",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reveals archive path without pipe entry for selected item",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-explorer reveals archive path without pipe entry for selected item",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reveals regular file path for selected item",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-explorer reveals regular file path for selected item",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "opens directory when selected item is parent entry outside archive mode",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-explorer opens directory when selected item is parent entry outside archive mode",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "strips archive file to compute container directory for highlighted favorite",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-folder strips archive file to compute container directory for highlighted favorite",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "strips archive file to compute container directory for selected archive item",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-folder strips archive file to compute container directory for selected archive item",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "opens directory path directly when selected item is directory",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-folder opens directory path directly when selected item is directory",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "keeps root files before nested files in archive default name order",
+      "fullTitle": "Sorting service keeps root files before nested files in archive default name order",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 12,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts entry group order and reverses names within groups in descending name sort",
+      "fullTitle": "Sorting service inverts entry group order and reverses names within groups in descending name sort",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "falls back to compareNames when size values are equal or zero for composite archive paths",
+      "fullTitle": "Sorting service falls back to compareNames when size values are equal or zero for composite archive paths",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "falls back to compareNames when dimension areas are equal or zero for composite archive paths",
+      "fullTitle": "Sorting service falls back to compareNames when dimension areas are equal or zero for composite archive paths",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "sorts composite archive paths by extension with natural compare fallback",
+      "fullTitle": "Sorting service sorts composite archive paths by extension with natural compare fallback",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "sorts composite archive paths by raw date with natural compare fallback",
+      "fullTitle": "Sorting service sorts composite archive paths by raw date with natural compare fallback",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "uses natural compare without archive hierarchy for standalone file paths without pipes",
+      "fullTitle": "Sorting service uses natural compare without archive hierarchy for standalone file paths without pipes",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns default sort when no custom preference is stored",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup returns default sort when no custom preference is stored",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "stores custom sort preferences and supports slash normalization",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup stores custom sort preferences and supports slash normalization",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "removes sort preferences and reverts to default sort",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup removes sort preferences and reverts to default sort",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reconciles directory_sort and purges missing folders and archives",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup reconciles directory_sort and purges missing folders and archives",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "normalizes mixed slashes, trailing slashes, and drive letter casing across get and set",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup normalizes mixed slashes, trailing slashes, and drive letter casing across get and set",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reconciles directory_sort and purges missing composite archive paths",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup reconciles directory_sort and purges missing composite archive paths",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "classifies folders, archives, and images correctly",
+      "fullTitle": "Sorting service Saved items grouping (favorites) classifies folders, archives, and images correctly",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "classifies composite archive paths as images rather than archives",
+      "fullTitle": "Sorting service Saved items grouping (favorites) classifies composite archive paths as images rather than archives",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "classifies standalone archive files across all supported extensions as archives",
+      "fullTitle": "Sorting service Saved items grouping (favorites) classifies standalone archive files across all supported extensions as archives",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "classifies paths with trailing slashes and drive letters as folders",
+      "fullTitle": "Sorting service Saved items grouping (favorites) classifies paths with trailing slashes and drive letters as folders",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "groups items as folders, then archives, then images while preserving insertion order",
+      "fullTitle": "Sorting service Saved items grouping (favorites) groups items as folders, then archives, then images while preserving insertion order",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "appends new items to their respective group in proper hierarchy",
+      "fullTitle": "Sorting service Saved items grouping (favorites) appends new items to their respective group in proper hierarchy",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "treats videos as images alongside other image files in the image group",
+      "fullTitle": "Sorting service Saved items grouping (favorites) treats videos as images alongside other image files in the image group",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "detects aspect ratios at or above the 1.2 threshold",
+      "fullTitle": "viewerMath checkIsSpread detects aspect ratios at or above the 1.2 threshold",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "aligns right and left pages for RTL reading order",
+      "fullTitle": "viewerMath spread mode fit and step alignment aligns right and left pages for RTL reading order",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "aligns left and right pages for LTR reading order",
+      "fullTitle": "viewerMath spread mode fit and step alignment aligns left and right pages for LTR reading order",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles disabled spread mode and single-page images",
+      "fullTitle": "viewerMath spread mode fit and step alignment handles disabled spread mode and single-page images",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "calculates scaling for standard fit modes",
+      "fullTitle": "viewerMath fit modes and viewport state calculates scaling for standard fit modes",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "recalculates scale on viewport resize in strict fit mode",
+      "fullTitle": "viewerMath fit modes and viewport state recalculates scale on viewport resize in strict fit mode",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "preserves manual zoom and pan offsets across viewport resize",
+      "fullTitle": "viewerMath fit modes and viewport state preserves manual zoom and pan offsets across viewport resize",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "updates userTransformed flag on pan and resets on resetGeometry",
+      "fullTitle": "viewerMath fit modes and viewport state updates userTransformed flag on pan and resets on resetGeometry",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "resolves effective scaling mode correctly",
+      "fullTitle": "viewerMath coordinate and scaling helpers resolves effective scaling mode correctly",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts viewport coordinates to natural image space",
+      "fullTitle": "viewerMath coordinate and scaling helpers inverts viewport coordinates to natural image space",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "defaults to -45deg at 0 rotation and no flip",
+      "fullTitle": "viewerMath grill counter-angle calculations defaults to -45deg at 0 rotation and no flip",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts angle on 90 and 270 degree rotation, preserves on 0 and 180",
+      "fullTitle": "viewerMath grill counter-angle calculations inverts angle on 90 and 270 degree rotation, preserves on 0 and 180",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts angle on single axis flip and restores on dual flip",
+      "fullTitle": "viewerMath grill counter-angle calculations inverts angle on single axis flip and restores on dual flip",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "correctly calculates parity for composite rotation and flip",
+      "fullTitle": "viewerMath grill counter-angle calculations correctly calculates parity for composite rotation and flip",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns viewport width for all layout fit modes at zoom 1",
+      "fullTitle": "viewerMath computeStripWidth returns viewport width for all layout fit modes at zoom 1",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns null for none (natural width)",
+      "fullTitle": "viewerMath computeStripWidth returns null for none (natural width)",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "scales by zoom factor",
+      "fullTitle": "viewerMath computeStripWidth scales by zoom factor",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns null for zero or missing viewport",
+      "fullTitle": "viewerMath computeStripWidth returns null for zero or missing viewport",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "determines widest width and unscaled column width at zoom 1",
+      "fullTitle": "viewerMath computeColumnOffsets determines widest width and unscaled column width at zoom 1",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "derives per-item offsets from heights at that width",
+      "fullTitle": "viewerMath computeColumnOffsets derives per-item offsets from heights at that width",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "scales column width, heights, and offsets by zoom factor",
+      "fullTitle": "viewerMath computeColumnOffsets scales column width, heights, and offsets by zoom factor",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "supports naturalWidth and naturalHeight properties",
+      "fullTitle": "viewerMath computeColumnOffsets supports naturalWidth and naturalHeight properties",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles empty and invalid input gracefully",
+      "fullTitle": "viewerMath computeColumnOffsets handles empty and invalid input gracefully",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "aliases computeColumnLayout to computeColumnOffsets",
+      "fullTitle": "viewerMath computeColumnOffsets aliases computeColumnLayout to computeColumnOffsets",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "mirrors the CSS seam overlap for any zoom scale",
+      "fullTitle": "viewerMath computeColumnOffsets mirrors the CSS seam overlap for any zoom scale",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "shifts offsets up by the seam overlap per boundary",
+      "fullTitle": "viewerMath computeColumnOffsets shifts offsets up by the seam overlap per boundary",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "identifies item containing center coordinate",
+      "fullTitle": "viewerMath findAnchorIndex identifies item containing center coordinate",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "clamps to first or last item when out of range",
+      "fullTitle": "viewerMath findAnchorIndex clamps to first or last item when out of range",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles empty or invalid offsets",
+      "fullTitle": "viewerMath findAnchorIndex handles empty or invalid offsets",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "picks correct slot when center coordinate is in seam overlap",
+      "fullTitle": "viewerMath findAnchorIndex picks correct slot when center coordinate is in seam overlap",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "computes start and end index for visible range plus buffer",
+      "fullTitle": "viewerMath computeWindowRange computes start and end index for visible range plus buffer",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns -1 for ranges completely outside the column",
+      "fullTitle": "viewerMath computeWindowRange returns -1 for ranges completely outside the column",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles exact exclusive boundaries and single visible item",
+      "fullTitle": "viewerMath computeWindowRange handles exact exclusive boundaries and single visible item",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "does not include preceding slot when next slot is top aligned with seam overlap",
+      "fullTitle": "viewerMath computeWindowRange does not include preceding slot when next slot is top aligned with seam overlap",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pins binary search behavior on long lists and boundary edges",
+      "fullTitle": "viewerMath computeWindowRange pins binary search behavior on long lists and boundary edges",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "updates natural dimensions and clamps pan",
+      "fullTitle": "viewerMath setDimensions on viewportState updates natural dimensions and clamps pan",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "atomically updates dimensions and pan position when next coordinates are passed",
+      "fullTitle": "viewerMath setDimensions on viewportState atomically updates dimensions and pan position when next coordinates are passed",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "allows panning shorter content within viewport bounds",
+      "fullTitle": "viewerMath short content clamping on viewportState allows panning shorter content within viewport bounds",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pins the first item to viewport top",
+      "fullTitle": "viewerMath computeTopAlignTy pins the first item to viewport top",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "aligns middle item top to viewport top",
+      "fullTitle": "viewerMath computeTopAlignTy aligns middle item top to viewport top",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "clamps last item to column bottom boundary",
+      "fullTitle": "viewerMath computeTopAlignTy clamps last item to column bottom boundary",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pins short columns down/towards bottom on top align regardless of slot offset",
+      "fullTitle": "viewerMath computeTopAlignTy pins short columns down/towards bottom on top align regardless of slot offset",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "scales correctly for zoomed in and zoomed out states",
+      "fullTitle": "viewerMath computeTopAlignTy scales correctly for zoomed in and zoomed out states",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pins the last item to viewport bottom",
+      "fullTitle": "viewerMath computeBottomAlignTy pins the last item to viewport bottom",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pins short columns up/towards top on bottom align regardless of slot offset",
+      "fullTitle": "viewerMath computeBottomAlignTy pins short columns up/towards top on bottom align regardless of slot offset",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "scales correctly for zoomed in and zoomed out states",
+      "fullTitle": "viewerMath computeBottomAlignTy scales correctly for zoomed in and zoomed out states",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "produces distinct hues for all items in a set",
+      "fullTitle": "viewerMath computeSlotHue produces distinct hues for all items in a set",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "wraps around cleanly when index exceeds total or is negative",
+      "fullTitle": "viewerMath computeSlotHue wraps around cleanly when index exceeds total or is negative",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "skips the 190 through 240 blue/cyan range across various counts",
+      "fullTitle": "viewerMath computeSlotHue skips the 190 through 240 blue/cyan range across various counts",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles zero or negative total gracefully without NaN",
+      "fullTitle": "viewerMath computeSlotHue handles zero or negative total gracefully without NaN",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "calculates scaleY matching viewport height with seam overlap on first call",
+      "fullTitle": "viewerMath computeStripFitScale calculates scaleY matching viewport height with seam overlap on first call",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles short strips that fit within viewport at scale 1 or larger",
+      "fullTitle": "viewerMath computeStripFitScale handles short strips that fit within viewport at scale 1 or larger",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles window and window-if-larger correctly",
+      "fullTitle": "viewerMath computeStripFitScale handles window and window-if-larger correctly",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles single-item strip (itemCount = 1) without seam overlap offset",
+      "fullTitle": "viewerMath computeStripFitScale handles single-item strip (itemCount = 1) without seam overlap offset",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns neither for empty or single-item total",
+      "fullTitle": "viewerMath firstLastHighlight returns neither for empty or single-item total",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "prioritizes primary selection at index 0 or total - 1 even if whole column is visible",
+      "fullTitle": "viewerMath firstLastHighlight prioritizes primary selection at index 0 or total - 1 even if whole column is visible",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns first or last when only that column end is visible",
+      "fullTitle": "viewerMath firstLastHighlight returns first or last when only that column end is visible",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "resolves tie by proximity to nearest end when both ends are visible with middle primary",
+      "fullTitle": "viewerMath firstLastHighlight resolves tie by proximity to nearest end when both ends are visible with middle primary",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns empty draw list for empty offsets or offscreen windows",
+      "fullTitle": "viewerMath computeColumnComposite returns empty draw list for empty offsets or offscreen windows",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "maps still layout into visible draw items with columnYOrigin",
+      "fullTitle": "viewerMath computeColumnComposite maps still layout into visible draw items with columnYOrigin",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "covers a window that spans a slot boundary cleanly",
+      "fullTitle": "viewerMath computeColumnComposite covers a window that spans a slot boundary cleanly",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "covers tall layout where only a slice of one slot is visible",
+      "fullTitle": "viewerMath computeColumnComposite covers tall layout where only a slice of one slot is visible",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "covers scale below 1 where seam overlap grows",
+      "fullTitle": "viewerMath computeColumnComposite covers scale below 1 where seam overlap grows",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "expands visible window when overscan is specified",
+      "fullTitle": "viewerMath computeColumnComposite expands visible window when overscan is specified",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "keeps continuous offsets for mixed still and animated chapters",
+      "fullTitle": "viewerMath computeColumnComposite keeps continuous offsets for mixed still and animated chapters",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts grill angle for ICO backdrops",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers inverts grill angle for ICO backdrops",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "calculates total dimensions for ICO frame arrays",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers calculates total dimensions for ICO frame arrays",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "computes bounding width sum and maximum height across multiple frames",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers computes bounding width sum and maximum height across multiple frames",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles frames with missing or undefined dimensions without NaN",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers handles frames with missing or undefined dimensions without NaN",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles frames with 0 dimensions",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers handles frames with 0 dimensions",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns null for empty array, null, undefined, or non-array inputs",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers returns null for empty array, null, undefined, or non-array inputs",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "extracts first ICO frame data_url and detects source shapes",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers extracts first ICO frame data_url and detects source shapes",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "maps screen corners to WebGL NDC bounds",
+      "fullTitle": "QuadCompositor pipeline module screenToNdc coordinate mapping maps screen corners to WebGL NDC bounds",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts NDC Y when flipY = -1.0 for FBO targets",
+      "fullTitle": "QuadCompositor pipeline module screenToNdc coordinate mapping inverts NDC Y when flipY = -1.0 for FBO targets",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles degenerate viewport dimensions without NaN",
+      "fullTitle": "QuadCompositor pipeline module screenToNdc coordinate mapping handles degenerate viewport dimensions without NaN",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "calculates full viewport rectangle NDC bounds",
+      "fullTitle": "QuadCompositor pipeline module destRectToNdc bounds calculation calculates full viewport rectangle NDC bounds",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "calculates centered sub-rectangle NDC bounds and supports dx/dy aliases",
+      "fullTitle": "QuadCompositor pipeline module destRectToNdc bounds calculation calculates centered sub-rectangle NDC bounds and supports dx/dy aliases",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "populates 24 floats for 6 vertices (2 triangles)",
+      "fullTitle": "QuadCompositor pipeline module fillQuadBuffer vertex layout and reuse populates 24 floats for 6 vertices (2 triangles)",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "mutates existing buffer in place to prevent allocation on hot paths",
+      "fullTitle": "QuadCompositor pipeline module fillQuadBuffer vertex layout and reuse mutates existing buffer in place to prevent allocation on hot paths",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "supports fillQuadNdcBuffer for direct NDC verification",
+      "fullTitle": "QuadCompositor pipeline module fillQuadBuffer vertex layout and reuse supports fillQuadNdcBuffer for direct NDC verification",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "initializes program, shader attributes, and dynamic VBO",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle initializes program, shader attributes, and dynamic VBO",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "drawQuad updates VBO, sets viewport uniforms, and issues draw call",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle drawQuad updates VBO, sets viewport uniforms, and issues draw call",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "drawQuad passes flipY = -1.0 when rendering to FBO targets",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle drawQuad passes flipY = -1.0 when rendering to FBO targets",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "drawQuad with sampler = \"lanczos\" sets u_sourceSize uniform",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle drawQuad with sampler = \"lanczos\" sets u_sourceSize uniform",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns false and ignores draw calls for invalid viewport dimensions",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle returns false and ignores draw calls for invalid viewport dimensions",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "compiles both standard texture and lanczos fragment shaders and caches uniform locations",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle compiles both standard texture and lanczos fragment shaders and caches uniform locations",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reuses compiled programs across repeated drawQuad calls without recompilation",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle reuses compiled programs across repeated drawQuad calls without recompilation",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "switches active programs when switching between texture and lanczos samplers",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle switches active programs when switching between texture and lanczos samplers",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "sets u_sourceSize uniform with expected float values for lanczos sampler",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle sets u_sourceSize uniform with expected float values for lanczos sampler",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns false without error for invalid or unsupported viewport bounds",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle returns false without error for invalid or unsupported viewport bounds",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "dispose deletes VBO and program cleanly",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle dispose deletes VBO and program cleanly",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    }
+  ],
+  "pending": [],
+  "failures": [],
+  "passes": [
+    {
+      "title": "contains unique actions with required properties",
+      "fullTitle": "Actions registry and keybindings ACTION_REGISTRY integrity contains unique actions with required properties",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "contains all expected core command categories",
+      "fullTitle": "Actions registry and keybindings ACTION_REGISTRY integrity contains all expected core command categories",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "maps registered actions to valid key combo strings",
+      "fullTitle": "Actions registry and keybindings default keybinding mappings maps registered actions to valid key combo strings",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "normalizes key combos according to keyCombo rules",
+      "fullTitle": "Actions registry and keybindings default keybinding mappings normalizes key combos according to keyCombo rules",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "binds manhwa to m with no default conflicts and leaves audio mute unassigned",
+      "fullTitle": "Actions registry and keybindings default keybinding mappings binds manhwa to m with no default conflicts and leaves audio mute unassigned",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "dispatches registered actions to context handlers",
+      "fullTitle": "Actions registry and keybindings dispatch function dispatches registered actions to context handlers",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "gracefully ignores unknown action IDs without throwing",
+      "fullTitle": "Actions registry and keybindings dispatch function gracefully ignores unknown action IDs without throwing",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "routes audio toggle to the strip coordinator when manhwa is active",
+      "fullTitle": "Actions registry and keybindings dispatch function routes audio toggle to the strip coordinator when manhwa is active",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "routes navigation to navigateManhwa and pan/zoom to Viewer when manhwa is active",
+      "fullTitle": "Actions registry and keybindings dispatch function routes navigation to navigateManhwa and pan/zoom to Viewer when manhwa is active",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "routes to standard handlers when manhwa is inactive",
+      "fullTitle": "Actions registry and keybindings dispatch function routes to standard handlers when manhwa is inactive",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reveals archive path without pipe entry for highlighted favorite",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-explorer reveals archive path without pipe entry for highlighted favorite",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reveals archive path without pipe entry for selected item",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-explorer reveals archive path without pipe entry for selected item",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reveals regular file path for selected item",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-explorer reveals regular file path for selected item",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "opens directory when selected item is parent entry outside archive mode",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-explorer opens directory when selected item is parent entry outside archive mode",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "strips archive file to compute container directory for highlighted favorite",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-folder strips archive file to compute container directory for highlighted favorite",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "strips archive file to compute container directory for selected archive item",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-folder strips archive file to compute container directory for selected archive item",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "opens directory path directly when selected item is directory",
+      "fullTitle": "Actions registry and keybindings archive path handling in explorer actions cmd-open-folder opens directory path directly when selected item is directory",
+      "file": "D:\\Projects\\QuiviT\\mocha\\actions.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "keeps root files before nested files in archive default name order",
+      "fullTitle": "Sorting service keeps root files before nested files in archive default name order",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 12,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts entry group order and reverses names within groups in descending name sort",
+      "fullTitle": "Sorting service inverts entry group order and reverses names within groups in descending name sort",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "falls back to compareNames when size values are equal or zero for composite archive paths",
+      "fullTitle": "Sorting service falls back to compareNames when size values are equal or zero for composite archive paths",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "falls back to compareNames when dimension areas are equal or zero for composite archive paths",
+      "fullTitle": "Sorting service falls back to compareNames when dimension areas are equal or zero for composite archive paths",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "sorts composite archive paths by extension with natural compare fallback",
+      "fullTitle": "Sorting service sorts composite archive paths by extension with natural compare fallback",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "sorts composite archive paths by raw date with natural compare fallback",
+      "fullTitle": "Sorting service sorts composite archive paths by raw date with natural compare fallback",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "uses natural compare without archive hierarchy for standalone file paths without pipes",
+      "fullTitle": "Sorting service uses natural compare without archive hierarchy for standalone file paths without pipes",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns default sort when no custom preference is stored",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup returns default sort when no custom preference is stored",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "stores custom sort preferences and supports slash normalization",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup stores custom sort preferences and supports slash normalization",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "removes sort preferences and reverts to default sort",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup removes sort preferences and reverts to default sort",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reconciles directory_sort and purges missing folders and archives",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup reconciles directory_sort and purges missing folders and archives",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "normalizes mixed slashes, trailing slashes, and drive letter casing across get and set",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup normalizes mixed slashes, trailing slashes, and drive letter casing across get and set",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reconciles directory_sort and purges missing composite archive paths",
+      "fullTitle": "Sorting service DirectoryPrefs persistence and deletion cleanup reconciles directory_sort and purges missing composite archive paths",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "classifies folders, archives, and images correctly",
+      "fullTitle": "Sorting service Saved items grouping (favorites) classifies folders, archives, and images correctly",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "classifies composite archive paths as images rather than archives",
+      "fullTitle": "Sorting service Saved items grouping (favorites) classifies composite archive paths as images rather than archives",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "classifies standalone archive files across all supported extensions as archives",
+      "fullTitle": "Sorting service Saved items grouping (favorites) classifies standalone archive files across all supported extensions as archives",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "classifies paths with trailing slashes and drive letters as folders",
+      "fullTitle": "Sorting service Saved items grouping (favorites) classifies paths with trailing slashes and drive letters as folders",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "groups items as folders, then archives, then images while preserving insertion order",
+      "fullTitle": "Sorting service Saved items grouping (favorites) groups items as folders, then archives, then images while preserving insertion order",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "appends new items to their respective group in proper hierarchy",
+      "fullTitle": "Sorting service Saved items grouping (favorites) appends new items to their respective group in proper hierarchy",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "treats videos as images alongside other image files in the image group",
+      "fullTitle": "Sorting service Saved items grouping (favorites) treats videos as images alongside other image files in the image group",
+      "file": "D:\\Projects\\QuiviT\\mocha\\sorting.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "detects aspect ratios at or above the 1.2 threshold",
+      "fullTitle": "viewerMath checkIsSpread detects aspect ratios at or above the 1.2 threshold",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "aligns right and left pages for RTL reading order",
+      "fullTitle": "viewerMath spread mode fit and step alignment aligns right and left pages for RTL reading order",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "aligns left and right pages for LTR reading order",
+      "fullTitle": "viewerMath spread mode fit and step alignment aligns left and right pages for LTR reading order",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles disabled spread mode and single-page images",
+      "fullTitle": "viewerMath spread mode fit and step alignment handles disabled spread mode and single-page images",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "calculates scaling for standard fit modes",
+      "fullTitle": "viewerMath fit modes and viewport state calculates scaling for standard fit modes",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "recalculates scale on viewport resize in strict fit mode",
+      "fullTitle": "viewerMath fit modes and viewport state recalculates scale on viewport resize in strict fit mode",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "preserves manual zoom and pan offsets across viewport resize",
+      "fullTitle": "viewerMath fit modes and viewport state preserves manual zoom and pan offsets across viewport resize",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "updates userTransformed flag on pan and resets on resetGeometry",
+      "fullTitle": "viewerMath fit modes and viewport state updates userTransformed flag on pan and resets on resetGeometry",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "resolves effective scaling mode correctly",
+      "fullTitle": "viewerMath coordinate and scaling helpers resolves effective scaling mode correctly",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts viewport coordinates to natural image space",
+      "fullTitle": "viewerMath coordinate and scaling helpers inverts viewport coordinates to natural image space",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "defaults to -45deg at 0 rotation and no flip",
+      "fullTitle": "viewerMath grill counter-angle calculations defaults to -45deg at 0 rotation and no flip",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts angle on 90 and 270 degree rotation, preserves on 0 and 180",
+      "fullTitle": "viewerMath grill counter-angle calculations inverts angle on 90 and 270 degree rotation, preserves on 0 and 180",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts angle on single axis flip and restores on dual flip",
+      "fullTitle": "viewerMath grill counter-angle calculations inverts angle on single axis flip and restores on dual flip",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "correctly calculates parity for composite rotation and flip",
+      "fullTitle": "viewerMath grill counter-angle calculations correctly calculates parity for composite rotation and flip",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns viewport width for all layout fit modes at zoom 1",
+      "fullTitle": "viewerMath computeStripWidth returns viewport width for all layout fit modes at zoom 1",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns null for none (natural width)",
+      "fullTitle": "viewerMath computeStripWidth returns null for none (natural width)",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "scales by zoom factor",
+      "fullTitle": "viewerMath computeStripWidth scales by zoom factor",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns null for zero or missing viewport",
+      "fullTitle": "viewerMath computeStripWidth returns null for zero or missing viewport",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "determines widest width and unscaled column width at zoom 1",
+      "fullTitle": "viewerMath computeColumnOffsets determines widest width and unscaled column width at zoom 1",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "derives per-item offsets from heights at that width",
+      "fullTitle": "viewerMath computeColumnOffsets derives per-item offsets from heights at that width",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "scales column width, heights, and offsets by zoom factor",
+      "fullTitle": "viewerMath computeColumnOffsets scales column width, heights, and offsets by zoom factor",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "supports naturalWidth and naturalHeight properties",
+      "fullTitle": "viewerMath computeColumnOffsets supports naturalWidth and naturalHeight properties",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles empty and invalid input gracefully",
+      "fullTitle": "viewerMath computeColumnOffsets handles empty and invalid input gracefully",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "aliases computeColumnLayout to computeColumnOffsets",
+      "fullTitle": "viewerMath computeColumnOffsets aliases computeColumnLayout to computeColumnOffsets",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "mirrors the CSS seam overlap for any zoom scale",
+      "fullTitle": "viewerMath computeColumnOffsets mirrors the CSS seam overlap for any zoom scale",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "shifts offsets up by the seam overlap per boundary",
+      "fullTitle": "viewerMath computeColumnOffsets shifts offsets up by the seam overlap per boundary",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "identifies item containing center coordinate",
+      "fullTitle": "viewerMath findAnchorIndex identifies item containing center coordinate",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "clamps to first or last item when out of range",
+      "fullTitle": "viewerMath findAnchorIndex clamps to first or last item when out of range",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles empty or invalid offsets",
+      "fullTitle": "viewerMath findAnchorIndex handles empty or invalid offsets",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "picks correct slot when center coordinate is in seam overlap",
+      "fullTitle": "viewerMath findAnchorIndex picks correct slot when center coordinate is in seam overlap",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "computes start and end index for visible range plus buffer",
+      "fullTitle": "viewerMath computeWindowRange computes start and end index for visible range plus buffer",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns -1 for ranges completely outside the column",
+      "fullTitle": "viewerMath computeWindowRange returns -1 for ranges completely outside the column",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles exact exclusive boundaries and single visible item",
+      "fullTitle": "viewerMath computeWindowRange handles exact exclusive boundaries and single visible item",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "does not include preceding slot when next slot is top aligned with seam overlap",
+      "fullTitle": "viewerMath computeWindowRange does not include preceding slot when next slot is top aligned with seam overlap",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pins binary search behavior on long lists and boundary edges",
+      "fullTitle": "viewerMath computeWindowRange pins binary search behavior on long lists and boundary edges",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "updates natural dimensions and clamps pan",
+      "fullTitle": "viewerMath setDimensions on viewportState updates natural dimensions and clamps pan",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "atomically updates dimensions and pan position when next coordinates are passed",
+      "fullTitle": "viewerMath setDimensions on viewportState atomically updates dimensions and pan position when next coordinates are passed",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "allows panning shorter content within viewport bounds",
+      "fullTitle": "viewerMath short content clamping on viewportState allows panning shorter content within viewport bounds",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pins the first item to viewport top",
+      "fullTitle": "viewerMath computeTopAlignTy pins the first item to viewport top",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "aligns middle item top to viewport top",
+      "fullTitle": "viewerMath computeTopAlignTy aligns middle item top to viewport top",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "clamps last item to column bottom boundary",
+      "fullTitle": "viewerMath computeTopAlignTy clamps last item to column bottom boundary",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pins short columns down/towards bottom on top align regardless of slot offset",
+      "fullTitle": "viewerMath computeTopAlignTy pins short columns down/towards bottom on top align regardless of slot offset",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "scales correctly for zoomed in and zoomed out states",
+      "fullTitle": "viewerMath computeTopAlignTy scales correctly for zoomed in and zoomed out states",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pins the last item to viewport bottom",
+      "fullTitle": "viewerMath computeBottomAlignTy pins the last item to viewport bottom",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pins short columns up/towards top on bottom align regardless of slot offset",
+      "fullTitle": "viewerMath computeBottomAlignTy pins short columns up/towards top on bottom align regardless of slot offset",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "scales correctly for zoomed in and zoomed out states",
+      "fullTitle": "viewerMath computeBottomAlignTy scales correctly for zoomed in and zoomed out states",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "produces distinct hues for all items in a set",
+      "fullTitle": "viewerMath computeSlotHue produces distinct hues for all items in a set",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "wraps around cleanly when index exceeds total or is negative",
+      "fullTitle": "viewerMath computeSlotHue wraps around cleanly when index exceeds total or is negative",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "skips the 190 through 240 blue/cyan range across various counts",
+      "fullTitle": "viewerMath computeSlotHue skips the 190 through 240 blue/cyan range across various counts",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles zero or negative total gracefully without NaN",
+      "fullTitle": "viewerMath computeSlotHue handles zero or negative total gracefully without NaN",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "calculates scaleY matching viewport height with seam overlap on first call",
+      "fullTitle": "viewerMath computeStripFitScale calculates scaleY matching viewport height with seam overlap on first call",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles short strips that fit within viewport at scale 1 or larger",
+      "fullTitle": "viewerMath computeStripFitScale handles short strips that fit within viewport at scale 1 or larger",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles window and window-if-larger correctly",
+      "fullTitle": "viewerMath computeStripFitScale handles window and window-if-larger correctly",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles single-item strip (itemCount = 1) without seam overlap offset",
+      "fullTitle": "viewerMath computeStripFitScale handles single-item strip (itemCount = 1) without seam overlap offset",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns neither for empty or single-item total",
+      "fullTitle": "viewerMath firstLastHighlight returns neither for empty or single-item total",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "prioritizes primary selection at index 0 or total - 1 even if whole column is visible",
+      "fullTitle": "viewerMath firstLastHighlight prioritizes primary selection at index 0 or total - 1 even if whole column is visible",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns first or last when only that column end is visible",
+      "fullTitle": "viewerMath firstLastHighlight returns first or last when only that column end is visible",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "resolves tie by proximity to nearest end when both ends are visible with middle primary",
+      "fullTitle": "viewerMath firstLastHighlight resolves tie by proximity to nearest end when both ends are visible with middle primary",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns empty draw list for empty offsets or offscreen windows",
+      "fullTitle": "viewerMath computeColumnComposite returns empty draw list for empty offsets or offscreen windows",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "maps still layout into visible draw items with columnYOrigin",
+      "fullTitle": "viewerMath computeColumnComposite maps still layout into visible draw items with columnYOrigin",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "covers a window that spans a slot boundary cleanly",
+      "fullTitle": "viewerMath computeColumnComposite covers a window that spans a slot boundary cleanly",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "covers tall layout where only a slice of one slot is visible",
+      "fullTitle": "viewerMath computeColumnComposite covers tall layout where only a slice of one slot is visible",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "covers scale below 1 where seam overlap grows",
+      "fullTitle": "viewerMath computeColumnComposite covers scale below 1 where seam overlap grows",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "expands visible window when overscan is specified",
+      "fullTitle": "viewerMath computeColumnComposite expands visible window when overscan is specified",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "keeps continuous offsets for mixed still and animated chapters",
+      "fullTitle": "viewerMath computeColumnComposite keeps continuous offsets for mixed still and animated chapters",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts grill angle for ICO backdrops",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers inverts grill angle for ICO backdrops",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "calculates total dimensions for ICO frame arrays",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers calculates total dimensions for ICO frame arrays",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "computes bounding width sum and maximum height across multiple frames",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers computes bounding width sum and maximum height across multiple frames",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles frames with missing or undefined dimensions without NaN",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers handles frames with missing or undefined dimensions without NaN",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles frames with 0 dimensions",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers handles frames with 0 dimensions",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns null for empty array, null, undefined, or non-array inputs",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers returns null for empty array, null, undefined, or non-array inputs",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "extracts first ICO frame data_url and detects source shapes",
+      "fullTitle": "viewerMath ICO sources and backdrop helpers extracts first ICO frame data_url and detects source shapes",
+      "file": "D:\\Projects\\QuiviT\\mocha\\viewerMath.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "maps screen corners to WebGL NDC bounds",
+      "fullTitle": "QuadCompositor pipeline module screenToNdc coordinate mapping maps screen corners to WebGL NDC bounds",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "inverts NDC Y when flipY = -1.0 for FBO targets",
+      "fullTitle": "QuadCompositor pipeline module screenToNdc coordinate mapping inverts NDC Y when flipY = -1.0 for FBO targets",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "handles degenerate viewport dimensions without NaN",
+      "fullTitle": "QuadCompositor pipeline module screenToNdc coordinate mapping handles degenerate viewport dimensions without NaN",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "calculates full viewport rectangle NDC bounds",
+      "fullTitle": "QuadCompositor pipeline module destRectToNdc bounds calculation calculates full viewport rectangle NDC bounds",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "calculates centered sub-rectangle NDC bounds and supports dx/dy aliases",
+      "fullTitle": "QuadCompositor pipeline module destRectToNdc bounds calculation calculates centered sub-rectangle NDC bounds and supports dx/dy aliases",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "populates 24 floats for 6 vertices (2 triangles)",
+      "fullTitle": "QuadCompositor pipeline module fillQuadBuffer vertex layout and reuse populates 24 floats for 6 vertices (2 triangles)",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "mutates existing buffer in place to prevent allocation on hot paths",
+      "fullTitle": "QuadCompositor pipeline module fillQuadBuffer vertex layout and reuse mutates existing buffer in place to prevent allocation on hot paths",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "supports fillQuadNdcBuffer for direct NDC verification",
+      "fullTitle": "QuadCompositor pipeline module fillQuadBuffer vertex layout and reuse supports fillQuadNdcBuffer for direct NDC verification",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "initializes program, shader attributes, and dynamic VBO",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle initializes program, shader attributes, and dynamic VBO",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "drawQuad updates VBO, sets viewport uniforms, and issues draw call",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle drawQuad updates VBO, sets viewport uniforms, and issues draw call",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "drawQuad passes flipY = -1.0 when rendering to FBO targets",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle drawQuad passes flipY = -1.0 when rendering to FBO targets",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "drawQuad with sampler = \"lanczos\" sets u_sourceSize uniform",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle drawQuad with sampler = \"lanczos\" sets u_sourceSize uniform",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns false and ignores draw calls for invalid viewport dimensions",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle returns false and ignores draw calls for invalid viewport dimensions",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "compiles both standard texture and lanczos fragment shaders and caches uniform locations",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle compiles both standard texture and lanczos fragment shaders and caches uniform locations",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "reuses compiled programs across repeated drawQuad calls without recompilation",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle reuses compiled programs across repeated drawQuad calls without recompilation",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "switches active programs when switching between texture and lanczos samplers",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle switches active programs when switching between texture and lanczos samplers",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "sets u_sourceSize uniform with expected float values for lanczos sampler",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle sets u_sourceSize uniform with expected float values for lanczos sampler",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "returns false without error for invalid or unsupported viewport bounds",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle returns false without error for invalid or unsupported viewport bounds",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 1,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "dispose deletes VBO and program cleanly",
+      "fullTitle": "QuadCompositor pipeline module QuadCompositor WebGL rendering and lifecycle dispose deletes VBO and program cleanly",
+      "file": "D:\\Projects\\QuiviT\\mocha\\quadCompositor.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    }
+  ]
+}

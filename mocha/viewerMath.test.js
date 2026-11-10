@@ -1001,6 +1001,7 @@ describe('viewerMath', () => {
     });
 
     it('calculates total dimensions for ICO frame arrays', async () => {
+      const { icoSizesTotal } = await import('../src/js/services/viewerMath.js');
       if (typeof window === 'undefined') {
         globalThis.window = { __TAURI__: { core: { invoke: async () => ({}) } } };
       }
@@ -1014,9 +1015,48 @@ describe('viewerMath', () => {
       ];
       const total = FsUtils.icoSourcesTotal(sizes);
       assert.deepEqual(total, { width: 368, height: 256 });
+      assert.deepEqual(icoSizesTotal(sizes), { width: 368, height: 256 });
       assert.equal(FsUtils.icoSourcesTotal([]), null);
       assert.equal(FsUtils.icoSourcesTotal(null), null);
       assert.equal(FsUtils.icoSourcesTotal('not-array'), null);
+      assert.equal(icoSizesTotal([]), null);
+      assert.equal(icoSizesTotal(null), null);
+      assert.equal(icoSizesTotal('not-array'), null);
+    });
+
+    it('computes bounding width sum and maximum height across multiple frames', async () => {
+      const { icoSizesTotal } = await import('../src/js/services/viewerMath.js');
+      const frames = [
+        { width: 256, height: 256 },
+        { width: 64, height: 64 },
+        { width: 32, height: 32 },
+      ];
+      assert.deepEqual(icoSizesTotal(frames), { width: 352, height: 256 });
+    });
+
+    it('handles frames with missing or undefined dimensions without NaN', async () => {
+      const { icoSizesTotal } = await import('../src/js/services/viewerMath.js');
+      assert.deepEqual(icoSizesTotal([{ width: 100 }, { height: 50 }, {}]), { width: 100, height: 50 });
+      assert.deepEqual(icoSizesTotal([{ width: undefined, height: undefined }]), { width: 0, height: 0 });
+      assert.deepEqual(icoSizesTotal([{ width: null, height: null }]), { width: 0, height: 0 });
+      assert.deepEqual(icoSizesTotal([null, undefined]), { width: 0, height: 0 });
+    });
+
+    it('handles frames with 0 dimensions', async () => {
+      const { icoSizesTotal } = await import('../src/js/services/viewerMath.js');
+      assert.deepEqual(icoSizesTotal([{ width: 0, height: 0 }]), { width: 0, height: 0 });
+      assert.deepEqual(icoSizesTotal([{ width: 0, height: 120 }, { width: 80, height: 0 }]), { width: 80, height: 120 });
+    });
+
+    it('returns null for empty array, null, undefined, or non-array inputs', async () => {
+      const { icoSizesTotal } = await import('../src/js/services/viewerMath.js');
+      assert.equal(icoSizesTotal([]), null);
+      assert.equal(icoSizesTotal(null), null);
+      assert.equal(icoSizesTotal(undefined), null);
+      assert.equal(icoSizesTotal('not-array'), null);
+      assert.equal(icoSizesTotal(42), null);
+      assert.equal(icoSizesTotal({}), null);
+      assert.equal(icoSizesTotal(false), null);
     });
 
     it('extracts first ICO frame data_url and detects source shapes', async () => {
