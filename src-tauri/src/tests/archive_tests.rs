@@ -347,14 +347,7 @@ fn invalid_archive_tar_invalid_checksum_and_truncated() {
 // ============================================================================
 
 // --- #1.2.1 Archive pipe path contracts ---
-
-fn split_archive_path(path: &str) -> (&str, &str) {
-    path.split_once('|').unwrap_or((path, ""))
-}
-
-fn format_archive_entry_path(archive_path: &str, entry_name: &str) -> String {
-    format!("{}|{}", archive_path, entry_name)
-}
+use crate::archives::{format_archive_entry_path, split_archive_path};
 
 #[test]
 fn archive_pipe_path_split_basic() {
@@ -413,29 +406,10 @@ fn archive_pipe_path_format() {
 }
 
 // --- #1.2.2 Path canonicalization contracts ---
-
-fn strip_verbatim_prefix(path: &str) -> String {
-    let value = path.replace('/', "\\");
-    if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
-        format!(r"\\{rest}")
-    } else if let Some(rest) = value.strip_prefix(r"\\?\") {
-        rest.to_string()
-    } else {
-        value
-    }
-}
-
-fn normalize_windows_slashes(path: &str) -> String {
-    path.replace('/', "\\")
-}
-
-fn normalize_archive_entry_slashes(entry: &str) -> String {
-    entry.replace('\\', "/")
-}
-
-fn trim_trailing_slashes(path: &str) -> &str {
-    path.trim_end_matches(|c| c == '/' || c == '\\')
-}
+use crate::utils::{
+    normalize_archive_entry_slashes, normalize_windows_slashes, strip_verbatim_prefix,
+    trim_trailing_slashes,
+};
 
 #[test]
 fn path_canonicalization_verbatim_prefix_stripping() {
@@ -523,23 +497,8 @@ fn path_canonicalization_trailing_slash_trimming() {
 }
 
 // --- #1.2.3 Win32 wide string conversion contracts ---
-
-fn encode_wide_null(s: impl AsRef<OsStr>) -> Vec<u16> {
-    #[cfg(windows)]
-    {
-        s.as_ref()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect()
-    }
-    #[cfg(not(windows))]
-    {
-        s.as_ref()
-            .to_str()
-            .map(|text| text.encode_utf16().chain(std::iter::once(0)).collect())
-            .unwrap_or_else(|| vec![0])
-    }
-}
+#[cfg(windows)]
+use crate::platform::encode_wide_null;
 
 #[test]
 fn win32_wide_string_null_terminated_encoding() {
@@ -610,23 +569,7 @@ fn win32_wide_string_empty() {
 }
 
 // --- #1.2.5 Pixel conversion contracts ---
-
-fn bgra_to_rgba_in_place(pixels: &mut [u8]) {
-    for chunk in pixels.chunks_exact_mut(4) {
-        chunk.swap(0, 2);
-    }
-}
-
-fn unpremultiply_rgba_in_place(pixels: &mut [u8]) {
-    for pixel in pixels.chunks_exact_mut(4) {
-        let alpha = u16::from(pixel[3]);
-        if alpha != 0 && alpha != 255 {
-            for channel in &mut pixel[..3] {
-                *channel = ((u16::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
-            }
-        }
-    }
-}
+use crate::platform::gdi::{bgra_to_rgba_in_place, unpremultiply_rgba_in_place};
 
 #[test]
 fn pixel_conversion_bgra_to_rgba_in_place() {
