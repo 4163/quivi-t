@@ -14,10 +14,34 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, RwLock};
 use tauri::{Emitter, Manager};
 
-use archives::*;
-use commands::*;
-use config::*;
-use windows::*;
+use archives::ArchiveCache;
+#[cfg(test)]
+use archives::{
+    archive_entry_temp_path, list_7z_entries, list_rar_entries, list_tar_entries,
+    list_zip_entries,
+};
+use commands::{
+    apply_associations, cancel_dims_scan, cancel_download, cancel_width_scan, check_is_animated,
+    check_media_audio, create_placeholder_files, download_to_file, drop_all_archives_cache,
+    drop_archive_cache, fetch_bytes, fetch_extractor_text, fetch_text, find_directory_metadata,
+    get_archive_ico_frames, get_default_dir, get_default_library_dir, get_drives, get_file_sizes,
+    get_format_status, get_ico_frames, get_initial_args, get_library_dir, get_native_icon,
+    get_path_kind, get_preview_diagnostics, invalidate_native_icon_cache, library_move_in_progress,
+    list_archive, move_library, network, open_in_explorer, pick_folder, prefetch_archive_entries,
+    probe_media_dimensions, read_directory, read_library_tree, read_text_file,
+    rebind_library_watcher, register_associations, remove_directory, remove_file,
+    resolve_archive_temp_origin, scan_container_dimensions, scan_container_max_width,
+    sync_preview_associations, unregister_associations, verify_image_magic, watch_directory,
+    write_text_file, WatcherState,
+};
+#[cfg(windows)]
+use commands::{describe_drop, enable_native_drop, release_drop, save_dropped_image};
+use windows::{
+    apply_shell_background, close_secondary_windows, close_workspace_window, fit_metadata_window,
+    fit_options_window, hide_to_tray, open_metadata_window, open_options, open_workspace_window,
+    restore_from_tray, set_workspace_title, show_from_tray, show_window, update_theme,
+    MAIN_INITIAL_H, MAIN_INITIAL_W, MAIN_MIN_H, MAIN_MIN_W,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -42,7 +66,7 @@ pub fn run() {
 
     if single_instance {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            windows::restore_from_tray(app);
+            restore_from_tray(app);
             if let Some(main_window) = app.get_webview_window("main") {
                 let path_arg = argv
                     .iter()
@@ -90,7 +114,7 @@ pub fn run() {
                 let _ = commands::library::cleanup_abandoned_captures();
             });
 
-            windows::apply_shell_background(&main_window, &config);
+            apply_shell_background(&main_window, &config);
             platform::icons::warmup();
             crate::commands::registry::spawn_launch_previews_sync(app.handle().clone());
             crate::commands::watchers::spawn_config_file_watcher(app.handle().clone());
@@ -108,14 +132,14 @@ pub fn run() {
         drop_archive_cache,
         drop_all_archives_cache,
         prefetch_archive_entries,
-        load_config,
-        get_config_dir,
-        get_active_config_info,
-        open_active_config_dir,
-        open_config_dir,
-        get_local_data_dir,
-        open_local_data_dir,
-        save_config,
+        crate::config::load_config,
+        crate::config::get_config_dir,
+        crate::config::get_active_config_info,
+        crate::config::open_active_config_dir,
+        crate::config::open_config_dir,
+        crate::config::get_local_data_dir,
+        crate::config::open_local_data_dir,
+        crate::config::save_config,
         open_options,
         open_workspace_window,
         close_workspace_window,
@@ -183,7 +207,7 @@ pub fn run() {
     crate::protocol::register_quivit_protocol(builder)
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
-                windows::close_secondary_windows(window.app_handle());
+                close_secondary_windows(window.app_handle());
             }
             #[cfg(windows)]
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
@@ -212,7 +236,3 @@ mod archive_tests;
 #[cfg(test)]
 #[path = "tests/format_tests.rs"]
 mod format_tests;
-
-#[cfg(test)]
-#[path = "tests/temp_archive_tests.rs"]
-mod temp_archive_tests;

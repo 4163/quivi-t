@@ -616,8 +616,6 @@ pub fn save_config_unchecked(
         // user data. E2E and diagnose runs save portable configs routinely.
         if migrating {
             remove_roaming_files(&roaming_dir_path(&app_handle));
-
-            let _ = fs::remove_file(roaming_dir(&app_handle).join("custom_css.css"));
         }
     } else {
         // Roaming: write the split files first, then remove portable leftovers so

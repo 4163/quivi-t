@@ -679,7 +679,7 @@ fn find_tkhd_in_trak(trak_bytes: &[u8]) -> Option<(u32, u32)> {
 
 /// Stream through an MP4/ISOBMFF reader without Seek (e.g. a ZipFile entry)
 /// to locate moov -> trak -> tkhd width and height.
-pub fn read_mp4_dimensions_stream<R: Read>(reader: &mut R) -> Option<(u32, u32)> {
+fn read_mp4_dimensions_stream<R: Read>(reader: &mut R) -> Option<(u32, u32)> {
     let mut header = [0u8; 8];
     while reader.read_exact(&mut header).is_ok() {
         let size32 = u32::from_be_bytes([header[0], header[1], header[2], header[3]]) as u64;
@@ -719,7 +719,7 @@ pub fn read_mp4_dimensions_stream<R: Read>(reader: &mut R) -> Option<(u32, u32)>
 
 /// Walk JPEG markers over a stream to extract SOF width and height even when
 /// APP1/EXIF/ICC segments exceed the initial 64 KiB header buffer.
-pub fn read_jpeg_dimensions_from_reader<R: Read>(reader: &mut R) -> Option<(u32, u32)> {
+fn read_jpeg_dimensions_from_reader<R: Read>(reader: &mut R) -> Option<(u32, u32)> {
     let mut soi = [0u8; 2];
     reader.read_exact(&mut soi).ok()?;
     if soi != [0xFF, 0xD8] {
@@ -768,7 +768,7 @@ pub fn read_jpeg_dimensions_from_reader<R: Read>(reader: &mut R) -> Option<(u32,
 }
 
 /// Parse AVIF image dimensions from ISOBMFF `ispe` (and `irot` rotation) boxes.
-pub fn read_avif_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+fn read_avif_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     let mut best: Option<(u32, u32)> = None;
     let mut rotate_90 = false;
     let mut i = 0;
@@ -803,7 +803,7 @@ pub fn read_avif_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 
 /// Compute stitched ICO dimensions matching `icoSizesTotal` in the viewer:
 /// sum of unique frame widths and max of unique frame heights.
-pub fn read_ico_dimensions(data: &[u8]) -> Option<(u32, u32)> {
+fn read_ico_dimensions(data: &[u8]) -> Option<(u32, u32)> {
     if data.len() < 6 || data[..4] != [0, 0, 1, 0] {
         return None;
     }
@@ -916,7 +916,7 @@ fn parse_svg_viewbox(tag: &str) -> Option<(f64, f64)> {
 }
 
 /// Parse `<svg>` width/height or `viewBox` from the leading UTF-8 header bytes.
-pub fn read_svg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+fn read_svg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     let text = String::from_utf8_lossy(bytes);
     let lower = text.to_ascii_lowercase();
     let start = lower.find("<svg")?;

@@ -32,7 +32,10 @@ use windows::{
         },
         UI::{
             Controls::IImageList,
-            Input::KeyboardAndMouse::{GetFocus, ReleaseCapture, SetCapture, SetFocus},
+            Input::KeyboardAndMouse::{
+                GetFocus, ReleaseCapture, SetCapture, SetFocus, TrackMouseEvent, TME_LEAVE,
+                TRACKMOUSEEVENT,
+            },
             Shell::{
                 IInitializeWithItem, IInitializeWithItem_Impl, IPreviewHandler,
                 IPreviewHandlerFrame, IPreviewHandlerVisuals, IPreviewHandlerVisuals_Impl,
@@ -63,9 +66,7 @@ use super::{
     PREVIEW_HANDLER_CLSID,
 };
 
-const PREVIEW_CLASS_NAME: &[u16] = &[
-    81, 117, 105, 118, 105, 84, 80, 114, 101, 118, 105, 101, 119, 80, 97, 110, 101, 0,
-];
+const PREVIEW_CLASS_NAME: windows::core::PCWSTR = windows::core::w!("QuiviTPreviewPane");
 const HEADER_HEIGHT: i32 = 150;
 const ROW_HEIGHT: i32 = 24;
 const MARGIN_LEFT: i32 = 8;
@@ -77,19 +78,6 @@ const ICON_TEXT_GAP: i32 = 6;
 const SCROLLBAR_WIDTH: i32 = 12;
 const ARROW_BUTTON_HEIGHT: i32 = 14;
 const WM_MOUSELEAVE: u32 = 0x02A3;
-const TME_LEAVE: u32 = 0x00000002;
-
-#[repr(C)]
-struct TRACKMOUSEEVENT {
-    cb_size: u32,
-    flags: u32,
-    hwnd_track: HWND,
-    hover_time: u32,
-}
-
-extern "system" {
-    fn TrackMouseEvent(lp_event_track: *mut TRACKMOUSEEVENT) -> i32;
-}
 
 static ACTIVE_HANDLERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static SERVER_LOCKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -1777,7 +1765,7 @@ fn create_preview_child(parent: HWND, rect: RECT, pane: &mut PreviewPane) -> Res
     let hwnd = unsafe {
         CreateWindowExW(
             WINDOW_EX_STYLE(0),
-            windows::core::PCWSTR(PREVIEW_CLASS_NAME.as_ptr()),
+            PREVIEW_CLASS_NAME,
             windows::core::PCWSTR::null(),
             WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
             rect.left,
@@ -1806,7 +1794,7 @@ fn register_preview_class() -> Result<()> {
         style: CS_DBLCLKS,
         lpfnWndProc: Some(preview_window_proc),
         hInstance: module_instance(),
-        lpszClassName: windows::core::PCWSTR(PREVIEW_CLASS_NAME.as_ptr()),
+        lpszClassName: PREVIEW_CLASS_NAME,
         ..Default::default()
     };
     if unsafe { RegisterClassW(&class) } == 0 {
@@ -1881,10 +1869,10 @@ unsafe extern "system" fn preview_window_proc(
             }
             if !pane.mouse_tracked {
                 let mut tme = TRACKMOUSEEVENT {
-                    cb_size: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
-                    flags: TME_LEAVE,
-                    hwnd_track: hwnd,
-                    hover_time: 0,
+                    cbSize: std::mem::size_of::<TRACKMOUSEEVENT>() as u32,
+                    dwFlags: TME_LEAVE,
+                    hwndTrack: hwnd,
+                    dwHoverTime: 0,
                 };
                 unsafe {
                     let _ = TrackMouseEvent(&mut tme);

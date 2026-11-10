@@ -41,24 +41,18 @@ pub(crate) fn is_workspace_window(label: &str) -> bool {
     WORKSPACE_WINDOWS.contains(&label)
 }
 
-// Options window width auto-fits to content (capped at OPTIONS_MAX_W), height fixed.
+// Options window width auto-fits to content, height fixed.
 pub(crate) const OPTIONS_INITIAL_W: f64 = AUTO_FIT_INITIAL_W;
 pub(crate) const OPTIONS_INITIAL_H: f64 = 620.0;
 pub(crate) const OPTIONS_MIN_W: f64 = 400.0;
 pub(crate) const OPTIONS_MIN_H: f64 = 360.0;
-// Auto-fit clamp for the width; mirrored by OPTIONS_MAX_INITIAL_W in shared/windowFit.js.
-#[allow(dead_code)] // Single source of truth for the cap; enforced in JS.
-const OPTIONS_MAX_W: f64 = 560.0;
 
-// Metadata window is 400 wide; height auto-fits to content (capped at META_MAX_H,
-// a fit cap, not a hard size limit). Opens hidden, fitted + centered before show.
+// Metadata window is 400 wide; height auto-fits to content (a fit cap, not a hard size limit).
+// Opens hidden, fitted + centered before show.
 pub(crate) const META_INITIAL_W: f64 = 400.0;
 pub(crate) const META_INITIAL_H: f64 = AUTO_FIT_INITIAL_H;
 pub(crate) const META_MIN_W: f64 = 320.0;
 pub(crate) const META_MIN_H: f64 = 280.0;
-// Auto-fit clamp; mirrored by META_MAX_INITIAL_H in shared/windowFit.js.
-#[allow(dead_code)] // Single source of truth for the cap; enforced in JS.
-const META_MAX_H: f64 = 600.0;
 
 // Styling and appearance
 

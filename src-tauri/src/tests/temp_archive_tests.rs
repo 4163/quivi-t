@@ -1,9 +1,4 @@
-use crate::platform::temp_archive::{
-    deduplicate_candidate_archives, parse_7z_folder_history, parse_7z_window_title,
-    parse_bandizip_archive_name, parse_bandizip_window_title, parse_peazip_window_title,
-    parse_temp_engine, parse_winrar_window_title, select_sevenzip_live_candidates,
-    sevenzip_creator_pid_low12, TempEngine,
-};
+use super::*;
 use std::path::PathBuf;
 
 fn fixture_archive_path() -> PathBuf {
@@ -265,11 +260,11 @@ fn test_match_candidate_origin_subfolder_and_root() {
     };
 
     // 1. When subfolder is "New folder", matches entry in "New folder"
-    let cand_sub = crate::platform::temp_archive::CandidateArchive::with_subfolder(
+    let cand_sub = CandidateArchive::with_subfolder(
         PathBuf::from(&fixture),
         Some("New folder".to_string()),
     );
-    let origin_sub = crate::platform::temp_archive::match_candidate_origin(
+    let origin_sub = match_candidate_origin(
         &cand_sub,
         &engine,
         0,
@@ -284,11 +279,11 @@ fn test_match_candidate_origin_subfolder_and_root() {
     );
 
     // 2. When subfolder is "" (explicit root), matches entry at root
-    let cand_root = crate::platform::temp_archive::CandidateArchive::with_subfolder(
+    let cand_root = CandidateArchive::with_subfolder(
         PathBuf::from(&fixture),
         Some(String::new()),
     );
-    let origin_root = crate::platform::temp_archive::match_candidate_origin(
+    let origin_root = match_candidate_origin(
         &cand_root,
         &engine,
         0,
@@ -303,8 +298,8 @@ fn test_match_candidate_origin_subfolder_and_root() {
     );
 
     // 3. When known_subfolder is None and ambiguous duplicates exist, returns None (fails closed)
-    let cand_none = crate::platform::temp_archive::CandidateArchive::new(PathBuf::from(&fixture));
-    let origin_none = crate::platform::temp_archive::match_candidate_origin(
+    let cand_none = CandidateArchive::new(PathBuf::from(&fixture));
+    let origin_none = match_candidate_origin(
         &cand_none,
         &engine,
         0,
@@ -330,14 +325,14 @@ fn test_deduplicate_and_subfolder_override() {
 
     // When known_subfolder is Some("") (root) but subfolder_index is Some(0),
     // subfolder_index should take precedence and resolve to "New folder"
-    let mut cand = crate::platform::temp_archive::CandidateArchive::with_subfolder(
+    let mut cand = CandidateArchive::with_subfolder(
         PathBuf::from(&fixture),
         Some(String::new()),
     );
     cand.subfolder_index = Some(0);
 
     let origin =
-        crate::platform::temp_archive::match_candidate_origin(&cand, &engine, 0, &archive_result);
+        match_candidate_origin(&cand, &engine, 0, &archive_result);
     assert_eq!(
         origin,
         Some(crate::models::TempArchiveOrigin {
@@ -356,13 +351,13 @@ fn test_explorer_entry_matching_uses_relative_path() {
 
     let mut cache = crate::archives::ArchiveCache::new(50);
     let archive_result = cache.prepare_archive(&fixture, None).unwrap();
-    let candidate = crate::platform::temp_archive::CandidateArchive::new(PathBuf::from(&fixture));
+    let candidate = CandidateArchive::new(PathBuf::from(&fixture));
 
     let nested_engine = TempEngine::WindowsExplorer {
         archive_filename: "zip.zip".to_string(),
         rel_entry: "New folder/export_1785518835803.apng".to_string(),
     };
-    let nested_origin = crate::platform::temp_archive::match_candidate_origin(
+    let nested_origin = match_candidate_origin(
         &candidate,
         &nested_engine,
         0,
@@ -380,7 +375,7 @@ fn test_explorer_entry_matching_uses_relative_path() {
         archive_filename: "zip.zip".to_string(),
         rel_entry: "export_1785518835803.apng".to_string(),
     };
-    let root_origin = crate::platform::temp_archive::match_candidate_origin(
+    let root_origin = match_candidate_origin(
         &candidate,
         &root_engine,
         0,
@@ -415,7 +410,7 @@ fn test_7z_folder_history_dedup_and_subfolder_match() {
 
     // Add a live window candidate representing root view
     candidates.push(
-        crate::platform::temp_archive::CandidateArchive::with_subfolder(
+        CandidateArchive::with_subfolder(
             PathBuf::from(&fixture),
             Some(String::new()),
         ),
@@ -434,7 +429,7 @@ fn test_7z_folder_history_dedup_and_subfolder_match() {
 
     let mut cache = crate::archives::ArchiveCache::new(50);
     let archive_result = cache.prepare_archive(&fixture, None).unwrap();
-    let origin_root = crate::platform::temp_archive::match_candidate_origin(
+    let origin_root = match_candidate_origin(
         &deduped[0],
         &engine,
         0,
@@ -451,7 +446,7 @@ fn test_7z_folder_history_dedup_and_subfolder_match() {
     // When live window is in "New folder"
     let mut cand_sub = deduped[0].clone();
     cand_sub.known_subfolder = Some("New folder".to_string());
-    let origin_sub = crate::platform::temp_archive::match_candidate_origin(
+    let origin_sub = match_candidate_origin(
         &cand_sub,
         &engine,
         0,
@@ -483,11 +478,11 @@ fn test_winrar_window_title_and_subfolder_match() {
     // 1. Root window title "zip.zip - WinRAR" -> matches root entry
     let sub_root = parse_winrar_window_title("zip.zip - WinRAR");
     assert_eq!(sub_root, Some(String::new()));
-    let cand_root = crate::platform::temp_archive::CandidateArchive::with_subfolder(
+    let cand_root = CandidateArchive::with_subfolder(
         PathBuf::from(&fixture),
         sub_root,
     );
-    let origin_root = crate::platform::temp_archive::match_candidate_origin(
+    let origin_root = match_candidate_origin(
         &cand_root,
         &engine,
         0,
@@ -504,11 +499,11 @@ fn test_winrar_window_title_and_subfolder_match() {
     // 2. Subfolder window title "zip.zip\New folder - WinRAR" -> matches subfolder entry
     let sub_folder = parse_winrar_window_title(r"zip.zip\New folder - WinRAR");
     assert_eq!(sub_folder, Some("New folder".to_string()));
-    let cand_folder = crate::platform::temp_archive::CandidateArchive::with_subfolder(
+    let cand_folder = CandidateArchive::with_subfolder(
         PathBuf::from(&fixture),
         sub_folder,
     );
-    let origin_folder = crate::platform::temp_archive::match_candidate_origin(
+    let origin_folder = match_candidate_origin(
         &cand_folder,
         &engine,
         0,
@@ -545,11 +540,11 @@ fn test_nanazip_window_title_and_subfolder_match() {
         parse_7z_window_title(&root_title).expect("failed to parse NanaZip root title");
     assert_eq!(arc, fixture);
     assert_eq!(sub_root, Some(String::new()));
-    let cand_root = crate::platform::temp_archive::CandidateArchive::with_subfolder(
+    let cand_root = CandidateArchive::with_subfolder(
         PathBuf::from(arc),
         sub_root,
     );
-    let origin_root = crate::platform::temp_archive::match_candidate_origin(
+    let origin_root = match_candidate_origin(
         &cand_root,
         &engine,
         0,
@@ -569,11 +564,11 @@ fn test_nanazip_window_title_and_subfolder_match() {
         parse_7z_window_title(&sub_title).expect("failed to parse NanaZip sub title");
     assert_eq!(arc_sub, fixture);
     assert_eq!(sub_folder, Some("New folder".to_string()));
-    let cand_folder = crate::platform::temp_archive::CandidateArchive::with_subfolder(
+    let cand_folder = CandidateArchive::with_subfolder(
         PathBuf::from(arc_sub),
         sub_folder,
     );
-    let origin_folder = crate::platform::temp_archive::match_candidate_origin(
+    let origin_folder = match_candidate_origin(
         &cand_folder,
         &engine,
         0,
@@ -618,8 +613,6 @@ fn test_parse_nanazip_address_bar_paths() {
 
 #[test]
 fn test_7z_nanazip_conflicting_live_context_fails_closed() {
-    use crate::platform::temp_archive::CandidateArchive;
-
     let path = fixture_archive_path();
 
     let candidates = vec![
@@ -664,8 +657,6 @@ fn test_7z_nanazip_conflicting_live_context_fails_closed() {
 
 #[test]
 fn test_7z_nanazip_pid_hint_selects_matching_window() {
-    use crate::platform::temp_archive::CandidateArchive;
-
     let path = fixture_archive_path();
     let root = CandidateArchive::with_subfolder(path.clone(), Some(String::new()));
     let subfolder = CandidateArchive::with_subfolder(path, Some("New folder".to_string()));
@@ -690,7 +681,6 @@ fn test_7z_nanazip_pid_hint_selects_matching_window() {
 #[test]
 fn test_nanazip_match_candidate_origin_subfolder_vs_root() {
     use crate::models::{ArchiveReadResult, FileEntry};
-    use crate::platform::temp_archive::{match_candidate_origin, CandidateArchive};
 
     let fixture = fixture_archive_string();
 

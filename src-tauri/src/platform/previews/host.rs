@@ -145,7 +145,7 @@ fn locked_retry_message(detail: &str) -> String {
     format!("Close the preview pane and Explorer windows, then retry: cannot update the preview helper ({detail}). A shell handler may still be running.")
 }
 
-pub(crate) fn decide_host_action(
+fn decide_host_action(
     staged: Option<&PreviewsSidecar>,
     hash_ok: bool,
     embedded_version: u32,
@@ -228,7 +228,7 @@ fn lock_staging(host_path: &Path) -> Result<std::fs::File, String> {
 
 /// Testable core. Copies `source_exe` to `host_path` per the update rule.
 /// Never kills a process; a locked helper surfaces as a retry message.
-pub(crate) fn ensure_previews_host_from(
+fn ensure_previews_host_from(
     source_exe: &Path,
     host_path: &Path,
     embedded_version: u32,

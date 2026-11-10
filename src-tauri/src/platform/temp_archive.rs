@@ -178,7 +178,7 @@ fn parse_winrar_pid(folder_name: &str) -> u32 {
     digits.parse::<u32>().unwrap_or(0)
 }
 
-pub fn sevenzip_creator_pid_low12(folder_name: &str) -> Option<u16> {
+fn sevenzip_creator_pid_low12(folder_name: &str) -> Option<u16> {
     let hex_part = folder_name.get(3..)?;
     if hex_part.len() < 3 || !hex_part.chars().take(3).all(|c| c.is_ascii_hexdigit()) {
         return None;
@@ -190,7 +190,7 @@ pub fn sevenzip_creator_pid_low12(folder_name: &str) -> Option<u16> {
     u16::from_str_radix(&pid_low_hex, 16).ok()
 }
 
-pub fn select_sevenzip_live_candidates(
+fn select_sevenzip_live_candidates(
     creator_pid_low12: Option<u16>,
     live_candidates: Vec<(u32, CandidateArchive)>,
 ) -> Vec<CandidateArchive> {
@@ -217,56 +217,24 @@ pub fn select_sevenzip_live_candidates(
 }
 
 #[cfg(windows)]
-extern "system" {
-    pub(crate) fn OpenWindowStationW(
-        lpszWinSta: *const u16,
-        fInherit: i32,
-        dwDesiredAccess: u32,
-    ) -> isize;
-    pub(crate) fn SetProcessWindowStation(hWinSta: isize) -> i32;
-    pub(crate) fn EnumDesktopsW(
-        hWinSta: isize,
-        lpEnumFunc: unsafe extern "system" fn(*const u16, isize) -> i32,
-        lParam: isize,
-    ) -> i32;
-    pub(crate) fn CloseWindowStation(hWinSta: isize) -> i32;
-    pub(crate) fn OpenDesktopW(
-        lpszDesktop: *const u16,
-        dwFlags: u32,
-        fInherit: i32,
-        dwDesiredAccess: u32,
-    ) -> isize;
-    pub(crate) fn CloseDesktop(hDesktop: isize) -> i32;
-    pub(crate) fn EnumDesktopWindows(
-        hDesktop: isize,
-        lpfn: unsafe extern "system" fn(isize, isize) -> i32,
-        lParam: isize,
-    ) -> i32;
-    pub(crate) fn EnumWindows(
-        lpEnumFunc: unsafe extern "system" fn(isize, isize) -> i32,
-        lParam: isize,
-    ) -> i32;
-    pub(crate) fn EnumChildWindows(
-        hWnd: isize,
-        lpEnumFunc: unsafe extern "system" fn(isize, isize) -> i32,
-        lParam: isize,
-    ) -> i32;
-    pub(crate) fn GetWindowTextW(hWnd: isize, lpString: *mut u16, nMaxCount: i32) -> i32;
-    pub(crate) fn GetClassNameW(hWnd: isize, lpClassName: *mut u16, nMaxCount: i32) -> i32;
-    pub(crate) fn GetWindowThreadProcessId(hWnd: isize, lpdwProcessId: *mut u32) -> u32;
-    pub(crate) fn SendMessageTimeoutW(
-        hWnd: isize,
-        Msg: u32,
-        wParam: usize,
-        lParam: isize,
-        fuFlags: u32,
-        uTimeout: u32,
-        lpdwResult: *mut usize,
-    ) -> isize;
-}
+use windows::{
+    core::{w, BOOL, PCWSTR},
+    Win32::{
+        Foundation::{HWND, LPARAM, WPARAM},
+        System::StationsAndDesktops::{
+            CloseDesktop, CloseWindowStation, EnumDesktopWindows, EnumDesktopsW, OpenDesktopW,
+            OpenWindowStationW, SetProcessWindowStation, SetThreadDesktop, DESKTOP_CONTROL_FLAGS,
+            HDESK,
+        },
+        UI::WindowsAndMessaging::{
+            EnumChildWindows, EnumWindows, GetClassNameW, GetWindowTextW,
+            GetWindowThreadProcessId, SendMessageTimeoutW, SMTO_ABORTIFHUNG, WM_GETTEXT,
+        },
+    },
+};
 
 #[cfg(windows)]
-pub fn enumerate_top_level_windows() -> Vec<(isize, u32, String, String)> {
+fn enumerate_top_level_windows() -> Vec<(isize, u32, String, String)> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
@@ -279,16 +247,16 @@ pub fn enumerate_top_level_windows() -> Vec<(isize, u32, String, String)> {
         hdesk: isize,
     }
 
-    unsafe extern "system" fn enum_proc(hwnd: isize, lparam: isize) -> i32 {
-        let ctx = &mut *(lparam as *mut EnumContext);
+    unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let ctx = &mut *(lparam.0 as *mut EnumContext);
         let collector = &mut *ctx.collector;
         let mut title_buf = [0u16; 512];
         let mut class_buf = [0u16; 256];
-        let title_len = GetWindowTextW(hwnd, title_buf.as_mut_ptr(), 512);
+        let title_len = GetWindowTextW(hwnd, &mut title_buf);
         if title_len > 0 {
-            let class_len = GetClassNameW(hwnd, class_buf.as_mut_ptr(), 256);
+            let class_len = GetClassNameW(hwnd, &mut class_buf);
             let mut pid = 0u32;
-            GetWindowThreadProcessId(hwnd, &mut pid);
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
             let mut title = OsString::from_wide(&title_buf[..title_len as usize])
                 .to_string_lossy()
                 .to_string();
@@ -299,20 +267,21 @@ pub fn enumerate_top_level_windows() -> Vec<(isize, u32, String, String)> {
             } else {
                 String::new()
             };
+            let hwnd_val = hwnd.0 as isize;
             if class_name.contains("NanaZip") || class_name.contains("FileManager") {
-                if let Some(nanazip_title) = get_nanazip_address_bar(hwnd, ctx.hdesk) {
+                if let Some(nanazip_title) = get_nanazip_address_bar(hwnd_val, ctx.hdesk) {
                     title = nanazip_title;
                 }
             }
-            if let Some(existing) = collector.list.iter_mut().find(|(h, _, _, _)| *h == hwnd) {
+            if let Some(existing) = collector.list.iter_mut().find(|(h, _, _, _)| *h == hwnd_val) {
                 if title != existing.3 && !title.is_empty() {
                     existing.3 = title;
                 }
             } else {
-                collector.list.push((hwnd, pid, class_name, title));
+                collector.list.push((hwnd_val, pid, class_name, title));
             }
         }
-        1
+        BOOL(1)
     }
 
     let mut collector = WindowCollector { list: Vec::new() };
@@ -322,43 +291,40 @@ pub fn enumerate_top_level_windows() -> Vec<(isize, u32, String, String)> {
     };
 
     unsafe {
-        EnumWindows(enum_proc, &mut default_ctx as *mut _ as isize);
+        let _ = EnumWindows(Some(enum_proc), LPARAM(&mut default_ctx as *mut _ as isize));
 
-        let winsta_name: Vec<u16> = "WinSta0\0".encode_utf16().collect();
-        let hwinsta = OpenWindowStationW(winsta_name.as_ptr(), 0, 0x10000000);
-        if hwinsta != 0 {
-            SetProcessWindowStation(hwinsta);
+        if let Ok(hwinsta) = OpenWindowStationW(w!("WinSta0"), false, 0x10000000) {
+            let _ = SetProcessWindowStation(hwinsta);
 
             struct DesktopEnumContext {
                 collector: *mut WindowCollector,
             }
 
-            unsafe extern "system" fn desk_proc(desk_name: *const u16, lparam: isize) -> i32 {
-                let dctx = &*(lparam as *const DesktopEnumContext);
-                let hdesk = OpenDesktopW(desk_name, 0, 0, 0x10000000);
-                if hdesk != 0 {
+            unsafe extern "system" fn desk_proc(desk_name: PCWSTR, lparam: LPARAM) -> BOOL {
+                let dctx = &*(lparam.0 as *const DesktopEnumContext);
+                if let Ok(hdesk) = OpenDesktopW(desk_name, DESKTOP_CONTROL_FLAGS(0), false, 0x10000000) {
                     let mut ectx = EnumContext {
                         collector: dctx.collector,
-                        hdesk,
+                        hdesk: hdesk.0 as isize,
                     };
-                    EnumDesktopWindows(hdesk, enum_proc, &mut ectx as *mut _ as isize);
-                    CloseDesktop(hdesk);
+                    let _ = EnumDesktopWindows(Some(hdesk), Some(enum_proc), LPARAM(&mut ectx as *mut _ as isize));
+                    let _ = CloseDesktop(hdesk);
                 }
-                1
+                BOOL(1)
             }
 
             let dctx = DesktopEnumContext {
                 collector: &mut collector as *mut _,
             };
-            EnumDesktopsW(hwinsta, desk_proc, &dctx as *const _ as isize);
-            CloseWindowStation(hwinsta);
+            let _ = EnumDesktopsW(Some(hwinsta), Some(desk_proc), LPARAM(&dctx as *const _ as isize));
+            let _ = CloseWindowStation(hwinsta);
         }
     }
     collector.list
 }
 
 #[cfg(not(windows))]
-pub fn enumerate_top_level_windows() -> Vec<(isize, u32, String, String)> {
+fn enumerate_top_level_windows() -> Vec<(isize, u32, String, String)> {
     Vec::new()
 }
 
@@ -368,39 +334,43 @@ fn paths_match(p1: &Path, p2: &Path) -> bool {
 }
 
 #[cfg(windows)]
-pub fn get_winrar_address_bar(hwnd: isize) -> Option<String> {
+fn get_winrar_address_bar(hwnd: isize) -> Option<String> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
-    unsafe extern "system" fn find_edit(child: isize, lparam: isize) -> i32 {
+    unsafe extern "system" fn find_edit(child: HWND, lparam: LPARAM) -> BOOL {
         let mut class_buf = [0u16; 64];
-        let len = GetClassNameW(child, class_buf.as_mut_ptr(), 64);
+        let len = GetClassNameW(child, &mut class_buf);
         if len > 0 {
             let class_name = OsString::from_wide(&class_buf[..len as usize])
                 .to_string_lossy()
                 .to_string();
             if class_name == "Edit" {
-                *(lparam as *mut isize) = child;
-                return 0;
+                *(lparam.0 as *mut HWND) = child;
+                return BOOL(0);
             }
         }
-        1
+        BOOL(1)
     }
 
-    let mut edit_hwnd: isize = 0;
+    let mut edit_hwnd = HWND::default();
     unsafe {
-        EnumChildWindows(hwnd, find_edit, &mut edit_hwnd as *mut _ as isize);
-        if edit_hwnd != 0 {
+        let _ = EnumChildWindows(
+            Some(HWND(hwnd as *mut _)),
+            Some(find_edit),
+            LPARAM(&mut edit_hwnd as *mut _ as isize),
+        );
+        if !edit_hwnd.0.is_null() {
             let mut text_buf = [0u16; 512];
             let mut res: usize = 0;
             SendMessageTimeoutW(
                 edit_hwnd,
-                0x000D, // WM_GETTEXT
-                512,
-                text_buf.as_mut_ptr() as isize,
-                2, // SMTO_ABORTIFHUNG
+                WM_GETTEXT,
+                WPARAM(512),
+                LPARAM(text_buf.as_mut_ptr() as isize),
+                SMTO_ABORTIFHUNG,
                 100,
-                &mut res,
+                Some(&mut res),
             );
             if res > 0 {
                 let text = OsString::from_wide(&text_buf[..res])
@@ -439,18 +409,18 @@ pub fn get_winrar_address_bar(hwnd: isize) -> Option<String> {
 }
 
 #[cfg(not(windows))]
-pub fn get_winrar_address_bar(_hwnd: isize) -> Option<String> {
+fn get_winrar_address_bar(_hwnd: isize) -> Option<String> {
     None
 }
 
 #[cfg(windows)]
-pub fn get_7z_address_bar(hwnd: isize) -> Option<(String, Option<String>)> {
+fn get_7z_address_bar(hwnd: isize) -> Option<(String, Option<String>)> {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
-    unsafe extern "system" fn find_combo_or_edit(child: isize, lparam: isize) -> i32 {
+    unsafe extern "system" fn find_combo_or_edit(child: HWND, lparam: LPARAM) -> BOOL {
         let mut class_buf = [0u16; 64];
-        let len = GetClassNameW(child, class_buf.as_mut_ptr(), 64);
+        let len = GetClassNameW(child, &mut class_buf);
         if len > 0 {
             let class_name = OsString::from_wide(&class_buf[..len as usize])
                 .to_string_lossy()
@@ -460,12 +430,12 @@ pub fn get_7z_address_bar(hwnd: isize) -> Option<(String, Option<String>)> {
                 let mut res: usize = 0;
                 SendMessageTimeoutW(
                     child,
-                    0x000D, // WM_GETTEXT
-                    512,
-                    text_buf.as_mut_ptr() as isize,
-                    2, // SMTO_ABORTIFHUNG
+                    WM_GETTEXT,
+                    WPARAM(512),
+                    LPARAM(text_buf.as_mut_ptr() as isize),
+                    SMTO_ABORTIFHUNG,
                     100,
-                    &mut res,
+                    Some(&mut res),
                 );
                 if res > 0 {
                     let text = OsString::from_wide(&text_buf[..res])
@@ -473,29 +443,33 @@ pub fn get_7z_address_bar(hwnd: isize) -> Option<(String, Option<String>)> {
                         .trim()
                         .to_string();
                     if let Some(parsed) = parse_7z_window_title(&text) {
-                        *(lparam as *mut Option<(String, Option<String>)>) = Some(parsed);
-                        return 0;
+                        *(lparam.0 as *mut Option<(String, Option<String>)>) = Some(parsed);
+                        return BOOL(0);
                     }
                 }
             }
         }
-        1
+        BOOL(1)
     }
 
     let mut result: Option<(String, Option<String>)> = None;
     unsafe {
-        EnumChildWindows(hwnd, find_combo_or_edit, &mut result as *mut _ as isize);
+        let _ = EnumChildWindows(
+            Some(HWND(hwnd as *mut _)),
+            Some(find_combo_or_edit),
+            LPARAM(&mut result as *mut _ as isize),
+        );
     }
     result
 }
 
 #[cfg(not(windows))]
-pub fn get_7z_address_bar(_hwnd: isize) -> Option<(String, Option<String>)> {
+fn get_7z_address_bar(_hwnd: isize) -> Option<(String, Option<String>)> {
     None
 }
 
 #[cfg(windows)]
-pub fn get_nanazip_address_bar(hwnd: isize, hdesk: isize) -> Option<String> {
+fn get_nanazip_address_bar(hwnd: isize, hdesk: isize) -> Option<String> {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
@@ -506,11 +480,8 @@ pub fn get_nanazip_address_bar(hwnd: isize, hdesk: isize) -> Option<String> {
     };
 
     std::thread::spawn(move || unsafe {
-        extern "system" {
-            fn SetThreadDesktop(hdesk: isize) -> i32;
-        }
         if hdesk != 0 {
-            SetThreadDesktop(hdesk);
+            let _ = SetThreadDesktop(HDESK(hdesk as *mut _));
         }
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         if let Ok(uia) =
@@ -557,7 +528,7 @@ pub fn get_nanazip_address_bar(hwnd: isize, hdesk: isize) -> Option<String> {
 }
 
 #[cfg(not(windows))]
-pub fn get_nanazip_address_bar(_hwnd: isize, _hdesk: isize) -> Option<String> {
+fn get_nanazip_address_bar(_hwnd: isize, _hdesk: isize) -> Option<String> {
     None
 }
 
@@ -579,13 +550,13 @@ unsafe fn find_tree_caret_index(
 
     let mut child: usize = 0;
     SendMessageTimeoutW(
-        tree_hwnd,
+        HWND(tree_hwnd as *mut _),
         TVM_GETNEXTITEM,
-        TVGN_CHILD,
-        item as isize,
-        2,
+        WPARAM(TVGN_CHILD),
+        LPARAM(item as isize),
+        SMTO_ABORTIFHUNG,
         50,
-        &mut child,
+        Some(&mut child),
     );
     while child != 0 {
         if let Some(found) = find_tree_caret_index(tree_hwnd, child, caret, current_idx) {
@@ -593,13 +564,13 @@ unsafe fn find_tree_caret_index(
         }
         let mut next: usize = 0;
         SendMessageTimeoutW(
-            tree_hwnd,
+            HWND(tree_hwnd as *mut _),
             TVM_GETNEXTITEM,
-            TVGN_NEXT,
-            child as isize,
-            2,
+            WPARAM(TVGN_NEXT),
+            LPARAM(child as isize),
+            SMTO_ABORTIFHUNG,
             50,
-            &mut next,
+            Some(&mut next),
         );
         child = next;
     }
@@ -611,25 +582,29 @@ fn get_bandizip_tree_state(hwnd: isize) -> (Option<String>, Option<usize>) {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
-    unsafe extern "system" fn find_tree(child: isize, lparam: isize) -> i32 {
+    unsafe extern "system" fn find_tree(child: HWND, lparam: LPARAM) -> BOOL {
         let mut class_buf = [0u16; 64];
-        let len = GetClassNameW(child, class_buf.as_mut_ptr(), 64);
+        let len = GetClassNameW(child, &mut class_buf);
         if len > 0 {
             let class_name = OsString::from_wide(&class_buf[..len as usize])
                 .to_string_lossy()
                 .to_string();
             if class_name == "SysTreeView32" {
-                *(lparam as *mut isize) = child;
-                return 0;
+                *(lparam.0 as *mut HWND) = child;
+                return BOOL(0);
             }
         }
-        1
+        BOOL(1)
     }
 
-    let mut tree_hwnd: isize = 0;
+    let mut tree_hwnd = HWND::default();
     unsafe {
-        EnumChildWindows(hwnd, find_tree, &mut tree_hwnd as *mut _ as isize);
-        if tree_hwnd != 0 {
+        let _ = EnumChildWindows(
+            Some(HWND(hwnd as *mut _)),
+            Some(find_tree),
+            LPARAM(&mut tree_hwnd as *mut _ as isize),
+        );
+        if !tree_hwnd.0.is_null() {
             const TVM_GETNEXTITEM: u32 = 0x110A;
             const TVGN_ROOT: usize = 0x0;
             const TVGN_NEXT: usize = 0x1;
@@ -637,9 +612,25 @@ fn get_bandizip_tree_state(hwnd: isize) -> (Option<String>, Option<usize>) {
             const TVGN_CARET: usize = 0x9;
 
             let mut root: usize = 0;
-            SendMessageTimeoutW(tree_hwnd, TVM_GETNEXTITEM, TVGN_ROOT, 0, 2, 50, &mut root);
+            SendMessageTimeoutW(
+                tree_hwnd,
+                TVM_GETNEXTITEM,
+                WPARAM(TVGN_ROOT),
+                LPARAM(0),
+                SMTO_ABORTIFHUNG,
+                50,
+                Some(&mut root),
+            );
             let mut caret: usize = 0;
-            SendMessageTimeoutW(tree_hwnd, TVM_GETNEXTITEM, TVGN_CARET, 0, 2, 50, &mut caret);
+            SendMessageTimeoutW(
+                tree_hwnd,
+                TVM_GETNEXTITEM,
+                WPARAM(TVGN_CARET),
+                LPARAM(0),
+                SMTO_ABORTIFHUNG,
+                50,
+                Some(&mut caret),
+            );
 
             if root != 0 && caret != 0 {
                 if caret == root {
@@ -650,26 +641,26 @@ fn get_bandizip_tree_state(hwnd: isize) -> (Option<String>, Option<usize>) {
                 SendMessageTimeoutW(
                     tree_hwnd,
                     TVM_GETNEXTITEM,
-                    TVGN_CHILD,
-                    root as isize,
-                    2,
+                    WPARAM(TVGN_CHILD),
+                    LPARAM(root as isize),
+                    SMTO_ABORTIFHUNG,
                     50,
-                    &mut child,
+                    Some(&mut child),
                 );
                 let mut idx = 0;
                 while child != 0 {
-                    if let Some(found) = find_tree_caret_index(tree_hwnd, child, caret, &mut idx) {
+                    if let Some(found) = find_tree_caret_index(tree_hwnd.0 as isize, child, caret, &mut idx) {
                         return (None, Some(found));
                     }
                     let mut next: usize = 0;
                     SendMessageTimeoutW(
                         tree_hwnd,
                         TVM_GETNEXTITEM,
-                        TVGN_NEXT,
-                        child as isize,
-                        2,
+                        WPARAM(TVGN_NEXT),
+                        LPARAM(child as isize),
+                        SMTO_ABORTIFHUNG,
                         50,
-                        &mut next,
+                        Some(&mut next),
                     );
                     child = next;
                 }
@@ -684,7 +675,7 @@ fn get_bandizip_tree_state(_hwnd: isize) -> (Option<String>, Option<usize>) {
     (None, None)
 }
 
-pub fn collect_candidates(engine: &TempEngine) -> Vec<CandidateArchive> {
+fn collect_candidates(engine: &TempEngine) -> Vec<CandidateArchive> {
     let mut candidates = Vec::new();
 
     #[cfg(windows)]
@@ -959,7 +950,7 @@ fn known_subfolders_conflict(left: &Option<String>, right: &Option<String>) -> b
     }
 }
 
-pub fn deduplicate_candidate_archives(
+fn deduplicate_candidate_archives(
     engine: &TempEngine,
     candidates: Vec<CandidateArchive>,
 ) -> Vec<CandidateArchive> {
@@ -1114,7 +1105,7 @@ fn collect_user_folder_candidates(archive_filename: &str, candidates: &mut Vec<C
     }
 }
 
-pub fn parse_winrar_window_title(title: &str) -> Option<String> {
+fn parse_winrar_window_title(title: &str) -> Option<String> {
     let clean = title.split(" - ").next()?.split(" (").next()?.trim();
     let lower = clean.to_lowercase();
 
@@ -1148,7 +1139,7 @@ pub fn parse_winrar_window_title(title: &str) -> Option<String> {
     None
 }
 
-pub fn parse_7z_folder_history(bytes: &[u8], candidates: &mut Vec<CandidateArchive>) {
+fn parse_7z_folder_history(bytes: &[u8], candidates: &mut Vec<CandidateArchive>) {
     let u16_chars: Vec<u16> = bytes
         .chunks_exact(2)
         .map(|c| u16::from_le_bytes([c[0], c[1]]))
@@ -1191,7 +1182,7 @@ pub fn parse_7z_folder_history(bytes: &[u8], candidates: &mut Vec<CandidateArchi
     }
 }
 
-pub fn parse_7z_window_title(title: &str) -> Option<(String, Option<String>)> {
+fn parse_7z_window_title(title: &str) -> Option<(String, Option<String>)> {
     let trimmed = title.split(" - ").next()?.trim();
     let lower = trimmed.to_lowercase();
 
@@ -1228,7 +1219,7 @@ pub fn parse_7z_window_title(title: &str) -> Option<(String, Option<String>)> {
     }
 }
 
-pub fn parse_bandizip_window_title(title: &str) -> Option<CandidateArchive> {
+fn parse_bandizip_window_title(title: &str) -> Option<CandidateArchive> {
     let clean = title.split(" - ").next()?.trim();
     let p = PathBuf::from(clean);
     if p.is_file() {
@@ -1238,7 +1229,7 @@ pub fn parse_bandizip_window_title(title: &str) -> Option<CandidateArchive> {
     }
 }
 
-pub fn parse_bandizip_archive_name(title: &str) -> Option<String> {
+fn parse_bandizip_archive_name(title: &str) -> Option<String> {
     let clean = title.split(" - ").next()?.trim();
     let p = Path::new(clean);
     if is_supported_archive(p) {
@@ -1250,7 +1241,7 @@ pub fn parse_bandizip_archive_name(title: &str) -> Option<String> {
     }
 }
 
-pub fn parse_peazip_window_title(title: &str) -> Option<CandidateArchive> {
+fn parse_peazip_window_title(title: &str) -> Option<CandidateArchive> {
     let mut cand = title.trim();
     if let Some(rest) = cand.strip_prefix("PeaZip - ") {
         cand = rest.trim();
@@ -1330,7 +1321,7 @@ fn resolve_temp_origin_from_candidates(
     Ok(None)
 }
 
-pub fn match_candidate_origin(
+fn match_candidate_origin(
     candidate: &CandidateArchive,
     engine: &TempEngine,
     temp_file_size: u64,
@@ -1476,3 +1467,7 @@ pub fn match_candidate_origin(
 
     None
 }
+
+#[cfg(test)]
+#[path = "../tests/temp_archive_tests.rs"]
+mod temp_archive_tests;

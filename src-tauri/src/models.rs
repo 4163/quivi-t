@@ -178,7 +178,6 @@ pub struct LibraryNode {
     #[serde(default)]
     pub size: u64,
     pub image_count: usize,
-    pub children: Vec<LibraryNode>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

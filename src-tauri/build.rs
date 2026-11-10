@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 #[path = "src/platform/previews/contract.rs"]
 mod preview_contract;
 

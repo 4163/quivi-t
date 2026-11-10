@@ -6,7 +6,6 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
-#[allow(dead_code)]
 #[path = "../contract.rs"]
 mod contract;
 
