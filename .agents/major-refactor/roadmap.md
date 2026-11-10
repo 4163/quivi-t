@@ -103,7 +103,7 @@ Extract zero-dependency shared helpers in JS and Rust so all subsequent decoupli
 - [-] **#1.1.5 Deduplicate Lanczos3 GLSL fragment shader** (`src/js/services/scaling/lanczosWebGL.js:6-73`, `src/js/services/pipelines/quadCompositor.js:151-201` -> `src/js/services/pipelines/glCommon.js`): Move the 36-lookup Lanczos3 GLSL shader string into `glCommon.js` and import it from both modules. [Ref: audit-02:L357-361]
 - [-] **#1.1.6 Shared IPC error formatter** (`src/js/main/urlOverlay.js:67-73`, `src/js/main/dropzone.js:27` -> `src/js/shared/errorUtils.js`): Create `formatIpcError(err, fallback)` in `src/js/shared/errorUtils.js` and replace duplicate unwrapping in `urlOverlay.js` and `dropzone.js`. [Ref: audit-01:L327-330]
 - [-] **#1.1.7 Consolidate offscreen canvas cover thumbnail helper** (`src/js/main/metadataBadge.js:44-63` -> `src/js/shared/blobImage.js`): Move `_generateCoverThumbnail` canvas scaling helper into `src/js/shared/blobImage.js` with a reusable offscreen canvas instance. [Ref: audit-01:L39, L332-334]
-- [ ] **#1.1.8 [Telemetry B] Verification capture**: Run `npx mocha <spec> --reporter json` with extracted module imports, save output to `.agents/major-refactor/telemetry/slice-1.1-b.json`, verify 1:1 parity against Telemetry A, and pause for commit.
+- [-] **#1.1.8 [Telemetry B] Verification capture**: Run `npx mocha <spec> --reporter json` with extracted module imports, save output to `.agents/major-refactor/telemetry/slice-1.1-b.json`, verify 1:1 parity against Telemetry A, and pause for commit.
 
 **Verification:** Capture `[Telemetry A]`, implement Slice 1.1, run `npx mocha <spec> --reporter json` to capture `[Telemetry B]`, and confirm 1:1 parity with Telemetry A. Mark items `[-]` once green.
 
