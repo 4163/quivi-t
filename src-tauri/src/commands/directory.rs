@@ -443,8 +443,7 @@ fn move_to_recycle_bin(path: &Path) -> std::io::Result<()> {
         SHFILEOPSTRUCTW,
     };
 
-    let path_str = path.to_string_lossy();
-    let clean_path = path_str.strip_prefix(r"\\?\").unwrap_or(&path_str);
+    let clean_path = crate::utils::strip_verbatim_prefix(&path.to_string_lossy());
 
     let mut wide: Vec<u16> = clean_path.encode_utf16().collect();
     wide.push(0);

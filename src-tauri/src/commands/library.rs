@@ -42,10 +42,13 @@ impl Drop for LibraryMoveLock {
 }
 
 fn normalized_path(path: &Path) -> String {
-    let mut value = config::display_path(path).replace('/', "\\");
-    while value.ends_with('\\') && value.len() > 3 {
-        value.pop();
-    }
+    let display = config::display_path(path);
+    let trimmed = crate::utils::trim_trailing_slashes(&display);
+    let value = if trimmed.len() <= 2 && display.len() > trimmed.len() {
+        format!("{trimmed}\\")
+    } else {
+        trimmed.to_string()
+    };
     #[cfg(windows)]
     {
         return value.to_ascii_lowercase();
@@ -594,12 +597,12 @@ fn remap_library_paths(config: &mut AppConfig, source: &Path, destination: &Path
                             continue;
                         };
                         let (filesystem_path, archive_entry) =
-                            path.split_once('|').unwrap_or((path, ""));
+                            crate::archives::split_archive_path(path);
                         if let Some(remapped) = remap_path(filesystem_path, source, destination) {
                             let path = if archive_entry.is_empty() {
                                 remapped
                             } else {
-                                format!("{remapped}|{archive_entry}")
+                                crate::archives::format_archive_entry_path(&remapped, archive_entry)
                             };
                             item_obj.insert("path".to_string(), serde_json::json!(path));
                         }

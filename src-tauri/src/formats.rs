@@ -204,6 +204,63 @@ pub fn is_metadata_ext(ext: &str) -> bool {
     ext.eq_ignore_ascii_case("xml") || ext.eq_ignore_ascii_case("opf")
 }
 
+pub const ARCHIVE_EXTENSIONS: &[&str] = &["zip", "cbz", "rar", "cbr", "7z", "cb7", "tar", "cbt"];
+
+pub const ARCHIVE_SLASH_EXTS: &[&str] = &[
+    ".zip\\", ".cbz\\", ".rar\\", ".cbr\\", ".7z\\", ".cb7\\", ".tar\\", ".cbt\\",
+    ".zip/", ".cbz/", ".rar/", ".cbr/", ".7z/", ".cb7/", ".tar/", ".cbt/",
+];
+
+pub const ARCHIVE_DOT_EXTS: &[&str] = &[
+    ".zip", ".cbz", ".rar", ".cbr", ".7z", ".cb7", ".tar", ".cbt",
+];
+
+#[inline]
+pub fn is_shell_thumb_supported(ext: &str) -> bool {
+    is_image_ext(ext) || ext.eq_ignore_ascii_case("mp4")
+}
+
+pub fn guess_mime(name: &str) -> &'static str {
+    let ext = name.rsplit('.').next().unwrap_or("");
+    if ext.eq_ignore_ascii_case("jpg") || ext.eq_ignore_ascii_case("jpeg") {
+        "image/jpeg"
+    } else if ext.eq_ignore_ascii_case("png") {
+        "image/png"
+    } else if ext.eq_ignore_ascii_case("gif") {
+        "image/gif"
+    } else if ext.eq_ignore_ascii_case("webp") {
+        "image/webp"
+    } else if ext.eq_ignore_ascii_case("svg") {
+        "image/svg+xml"
+    } else if ext.eq_ignore_ascii_case("bmp") || ext.eq_ignore_ascii_case("dib") {
+        "image/bmp"
+    } else if ext.eq_ignore_ascii_case("ico") {
+        "image/x-icon"
+    } else if ext.eq_ignore_ascii_case("avif") {
+        "image/avif"
+    } else if ext.eq_ignore_ascii_case("apng") {
+        "image/apng"
+    } else if ext.eq_ignore_ascii_case("mp4") {
+        "video/mp4"
+    } else {
+        "application/octet-stream"
+    }
+}
+
+pub fn check_image_magic_head(head: &[u8], expected_ext: &str) -> bool {
+    let ext = expected_ext.trim_start_matches('.').to_ascii_lowercase();
+    let enough = |n: usize| head.len() >= n;
+    match ext.as_str() {
+        "png" | "apng" => enough(8) && head[..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
+        "jpg" | "jpeg" => enough(2) && head[..2] == [0xFF, 0xD8],
+        "gif" => enough(6) && (head[..6] == *b"GIF87a" || head[..6] == *b"GIF89a"),
+        "bmp" | "dib" => enough(2) && head[..2] == *b"BM",
+        "webp" => enough(12) && head[..4] == *b"RIFF" && head[8..12] == *b"WEBP",
+        "avif" => enough(12) && head[4..8] == *b"ftyp",
+        _ => true,
+    }
+}
+
 pub fn check_animation_status(bytes: &[u8]) -> AnimationInfo {
     if bytes.len() < 8 {
         return AnimationInfo {

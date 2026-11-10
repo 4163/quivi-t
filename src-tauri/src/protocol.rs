@@ -2,6 +2,7 @@ use tauri::http::Response;
 use tauri::Manager;
 
 use crate::archives::ArchiveCache;
+pub use crate::formats::guess_mime;
 
 /// Registers the `quivit://` custom URI scheme protocol on the Tauri builder.
 ///
@@ -298,32 +299,6 @@ fn parse_byte_range(header: &str, total_len: usize) -> Option<ByteRange> {
     Some(ByteRange { start, end })
 }
 
-fn guess_mime(name: &str) -> &'static str {
-    let ext = name.rsplit('.').next().unwrap_or("");
-    if ext.eq_ignore_ascii_case("jpg") || ext.eq_ignore_ascii_case("jpeg") {
-        "image/jpeg"
-    } else if ext.eq_ignore_ascii_case("png") {
-        "image/png"
-    } else if ext.eq_ignore_ascii_case("gif") {
-        "image/gif"
-    } else if ext.eq_ignore_ascii_case("webp") {
-        "image/webp"
-    } else if ext.eq_ignore_ascii_case("svg") {
-        "image/svg+xml"
-    } else if ext.eq_ignore_ascii_case("bmp") || ext.eq_ignore_ascii_case("dib") {
-        "image/bmp"
-    } else if ext.eq_ignore_ascii_case("ico") {
-        "image/x-icon"
-    } else if ext.eq_ignore_ascii_case("avif") {
-        "image/avif"
-    } else if ext.eq_ignore_ascii_case("apng") {
-        "image/apng"
-    } else if ext.eq_ignore_ascii_case("mp4") {
-        "video/mp4"
-    } else {
-        "application/octet-stream"
-    }
-}
 
 #[cfg(test)]
 #[path = "tests/protocol_tests.rs"]

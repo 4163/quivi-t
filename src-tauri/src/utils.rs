@@ -33,3 +33,26 @@ pub fn url_decode(input: &str) -> String {
     }
     String::from_utf8(decoded).unwrap_or_default()
 }
+
+pub fn strip_verbatim_prefix(path: &str) -> String {
+    let value = path.replace('/', "\\");
+    if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = value.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        value
+    }
+}
+
+pub fn normalize_windows_slashes(path: &str) -> String {
+    path.replace('/', "\\")
+}
+
+pub fn normalize_archive_entry_slashes(entry: &str) -> String {
+    entry.replace('\\', "/")
+}
+
+pub fn trim_trailing_slashes(path: &str) -> &str {
+    path.trim_end_matches(|c| c == '/' || c == '\\')
+}

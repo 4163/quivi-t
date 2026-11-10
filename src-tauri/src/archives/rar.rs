@@ -5,6 +5,7 @@ use crate::formats::{is_image_ext, is_metadata_ext};
 use crate::models::{ArchiveEncryptionStatus, FileEntry};
 
 use super::cache::{notify_extracted, write_temp_entry, ExtractNotify, FinishGuard};
+use super::format_archive_entry_path;
 use super::sort_archive_entries;
 
 pub(crate) fn validate_rar_header(archive_path: &str) -> Result<(), String> {
@@ -79,7 +80,7 @@ pub(crate) fn list_rar_entries(
                         let size = entry.unpacked_size as u64;
                         files.push(FileEntry::new_archive_entry(
                             name.clone(),
-                            format!("{}|{}", archive_path, name),
+                            format_archive_entry_path(archive_path, &name),
                             ext.to_uppercase(),
                             "".to_string(),
                             size,

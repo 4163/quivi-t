@@ -5,18 +5,19 @@ use image::RgbaImage;
 #[cfg(windows)]
 use std::collections::HashMap;
 #[cfg(windows)]
-use std::ffi::OsStr;
-#[cfg(windows)]
 use std::io::Cursor;
-#[cfg(windows)]
-use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
 use std::sync::Mutex;
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, GetObjectW, ReleaseDC,
-    SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HDC, HGDIOBJ,
+    CreateCompatibleDC, CreateDIBSection, GetDC, GetObjectW, SelectObject, BITMAP, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
 };
+
+#[cfg(windows)]
+use crate::platform::encode_wide_null;
+#[cfg(windows)]
+use crate::platform::gdi::{bgra_to_rgba_in_place, ScopedHgdiobj, ScopedMemDc, ScopedScreenDc};
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL};
 #[cfg(windows)]
@@ -58,44 +59,6 @@ impl Drop for ScopedHicon {
     }
 }
 
-#[cfg(windows)]
-struct ScopedHgdiobj(HGDIOBJ);
-#[cfg(windows)]
-impl Drop for ScopedHgdiobj {
-    fn drop(&mut self) {
-        if !self.0.is_invalid() {
-            unsafe {
-                let _ = DeleteObject(self.0);
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-struct ScopedMemDc(HDC);
-#[cfg(windows)]
-impl Drop for ScopedMemDc {
-    fn drop(&mut self) {
-        if !self.0.is_invalid() {
-            unsafe {
-                let _ = DeleteDC(self.0);
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-struct ScopedScreenDc(HDC);
-#[cfg(windows)]
-impl Drop for ScopedScreenDc {
-    fn drop(&mut self) {
-        if !self.0.is_invalid() {
-            unsafe {
-                let _ = ReleaseDC(None, self.0);
-            }
-        }
-    }
-}
 
 /// Pre-warm the Windows shell icon infrastructure on a background thread.
 /// The first SHGetFileInfoW call in a process pays a ~2-3s initialization cost;
@@ -104,10 +67,7 @@ pub fn warmup() {
     #[cfg(windows)]
     {
         std::thread::spawn(|| {
-            let dummy: Vec<u16> = OsStr::new("warmup.txt")
-                .encode_wide()
-                .chain(std::iter::once(0))
-                .collect();
+            let dummy = encode_wide_null("warmup.txt");
             let mut shfi = SHFILEINFOW::default();
             unsafe {
                 SHGetFileInfoW(
@@ -202,16 +162,10 @@ pub fn get_cached_native_icon_png_with_size(
         };
 
         let (query_name, attrs, flags) = if is_real_path {
-            let wide: Vec<u16> = OsStr::new(path)
-                .encode_wide()
-                .chain(std::iter::once(0))
-                .collect();
+            let wide = encode_wide_null(path);
             (wide, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | size_flag)
         } else if is_generic_folder {
-            let wide: Vec<u16> = OsStr::new("dummy")
-                .encode_wide()
-                .chain(std::iter::once(0))
-                .collect();
+            let wide = encode_wide_null("dummy");
             (
                 wide,
                 FILE_ATTRIBUTE_DIRECTORY,
@@ -219,10 +173,7 @@ pub fn get_cached_native_icon_png_with_size(
             )
         } else {
             let name = format!("dummy.{}", ext_key.trim_start_matches('.'));
-            let wide: Vec<u16> = OsStr::new(&name)
-                .encode_wide()
-                .chain(std::iter::once(0))
-                .collect();
+            let wide = encode_wide_null(&name);
             (
                 wide,
                 FILE_ATTRIBUTE_NORMAL,
@@ -354,12 +305,7 @@ pub fn get_cached_native_icon_png_with_size(
             return Ok(None);
         }
         // Convert BGRA to RGBA
-        for chunk in pixels.chunks_exact_mut(4) {
-            let b = chunk[0];
-            let r = chunk[2];
-            chunk[0] = r;
-            chunk[2] = b;
-        }
+        bgra_to_rgba_in_place(&mut pixels);
 
         let img = RgbaImage::from_raw(width, height, pixels).ok_or("Failed to create RgbaImage")?;
         let mut buf = Cursor::new(Vec::new());

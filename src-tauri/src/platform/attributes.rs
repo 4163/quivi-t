@@ -7,16 +7,10 @@ use std::path::Path;
 /// Returns Ok(()) on success or if not on Windows.
 #[cfg(windows)]
 pub fn set_hidden_attribute(path: &Path, hidden: bool) -> Result<(), String> {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
-
     const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
 
     // Convert the path for Win32.
-    let wide_path: Vec<u16> = OsStr::new(path)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
+    let wide_path = crate::platform::encode_wide_null(path);
 
     unsafe {
         // Read current attributes.

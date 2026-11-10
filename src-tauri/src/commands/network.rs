@@ -8,6 +8,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::Emitter;
 
+pub(crate) use crate::formats::check_image_magic_head;
+
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 QuiviT/1.0";
 const MANIFEST_BASE_URL: &str = "https://raw.githubusercontent.com/4163/quivi-t/extractors/";
@@ -457,19 +459,6 @@ fn read_head(path: &str) -> Result<Vec<u8>, String> {
     Ok(head)
 }
 
-fn check_image_magic_head(head: &[u8], expected_ext: &str) -> bool {
-    let ext = expected_ext.trim_start_matches('.').to_ascii_lowercase();
-    let enough = |n: usize| head.len() >= n;
-    match ext.as_str() {
-        "png" | "apng" => enough(8) && head[..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
-        "jpg" | "jpeg" => enough(2) && head[..2] == [0xFF, 0xD8],
-        "gif" => enough(6) && (head[..6] == *b"GIF87a" || head[..6] == *b"GIF89a"),
-        "bmp" | "dib" => enough(2) && head[..2] == *b"BM",
-        "webp" => enough(12) && head[..4] == *b"RIFF" && head[8..12] == *b"WEBP",
-        "avif" => enough(12) && head[4..8] == *b"ftyp",
-        _ => true,
-    }
-}
 
 fn apply_tile_descramble(path: &std::path::Path, desc: &TileDescramble) -> Result<(), String> {
     let total = (desc.cols as usize) * (desc.rows as usize);

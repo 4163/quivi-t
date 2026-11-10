@@ -167,14 +167,7 @@ fn render_svg(bytes: &[u8], cx: u32) -> Result<RgbaImage, String> {
         &mut pixmap.as_mut(),
     );
     let mut pixels = pixmap.take();
-    for pixel in pixels.chunks_exact_mut(4) {
-        let alpha = u16::from(pixel[3]);
-        if alpha != 0 && alpha != 255 {
-            for channel in &mut pixel[..3] {
-                *channel = ((u16::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
-            }
-        }
-    }
+    crate::platform::gdi::unpremultiply_rgba_in_place(&mut pixels);
     RgbaImage::from_raw(width, height, pixels).ok_or_else(|| "Invalid SVG thumbnail pixels.".into())
 }
 

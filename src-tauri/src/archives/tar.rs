@@ -6,6 +6,7 @@ use crate::models::FileEntry;
 
 use super::cache::{notify_extracted, write_temp_entry, ExtractNotify, FinishGuard};
 use super::decode_cjk_name;
+use super::format_archive_entry_path;
 use super::sort_archive_entries;
 
 fn decode_tar_name<R: std::io::Read>(entry: &tar::Entry<'_, R>) -> String {
@@ -89,7 +90,7 @@ pub(crate) fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, Str
         let size = entry.header().size().unwrap_or(0);
         files.push(FileEntry::new_archive_entry(
             name.clone(),
-            format!("{}|{}", archive_path, name),
+            format_archive_entry_path(archive_path, &name),
             ext.to_uppercase(),
             "".to_string(),
             size,

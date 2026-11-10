@@ -70,17 +70,7 @@ impl Bitmap {
         }
         let output =
             unsafe { std::slice::from_raw_parts_mut(bits.cast::<u8>(), image.as_raw().len()) };
-        for (source, target) in image
-            .as_raw()
-            .chunks_exact(4)
-            .zip(output.chunks_exact_mut(4))
-        {
-            let alpha = source[3] as u16;
-            target[0] = ((source[2] as u16 * alpha + 127) / 255) as u8;
-            target[1] = ((source[1] as u16 * alpha + 127) / 255) as u8;
-            target[2] = ((source[0] as u16 * alpha + 127) / 255) as u8;
-            target[3] = source[3];
-        }
+        crate::platform::gdi::rgba_to_premultiplied_bgra(image.as_raw(), output);
         Ok(bitmap)
     }
 

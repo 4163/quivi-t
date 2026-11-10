@@ -187,17 +187,7 @@ pub fn default_library_dir() -> Result<PathBuf, String> {
 /// Keep that form inside filesystem operations, but never expose or persist it
 /// as a user-facing Library location.
 pub fn display_path(path: &Path) -> String {
-    let value = path.to_string_lossy().replace('/', "\\");
-    #[cfg(windows)]
-    {
-        if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
-            return format!(r"\\{rest}");
-        }
-        if let Some(rest) = value.strip_prefix(r"\\?\") {
-            return rest.to_string();
-        }
-    }
-    value
+    crate::utils::strip_verbatim_prefix(&path.to_string_lossy())
 }
 
 pub fn library_dir_from_config(config: &AppConfig) -> Result<PathBuf, String> {
@@ -282,12 +272,13 @@ fn normalize_library_location_paths(config: &mut AppConfig) {
                         let Some(path) = item_obj.get("path").and_then(|value| value.as_str()) else {
                             continue;
                         };
-                        let (filesystem_path, archive_entry) = path.split_once('|').unwrap_or((path, ""));
+                        let (filesystem_path, archive_entry) =
+                            crate::archives::split_archive_path(path);
                         let normalized = clean_saved_path(filesystem_path);
                         let value = if archive_entry.is_empty() {
                             normalized
                         } else {
-                            format!("{normalized}|{archive_entry}")
+                            crate::archives::format_archive_entry_path(&normalized, archive_entry)
                         };
                         item_obj.insert("path".to_string(), serde_json::json!(value));
                     }

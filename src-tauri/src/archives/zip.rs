@@ -3,8 +3,10 @@ use std::fs;
 
 use crate::formats::{is_image_ext, is_metadata_ext};
 use crate::models::{ArchiveEncryptionStatus, FileEntry};
+use crate::utils::normalize_archive_entry_slashes;
 
 use super::cache::ZipArchive;
+use super::format_archive_entry_path;
 use super::sort_archive_entries;
 
 pub(crate) fn validate_zip_header(archive_path: &str) -> Result<fs::File, String> {
@@ -109,7 +111,7 @@ pub(crate) fn list_zip_entries(
                 if name != &decoded_name {
                     index_map.insert(name.clone(), i);
                 }
-                let normalized = decoded_name.replace('\\', "/");
+                let normalized = normalize_archive_entry_slashes(&decoded_name);
                 if normalized != decoded_name {
                     index_map.insert(normalized, i);
                 }
@@ -125,7 +127,7 @@ pub(crate) fn list_zip_entries(
                 let size = entry.size();
                 files.push(FileEntry::new_archive_entry(
                     decoded_name.clone(),
-                    format!("{}|{}", archive_path, decoded_name),
+                    format_archive_entry_path(archive_path, &decoded_name),
                     ext.to_uppercase(),
                     "".to_string(),
                     size,
@@ -134,7 +136,7 @@ pub(crate) fn list_zip_entries(
             Err(zip::result::ZipError::InvalidPassword) => {
                 bad_password = true;
                 index_map.insert(name.clone(), i);
-                let normalized = name.replace('\\', "/");
+                let normalized = normalize_archive_entry_slashes(name);
                 if normalized != *name {
                     index_map.insert(normalized, i);
                 }
@@ -142,7 +144,7 @@ pub(crate) fn list_zip_entries(
                 if is_image_ext(ext) || is_metadata_ext(ext) {
                     files.push(FileEntry::new_archive_entry(
                         name.clone(),
-                        format!("{}|{}", archive_path, name),
+                        format_archive_entry_path(archive_path, name),
                         ext.to_uppercase(),
                         "".to_string(),
                         0,
@@ -152,7 +154,7 @@ pub(crate) fn list_zip_entries(
             Err(zip::result::ZipError::UnsupportedArchive(err)) if err.contains("Password") => {
                 has_encrypted = true;
                 index_map.insert(name.clone(), i);
-                let normalized = name.replace('\\', "/");
+                let normalized = normalize_archive_entry_slashes(name);
                 if normalized != *name {
                     index_map.insert(normalized, i);
                 }
@@ -160,7 +162,7 @@ pub(crate) fn list_zip_entries(
                 if is_image_ext(ext) || is_metadata_ext(ext) {
                     files.push(FileEntry::new_archive_entry(
                         name.clone(),
-                        format!("{}|{}", archive_path, name),
+                        format_archive_entry_path(archive_path, name),
                         ext.to_uppercase(),
                         "".to_string(),
                         0,
@@ -169,7 +171,7 @@ pub(crate) fn list_zip_entries(
             }
             Err(_) => {
                 index_map.insert(name.clone(), i);
-                let normalized = name.replace('\\', "/");
+                let normalized = normalize_archive_entry_slashes(name);
                 if normalized != *name {
                     index_map.insert(normalized, i);
                 }
@@ -178,7 +180,7 @@ pub(crate) fn list_zip_entries(
                 if is_image_ext(ext) || is_metadata_ext(ext) {
                     files.push(FileEntry::new_archive_entry(
                         name.clone(),
-                        format!("{}|{}", archive_path, name),
+                        format_archive_entry_path(archive_path, name),
                         ext.to_uppercase(),
                         "".to_string(),
                         0,

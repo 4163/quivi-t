@@ -1358,9 +1358,6 @@ fn resolve_ico_path_for_ext(ext: &str) -> Option<PathBuf> {
 }
 
 fn load_hicon_from_ico_file(path: &Path, size: i32) -> Option<HICON> {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
-
     if !path.exists() {
         return None;
     }
@@ -1373,10 +1370,7 @@ fn load_hicon_from_ico_file(path: &Path, size: i32) -> Option<HICON> {
         return None;
     }
 
-    let wide: Vec<u16> = OsStr::new(path.as_os_str())
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
+    let wide = crate::platform::encode_wide_null(path);
 
     let handle_res = unsafe {
         LoadImageW(
@@ -1412,18 +1406,12 @@ fn load_shell_large_icon(ext: &str) -> Option<HICON> {
     }
 
     // 2. Fallback to Shell Image List (SHIL_JUMBO 256x256, SHIL_EXTRALARGE 48x48)
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
-
     let name = if ext.is_empty() {
         "dummy".to_string()
     } else {
         format!("dummy.{}", ext.trim_start_matches('.'))
     };
-    let wide: Vec<u16> = OsStr::new(&name)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
+    let wide = crate::platform::encode_wide_null(&name);
 
     let mut shfi = SHFILEINFOW::default();
     let res = unsafe {
@@ -1452,14 +1440,8 @@ fn load_shell_large_icon(ext: &str) -> Option<HICON> {
 }
 
 fn load_shell_icon(is_folder: bool, ext: &str) -> Option<HICON> {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
-
     let (query_name, attrs) = if is_folder {
-        let wide: Vec<u16> = OsStr::new("dummy")
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
+        let wide = crate::platform::encode_wide_null("dummy");
         (wide, FILE_ATTRIBUTE_DIRECTORY)
     } else {
         let name = if ext.is_empty() {
@@ -1467,10 +1449,7 @@ fn load_shell_icon(is_folder: bool, ext: &str) -> Option<HICON> {
         } else {
             format!("dummy.{}", ext.trim_start_matches('.'))
         };
-        let wide: Vec<u16> = OsStr::new(&name)
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
+        let wide = crate::platform::encode_wide_null(&name);
         (wide, FILE_ATTRIBUTE_NORMAL)
     };
 

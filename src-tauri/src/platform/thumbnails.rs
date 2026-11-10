@@ -1,19 +1,19 @@
 #[cfg(windows)]
 use image::RgbaImage;
 #[cfg(windows)]
-use std::ffi::OsStr;
-#[cfg(windows)]
 use std::io::Cursor;
-#[cfg(windows)]
-use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
 use windows::Win32::Foundation::SIZE;
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
-    BitBlt, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, GetObjectW,
-    ReleaseDC, SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HDC,
-    HGDIOBJ, SRCCOPY,
+    BitBlt, CreateCompatibleDC, CreateDIBSection, GetDC, GetObjectW, SelectObject, BITMAP,
+    BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, SRCCOPY,
 };
+
+#[cfg(windows)]
+use crate::platform::encode_wide_null;
+#[cfg(windows)]
+use crate::platform::gdi::{bgra_to_rgba_in_place, ScopedHgdiobj, ScopedMemDc, ScopedScreenDc};
 #[cfg(windows)]
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
 #[cfg(windows)]
@@ -21,49 +21,7 @@ use windows::Win32::UI::Shell::{
     IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK, SIIGBF_THUMBNAILONLY,
 };
 
-#[cfg(windows)]
-const SHELL_THUMB_EXTS: &[&str] = &["jpg", "jpeg", "png", "bmp", "dib", "gif", "ico", "mp4"];
 
-// RAII guards matching the pattern in icons.rs (file-private there).
-
-#[cfg(windows)]
-struct ScopedHgdiobj(HGDIOBJ);
-#[cfg(windows)]
-impl Drop for ScopedHgdiobj {
-    fn drop(&mut self) {
-        if !self.0.is_invalid() {
-            unsafe {
-                let _ = DeleteObject(self.0);
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-struct ScopedMemDc(HDC);
-#[cfg(windows)]
-impl Drop for ScopedMemDc {
-    fn drop(&mut self) {
-        if !self.0.is_invalid() {
-            unsafe {
-                let _ = DeleteDC(self.0);
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-struct ScopedScreenDc(HDC);
-#[cfg(windows)]
-impl Drop for ScopedScreenDc {
-    fn drop(&mut self) {
-        if !self.0.is_invalid() {
-            unsafe {
-                let _ = ReleaseDC(None, self.0);
-            }
-        }
-    }
-}
 
 #[cfg(windows)]
 struct ComGuard(bool);
@@ -93,7 +51,7 @@ pub fn get_shell_thumbnail_png(path: &str, size: u32) -> Result<Option<Vec<u8>>,
             .map(|e| e.to_ascii_lowercase());
 
         match ext {
-            Some(ref e) if SHELL_THUMB_EXTS.contains(&e.as_str()) => {}
+            Some(ref e) if crate::formats::is_shell_thumb_supported(e) => {}
             _ => return Ok(None),
         }
 
@@ -120,10 +78,7 @@ pub fn get_shell_thumbnail_png(path: &str, size: u32) -> Result<Option<Vec<u8>>,
         }
         let _com = ComGuard(hr.0 == 0); // S_OK = 0
 
-        let wide_path: Vec<u16> = OsStr::new(path)
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
+        let wide_path = encode_wide_null(path);
 
         let factory: IShellItemImageFactory = match unsafe {
             SHCreateItemFromParsingName(windows::core::PCWSTR(wide_path.as_ptr()), None)
@@ -227,11 +182,7 @@ pub fn get_shell_thumbnail_png(path: &str, size: u32) -> Result<Option<Vec<u8>>,
         }
 
         // BGRA → RGBA
-        for chunk in pixels.chunks_exact_mut(4) {
-            let b = chunk[0];
-            chunk[0] = chunk[2];
-            chunk[2] = b;
-        }
+        bgra_to_rgba_in_place(&mut pixels);
 
         // Detect black matte: the Shell sometimes composites transparent
         // sources onto a black background, producing a fully opaque thumbnail

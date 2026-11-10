@@ -379,10 +379,7 @@ fn get_winrar_address_bar(hwnd: isize) -> Option<String> {
                     .to_string();
                 let clean = text.split(" - ").next().unwrap_or(&text).trim();
                 let lower = clean.to_lowercase();
-                for ext in &[
-                    ".zip\\", ".cbz\\", ".rar\\", ".cbr\\", ".7z\\", ".cb7\\", ".tar\\", ".cbt\\",
-                    ".zip/", ".cbz/", ".rar/", ".cbr/", ".7z/", ".cb7/", ".tar/", ".cbt/",
-                ] {
+                for ext in crate::formats::ARCHIVE_SLASH_EXTS {
                     if let Some(pos) = lower.find(ext) {
                         let sub = clean[pos + ext.len()..].trim_matches(&['\\', '/'][..]);
                         if !sub.is_empty() {
@@ -392,9 +389,7 @@ fn get_winrar_address_bar(hwnd: isize) -> Option<String> {
                         }
                     }
                 }
-                for ext in &[
-                    ".zip", ".cbz", ".rar", ".cbr", ".7z", ".cb7", ".tar", ".cbt",
-                ] {
+                for ext in crate::formats::ARCHIVE_DOT_EXTS {
                     if lower.ends_with(ext) {
                         return Some(String::new());
                     }
@@ -830,11 +825,7 @@ fn collect_candidates(engine: &TempEngine) -> Vec<CandidateArchive> {
                             .unwrap_or(title)
                             .trim();
                         let lower = clean.to_lowercase();
-                        for ext in &[
-                            ".zip\\", ".cbz\\", ".rar\\", ".cbr\\", ".7z\\", ".cb7\\", ".tar\\",
-                            ".cbt\\", ".zip/", ".cbz/", ".rar/", ".cbr/", ".7z/", ".cb7/", ".tar/",
-                            ".cbt/",
-                        ] {
+                        for ext in crate::formats::ARCHIVE_SLASH_EXTS {
                             if let Some(pos) = lower.find(ext) {
                                 let arc_p = PathBuf::from(&clean[..pos + ext.len() - 1]);
                                 if arc_p.is_file() {
@@ -845,9 +836,7 @@ fn collect_candidates(engine: &TempEngine) -> Vec<CandidateArchive> {
                                 }
                             }
                         }
-                        for ext in &[
-                            ".zip", ".cbz", ".rar", ".cbr", ".7z", ".cb7", ".tar", ".cbt",
-                        ] {
+                        for ext in crate::formats::ARCHIVE_DOT_EXTS {
                             if lower.ends_with(ext) {
                                 let arc_p = PathBuf::from(clean);
                                 if arc_p.is_file() {
@@ -1011,13 +1000,9 @@ fn is_supported_archive(path: &Path) -> bool {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
+        .unwrap_or("");
 
-    matches!(
-        ext.as_str(),
-        "zip" | "cbz" | "rar" | "cbr" | "7z" | "cb7" | "tar" | "cbt"
-    )
+    crate::formats::is_archive_ext(ext)
 }
 
 fn scan_folder_archives(dir: &Path, candidates: &mut Vec<CandidateArchive>) {
@@ -1109,10 +1094,7 @@ fn parse_winrar_window_title(title: &str) -> Option<String> {
     let clean = title.split(" - ").next()?.split(" (").next()?.trim();
     let lower = clean.to_lowercase();
 
-    for ext in &[
-        ".zip\\", ".cbz\\", ".rar\\", ".cbr\\", ".7z\\", ".cb7\\", ".tar\\", ".cbt\\", ".zip/",
-        ".cbz/", ".rar/", ".cbr/", ".7z/", ".cb7/", ".tar/", ".cbt/",
-    ] {
+    for ext in crate::formats::ARCHIVE_SLASH_EXTS {
         if let Some(pos) = lower.find(ext) {
             let sub_start = pos + ext.len();
             let sub = clean[sub_start..].trim_matches(&['\\', '/'][..]);
@@ -1124,9 +1106,7 @@ fn parse_winrar_window_title(title: &str) -> Option<String> {
         }
     }
 
-    for ext in &[
-        ".zip", ".cbz", ".rar", ".cbr", ".7z", ".cb7", ".tar", ".cbt",
-    ] {
+    for ext in crate::formats::ARCHIVE_DOT_EXTS {
         if lower.ends_with(ext) {
             return Some(String::new());
         }
@@ -1152,10 +1132,7 @@ fn parse_7z_folder_history(bytes: &[u8], candidates: &mut Vec<CandidateArchive>)
             continue;
         }
 
-        for ext in &[
-            ".zip\\", ".cbz\\", ".rar\\", ".cbr\\", ".7z\\", ".cb7\\", ".tar\\", ".cbt\\", ".zip/",
-            ".cbz/", ".rar/", ".cbr/", ".7z/", ".cb7/", ".tar/", ".cbt/",
-        ] {
+        for ext in crate::formats::ARCHIVE_SLASH_EXTS {
             let lower = trimmed.to_lowercase();
             if let Some(pos) = lower.find(ext) {
                 let arc_end = pos + ext.len() - 1;
@@ -1167,9 +1144,7 @@ fn parse_7z_folder_history(bytes: &[u8], candidates: &mut Vec<CandidateArchive>)
                 break;
             }
         }
-        for ext in &[
-            ".zip", ".cbz", ".rar", ".cbr", ".7z", ".cb7", ".tar", ".cbt",
-        ] {
+        for ext in crate::formats::ARCHIVE_DOT_EXTS {
             let lower = trimmed.to_lowercase();
             if lower.ends_with(ext) {
                 let p = PathBuf::from(trimmed);
@@ -1186,10 +1161,7 @@ fn parse_7z_window_title(title: &str) -> Option<(String, Option<String>)> {
     let trimmed = title.split(" - ").next()?.trim();
     let lower = trimmed.to_lowercase();
 
-    for ext in &[
-        ".zip\\", ".cbz\\", ".rar\\", ".cbr\\", ".7z\\", ".cb7\\", ".tar\\", ".cbt\\", ".zip/",
-        ".cbz/", ".rar/", ".cbr/", ".7z/", ".cb7/", ".tar/", ".cbt/",
-    ] {
+    for ext in crate::formats::ARCHIVE_SLASH_EXTS {
         if let Some(pos) = lower.find(ext) {
             let arc_end = pos + ext.len() - 1;
             let arc_str = &trimmed[..arc_end];
@@ -1203,9 +1175,7 @@ fn parse_7z_window_title(title: &str) -> Option<(String, Option<String>)> {
         }
     }
 
-    for ext in &[
-        ".zip", ".cbz", ".rar", ".cbr", ".7z", ".cb7", ".tar", ".cbt",
-    ] {
+    for ext in crate::formats::ARCHIVE_DOT_EXTS {
         if lower.ends_with(ext) {
             return Some((trimmed.to_string(), Some(String::new())));
         }

@@ -21,6 +21,14 @@ pub(crate) use sevenz::list_7z_entries;
 pub(crate) use tar::list_tar_entries;
 pub(crate) use zip::list_zip_entries;
 
+pub fn split_archive_path(path: &str) -> (&str, &str) {
+    path.split_once('|').unwrap_or((path, ""))
+}
+
+pub fn format_archive_entry_path(archive_path: &str, entry_name: &str) -> String {
+    format!("{}|{}", archive_path, entry_name)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ArchiveKind {
     Zip,
