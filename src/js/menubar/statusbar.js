@@ -229,9 +229,8 @@ export const Statusbar = {
     }
 
     if (statusScaling) {
-      const isAnimated = !!state.isAnimated;
       const rawScaling = state.scalingMode ?? state.config?.frontend_data?.scaling_mode ?? 'bilinear';
-      const effective = getEffectiveScaling(rawScaling, isAnimated, false);
+      const effective = getEffectiveScaling(rawScaling, false);
       const label = SCALING_LABELS[effective] || SCALING_LABELS[rawScaling] || 'Bilinear';
       const text = `Scale: ${label}`;
       if (statusScaling.textContent !== text) {

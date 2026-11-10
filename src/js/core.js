@@ -427,7 +427,7 @@ export const Core = {
   },
 
   isDownloading(path) {
-    return _placeholderCheck ? _placeholderCheck(path) : false;
+    return this.isPlaceholder(path);
   },
 
   isPlaceholder(path) {

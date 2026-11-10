@@ -1,4 +1,10 @@
-import { mergeConfig, DEFAULT_KEYBINDS } from '../keybinds.js';
+import {
+  mergeConfig,
+  DEFAULT_KEYBINDS,
+  DEFAULT_KEYBOARD_PAN_STEP,
+  DEFAULT_WHEEL_PAN_STEP,
+  DEFAULT_HIDE_CURSOR_DELAY_SEC,
+} from '../keybinds.js';
 import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { makeListNavigable, handleTabJump } from '../keyboardNav.js';
 import { initKeybindUi } from './keybindUi.js';
@@ -174,9 +180,9 @@ async function init() {
     document.getElementById('opt-single-instance').checked = initialSingleInstance;
     document.getElementById('opt-show-hidden').checked = config.frontend_data.show_hidden === true;
     document.getElementById('opt-hide-chrome-fullscreen').checked = config.frontend_data.hide_chrome_on_fullscreen !== false;
-    document.getElementById('opt-hide-cursor-delay').value = typeof config.frontend_data.hide_cursor_delay_sec === 'number' ? config.frontend_data.hide_cursor_delay_sec : 2;
-    document.getElementById('opt-keyboard-pan-step').value = config.frontend_data.keyboard_pan_step || 72;
-    document.getElementById('opt-wheel-pan-step').value = config.frontend_data.wheel_pan_step || 120;
+    document.getElementById('opt-hide-cursor-delay').value = typeof config.frontend_data.hide_cursor_delay_sec === 'number' ? config.frontend_data.hide_cursor_delay_sec : DEFAULT_HIDE_CURSOR_DELAY_SEC;
+    document.getElementById('opt-keyboard-pan-step').value = config.frontend_data.keyboard_pan_step || DEFAULT_KEYBOARD_PAN_STEP;
+    document.getElementById('opt-wheel-pan-step').value = config.frontend_data.wheel_pan_step || DEFAULT_WHEEL_PAN_STEP;
     const startDirInput = document.getElementById('opt-start-dir');
     startDirInput.value = config.frontend_data.start_dir || '';
     startDirInput.placeholder = await invoke('get_default_dir');

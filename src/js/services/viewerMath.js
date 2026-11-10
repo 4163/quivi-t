@@ -738,7 +738,7 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
   };
 }
 
-export function getEffectiveScaling(scalingMode, isAnimated, isSvg = false) {
+export function getEffectiveScaling(scalingMode, isSvg = false) {
   if (isSvg && scalingMode === 'lanczos') return 'bilinear';
   return scalingMode;
 }

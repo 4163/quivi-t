@@ -186,9 +186,9 @@ describe('viewerMath', () => {
 
   describe('coordinate and scaling helpers', () => {
     it('resolves effective scaling mode correctly', () => {
-      assert.equal(getEffectiveScaling('lanczos', false, true), 'bilinear');
-      assert.equal(getEffectiveScaling('lanczos', false, false), 'lanczos');
-      assert.equal(getEffectiveScaling('none', false, false), 'none');
+      assert.equal(getEffectiveScaling('lanczos', true), 'bilinear');
+      assert.equal(getEffectiveScaling('lanczos', false), 'lanczos');
+      assert.equal(getEffectiveScaling('none', false), 'none');
     });
 
     it('inverts viewport coordinates to natural image space', () => {

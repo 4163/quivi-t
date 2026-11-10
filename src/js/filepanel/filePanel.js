@@ -1758,12 +1758,6 @@ export function highlightLibraryByPath(path) {
   }
 }
 
-export function getHighlightedLibrary() {
-  if (!highlightedLibraryPath || !libraryPanelEl) return null;
-  const el = libraryPanelEl.querySelector(`.library-provider-list li[data-path="${CSS.escape(highlightedLibraryPath)}"]`);
-  return el ? { path: highlightedLibraryPath } : null;
-}
-
 export function navigateHighlightedLibrary(delta) {
   if (!libraryPanelEl) return;
   const items = Array.from(libraryPanelEl.querySelectorAll('.library-provider-list:not(.collapsed) li'));

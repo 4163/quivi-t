@@ -24,11 +24,11 @@ import {
   matchSidecarRecord,
   buildStubCoverRecord,
   sanitizeSvgText,
-  expandSvgEntities,
   downloadSanitizedSvg,
   downloadFile,
   extractorNeedsHtml
 } from '../src/js/urlLoader.js';
+import { expandSvgEntities } from '../src/js/shared/svgUtils.js';
 import * as ImgurExtractor from '../extractors/imgur.js';
 import * as MangaDexExtractor from '../extractors/mangadex.js';
 import fs from 'node:fs';

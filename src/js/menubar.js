@@ -845,11 +845,10 @@ export function syncViewMenu(state) {
     item?.classList.toggle('checked', checked);
     item?.setAttribute('aria-checked', String(checked));
   }
-  const isAnimated = !!state.isAnimated;
   // The renderer silently falls back to Bilinear for SVGs.
   // Ignore SVG status here so the user's preferred scaling mode remains visually checked (intended UX).
   const currentFilter = activeFilterId(state.config?.frontend_data || {});
-  const displayScaling = getEffectiveScaling(state.scalingMode, isAnimated, false);
+  const displayScaling = getEffectiveScaling(state.scalingMode, false);
 
   const activeFit = state.fitMode;
   for (const [mode, id] of Object.entries(FIT_MODE_MAP)) {

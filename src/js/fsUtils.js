@@ -27,7 +27,6 @@ function _ext(name) {
 }
 
 import { BoundedMap } from './services/cache.js';
-export { BoundedMap };
 
 let _navigationGeneration = 0;
 let _archivePrefetchTimer = null;

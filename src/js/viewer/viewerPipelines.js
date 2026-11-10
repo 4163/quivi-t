@@ -277,22 +277,30 @@ export function createViewerPipelines(viewportState) {
     return active;
   }
 
+  function _clearLanczosCropProps() {
+    if (!lanczosCanvas) return;
+    lanczosCanvas.style.removeProperty('--crop-left');
+    lanczosCanvas.style.removeProperty('--crop-top');
+    lanczosCanvas.style.removeProperty('--crop-w');
+    lanczosCanvas.style.removeProperty('--crop-h');
+  }
+
+  function _resetLanczosCanvas() {
+    if (!lanczosCanvas) return;
+    lanczosCanvas.removeAttribute('data-render-ready');
+    const ctx = lanczosCanvas.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, lanczosCanvas.width, lanczosCanvas.height);
+    lanczosCanvas.width = 0;
+    lanczosCanvas.height = 0;
+    _clearLanczosCropProps();
+  }
+
   function _cancelRender() {
     _renderGeneration++;
     if (pipeline) pipeline.cancel();
     if (_renderTimeout) clearTimeout(_renderTimeout);
     _renderTimeout = null;
-    if (lanczosCanvas) {
-      lanczosCanvas.removeAttribute('data-render-ready');
-      const ctx = lanczosCanvas.getContext('2d');
-      if (ctx) ctx.clearRect(0, 0, lanczosCanvas.width, lanczosCanvas.height);
-      lanczosCanvas.width = 0;
-      lanczosCanvas.height = 0;
-      lanczosCanvas.style.removeProperty('--crop-left');
-      lanczosCanvas.style.removeProperty('--crop-top');
-      lanczosCanvas.style.removeProperty('--crop-w');
-      lanczosCanvas.style.removeProperty('--crop-h');
-    }
+    _resetLanczosCanvas();
   }
 
   function _teardownWebglCanvas() {
@@ -324,7 +332,7 @@ export function createViewerPipelines(viewportState) {
     const isAnimated = incomingIsAnimated !== undefined ? incomingIsAnimated : !!live?.isAnimated;
     const isSvg = _isActiveSvg(live);
     const isMoving = isAnimated || isVideo;
-    const scaling = getEffectiveScaling(live?.scalingMode, isMoving, isSvg);
+    const scaling = getEffectiveScaling(live?.scalingMode, isSvg);
 
     const activeFilter = incomingFilter !== undefined ? incomingFilter : _resolveActiveFilter(live);
     
@@ -340,16 +348,8 @@ export function createViewerPipelines(viewportState) {
       }
     }
 
-    if (!usesLanczos && lanczosCanvas) {
-      lanczosCanvas.removeAttribute('data-render-ready');
-      const ctx = lanczosCanvas.getContext('2d');
-      if (ctx) ctx.clearRect(0, 0, lanczosCanvas.width, lanczosCanvas.height);
-      lanczosCanvas.width = 0;
-      lanczosCanvas.height = 0;
-      lanczosCanvas.style.removeProperty('--crop-left');
-      lanczosCanvas.style.removeProperty('--crop-top');
-      lanczosCanvas.style.removeProperty('--crop-w');
-      lanczosCanvas.style.removeProperty('--crop-h');
+    if (!usesLanczos) {
+      _resetLanczosCanvas();
     }
 
     let needsNewPipeline = !pipeline;
@@ -520,7 +520,7 @@ export function createViewerPipelines(viewportState) {
     const isVideo = isVideoSource(_activeSource);
     const liveAnimated = !!live?.isAnimated || isVideo;
     const isSvg = _isActiveSvg(live);
-    const scaling = getEffectiveScaling(live?.scalingMode, liveAnimated, isSvg);
+    const scaling = getEffectiveScaling(live?.scalingMode, isSvg);
     
     let activeFilter = _resolveActiveFilter(live);
     const useWebGlForLanczos = scaling === 'lanczos' && liveAnimated && !isSvg && activeFilter === null;
@@ -572,10 +572,7 @@ export function createViewerPipelines(viewportState) {
               lanczosCanvas.style.setProperty('--crop-w', res.cssWidth + 'px');
               lanczosCanvas.style.setProperty('--crop-h', res.cssHeight + 'px');
             } else {
-              lanczosCanvas.style.removeProperty('--crop-left');
-              lanczosCanvas.style.removeProperty('--crop-top');
-              lanczosCanvas.style.removeProperty('--crop-w');
-              lanczosCanvas.style.removeProperty('--crop-h');
+              _clearLanczosCropProps();
             }
             lanczosCanvas.setAttribute('data-render-ready', 'true');
             _finishManhwaExitWarmup();
@@ -656,7 +653,7 @@ export function createViewerPipelines(viewportState) {
     const isAnimated = !!live?.isAnimated;
     const isSvg = _isActiveSvg(live);
     const isMoving = isAnimated || isVideo;
-    const scaling = getEffectiveScaling(live?.scalingMode, isMoving, isSvg);
+    const scaling = getEffectiveScaling(live?.scalingMode, isSvg);
     const activeFilter = _resolveActiveFilter(live);
     const useLivePump = (isMoving || isSvg) && (activeFilter !== null || scaling === 'lanczos');
 
@@ -1131,7 +1128,7 @@ export function createViewerPipelines(viewportState) {
     const isVideo = isVideoSource(_activeSource);
     const newIsAnimated = !!state.isAnimated;
     const newIsSvg = _isActiveSvg(state);
-    const newScaling = getEffectiveScaling(state.scalingMode, newIsAnimated || isVideo, newIsSvg);
+    const newScaling = getEffectiveScaling(state.scalingMode, newIsSvg);
     const newVariant = newFilter === 'anime4k' ? state?.config?.frontend_data?.filter_options?.anime4k?.variant : null;
     
     if (newFilter !== _lastActiveFilter || newIsAnimated !== _lastIsAnimated || newScaling !== _lastScalingMode || newVariant !== _lastAnime4kVariant) {

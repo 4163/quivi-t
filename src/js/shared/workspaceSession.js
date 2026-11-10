@@ -145,9 +145,6 @@ async function execute(message) {
   if (group === 'fs' && ownLabel === 'main' && fsMethods.has(method)) return FsUtils[method](...args);
   if (group === 'config' && ownLabel === 'main' && method === 'persist') {
     await Core.patchFrontendConfig(message.patch, args[0]);
-    if ('favorites' in message.patch || 'favorites_collapsed' in message.patch) {
-      window.dispatchEvent(new CustomEvent('quivit-favorites-changed'));
-    }
     return Core.flushConfig();
   }
   if (Object.hasOwn(handlers, group) && Object.hasOwn(handlers[group], method)) return handlers[group][method](...args);

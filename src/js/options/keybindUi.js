@@ -1,6 +1,5 @@
 import { formatKeysCombo, normalizeCombo, normalizeList } from '../services/keyCombo.js';
 import {
-  CATEGORIES,
   SINGLE_INPUT_ACTIONS,
   validateKeybindSafety,
   getConflictColors,

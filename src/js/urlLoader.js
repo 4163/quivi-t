@@ -264,7 +264,6 @@ export function sanitizeSvgText(text) {
   return purify.sanitize(expandSvgEntities(text), { USE_PROFILES: { svg: true } });
 }
 
-export { expandSvgEntities } from './shared/svgUtils.js';
 import { expandSvgEntities } from './shared/svgUtils.js';
 
 export async function downloadSanitizedSvg(url, destPath, headers) {

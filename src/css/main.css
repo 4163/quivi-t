@@ -749,15 +749,6 @@ li:hover>.favorite-remove,
   transition: color 0.15s ease, opacity 0.15s ease;
 }
 
-.lib-remove .lib-remove-box {
-  display: block;
-  width: 10px;
-  height: 10px;
-  box-sizing: border-box;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-}
-
 .lib-remove svg {
   width: var(--fs-12);
   height: var(--fs-12);

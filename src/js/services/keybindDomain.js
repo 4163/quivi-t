@@ -1,9 +1,5 @@
 import { normalizeCombo, normalizeList } from './keyCombo.js';
 
-import { CATEGORIES as REGISTRY_CATEGORIES } from './actions.js';
-
-export const CATEGORIES = REGISTRY_CATEGORIES;
-
 export const SINGLE_INPUT_ACTIONS = new Set(['cmd-pan-drag', 'cmd-exit-fullscreen-hold']);
 export const LOCKED_BINDINGS = {
   'cmd-exit-fullscreen-hold': new Set(['Escape']),
