@@ -1,7 +1,10 @@
 use super::*;
 use crate::formats::*;
 
+use std::ffi::OsStr;
 use std::fs;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
 
 fn test_file(name: &str) -> std::path::PathBuf {
     // Tests run with CWD = src-tauri; test files live under the repo root.
@@ -337,4 +340,379 @@ fn invalid_archive_tar_invalid_checksum_and_truncated() {
     assert!(res.err().unwrap().contains("invalid header checksum"));
 
     let _ = fs::remove_dir_all(&scratch_dir);
+}
+
+// ============================================================================
+// Slice 1.2 Contract Baseline Helpers and Tests
+// ============================================================================
+
+// --- #1.2.1 Archive pipe path contracts ---
+
+fn split_archive_path(path: &str) -> (&str, &str) {
+    path.split_once('|').unwrap_or((path, ""))
+}
+
+fn format_archive_entry_path(archive_path: &str, entry_name: &str) -> String {
+    format!("{}|{}", archive_path, entry_name)
+}
+
+#[test]
+fn archive_pipe_path_split_basic() {
+    assert_eq!(
+        split_archive_path("archive.cbz|entry.jpg"),
+        ("archive.cbz", "entry.jpg")
+    );
+    assert_eq!(
+        split_archive_path(r"C:\manga\archive.cbz|entry.jpg"),
+        (r"C:\manga\archive.cbz", "entry.jpg")
+    );
+}
+
+#[test]
+fn archive_pipe_path_split_nested() {
+    assert_eq!(
+        split_archive_path("archive.zip|sub/dir/page.png"),
+        ("archive.zip", "sub/dir/page.png")
+    );
+    assert_eq!(
+        split_archive_path(r"D:\comics\vol1.zip|chapter1/pages/001.jpg"),
+        (r"D:\comics\vol1.zip", "chapter1/pages/001.jpg")
+    );
+    // Multiple pipe delimiters split at the first pipe
+    assert_eq!(
+        split_archive_path("archive.zip|nested|entry.png"),
+        ("archive.zip", "nested|entry.png")
+    );
+}
+
+#[test]
+fn archive_pipe_path_split_no_pipe() {
+    assert_eq!(split_archive_path("photo.jpg"), ("photo.jpg", ""));
+    assert_eq!(
+        split_archive_path(r"C:\photos\vacation\photo.jpg"),
+        (r"C:\photos\vacation\photo.jpg", "")
+    );
+    assert_eq!(split_archive_path(""), ("", ""));
+}
+
+#[test]
+fn archive_pipe_path_format() {
+    assert_eq!(
+        format_archive_entry_path("archive.cbz", "entry.jpg"),
+        "archive.cbz|entry.jpg"
+    );
+    assert_eq!(
+        format_archive_entry_path(r"C:\manga\vol1.zip", "sub/dir/page.png"),
+        r"C:\manga\vol1.zip|sub/dir/page.png"
+    );
+    // Split and format roundtrip
+    let formatted = format_archive_entry_path("test.zip", "page_1.png");
+    let (archive, entry) = split_archive_path(&formatted);
+    assert_eq!(archive, "test.zip");
+    assert_eq!(entry, "page_1.png");
+}
+
+// --- #1.2.2 Path canonicalization contracts ---
+
+fn strip_verbatim_prefix(path: &str) -> String {
+    let value = path.replace('/', "\\");
+    if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = value.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        value
+    }
+}
+
+fn normalize_windows_slashes(path: &str) -> String {
+    path.replace('/', "\\")
+}
+
+fn normalize_archive_entry_slashes(entry: &str) -> String {
+    entry.replace('\\', "/")
+}
+
+fn trim_trailing_slashes(path: &str) -> &str {
+    path.trim_end_matches(|c| c == '/' || c == '\\')
+}
+
+#[test]
+fn path_canonicalization_verbatim_prefix_stripping() {
+    // Verbatim DOS path
+    assert_eq!(
+        strip_verbatim_prefix(r"\\?\C:\manga\vol.zip"),
+        r"C:\manga\vol.zip"
+    );
+    // Verbatim UNC path
+    assert_eq!(
+        strip_verbatim_prefix(r"\\?\UNC\server\share"),
+        r"\\server\share"
+    );
+    assert_eq!(
+        strip_verbatim_prefix(r"\\?\UNC\server\share\manga\vol.zip"),
+        r"\\server\share\manga\vol.zip"
+    );
+    // Forward slashes in verbatim path
+    assert_eq!(
+        strip_verbatim_prefix("//?/C:/manga/vol.zip"),
+        r"C:\manga\vol.zip"
+    );
+    // Non-verbatim paths remain unchanged
+    assert_eq!(
+        strip_verbatim_prefix(r"C:\manga\vol.zip"),
+        r"C:\manga\vol.zip"
+    );
+    assert_eq!(
+        strip_verbatim_prefix(r"\\server\share"),
+        r"\\server\share"
+    );
+
+    // Existing config::display_path contract parity
+    assert_eq!(
+        crate::config::display_path(std::path::Path::new(r"\\?\C:\manga\vol.zip")),
+        r"C:\manga\vol.zip"
+    );
+    #[cfg(windows)]
+    assert_eq!(
+        crate::config::display_path(std::path::Path::new(r"\\?\UNC\server\share")),
+        r"\\server\share"
+    );
+}
+
+#[test]
+fn path_canonicalization_slash_normalization() {
+    // Windows paths use backslashes
+    assert_eq!(
+        normalize_windows_slashes("C:/manga/chapter1/01.jpg"),
+        r"C:\manga\chapter1\01.jpg"
+    );
+    assert_eq!(
+        normalize_windows_slashes(r"C:\manga\vol1\01.jpg"),
+        r"C:\manga\vol1\01.jpg"
+    );
+
+    // Archive entry paths use forward slashes
+    assert_eq!(
+        normalize_archive_entry_slashes(r"sub\dir\page.png"),
+        "sub/dir/page.png"
+    );
+    assert_eq!(
+        normalize_archive_entry_slashes(r"chapter1\images\001.jpg"),
+        "chapter1/images/001.jpg"
+    );
+    assert_eq!(
+        normalize_archive_entry_slashes("sub/dir/page.png"),
+        "sub/dir/page.png"
+    );
+    // Mixed slashes
+    assert_eq!(
+        normalize_archive_entry_slashes(r"sub/dir\nested/page.png"),
+        "sub/dir/nested/page.png"
+    );
+}
+
+#[test]
+fn path_canonicalization_trailing_slash_trimming() {
+    assert_eq!(trim_trailing_slashes(r"C:\manga\vol1\"), r"C:\manga\vol1");
+    assert_eq!(trim_trailing_slashes("archive/nested/dir/"), "archive/nested/dir");
+    assert_eq!(trim_trailing_slashes("archive/nested/dir///"), "archive/nested/dir");
+    assert_eq!(trim_trailing_slashes(r"C:\manga\vol1\\\"), r"C:\manga\vol1");
+    assert_eq!(trim_trailing_slashes(r"C:\manga\vol1"), r"C:\manga\vol1");
+    assert_eq!(trim_trailing_slashes(""), "");
+}
+
+// --- #1.2.3 Win32 wide string conversion contracts ---
+
+fn encode_wide_null(s: impl AsRef<OsStr>) -> Vec<u16> {
+    #[cfg(windows)]
+    {
+        s.as_ref()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+    #[cfg(not(windows))]
+    {
+        s.as_ref()
+            .to_str()
+            .map(|text| text.encode_utf16().chain(std::iter::once(0)).collect())
+            .unwrap_or_else(|| vec![0])
+    }
+}
+
+#[test]
+fn win32_wide_string_null_terminated_encoding() {
+    let input = "warmup.txt";
+    let wide = encode_wide_null(input);
+
+    // Must be null-terminated
+    assert_eq!(wide.last(), Some(&0));
+    assert_eq!(wide.len(), input.len() + 1);
+
+    // No intermediate null characters
+    assert!(!wide[..wide.len() - 1].contains(&0));
+
+    // Decodes back to original ASCII string
+    let decoded = String::from_utf16(&wide[..wide.len() - 1]).expect("valid utf16");
+    assert_eq!(decoded, input);
+
+    // Parity with OsStr::new(s).encode_wide().chain(once(0))
+    #[cfg(windows)]
+    {
+        let expected: Vec<u16> = OsStr::new(input)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        assert_eq!(wide, expected);
+    }
+}
+
+#[test]
+fn win32_wide_string_unicode_cjk() {
+    let test_cases = ["BDレーベル.bmp", "テスト", "测试", "테스트"];
+
+    for input in test_cases {
+        let wide = encode_wide_null(input);
+
+        // Must end with null terminator
+        assert_eq!(wide.last(), Some(&0), "Missing null terminator for {}", input);
+
+        // Must not have embedded nulls
+        assert!(
+            !wide[..wide.len() - 1].contains(&0),
+            "Premature null in wide string for {}",
+            input
+        );
+
+        // Roundtrip decoding matches original text
+        let decoded = String::from_utf16(&wide[..wide.len() - 1]).expect("valid utf16");
+        assert_eq!(decoded, input, "Roundtrip mismatch for {}", input);
+
+        // Parity with OsStr::new(s).encode_wide().chain(once(0))
+        #[cfg(windows)]
+        {
+            let expected: Vec<u16> = OsStr::new(input)
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+            assert_eq!(wide, expected);
+        }
+    }
+}
+
+#[test]
+fn win32_wide_string_empty() {
+    let wide = encode_wide_null("");
+    assert_eq!(wide, vec![0]);
+    assert_eq!(wide.len(), 1);
+    assert_eq!(wide.last(), Some(&0));
+}
+
+// --- #1.2.5 Pixel conversion contracts ---
+
+fn bgra_to_rgba_in_place(pixels: &mut [u8]) {
+    for chunk in pixels.chunks_exact_mut(4) {
+        chunk.swap(0, 2);
+    }
+}
+
+fn unpremultiply_rgba_in_place(pixels: &mut [u8]) {
+    for pixel in pixels.chunks_exact_mut(4) {
+        let alpha = u16::from(pixel[3]);
+        if alpha != 0 && alpha != 255 {
+            for channel in &mut pixel[..3] {
+                *channel = ((u16::from(*channel) * 255 + alpha / 2) / alpha).min(255) as u8;
+            }
+        }
+    }
+}
+
+#[test]
+fn pixel_conversion_bgra_to_rgba_in_place() {
+    // Single pixel: swapping bytes 0 (B) and 2 (R), preserving 1 (G) and 3 (A)
+    let mut px = vec![10u8, 20, 30, 40];
+    bgra_to_rgba_in_place(&mut px);
+    assert_eq!(px, vec![30, 20, 10, 40]);
+
+    // Multi-pixel buffer
+    let mut multi = vec![
+        1u8, 2, 3, 255,      // px 0: B=1, G=2, R=3, A=255
+        100, 150, 200, 128,  // px 1: B=100, G=150, R=200, A=128
+        0, 128, 255, 0,      // px 2: B=0, G=128, R=255, A=0
+    ];
+    bgra_to_rgba_in_place(&mut multi);
+    assert_eq!(
+        multi,
+        vec![
+            3, 2, 1, 255,
+            200, 150, 100, 128,
+            255, 128, 0, 0,
+        ]
+    );
+
+    // Involutive / self-inverse: swizzling twice returns original buffer
+    bgra_to_rgba_in_place(&mut multi);
+    assert_eq!(
+        multi,
+        vec![
+            1, 2, 3, 255,
+            100, 150, 200, 128,
+            0, 128, 255, 0,
+        ]
+    );
+
+    // Empty buffer is a safe no-op
+    let mut empty: Vec<u8> = vec![];
+    bgra_to_rgba_in_place(&mut empty);
+    assert!(empty.is_empty());
+}
+
+#[test]
+fn pixel_conversion_unpremultiply_rgba_in_place() {
+    // Transparent pixel (alpha == 0): color channels remain unchanged, no division by zero
+    let mut transparent = vec![0u8, 0, 0, 0];
+    unpremultiply_rgba_in_place(&mut transparent);
+    assert_eq!(transparent, vec![0, 0, 0, 0]);
+
+    // Fully opaque pixel (alpha == 255): channels are untouched
+    let mut opaque = vec![210u8, 140, 70, 255];
+    unpremultiply_rgba_in_place(&mut opaque);
+    assert_eq!(opaque, vec![210, 140, 70, 255]);
+
+    // Semi-transparent pixel (0 < alpha < 255):
+    // Original un-premultiplied: R=200, G=100, B=50, A=128
+    // Premultiplied bytes:
+    //   R = (200 * 128 + 127) / 255 = 100
+    //   G = (100 * 128 + 127) / 255 = 50
+    //   B = (50 * 128 + 127) / 255 = 25
+    let mut semi = vec![100u8, 50, 25, 128];
+    unpremultiply_rgba_in_place(&mut semi);
+    assert_eq!(semi[3], 128, "Alpha channel must be preserved");
+    // Integer rounding recovers the original channels within +/- 1 quantization unit
+    assert!((semi[0] as i32 - 200).abs() <= 1, "R channel recovered");
+    assert!((semi[1] as i32 - 100).abs() <= 1, "G channel recovered");
+    assert!((semi[2] as i32 - 50).abs() <= 1, "B channel recovered");
+
+    // Clamping: channels exceeding alpha do not overflow u8
+    let mut saturated = vec![255u8, 200, 150, 100];
+    unpremultiply_rgba_in_place(&mut saturated);
+    assert_eq!(saturated[0], 255, "Channel clamped to 255");
+    assert_eq!(saturated[3], 100, "Alpha preserved");
+
+    // Multi-pixel mixed alpha buffer
+    let mut mixed = vec![
+        0u8, 0, 0, 0,        // alpha 0
+        100, 50, 25, 128,    // semi-transparent
+        50, 100, 150, 255,   // fully opaque
+    ];
+    unpremultiply_rgba_in_place(&mut mixed);
+    assert_eq!(&mixed[0..4], &[0, 0, 0, 0]);
+    assert_eq!(mixed[7], 128);
+    assert_eq!(&mixed[8..12], &[50, 100, 150, 255]);
+
+    // Empty buffer is a safe no-op
+    let mut empty: Vec<u8> = vec![];
+    unpremultiply_rgba_in_place(&mut empty);
+    assert!(empty.is_empty());
 }

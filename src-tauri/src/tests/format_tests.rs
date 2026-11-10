@@ -1,46 +1,116 @@
+use std::collections::HashSet;
+
 use crate::formats::{
     check_animation_status, check_mp4_has_audio, is_archive_ext, is_image_ext, is_metadata_ext,
+    FormatCategory, FORMAT_ICONS, SUPPORTED_FORMATS,
 };
 
 #[test]
 fn test_is_image_ext() {
-    // Valid cases (case insensitive)
-    assert!(is_image_ext("jpg"));
-    assert!(is_image_ext("JPG"));
-    assert!(is_image_ext("JpEg"));
-    assert!(is_image_ext("png"));
-    assert!(is_image_ext("gif"));
-    assert!(is_image_ext("avif"));
-    assert!(is_image_ext("webp"));
-    assert!(is_image_ext("dib"));
-    assert!(is_image_ext("DIB"));
+    // All supported image extensions across viewer and shell thumbnails
+    let valid_exts = [
+        "jpg", "jpeg", "png", "gif", "webp", "avif", "dib", "bmp", "ico", "apng", "svg",
+    ];
 
-    // Invalid cases
+    for ext in valid_exts {
+        assert!(is_image_ext(ext), "Expected '{}' to be recognized as image", ext);
+        assert!(
+            is_image_ext(&ext.to_uppercase()),
+            "Expected uppercase '{}' to be recognized",
+            ext
+        );
+    }
+
+    // Mixed-case permutations
+    assert!(is_image_ext("JpEg"));
+    assert!(is_image_ext("PnG"));
+    assert!(is_image_ext("WebP"));
+    assert!(is_image_ext("AvIf"));
+    assert!(is_image_ext("DiB"));
+    assert!(is_image_ext("bMp"));
+    assert!(is_image_ext("IcO"));
+    assert!(is_image_ext("aPnG"));
+    assert!(is_image_ext("SvG"));
+
+    // Unsupported and non-image extensions
+    let invalid_exts = [
+        "exe", "txt", "zip", "xml", "pdf", "mp3", "doc", "bin", "dll", "json", "html", "rs",
+        "cbz", "rar", "cbr", "7z", "cb7", "tar", "cbt", "opf",
+    ];
+    for ext in invalid_exts {
+        assert!(!is_image_ext(ext), "Did not expect '{}' to be recognized as image", ext);
+    }
+
+    // Partial names and substrings
+    assert!(!is_image_ext("jpgx"));
+    assert!(!is_image_ext("xjpg"));
+    assert!(!is_image_ext("jpeg2000"));
+    assert!(!is_image_ext("png1"));
+    assert!(!is_image_ext(".jpg"));
+    assert!(!is_image_ext(".png"));
+
+    // Edge cases: empty, whitespace
     assert!(!is_image_ext(""));
-    assert!(!is_image_ext("zip"));
-    assert!(!is_image_ext("xml"));
-    assert!(!is_image_ext("exe"));
+    assert!(!is_image_ext(" "));
+    assert!(!is_image_ext("   "));
+    assert!(!is_image_ext("\t"));
+    assert!(!is_image_ext("\n"));
     assert!(!is_image_ext("jpg "));
+    assert!(!is_image_ext(" jpg"));
+    assert!(!is_image_ext(" png "));
+    assert!(!is_image_ext("\twebp\n"));
 }
 
 #[test]
 fn test_is_archive_ext() {
-    // Valid cases (case insensitive)
-    assert!(is_archive_ext("zip"));
-    assert!(is_archive_ext("ZIP"));
-    assert!(is_archive_ext("cbz"));
-    assert!(is_archive_ext("rar"));
-    assert!(is_archive_ext("cbr"));
-    assert!(is_archive_ext("7z"));
-    assert!(is_archive_ext("cb7"));
-    assert!(is_archive_ext("tar"));
-    assert!(is_archive_ext("cbt"));
+    // All 8 supported archive extensions
+    let valid_archives = ["zip", "cbz", "rar", "cbr", "7z", "cb7", "tar", "cbt"];
 
-    // Invalid cases
+    for ext in valid_archives {
+        assert!(is_archive_ext(ext), "Expected '{}' to be recognized as archive", ext);
+        assert!(
+            is_archive_ext(&ext.to_uppercase()),
+            "Expected uppercase '{}' to be recognized",
+            ext
+        );
+    }
+
+    // Mixed-case permutations
+    assert!(is_archive_ext("Zip"));
+    assert!(is_archive_ext("Cbz"));
+    assert!(is_archive_ext("Rar"));
+    assert!(is_archive_ext("Cbr"));
+    assert!(is_archive_ext("7Z"));
+    assert!(is_archive_ext("Cb7"));
+    assert!(is_archive_ext("Tar"));
+    assert!(is_archive_ext("Cbt"));
+
+    // Non-archive extensions
+    let invalid_exts = [
+        "jpg", "jpeg", "png", "gif", "webp", "avif", "bmp", "ico", "svg", "xml", "opf", "exe",
+        "txt", "pdf", "bin", "gz", "bz2", "xz", "zst", "iso", "cab", "apk",
+    ];
+    for ext in invalid_exts {
+        assert!(!is_archive_ext(ext), "Did not expect '{}' to be recognized as archive", ext);
+    }
+
+    // Partial and compound extensions
+    assert!(!is_archive_ext("7zip"));
+    assert!(!is_archive_ext("zipx"));
+    assert!(!is_archive_ext("tar.gz"));
+    assert!(!is_archive_ext(".zip"));
+    assert!(!is_archive_ext(".cbz"));
+    assert!(!is_archive_ext(".7z"));
+
+    // Edge cases: empty, whitespace
     assert!(!is_archive_ext(""));
-    assert!(!is_archive_ext("jpg"));
-    assert!(!is_archive_ext("xml"));
+    assert!(!is_archive_ext(" "));
+    assert!(!is_archive_ext("   "));
+    assert!(!is_archive_ext("\t"));
     assert!(!is_archive_ext("7Z "));
+    assert!(!is_archive_ext(" zip"));
+    assert!(!is_archive_ext(" cbz "));
+    assert!(!is_archive_ext("\ttar\n"));
 }
 
 #[test]
@@ -48,14 +118,197 @@ fn test_is_metadata_ext() {
     // Valid cases (case insensitive)
     assert!(is_metadata_ext("xml"));
     assert!(is_metadata_ext("XML"));
+    assert!(is_metadata_ext("Xml"));
+    assert!(is_metadata_ext("xMl"));
     assert!(is_metadata_ext("opf"));
+    assert!(is_metadata_ext("OPF"));
     assert!(is_metadata_ext("OpF"));
+    assert!(is_metadata_ext("oPf"));
 
-    // Invalid cases
+    // Invalid non-metadata extensions
+    let invalid_exts = [
+        "jpg", "png", "zip", "cbz", "rar", "7z", "json", "yaml", "yml", "toml", "txt", "html",
+        "nfo", "exe",
+    ];
+    for ext in invalid_exts {
+        assert!(!is_metadata_ext(ext), "Did not expect '{}' to be recognized as metadata", ext);
+    }
+
+    // Affixes and dotted forms
+    assert!(!is_metadata_ext(".xml"));
+    assert!(!is_metadata_ext(".opf"));
+    assert!(!is_metadata_ext("xml2"));
+    assert!(!is_metadata_ext("xxml"));
+    assert!(!is_metadata_ext("opfx"));
+
+    // Edge cases: empty, whitespace
     assert!(!is_metadata_ext(""));
-    assert!(!is_metadata_ext("jpg"));
-    assert!(!is_metadata_ext("zip"));
+    assert!(!is_metadata_ext(" "));
+    assert!(!is_metadata_ext("\t"));
     assert!(!is_metadata_ext("xml "));
+    assert!(!is_metadata_ext(" xml"));
+    assert!(!is_metadata_ext(" opf "));
+    assert!(!is_metadata_ext("\nopf\t"));
+}
+
+#[test]
+fn test_supported_formats_table_integrity() {
+    assert!(!SUPPORTED_FORMATS.is_empty(), "SUPPORTED_FORMATS must not be empty");
+
+    let mut seen_exts = HashSet::new();
+    for fmt in SUPPORTED_FORMATS {
+        assert!(!fmt.ext.is_empty(), "Format extension must not be empty");
+        assert_eq!(
+            fmt.ext,
+            fmt.ext.to_lowercase(),
+            "Format extension '{}' must be stored lowercase",
+            fmt.ext
+        );
+        assert_eq!(
+            fmt.ext,
+            fmt.ext.trim(),
+            "Format extension '{}' must not contain whitespace",
+            fmt.ext
+        );
+        assert!(!fmt.ext.starts_with('.'), "Format extension '{}' must not have leading dot", fmt.ext);
+        assert!(!fmt.name.is_empty(), "Format name for '{}' must not be empty", fmt.ext);
+        assert!(
+            fmt.icon.ends_with(".ico"),
+            "Format icon '{}' for '{}' must end with .ico",
+            fmt.icon,
+            fmt.ext
+        );
+
+        assert!(
+            seen_exts.insert(fmt.ext),
+            "Duplicate format extension '{}' in SUPPORTED_FORMATS",
+            fmt.ext
+        );
+
+        match fmt.category {
+            FormatCategory::Image => {
+                assert!(
+                    is_image_ext(fmt.ext),
+                    "Category::Image format '{}' must return true from is_image_ext",
+                    fmt.ext
+                );
+                assert!(
+                    !is_archive_ext(fmt.ext),
+                    "Category::Image format '{}' must return false from is_archive_ext",
+                    fmt.ext
+                );
+            }
+            FormatCategory::Archive => {
+                assert!(
+                    is_archive_ext(fmt.ext),
+                    "Category::Archive format '{}' must return true from is_archive_ext",
+                    fmt.ext
+                );
+                assert!(
+                    !is_image_ext(fmt.ext),
+                    "Category::Archive format '{}' must return false from is_image_ext",
+                    fmt.ext
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn test_format_icons_table_integrity() {
+    assert!(!FORMAT_ICONS.is_empty(), "FORMAT_ICONS table must not be empty");
+
+    let icon_map: std::collections::HashMap<&str, &[u8]> = FORMAT_ICONS.iter().cloned().collect();
+
+    // Every format in SUPPORTED_FORMATS must have an embedded icon
+    for fmt in SUPPORTED_FORMATS {
+        let icon_bytes = icon_map.get(fmt.icon).unwrap_or_else(|| {
+            panic!("Missing embedded icon '{}' for format '{}'", fmt.icon, fmt.ext)
+        });
+        assert!(
+            !icon_bytes.is_empty(),
+            "Embedded icon '{}' for '{}' must not be empty",
+            fmt.icon,
+            fmt.ext
+        );
+        // Valid ICO files start with 00 00 01 00
+        assert!(
+            icon_bytes.len() >= 4 && icon_bytes[..4] == [0, 0, 1, 0],
+            "Embedded icon '{}' has invalid ICO header",
+            fmt.icon
+        );
+    }
+}
+
+#[test]
+fn test_archive_extension_unification_contract() {
+    // 8 canonical archive formats unified across temp_archive and formats
+    let expected_archives = ["zip", "cbz", "rar", "cbr", "7z", "cb7", "tar", "cbt"];
+
+    let table_archives: Vec<&str> = SUPPORTED_FORMATS
+        .iter()
+        .filter(|f| f.category == FormatCategory::Archive)
+        .map(|f| f.ext)
+        .collect();
+
+    assert_eq!(
+        table_archives.len(),
+        expected_archives.len(),
+        "Archive count in SUPPORTED_FORMATS must match canonical list"
+    );
+
+    for ext in expected_archives {
+        assert!(
+            table_archives.contains(&ext),
+            "SUPPORTED_FORMATS missing archive format '{}'",
+            ext
+        );
+        assert!(is_archive_ext(ext), "is_archive_ext must return true for '{}'", ext);
+        assert!(!is_image_ext(ext), "is_image_ext must return false for '{}'", ext);
+        assert!(!is_metadata_ext(ext), "is_metadata_ext must return false for '{}'", ext);
+    }
+}
+
+#[test]
+fn test_shell_thumb_extensions_contract() {
+    // Matches SHELL_THUMB_EXTS contract in platform/thumbnails.rs
+    let shell_thumb_images = ["jpg", "jpeg", "png", "bmp", "dib", "gif", "ico"];
+    for ext in shell_thumb_images {
+        assert!(
+            is_image_ext(ext),
+            "Shell thumb extension '{}' must be recognized by is_image_ext",
+            ext
+        );
+    }
+
+    // Video container handled by shell thumbnails, not is_image_ext
+    assert!(!is_image_ext("mp4"));
+}
+
+#[test]
+fn test_format_category_display_and_as_str() {
+    assert_eq!(FormatCategory::Image.as_str(), "Image");
+    assert_eq!(FormatCategory::Archive.as_str(), "Archive");
+    assert_eq!(format!("{}", FormatCategory::Image), "Image");
+    assert_eq!(format!("{}", FormatCategory::Archive), "Archive");
+}
+
+#[test]
+fn test_is_animated_svg() {
+    let anim_svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\"><animate attributeName=\"opacity\" from=\"0\" to=\"1\" dur=\"1s\"/></svg>";
+    assert!(check_animation_status(anim_svg).is_animated);
+
+    let anim_transform_svg = b"<svg><animateTransform attributeName=\"transform\"/></svg>";
+    assert!(check_animation_status(anim_transform_svg).is_animated);
+
+    let set_svg = b"<svg><set attributeName=\"visibility\" to=\"visible\"/></svg>";
+    assert!(check_animation_status(set_svg).is_animated);
+
+    let static_svg = b"<svg viewBox=\"0 0 100 100\"><rect width=\"100\" height=\"100\"/></svg>";
+    assert!(!check_animation_status(static_svg).is_animated);
+
+    let empty_svg = b"<svg></svg>";
+    assert!(!check_animation_status(empty_svg).is_animated);
 }
 
 #[test]

@@ -1,0 +1,572 @@
+{
+  "stats": {
+    "suites": 3,
+    "tests": 62,
+    "passes": 62,
+    "pending": 0,
+    "failures": 0,
+    "start": "2026-11-10T11:34:11.064Z",
+    "end": "2026-11-10T11:34:14.225Z",
+    "duration": 3161
+  },
+  "tests": [
+    {
+      "title": "archive_cache_bounds_open_archive_state",
+      "fullTitle": "archive_tests::archive_cache_bounds_open_archive_state",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_cache_zip_hits_reuse_shared_bytes",
+      "fullTitle": "archive_tests::archive_cache_zip_hits_reuse_shared_bytes",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_entry_temp_path_rejects_escape_paths",
+      "fullTitle": "archive_tests::archive_entry_temp_path_rejects_escape_paths",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_pipe_path_format",
+      "fullTitle": "archive_tests::archive_pipe_path_format",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_pipe_path_split_basic",
+      "fullTitle": "archive_tests::archive_pipe_path_split_basic",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_pipe_path_split_nested",
+      "fullTitle": "archive_tests::archive_pipe_path_split_nested",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_pipe_path_split_no_pipe",
+      "fullTitle": "archive_tests::archive_pipe_path_split_no_pipe",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "invalid_archive_rar_invalid_magic_and_truncated",
+      "fullTitle": "archive_tests::invalid_archive_rar_invalid_magic_and_truncated",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "invalid_archive_tar_invalid_checksum_and_truncated",
+      "fullTitle": "archive_tests::invalid_archive_tar_invalid_checksum_and_truncated",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "invalid_archive_zip_invalid_magic_fails_fast",
+      "fullTitle": "archive_tests::invalid_archive_zip_invalid_magic_fails_fast",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_cache_byte_budget_evicts_globally",
+      "fullTitle": "archive_tests::archive_cache_byte_budget_evicts_globally",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "invalid_archive_sevenz_invalid_magic_and_truncated",
+      "fullTitle": "archive_tests::invalid_archive_sevenz_invalid_magic_and_truncated",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "path_canonicalization_slash_normalization",
+      "fullTitle": "archive_tests::path_canonicalization_slash_normalization",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "path_canonicalization_trailing_slash_trimming",
+      "fullTitle": "archive_tests::path_canonicalization_trailing_slash_trimming",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "invalid_archive_zip_corrupt_tail_missing_eocd_fails_fast",
+      "fullTitle": "archive_tests::invalid_archive_zip_corrupt_tail_missing_eocd_fails_fast",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "path_canonicalization_verbatim_prefix_stripping",
+      "fullTitle": "archive_tests::path_canonicalization_verbatim_prefix_stripping",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pixel_conversion_bgra_to_rgba_in_place",
+      "fullTitle": "archive_tests::pixel_conversion_bgra_to_rgba_in_place",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pixel_conversion_unpremultiply_rgba_in_place",
+      "fullTitle": "archive_tests::pixel_conversion_unpremultiply_rgba_in_place",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "supported_archives_include_new_formats",
+      "fullTitle": "archive_tests::supported_archives_include_new_formats",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "url_decode_roundtrips_utf8_entry_names",
+      "fullTitle": "archive_tests::url_decode_roundtrips_utf8_entry_names",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "win32_wide_string_empty",
+      "fullTitle": "archive_tests::win32_wide_string_empty",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "win32_wide_string_null_terminated_encoding",
+      "fullTitle": "archive_tests::win32_wide_string_null_terminated_encoding",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "win32_wide_string_unicode_cjk",
+      "fullTitle": "archive_tests::win32_wide_string_unicode_cjk",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "zip_corrupt_local_header_fails_fast_on_corrupt_entry_and_reads_valid_entry",
+      "fullTitle": "archive_tests::zip_corrupt_local_header_fails_fast_on_corrupt_entry_and_reads_valid_entry",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "zip_decodes_euckr_entry_names",
+      "fullTitle": "archive_tests::zip_decodes_euckr_entry_names",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "zip_decodes_gbk_entry_names",
+      "fullTitle": "archive_tests::zip_decodes_gbk_entry_names",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_archive_extension_unification_contract",
+      "fullTitle": "format_tests::test_archive_extension_unification_contract",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_check_mp4_has_audio",
+      "fullTitle": "format_tests::test_check_mp4_has_audio",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_format_category_display_and_as_str",
+      "fullTitle": "format_tests::test_format_category_display_and_as_str",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "zip_decodes_shift_jis_entry_names",
+      "fullTitle": "archive_tests::zip_decodes_shift_jis_entry_names",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_format_icons_table_integrity",
+      "fullTitle": "format_tests::test_format_icons_table_integrity",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_apng",
+      "fullTitle": "format_tests::test_is_animated_apng",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_apng_loop_count",
+      "fullTitle": "format_tests::test_is_animated_apng_loop_count",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_avif",
+      "fullTitle": "format_tests::test_is_animated_avif",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_gif_no_loop",
+      "fullTitle": "format_tests::test_is_animated_gif_no_loop",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_gif",
+      "fullTitle": "format_tests::test_is_animated_gif",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_svg",
+      "fullTitle": "format_tests::test_is_animated_svg",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_truncated",
+      "fullTitle": "format_tests::test_is_animated_truncated",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_webp",
+      "fullTitle": "format_tests::test_is_animated_webp",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_webp_loop_count",
+      "fullTitle": "format_tests::test_is_animated_webp_loop_count",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_archive_ext",
+      "fullTitle": "format_tests::test_is_archive_ext",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_image_ext",
+      "fullTitle": "format_tests::test_is_image_ext",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_metadata_ext",
+      "fullTitle": "format_tests::test_is_metadata_ext",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_shell_thumb_extensions_contract",
+      "fullTitle": "format_tests::test_shell_thumb_extensions_contract",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_supported_formats_table_integrity",
+      "fullTitle": "format_tests::test_supported_formats_table_integrity",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_7z_nanazip_conflicting_live_context_fails_closed",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_7z_nanazip_conflicting_live_context_fails_closed",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_7z_nanazip_pid_hint_selects_matching_window",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_7z_nanazip_pid_hint_selects_matching_window",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_7z_folder_history_dedup_and_subfolder_match",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_7z_folder_history_dedup_and_subfolder_match",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_ignore_non_temp_paths",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_ignore_non_temp_paths",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_explorer_entry_matching_uses_relative_path",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_explorer_entry_matching_uses_relative_path",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_nanazip_match_candidate_origin_subfolder_vs_root",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_nanazip_match_candidate_origin_subfolder_vs_root",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_deduplicate_and_subfolder_override",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_deduplicate_and_subfolder_override",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_7zip_temp_path_and_folder_history",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_7zip_temp_path_and_folder_history",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_bandizip_temp_path_and_window_title",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_bandizip_temp_path_and_window_title",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_explorer_temp_path",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_explorer_temp_path",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_nanazip_address_bar_paths",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_nanazip_address_bar_paths",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_peazip_temp_path",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_peazip_temp_path",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_winrar_temp_path_and_window_title",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_winrar_temp_path_and_window_title",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_winzip_temp_path",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_winzip_temp_path",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_match_candidate_origin_subfolder_and_root",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_match_candidate_origin_subfolder_and_root",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_nanazip_window_title_and_subfolder_match",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_nanazip_window_title_and_subfolder_match",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_winrar_window_title_and_subfolder_match",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_winrar_window_title_and_subfolder_match",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    }
+  ]
+}
