@@ -6,6 +6,8 @@
  * interacts with the file list or backdrop.
  */
 
+import { formatIpcError } from '../shared/errorUtils.js';
+
 let _overlay = null;
 let _input = null;
 let _errorEl = null;
@@ -65,11 +67,7 @@ function _hide(opts = {}) {
 }
 
 function _errorText(err) {
-  // Tauri IPC rejections arrive as plain strings without `.message`.
-  // Prefer the real backend text over the generic fallback.
-  if (typeof err === 'string' && err) return err;
-  if (typeof err?.message === 'string' && err.message) return err.message;
-  return 'Failed to open URL';
+  return formatIpcError(err, 'Failed to open URL');
 }
 
 function _setError(message) {

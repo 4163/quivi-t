@@ -31,6 +31,7 @@ import { BoundedMap } from './services/cache.js';
 import { applySort } from './services/sorting.js';
 import { DirectoryPrefs } from './directoryPrefs.js';
 import { activateImportProvider as _autoActivateImportProvider } from './filepanel/libraryStore.js';
+import { getBasename, getExtension, getParentPath, isPathWithin, pathsEqual } from './services/pathUtils.js';
 
 const EXTRACTOR_MODULE_CACHE_CAPACITY = 20;
 export const EXTRACTOR_MANIFEST_VERSION = 1;
@@ -145,7 +146,7 @@ function _validateImage(image, index) {
   }
 
   const filename = _validateWindowsName(image.filename, `filename at index ${index}`);
-  const extension = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
+  const extension = getExtension(filename);
   if (!extension || !SUPPORTED_IMAGE_EXTENSIONS.has(extension)) {
     throw new Error(`Extractor returned an unsupported image filename at index ${index}`);
   }
@@ -241,12 +242,12 @@ export async function downloadFile(url, destPath, options = {}) {
   if (options.xorKey) args.xorKey = options.xorKey;
   if (options.descramble) args.descramble = options.descramble;
   await window.__TAURI__.core.invoke('download_to_file', args);
-  const leaf = String(destPath || '').split('\\').pop() || '';
+  const leaf = getBasename(destPath);
   const dot = leaf.lastIndexOf('.');
   try {
     await window.__TAURI__.core.invoke('verify_image_magic', {
       path: destPath,
-      expectedExt: dot > 0 ? leaf.slice(dot + 1) : ''
+      expectedExt: dot > 0 ? getExtension(leaf) : ''
     });
   } catch (err) {
     await window.__TAURI__.core.invoke('remove_file', { path: destPath }).catch(() => {});
@@ -319,15 +320,11 @@ export function getCachedLibraryDir() {
 // -- Path comparison helper --
 
 function _pathsEqual(a, b) {
-  if (!a || !b) return false;
-  return a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase();
+  return pathsEqual(a, b);
 }
 
 function _isPathWithin(path, root) {
-  if (!path || !root) return false;
-  const cleanPath = String(path).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-  const cleanRoot = String(root).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-  return cleanPath === cleanRoot || cleanPath.startsWith(`${cleanRoot}/`);
+  return isPathWithin(path, root);
 }
 
 function _rebasePath(path, oldRoot, newRoot) {
@@ -344,7 +341,7 @@ export class DownloadQueue {
   constructor(items = [], options = {}) {
     this._items = items.map((item, i) => {
       const destPath = item.destPath || '';
-      const filename = item.filename || (destPath ? destPath.replace(/\\/g, '/').split('/').pop() : '');
+      const filename = item.filename || getBasename(destPath);
       return {
         url: item.url,
         fallbackUrl: item.fallbackUrl || null,
@@ -394,7 +391,7 @@ export class DownloadQueue {
   _findItem(targetPathOrName) {
     if (!targetPathOrName) return null;
     const cleanTarget = String(targetPathOrName).replace(/\\/g, '/').toLowerCase();
-    const targetName = cleanTarget.split('/').pop();
+    const targetName = getBasename(cleanTarget);
     return this._items.find((item) => {
       if (!item.destPath) return false;
       const cleanItem = item.destPath.replace(/\\/g, '/').toLowerCase();
@@ -438,9 +435,8 @@ export class DownloadQueue {
   _galleryRoot() {
     const first = this._items.length > 0 ? this._items[0].destPath : '';
     if (!first) return null;
-    const clean = String(first).replace(/\\/g, '/');
-    const slashAt = clean.lastIndexOf('/');
-    return slashAt > 0 ? clean.slice(0, slashAt) : null;
+    const parent = getParentPath(first);
+    return parent ? parent.replace(/\\/g, '/') : null;
   }
 
   prioritize(destPath) {
@@ -1091,12 +1087,12 @@ export function extractUrlStem(urlOrFilename) {
       ? new URL(urlOrFilename).pathname
       : urlOrFilename;
     const cleanPath = rawPath.split(/[?#]/)[0];
-    const segment = cleanPath.split(/[\\/]/).pop() || '';
+    const segment = getBasename(cleanPath);
     const dotIdx = segment.lastIndexOf('.');
     return (dotIdx > 0 ? segment.slice(0, dotIdx) : segment).toLowerCase();
   } catch {
     const clean = urlOrFilename.split(/[?#]/)[0];
-    const segment = clean.split(/[\\/]/).pop() || '';
+    const segment = getBasename(clean);
     const dotIdx = segment.lastIndexOf('.');
     return (dotIdx > 0 ? segment.slice(0, dotIdx) : segment).toLowerCase();
   }
@@ -1107,7 +1103,7 @@ export function isDirectMediaUrl(url) {
   try {
     const rawPath = url.includes('://') ? new URL(url).pathname : url;
     const cleanPath = rawPath.split(/[?#]/)[0];
-    const segment = cleanPath.split(/[\\/]/).pop() || '';
+    const segment = getBasename(cleanPath);
     const dotIdx = segment.lastIndexOf('.');
     if (dotIdx > 0) {
       const ext = segment.slice(dotIdx + 1).toLowerCase();
@@ -1781,8 +1777,8 @@ async function _loadUrlWithLibraryDir(url, mod, entry, libraryDir) {
       ? await mod.parseDirectUrl(url, { fetchText: fetchRemoteText, fetchBytes: _fetchBytes })
       : null;
     const hash = directInfo?.hash || rawStem;
-    const targetFilename = directInfo?.filename || (url.split(/[?#]/)[0].split('/').pop() || 'image.png');
-    const rawFilename = directInfo?.rawFileName || (url.split(/[?#]/)[0].split('/').pop() || targetFilename);
+    const targetFilename = directInfo?.filename || (getBasename(url.split(/[?#]/)[0]) || 'image.png');
+    const rawFilename = directInfo?.rawFileName || (getBasename(url.split(/[?#]/)[0]) || targetFilename);
     const downloadUrl = directInfo?.url || url;
     _validateImage({ url: downloadUrl, filename: targetFilename }, 0);
 

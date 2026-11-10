@@ -1,3 +1,5 @@
+import { splitArchivePath } from './archivePath.js';
+
 export function naturalCompare(a, b) {
   const ax = [], bx = [];
   a.replace(/(\d+)|(\D+)/g, function (_, $1, $2) { ax.push([$1 || Infinity, $2 || ""]); });
@@ -18,7 +20,7 @@ function isNestedArchiveEntry(item) {
 }
 
 function hasArchiveEntryPath(item) {
-  return typeof item?.path === 'string' && item.path.includes('|');
+  return splitArchivePath(item?.path).isArchiveEntry;
 }
 
 function compareNames(a, b) {
@@ -112,7 +114,7 @@ export function getSavedItemKind(item) {
   if (path.endsWith('/') || path.endsWith('\\') || /^[a-zA-Z]:[\\/]?$/.test(path)) {
     return 'folder';
   }
-  if (!path.includes('|')) {
+  if (!splitArchivePath(path).isArchiveEntry) {
     const rawExt = typeof item.ext === 'string' && item.ext
       ? item.ext
       : (typeof item.name === 'string' && item.name.includes('.') ? item.name.split('.').pop() : path.split('.').pop() || '');

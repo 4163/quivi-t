@@ -1,5 +1,6 @@
 import { ViewportCore as Core } from '../shared/workspaceHost.js';
 import { getEffectiveScaling, computeColumnComposite, icoSizesTotal } from '../services/viewerMath.js';
+import { isSvgSource, isVideoSource } from '../services/mediaClassification.js';
 import { buildIcoCompositeCanvas } from './icoCells.js';
 import { createLanczosPipeline } from '../services/scaling/lanczos.js';
 import { filter as lanczosWebGlModule } from '../services/scaling/lanczosWebGL.js';
@@ -70,20 +71,6 @@ function _drawSlotQuad(compositor, texture, draw, item, nodeW, nodeH, vpW, vpH, 
   _scratchSize.h = nodeH;
 
   return compositor.drawQuad(texture, _scratchDest, _scratchUV, vpW, vpH, flipY, quadSampler, _scratchSize);
-}
-
-function isSvgSource(src, item = null) {
-  if (item?.entry) {
-    const name = item.entry.name || item.entry.path || '';
-    if (/\.svg($|[?#])/i.test(name)) return true;
-  }
-  if (!src || typeof src !== 'string') return false;
-  try {
-    const url = new URL(src);
-    return url.pathname.toLowerCase().endsWith('.svg');
-  } catch {
-    return src.split('?')[0].toLowerCase().endsWith('.svg');
-  }
 }
 
 async function loadSvgCanvas(src) {
@@ -253,17 +240,8 @@ export function createViewerPipelines(viewportState) {
     _icoCompositePromise = null;
   }
 
-  function isVideoSource(el) {
-    return el?.tagName === 'VIDEO';
-  }
-
-  // Pool sources can be blob URLs that hide the real extension, so the
-  // state entry and filename back up the src check for SVG detection.
   function _isActiveSvg(state) {
-    if (isSvgSource(_activeSource?.src)) return true;
-    const entry = state?.list?.[state?.index];
-    const name = entry?.name || entry?.path || state?.filename || '';
-    return /\.svg($|[?#])/i.test(name || '');
+    return isSvgSource(_activeSource?.src, state);
   }
 
   function _resolveActiveFilter(state) {
@@ -2279,7 +2257,7 @@ export function createViewerPipelines(viewportState) {
 
     // Draw live video slots from element upload.
     for (const { draw, node } of _liveDrawsScratch) {
-      const isVideo = node.tagName === 'VIDEO';
+      const isVideo = isVideoSource(node);
       const nodeW = isVideo ? node.videoWidth : (node.naturalWidth || 0);
       const nodeH = isVideo ? node.videoHeight : (node.naturalHeight || 0);
       if (nodeW <= 0 || nodeH <= 0) continue;

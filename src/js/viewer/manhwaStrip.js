@@ -12,7 +12,8 @@ import { ViewportCore as Core, hostsWorkspaceSurface } from '../shared/workspace
 import { BoundedMap } from '../services/cache.js';
 import { FsUtils } from '../fsUtils.js';
 import { getCachedArchiveBlob } from '../services/archiveImageCache.js';
-import { computeColumnOffsets, columnCenterY, columnCenterTy, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale, firstLastHighlight } from '../services/viewerMath.js';
+import { computeColumnOffsets, columnCenterY, columnCenterTy, findAnchorIndex, computeWindowRange, seamOverlapForScale, computeTopAlignTy, computeBottomAlignTy, computeSlotHue, computeStripFitScale, firstLastHighlight, icoSizesTotal } from '../services/viewerMath.js';
+import { isVideoEntry, isSvgEntry, isAnimCandidateExt } from '../services/mediaClassification.js';
 import { createIcoCell, createIcoContainer, mirroredGrillAngle } from './icoCells.js';
 import { Statusbar } from '../menubar/statusbar.js';
 import { initManhwaAudio, ManhwaAudio } from './manhwaAudio.js';
@@ -430,16 +431,6 @@ function _isPendingEntry(entry) {
   return false;
 }
 
-function _isSvgEntry(entry) {
-  const name = entry?.name || entry?.path || '';
-  return /\.svg($|[?#])/i.test(name);
-}
-
-/** Raster extensions that can carry animation. APNG rides on .png. */
-function _isAnimCandidateExt(name) {
-  return /\.(gif|webp|png|apng|avif)($|[?#])/i.test(name || '');
-}
-
 function _animArgsFor(entry) {
   const st = Core.getState() || {};
   const mode = st.mode ?? _lastMode;
@@ -457,7 +448,7 @@ function _classifyAnimatedSlot(imgIdx, item) {
   if (!item?.entry) return;
   const kind = item.kind;
   if (kind !== 'svg' && kind !== 'image') return;
-  if (kind === 'image' && !_isAnimCandidateExt(item.entry.name || item.entry.path)) return;
+  if (kind === 'image' && !isAnimCandidateExt(item.entry.name || item.entry.path)) return;
   const { pathArg, archiveArg } = _animArgsFor(item.entry);
   if (!pathArg) return;
   const wantType = kind === 'svg' ? 'svg' : 'raster';
@@ -483,7 +474,7 @@ function _buildImageIndex(list) {
         listIndex: i,
         entry,
         imgIdx,
-        kind: FsUtils.isVideoEntry(entry) ? 'video' : _isSvgEntry(entry) ? 'svg' : 'image',
+        kind: isVideoEntry(entry) ? 'video' : isSvgEntry(entry) ? 'svg' : 'image',
         naturalWidth: 0,
         naturalHeight: 0,
         decoded: false,
@@ -757,7 +748,7 @@ function _initEstimatedDimensions() {
   const sampleDecoded = _imageIndex.find((it) => it.decoded && it.naturalHeight > 0);
   for (let i = 0; i < total; i++) {
     const item = _imageIndex[i];
-    const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
+    const isSvg = isSvgEntry(item.entry);
     const fallbackW = sampleDecoded?.naturalWidth || _widthEstimate();
     const fallbackH = sampleDecoded?.naturalHeight || DEFAULT_ESTIMATED_HEIGHT;
     const defW = isSvg ? 1000 : fallbackW;
@@ -881,7 +872,7 @@ function _onItemDecoded(imgIdx, nw, nh) {
   // from current state so a burst of decodes settles once, not once each.
   const wasEstimated = !item.decoded;
 
-  const isSvg = /\.svg($|[?#])/i.test(item.entry?.name || item.entry?.path || '');
+  const isSvg = isSvgEntry(item.entry);
   const isIco = FsUtils.isIco(item.entry?.name || item.entry?.path || '');
   if (isSvg) {
     const isBrowserDefault = (nw === 150 && nh === 150) || (nw === 300 && nh === 150);
@@ -1745,7 +1736,7 @@ function _advanceMountQueue() {
       }
       if (cached && cached.length > 0) {
         _releaseNode(pre);
-        const total = FsUtils.icoSourcesTotal(cached);
+        const total = icoSizesTotal(cached);
         _mountInFlight = -1;
         const slot = _slots.get(entry.imgIdx);
         if (slot && _active && !_mounted.has(entry.imgIdx)) {
@@ -1767,7 +1758,7 @@ function _advanceMountQueue() {
               return;
             }
             _releaseNode(pre);
-            const total = FsUtils.icoSourcesTotal(sizes);
+            const total = icoSizesTotal(sizes);
             _mountInFlight = -1;
             const slot = _slots.get(entry.imgIdx);
             if (slot && _active && !_mounted.has(entry.imgIdx)) {

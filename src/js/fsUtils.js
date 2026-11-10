@@ -4,6 +4,8 @@ import { applySort } from './services/sorting.js';
 import { isMetadataEntryName } from './services/metadataFiles.js';
 import { createHistoryEntry, recordNavigation } from './navigationHistory.js';
 import { icoSizesTotal } from './services/viewerMath.js';
+import { getBasename, getExtension, normalizePathKey } from './services/pathUtils.js';
+import { splitArchivePath } from './services/archivePath.js';
 
 const { invoke } = window.__TAURI__.core;
 export const FS_SESSION_METHODS = ['loadFile', 'loadArchive', 'openParent', 'openSibling', 'refresh',
@@ -23,7 +25,7 @@ export const SHELL_THUMBNAIL_EXTS = new Set(['jpg', 'jpeg', 'png', 'bmp', 'dib',
 let nativeIconCacheVersion = 0;
 
 function _ext(name) {
-  return name.split('.').pop().toLowerCase();
+  return getExtension(name);
 }
 
 import { BoundedMap } from './services/cache.js';
@@ -39,7 +41,7 @@ const _pendingDeletions = new Set();
 
 function _normalizeDeletionPath(path) {
   if (!path || typeof path !== 'string') return '';
-  return path.replace(/\\/g, '/').toLowerCase().replace(/\/+$/, '');
+  return normalizePathKey(path);
 }
 
 export function registerPendingDeletion(path) {
@@ -81,8 +83,7 @@ function parentOf(path) {
 }
 
 function basename(path) {
-  if (!path) return '';
-  return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+  return getBasename(path);
 }
 
 function _formatDate(msStr) {
@@ -326,10 +327,8 @@ export const FsUtils = {
   buildThumbnailSrc(item, state) {
     if (!item) return '';
     if (this.isImageEntry(item)) {
-      if (item.path && item.path.includes('|')) {
-        const sep = item.path.indexOf('|');
-        const archivePath = item.path.slice(0, sep);
-        const entryName = item.path.slice(sep + 1);
+      const { isArchiveEntry, archivePath, entryName } = splitArchivePath(item.path);
+      if (isArchiveEntry) {
         return this.buildArchiveSrc(archivePath, entryName);
       } else if (state?.mode === 'archive' && !this._isAbsolutePath(item.path)) {
         return this.buildArchiveSrc(state.archivePath, item.name);
@@ -919,7 +918,7 @@ export const FsUtils = {
     }
 
     const name = typeof pathStr === 'string'
-      ? pathStr.replace(/\\/g, '/').split('/').pop()
+      ? getBasename(pathStr)
       : pathStr.name || '';
     let path = typeof pathStr === 'string' ? pathStr : (pathStr.path || pathStr.name);
 
@@ -970,12 +969,10 @@ export const FsUtils = {
 
     // Composite archive-entry path: "<archive path>|<inner entry name>". Used by
     // favorites saved for images inside archives.
-    if (path.includes('|')) {
-      const sep = path.indexOf('|');
-      const archivePath = path.slice(0, sep);
-      const innerEntry = path.slice(sep + 1);
-      if (this.isArchive(archivePath)) {
-        await this.loadArchive(archivePath, innerEntry, {
+    const archiveParsed = splitArchivePath(path);
+    if (archiveParsed.isArchiveEntry) {
+      if (this.isArchive(archiveParsed.archivePath)) {
+        await this.loadArchive(archiveParsed.archivePath, archiveParsed.entryName, {
           ...options,
           preferInitial: true,
           restoreLastImage: false,

@@ -1,5 +1,7 @@
 import { ViewportCore as Core } from '../shared/workspaceHost.js';
 import { FsUtils } from '../fsUtils.js';
+import { icoSizesTotal } from '../services/viewerMath.js';
+import { isVideoSource, isSvgSource } from '../services/mediaClassification.js';
 import { getCachedArchiveBlob, hasCachedArchiveBlob } from '../services/archiveImageCache.js';
 import { createIcoCell, createIcoContainer, mirroredGrillAngle } from './icoCells.js';
 import { Statusbar } from '../menubar/statusbar.js';
@@ -111,13 +113,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
   }
 
   function _isVideoState(state) {
-    const entry = state?.list?.[state.index];
-    if (entry && !entry.is_dir && !entry.is_parent) {
-      if (FsUtils.isVideoEntry?.(entry)) return true;
-      if (FsUtils.isVideo?.(entry.name || entry.path || '')) return true;
-    }
-    if (state?.filename && FsUtils.isVideo?.(state.filename)) return true;
-    return false;
+    return isVideoSource(state?.src, state);
   }
 
   function _pickIncomingVideoEl(videoSrc) {
@@ -359,7 +355,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
     let clientW = el.clientWidth;
     let clientH = el.clientHeight;
 
-    if (clientW === 0 && el.src && el.src.toLowerCase().includes('.svg')) {
+    if (clientW === 0 && isSvgSource(el.src)) {
       const scale = Math.min((window.innerWidth * 0.5) / natW, (window.innerHeight * 0.5) / natH);
       natW = Math.max(1, Math.round(el.naturalWidth * scale));
       natH = Math.max(1, Math.round(el.naturalHeight * scale));
@@ -529,7 +525,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
         }
       });
     }
-    const total = FsUtils.icoSourcesTotal(sizes);
+    const total = icoSizesTotal(sizes);
     const tw = total ? total.width : sizes[0].width;
     const th = total ? total.height : sizes[0].height;
     imgWrapper.style.setProperty('--ico-total-w', `${tw}px`);
@@ -731,7 +727,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
       const fitChanged = _lastFitModeGen !== state.fitModeGen;
       if (sameRow) {
         if (fitChanged) {
-          const total = FsUtils.icoSourcesTotal(state.src);
+          const total = icoSizesTotal(state.src);
           const tw = total ? total.width : state.src[0].width;
           const th = total ? total.height : state.src[0].height;
           viewportState.applyFitMode(state.fitMode, tw, th);
@@ -889,7 +885,7 @@ export function createViewerRenderer(viewportState, onActiveImageChanged = () =>
 
         const srcForCheck = typeof effectiveSrc === 'string' ? effectiveSrc : '';
         const skipDecode = srcForCheck.toLowerCase().endsWith('.ico') || srcForCheck.includes('.ico?') || 
-                           srcForCheck.toLowerCase().endsWith('.svg') || srcForCheck.includes('.svg?');
+                           isSvgSource(srcForCheck);
         const ready = !isReload && activeEl && activeEl.complete && (activeEl.naturalWidth > 0 || skipDecode);
 
         let decodePromise;

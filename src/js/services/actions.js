@@ -4,6 +4,8 @@
 
 import { FILTERS, activeFilterId } from './registry.js';
 import { WORKSPACE_SURFACES, WORKSPACE_POSITIONS, workspacePositionLabel } from './workspaceLayout.js';
+import { splitArchivePath } from './archivePath.js';
+import { getParentPath } from './pathUtils.js';
 
 function navigationOwner(ctx, payload) {
   return !payload?.fileList && (ctx.isFavoritesFocused?.() || ctx.isLibraryFocused?.()) ? 'window' : 'main';
@@ -292,8 +294,7 @@ export const ACTION_REGISTRY = [
           if (favorite.is_drive) {
             await window.__TAURI__.core.invoke('open_in_explorer', { path: favorite.path });
           } else {
-            const sep = favorite.path.indexOf('|');
-            const realPath = sep === -1 ? favorite.path : favorite.path.slice(0, sep);
+            const realPath = splitArchivePath(favorite.path).archivePath;
             await window.__TAURI__.opener.revealItemInDir(realPath);
           }
         } catch (err) {
@@ -316,8 +317,7 @@ export const ACTION_REGISTRY = [
         if (entry.is_parent && state.mode !== 'archive') {
           await window.__TAURI__.core.invoke('open_in_explorer', { path: state.directory });
         } else {
-          const sep = entry.path.indexOf('|');
-          const realPath = sep === -1 ? entry.path : entry.path.slice(0, sep);
+          const realPath = splitArchivePath(entry.path).archivePath;
           await window.__TAURI__.opener.revealItemInDir(realPath);
         }
       } catch (err) {
@@ -336,9 +336,8 @@ export const ACTION_REGISTRY = [
           if (favorite.is_dir || favorite.is_drive) {
             targetPath = favorite.path;
           } else {
-            const sep = favorite.path.indexOf('|');
-            const realPath = sep === -1 ? favorite.path : favorite.path.slice(0, sep);
-            targetPath = realPath.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '');
+            const realPath = splitArchivePath(favorite.path).archivePath;
+            targetPath = getParentPath(realPath);
           }
           await window.__TAURI__.core.invoke('open_in_explorer', { path: targetPath });
         } catch (err) {
@@ -350,10 +349,9 @@ export const ACTION_REGISTRY = [
       let targetPath = state.directory;
 
       if (entry) {
-        const sep = entry.path.indexOf('|');
-        if (state.mode === 'archive' || sep !== -1) {
-          const realPath = sep === -1 ? entry.path : entry.path.slice(0, sep);
-          targetPath = realPath.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '');
+        const parsed = splitArchivePath(entry.path);
+        if (state.mode === 'archive' || parsed.isArchiveEntry) {
+          targetPath = getParentPath(parsed.archivePath);
         } else if (entry.is_dir || entry.is_parent) {
           targetPath = entry.path;
         }

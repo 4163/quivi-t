@@ -1,11 +1,9 @@
 import { Core } from './core.js';
 import { applySort } from './services/sorting.js';
+import { normalizePathKey, pathsEqual } from './services/pathUtils.js';
+import { splitArchivePath } from './services/archivePath.js';
 
 let sortReconciliationPromise = null;
-
-function normalizePathKey(p) {
-  return String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-}
 
 function isColumnEnabled(col, fd) {
   if (!col || col === 'name') return true;
@@ -54,9 +52,8 @@ export const DirectoryPrefs = {
       if (fd.directory_sort[directoryPath]) {
         return resolveEnabledSortPref(fd.directory_sort[directoryPath], fd);
       }
-      const norm = normalizePathKey(directoryPath);
       for (const [key, pref] of Object.entries(fd.directory_sort)) {
-        if (normalizePathKey(key) === norm) {
+        if (pathsEqual(key, directoryPath)) {
           return resolveEnabledSortPref(pref, fd);
         }
       }
@@ -73,9 +70,8 @@ export const DirectoryPrefs = {
     if (!fd.default_sort) fd.default_sort = { col: 'name', desc: false };
     if (!fd.directory_sort) fd.directory_sort = {};
 
-    const norm = normalizePathKey(directoryPath);
     for (const key of Object.keys(fd.directory_sort)) {
-      if (normalizePathKey(key) === norm) {
+      if (pathsEqual(key, directoryPath)) {
         delete fd.directory_sort[key];
       }
     }
@@ -107,9 +103,8 @@ export const DirectoryPrefs = {
       removed = true;
     }
 
-    const norm = normalizePathKey(directoryPath);
     for (const key of Object.keys(fd.directory_sort)) {
-      if (normalizePathKey(key) === norm) {
+      if (pathsEqual(key, directoryPath)) {
         delete fd.directory_sort[key];
         removed = true;
       }
@@ -141,7 +136,7 @@ export const DirectoryPrefs = {
     sortReconciliationPromise = Promise.all(paths.map(async (path) => {
       if (!path || path === 'Drives' || path === '__DRIVES__') return null;
 
-      const targetPath = path.includes('|') ? path.slice(0, path.indexOf('|')) : path;
+      const targetPath = splitArchivePath(path).archivePath;
 
       try {
         const kind = await invoke('get_path_kind', { path: targetPath });

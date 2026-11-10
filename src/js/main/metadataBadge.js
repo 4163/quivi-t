@@ -1,6 +1,7 @@
 import { fetchMetadata, fetchDirectoryMetadata } from '../metadata.js';
 import { workspaceSurface, hostsWorkspaceSurface } from '../shared/workspaceHost.js';
 import { registerMetadataStateProvider, getSessionMetadataState } from '../shared/workspaceSession.js';
+import { generateCoverThumbnail } from '../shared/blobImage.js';
 
 let _lastMetadataArchive = null;
 let _lastMetadataDir = null;
@@ -41,27 +42,6 @@ function _readStoredMetadataAvailability() {
   }
 }
 
-function _generateCoverThumbnail(src, usePng) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const MAX_H = 300;
-      const scale = Math.min(1, MAX_H / img.naturalHeight);
-      const w = Math.round(img.naturalWidth * scale);
-      const h = Math.round(img.naturalHeight * scale);
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      resolve(usePng ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.8));
-    };
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
 async function _loadMetadataForArchive(archivePath, metaFiles, fileList, FsUtils, Core) {
   if (archivePath === _lastMetadataArchive) return;
   _lastMetadataArchive = archivePath;
@@ -84,7 +64,7 @@ async function _loadMetadataForArchive(archivePath, metaFiles, fileList, FsUtils
     if (coverSrc) {
       try {
         const isIco = firstImage ? FsUtils.isIco(firstImage.name || '') : false;
-        coverDataUrl = await _generateCoverThumbnail(coverSrc, isIco);
+        coverDataUrl = await generateCoverThumbnail(coverSrc, isIco);
       } catch (_) {}
     }
     if (seq !== _loadSeq || _lastMetadataArchive !== archivePath) return;
@@ -123,7 +103,7 @@ async function _loadMetadataForDirectory(directory, fileList, FsUtils, Core) {
     let coverDataUrl = null;
     if (coverSrc) {
       try {
-        coverDataUrl = await _generateCoverThumbnail(coverSrc, Array.isArray(rawCoverSrc));
+        coverDataUrl = await generateCoverThumbnail(coverSrc, Array.isArray(rawCoverSrc));
       } catch (_) {}
     }
     if (seq !== _loadSeq || _lastMetadataDir !== directory) return;

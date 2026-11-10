@@ -4,6 +4,8 @@
 import { DirectoryPrefs } from '../directoryPrefs.js';
 import { copyTextToClipboard } from '../shared/clipboard.js';
 import { makeListNavigable, makeContainerNavigable } from '../keyboardNav.js';
+import { getBasename, getParentPath, isPathWithin, normalizePathKey, pathsEqual } from '../services/pathUtils.js';
+import { splitArchivePath } from '../services/archivePath.js';
 import {
   getActiveFavorites,
   getActiveLoadoutName,
@@ -370,7 +372,7 @@ function updateDownloadRow(destPath, status, size = 0) {
       item.size = size || 1;
       completedItem = item;
     }
-    const thumbnailItem = item || { path: destPath, name: FsUtils.basename(destPath) };
+    const thumbnailItem = item || { path: destPath, name: getBasename(destPath) };
     thumbnailCache.delete(buildListThumbnailSrc(thumbnailItem, state));
   }
   for (const [idx, li] of activeRows) {
@@ -833,8 +835,7 @@ function getIconHtml(item, size = 'small') {
 }
 
 function _pathsEqual(a, b) {
-  if (!a || !b) return false;
-  return a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase();
+  return pathsEqual(a, b);
 }
 
 const MARU_O_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle></svg>';
@@ -846,14 +847,14 @@ function findOpenFavoriteIndex(path) {
   const state = Core.getState();
   const list = state?.list;
   if (!Array.isArray(list) || typeof path !== 'string' || !path) return -1;
-  if (path.includes('|')) {
+  const { isArchiveEntry, archivePath } = splitArchivePath(path);
+  if (isArchiveEntry) {
     if (state.mode !== 'archive') return -1;
-    const sep = path.indexOf('|');
-    if (!_pathsEqual(path.slice(0, sep), state.archivePath)) return -1;
-    return list.findIndex(e => _pathsEqual(e.path, path));
+    if (!pathsEqual(archivePath, state.archivePath)) return -1;
+    return list.findIndex(e => pathsEqual(e.path, path));
   }
   if (state.mode === 'archive') return -1;
-  return list.findIndex(e => _pathsEqual(e.path, path));
+  return list.findIndex(e => pathsEqual(e.path, path));
 }
 
 // Same-container favorite picks skip the directory reload. The reload path
@@ -894,14 +895,15 @@ function openSavedPath(path) {
 
 function buildSavedEntry(item, { onRemove, onOpen, onHighlight, listUl, removeClass, removeTitle }) {
   const li = document.createElement('li');
-  li.title = item.path.includes('|')
-    ? item.path.replace('|', '\nEntry: ')
+  const archiveParsed = splitArchivePath(item.path);
+  li.title = archiveParsed.isArchiveEntry
+    ? `${archiveParsed.archivePath}\nEntry: ${archiveParsed.entryName}`
     : item.path;
   li.dataset.path = item.path;
   li.setAttribute('role', 'option');
   li.setAttribute('tabindex', '0');
   li.classList.toggle('is-hidden-entry', !!item.is_hidden);
-  li.classList.toggle('is-pending-download', isPendingDownload(item, getGalleryDownloadStatus(item.path), item.path.includes('|')));
+  li.classList.toggle('is-pending-download', isPendingDownload(item, getGalleryDownloadStatus(item.path), archiveParsed.isArchiveEntry));
 
   // List mode elements
   const itemName = document.createElement('span');
@@ -1099,7 +1101,7 @@ function renderFavorites(options = {}) {
   for (const fav of favs) {
     const row = buildFavoriteEntry(fav);
     favoritesListUl.appendChild(row);
-    if (!fav.is_dir && !fav.is_drive && !fav.path.includes('|')) downloadRows.push(row);
+    if (!fav.is_dir && !fav.is_drive && !splitArchivePath(fav.path).isArchiveEntry) downloadRows.push(row);
   }
   refreshFavoriteDownloadState(downloadRows);
 
@@ -1162,7 +1164,7 @@ function favoritesInViewPaths(state) {
   const paths = new Set();
   for (const i of visible) {
     const p = state.list?.[i]?.path;
-    if (p) paths.add(p.replace(/\\/g, '/').toLowerCase());
+    if (p) paths.add(normalizePathKey(p));
   }
   return paths;
 }
@@ -1174,7 +1176,7 @@ function applyFavoritesInView(inViewPaths) {
       li.classList.remove('in-view');
       continue;
     }
-    const key = (li.dataset.path || '').replace(/\\/g, '/').toLowerCase();
+    const key = normalizePathKey(li.dataset.path);
     li.classList.toggle('in-view', !!inViewPaths && key !== '' && inViewPaths.has(key));
   }
 }
@@ -1361,15 +1363,15 @@ function buildLibraryEntry(item, depth = 0) {
       }
 
       const state = Core?.getState?.();
-      const curDir = (state?.directory || '').replace(/\\/g, '/').toLowerCase();
-      const targetDir = (item.path || '').replace(/\\/g, '/').toLowerCase();
-      const isInside = curDir === targetDir || (targetDir && curDir.startsWith(targetDir + '/'));
-      const parentOfTarget = targetDir.includes('/') ? targetDir.substring(0, targetDir.lastIndexOf('/')) : '';
+      const curDir = normalizePathKey(state?.directory);
+      const targetDir = normalizePathKey(item.path);
+      const isInside = isPathWithin(curDir, targetDir);
+      const parentOfTarget = getParentPath(targetDir);
 
       // Provider root for the boot-out navigation below: first segment under
       // the Library root for galleries, immediate parent for provider-level
       // files. Falls back to '' (then openParent) when unresolvable.
-      const libRootRaw = (typeof getCachedLibraryDir === 'function' ? getCachedLibraryDir() : '').replace(/\\/g, '/').replace(/\/+$/, '');
+      const libRootRaw = normalizePathKey(typeof getCachedLibraryDir === 'function' ? getCachedLibraryDir() : '');
       const itemFwd = (item.path || '').replace(/\\/g, '/');
       let providerRoot = '';
       if (libRootRaw && itemFwd.toLowerCase().startsWith(libRootRaw.toLowerCase() + '/')) {
@@ -1720,7 +1722,7 @@ function updateLibrarySelection(state) {
   if (!items.length) return;
 
   const containerPath = state.mode === 'archive' ? state.archivePath : state.directory;
-  const containerNorm = containerPath ? containerPath.replace(/\\/g, '/').toLowerCase() : '';
+  const containerNorm = normalizePathKey(containerPath);
 
   // Find the deepest library item that is either the current directory or an
   // ancestor of it. This keeps provider entries highlighted while browsing
@@ -1729,9 +1731,9 @@ function updateLibrarySelection(state) {
   if (containerNorm) {
     let bestLen = 0;
     for (const li of items) {
-      const itemNorm = (li.dataset.path || '').replace(/\\/g, '/').toLowerCase();
+      const itemNorm = normalizePathKey(li.dataset.path);
       if (!itemNorm) continue;
-      if (containerNorm === itemNorm || containerNorm.startsWith(itemNorm + '/')) {
+      if (isPathWithin(containerNorm, itemNorm)) {
         if (itemNorm.length > bestLen) {
           bestLen = itemNorm.length;
           activePath = li.dataset.path;

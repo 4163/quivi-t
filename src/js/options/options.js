@@ -13,6 +13,7 @@ import { validateKeybindSafety } from '../services/keybindDomain.js';
 import { initAssociationsUi, applyAssociations } from './associationsUi.js';
 import { previewing, setPreviewing, revertPreviewChanges as _revertPreviewChanges, previewTheme, previewCss, emergencyCssReset } from '../shared/configPreview.js';
 import { fitContentWidth } from '../shared/windowFit.js';
+import { pathsEqual } from '../services/pathUtils.js';
 
 const tauri = window.__TAURI__ || {};
 const invoke = tauri.core?.invoke?.bind(tauri.core);
@@ -97,8 +98,7 @@ function relocationWarningMessage(relocation) {
 }
 
 function pathsMatch(left, right) {
-  return String(left || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
-    === String(right || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
+  return pathsEqual(left, right);
 }
 
 // E2E suite lock. The harness stamps frontend_data.e2e_suite on its isolation

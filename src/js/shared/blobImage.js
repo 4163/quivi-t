@@ -50,3 +50,37 @@ export async function getCleanImageCrop(src, sx, sy, sw, sh) {
   const blob = await resp.blob();
   return createImageBitmap(blob, sx, sy, sw, sh);
 }
+
+let _sharedCoverCanvas = null;
+
+export function generateCoverThumbnail(src, usePng = false) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const MAX_H = 300;
+        const scale = Math.min(1, MAX_H / img.naturalHeight);
+        const w = Math.round(img.naturalWidth * scale);
+        const h = Math.round(img.naturalHeight * scale);
+        if (!_sharedCoverCanvas && typeof document !== 'undefined') {
+          _sharedCoverCanvas = document.createElement('canvas');
+        }
+        const canvas = _sharedCoverCanvas;
+        if (!canvas) {
+          reject(new Error('Canvas support unavailable'));
+          return;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(usePng ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.8));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = reject;
+    img.src = src;
+  });
+}

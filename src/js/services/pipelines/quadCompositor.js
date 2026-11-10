@@ -6,6 +6,8 @@
  * and updates a dynamic VBO per quad to eliminate garbage collection on hot paths.
  */
 
+import { lanczos3ShaderSnippet } from './glCommon.js';
+
 export const QUAD_VERTEX_COUNT = 6;
 export const QUAD_FLOATS_PER_VERTEX = 4;
 export const QUAD_VERTEX_FLOAT_COUNT = QUAD_VERTEX_COUNT * QUAD_FLOATS_PER_VERTEX; // 24 floats
@@ -155,48 +157,10 @@ out vec4 fragColor;
 uniform sampler2D u_texture;
 uniform vec2 u_sourceSize;
 
-const float PI = 3.14159265358979323846264;
-
-float lanczos3(float x) {
-  x = abs(x);
-  if (x < 0.0001) return 1.0;
-  if (x >= 3.0) return 0.0;
-  float px = PI * x;
-  return (sin(px) / px) * (sin(px / 3.0) / (px / 3.0));
-}
+${lanczos3ShaderSnippet}
 
 void main() {
-  vec2 texelSize = 1.0 / u_sourceSize;
-  vec2 pxCoords = v_texCoord * u_sourceSize;
-  vec2 center = floor(pxCoords - 0.5) + 0.5;
-  vec2 offset = pxCoords - center;
-
-  vec4 color = vec4(0.0);
-  float totalWeight = 0.0;
-
-  for (float y = -2.0; y <= 3.0; y++) {
-    float dy = y - offset.y;
-    float wy = lanczos3(dy);
-    if (wy == 0.0) continue;
-
-    for (float x = -2.0; x <= 3.0; x++) {
-      float dx = x - offset.x;
-      float wx = lanczos3(dx);
-      float weight = wx * wy;
-
-      vec2 sampleUV = clamp((center + vec2(x, y)) * texelSize, 0.0, 1.0);
-      vec4 texel = texture(u_texture, sampleUV);
-
-      texel.rgb *= texel.a;
-      color += texel * weight;
-      totalWeight += weight;
-    }
-  }
-
-  if (totalWeight > 0.00001) {
-    color /= totalWeight;
-  }
-  fragColor = clamp(color, 0.0, 1.0);
+  fragColor = sampleLanczos3(u_texture, v_texCoord, u_sourceSize);
 }
 `;
 

@@ -1,4 +1,5 @@
 import { listenWorkspaceEvent } from '../shared/workspaceSession.js';
+import { formatIpcError } from '../shared/errorUtils.js';
 
 const DEFAULT_DROP_MESSAGE = 'Drop images, links, files, or folders here';
 const FEEDBACK_DURATION_MS = 3000;
@@ -24,7 +25,7 @@ export function initDropZone({ dropOverlay, FsUtils, Core, importActions, isUnma
   function showError(err) {
     clearTimeout(feedbackTimer);
     feedback = true;
-    message = typeof err === 'string' ? err : err?.message || 'Unable to open dropped content';
+    message = formatIpcError(err, 'Unable to open dropped content');
     dropOverlay.classList.add('unsupported');
     render();
     feedbackTimer = setTimeout(() => {

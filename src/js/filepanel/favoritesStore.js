@@ -5,6 +5,7 @@
 
 import { Core } from '../core.js';
 import { groupSavedItems } from '../services/sorting.js';
+import { splitArchivePath } from '../services/archivePath.js';
 
 let configLoaded = false;
 let reconciliationPromise = null;
@@ -225,8 +226,7 @@ export function saveFavoritesCollapsed(collapsed) {
 function getFavoriteTargetPath(favorite) {
   const path = favorite?.path;
   if (typeof path !== 'string' || !path) return '';
-  const separator = path.indexOf('|');
-  return separator === -1 ? path : path.slice(0, separator);
+  return splitArchivePath(path).archivePath;
 }
 
 export async function reconcileFavorites() {

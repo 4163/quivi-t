@@ -1,4 +1,5 @@
 import { BoundedMap } from '../services/cache.js';
+import { isVideoEntry } from '../services/mediaClassification.js';
 
 const AUDIO_STATE_CACHE_CAPACITY = 500;
 const DEFAULT_VOLUME = 0.5;
@@ -144,7 +145,7 @@ async function _syncAudioState(state) {
   }
 
   const item = state.list[state.index];
-  if (!item || item.is_dir || item.is_parent || !_FsUtils?.isVideo(item.name || item.path || '')) {
+  if (!isVideoEntry(item)) {
     _resetAudio();
     return;
   }
