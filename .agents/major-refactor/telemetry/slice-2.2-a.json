@@ -1,0 +1,500 @@
+{
+  "stats": {
+    "suites": 3,
+    "tests": 54,
+    "passes": 54,
+    "pending": 0,
+    "failures": 0,
+    "start": "2026-11-11T02:59:40.359Z",
+    "end": "2026-11-11T02:59:40.459Z",
+    "duration": 100
+  },
+  "tests": [
+    {
+      "title": "library_nodes_are_single_galleries_without_nested_tree",
+      "fullTitle": "commands::directory::tests::library_nodes_are_single_galleries_without_nested_tree",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "library_nodes_never_include_files_under_subdirectories",
+      "fullTitle": "commands::directory::tests::library_nodes_never_include_files_under_subdirectories",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_create_placeholder_files",
+      "fullTitle": "commands::directory::tests::test_create_placeholder_files",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_find_directory_metadata",
+      "fullTitle": "commands::directory::tests::test_find_directory_metadata",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_get_file_sizes",
+      "fullTitle": "commands::directory::tests::test_get_file_sizes",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_get_path_kind",
+      "fullTitle": "commands::directory::tests::test_get_path_kind",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_and_write_text_file",
+      "fullTitle": "commands::directory::tests::test_read_and_write_text_file",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_directory_impl_errors",
+      "fullTitle": "commands::directory::tests::test_read_directory_impl_errors",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_directory_impl_populated_and_sorting",
+      "fullTitle": "commands::directory::tests::test_read_directory_impl_populated_and_sorting",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_directory_impl_target_and_file_path",
+      "fullTitle": "commands::directory::tests::test_read_directory_impl_target_and_file_path",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_gallery_metadata_parsing",
+      "fullTitle": "commands::directory::tests::test_read_gallery_metadata_parsing",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_remove_directory_safety",
+      "fullTitle": "commands::directory::tests::test_remove_directory_safety",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_remove_file",
+      "fullTitle": "commands::directory::tests::test_remove_file",
+      "file": "src-tauri/src/tests/directory_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "active_library_root_stays_writable_despite_retired_history",
+      "fullTitle": "commands::library::tests::active_library_root_stays_writable_despite_retired_history",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_carry_live_library_state_clears_keys_absent_in_current",
+      "fullTitle": "commands::library::tests::test_carry_live_library_state_clears_keys_absent_in_current",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_carry_live_library_state_drops_last_opened_when_continue_last_false",
+      "fullTitle": "commands::library::tests::test_carry_live_library_state_drops_last_opened_when_continue_last_false",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_carry_live_library_state_preserves_runtime_state",
+      "fullTitle": "commands::library::tests::test_carry_live_library_state_preserves_runtime_state",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_ensure_empty_writable_destination",
+      "fullTitle": "commands::library::tests::test_ensure_empty_writable_destination",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_ensure_library_write_allowed_active_and_retired",
+      "fullTitle": "commands::library::tests::test_ensure_library_write_allowed_active_and_retired",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_filesystem_root",
+      "fullTitle": "commands::library::tests::test_is_filesystem_root",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_within_library",
+      "fullTitle": "commands::library::tests::test_is_within_library",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_path_is_within_containment_and_normalization",
+      "fullTitle": "commands::library::tests::test_path_is_within_containment_and_normalization",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_remap_library_paths_config_migration",
+      "fullTitle": "commands::library::tests::test_remap_library_paths_config_migration",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_remap_library_paths_empty_or_external_config",
+      "fullTitle": "commands::library::tests::test_remap_library_paths_empty_or_external_config",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_remap_path_rewriting",
+      "fullTitle": "commands::library::tests::test_remap_path_rewriting",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_retain_retired_library_path",
+      "fullTitle": "commands::library::tests::test_retain_retired_library_path",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_same_path_equivalence",
+      "fullTitle": "commands::library::tests::test_same_path_equivalence",
+      "file": "src-tauri/src/tests/library_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_appconfig_resiliency",
+      "fullTitle": "config::tests::test_appconfig_resiliency",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_appconfig_resiliency_defaults_and_corruption",
+      "fullTitle": "config::tests::test_appconfig_resiliency_defaults_and_corruption",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_apply_pending_config_disable_promotion",
+      "fullTitle": "config::tests::test_apply_pending_config_disable_promotion",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_apply_pending_config_enable_promotion",
+      "fullTitle": "config::tests::test_apply_pending_config_enable_promotion",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_apply_pending_config_non_bool_dropped",
+      "fullTitle": "config::tests::test_apply_pending_config_non_bool_dropped",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_apply_pending_config_noop_without_pending",
+      "fullTitle": "config::tests::test_apply_pending_config_noop_without_pending",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_apply_pending_to_config_edge_cases",
+      "fullTitle": "config::tests::test_apply_pending_to_config_edge_cases",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_atomic_write_creates_and_overwrites",
+      "fullTitle": "config::tests::test_atomic_write_creates_and_overwrites",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_describe_config_source_all_modes",
+      "fullTitle": "config::tests::test_describe_config_source_all_modes",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_describe_config_source_names_override",
+      "fullTitle": "config::tests::test_describe_config_source_names_override",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_e2e_suite_non_persistence_and_detection",
+      "fullTitle": "config::tests::test_e2e_suite_non_persistence_and_detection",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_extract_and_merge_keys_edge_cases",
+      "fullTitle": "config::tests::test_extract_and_merge_keys_edge_cases",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_portable_dir_marker_and_content",
+      "fullTitle": "config::tests::test_is_portable_dir_marker_and_content",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_normalize_library_location_paths_surfaces",
+      "fullTitle": "config::tests::test_normalize_library_location_paths_surfaces",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_override_dir_rejects_relative_and_empty",
+      "fullTitle": "config::tests::test_override_dir_rejects_relative_and_empty",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_override_dir_wins_over_marker",
+      "fullTitle": "config::tests::test_override_dir_wins_over_marker",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_override_in_file_flag_honored",
+      "fullTitle": "config::tests::test_override_in_file_flag_honored",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_override_single_file_layout",
+      "fullTitle": "config::tests::test_override_single_file_layout",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_override_split_roundtrip",
+      "fullTitle": "config::tests::test_override_split_roundtrip",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_json_file_resilience",
+      "fullTitle": "config::tests::test_read_json_file_resilience",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_remove_roaming_files_leaves_unrelated_files",
+      "fullTitle": "config::tests::test_remove_roaming_files_leaves_unrelated_files",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_same_library_location_matching_and_validation",
+      "fullTitle": "config::tests::test_same_library_location_matching_and_validation",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_save_override_cleans_split_files_on_portable",
+      "fullTitle": "config::tests::test_save_override_cleans_split_files_on_portable",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_should_cleanup_old_location_only_on_migration",
+      "fullTitle": "config::tests::test_should_cleanup_old_location_only_on_migration",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_split_config_missing_files_and_extra_keys",
+      "fullTitle": "config::tests::test_split_config_missing_files_and_extra_keys",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_unchanged_config_save_preserves_content_deterministically",
+      "fullTitle": "config::tests::test_unchanged_config_save_preserves_content_deterministically",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_write_split_config_all_five_files",
+      "fullTitle": "config::tests::test_write_split_config_all_five_files",
+      "file": "src-tauri/src/tests/config_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    }
+  ]
+}

@@ -98,3 +98,34 @@ Continuation record of pre-refactor (`[Telemetry A]`) versus post-refactor (`[Te
 - `formats.rs` decomposed into `src-tauri/src/formats/{mod,registry,icons,animation,isobmff,dimensions}.rs` with 100% API facade compatibility.
 - `ArchiveCache` header reads and temp extraction polling refactored to fine-grained concurrency, eliminating global write-lock starvation.
 - Protocol zero-copy responses and fallible parsing in ICO and DIB image import verified with 0 failures or panics.
+
+---
+
+## Slice 2.2: Config, Library, Directory, and Container Sweep domain extraction
+
+- **Telemetry A:** `.agents/major-refactor/telemetry/slice-2.2-a.json`
+- **Telemetry B:** Pending implementation completion (#2.2.6)
+- **Harness:** Rust backend unit tests (`src-tauri/src/tests/config_tests.rs`, `src-tauri/src/tests/directory_tests.rs`, `src-tauri/src/tests/library_tests.rs`)
+- **Verdict:** Telemetry A baseline captured, 0 failures.
+
+### Metrics baseline
+
+| Metric | Telemetry A | Telemetry B | Delta |
+|---|---|---|---|
+| Suites | 3 | TBD | TBD |
+| Total tests | 54 | TBD | TBD |
+| Passes | 54 | TBD | TBD |
+| Failures | 0 | TBD | TBD |
+| Pending | 0 | TBD | TBD |
+| Duration | 100 ms | TBD | TBD |
+
+### Test suite breakdown
+
+- `src-tauri/src/tests/config_tests.rs`: 27 / 27
+- `src-tauri/src/tests/directory_tests.rs`: 13 / 13
+- `src-tauri/src/tests/library_tests.rs`: 14 / 14
+
+### Notes
+
+- Baseline coverage expanded across split config serialization/deserialization across all 5 files, unchanged save determinism, pending config promotion edge cases, directory listing and sorting with natural order, metadata sidecar detection, deletion safety boundaries, library root write guards, path containment and normalization, and library relocation config remapping.
+- All 54 tests pass without failures or panics.
