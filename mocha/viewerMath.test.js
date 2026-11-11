@@ -182,6 +182,36 @@ describe('viewerMath', () => {
       assert.equal(state.getTx(), 0);
       assert.equal(state.getTy(), 0);
     });
+
+    it('defaults zoomTo and zoomAt to viewport center when focal coordinates are omitted', () => {
+      const vp = { clientWidth: 1000, clientHeight: 800, left: 280, top: 32 };
+      const stateDefault = createViewportState({ getViewport: () => vp });
+      const stateExplicit = createViewportState({ getViewport: () => vp });
+
+      stateDefault.applyFitMode('window', 2000, 1000);
+      stateExplicit.applyFitMode('window', 2000, 1000);
+
+      // Omitted focal coordinates must center on the viewport regardless of offset
+      stateDefault.zoomTo(2);
+      assert.equal(stateDefault.getScale(), 2);
+      assert.equal(stateDefault.getTx(), 0);
+      assert.equal(stateDefault.getTy(), 0);
+
+      // Explicit screen coordinates matching the center of the offset viewport
+      stateExplicit.zoomTo(2, 280 + 500, 32 + 400);
+      assert.equal(stateExplicit.getScale(), stateDefault.getScale());
+      assert.equal(stateExplicit.getTx(), stateDefault.getTx());
+      assert.equal(stateExplicit.getTy(), stateDefault.getTy());
+
+      // zoomAt without explicit focal coordinates also defaults to viewport center
+      stateDefault.zoomAt(1);
+      stateExplicit.zoomAt(1, 280 + 500, 32 + 400);
+      assert.equal(stateDefault.getTx(), 0);
+      assert.equal(stateDefault.getTy(), 0);
+      assert.equal(stateDefault.getScale(), stateExplicit.getScale());
+      assert.equal(stateDefault.getTx(), stateExplicit.getTx());
+      assert.equal(stateDefault.getTy(), stateExplicit.getTy());
+    });
   });
 
   describe('coordinate and scaling helpers', () => {

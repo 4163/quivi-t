@@ -1,4 +1,5 @@
-This audit was compared against .agents/skills/validate-changes/SKILL.md and .agents/AGENTS.md before presentation.
+> **Architecture and Implementation Validation**
+> This audit was reviewed against `.agents/skills/validate-changes/SKILL.md` and `.agents/AGENTS.md`. All line references and structural findings reflect the current working tree after Slices 0.1, 0.2, 1.1, 1.2, 2.1, 2.2, and upstream bug fix 9449c59 integration.
 
 # Zone 2 architectural and performance audit: media viewer, continuous manhwa strip, viewer math, and WebGL scaling pipelines
 
@@ -25,7 +26,7 @@ Every assigned file was evaluated against the rules in `.agents/AGENTS.md` and t
   Lanczos canvas positioning writes `--crop-left`, `--crop-top`, `--crop-w`, and `--crop-h` as CSS custom properties. Line 1878-1879 calls `_columnCanvas.style.removeProperty('width')` and `removeProperty('height')` after setting buffer dimensions on canvas attributes. No intrinsic CSS style properties are assigned.
 
 - `src/js/viewer/manhwaStrip.js:499-500` `[Nit]`
-  Per-slot dimensions are set via `--slot-width` and `--slot-height`. Lines 655-670 set `--strip-width`, `--strip-spacer-top`, and `--strip-spacer-bottom`. Lines 712 and 2949 set `--slot-backdrop-bg`. Lines 773-774 set `--grill-angle` and `--slot-backdrop-angle`. Lines 999-1004 set `--slot-grill-top` and `--slot-grill-height`. Strip positioning at lines 864, 2134, 2169, 2202, 2252, 2296, 2346, 2468, 2496, 2520, 2535, and 2881 mutates `_strip.style.transform` only. No intrinsic CSS styles are assigned.
+  Per-slot dimensions are set via `--slot-width` and `--slot-height`. Lines 655-670 set `--strip-width`, `--strip-spacer-top`, and `--strip-spacer-bottom`. Lines 712 and 2949 set `--slot-backdrop-bg`. Lines 773-774 set `--grill-angle` and `--slot-backdrop-angle`. Lines 999-1004 set `--slot-grill-top` and `--slot-grill-height`. Strip positioning at lines 855, 2128, 2163, 2196, 2246, 2290, 2340, 2462, 2493, 2520, 2535, and 2881 mutates `_strip.style.transform` only. No intrinsic CSS styles are assigned.
 
 - `src/js/viewer/manhwaAudio.js:173` `[Nit]`
   Audio pill positioning sets `rec.pill.style.transform` using virtualization transforms.
@@ -90,7 +91,7 @@ Every assigned file was evaluated against the rules in `.agents/AGENTS.md` and t
 
 ## Monolithic file decoupling and ownership plan
 
-The four largest files in Zone 2 span 7,444 total lines: `manhwaStrip.js` at 3,142 lines, `viewerPipelines.js` at 2,491 lines, `viewerRender.js` at 993 lines, and `viewerMath.js` at 818 lines.
+The four largest files in Zone 2 span 7,446 total lines: `manhwaStrip.js` at 3,142 lines, `viewerPipelines.js` at 2,491 lines, `viewerRender.js` at 993 lines, and `viewerMath.js` at 820 lines.
 
 Applying the single-owner split gate from `.agents/AGENTS.md`, files must not be split into sibling files that mutate the same DOM container. Instead, pure calculations, layout state machines, schedulers, and separate canvas owners must be extracted into dedicated modules.
 
@@ -112,7 +113,7 @@ Applying the single-owner split gate from `.agents/AGENTS.md`, files must not be
          \              |              /
           v             v             v
 +-------------------------------------------------------+
-| viewerMath.js, 818 lines: Math and Viewport Store     |
+| viewerMath.js, 820 lines: Math and Viewport Store     |
 +-------------------------------------------------------+
 ```
 
@@ -161,8 +162,8 @@ Applying the single-owner split gate from `.agents/AGENTS.md`, files must not be
 - `lines 1261-1445`, 185 lines: Prefetch engine and background warming, including `_prefetchVideo`, `_prefetchAhead`, `_warmBackendAhead`, and `_sortMountQueue`.
   *Target:* Move to `src/js/services/manhwaMountScheduler.js`. Pure scheduling logic calculating priority queues based on scroll direction and anchor proximity.
 
-- `lines 1863-2146` and `2360-2537`, 462 lines: Scale calculations, fit mode resolutions, alignment transforms, and navigation commands, including `_resolveStripFitScale`, `_applyFitMode`, `alignListItemTop`, `alignListItemBottom`, `centerListItem`, `jumpManhwa`, `navigateManhwa`, and `pageStrip`.
-  *Target:* Extract geometry and navigation math to `src/js/services/columnMath.js`. The DOM transform application remains in `manhwaStrip.js`.
+- `lines 1891-2155` and `2260-2536`, 462 lines: Scale calculations, fit mode resolutions, alignment transforms, and navigation commands, including `_resolveStripFitScale`, `_applyFitMode`, `alignListItemTop`, `alignListItemBottom`, `centerListItem`, `resetZoom`, `jumpManhwa`, `navigateManhwa`, and `pageStrip`.
+  *Target:* Extract geometry and navigation math to `src/js/services/columnMath.js`. Post-zoom settled column height recomputation (`settledColH` / `settledColFits`) and sub-viewport centering routing with `targetTx` in alignment helpers belong in `columnMath.js`. Viewport focal centering remains cleanly delegated to `viewportState.js`.
 
 - `lines 497-754`, `974-1260`, `1507-1862`, and `2538-2867`, 1,800 lines: Strip DOM pool, window virtualization, slot mounting, spacer management, and Core subscription.
   *Target:* Retain in `src/js/viewer/manhwaStrip.js` as the sole writer for `#manhwa-strip`.
@@ -191,13 +192,13 @@ Applying the single-owner split gate from `.agents/AGENTS.md`, files must not be
 - `lines 15-155`, `220-282`, `342-477`, `551-650`, and `681-974`, 775 lines: Image pool, video pool with `#viewer-video` and `#viewer-video-b`, SVG bounds, active image synchronization to Core and statusbar.
   *Target:* Retain in `src/js/viewer/viewerRender.js` as the sole owner of `#viewer-img-wrapper`.
 
-#### 4. `src/js/services/viewerMath.js`, 818 lines
+#### 4. `src/js/services/viewerMath.js`, 820 lines
 
-- `lines 403-739`, 337 lines: `createViewportState`.
+- `lines 403-741`, 339 lines: `createViewportState`.
   This is a stateful store managing scale, pan translation, rotation, flip, spread step, user transform locks, and observer subscriptions. It is not pure math.
-  *Target:* Extract into `src/js/services/viewportState.js`.
+  *Target:* Extract into `src/js/services/viewportState.js`. Focal coordinate defaulting to `(vp.left + vw / 2, vp.top + vh / 2)` belongs in `viewportState.js` to preserve zero horizontal translation drift when docked without layout thrashing.
 
-- `lines 1-401` and `741-818`, 481 lines: Pure layout and coordinate calculations, including `checkIsSpread`, `icoSizesTotal`, `computeStripWidth`, `computeColumnOffsets`, `seamOverlapForScale`, `columnCenterY`, `columnCenterTy`, `findAnchorIndex`, `computeWindowRange`, `firstLastHighlight`, `computeTopAlignTy`, `computeBottomAlignTy`, `computeColumnComposite`, `invertViewport`, and `computeStripFitScale`.
+- `lines 1-402` and `743-820`, 481 lines: Pure layout and coordinate calculations, including `checkIsSpread`, `icoSizesTotal`, `computeStripWidth`, `computeColumnOffsets`, `seamOverlapForScale`, `columnCenterY`, `columnCenterTy`, `findAnchorIndex`, `computeWindowRange`, `firstLastHighlight`, `computeTopAlignTy`, `computeBottomAlignTy`, `computeColumnComposite`, `invertViewport`, and `computeStripFitScale`.
   *Target:* Retain in `src/js/services/viewerMath.js` as purely functional, stateless calculation utilities.
 
 #### 5. Audio logic unification between `viewerAudio.js` and `manhwaAudio.js`
@@ -233,7 +234,7 @@ Layout reads interleaved with DOM or style writes force the browser to synchrono
    `syncPills` iterates over `_attached.values` on window resize and slot movements, calling `_positionPill` sequentially. Each iteration reads element geometry and immediately writes `rec.pill.style.transform`. With multiple active video slots in view, this causes synchronous layout thrashing.
    *Remediation:* Batch all `getBoundingClientRect` reads first, compute target coordinates, then apply style transforms in a separate write phase.
 
-2. `src/js/viewer/manhwaStrip.js:803-804`, `980`, `1016`
+2. `src/js/viewer/manhwaStrip.js:794`, `971`, `1007`
    Inside `_updateWindow` from line 1008 to 1250 and `_updateLayout` from line 798 to 874, the strip reads `_viewport.clientHeight` and `_viewport.clientWidth` while simultaneously mutating slot datasets, appending or removing slot children, and setting CSS variables on `_strip`.
    *Remediation:* `viewer.js` already maintains `_cachedViewport` updated via ResizeObserver at lines 65-76. `manhwaStrip.js` should read cached dimensions from `viewportState.getViewport` instead of querying `_viewport.clientHeight` on every pan, scroll, and layout tick.
 
@@ -369,9 +370,9 @@ Layout reads interleaved with DOM or style writes force the browser to synchrono
    *Recommended shared helper:* Consolidate entry format testing into `src/js/services/mediaClassification.js`.
 
 5. **Transform string formatting:**
-   - `src/js/services/viewerMath.js:697`
+   - `src/js/services/viewerMath.js:699`
    - `src/js/viewer/viewerRender.js:170-174`
-   - `src/js/viewer/manhwaStrip.js:864`, `2134`, `2296`, `2346`
+   - `src/js/viewer/manhwaStrip.js:855`, `2128`, `2290`, `2340`
    Transform strings with `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) rotate(...) scale(...)` are formatted manually in multiple callsites.
    *Recommended shared helper:* Centralize transform string generation in `viewerMath.js`.
 
@@ -382,7 +383,7 @@ Layout reads interleaved with DOM or style writes force the browser to synchrono
    - `src/js/services/scaling/lanczosWebGL.js`: Contains WebGL Lanczos3 shader for live pump scaling. Missing from `architecture-state.md`.
 
 2. **Unused function parameters:**
-   - `src/js/services/viewerMath.js:741`:
+   - `src/js/services/viewerMath.js:743`:
      `getEffectiveScaling(scalingMode, isAnimated, isSvg = false)`
      The `isAnimated` parameter is never read in the function body:
      ```javascript

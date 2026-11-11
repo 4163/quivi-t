@@ -2082,17 +2082,20 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
 
   const preScale = _viewportState.getScale() || 1;
   const centerColY = columnCenterY(_layout.totalHeight, preScale, _viewportState.getTy(), _flipY());
-  _viewportState.zoomTo(targetScale, vw / 2, vh / 2);
+  _viewportState.zoomTo(targetScale);
+
+  const settledColH = (_layout.totalHeight || 0) * targetScale;
+  const settledColFits = settledColH <= vh + 0.5 || _imageIndex.length <= 1;
 
   if (targetImgIdx !== null) {
     if (alignTop) {
-      if (!colFits && _layout.offsets[targetImgIdx]) {
+      if (!settledColFits && _layout.offsets[targetImgIdx]) {
         _topAlignColumnY(_slotTopY(targetImgIdx), 0);
       } else {
         _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       }
     } else {
-      if (!colFits && _isBottomItem(targetImgIdx) && _imageIndex.length > 1) {
+      if (!settledColFits && _isBottomItem(targetImgIdx) && _imageIndex.length > 1) {
         _bottomAlignColumnY(_slotBottomY(targetImgIdx), 0);
       } else if (_layout.offsets[targetImgIdx]) {
         _centerColumnY(_layout.offsets[targetImgIdx].top + _layout.offsets[targetImgIdx].height / 2, 0);
@@ -2100,9 +2103,9 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
         _centerColumnY((_layout.totalHeight || 0) / 2, 0);
       }
     }
-  } else if (colH <= vh + 0.5) {
+  } else if (settledColH <= vh + 0.5) {
     const isMiddle = 0 < _anchorImgIdx && _anchorImgIdx < _imageIndex.length - 1;
-    if (_imageIndex.length <= 2 || isMiddle || colFits) {
+    if (_imageIndex.length <= 2 || isMiddle || settledColFits) {
       const idx = _anchorImgIdx >= 0 && _layout.offsets[_anchorImgIdx] ? _anchorImgIdx : 0;
       if (_layout.offsets[idx]) {
         _centerColumnY(_layout.offsets[idx].top + _layout.offsets[idx].height / 2, 0);
@@ -2312,7 +2315,7 @@ export function resetZoom(exactScale) {
       }
     }
 
-    _viewportState.zoomTo(exactScale, vw / 2, vh / 2);
+    _viewportState.zoomTo(exactScale);
 
     // Re-pin the anchor at its current offset so ty stays stable.
     if (_anchorHoldover !== null && _layout.offsets[_anchorHoldover]) {
@@ -2472,7 +2475,10 @@ function _topAlignColumnY(colY, targetTx = null) {
   const scale = _viewportState.getScale() || 1;
   const vpH = _viewport?.clientHeight || 800;
   const colH = (_layout.totalHeight || 0) * scale;
-  if (colH <= vpH + 0.5) return;
+  if (colH <= vpH + 0.5) {
+    _centerColumnY((_layout.totalHeight || 0) / 2, targetTx);
+    return;
+  }
   const targetTy = computeTopAlignTy({
     slotTop: colY,
     totalHeight: _layout.totalHeight || 0,
@@ -2496,7 +2502,10 @@ function _bottomAlignColumnY(colY, targetTx = null) {
   const scale = _viewportState.getScale() || 1;
   const vpH = _viewport?.clientHeight || 800;
   const colH = (_layout.totalHeight || 0) * scale;
-  if (colH <= vpH + 0.5) return;
+  if (colH <= vpH + 0.5) {
+    _centerColumnY((_layout.totalHeight || 0) / 2, targetTx);
+    return;
+  }
   const targetTy = computeBottomAlignTy({
     slotBottom: colY,
     totalHeight: _layout.totalHeight || 0,
