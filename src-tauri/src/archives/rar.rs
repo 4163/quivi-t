@@ -142,7 +142,11 @@ pub(crate) fn extract_rar_to_temp(
     cancel_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
     password: Option<String>,
 ) {
-    let _finish_guard = FinishGuard(&notify);
+    let _finish_guard = FinishGuard {
+        notify: &notify,
+        temp_dir: &temp_dir,
+        cancel_flag: &cancel_flag,
+    };
     if validate_rar_header(&archive_path).is_err() {
         return;
     }

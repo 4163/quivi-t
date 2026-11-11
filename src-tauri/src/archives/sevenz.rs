@@ -27,12 +27,20 @@ pub(crate) fn validate_7z_header(archive_path: &str) -> Result<(), String> {
     file.read_exact(&mut header)
         .map_err(|e| format!("Cannot read 7Z signature: {e}"))?;
 
-    if header[0..6] != [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C] {
+    if header.get(0..6) != Some(&[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]) {
         return Err("Invalid 7Z archive: missing 7Z signature header".to_string());
     }
 
-    let next_header_offset = u64::from_le_bytes(header[12..20].try_into().unwrap());
-    let next_header_size = u64::from_le_bytes(header[20..28].try_into().unwrap());
+    let next_header_offset = header
+        .get(12..20)
+        .and_then(|s| s.try_into().ok())
+        .map(u64::from_le_bytes)
+        .ok_or_else(|| "Invalid 7Z archive: truncated header offset".to_string())?;
+    let next_header_size = header
+        .get(20..28)
+        .and_then(|s| s.try_into().ok())
+        .map(u64::from_le_bytes)
+        .ok_or_else(|| "Invalid 7Z archive: truncated header size".to_string())?;
 
     if let Some(end) = 32u64
         .checked_add(next_header_offset)
@@ -146,7 +154,11 @@ pub(crate) fn extract_7z_to_temp(
     cancel_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
     password: Option<String>,
 ) {
-    let _finish_guard = FinishGuard(&notify);
+    let _finish_guard = FinishGuard {
+        notify: &notify,
+        temp_dir: &temp_dir,
+        cancel_flag: &cancel_flag,
+    };
     if validate_7z_header(&archive_path).is_err() {
         return;
     }

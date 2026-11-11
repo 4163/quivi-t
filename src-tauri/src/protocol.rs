@@ -22,10 +22,7 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             let (path, ext_key, size) = match parse_icon_url(&url) {
                 Ok(parts) => parts,
                 Err(message) => {
-                    let response = Response::builder()
-                        .status(400)
-                        .body(message.into_bytes())
-                        .unwrap();
+                    let response = simple_response(400, message.into_bytes());
                     responder.respond(response);
                     return;
                 }
@@ -36,10 +33,7 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
                     &path, &ext_key, size,
                 ) {
                     Ok(Some(bytes)) => png_response(bytes),
-                    _ => Response::builder()
-                        .status(404)
-                        .body(b"Icon not found".to_vec())
-                        .unwrap(),
+                    _ => simple_response(404, b"Icon not found".to_vec()),
                 };
                 responder.respond(response);
             });
@@ -50,10 +44,7 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             let path = match parse_thumb_url(&url) {
                 Ok(path) => path,
                 Err(message) => {
-                    let response = Response::builder()
-                        .status(400)
-                        .body(message.into_bytes())
-                        .unwrap();
+                    let response = simple_response(400, message.into_bytes());
                     responder.respond(response);
                     return;
                 }
@@ -63,10 +54,7 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
                 let response = match crate::platform::thumbnails::get_shell_thumbnail_png(&path, 96)
                 {
                     Ok(Some(bytes)) => png_response(bytes),
-                    _ => Response::builder()
-                        .status(404)
-                        .body(b"Thumbnail not found".to_vec())
-                        .unwrap(),
+                    _ => simple_response(404, b"Thumbnail not found".to_vec()),
                 };
                 responder.respond(response);
             });
@@ -76,27 +64,25 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
         let (archive_path, entry_name) = match parse_archive_url(&url) {
             Ok(parts) => parts,
             Err(message) => {
-                let response = Response::builder()
-                    .status(400)
-                    .body(message.into_bytes())
-                    .unwrap();
+                let response = simple_response(400, message.into_bytes());
                 responder.respond(response);
                 return;
             }
         };
 
         let app_handle = ctx.app_handle().clone();
-        if let Some(response) = try_cached_entry_response(
-            &app_handle,
-            &archive_path,
-            &entry_name,
-            range_header.as_deref(),
-        ) {
-            responder.respond(response);
-            return;
-        }
 
         tauri::async_runtime::spawn_blocking(move || {
+            if let Some(response) = try_cached_entry_response(
+                &app_handle,
+                &archive_path,
+                &entry_name,
+                range_header.as_deref(),
+            ) {
+                responder.respond(response);
+                return;
+            }
+
             // Unlocked ZIP path first: extraction runs without the global
             // lock so parallel entry fetches overlap instead of queueing.
             let state = app_handle.state::<std::sync::RwLock<ArchiveCache>>();
@@ -107,13 +93,10 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             ) {
                 match shared {
                     Ok(d) => {
-                        responder.respond(entry_response(&entry_name, &d, range_header.as_deref()))
+                        responder.respond(entry_response(&entry_name, &*d, range_header.as_deref()))
                     }
                     Err(_) => {
-                        let response = Response::builder()
-                            .status(404)
-                            .body(b"Entry not found or failed to extract".to_vec())
-                            .unwrap();
+                        let response = simple_response(404, b"Entry not found or failed to extract".to_vec());
                         responder.respond(response);
                     }
                 }
@@ -129,12 +112,9 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             let data = entry_data.and_then(|d| d.wait_for_data(&entry_name));
 
             if let Ok(d) = data {
-                responder.respond(entry_response(&entry_name, &d, range_header.as_deref()));
+                responder.respond(entry_response(&entry_name, d, range_header.as_deref()));
             } else {
-                let response = Response::builder()
-                    .status(404)
-                    .body(b"Entry not found or failed to extract".to_vec())
-                    .unwrap();
+                let response = simple_response(404, b"Entry not found or failed to extract".to_vec());
                 responder.respond(response);
             }
         });
@@ -210,7 +190,14 @@ fn try_cached_entry_response<R: tauri::Runtime>(
         .cached_zip_entry_bytes(archive_path, entry_name)
         .ok()
         .flatten()?;
-    Some(entry_response(entry_name, &data, range_header))
+    Some(entry_response(entry_name, &*data, range_header))
+}
+
+fn simple_response(status: u16, body: impl Into<Vec<u8>>) -> Response<Vec<u8>> {
+    Response::builder()
+        .status(status)
+        .body(body.into())
+        .unwrap_or_else(|_| Response::new(Vec::new()))
 }
 
 fn png_response(data: Vec<u8>) -> Response<Vec<u8>> {
@@ -221,10 +208,15 @@ fn png_response(data: Vec<u8>) -> Response<Vec<u8>> {
         .header("Cache-Control", "public, max-age=86400")
         .header("Access-Control-Allow-Origin", "*")
         .body(data)
-        .unwrap()
+        .unwrap_or_else(|_| Response::new(Vec::new()))
 }
 
-fn entry_response(entry_name: &str, data: &[u8], range_header: Option<&str>) -> Response<Vec<u8>> {
+fn entry_response<'a>(
+    entry_name: &str,
+    data: impl Into<std::borrow::Cow<'a, [u8]>>,
+    range_header: Option<&str>,
+) -> Response<Vec<u8>> {
+    let data = data.into();
     let mime = guess_mime(entry_name);
     if let Some(range) = range_header.and_then(|range| parse_byte_range(range, data.len())) {
         let body = data[range.start..=range.end].to_vec();
@@ -237,18 +229,19 @@ fn entry_response(entry_name: &str, data: &[u8], range_header: Option<&str>) -> 
             .header("Cache-Control", "no-store")
             .header("Access-Control-Allow-Origin", "*")
             .body(body)
-            .unwrap();
+            .unwrap_or_else(|_| Response::new(Vec::new()));
     }
 
+    let len = data.len();
     Response::builder()
         .status(200)
         .header("Content-Type", mime)
         .header("Accept-Ranges", "bytes")
-        .header("Content-Length", data.len().to_string())
+        .header("Content-Length", len.to_string())
         .header("Cache-Control", "no-store")
         .header("Access-Control-Allow-Origin", "*")
-        .body(data.to_vec())
-        .unwrap()
+        .body(data.into_owned())
+        .unwrap_or_else(|_| Response::new(Vec::new()))
 }
 
 #[derive(Debug, PartialEq, Eq)]

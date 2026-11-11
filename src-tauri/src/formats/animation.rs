@@ -1,0 +1,287 @@
+use crate::models::AnimationInfo;
+use super::isobmff::{is_avif_family_brand, isobmff_box};
+
+pub fn check_animation_status(bytes: &[u8]) -> AnimationInfo {
+    if bytes.len() < 8 {
+        return AnimationInfo {
+            is_animated: false,
+            loop_count: 0,
+        };
+    }
+
+    if bytes.starts_with(b"GIF8") {
+        return check_gif(bytes);
+    } else if bytes.starts_with(b"RIFF") && bytes.len() > 12 && &bytes[8..12] == b"WEBP" {
+        return check_webp(bytes);
+    } else if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return check_apng(bytes);
+    } else if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" {
+        return check_avif(bytes);
+    } else if bytes.windows(4).any(|w| w == b"<svg") {
+        return AnimationInfo {
+            is_animated: check_svg(bytes),
+            loop_count: 0,
+        };
+    }
+
+    AnimationInfo {
+        is_animated: false,
+        loop_count: 0,
+    }
+}
+
+fn check_gif(bytes: &[u8]) -> AnimationInfo {
+    if bytes.len() < 13 || !bytes.starts_with(b"GIF") {
+        return AnimationInfo {
+            is_animated: false,
+            loop_count: 0,
+        };
+    }
+
+    let mut pos = 13;
+    let flags = bytes[10];
+    if (flags & 0x80) != 0 {
+        let gct_size = 2_usize.pow((flags & 0x07) as u32 + 1);
+        pos += 3 * gct_size;
+    }
+
+    let mut frame_count: u32 = 0;
+    let mut parsed_loop_count: Option<u16> = None;
+    let scan_limit = bytes.len().min(262_144); // 256 KiB
+
+    while pos < scan_limit {
+        let block_type = bytes[pos];
+        if block_type == 0x2C {
+            frame_count += 1;
+            // Early exit: we know it's animated and already found loop status
+            if frame_count > 1 && parsed_loop_count.is_some() {
+                break;
+            }
+            pos += 1;
+            if pos + 9 > bytes.len() {
+                break;
+            }
+            let lct_flags = bytes[pos + 8];
+            pos += 9;
+            if (lct_flags & 0x80) != 0 {
+                let lct_size = 2_usize.pow((lct_flags & 0x07) as u32 + 1);
+                pos += 3 * lct_size;
+            }
+            if pos < bytes.len() {
+                pos += 1; // LZW code size
+                while pos < bytes.len() {
+                    let block_size = bytes[pos] as usize;
+                    pos += 1;
+                    if block_size == 0 {
+                        break;
+                    }
+                    pos += block_size;
+                }
+            }
+        } else if block_type == 0x21 {
+            pos += 1;
+            if pos < bytes.len() {
+                let ext_label = bytes[pos];
+                pos += 1;
+                if ext_label == 0xFF {
+                    if pos + 12 <= bytes.len() && &bytes[pos..pos + 12] == b"\x0BNETSCAPE2.0" {
+                        if pos + 16 <= bytes.len()
+                            && bytes[pos + 12] == 0x03
+                            && bytes[pos + 13] == 0x01
+                        {
+                            parsed_loop_count =
+                                Some(u16::from_le_bytes([bytes[pos + 14], bytes[pos + 15]]));
+                        } else {
+                            parsed_loop_count = Some(0);
+                        }
+                    }
+                }
+                while pos < bytes.len() {
+                    let block_size = bytes[pos] as usize;
+                    pos += 1;
+                    if block_size == 0 {
+                        break;
+                    }
+                    pos += block_size;
+                }
+            }
+        } else if block_type == 0x3B {
+            break;
+        } else {
+            break;
+        }
+    }
+
+    let is_animated = frame_count > 1 || parsed_loop_count.is_some();
+
+    // Normalize GIF loop count to total_plays
+    let loop_count = if is_animated {
+        match parsed_loop_count {
+            None => 1,                 // No NETSCAPE block = play once
+            Some(0) => 0,              // 0 = infinite
+            Some(n) => (n as u32) + 1, // Native plays N + 1 times
+        }
+    } else {
+        0
+    };
+
+    AnimationInfo {
+        is_animated,
+        loop_count,
+    }
+}
+
+fn check_webp(bytes: &[u8]) -> AnimationInfo {
+    if let Some(pos) = bytes.windows(4).position(|w| w == b"VP8X") {
+        if pos + 8 < bytes.len() {
+            let flags = bytes[pos + 8];
+            let is_animated = (flags & 0b0000_0010) != 0;
+            if is_animated {
+                if let Some(anim_pos) = bytes.windows(4).position(|w| w == b"ANIM") {
+                    if anim_pos + 14 <= bytes.len() {
+                        let parsed_loop_count =
+                            u16::from_le_bytes([bytes[anim_pos + 12], bytes[anim_pos + 13]]);
+                        let loop_count = if parsed_loop_count == 0 {
+                            0
+                        } else {
+                            (parsed_loop_count as u32) + 1
+                        };
+                        return AnimationInfo {
+                            is_animated,
+                            loop_count,
+                        };
+                    }
+                }
+                return AnimationInfo {
+                    is_animated,
+                    loop_count: 0,
+                };
+            }
+        }
+    }
+    AnimationInfo {
+        is_animated: false,
+        loop_count: 0,
+    }
+}
+
+fn check_apng(bytes: &[u8]) -> AnimationInfo {
+    let actl_pos = bytes.windows(4).position(|w| w == b"acTL");
+    let idat_pos = bytes.windows(4).position(|w| w == b"IDAT");
+
+    match (actl_pos, idat_pos) {
+        (Some(a), Some(i)) if a < i => {
+            let mut loop_count = 0;
+            if a + 12 <= bytes.len() {
+                if let Ok(num_plays) = bytes[a + 8..a + 12].try_into() {
+                    loop_count = u32::from_be_bytes(num_plays);
+                }
+            }
+            AnimationInfo {
+                is_animated: true,
+                loop_count,
+            }
+        }
+        (Some(_), None) => AnimationInfo {
+            is_animated: true,
+            loop_count: 0,
+        },
+        _ => AnimationInfo {
+            is_animated: false,
+            loop_count: 0,
+        },
+    }
+}
+
+/// Animated AVIF is still a `.avif` file. Two in-file signals, either is enough:
+/// `avis` in `ftyp` (the spec brand for a sequence) or a top-level `moov`
+/// (the movie timeline) on an AVIF-family file. Still AVIF is `avif` without
+/// `avis` and without `moov`. Walk boxes; do not scan payload bytes for the
+/// four-character codes.
+fn contains_elst(bytes: &[u8], start: usize, end: usize) -> bool {
+    let mut pos = start;
+    while pos + 8 <= end {
+        let Some((size, header, typ)) = isobmff_box(bytes, pos) else {
+            break;
+        };
+        if size < header || pos.checked_add(size).is_none() {
+            break;
+        }
+        let box_end = (pos + size).min(end);
+
+        if &typ == b"elst" {
+            return true;
+        } else if &typ == b"moov" || &typ == b"trak" || &typ == b"edts" {
+            if contains_elst(bytes, pos + header, box_end) {
+                return true;
+            }
+        }
+
+        if pos + size > end {
+            break;
+        }
+        pos += size;
+    }
+    false
+}
+
+fn check_avif(bytes: &[u8]) -> AnimationInfo {
+    let mut pos = 0;
+    let mut avis = false;
+    let mut avif_family = false;
+    let mut has_moov = false;
+    let mut has_elst = false;
+
+    while pos + 8 <= bytes.len() {
+        let Some((size, header, typ)) = isobmff_box(bytes, pos) else {
+            break;
+        };
+        if size < header || pos.checked_add(size).is_none() {
+            break;
+        }
+        let box_end = (pos + size).min(bytes.len());
+
+        if &typ == b"ftyp" {
+            let payload = pos + header;
+            if payload + 4 <= box_end {
+                let major = &bytes[payload..payload + 4];
+                avis |= major == b"avis";
+                avif_family |= is_avif_family_brand(major);
+                let mut i = payload + 8;
+                while i + 4 <= box_end {
+                    let brand = &bytes[i..i + 4];
+                    avis |= brand == b"avis";
+                    avif_family |= is_avif_family_brand(brand);
+                    i += 4;
+                }
+            }
+        } else if &typ == b"moov" {
+            has_moov = true;
+            if contains_elst(bytes, pos + header, box_end) {
+                has_elst = true;
+            }
+        }
+
+        if pos + size > bytes.len() {
+            break;
+        }
+        pos += size;
+    }
+
+    let is_animated = avis || (avif_family && has_moov);
+    let loop_count = if is_animated && has_elst { 1 } else { 0 };
+
+    AnimationInfo {
+        is_animated,
+        loop_count,
+    }
+}
+
+fn check_svg(bytes: &[u8]) -> bool {
+    // <animate matches <animate, <animateMotion, and <animateTransform
+    bytes.windows(8).any(|w| w == b"<animate")
+        || bytes.windows(5).any(|w| w == b"<set " || w == b"<set>")
+        || bytes
+            .windows(6)
+            .any(|w| w == b"<set\t\n" || w == b"<set\r\n") // Just in case, though <set > is enough usually
+}

@@ -51,10 +51,8 @@ pub fn prefetch_archive_entries(
         return Ok(());
     }
 
-    for entry_name in entries {
-        if let Ok(mut cache) = state.write() {
-            let _ = cache.read_entry_bytes(&archive_path, &entry_name);
-        }
+    if let Ok(mut cache) = state.write() {
+        cache.prefetch_entries(&archive_path, &entries);
     }
 
     Ok(())
@@ -66,11 +64,10 @@ pub fn get_archive_ico_frames(
     entry_name: String,
     state: tauri::State<'_, RwLock<ArchiveCache>>,
 ) -> Result<Vec<crate::models::IcoSize>, String> {
-    let entry_data = state
-        .write()
-        .map_err(|e| e.to_string())?
-        .read_entry_bytes(&archive_path, &entry_name)?;
-    let data = entry_data.wait_for_data(&entry_name)?;
+    let data = {
+        let cache = state.read().map_err(|e| e.to_string())?;
+        cache.read_resolved_entry_bytes(&archive_path, &entry_name)?
+    };
     ico_frames_from_bytes(&data)
 }
 

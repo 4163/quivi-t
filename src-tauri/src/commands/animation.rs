@@ -39,7 +39,7 @@ pub fn check_is_animated(
 ) -> Result<AnimationInfo, String> {
     if let Some(arc_path) = archive_path {
         let header = {
-            let mut cache = state.write().map_err(|e| e.to_string())?;
+            let cache = state.read().map_err(|e| e.to_string())?;
             cache.read_entry_header(&arc_path, &path, 262_144)?
         };
         Ok(crate::formats::check_animation_status(&header))
@@ -61,7 +61,7 @@ pub fn check_media_audio(
 ) -> Result<bool, String> {
     if let Some(arc_path) = archive_path {
         let entry_bytes = {
-            let mut cache = state.write().map_err(|e| e.to_string())?;
+            let cache = state.read().map_err(|e| e.to_string())?;
             cache.read_entry_header(&arc_path, &path, 524_288)?
         };
         let mut cursor = std::io::Cursor::new(&entry_bytes);
@@ -255,21 +255,14 @@ fn scan_temp_archive_widths(
     gen: u64,
 ) {
     use tauri::Manager;
-    let mut extraction_state = None;
-    for _ in 0..10 {
-        if SCAN_GENERATION.load(Ordering::Relaxed) != gen {
-            return;
-        }
-        if let Some(cache) = app.try_state::<RwLock<ArchiveCache>>() {
-            if let Ok(c) = cache.read() {
-                if let Some(s) = c.temp_extraction_state(archive_path) {
-                    extraction_state = Some(s);
-                    break;
-                }
-            }
-        }
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+    let extraction_state = app.try_state::<RwLock<ArchiveCache>>().and_then(|cache| {
+        crate::archives::wait_for_temp_extraction_state(
+            &cache,
+            archive_path,
+            std::time::Duration::from_millis(500),
+            || SCAN_GENERATION.load(Ordering::Relaxed) != gen,
+        )
+    });
 
     let (temp_dir, notify) = match extraction_state {
         Some(s) => s,
@@ -486,21 +479,14 @@ fn scan_zip_archive_dimensions(
 
 fn scan_temp_archive_dimensions(archive_path: &str, app: &tauri::AppHandle, gen: u64) {
     use tauri::Manager;
-    let mut extraction_state = None;
-    for _ in 0..10 {
-        if DIMS_SCAN_GENERATION.load(Ordering::Relaxed) != gen {
-            return;
-        }
-        if let Some(cache) = app.try_state::<RwLock<ArchiveCache>>() {
-            if let Ok(c) = cache.read() {
-                if let Some(s) = c.temp_extraction_state(archive_path) {
-                    extraction_state = Some(s);
-                    break;
-                }
-            }
-        }
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+    let extraction_state = app.try_state::<RwLock<ArchiveCache>>().and_then(|cache| {
+        crate::archives::wait_for_temp_extraction_state(
+            &cache,
+            archive_path,
+            std::time::Duration::from_millis(500),
+            || DIMS_SCAN_GENERATION.load(Ordering::Relaxed) != gen,
+        )
+    });
 
     let (temp_dir, notify) = match extraction_state {
         Some(s) => s,

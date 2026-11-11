@@ -236,24 +236,45 @@ fn bmp_header_from_dib(bytes: &[u8], size: usize) -> Result<[u8; BMP_HEADER_BYTE
     if bytes.len() < 40 {
         return Err("Dropped bitmap header is incomplete".into());
     }
-    let u32_at = |offset| u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap());
-    let header = u32_at(0) as usize;
+    let u32_at = |offset: usize| -> Result<u32, String> {
+        bytes
+            .get(offset..offset + 4)
+            .and_then(|s| s.try_into().ok())
+            .map(u32::from_le_bytes)
+            .ok_or_else(|| "Dropped bitmap header is incomplete".to_string())
+    };
+    let i32_at = |offset: usize| -> Result<i32, String> {
+        bytes
+            .get(offset..offset + 4)
+            .and_then(|s| s.try_into().ok())
+            .map(i32::from_le_bytes)
+            .ok_or_else(|| "Dropped bitmap header is incomplete".to_string())
+    };
+    let u16_at = |offset: usize| -> Result<u16, String> {
+        bytes
+            .get(offset..offset + 2)
+            .and_then(|s| s.try_into().ok())
+            .map(u16::from_le_bytes)
+            .ok_or_else(|| "Dropped bitmap header is incomplete".to_string())
+    };
+    let header = u32_at(0)? as usize;
     if ![40, 52, 56, 108, 124].contains(&header) || header > bytes.len() {
         return Err("Dropped bitmap header is not supported".into());
     }
-    let width = i32::from_le_bytes(bytes[4..8].try_into().unwrap());
-    let height = i32::from_le_bytes(bytes[8..12].try_into().unwrap());
+    let width = i32_at(4)?;
+    let height = i32_at(8)?;
     if width <= 0 || height == i32::MIN {
         return Err("Invalid dropped bitmap dimensions".into());
     }
     check_dimensions(width as u32, height.unsigned_abs())?;
-    let depth = u16::from_le_bytes(bytes[14..16].try_into().unwrap());
-    let compression = u32_at(16);
+    let depth = u16_at(14)?;
+    let compression = u32_at(16)?;
     if ![1, 4, 8, 16, 24, 32].contains(&depth) || ![0, 3, 6].contains(&compression) {
         return Err("Dropped bitmap encoding is not supported".into());
     }
-    let palette = if u32_at(32) != 0 {
-        u32_at(32) as usize
+    let palette_colors = u32_at(32)?;
+    let palette = if palette_colors != 0 {
+        palette_colors as usize
     } else if depth <= 8 {
         1 << depth
     } else {

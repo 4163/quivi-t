@@ -684,7 +684,7 @@ fn archive_cache_read_entry_header_contracts() {
     create_test_zip(&zip_path, &[("payload.bin", &payload)]);
 
     let path_str = zip_path.to_str().unwrap();
-    let mut cache = ArchiveCache::new(8);
+    let cache = ArchiveCache::new(8);
 
     // Limit smaller than payload
     let h10 = cache

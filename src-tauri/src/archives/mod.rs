@@ -93,37 +93,10 @@ impl ArchiveEntryData {
         match self {
             Self::Ready(data) => Ok(data.to_vec()),
             Self::PendingExtraction { file_path, notify } => {
-                let (lock, cvar) = &*notify;
-                let mut guard = match lock.lock() {
-                    Ok(g) => g,
-                    Err(p) => p.into_inner(),
-                };
-                let timeout = Duration::from_secs(30);
-                let start = std::time::Instant::now();
-
-                while !guard.extracted.contains(entry_name) && !guard.finished {
-                    let elapsed = start.elapsed();
-                    if elapsed >= timeout {
-                        break;
-                    }
-                    let rem = timeout - elapsed;
-                    let (next_guard, timeout_res) =
-                        cvar.wait_timeout(guard, rem).map_err(|e| e.to_string())?;
-                    guard = next_guard;
-                    if timeout_res.timed_out() {
-                        break;
-                    }
-                }
-
-                if guard.extracted.contains(entry_name) {
-                    fs::read(&file_path).map_err(|e| {
-                        format!("Cannot read extracted archive entry {entry_name}: {e}")
-                    })
-                } else {
-                    Err(format!(
-                        "Archive entry {entry_name} not available or extraction finished"
-                    ))
-                }
+                notify.wait_for_entry(entry_name, Duration::from_secs(30))?;
+                fs::read(&file_path).map_err(|e| {
+                    format!("Cannot read extracted archive entry {entry_name}: {e}")
+                })
             }
         }
     }
@@ -222,7 +195,7 @@ impl ArchiveCache {
         Ok(self.get_zip_entry(archive_path, entry_name))
     }
     pub fn read_entry_header(
-        &mut self,
+        &self,
         archive_path: &str,
         entry_name: &str,
         limit: usize,
@@ -236,7 +209,7 @@ impl ArchiveCache {
     }
 
     fn read_zip_entry_header(
-        &mut self,
+        &self,
         archive_path: &str,
         entry_name: &str,
         limit: usize,
@@ -260,12 +233,8 @@ impl ArchiveCache {
         zip::read_zip_entry_header(&mut archive, entry_name, limit, None, None)
     }
 
-    // Architectural Note: RAR, 7Z, and TAR formats currently wait for the entire entry
-    // to be fully extracted to disk before we can slice the header out of it.
-    // Unlike ZIP, we do not stream the header from these formats directly.
-    // This behavior is intentional/maintained for now as the temp extractor handles it.
     fn read_temp_entry_header(
-        &mut self,
+        &self,
         archive_path: &str,
         entry_name: &str,
         limit: usize,
@@ -274,52 +243,66 @@ impl ArchiveCache {
             return Err(format!("Archive is password-protected: {archive_path}"));
         }
 
-        let data = self.read_temp_entry_bytes(archive_path, entry_name)?;
-        match data {
-            ArchiveEntryData::Ready(arc) => {
-                let end = arc.len().min(limit);
-                Ok(arc[..end].to_vec())
-            }
-            ArchiveEntryData::PendingExtraction { file_path, notify } => {
-                // Note: Wait logic duplicates ArchiveEntryData::wait_for_data.
-                // Left inline to avoid premature abstraction for a two-caller pattern.
-                let (lock, cvar) = &*notify;
-                let mut guard = match lock.lock() {
-                    Ok(g) => g,
-                    Err(p) => p.into_inner(),
-                };
-                let timeout = std::time::Duration::from_secs(30);
-                let start = std::time::Instant::now();
-                while !guard.extracted.contains(entry_name) && !guard.finished {
-                    let elapsed = start.elapsed();
-                    if elapsed >= timeout {
-                        break;
-                    }
-                    let (next, timed_out) = cvar
-                        .wait_timeout(guard, timeout - elapsed)
-                        .map_err(|e| e.to_string())?;
-                    guard = next;
-                    if timed_out.timed_out() {
-                        break;
-                    }
-                }
-                if !guard.extracted.contains(entry_name) {
-                    return Err(format!(
-                        "Archive entry {entry_name} not available or extraction finished"
-                    ));
-                }
-                drop(guard);
+        let (temp_dir, notify) = self.temp_extraction_state(archive_path).ok_or_else(|| {
+            format!("Archive is not prepared for temporary extraction: {archive_path}")
+        })?;
+        let file_path = archive_entry_temp_path(&temp_dir, entry_name)
+            .ok_or_else(|| format!("Unsafe archive entry path: {entry_name}"))?;
 
-                use std::io::Read;
-                let mut f = std::fs::File::open(&file_path)
-                    .map_err(|e| format!("Cannot open extracted entry {entry_name}: {e}"))?;
-                let mut buf = vec![0u8; limit];
-                let n = f
-                    .read(&mut buf)
-                    .map_err(|e| format!("Cannot read extracted entry header {entry_name}: {e}"))?;
-                buf.truncate(n);
-                Ok(buf)
+        notify.wait_for_entry(entry_name, Duration::from_secs(30))?;
+
+        use std::io::Read;
+        let mut f = std::fs::File::open(&file_path)
+            .map_err(|e| format!("Cannot open extracted entry {entry_name}: {e}"))?;
+        let mut buf = vec![0u8; limit];
+        let n = f
+            .read(&mut buf)
+            .map_err(|e| format!("Cannot read extracted entry header {entry_name}: {e}"))?;
+        buf.truncate(n);
+        Ok(buf)
+    }
+
+    pub fn read_resolved_entry_bytes(
+        &self,
+        archive_path: &str,
+        entry_name: &str,
+    ) -> Result<Vec<u8>, String> {
+        if self.is_archive_password_required(archive_path) {
+            return Err(format!("Archive is password-protected: {archive_path}"));
+        }
+
+        match ArchiveKind::from_path(archive_path)? {
+            ArchiveKind::Zip => {
+                if let Some(cached) = self.get_zip_entry(archive_path, entry_name) {
+                    return Ok(cached.to_vec());
+                }
+                if self.contains_archive(archive_path) {
+                    if let Some(bytes) = self.read_from_open_zip(archive_path, entry_name) {
+                        return Ok(bytes.to_vec());
+                    }
+                }
+                let password = self.get_archive_password(archive_path);
+                zip::extract_zip_entry(archive_path, entry_name, password.as_deref())
+                    .map_err(|_| format!("Cannot find ZIP entry: {entry_name}"))
             }
+            ArchiveKind::Rar | ArchiveKind::SevenZ | ArchiveKind::Tar => {
+                let (temp_dir, notify) = self.temp_extraction_state(archive_path).ok_or_else(|| {
+                    format!("Archive is not prepared for temporary extraction: {archive_path}")
+                })?;
+                let file_path = archive_entry_temp_path(&temp_dir, entry_name)
+                    .ok_or_else(|| format!("Unsafe archive entry path: {entry_name}"))?;
+
+                notify.wait_for_entry(entry_name, Duration::from_secs(30))?;
+                fs::read(&file_path).map_err(|e| {
+                    format!("Cannot read extracted archive entry {entry_name}: {e}")
+                })
+            }
+        }
+    }
+
+    pub fn prefetch_entries(&mut self, archive_path: &str, entries: &[String]) {
+        for entry_name in entries {
+            let _ = self.read_entry_bytes(archive_path, entry_name);
         }
     }
 
@@ -484,6 +467,28 @@ fn spawn_temp_extractor(
         ArchiveKind::Tar => tar::extract_tar_to_temp(archive_path, temp_dir, notify, cancel_flag),
         ArchiveKind::Zip => {}
     });
+}
+
+pub fn wait_for_temp_extraction_state(
+    state: &std::sync::RwLock<ArchiveCache>,
+    archive_path: &str,
+    timeout: Duration,
+    check_cancelled: impl Fn() -> bool,
+) -> Option<(PathBuf, cache::ExtractNotify)> {
+    let start = std::time::Instant::now();
+    let step = Duration::from_millis(50);
+    while start.elapsed() < timeout {
+        if check_cancelled() {
+            return None;
+        }
+        if let Ok(cache) = state.read() {
+            if let Some(s) = cache.temp_extraction_state(archive_path) {
+                return Some(s);
+            }
+        }
+        std::thread::sleep(step);
+    }
+    None
 }
 
 pub(crate) use encoding::decode_cjk_name;

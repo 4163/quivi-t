@@ -32,8 +32,20 @@ fn decoded_ico_frames(data: &[u8]) -> Result<Vec<RgbaImage>, String> {
     let mut decoded_bytes = 0u64;
     for i in 0..count {
         let entry = 6 + i * 16;
-        let offset = u32::from_le_bytes(data[entry + 12..entry + 16].try_into().unwrap()) as usize;
-        let size = u32::from_le_bytes(data[entry + 8..entry + 12].try_into().unwrap()) as usize;
+        let Some(offset) = data
+            .get(entry + 12..entry + 16)
+            .and_then(|s| s.try_into().ok())
+            .map(|b| u32::from_le_bytes(b) as usize)
+        else {
+            continue;
+        };
+        let Some(size) = data
+            .get(entry + 8..entry + 12)
+            .and_then(|s| s.try_into().ok())
+            .map(|b| u32::from_le_bytes(b) as usize)
+        else {
+            continue;
+        };
         let Some(end) = offset.checked_add(size).filter(|end| *end <= data.len()) else { continue };
         if offset < 6 + count * 16 { continue; }
         let bytes = &data[offset..end];
@@ -86,7 +98,7 @@ pub fn ico_frames_from_bytes(data: &[u8]) -> Result<Vec<crate::models::IcoSize>,
     let mut sizes = Vec::with_capacity(frames.len());
     for rgba in frames {
         let (width, height) = (rgba.width(), rgba.height());
-        let mut png_bytes = Vec::new();
+        let mut png_bytes = Vec::with_capacity(rgba.as_raw().len() / 2);
         {
             use image::ImageEncoder;
             let encoder = image::codecs::png::PngEncoder::new(&mut png_bytes);

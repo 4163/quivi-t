@@ -107,7 +107,11 @@ pub(crate) fn extract_tar_to_temp(
     notify: ExtractNotify,
     cancel_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) {
-    let _finish_guard = FinishGuard(&notify);
+    let _finish_guard = FinishGuard {
+        notify: &notify,
+        temp_dir: &temp_dir,
+        cancel_flag: &cancel_flag,
+    };
     let Ok(file) = validate_tar_header(&archive_path) else {
         return;
     };

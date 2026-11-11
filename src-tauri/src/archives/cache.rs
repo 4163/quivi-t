@@ -12,16 +12,64 @@ pub struct ExtractState {
 }
 
 pub(crate) type ZipArchive = zip::ZipArchive<std::io::BufReader<std::fs::File>>;
-pub(crate) type ExtractNotify = Arc<(Mutex<ExtractState>, Condvar)>;
 pub(crate) type SharedEntryBytes = Arc<[u8]>;
 
+#[derive(Clone)]
+pub struct ExtractNotify(pub Arc<(Mutex<ExtractState>, Condvar)>);
+
+impl std::ops::Deref for ExtractNotify {
+    type Target = (Mutex<ExtractState>, Condvar);
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl ExtractNotify {
+    pub fn new() -> Self {
+        Self(Arc::new((Mutex::new(ExtractState::default()), Condvar::new())))
+    }
+
+    pub fn wait_for_entry(
+        &self,
+        entry_name: &str,
+        timeout: std::time::Duration,
+    ) -> Result<(), String> {
+        let (lock, cvar) = &*self.0;
+        let mut guard = match lock.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        let start = std::time::Instant::now();
+        while !guard.extracted.contains(entry_name) && !guard.finished {
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
+                break;
+            }
+            let rem = timeout - elapsed;
+            let (next_guard, timeout_res) =
+                cvar.wait_timeout(guard, rem).map_err(|e| e.to_string())?;
+            guard = next_guard;
+            if timeout_res.timed_out() {
+                break;
+            }
+        }
+        if guard.extracted.contains(entry_name) {
+            Ok(())
+        } else {
+            Err(format!(
+                "Archive entry {entry_name} not available or extraction finished"
+            ))
+        }
+    }
+}
+
 pub(crate) fn new_extract_notify() -> ExtractNotify {
-    Arc::new((Mutex::new(ExtractState::default()), Condvar::new()))
+    ExtractNotify::new()
 }
 
 pub(crate) struct SingleArchiveCache {
     zip_entries: HashMap<String, SharedEntryBytes>,
-    zip_archive: Option<ZipArchive>,
+    zip_archive: Mutex<Option<ZipArchive>>,
     zip_index_map: Option<HashMap<String, usize>>,
     password: Option<String>,
     encryption: Option<crate::models::ArchiveEncryptionStatus>,
@@ -39,7 +87,7 @@ impl SingleArchiveCache {
     ) -> Self {
         Self {
             zip_entries: HashMap::new(),
-            zip_archive,
+            zip_archive: Mutex::new(zip_archive),
             zip_index_map,
             password,
             encryption,
@@ -56,7 +104,7 @@ impl SingleArchiveCache {
     ) -> Self {
         Self {
             zip_entries: HashMap::new(),
-            zip_archive: None,
+            zip_archive: Mutex::new(None),
             zip_index_map: None,
             password,
             encryption,
@@ -99,6 +147,20 @@ struct ArchiveLruState {
     current_zip_bytes: usize,
 }
 
+impl ArchiveLruState {
+    fn touch_archive(&mut self, archive_path: &str) {
+        self.archive_lru.retain(|p| p != archive_path);
+        self.archive_lru.push_back(archive_path.to_string());
+    }
+
+    fn touch_zip_entry(&mut self, archive_path: &str, entry_name: &str) {
+        let key = (archive_path.to_string(), entry_name.to_string());
+        self.global_zip_lru.retain(|existing| existing != &key);
+        self.global_zip_lru.push_back(key);
+        self.touch_archive(archive_path);
+    }
+}
+
 pub struct ArchiveCache {
     archives: HashMap<String, SingleArchiveCache>,
     lru: Mutex<ArchiveLruState>,
@@ -107,6 +169,10 @@ pub struct ArchiveCache {
 }
 
 impl ArchiveCache {
+    fn lock_lru(&self) -> std::sync::MutexGuard<'_, ArchiveLruState> {
+        self.lru.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     pub fn new(capacity_mb: usize) -> Self {
         Self {
             archives: HashMap::new(),
@@ -125,21 +191,20 @@ impl ArchiveCache {
     }
 
     pub(crate) fn touch_archive(&self, archive_path: &str) {
-        let mut lru = self.lru.lock().unwrap();
-        lru.archive_lru.retain(|p| p != archive_path);
-        lru.archive_lru.push_back(archive_path.to_string());
+        let mut lru = self.lock_lru();
+        lru.touch_archive(archive_path);
     }
 
     pub(crate) fn read_from_open_zip(
-        &mut self,
+        &self,
         archive_path: &str,
         entry_name: &str,
     ) -> Option<SharedEntryBytes> {
-        let single = self.archives.get_mut(archive_path)?;
+        let single = self.archives.get(archive_path)?;
         let index_map = single.zip_index_map.as_ref();
         let password = single.password.as_deref();
-        single
-            .zip_archive
+        let mut guard = single.zip_archive.lock().unwrap_or_else(|e| e.into_inner());
+        guard
             .as_mut()
             .and_then(|archive| {
                 crate::archives::zip::read_zip_entry_by_decoded_name(
@@ -151,15 +216,16 @@ impl ArchiveCache {
     }
 
     pub(crate) fn read_from_open_zip_header(
-        &mut self,
+        &self,
         archive_path: &str,
         entry_name: &str,
         limit: usize,
     ) -> Option<Vec<u8>> {
-        let single = self.archives.get_mut(archive_path)?;
+        let single = self.archives.get(archive_path)?;
         let index_map = single.zip_index_map.as_ref();
         let password = single.password.as_deref();
-        single.zip_archive.as_mut().and_then(|archive| {
+        let mut guard = single.zip_archive.lock().unwrap_or_else(|e| e.into_inner());
+        guard.as_mut().and_then(|archive| {
             crate::archives::zip::read_zip_entry_header(
                 archive, entry_name, limit, index_map, password,
             )
@@ -179,13 +245,8 @@ impl ArchiveCache {
     }
 
     fn touch_zip_entry(&self, archive_path: &str, entry_name: &str) {
-        let key = (archive_path.to_string(), entry_name.to_string());
-        {
-            let mut lru = self.lru.lock().unwrap();
-            lru.global_zip_lru.retain(|existing| existing != &key);
-            lru.global_zip_lru.push_back(key);
-        }
-        self.touch_archive(archive_path);
+        let mut lru = self.lock_lru();
+        lru.touch_zip_entry(archive_path, entry_name);
     }
 
     fn remove_archive_zip_entries(&mut self, archive_path: &str) {
@@ -195,7 +256,7 @@ impl ArchiveCache {
                 removed_bytes += data.len();
             }
         }
-        let mut lru = self.lru.lock().unwrap();
+        let mut lru = self.lock_lru();
         lru.current_zip_bytes = lru.current_zip_bytes.saturating_sub(removed_bytes);
         lru.global_zip_lru.retain(|(path, _)| path != archive_path);
     }
@@ -203,7 +264,7 @@ impl ArchiveCache {
     fn evict_idle_archives(&mut self, keep_path: &str) {
         while self.archives.len() > self.max_open_archives {
             let old_archive = {
-                let mut lru = self.lru.lock().unwrap();
+                let mut lru = self.lock_lru();
                 let Some(front) = lru.archive_lru.pop_front() else {
                     break;
                 };
@@ -221,7 +282,7 @@ impl ArchiveCache {
     fn evict_until_within_budget(&mut self, incoming_bytes: usize) {
         loop {
             let (old_archive, old_entry) = {
-                let lru = self.lru.lock().unwrap();
+                let lru = self.lock_lru();
                 if lru.current_zip_bytes + incoming_bytes <= self.global_zip_capacity_bytes {
                     break;
                 }
@@ -238,7 +299,7 @@ impl ArchiveCache {
                 .map(|d| d.len())
                 .unwrap_or(0);
 
-            let mut lru = self.lru.lock().unwrap();
+            let mut lru = self.lock_lru();
             lru.global_zip_lru.pop_front();
             lru.current_zip_bytes = lru.current_zip_bytes.saturating_sub(removed);
         }
@@ -253,7 +314,7 @@ impl ArchiveCache {
     pub(crate) fn drop_archive(&mut self, archive_path: &str) {
         self.remove_archive_zip_entries(archive_path);
         self.archives.remove(archive_path);
-        let mut lru = self.lru.lock().unwrap();
+        let mut lru = self.lock_lru();
         lru.archive_lru.retain(|p| p != archive_path);
     }
 
@@ -263,7 +324,7 @@ impl ArchiveCache {
             self.remove_archive_zip_entries(&path);
         }
         self.archives.clear();
-        let mut lru = self.lru.lock().unwrap();
+        let mut lru = self.lock_lru();
         lru.archive_lru.clear();
     }
 
@@ -318,7 +379,7 @@ impl ArchiveCache {
         let data = data.into();
         self.evict_until_within_budget(data.len());
         if let Some(single) = self.archives.get_mut(archive_path) {
-            let mut lru = self.lru.lock().unwrap();
+            let mut lru = self.lru.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(old) = single
                 .zip_entries
                 .insert(entry_name.to_string(), data.clone())
@@ -326,8 +387,8 @@ impl ArchiveCache {
                 lru.current_zip_bytes = lru.current_zip_bytes.saturating_sub(old.len());
             }
             lru.current_zip_bytes = lru.current_zip_bytes.saturating_add(data.len());
+            lru.touch_zip_entry(archive_path, entry_name);
         }
-        self.touch_zip_entry(archive_path, entry_name);
     }
 
     #[cfg(test)]
@@ -345,7 +406,7 @@ impl ArchiveCache {
 
     #[cfg(test)]
     pub(crate) fn current_zip_bytes(&self) -> usize {
-        self.lru.lock().unwrap().current_zip_bytes
+        self.lock_lru().current_zip_bytes
     }
 
     #[cfg(test)]
@@ -411,7 +472,7 @@ pub(crate) fn write_temp_entry(
 // Called by rar.rs, sevenz.rs, and tar.rs extractors after each entry is
 // written, waking any protocol/IPC thread waiting on that file.
 pub(crate) fn notify_extracted(notify: &ExtractNotify, entry_name: &str) {
-    let (lock, cvar) = &**notify;
+    let (lock, cvar) = &*notify.0;
     {
         let mut state = match lock.lock() {
             Ok(guard) => guard,
@@ -423,7 +484,7 @@ pub(crate) fn notify_extracted(notify: &ExtractNotify, entry_name: &str) {
 }
 
 pub(crate) fn notify_finished(notify: &ExtractNotify) {
-    let (lock, cvar) = &**notify;
+    let (lock, cvar) = &*notify.0;
     {
         let mut state = match lock.lock() {
             Ok(guard) => guard,
@@ -434,11 +495,18 @@ pub(crate) fn notify_finished(notify: &ExtractNotify) {
     cvar.notify_all();
 }
 
-pub(crate) struct FinishGuard<'a>(pub &'a ExtractNotify);
+pub(crate) struct FinishGuard<'a> {
+    pub notify: &'a ExtractNotify,
+    pub temp_dir: &'a Path,
+    pub cancel_flag: &'a std::sync::atomic::AtomicBool,
+}
 
 impl Drop for FinishGuard<'_> {
     fn drop(&mut self) {
-        notify_finished(self.0);
+        notify_finished(self.notify);
+        if self.cancel_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            let _ = fs::remove_dir_all(self.temp_dir);
+        }
     }
 }
 
