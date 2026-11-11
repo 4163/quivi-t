@@ -64,3 +64,35 @@ Continuation record of pre-refactor (`[Telemetry A]`) versus post-refactor (`[Te
 - All 62 tests matched 1:1 in title, hierarchy, and sequence order.
 - Test stubs in `archive_tests.rs` now import real extracted helpers from `crate::archives`, `crate::utils`, `crate::platform`, and `crate::platform::gdi` with 0 contract regressions.
 - The +39 ms (+1.2%) duration delta reflects standard Windows process spawn, binary loading, and timer tick variance across `cargo test` invocations. Pure test execution time remained identical at ~60 ms.
+
+---
+
+## Slice 2.1: formats.rs decomposition, ArchiveCache lock contention, and panic-free parsing
+
+- **Telemetry A:** `.agents/major-refactor/telemetry/slice-2.1-a.json`
+- **Telemetry B:** Pending implementation completion (#2.1.9)
+- **Harness:** Rust backend unit tests (`src-tauri/src/tests/archive_tests.rs`, `src-tauri/src/tests/format_tests.rs`, `src-tauri/src/tests/ico_tests.rs`, `src-tauri/src/tests/protocol_tests.rs`)
+- **Verdict:** Telemetry A baseline captured, 0 failures.
+
+### Metrics baseline
+
+| Metric | Telemetry A | Telemetry B | Delta |
+|---|---|---|---|
+| Suites | 5 | TBD | TBD |
+| Total tests | 100 | TBD | TBD |
+| Passes | 100 | TBD | TBD |
+| Failures | 0 | TBD | TBD |
+| Pending | 0 | TBD | TBD |
+| Duration | 1834 ms | TBD | TBD |
+
+### Test suite breakdown
+
+- `src-tauri/src/tests/archive_tests.rs`: 48 / 48 (32 `archive_tests` + 16 `temp_archive_tests`)
+- `src-tauri/src/tests/format_tests.rs`: 26 / 26
+- `src-tauri/src/tests/ico_tests.rs`: 8 / 8
+- `src-tauri/src/tests/protocol_tests.rs`: 18 / 18
+
+### Notes
+
+- Baseline coverage expanded across header dimension probes, ICO spritesheet generation, corrupted directory entry bounds, cache entry headers and payloads, and protocol byte range responses.
+- All 100 tests pass without failures or panics.

@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use crate::formats::{
     check_animation_status, check_mp4_has_audio, is_archive_ext, is_image_ext, is_metadata_ext,
-    FormatCategory, FORMAT_ICONS, SUPPORTED_FORMATS,
+    read_dimensions_from_bytes, read_media_dimensions_from_path, read_media_dimensions_from_stream,
+    read_mp4_dimensions, FormatCategory, FORMAT_ICONS, SUPPORTED_FORMATS,
 };
 
 #[test]
@@ -511,4 +512,362 @@ fn test_check_mp4_has_audio() {
         let mut f = std::fs::File::open(yes_audio_path).unwrap();
         assert!(check_mp4_has_audio(&mut f));
     }
+}
+
+fn make_test_png(w: u32, h: u32) -> Vec<u8> {
+    use image::ImageEncoder;
+    let img = image::RgbaImage::new(w, h);
+    let mut out = Vec::new();
+    let encoder = image::codecs::png::PngEncoder::new(&mut out);
+    encoder
+        .write_image(img.as_raw(), w, h, image::ColorType::Rgba8.into())
+        .expect("encode test png");
+    out
+}
+
+fn make_test_gif(w: u32, h: u32) -> Vec<u8> {
+    let img = image::DynamicImage::ImageRgba8(image::RgbaImage::new(w, h));
+    let mut out = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut out);
+    img.write_to(&mut cursor, image::ImageFormat::Gif)
+        .expect("encode test gif");
+    out
+}
+
+fn make_test_bmp(w: i32, h: i32) -> Vec<u8> {
+    let mut out = Vec::with_capacity(54);
+    out.extend_from_slice(b"BM");
+    out.extend_from_slice(&54u32.to_le_bytes());
+    out.extend_from_slice(&[0; 4]);
+    out.extend_from_slice(&54u32.to_le_bytes());
+    out.extend_from_slice(&40u32.to_le_bytes());
+    out.extend_from_slice(&w.to_le_bytes());
+    out.extend_from_slice(&h.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&24u16.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out
+}
+
+fn make_test_webp(w: u32, h: u32) -> Vec<u8> {
+    let mut out = Vec::from(b"RIFF".as_ref());
+    let riff_size = 4 + 4 + 4 + 5;
+    out.extend_from_slice(&(riff_size as u32).to_le_bytes());
+    out.extend_from_slice(b"WEBPVP8L");
+    out.extend_from_slice(&5u32.to_le_bytes());
+    out.push(0x2F);
+    let bits: u32 = ((w - 1) & 0x3FFF) | (((h - 1) & 0x3FFF) << 14);
+    out.extend_from_slice(&bits.to_le_bytes());
+    out.push(0);
+    out
+}
+
+fn make_test_jpeg(w: u32, h: u32) -> Vec<u8> {
+    let img = image::DynamicImage::ImageRgba8(image::RgbaImage::new(w, h));
+    let mut out = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut out);
+    img.write_to(&mut cursor, image::ImageFormat::Jpeg)
+        .expect("encode test jpeg");
+    out
+}
+
+fn make_test_avif_ispe(w: u32, h: u32, rotate_90: bool) -> Vec<u8> {
+    let mut out = ftyp_box(b"avif", &[*b"avif", *b"mif1"]);
+    let mut ispe = Vec::new();
+    ispe.extend_from_slice(&20u32.to_be_bytes());
+    ispe.extend_from_slice(b"ispe");
+    ispe.push(0);
+    ispe.extend_from_slice(&[0, 0, 0]);
+    ispe.extend_from_slice(&w.to_be_bytes());
+    ispe.extend_from_slice(&h.to_be_bytes());
+    out.extend_from_slice(&ispe);
+    if rotate_90 {
+        out.extend_from_slice(&9u32.to_be_bytes());
+        out.extend_from_slice(b"irot");
+        out.push(1);
+    }
+    // Trailer padding so byte scanning loop (i + 12 <= len) inspects trailing boxes
+    out.extend_from_slice(&[0u8; 8]);
+    out
+}
+
+fn make_test_ico(entries: &[(u8, u8)]) -> Vec<u8> {
+    let count = entries.len();
+    let mut ico = vec![0u8, 0, 1, 0, count as u8, 0];
+    let mut offset = 6 + count * 16;
+    for &(w, h) in entries {
+        ico.push(w);
+        ico.push(h);
+        ico.push(0);
+        ico.push(0);
+        ico.extend_from_slice(&1u16.to_le_bytes());
+        ico.extend_from_slice(&32u16.to_le_bytes());
+        let dummy_size = 40u32;
+        ico.extend_from_slice(&dummy_size.to_le_bytes());
+        ico.extend_from_slice(&(offset as u32).to_le_bytes());
+        offset += dummy_size as usize;
+    }
+    for _ in entries {
+        ico.extend_from_slice(&[0u8; 40]);
+    }
+    ico
+}
+
+fn make_test_mp4(w: u32, h: u32) -> Vec<u8> {
+    let mut mp4 = ftyp_box(b"isom", &[*b"mp41"]);
+    let mut tkhd = Vec::new();
+    tkhd.extend_from_slice(&0u32.to_be_bytes());
+    tkhd.extend_from_slice(b"tkhd");
+    tkhd.push(0);
+    tkhd.extend_from_slice(&[0; 3]);
+    tkhd.extend_from_slice(&[0u8; 72]);
+    tkhd.extend_from_slice(&(w << 16).to_be_bytes());
+    tkhd.extend_from_slice(&(h << 16).to_be_bytes());
+    let tkhd_len = tkhd.len() as u32;
+    tkhd[0..4].copy_from_slice(&tkhd_len.to_be_bytes());
+
+    let mut trak = Vec::new();
+    trak.extend_from_slice(&0u32.to_be_bytes());
+    trak.extend_from_slice(b"trak");
+    trak.extend_from_slice(&tkhd);
+    let trak_len = trak.len() as u32;
+    trak[0..4].copy_from_slice(&trak_len.to_be_bytes());
+
+    let mut moov = Vec::new();
+    moov.extend_from_slice(&0u32.to_be_bytes());
+    moov.extend_from_slice(b"moov");
+    moov.extend_from_slice(&trak);
+    let moov_len = moov.len() as u32;
+    moov[0..4].copy_from_slice(&moov_len.to_be_bytes());
+
+    mp4.extend_from_slice(&moov);
+    mp4
+}
+
+#[test]
+fn test_read_dimensions_from_bytes_formats() {
+    let png = make_test_png(120, 80);
+    assert_eq!(read_dimensions_from_bytes(&png), Some((120, 80)));
+
+    let gif = make_test_gif(64, 48);
+    assert_eq!(read_dimensions_from_bytes(&gif), Some((64, 48)));
+
+    let bmp = make_test_bmp(32, 16);
+    assert_eq!(read_dimensions_from_bytes(&bmp), Some((32, 16)));
+
+    let webp = make_test_webp(200, 150);
+    assert_eq!(read_dimensions_from_bytes(&webp), Some((200, 150)));
+
+    let jpeg = make_test_jpeg(160, 120);
+    assert_eq!(read_dimensions_from_bytes(&jpeg), Some((160, 120)));
+}
+
+#[test]
+fn test_read_dimensions_from_bytes_truncated_and_corrupt() {
+    assert_eq!(read_dimensions_from_bytes(&[]), None);
+    assert_eq!(read_dimensions_from_bytes(b"\x89PNG"), None);
+    assert_eq!(read_dimensions_from_bytes(b"\x89PNG\r\n\x1a\n"), None);
+    assert_eq!(read_dimensions_from_bytes(b"GIF89a"), None);
+    assert_eq!(read_dimensions_from_bytes(b"BM"), None);
+    assert_eq!(read_dimensions_from_bytes(b"RIFF\x10\0\0\0WEBP"), None);
+    assert_eq!(read_dimensions_from_bytes(&[0xFF, 0xD8]), None);
+    assert_eq!(read_dimensions_from_bytes(&[0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x02]), None);
+    assert_eq!(read_dimensions_from_bytes(b"not an image data buffer"), None);
+}
+
+#[test]
+fn test_read_media_dimensions_from_stream_svg() {
+    use std::io::Cursor;
+
+    let svg1 = br#"<svg width="300" height="150" xmlns="http://www.w3.org/2000/svg"></svg>"#;
+    let mut c1 = Cursor::new(svg1);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c1, svg1.len() as u64, "svg"),
+        Some((300, 150))
+    );
+
+    let svg2 = br#"<svg   width = " 120px "   height = ' 80px ' ></svg>"#;
+    let mut c2 = Cursor::new(svg2);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c2, svg2.len() as u64, "svg"),
+        Some((120, 80))
+    );
+
+    let svg3 = br#"<svg viewBox="0 0 450 320" xmlns="http://www.w3.org/2000/svg"></svg>"#;
+    let mut c3 = Cursor::new(svg3);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c3, svg3.len() as u64, "svg"),
+        Some((450, 320))
+    );
+
+    let svg_pct = br#"<svg width="100%" height="100%"></svg>"#;
+    let mut c_pct = Cursor::new(svg_pct);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c_pct, svg_pct.len() as u64, "svg"),
+        None
+    );
+
+    let svg_empty = br#"<svg></svg>"#;
+    let mut c_empty = Cursor::new(svg_empty);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c_empty, svg_empty.len() as u64, "svg"),
+        None
+    );
+
+    let svg_trunc = br#"<svg width="100"#;
+    let mut c_trunc = Cursor::new(svg_trunc);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c_trunc, svg_trunc.len() as u64, "svg"),
+        None
+    );
+}
+
+#[test]
+fn test_read_media_dimensions_from_stream_avif() {
+    use std::io::Cursor;
+
+    let avif = make_test_avif_ispe(1920, 1080, false);
+    let mut c = Cursor::new(&avif);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c, avif.len() as u64, "avif"),
+        Some((1920, 1080))
+    );
+
+    let avif_rot = make_test_avif_ispe(1920, 1080, true);
+    let mut c_rot = Cursor::new(&avif_rot);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c_rot, avif_rot.len() as u64, "avif"),
+        Some((1080, 1920))
+    );
+
+    let mut c_trunc = Cursor::new(&avif[..16]);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c_trunc, 16, "avif"),
+        None
+    );
+}
+
+#[test]
+fn test_read_media_dimensions_from_stream_ico() {
+    use std::io::Cursor;
+
+    let ico1 = make_test_ico(&[(32, 32)]);
+    let mut c1 = Cursor::new(&ico1);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c1, ico1.len() as u64, "ico"),
+        Some((32, 32))
+    );
+
+    let ico_multi = make_test_ico(&[(16, 16), (48, 48)]);
+    let mut c_multi = Cursor::new(&ico_multi);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c_multi, ico_multi.len() as u64, "ico"),
+        Some((64, 48))
+    );
+
+    let mut c_trunc = Cursor::new(&ico1[..4]);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c_trunc, 4, "ico"),
+        None
+    );
+}
+
+#[test]
+fn test_read_media_dimensions_from_stream_mp4() {
+    use std::io::Cursor;
+
+    let mp4 = make_test_mp4(1280, 720);
+    let mut c_seek = Cursor::new(&mp4);
+    assert_eq!(read_mp4_dimensions(&mut c_seek), Some((1280, 720)));
+
+    let mut c = Cursor::new(&mp4);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c, mp4.len() as u64, "mp4"),
+        Some((1280, 720))
+    );
+
+    let mut c_zero = Cursor::new(&mp4);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c_zero, 0, "mp4"),
+        None
+    );
+
+    let mp4_bare = ftyp_box(b"isom", &[*b"mp41"]);
+    let mut c_bare = Cursor::new(&mp4_bare);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c_bare, mp4_bare.len() as u64, "mp4"),
+        None
+    );
+}
+
+#[test]
+fn test_read_media_dimensions_from_stream_jpeg_large_header() {
+    use std::io::Cursor;
+
+    let mut jpeg = Vec::new();
+    jpeg.extend_from_slice(&[0xFF, 0xD8]);
+    jpeg.extend_from_slice(&[0xFF, 0xE1]);
+    let app1_len = 502u16;
+    jpeg.extend_from_slice(&app1_len.to_be_bytes());
+    jpeg.extend_from_slice(&vec![0xAA; 500]);
+    jpeg.extend_from_slice(&[0xFF, 0xC0]);
+    let sof_len = 11u16;
+    jpeg.extend_from_slice(&sof_len.to_be_bytes());
+    jpeg.push(8);
+    jpeg.extend_from_slice(&240u16.to_be_bytes());
+    jpeg.extend_from_slice(&320u16.to_be_bytes());
+    jpeg.push(1);
+    jpeg.extend_from_slice(&[1, 0x11, 0]);
+    jpeg.extend_from_slice(&[0xFF, 0xD9]);
+
+    let mut c = Cursor::new(&jpeg);
+    assert_eq!(
+        read_media_dimensions_from_stream(&mut c, jpeg.len() as u64, "jpg"),
+        Some((320, 240))
+    );
+}
+
+#[test]
+fn test_read_media_dimensions_from_path() {
+    let scratch_dir = std::env::temp_dir().join("quivit-test-media-dims-path");
+    let _ = std::fs::remove_dir_all(&scratch_dir);
+    std::fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+
+    let png_path = scratch_dir.join("test.png");
+    std::fs::write(&png_path, make_test_png(88, 44)).expect("write png");
+    assert_eq!(read_media_dimensions_from_path(&png_path, "png"), Some((88, 44)));
+
+    let jpg_path = scratch_dir.join("test.jpg");
+    std::fs::write(&jpg_path, make_test_jpeg(100, 50)).expect("write jpg");
+    assert_eq!(read_media_dimensions_from_path(&jpg_path, "jpg"), Some((100, 50)));
+
+    let svg_path = scratch_dir.join("test.svg");
+    std::fs::write(&svg_path, br#"<svg width="220" height="110"></svg>"#).expect("write svg");
+    assert_eq!(read_media_dimensions_from_path(&svg_path, "svg"), Some((220, 110)));
+
+    let ico_path = scratch_dir.join("test.ico");
+    std::fs::write(&ico_path, make_test_ico(&[(48, 48)])).expect("write ico");
+    assert_eq!(read_media_dimensions_from_path(&ico_path, "ico"), Some((48, 48)));
+
+    let avif_path = scratch_dir.join("test.avif");
+    std::fs::write(&avif_path, make_test_avif_ispe(800, 600, false)).expect("write avif");
+    assert_eq!(read_media_dimensions_from_path(&avif_path, "avif"), Some((800, 600)));
+
+    let mp4_path = scratch_dir.join("test.mp4");
+    std::fs::write(&mp4_path, make_test_mp4(640, 360)).expect("write mp4");
+    assert_eq!(read_media_dimensions_from_path(&mp4_path, "mp4"), Some((640, 360)));
+
+    let empty_path = scratch_dir.join("empty.png");
+    std::fs::write(&empty_path, b"").expect("write empty");
+    assert_eq!(read_media_dimensions_from_path(&empty_path, "png"), None);
+
+    let missing_path = scratch_dir.join("missing.png");
+    assert_eq!(read_media_dimensions_from_path(&missing_path, "png"), None);
+
+    let _ = std::fs::remove_dir_all(&scratch_dir);
 }

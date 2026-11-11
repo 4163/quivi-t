@@ -1,0 +1,914 @@
+{
+  "stats": {
+    "suites": 5,
+    "tests": 100,
+    "passes": 100,
+    "pending": 0,
+    "failures": 0,
+    "start": "2026-11-11T01:24:50.015Z",
+    "end": "2026-11-11T01:24:51.849Z",
+    "duration": 1834
+  },
+  "tests": [
+    {
+      "title": "archive_cache_bounds_open_archive_state",
+      "fullTitle": "archive_tests::archive_cache_bounds_open_archive_state",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_cache_byte_budget_evicts_globally",
+      "fullTitle": "archive_tests::archive_cache_byte_budget_evicts_globally",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_cache_cached_zip_entry_bytes_contracts",
+      "fullTitle": "archive_tests::archive_cache_cached_zip_entry_bytes_contracts",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_cache_read_entry_bytes_and_wait_contracts",
+      "fullTitle": "archive_tests::archive_cache_read_entry_bytes_and_wait_contracts",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_cache_read_entry_header_cached_lru_bypass",
+      "fullTitle": "archive_tests::archive_cache_read_entry_header_cached_lru_bypass",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_cache_read_entry_header_contracts",
+      "fullTitle": "archive_tests::archive_cache_read_entry_header_contracts",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_cache_zip_hits_reuse_shared_bytes",
+      "fullTitle": "archive_tests::archive_cache_zip_hits_reuse_shared_bytes",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_entry_temp_path_rejects_escape_paths",
+      "fullTitle": "archive_tests::archive_entry_temp_path_rejects_escape_paths",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_pipe_path_format",
+      "fullTitle": "archive_tests::archive_pipe_path_format",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_pipe_path_split_basic",
+      "fullTitle": "archive_tests::archive_pipe_path_split_basic",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_pipe_path_split_nested",
+      "fullTitle": "archive_tests::archive_pipe_path_split_nested",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "archive_pipe_path_split_no_pipe",
+      "fullTitle": "archive_tests::archive_pipe_path_split_no_pipe",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "invalid_archive_rar_invalid_magic_and_truncated",
+      "fullTitle": "archive_tests::invalid_archive_rar_invalid_magic_and_truncated",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "invalid_archive_sevenz_invalid_magic_and_truncated",
+      "fullTitle": "archive_tests::invalid_archive_sevenz_invalid_magic_and_truncated",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "invalid_archive_tar_invalid_checksum_and_truncated",
+      "fullTitle": "archive_tests::invalid_archive_tar_invalid_checksum_and_truncated",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "invalid_archive_zip_corrupt_tail_missing_eocd_fails_fast",
+      "fullTitle": "archive_tests::invalid_archive_zip_corrupt_tail_missing_eocd_fails_fast",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "invalid_archive_zip_invalid_magic_fails_fast",
+      "fullTitle": "archive_tests::invalid_archive_zip_invalid_magic_fails_fast",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "path_canonicalization_slash_normalization",
+      "fullTitle": "archive_tests::path_canonicalization_slash_normalization",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "path_canonicalization_trailing_slash_trimming",
+      "fullTitle": "archive_tests::path_canonicalization_trailing_slash_trimming",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "path_canonicalization_verbatim_prefix_stripping",
+      "fullTitle": "archive_tests::path_canonicalization_verbatim_prefix_stripping",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pixel_conversion_bgra_to_rgba_in_place",
+      "fullTitle": "archive_tests::pixel_conversion_bgra_to_rgba_in_place",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "pixel_conversion_unpremultiply_rgba_in_place",
+      "fullTitle": "archive_tests::pixel_conversion_unpremultiply_rgba_in_place",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "supported_archives_include_new_formats",
+      "fullTitle": "archive_tests::supported_archives_include_new_formats",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "url_decode_roundtrips_utf8_entry_names",
+      "fullTitle": "archive_tests::url_decode_roundtrips_utf8_entry_names",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "win32_wide_string_empty",
+      "fullTitle": "archive_tests::win32_wide_string_empty",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "win32_wide_string_null_terminated_encoding",
+      "fullTitle": "archive_tests::win32_wide_string_null_terminated_encoding",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "win32_wide_string_unicode_cjk",
+      "fullTitle": "archive_tests::win32_wide_string_unicode_cjk",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "zip_corrupt_local_header_fails_fast_on_corrupt_entry_and_reads_valid_entry",
+      "fullTitle": "archive_tests::zip_corrupt_local_header_fails_fast_on_corrupt_entry_and_reads_valid_entry",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "zip_decodes_euckr_entry_names",
+      "fullTitle": "archive_tests::zip_decodes_euckr_entry_names",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "zip_decodes_gbk_entry_names",
+      "fullTitle": "archive_tests::zip_decodes_gbk_entry_names",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "zip_decodes_shift_jis_entry_names",
+      "fullTitle": "archive_tests::zip_decodes_shift_jis_entry_names",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_archive_extension_unification_contract",
+      "fullTitle": "format_tests::test_archive_extension_unification_contract",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_check_mp4_has_audio",
+      "fullTitle": "format_tests::test_check_mp4_has_audio",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_format_category_display_and_as_str",
+      "fullTitle": "format_tests::test_format_category_display_and_as_str",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_format_icons_table_integrity",
+      "fullTitle": "format_tests::test_format_icons_table_integrity",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_apng",
+      "fullTitle": "format_tests::test_is_animated_apng",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_apng_loop_count",
+      "fullTitle": "format_tests::test_is_animated_apng_loop_count",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_avif",
+      "fullTitle": "format_tests::test_is_animated_avif",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_gif",
+      "fullTitle": "format_tests::test_is_animated_gif",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_gif_no_loop",
+      "fullTitle": "format_tests::test_is_animated_gif_no_loop",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_svg",
+      "fullTitle": "format_tests::test_is_animated_svg",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_truncated",
+      "fullTitle": "format_tests::test_is_animated_truncated",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_webp",
+      "fullTitle": "format_tests::test_is_animated_webp",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_animated_webp_loop_count",
+      "fullTitle": "format_tests::test_is_animated_webp_loop_count",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_archive_ext",
+      "fullTitle": "format_tests::test_is_archive_ext",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_image_ext",
+      "fullTitle": "format_tests::test_is_image_ext",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_is_metadata_ext",
+      "fullTitle": "format_tests::test_is_metadata_ext",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_dimensions_from_bytes_formats",
+      "fullTitle": "format_tests::test_read_dimensions_from_bytes_formats",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_dimensions_from_bytes_truncated_and_corrupt",
+      "fullTitle": "format_tests::test_read_dimensions_from_bytes_truncated_and_corrupt",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_media_dimensions_from_path",
+      "fullTitle": "format_tests::test_read_media_dimensions_from_path",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_media_dimensions_from_stream_avif",
+      "fullTitle": "format_tests::test_read_media_dimensions_from_stream_avif",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_media_dimensions_from_stream_ico",
+      "fullTitle": "format_tests::test_read_media_dimensions_from_stream_ico",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_media_dimensions_from_stream_jpeg_large_header",
+      "fullTitle": "format_tests::test_read_media_dimensions_from_stream_jpeg_large_header",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_media_dimensions_from_stream_mp4",
+      "fullTitle": "format_tests::test_read_media_dimensions_from_stream_mp4",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_read_media_dimensions_from_stream_svg",
+      "fullTitle": "format_tests::test_read_media_dimensions_from_stream_svg",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_shell_thumb_extensions_contract",
+      "fullTitle": "format_tests::test_shell_thumb_extensions_contract",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_supported_formats_table_integrity",
+      "fullTitle": "format_tests::test_supported_formats_table_integrity",
+      "file": "src-tauri/src/tests/format_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "ico_directory_entry_corrupted_bounds_handling",
+      "fullTitle": "ico::tests::ico_directory_entry_corrupted_bounds_handling",
+      "file": "src-tauri/src/tests/ico_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "ico_frames_dedupes_identical_dims",
+      "fullTitle": "ico::tests::ico_frames_dedupes_identical_dims",
+      "file": "src-tauri/src/tests/ico_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "ico_frames_rejects_bad_headers",
+      "fullTitle": "ico::tests::ico_frames_rejects_bad_headers",
+      "file": "src-tauri/src/tests/ico_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "ico_frames_returns_per_size_data_urls_sorted_largest_first",
+      "fullTitle": "ico::tests::ico_frames_returns_per_size_data_urls_sorted_largest_first",
+      "file": "src-tauri/src/tests/ico_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "ico_spritesheet_multi_frame_layout",
+      "fullTitle": "ico::tests::ico_spritesheet_multi_frame_layout",
+      "file": "src-tauri/src/tests/ico_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "ico_spritesheet_rejects_bad_and_truncated_headers",
+      "fullTitle": "ico::tests::ico_spritesheet_rejects_bad_and_truncated_headers",
+      "file": "src-tauri/src/tests/ico_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "ico_spritesheet_single_frame",
+      "fullTitle": "ico::tests::ico_spritesheet_single_frame",
+      "file": "src-tauri/src/tests/ico_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "ico_spritesheet_size_bounds_limit",
+      "fullTitle": "ico::tests::ico_spritesheet_size_bounds_limit",
+      "file": "src-tauri/src/tests/ico_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_7z_folder_history_dedup_and_subfolder_match",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_7z_folder_history_dedup_and_subfolder_match",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_7z_nanazip_conflicting_live_context_fails_closed",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_7z_nanazip_conflicting_live_context_fails_closed",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_7z_nanazip_pid_hint_selects_matching_window",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_7z_nanazip_pid_hint_selects_matching_window",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_deduplicate_and_subfolder_override",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_deduplicate_and_subfolder_override",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_explorer_entry_matching_uses_relative_path",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_explorer_entry_matching_uses_relative_path",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_ignore_non_temp_paths",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_ignore_non_temp_paths",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_match_candidate_origin_subfolder_and_root",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_match_candidate_origin_subfolder_and_root",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_nanazip_match_candidate_origin_subfolder_vs_root",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_nanazip_match_candidate_origin_subfolder_vs_root",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_nanazip_window_title_and_subfolder_match",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_nanazip_window_title_and_subfolder_match",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_7zip_temp_path_and_folder_history",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_7zip_temp_path_and_folder_history",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_bandizip_temp_path_and_window_title",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_bandizip_temp_path_and_window_title",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_explorer_temp_path",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_explorer_temp_path",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_nanazip_address_bar_paths",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_nanazip_address_bar_paths",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_peazip_temp_path",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_peazip_temp_path",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_winrar_temp_path_and_window_title",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_winrar_temp_path_and_window_title",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_parse_winzip_temp_path",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_parse_winzip_temp_path",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "test_winrar_window_title_and_subfolder_match",
+      "fullTitle": "platform::temp_archive::temp_archive_tests::test_winrar_window_title_and_subfolder_match",
+      "file": "src-tauri/src/tests/archive_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "entry_response_content_type_mapping_across_formats",
+      "fullTitle": "protocol::tests::entry_response_content_type_mapping_across_formats",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "entry_response_empty_body_and_zero_len",
+      "fullTitle": "protocol::tests::entry_response_empty_body_and_zero_len",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "entry_response_ignores_invalid_byte_ranges",
+      "fullTitle": "protocol::tests::entry_response_ignores_invalid_byte_ranges",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "entry_response_serves_open_ended_byte_range",
+      "fullTitle": "protocol::tests::entry_response_serves_open_ended_byte_range",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "entry_response_serves_suffix_byte_range",
+      "fullTitle": "protocol::tests::entry_response_serves_suffix_byte_range",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "entry_response_serves_valid_byte_ranges",
+      "fullTitle": "protocol::tests::entry_response_serves_valid_byte_ranges",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "entry_response_single_byte_ranges",
+      "fullTitle": "protocol::tests::entry_response_single_byte_ranges",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "entry_response_uses_no_store_cache_control",
+      "fullTitle": "protocol::tests::entry_response_uses_no_store_cache_control",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "guess_mime_matches_known_image_extensions_case_insensitively",
+      "fullTitle": "protocol::tests::guess_mime_matches_known_image_extensions_case_insensitively",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "parse_archive_url_decodes_path_and_entry_name",
+      "fullTitle": "protocol::tests::parse_archive_url_decodes_path_and_entry_name",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "parse_archive_url_rejects_malformed_urls",
+      "fullTitle": "protocol::tests::parse_archive_url_rejects_malformed_urls",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "parse_byte_range_handles_common_range_forms",
+      "fullTitle": "protocol::tests::parse_byte_range_handles_common_range_forms",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "parse_byte_range_rejects_unsupported_ranges",
+      "fullTitle": "protocol::tests::parse_byte_range_rejects_unsupported_ranges",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "parse_icon_url_decodes_path_and_extension_key",
+      "fullTitle": "protocol::tests::parse_icon_url_decodes_path_and_extension_key",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "parse_icon_url_rejects_malformed_urls",
+      "fullTitle": "protocol::tests::parse_icon_url_rejects_malformed_urls",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "parse_thumb_url_decodes_path",
+      "fullTitle": "protocol::tests::parse_thumb_url_decodes_path",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "parse_thumb_url_rejects_malformed_urls",
+      "fullTitle": "protocol::tests::parse_thumb_url_rejects_malformed_urls",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "png_response_contract",
+      "fullTitle": "protocol::tests::png_response_contract",
+      "file": "src-tauri/src/tests/protocol_tests.rs",
+      "duration": 0,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    }
+  ]
+}

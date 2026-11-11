@@ -1,6 +1,6 @@
 use super::{
     entry_response, guess_mime, parse_archive_url, parse_byte_range, parse_icon_url,
-    parse_thumb_url, ByteRange,
+    parse_thumb_url, png_response, ByteRange,
 };
 
 #[test]
@@ -141,4 +141,104 @@ fn entry_response_uses_no_store_cache_control() {
     let response = entry_response("page.jpg", &[0, 1, 2], None);
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers()["Cache-Control"], "no-store");
+}
+
+#[test]
+fn entry_response_serves_suffix_byte_range() {
+    let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    let response = entry_response("image.png", &data, Some("bytes=-4"));
+
+    assert_eq!(response.status(), 206);
+    assert_eq!(response.headers()["Content-Range"], "bytes 6-9/10");
+    assert_eq!(response.headers()["Content-Length"], "4");
+    assert_eq!(response.body(), &vec![6, 7, 8, 9]);
+}
+
+#[test]
+fn entry_response_serves_open_ended_byte_range() {
+    let data = vec![10, 20, 30, 40, 50, 60, 70];
+    let response = entry_response("image.webp", &data, Some("bytes=4-"));
+
+    assert_eq!(response.status(), 206);
+    assert_eq!(response.headers()["Content-Range"], "bytes 4-6/7");
+    assert_eq!(response.headers()["Content-Length"], "3");
+    assert_eq!(response.body(), &vec![50, 60, 70]);
+}
+
+#[test]
+fn entry_response_single_byte_ranges() {
+    let data = vec![100, 101, 102, 103, 104];
+    let first = entry_response("photo.jpg", &data, Some("bytes=0-0"));
+    assert_eq!(first.status(), 206);
+    assert_eq!(first.headers()["Content-Range"], "bytes 0-0/5");
+    assert_eq!(first.headers()["Content-Length"], "1");
+    assert_eq!(first.body(), &vec![100]);
+
+    let last = entry_response("photo.jpg", &data, Some("bytes=4-4"));
+    assert_eq!(last.status(), 206);
+    assert_eq!(last.headers()["Content-Range"], "bytes 4-4/5");
+    assert_eq!(last.headers()["Content-Length"], "1");
+    assert_eq!(last.body(), &vec![104]);
+}
+
+#[test]
+fn entry_response_empty_body_and_zero_len() {
+    let empty: [u8; 0] = [];
+    let resp = entry_response("empty.bin", &empty, None);
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.headers()["Content-Length"], "0");
+    assert!(resp.body().is_empty());
+
+    let resp_range = entry_response("empty.bin", &empty, Some("bytes=0-0"));
+    assert_eq!(resp_range.status(), 200);
+    assert_eq!(resp_range.headers()["Content-Length"], "0");
+    assert!(resp_range.body().is_empty());
+}
+
+#[test]
+fn entry_response_content_type_mapping_across_formats() {
+    let dummy = [1u8, 2, 3];
+    assert_eq!(
+        entry_response("img.png", &dummy, None).headers()["Content-Type"],
+        "image/png"
+    );
+    assert_eq!(
+        entry_response("img.webp", &dummy, None).headers()["Content-Type"],
+        "image/webp"
+    );
+    assert_eq!(
+        entry_response("img.gif", &dummy, None).headers()["Content-Type"],
+        "image/gif"
+    );
+    assert_eq!(
+        entry_response("img.svg", &dummy, None).headers()["Content-Type"],
+        "image/svg+xml"
+    );
+    assert_eq!(
+        entry_response("img.avif", &dummy, None).headers()["Content-Type"],
+        "image/avif"
+    );
+    assert_eq!(
+        entry_response("img.bmp", &dummy, None).headers()["Content-Type"],
+        "image/bmp"
+    );
+    assert_eq!(
+        entry_response("img.ico", &dummy, None).headers()["Content-Type"],
+        "image/x-icon"
+    );
+}
+
+#[test]
+fn png_response_contract() {
+    let png_payload = vec![137, 80, 78, 71, 13, 10, 26, 10];
+    let resp = png_response(png_payload.clone());
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.headers()["Content-Type"], "image/png");
+    assert_eq!(
+        resp.headers()["Content-Length"],
+        png_payload.len().to_string()
+    );
+    assert_eq!(resp.headers()["Cache-Control"], "public, max-age=86400");
+    assert_eq!(resp.headers()["Access-Control-Allow-Origin"], "*");
+    assert_eq!(resp.body(), &png_payload);
 }

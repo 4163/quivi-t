@@ -659,3 +659,132 @@ fn pixel_conversion_unpremultiply_rgba_in_place() {
     unpremultiply_rgba_in_place(&mut empty);
     assert!(empty.is_empty());
 }
+
+fn create_test_zip(scratch_path: &std::path::Path, entries: &[(&str, &[u8])]) {
+    let file = fs::File::create(scratch_path).expect("create test zip");
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored);
+    for &(name, content) in entries {
+        use std::io::Write;
+        zip.start_file(name, options).expect("start zip file entry");
+        zip.write_all(content).expect("write zip file content");
+    }
+    zip.finish().expect("finish zip");
+}
+
+#[test]
+fn archive_cache_read_entry_header_contracts() {
+    let scratch_dir = std::env::temp_dir().join("quivit-test-cache-header-contracts");
+    let _ = fs::remove_dir_all(&scratch_dir);
+    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+
+    let zip_path = scratch_dir.join("test_headers.zip");
+    let payload = (0u8..100).collect::<Vec<u8>>();
+    create_test_zip(&zip_path, &[("payload.bin", &payload)]);
+
+    let path_str = zip_path.to_str().unwrap();
+    let mut cache = ArchiveCache::new(8);
+
+    // Limit smaller than payload
+    let h10 = cache
+        .read_entry_header(path_str, "payload.bin", 10)
+        .expect("read 10-byte header");
+    assert_eq!(h10, payload[..10].to_vec());
+
+    // Limit larger than payload
+    let h200 = cache
+        .read_entry_header(path_str, "payload.bin", 200)
+        .expect("read 200-byte header on 100-byte entry");
+    assert_eq!(h200, payload);
+
+    // Missing entry in valid archive fails
+    let missing_entry = cache.read_entry_header(path_str, "nonexistent.bin", 16);
+    assert!(missing_entry.is_err());
+
+    // Nonexistent archive path fails
+    let missing_archive = cache.read_entry_header("C:\\nonexistent_archive.zip", "entry.bin", 16);
+    assert!(missing_archive.is_err());
+
+    let _ = fs::remove_dir_all(&scratch_dir);
+}
+
+#[test]
+fn archive_cache_read_entry_header_cached_lru_bypass() {
+    let mut cache = ArchiveCache::new(4);
+    cache.register_test_archive("virtual.cbz");
+
+    let cached_payload = vec![10u8, 20, 30, 40, 50, 60, 70, 80];
+    cache.insert_zip_entry("virtual.cbz", "image.png", cached_payload.clone());
+
+    // Header read returns prefix up to limit directly from cache without needing archive file on disk
+    let header = cache
+        .read_entry_header("virtual.cbz", "image.png", 4)
+        .expect("read header from cached entry");
+    assert_eq!(header, vec![10, 20, 30, 40]);
+
+    // Limit greater than entry length returns entire cached payload
+    let full = cache
+        .read_entry_header("virtual.cbz", "image.png", 64)
+        .expect("read full header from cached entry");
+    assert_eq!(full, cached_payload);
+}
+
+#[test]
+fn archive_cache_read_entry_bytes_and_wait_contracts() {
+    let scratch_dir = std::env::temp_dir().join("quivit-test-cache-bytes-contracts");
+    let _ = fs::remove_dir_all(&scratch_dir);
+    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+
+    let zip_path = scratch_dir.join("test_bytes.zip");
+    let content = b"ArchiveCache read_entry_bytes payload content verification.";
+    create_test_zip(&zip_path, &[("message.txt", content)]);
+
+    let path_str = zip_path.to_str().unwrap();
+    let mut cache = ArchiveCache::new(8);
+
+    let entry_data = cache
+        .read_entry_bytes(path_str, "message.txt")
+        .expect("read entry bytes");
+    let bytes = entry_data
+        .wait_for_data("message.txt")
+        .expect("wait for data");
+    assert_eq!(bytes.as_slice(), content);
+
+    // Reading missing entry in archive fails
+    assert!(cache.read_entry_bytes(path_str, "ghost.txt").is_err());
+
+    // Non-existent archive fails
+    assert!(cache.read_entry_bytes("missing.zip", "test.txt").is_err());
+
+    let _ = fs::remove_dir_all(&scratch_dir);
+}
+
+#[test]
+fn archive_cache_cached_zip_entry_bytes_contracts() {
+    let mut cache = ArchiveCache::new(4);
+    cache.register_test_archive("archive.zip");
+
+    // Before inserting: lookup returns Ok(None)
+    assert!(cache
+        .cached_zip_entry_bytes("archive.zip", "entry.dat")
+        .unwrap()
+        .is_none());
+
+    // Insert entry
+    let data = vec![1, 2, 3, 4, 5];
+    cache.insert_zip_entry("archive.zip", "entry.dat", data.clone());
+
+    // After inserting: lookup returns Ok(Some(shared))
+    let cached = cache
+        .cached_zip_entry_bytes("archive.zip", "entry.dat")
+        .unwrap()
+        .expect("entry found in cache");
+    assert_eq!(cached.as_ref(), &data);
+
+    // Non-ZIP archive returns Ok(None)
+    assert!(cache
+        .cached_zip_entry_bytes("archive.rar", "entry.dat")
+        .unwrap()
+        .is_none());
+}
