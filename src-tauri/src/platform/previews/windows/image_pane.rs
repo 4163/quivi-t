@@ -57,6 +57,7 @@ const WM_BACKGROUND: u32 = WM_APP + 21;
 const WM_FOCUS: u32 = WM_APP + 22;
 const WM_CANCEL: u32 = WM_APP + 23;
 const READY_TIMER: usize = 1;
+const ORIGIN: &str = "https://quivit-preview.localhost/";
 const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'";
 const SVG_CSP: &str = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'";
 static REGISTERED: OnceLock<Result<(), String>> = OnceLock::new();
@@ -414,7 +415,8 @@ fn create_webview(
         .with_devtools(cfg!(debug_assertions))
         .with_default_context_menus(false)
         .with_browser_accelerator_keys(false)
-        .with_navigation_handler(|url| url == "quivit-preview://localhost/")
+        // wry rewrites custom protocols with https scheme to https://<protocol>.localhost/ on Windows.
+        .with_navigation_handler(|url| url == ORIGIN || url == "quivit-preview://localhost/")
         .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny)
         .with_download_started_handler(|_, _| false)
         .with_custom_protocol("quivit-preview".into(), move |_, request| {
