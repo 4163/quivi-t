@@ -536,8 +536,10 @@ export function createViewportState({ getViewport = () => ({ clientWidth: 1000, 
     const vp = getViewport();
     const vw = vp.clientWidth;
     const vh = vp.clientHeight;
-    const lx = cx - vp.left;
-    const ly = cy - vp.top;
+    const clientX = cx !== undefined ? cx : (vp.left + vw / 2);
+    const clientY = cy !== undefined ? cy : (vp.top + vh / 2);
+    const lx = clientX - vp.left;
+    const ly = clientY - vp.top;
 
     const ratio = _scale / prevScale;
     const wx = (lx - vw / 2 - _tx);
