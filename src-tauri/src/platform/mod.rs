@@ -10,6 +10,7 @@ pub mod icons;
 pub mod previews;
 #[cfg(windows)]
 pub mod process;
+pub mod recycle;
 pub mod temp_archive;
 pub mod thumbnails;
 

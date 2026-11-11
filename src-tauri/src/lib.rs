@@ -1,9 +1,12 @@
 pub mod archives;
 pub mod commands;
 pub mod config;
+pub mod containers;
 pub mod formats;
+pub mod fs;
 pub mod ico;
 pub mod image_import;
+pub mod library;
 pub mod models;
 pub mod platform;
 pub mod protocol;
@@ -24,15 +27,17 @@ use commands::{
     apply_associations, cancel_dims_scan, cancel_download, cancel_width_scan, check_is_animated,
     check_media_audio, create_placeholder_files, download_to_file, drop_all_archives_cache,
     drop_archive_cache, fetch_bytes, fetch_extractor_text, fetch_text, find_directory_metadata,
-    get_archive_ico_frames, get_default_dir, get_default_library_dir, get_drives, get_file_sizes,
-    get_format_status, get_ico_frames, get_initial_args, get_library_dir, get_native_icon,
-    get_path_kind, get_preview_diagnostics, invalidate_native_icon_cache, library_move_in_progress,
-    list_archive, move_library, network, open_in_explorer, pick_folder, prefetch_archive_entries,
+    get_active_config_info, get_archive_ico_frames, get_config_dir, get_default_dir,
+    get_default_library_dir, get_drives, get_file_sizes, get_format_status, get_ico_frames,
+    get_initial_args, get_library_dir, get_local_data_dir, get_native_icon, get_path_kind,
+    get_preview_diagnostics, invalidate_native_icon_cache, library_move_in_progress,
+    list_archive, load_config, move_library, network, open_active_config_dir, open_config_dir,
+    open_in_explorer, open_local_data_dir, pick_folder, prefetch_archive_entries,
     probe_media_dimensions, read_directory, read_library_tree, read_text_file,
     rebind_library_watcher, register_associations, remove_directory, remove_file,
-    resolve_archive_temp_origin, scan_container_dimensions, scan_container_max_width,
-    sync_preview_associations, unregister_associations, verify_image_magic, watch_directory,
-    write_text_file, WatcherState,
+    resolve_archive_temp_origin, save_config, scan_container_dimensions,
+    scan_container_max_width, sync_preview_associations, unregister_associations,
+    verify_image_magic, watch_directory, write_text_file, WatcherState,
 };
 #[cfg(windows)]
 use commands::{describe_drop, enable_native_drop, release_drop, save_dropped_image};
@@ -132,14 +137,14 @@ pub fn run() {
         drop_archive_cache,
         drop_all_archives_cache,
         prefetch_archive_entries,
-        crate::config::load_config,
-        crate::config::get_config_dir,
-        crate::config::get_active_config_info,
-        crate::config::open_active_config_dir,
-        crate::config::open_config_dir,
-        crate::config::get_local_data_dir,
-        crate::config::open_local_data_dir,
-        crate::config::save_config,
+        load_config,
+        get_config_dir,
+        get_active_config_info,
+        open_active_config_dir,
+        open_config_dir,
+        get_local_data_dir,
+        open_local_data_dir,
+        save_config,
         open_options,
         open_workspace_window,
         close_workspace_window,

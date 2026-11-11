@@ -1,6 +1,10 @@
 use super::*;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+
+use crate::commands::directory::{find_directory_metadata, read_directory, remove_directory};
+use crate::library::tree::{read_gallery_metadata, read_library_nodes};
 
 struct TempDirGuard {
     path: PathBuf,
@@ -364,7 +368,7 @@ fn test_remove_directory_safety() {
     let res_root_drive = remove_directory_impl("C:\\".to_string());
     assert!(res_root_drive.is_err());
 
-    if let Ok(lib_dir) = crate::commands::shell::get_library_dir() {
+    if let Ok(lib_dir) = crate::commands::library::get_library_dir() {
         let res_lib_root = remove_directory_impl(lib_dir);
         assert_eq!(
             res_lib_root.unwrap_err(),

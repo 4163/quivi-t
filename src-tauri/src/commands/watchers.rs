@@ -12,6 +12,7 @@ pub struct WatcherState {
     pub parent_watcher: Option<RecommendedWatcher>,
     pub config_watcher: Option<RecommendedWatcher>,
     pub library_watcher: Option<RecommendedWatcher>,
+    pub last_self_write: Option<std::time::Instant>,
 }
 
 impl WatcherState {
@@ -21,14 +22,21 @@ impl WatcherState {
             parent_watcher: None,
             config_watcher: None,
             library_watcher: None,
+            last_self_write: None,
         }
     }
+}
+
+pub fn record_config_self_write(app: &tauri::AppHandle) {
+    let state = app.state::<Mutex<WatcherState>>();
+    let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+    state.last_self_write = Some(std::time::Instant::now());
 }
 
 #[tauri::command]
 pub fn watch_directory(app: tauri::AppHandle, path: String) -> Result<(), String> {
     let state = app.state::<Mutex<WatcherState>>();
-    let mut state = state.lock().unwrap();
+    let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
 
     // Stop tracking the old directory.
     state.watcher = None;
@@ -137,11 +145,11 @@ pub fn validate_library_watch_path(path: &Path) -> Result<(), String> {
 
 #[tauri::command]
 pub fn rebind_library_watcher(app: tauri::AppHandle) -> Result<(), String> {
-    let library_path = crate::commands::shell::get_library_dir()?;
+    let library_path = crate::commands::library::get_library_dir()?;
     let watcher = create_library_watcher(app.clone(), &library_path)?;
     app.state::<Mutex<WatcherState>>()
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .library_watcher = Some(watcher);
     Ok(())
 }
@@ -154,7 +162,7 @@ pub fn spawn_library_watcher(app: tauri::AppHandle) {
 
 pub fn spawn_config_file_watcher(app: tauri::AppHandle) {
     let state = app.state::<Mutex<WatcherState>>();
-    let mut state = state.lock().unwrap();
+    let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
 
     let config_path = crate::config::get_config_path();
     if let Some(parent) = config_path.parent() {
@@ -171,7 +179,16 @@ pub fn spawn_config_file_watcher(app: tauri::AppHandle) {
                         .iter()
                         .any(|p| p.file_name() == config_path.file_name())
                     {
-                        let mut last = last_emit.lock().unwrap();
+                        let watcher_state = app_clone.state::<Mutex<WatcherState>>();
+                        let state = watcher_state.lock().unwrap_or_else(|e| e.into_inner());
+                        if let Some(last_self) = state.last_self_write {
+                            if last_self.elapsed() < std::time::Duration::from_millis(1000) {
+                                return;
+                            }
+                        }
+                        drop(state);
+
+                        let mut last = last_emit.lock().unwrap_or_else(|e| e.into_inner());
                         if last.elapsed() > std::time::Duration::from_millis(500) {
                             *last = std::time::Instant::now();
                             let _ = app_clone.emit("config-changed", ());

@@ -3,7 +3,6 @@ use serde_json::Value as JsonValue;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
-use tauri_plugin_opener::OpenerExt;
 
 pub const LIBRARY_PATH_KEY: &str = "library_path";
 pub const RETIRED_LIBRARY_PATHS_KEY: &str = "retired_library_paths";
@@ -13,6 +12,16 @@ fn atomic_write(path: &Path, data: impl AsRef<[u8]>) -> std::io::Result<()> {
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, data)?;
     fs::rename(&tmp, path)
+}
+
+fn write_if_changed(path: &Path, data: impl AsRef<[u8]>) -> std::io::Result<()> {
+    let bytes = data.as_ref();
+    if let Ok(existing) = fs::read(path) {
+        if existing == bytes {
+            return Ok(());
+        }
+    }
+    atomic_write(path, bytes)
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -107,7 +116,7 @@ pub fn describe_config_source() -> String {
 }
 
 /// One-file layout inside the override folder. Split files are the default.
-fn override_single_file() -> bool {
+pub fn override_single_file() -> bool {
     matches!(
         std::env::var("QUIVIT_PORTABLE")
             .ok()
@@ -423,7 +432,6 @@ fn load_from_dir(dir: &Path, force_single: bool) -> AppConfig {
     cfg
 }
 
-#[tauri::command]
 pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
     let mut config = if let Some(dir) = override_config_dir() {
         fs::create_dir_all(&dir).ok();
@@ -445,81 +453,6 @@ pub fn load_config(app_handle: tauri::AppHandle) -> AppConfig {
     config
 }
 
-// Options folder rows. They name the roaming and exe-dir spots, except an
-// override run repoints both at its own folder since that is where the files
-// actually live. They do not track the "Save config data locally" state.
-
-#[tauri::command]
-pub fn get_config_dir(app_handle: tauri::AppHandle) -> String {
-    roaming_dir(&app_handle).to_string_lossy().into_owned()
-}
-
-#[tauri::command]
-pub fn open_active_config_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
-    let dir = if let Some(dir) = override_config_dir() {
-        dir
-    } else if is_portable() {
-        get_exe_dir()
-    } else {
-        roaming_dir(&app_handle)
-    };
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create config directory: {e}"))?;
-    app_handle
-        .opener()
-        .open_path(dir.to_string_lossy().into_owned(), None::<&str>)
-        .map_err(|e| format!("Failed to open config directory: {e}"))
-}
-
-/// Folder and layout this run actually uses. Options renders it as the
-/// primary row; the secondary row names the inactive fixed spot.
-#[tauri::command]
-pub fn get_active_config_info() -> crate::models::ActiveConfigInfo {
-    if let Some(dir) = override_config_dir() {
-        let layout = if override_single_file() {
-            "single file"
-        } else {
-            "split files"
-        };
-        return crate::models::ActiveConfigInfo {
-            dir: dir.to_string_lossy().into_owned(),
-            mode: format!("override ({layout})"),
-        };
-    }
-    let mode = if is_portable() { "portable" } else { "roaming" };
-    let dir = get_config_path()
-        .parent()
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    crate::models::ActiveConfigInfo {
-        dir,
-        mode: mode.to_string(),
-    }
-}
-
-#[tauri::command]
-pub fn open_config_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
-    let dir = roaming_dir(&app_handle);
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create config directory: {e}"))?;
-    app_handle
-        .opener()
-        .open_path(dir.to_string_lossy().into_owned(), None::<&str>)
-        .map_err(|e| format!("Failed to open config directory: {e}"))
-}
-
-#[tauri::command]
-pub fn get_local_data_dir() -> String {
-    get_exe_dir().to_string_lossy().into_owned()
-}
-
-#[tauri::command]
-pub fn open_local_data_dir(app_handle: tauri::AppHandle) -> Result<(), String> {
-    let dir = get_exe_dir();
-    app_handle
-        .opener()
-        .open_path(dir.to_string_lossy().into_owned(), None::<&str>)
-        .map_err(|e| format!("Failed to open local data directory: {e}"))
-}
-
 /// Write the split layout into one folder. Shared by roaming and override saves.
 fn write_split_config(dir: &Path, config: &mut AppConfig) -> Result<(), String> {
     let mut fd = std::mem::take(&mut config.frontend_data);
@@ -538,24 +471,24 @@ fn write_split_config(dir: &Path, config: &mut AppConfig) -> Result<(), String> 
     config.frontend_data = fd;
 
     let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    atomic_write(
+    write_if_changed(
         &dir.join("quivit_state.json"),
         serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
-    atomic_write(
+    write_if_changed(
         &dir.join("quivit_directory_sort.json"),
         serde_json::to_string_pretty(&sort).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
-    atomic_write(
+    write_if_changed(
         &dir.join("quivit_favorites.json"),
         serde_json::to_string_pretty(&favorites).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
-    atomic_write(&dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())?;
+    write_if_changed(&dir.join("custom_css.css"), custom_css).map_err(|e| e.to_string())?;
 
-    atomic_write(&dir.join("quivit_config.json"), data).map_err(|e| e.to_string())
+    write_if_changed(&dir.join("quivit_config.json"), data).map_err(|e| e.to_string())
 }
 
 /// Save into the override folder only. One layout per folder: a single-file
@@ -623,22 +556,6 @@ pub fn save_config_unchecked(
     Ok(())
 }
 
-#[tauri::command]
-pub fn save_config(app_handle: tauri::AppHandle, config: AppConfig) -> Result<(), String> {
-    if crate::commands::library::library_move_in_progress()? {
-        return Err(
-            "Library relocation is in progress. Try saving settings again when it finishes.".into(),
-        );
-    }
-
-    let current = load_config(app_handle.clone());
-    if !same_library_location(&current, &config)? {
-        return Err("Use the Library location control to move the Library. Settings saves cannot change its path.".into());
-    }
-
-    save_config_unchecked(app_handle, config)
-}
-
 #[cfg(test)]
 #[path = "tests/config_tests.rs"]
-mod tests;
+mod config_tests;
