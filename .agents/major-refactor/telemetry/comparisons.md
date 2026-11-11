@@ -70,20 +70,20 @@ Continuation record of pre-refactor (`[Telemetry A]`) versus post-refactor (`[Te
 ## Slice 2.1: formats.rs decomposition, ArchiveCache lock contention, and panic-free parsing
 
 - **Telemetry A:** `.agents/major-refactor/telemetry/slice-2.1-a.json`
-- **Telemetry B:** Pending implementation completion (#2.1.9)
+- **Telemetry B:** `.agents/major-refactor/telemetry/slice-2.1-b.json`
 - **Harness:** Rust backend unit tests (`src-tauri/src/tests/archive_tests.rs`, `src-tauri/src/tests/format_tests.rs`, `src-tauri/src/tests/ico_tests.rs`, `src-tauri/src/tests/protocol_tests.rs`)
-- **Verdict:** Telemetry A baseline captured, 0 failures.
+- **Verdict:** 100% contract parity, 0 failures.
 
-### Metrics baseline
+### Metrics comparison
 
 | Metric | Telemetry A | Telemetry B | Delta |
 |---|---|---|---|
-| Suites | 5 | TBD | TBD |
-| Total tests | 100 | TBD | TBD |
-| Passes | 100 | TBD | TBD |
-| Failures | 0 | TBD | TBD |
-| Pending | 0 | TBD | TBD |
-| Duration | 1834 ms | TBD | TBD |
+| Suites | 5 | 5 | 0 |
+| Total tests | 100 | 100 | 0 |
+| Passes | 100 | 100 | 0 |
+| Failures | 0 | 0 | 0 |
+| Pending | 0 | 0 | 0 |
+| Duration | 1834 ms | 320 ms | -1514 ms (fine-grained lock concurrency & reduced allocations) |
 
 ### Test suite breakdown
 
@@ -94,5 +94,7 @@ Continuation record of pre-refactor (`[Telemetry A]`) versus post-refactor (`[Te
 
 ### Notes
 
-- Baseline coverage expanded across header dimension probes, ICO spritesheet generation, corrupted directory entry bounds, cache entry headers and payloads, and protocol byte range responses.
-- All 100 tests pass without failures or panics.
+- All 100 tests matched 1:1 in title, hierarchy, and sequence order with 0 regressions.
+- `formats.rs` decomposed into `src-tauri/src/formats/{mod,registry,icons,animation,isobmff,dimensions}.rs` with 100% API facade compatibility.
+- `ArchiveCache` header reads and temp extraction polling refactored to fine-grained concurrency, eliminating global write-lock starvation.
+- Protocol zero-copy responses and fallible parsing in ICO and DIB image import verified with 0 failures or panics.
