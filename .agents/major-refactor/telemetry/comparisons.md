@@ -2,6 +2,11 @@
 
 Continuation record of pre-refactor (`[Telemetry A]`) versus post-refactor (`[Telemetry B]`) test runs across all refactoring slices.
 
+### Guidelines for entries
+
+- Keep notes concise (1 to 2 bullets) focusing solely on test parity, failure counts, and execution time or timer deltas.
+- Do not repeat architectural changes, module splits, or implementation details that already live in `roadmap.md` and audit documents.
+
 ---
 
 ## Slice 1.1: Frontend shared path, archive, media classification, and shader helpers
@@ -61,9 +66,8 @@ Continuation record of pre-refactor (`[Telemetry A]`) versus post-refactor (`[Te
 
 ### Notes
 
-- All 62 tests matched 1:1 in title, hierarchy, and sequence order.
-- Test stubs in `archive_tests.rs` now import real extracted helpers from `crate::archives`, `crate::utils`, `crate::platform`, and `crate::platform::gdi` with 0 contract regressions.
-- The +39 ms (+1.2%) duration delta reflects standard Windows process spawn, binary loading, and timer tick variance across `cargo test` invocations. Pure test execution time remained identical at ~60 ms.
+- All 62 tests matched 1:1 in title, hierarchy, and sequence order with 0 regressions.
+- The +39 ms duration delta reflects standard Windows process spawn, binary loading, and timer tick variance across invocations.
 
 ---
 
@@ -95,29 +99,27 @@ Continuation record of pre-refactor (`[Telemetry A]`) versus post-refactor (`[Te
 ### Notes
 
 - All 100 tests matched 1:1 in title, hierarchy, and sequence order with 0 regressions.
-- `formats.rs` decomposed into `src-tauri/src/formats/{mod,registry,icons,animation,isobmff,dimensions}.rs` with 100% API facade compatibility.
-- `ArchiveCache` header reads and temp extraction polling refactored to fine-grained concurrency, eliminating global write-lock starvation.
-- Protocol zero-copy responses and fallible parsing in ICO and DIB image import verified with 0 failures or panics.
+- The 1514 ms duration reduction reflects fine-grained cache lock concurrency and reduced buffer copies.
 
 ---
 
 ## Slice 2.2: Config, Library, Directory, and Container Sweep domain extraction
 
 - **Telemetry A:** `.agents/major-refactor/telemetry/slice-2.2-a.json`
-- **Telemetry B:** Pending implementation completion (#2.2.6)
+- **Telemetry B:** `.agents/major-refactor/telemetry/slice-2.2-b.json`
 - **Harness:** Rust backend unit tests (`src-tauri/src/tests/config_tests.rs`, `src-tauri/src/tests/directory_tests.rs`, `src-tauri/src/tests/library_tests.rs`)
-- **Verdict:** Telemetry A baseline captured, 0 failures.
+- **Verdict:** 100% contract parity, 0 failures.
 
-### Metrics baseline
+### Metrics comparison
 
 | Metric | Telemetry A | Telemetry B | Delta |
 |---|---|---|---|
-| Suites | 3 | TBD | TBD |
-| Total tests | 54 | TBD | TBD |
-| Passes | 54 | TBD | TBD |
-| Failures | 0 | TBD | TBD |
-| Pending | 0 | TBD | TBD |
-| Duration | 100 ms | TBD | TBD |
+| Suites | 3 | 3 | 0 |
+| Total tests | 54 | 54 | 0 |
+| Passes | 54 | 54 | 0 |
+| Failures | 0 | 0 | 0 |
+| Pending | 0 | 0 | 0 |
+| Duration | 100 ms | 110 ms | +10 ms (timer tick resolution jitter) |
 
 ### Test suite breakdown
 
@@ -127,5 +129,5 @@ Continuation record of pre-refactor (`[Telemetry A]`) versus post-refactor (`[Te
 
 ### Notes
 
-- Baseline coverage expanded across split config serialization/deserialization across all 5 files, unchanged save determinism, pending config promotion edge cases, directory listing and sorting with natural order, metadata sidecar detection, deletion safety boundaries, library root write guards, path containment and normalization, and library relocation config remapping.
-- All 54 tests pass without failures or panics.
+- All 54 tests matched 1:1 in title, sequence order, and assertion semantics with 0 regressions.
+- The +10 ms duration delta reflects standard Windows system timer tick variance.
