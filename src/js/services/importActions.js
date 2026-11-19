@@ -28,6 +28,13 @@ export function parseLocalPath(input) {
   return null;
 }
 
+function isSupportedLocalFile(name, FsUtils) {
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0) return false;
+  if (FsUtils.isArchive(name)) return true;
+  return FsUtils.isImage(name) && !FsUtils.isVideo(name);
+}
+
 export function createImportActions({ invoke, FsUtils, loadUrl, cancelUrlImport, sanitizeSvg, activateMisc, libraryUpdated }) {
   let active = null;
   const listeners = new Set();
@@ -72,6 +79,9 @@ export function createImportActions({ invoke, FsUtils, loadUrl, cancelUrlImport,
   async function openPathResult(request, path) {
     const kind = await invoke('get_path_kind', { path });
     if (kind === 'missing') throw new Error('Path not found');
+    if (kind === 'file' && !isSupportedLocalFile(FsUtils.basename(path), FsUtils)) {
+      throw new Error('File type not supported');
+    }
     await openResult(request, path, { preferInitial: true });
   }
 
