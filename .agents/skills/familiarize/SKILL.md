@@ -18,7 +18,6 @@ Read agent guidelines and project documentation only. No codebase exploration.
 - `.agents/skills/unslop/SKILL.md`
 - `.agents/architecture-state.md`
 - `.agents/skills/blast-radius/SKILL.md`
-- `.agents/skills/validate-changes/SKILL.md`
 - `.agents/skills/verify-implementation/SKILL.md`
 - `README.md` (if present)
 
