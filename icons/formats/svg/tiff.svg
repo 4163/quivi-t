@@ -20,7 +20,7 @@
       <rect x="5" y="5" width="210" height="100" rx="10" />
     </clipPath>
     <pattern id="sign-grill" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-      <line x1="0" y1="0" x2="0" y2="10" stroke="#394B6E" stroke-width="7" />
+      <line x1="0" y1="0" x2="0" y2="10" stroke="#315463" stroke-width="7" />
     </pattern>
   </defs>
   <!-- Legs -->
@@ -49,11 +49,11 @@
   </g>
   <!-- The Sign (Adjusted height and position) -->
   <g transform="translate(30, 260)">
-    <rect x="0" y="0" width="220" height="110" rx="15" fill="#505FB0" />
+    <rect x="0" y="0" width="220" height="110" rx="15" fill="#44968E" />
     <g clip-path="url(#sign-inner-clip)">
       <rect x="0" y="0" width="220" height="110" fill="url(#sign-grill)" />
     </g>
-    <rect x="0" y="0" width="220" height="110" rx="15" fill="none" stroke="#483766" stroke-width="10" />
+    <rect x="0" y="0" width="220" height="110" rx="15" fill="none" stroke="#335C4B" stroke-width="10" />
     <text x="110" y="55" class="format-text" fill="#fff" font-size="58px">TIFF</text>
   </g>
   <!-- Tiny Stubby Hands Holding the Sign (Moved up with sign) -->
