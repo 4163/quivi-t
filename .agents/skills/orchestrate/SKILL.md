@@ -26,7 +26,7 @@ Read the affected files before delegating anything. Understand how the existing 
 
 ### 2. Divide the task and delegate
 
-Break the work into slices and spawn workers with `swarm{action:"add", name, model, workspace:"inherit", brief}`. Default `model` to `"gemini-4-hydrogen-medium"` unless the user specifies another model or reasoning level from `swarm{action:"models"}`.
+Break the work into slices and spawn workers with `swarm{action:"add", name, model, workspace:"inherit", brief}`. Default `model` to `"gemini-4-neon-medium"` unless the user specifies another model or reasoning level from `swarm{action:"models"}`.
 
 - **Give each slice exclusive files.** Two workers running at the same time must never touch the same file.
 - **Pick parallel or sequential order from dependencies.** Add independent slices together so they run in parallel. Add dependent slices only after the earlier slice reports `@coordinator [done]` on the board, or assign the follow-up to that worker with `post_message`.
