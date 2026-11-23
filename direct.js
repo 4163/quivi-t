@@ -14,7 +14,9 @@
 
 import { sanitizePathSegment } from './shared/sanitize.js';
 
-const DIRECT_IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'apng', 'bmp', 'svg']);
+const DIRECT_IMAGE_EXTS = new Set([
+  'jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp', 'avif', 'apng', 'bmp', 'dib', 'tif', 'tiff', 'svg'
+]);
 const DIRECT_IMAGE_RE = /^https?:\/\/[^?#]+\.([a-z0-9]+)([?#].*)?$/i;
 
 // First-byte signatures. A page that ends in an image extension but serves
@@ -36,12 +38,14 @@ function sniffKind(head, ext) {
       return sig(0, [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) ? 'image' : 'mismatch';
     case 'jpg':
     case 'jpeg':
+    case 'jfif':
       if (head.length < 2) return 'unknown';
       return sig(0, [0xFF, 0xD8]) ? 'image' : 'mismatch';
     case 'gif':
       if (head.length < 6) return 'unknown';
       return ascii(0, 'GIF87a') || ascii(0, 'GIF89a') ? 'image' : 'mismatch';
     case 'bmp':
+    case 'dib':
       if (head.length < 2) return 'unknown';
       return ascii(0, 'BM') ? 'image' : 'mismatch';
     case 'webp':
@@ -50,6 +54,15 @@ function sniffKind(head, ext) {
     case 'avif':
       if (head.length < 12) return 'unknown';
       return ascii(4, 'ftyp') ? 'image' : 'mismatch';
+    case 'tif':
+    case 'tiff':
+      if (head.length < 4) return 'unknown';
+      return (
+        sig(0, [0x49, 0x49, 0x2A, 0x00]) ||
+        sig(0, [0x4D, 0x4D, 0x00, 0x2A]) ||
+        sig(0, [0x49, 0x49, 0x2B, 0x00]) ||
+        sig(0, [0x4D, 0x4D, 0x00, 0x2B])
+      ) ? 'image' : 'mismatch';
     default:
       return 'unknown';
   }

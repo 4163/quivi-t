@@ -53,9 +53,9 @@
       "id": "direct",
       "name": "Misc",
       "libraryPath": "Misc",
-      "version": 1,
+      "version": 2,
       "patterns": [
-        "^https?://[^?#]+\\.([jJ][pP][gG]|[jJ][pP][eE][gG]|[pP][nN][gG]|[gG][iI][fF]|[wW][eE][bB][pP]|[aA][vV][iI][fF]|[aA][pP][nN][gG]|[bB][mM][pP]|[sS][vV][gG])([?#].*)?$"
+        "^https?://[^?#]+\\.([jJ][pP][gG]|[jJ][pP][eE][gG]|[jJ][fF][iI][fF]|[pP][nN][gG]|[gG][iI][fF]|[wW][eE][bB][pP]|[aA][vV][iI][fF]|[aA][pP][nN][gG]|[bB][mM][pP]|[dD][iI][bB]|[tT][iI][fF]|[tT][iI][fF][fF]|[sS][vV][gG])([?#].*)?$"
       ],
       "source": "direct.js"
     }
