@@ -155,6 +155,7 @@ pub fn prepare(
             image::ImageFormat::Bmp => "bmp",
             image::ImageFormat::Ico => "ico",
             image::ImageFormat::Avif => "avif",
+            image::ImageFormat::Tiff => "tiff",
             _ => return Err("Dropped image format is not supported".into()),
         };
         let (width, height) = if format == image::ImageFormat::Avif {

@@ -13,12 +13,12 @@ export const FS_SESSION_METHODS = ['loadFile', 'loadArchive', 'openParent', 'ope
 const OPTIMISTIC_SESSION_METHODS = new Set(['registerPendingDeletion', 'unregisterPendingDeletion']);
 
 export const SUPPORTED_IMAGES = new Set([
-  'jpg', 'jpeg', 'png', 'gif', 'webp', 'apng', 'svg', 'bmp', 'dib', 'ico', 'avif', 'mp4'
+  'jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp', 'apng', 'svg', 'avif', 'ico', 'bmp', 'dib', 'tif', 'tiff', 'mp4'
 ]);
 
 export const SUPPORTED_ARCHIVES = new Set(['zip', 'cbz', 'rar', 'cbr', '7z', 'cb7', 'cbt', 'tar']);
 
-export const SHELL_THUMBNAIL_EXTS = new Set(['jpg', 'jpeg', 'png', 'bmp', 'dib', 'gif', 'ico', 'mp4']);
+export const SHELL_THUMBNAIL_EXTS = new Set(['jpg', 'jpeg', 'jfif', 'png', 'bmp', 'dib', 'gif', 'ico', 'tif', 'tiff', 'mp4']);
 
 let nativeIconCacheVersion = 0;
 
@@ -210,6 +210,7 @@ export const FsUtils = {
   isImage(name) { return SUPPORTED_IMAGES.has(_ext(name)); },
   isVideo(name) { return _ext(name) === 'mp4'; },
   isIco(name) { return _ext(name) === 'ico'; },
+  isTiff(name) { const e = _ext(name); return e === 'tif' || e === 'tiff'; },
   isArchiveEntry(entry) { return entry && !entry.is_dir && this.isArchive(entry.name); },
   isImageEntry(entry) { return entry && !entry.is_dir && this.isImage(entry.name); },
   isVideoEntry(entry) { return entry && !entry.is_dir && this.isVideo(entry.name); },
@@ -302,6 +303,13 @@ export const FsUtils = {
     return this.versionMediaSrc(`${base}/thumb/${encoded}`);
   },
 
+  buildTiffSrc(path, revision) {
+    const encoded = _base64Encode(path);
+    const isWindows = navigator.userAgent.includes('Windows');
+    const base = isWindows ? 'http://quivit.localhost' : 'quivit://localhost';
+    return this.versionMediaSrc(`${base}/tiff/${encoded}`, revision);
+  },
+
   getIconExtKey(item) {
     if (!item) return '';
     if (item.is_parent) return '__folder__';
@@ -320,7 +328,7 @@ export const FsUtils = {
   // and raw 1:1 file assets. Shell /thumb/ (96px) and /icon/ are lightweight.
   isConstrainedThumbnailSrc(src) {
     if (!src) return false;
-    if (src.includes('/archive/')) return true;
+    if (src.includes('/archive/') || src.includes('/tiff/')) return true;
     return src.includes('asset.localhost') || src.includes('asset://');
   },
 
@@ -413,6 +421,7 @@ export const FsUtils = {
   // caller handles them through buildFileSrc().
   buildFileSrcSync(filePath, revision) {
     if (filePath.startsWith('blob:')) return filePath;
+    if (this.isTiff(filePath)) return this.buildTiffSrc(filePath, revision);
     // Video viewer needs the real file URL. Thumbnails use buildThumbnailSrc.
     return this.versionMediaSrc(window.__TAURI__.core.convertFileSrc(filePath), revision);
   },

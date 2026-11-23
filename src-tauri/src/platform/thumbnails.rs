@@ -22,7 +22,9 @@ use windows::Win32::UI::Shell::{
 };
 
 #[cfg(windows)]
-const SHELL_THUMB_EXTS: &[&str] = &["jpg", "jpeg", "png", "bmp", "dib", "gif", "ico", "mp4"];
+const SHELL_THUMB_EXTS: &[&str] = &[
+    "jpg", "jpeg", "jfif", "png", "bmp", "dib", "gif", "ico", "tif", "tiff", "mp4",
+];
 
 // RAII guards matching the pattern in icons.rs (file-private there).
 
@@ -317,6 +319,7 @@ pub(crate) fn source_has_transparency(path: &str, ext: &str) -> bool {
         "png" => png_has_alpha(hdr),
         "gif" => gif_has_transparency(hdr),
         "ico" => ico_has_alpha(hdr),
+        "tif" | "tiff" => tiff_has_alpha(hdr),
         _ => false,
     }
 }
@@ -421,6 +424,52 @@ fn ico_has_alpha(hdr: &[u8]) -> bool {
         if bytes_in_res >= 8 && hdr.len() >= 22 {
             // Heuristic: PNG entries are stored as PNG, which typically has alpha
             // We cannot read entry data in header-only 1024, but 32bpp is reliable.
+        }
+    }
+    false
+}
+
+/// TIFF: check first IFD for the ExtraSamples tag (338) when the IFD lies in the
+/// leading header buffer.
+#[cfg(windows)]
+fn tiff_has_alpha(hdr: &[u8]) -> bool {
+    if hdr.len() < 8 {
+        return false;
+    }
+    let le = match &hdr[..4] {
+        [0x49, 0x49, 0x2A, 0x00] => true,
+        [0x4D, 0x4D, 0x00, 0x2A] => false,
+        _ => return false,
+    };
+    let read_u16 = |off: usize| -> Option<u16> {
+        let bytes: [u8; 2] = hdr.get(off..off + 2)?.try_into().ok()?;
+        Some(if le {
+            u16::from_le_bytes(bytes)
+        } else {
+            u16::from_be_bytes(bytes)
+        })
+    };
+    let read_u32 = |off: usize| -> Option<u32> {
+        let bytes: [u8; 4] = hdr.get(off..off + 4)?.try_into().ok()?;
+        Some(if le {
+            u32::from_le_bytes(bytes)
+        } else {
+            u32::from_be_bytes(bytes)
+        })
+    };
+    let Some(ifd_off) = read_u32(4).map(|v| v as usize) else {
+        return false;
+    };
+    let Some(count) = read_u16(ifd_off).map(|v| v as usize) else {
+        return false;
+    };
+    for i in 0..count {
+        let entry = ifd_off + 2 + i * 12;
+        let Some(tag) = read_u16(entry) else {
+            break;
+        };
+        if tag == 338 {
+            return true;
         }
     }
     false

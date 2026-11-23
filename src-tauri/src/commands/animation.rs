@@ -72,9 +72,6 @@ pub fn check_media_audio(
     }
 }
 
-/// Bytes read from each entry header for dimension probing.
-const DIMENSION_HEADER_LIMIT: usize = 32_768;
-
 /// Extensions skipped during the width scan. SVG has no reliable header
 /// dimensions, and ICO header dimensions differ from the generated row total.
 fn skip_for_width_scan(ext: &str) -> bool {
@@ -146,14 +143,8 @@ fn scan_directory_widths(dir: &str, app: &tauri::AppHandle, max_w: &mut u32, gen
             continue;
         }
 
-        let w = if ext.eq_ignore_ascii_case("mp4") {
-            let mut f = match fs::File::open(&path) {
-                Ok(f) => f,
-                Err(_) => continue,
-            };
-            formats::read_mp4_dimensions(&mut f).map(|(w, _)| w)
-        } else if formats::is_image_ext(&ext) {
-            image::image_dimensions(&path).ok().map(|(w, _)| w)
+        let w = if ext.eq_ignore_ascii_case("mp4") || formats::is_image_ext(&ext) {
+            formats::read_media_dimensions_from_path(&path, &ext).map(|(w, _)| w)
         } else {
             None
         };
@@ -225,18 +216,9 @@ fn scan_zip_archive_widths(
             continue;
         }
 
-        let limit = (DIMENSION_HEADER_LIMIT as u64).min(entry.size());
-        let mut buf = Vec::with_capacity(limit as usize);
-        if entry.by_ref().take(limit).read_to_end(&mut buf).is_err() {
-            continue;
-        }
-
-        let w = if is_mp4 {
-            let mut cursor = std::io::Cursor::new(&buf);
-            formats::read_mp4_dimensions(&mut cursor).map(|(w, _)| w)
-        } else {
-            formats::read_dimensions_from_bytes(&buf).map(|(w, _)| w)
-        };
+        let entry_size = entry.size();
+        let w = formats::read_media_dimensions_from_stream(entry, entry_size, entry_ext)
+            .map(|(w, _)| w);
 
         if let Some(w) = w {
             if w > *max_w {
@@ -313,14 +295,8 @@ fn scan_temp_archive_widths(
             if let Some(path) = crate::archives::archive_entry_temp_path(&temp_dir, &name) {
                 let is_mp4 = ext.eq_ignore_ascii_case("mp4");
                 let is_image = formats::is_image_ext(ext);
-                let w = if is_mp4 {
-                    if let Ok(mut f) = fs::File::open(&path) {
-                        formats::read_mp4_dimensions(&mut f).map(|(w, _)| w)
-                    } else {
-                        None
-                    }
-                } else if is_image {
-                    image::image_dimensions(&path).ok().map(|(w, _)| w)
+                let w = if is_mp4 || is_image {
+                    formats::read_media_dimensions_from_path(&path, ext).map(|(w, _)| w)
                 } else {
                     None
                 };

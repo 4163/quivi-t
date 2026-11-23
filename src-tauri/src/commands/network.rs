@@ -462,11 +462,18 @@ fn check_image_magic_head(head: &[u8], expected_ext: &str) -> bool {
     let enough = |n: usize| head.len() >= n;
     match ext.as_str() {
         "png" | "apng" => enough(8) && head[..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
-        "jpg" | "jpeg" => enough(2) && head[..2] == [0xFF, 0xD8],
+        "jpg" | "jpeg" | "jfif" => enough(2) && head[..2] == [0xFF, 0xD8],
         "gif" => enough(6) && (head[..6] == *b"GIF87a" || head[..6] == *b"GIF89a"),
         "bmp" | "dib" => enough(2) && head[..2] == *b"BM",
         "webp" => enough(12) && head[..4] == *b"RIFF" && head[8..12] == *b"WEBP",
         "avif" => enough(12) && head[4..8] == *b"ftyp",
+        "tif" | "tiff" => {
+            enough(4)
+                && (head[..4] == [0x49, 0x49, 0x2A, 0x00]
+                    || head[..4] == [0x4D, 0x4D, 0x00, 0x2A]
+                    || head[..4] == [0x49, 0x49, 0x2B, 0x00]
+                    || head[..4] == [0x4D, 0x4D, 0x00, 0x2B])
+        }
         _ => true,
     }
 }
@@ -619,10 +626,15 @@ mod tests {
             "png"
         ));
         assert!(check_image_magic_head(&[0xFF, 0xD8, 0xFF, 0xE0], "jpg"));
+        assert!(check_image_magic_head(&[0xFF, 0xD8, 0xFF, 0xE0], "jfif"));
         assert!(check_image_magic_head(b"GIF89aXXXX", "gif"));
         assert!(check_image_magic_head(b"BMXXXX", "bmp"));
+        assert!(check_image_magic_head(b"BMXXXX", "dib"));
         assert!(check_image_magic_head(b"RIFF....WEBP", "webp"));
         assert!(check_image_magic_head(b"....ftypavif", "avif"));
+        assert!(check_image_magic_head(&[0x49, 0x49, 0x2A, 0x00], "tif"));
+        assert!(check_image_magic_head(&[0x4D, 0x4D, 0x00, 0x2A], "tiff"));
+        assert!(check_image_magic_head(&[0x49, 0x49, 0x2B, 0x00], "tiff"));
         assert!(check_image_magic_head(b"whatever", "mp4"));
         assert!(check_image_magic_head(b"whatever", "unknown-ext"));
     }

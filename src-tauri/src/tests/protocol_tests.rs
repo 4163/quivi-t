@@ -1,14 +1,17 @@
 use super::{
-    entry_response, guess_mime, parse_archive_url, parse_byte_range, parse_icon_url,
-    parse_thumb_url, ByteRange,
+    archive_entry_response, entry_response, guess_mime, parse_archive_url, parse_byte_range,
+    parse_icon_url, parse_thumb_url, parse_tiff_url, ByteRange,
 };
 
 #[test]
 fn guess_mime_matches_known_image_extensions_case_insensitively() {
     assert_eq!(guess_mime("page.JPG"), "image/jpeg");
+    assert_eq!(guess_mime("photo.JFIF"), "image/jpeg");
     assert_eq!(guess_mime("cover.WebP"), "image/webp");
     assert_eq!(guess_mime("icon.ICO"), "image/x-icon");
     assert_eq!(guess_mime("bitmap.DIB"), "image/bmp");
+    assert_eq!(guess_mime("scan.TIF"), "image/tiff");
+    assert_eq!(guess_mime("scan.TIFF"), "image/tiff");
     assert_eq!(guess_mime("notes.txt"), "application/octet-stream");
 }
 
@@ -141,4 +144,27 @@ fn entry_response_uses_no_store_cache_control() {
     let response = entry_response("page.jpg", &[0, 1, 2], None);
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers()["Cache-Control"], "no-store");
+}
+
+#[test]
+fn parse_tiff_url_decodes_path() {
+    let path = "E:\\Scans\\page01.tiff";
+    let encoded = crate::utils::base64_encode(path.as_bytes());
+    let url = format!("http://quivit.localhost/tiff/{encoded}?_media=2");
+    assert_eq!(parse_tiff_url(&url).expect("parse tiff URL"), path);
+    assert!(parse_tiff_url("quivit://localhost/not-tiff/path").is_err());
+}
+
+#[test]
+fn archive_entry_response_transcodes_tiff_to_png() {
+    let mut tiff_bytes = Vec::new();
+    image::DynamicImage::ImageRgb8(image::RgbImage::new(2, 2))
+        .write_to(&mut std::io::Cursor::new(&mut tiff_bytes), image::ImageFormat::Tiff)
+        .expect("encode test TIFF");
+
+    let response = archive_entry_response("page.tiff", &tiff_bytes, None);
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()["Content-Type"], "image/png");
+    assert_eq!(response.headers()["Cache-Control"], "no-store");
+    assert!(response.body().starts_with(b"\x89PNG\r\n\x1a\n"));
 }

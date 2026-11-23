@@ -72,6 +72,42 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             return;
         }
 
+        if url.contains("/tiff/") {
+            let path = match parse_tiff_url(&url) {
+                Ok(path) => path,
+                Err(message) => {
+                    let response = Response::builder()
+                        .status(400)
+                        .body(message.into_bytes())
+                        .unwrap();
+                    responder.respond(response);
+                    return;
+                }
+            };
+
+            if !crate::formats::is_tiff_name(&path) {
+                let response = Response::builder()
+                    .status(400)
+                    .body(b"Not a TIFF file".to_vec())
+                    .unwrap();
+                responder.respond(response);
+                return;
+            }
+
+            tauri::async_runtime::spawn_blocking(move || {
+                let response = match crate::formats::decode_tiff_file_to_png(std::path::Path::new(&path))
+                {
+                    Ok(bytes) => no_store_png_response(bytes),
+                    Err(_) => Response::builder()
+                        .status(404)
+                        .body(b"TIFF image not found or failed to decode".to_vec())
+                        .unwrap(),
+                };
+                responder.respond(response);
+            });
+            return;
+        }
+
         let (archive_path, entry_name) = match parse_archive_url(&url) {
             Ok(parts) => parts,
             Err(message) => {
@@ -85,14 +121,16 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
         };
 
         let app_handle = ctx.app_handle().clone();
-        if let Some(response) = try_cached_entry_response(
-            &app_handle,
-            &archive_path,
-            &entry_name,
-            range_header.as_deref(),
-        ) {
-            responder.respond(response);
-            return;
+        if !crate::formats::is_tiff_name(&entry_name) {
+            if let Some(response) = try_cached_entry_response(
+                &app_handle,
+                &archive_path,
+                &entry_name,
+                range_header.as_deref(),
+            ) {
+                responder.respond(response);
+                return;
+            }
         }
 
         tauri::async_runtime::spawn_blocking(move || {
@@ -105,9 +143,11 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
                 &entry_name,
             ) {
                 match shared {
-                    Ok(d) => {
-                        responder.respond(entry_response(&entry_name, &d, range_header.as_deref()))
-                    }
+                    Ok(d) => responder.respond(archive_entry_response(
+                        &entry_name,
+                        &d,
+                        range_header.as_deref(),
+                    )),
                     Err(_) => {
                         let response = Response::builder()
                             .status(404)
@@ -128,7 +168,11 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
             let data = entry_data.and_then(|d| d.wait_for_data(&entry_name));
 
             if let Ok(d) = data {
-                responder.respond(entry_response(&entry_name, &d, range_header.as_deref()));
+                responder.respond(archive_entry_response(
+                    &entry_name,
+                    &d,
+                    range_header.as_deref(),
+                ));
             } else {
                 let response = Response::builder()
                     .status(404)
@@ -176,6 +220,14 @@ fn parse_thumb_url(url: &str) -> Result<String, String> {
     crate::utils::base64_decode(clean).ok_or_else(|| "Invalid base64 thumbnail path".to_string())
 }
 
+fn parse_tiff_url(url: &str) -> Result<String, String> {
+    let Some((_, path_encoded)) = url.split_once("/tiff/") else {
+        return Err(format!("Invalid quivit TIFF URL: {url}"));
+    };
+    let clean = path_encoded.split('?').next().unwrap_or(path_encoded);
+    crate::utils::base64_decode(clean).ok_or_else(|| "Invalid base64 TIFF path".to_string())
+}
+
 fn parse_archive_url(url: &str) -> Result<(String, String), String> {
     let Some((_, archive_entry_path)) = url.split_once("/archive/") else {
         return Err(format!("Invalid quivit URL: {url}"));
@@ -221,6 +273,34 @@ fn png_response(data: Vec<u8>) -> Response<Vec<u8>> {
         .header("Access-Control-Allow-Origin", "*")
         .body(data)
         .unwrap()
+}
+
+fn no_store_png_response(data: Vec<u8>) -> Response<Vec<u8>> {
+    Response::builder()
+        .status(200)
+        .header("Content-Type", "image/png")
+        .header("Content-Length", data.len().to_string())
+        .header("Cache-Control", "no-store")
+        .header("Access-Control-Allow-Origin", "*")
+        .body(data)
+        .unwrap()
+}
+
+fn archive_entry_response(
+    entry_name: &str,
+    data: &[u8],
+    range_header: Option<&str>,
+) -> Response<Vec<u8>> {
+    if crate::formats::is_tiff_name(entry_name) {
+        return match crate::formats::decode_tiff_to_png(data) {
+            Ok(png) => no_store_png_response(png),
+            Err(_) => Response::builder()
+                .status(422)
+                .body(b"Failed to decode TIFF entry".to_vec())
+                .unwrap(),
+        };
+    }
+    entry_response(entry_name, data, range_header)
 }
 
 fn entry_response(entry_name: &str, data: &[u8], range_header: Option<&str>) -> Response<Vec<u8>> {
@@ -300,7 +380,10 @@ fn parse_byte_range(header: &str, total_len: usize) -> Option<ByteRange> {
 
 fn guess_mime(name: &str) -> &'static str {
     let ext = name.rsplit('.').next().unwrap_or("");
-    if ext.eq_ignore_ascii_case("jpg") || ext.eq_ignore_ascii_case("jpeg") {
+    if ext.eq_ignore_ascii_case("jpg")
+        || ext.eq_ignore_ascii_case("jpeg")
+        || ext.eq_ignore_ascii_case("jfif")
+    {
         "image/jpeg"
     } else if ext.eq_ignore_ascii_case("png") {
         "image/png"
@@ -316,6 +399,8 @@ fn guess_mime(name: &str) -> &'static str {
         "image/x-icon"
     } else if ext.eq_ignore_ascii_case("avif") {
         "image/avif"
+    } else if ext.eq_ignore_ascii_case("tif") || ext.eq_ignore_ascii_case("tiff") {
+        "image/tiff"
     } else if ext.eq_ignore_ascii_case("apng") {
         "image/apng"
     } else if ext.eq_ignore_ascii_case("mp4") {

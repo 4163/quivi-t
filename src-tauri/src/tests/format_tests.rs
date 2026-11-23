@@ -1,5 +1,6 @@
 use crate::formats::{
-    check_animation_status, check_mp4_has_audio, is_archive_ext, is_image_ext, is_metadata_ext,
+    check_animation_status, check_mp4_has_audio, decode_tiff_to_png, is_archive_ext, is_image_ext,
+    is_metadata_ext, is_tiff_ext, read_tiff_dimensions_from_reader,
 };
 
 #[test]
@@ -8,12 +9,21 @@ fn test_is_image_ext() {
     assert!(is_image_ext("jpg"));
     assert!(is_image_ext("JPG"));
     assert!(is_image_ext("JpEg"));
+    assert!(is_image_ext("jfif"));
+    assert!(is_image_ext("JFIF"));
     assert!(is_image_ext("png"));
     assert!(is_image_ext("gif"));
     assert!(is_image_ext("avif"));
     assert!(is_image_ext("webp"));
     assert!(is_image_ext("dib"));
     assert!(is_image_ext("DIB"));
+    assert!(is_image_ext("tif"));
+    assert!(is_image_ext("TIF"));
+    assert!(is_image_ext("tiff"));
+    assert!(is_image_ext("TIFF"));
+    assert!(is_tiff_ext("tif"));
+    assert!(is_tiff_ext("TIFF"));
+    assert!(!is_tiff_ext("jpg"));
 
     // Invalid cases
     assert!(!is_image_ext(""));
@@ -258,4 +268,27 @@ fn test_check_mp4_has_audio() {
         let mut f = std::fs::File::open(yes_audio_path).unwrap();
         assert!(check_mp4_has_audio(&mut f));
     }
+}
+
+#[test]
+fn test_decode_tiff_to_png_roundtrip() {
+    let mut img = image::RgbaImage::new(3, 2);
+    img.put_pixel(0, 0, image::Rgba([255, 10, 20, 128]));
+    let mut tiff_bytes = Vec::new();
+    image::DynamicImage::ImageRgba8(img)
+        .write_to(&mut std::io::Cursor::new(&mut tiff_bytes), image::ImageFormat::Tiff)
+        .expect("encode test TIFF");
+
+    assert_eq!(
+        read_tiff_dimensions_from_reader(std::io::Cursor::new(&tiff_bytes)),
+        Some((3, 2))
+    );
+
+    let png_bytes = decode_tiff_to_png(&tiff_bytes).expect("decode TIFF to PNG");
+    assert!(png_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+    let decoded = image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png)
+        .expect("decode PNG output")
+        .into_rgba8();
+    assert_eq!(decoded.dimensions(), (3, 2));
+    assert_eq!(*decoded.get_pixel(0, 0), image::Rgba([255, 10, 20, 128]));
 }

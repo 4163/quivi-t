@@ -46,7 +46,7 @@ TEXT_RE = re.compile(
 )
 
 GROUPS = {
-    "template_mascot.svg": ["jpg", "png", "jpeg", "bmp", "dib", "ico"],
+    "template_mascot.svg": ["jpg", "png", "jpeg", "jfif", "bmp", "dib", "ico", "tif", "tiff"],
     "template_moe-1.svg": ["gif", "webp", "apng", "svg", "avif"],
     "template_stoic.svg": ["zip", "rar", "7z", "tar"],
     "template_moe-3.svg": ["cbt", "cbz", "cbr", "cb7"],

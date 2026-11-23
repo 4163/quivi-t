@@ -4,12 +4,13 @@ const invoke = tauri.core?.invoke?.bind(tauri.core);
 const initialState = {};
 
 const RECOMMENDED_EXTENSIONS = new Set([
-  'gif', 'webp', 'apng', 'svg', 'bmp', 'ico', 'avif', 'cbz', 'cbr', 'cb7', 'cbt'
+  'gif', 'webp', 'apng', 'svg', 'avif', 'ico', 'bmp', 'dib', 'cbz', 'cbr', 'cb7', 'cbt'
 ]);
 
 // Mascot group mapping: extension → mascot data-group
 const EXT_TO_GROUP = new Map([
-  ['jpg', 'mascot'], ['jpeg', 'mascot'], ['png', 'mascot'], ['bmp', 'mascot'], ['ico', 'mascot'],
+  ['jpg', 'mascot'], ['jpeg', 'mascot'], ['jfif', 'mascot'], ['png', 'mascot'],
+  ['bmp', 'mascot'], ['dib', 'mascot'], ['ico', 'mascot'], ['tif', 'mascot'], ['tiff', 'mascot'],
   ['gif', 'moe1'], ['webp', 'moe1'], ['apng', 'moe1'], ['svg', 'moe1'], ['avif', 'moe1'],
   ['cbz', 'moe3'], ['cbr', 'moe3'], ['cb7', 'moe3'], ['cbt', 'moe3'],
   ['zip', 'stoic'], ['rar', 'stoic'], ['7z', 'stoic'], ['tar', 'stoic']
@@ -46,10 +47,8 @@ export async function applyAssociations(statusCallback) {
       changes.push({ ext, registered: cb.checked });
       if (cb.checked) {
         toRegister.push(ext);
-        if (ext === 'bmp') toRegister.push('dib');
       } else {
         toUnregister.push(ext);
-        if (ext === 'bmp') toUnregister.push('dib');
       }
     }
   });

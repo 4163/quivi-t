@@ -47,6 +47,12 @@ pub const SUPPORTED_FORMATS: &[FileFormat] = &[
         category: FormatCategory::Image,
     },
     FileFormat {
+        ext: "jfif",
+        name: "JFIF Image",
+        icon: "jfif.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
         ext: "png",
         name: "PNG Image",
         icon: "png.ico",
@@ -77,15 +83,9 @@ pub const SUPPORTED_FORMATS: &[FileFormat] = &[
         category: FormatCategory::Image,
     },
     FileFormat {
-        ext: "bmp",
-        name: "BMP Image",
-        icon: "bmp.ico",
-        category: FormatCategory::Image,
-    },
-    FileFormat {
-        ext: "dib",
-        name: "BMP Image",
-        icon: "dib.ico",
+        ext: "avif",
+        name: "AVIF Image",
+        icon: "avif.ico",
         category: FormatCategory::Image,
     },
     FileFormat {
@@ -95,9 +95,27 @@ pub const SUPPORTED_FORMATS: &[FileFormat] = &[
         category: FormatCategory::Image,
     },
     FileFormat {
-        ext: "avif",
-        name: "AVIF Image",
-        icon: "avif.ico",
+        ext: "bmp",
+        name: "BMP Image",
+        icon: "bmp.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "dib",
+        name: "DIB Image",
+        icon: "dib.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "tif",
+        name: "TIFF Image",
+        icon: "tif.ico",
+        category: FormatCategory::Image,
+    },
+    FileFormat {
+        ext: "tiff",
+        name: "TIFF Image",
+        icon: "tiff.ico",
         category: FormatCategory::Image,
     },
     // Archives
@@ -170,6 +188,10 @@ pub(crate) const FORMAT_ICONS: &[(&str, &[u8])] = &[
     ("gif.ico", include_bytes!("../../icons/formats/gif.ico")),
     ("ico.ico", include_bytes!("../../icons/formats/ico.ico")),
     (
+        "jfif.ico",
+        include_bytes!("../../icons/formats/jfif.ico"),
+    ),
+    (
         "jpeg.ico",
         include_bytes!("../../icons/formats/jpeg.ico"),
     ),
@@ -178,6 +200,11 @@ pub(crate) const FORMAT_ICONS: &[(&str, &[u8])] = &[
     ("rar.ico", include_bytes!("../../icons/formats/rar.ico")),
     ("svg.ico", include_bytes!("../../icons/formats/svg.ico")),
     ("tar.ico", include_bytes!("../../icons/formats/tar.ico")),
+    ("tif.ico", include_bytes!("../../icons/formats/tif.ico")),
+    (
+        "tiff.ico",
+        include_bytes!("../../icons/formats/tiff.ico"),
+    ),
     (
         "webp.ico",
         include_bytes!("../../icons/formats/webp.ico"),
@@ -202,6 +229,109 @@ pub fn is_archive_ext(ext: &str) -> bool {
 #[inline]
 pub fn is_metadata_ext(ext: &str) -> bool {
     ext.eq_ignore_ascii_case("xml") || ext.eq_ignore_ascii_case("opf")
+}
+
+#[inline]
+pub fn is_tiff_ext(ext: &str) -> bool {
+    ext.eq_ignore_ascii_case("tif") || ext.eq_ignore_ascii_case("tiff")
+}
+
+#[inline]
+pub fn is_tiff_name(name: &str) -> bool {
+    name.rsplit('.')
+        .next()
+        .is_some_and(is_tiff_ext)
+}
+
+const MAX_TIFF_INPUT_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_TIFF_DECODED_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_TIFF_DIMENSION: u32 = 32_768;
+
+fn tiff_decode_limits() -> image::Limits {
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_TIFF_DIMENSION);
+    limits.max_image_height = Some(MAX_TIFF_DIMENSION);
+    limits.max_alloc = Some(MAX_TIFF_DECODED_BYTES);
+    limits
+}
+
+fn orientation_swaps_axes(orientation: image::metadata::Orientation) -> bool {
+    matches!(
+        orientation,
+        image::metadata::Orientation::Rotate90
+            | image::metadata::Orientation::Rotate270
+            | image::metadata::Orientation::Rotate90FlipH
+            | image::metadata::Orientation::Rotate270FlipH
+    )
+}
+
+pub fn read_tiff_dimensions_from_reader<R: std::io::BufRead + Seek>(reader: R) -> Option<(u32, u32)> {
+    use image::ImageDecoder;
+    let mut decoder = image::codecs::tiff::TiffDecoder::new(reader).ok()?;
+    let (w, h) = decoder.dimensions();
+    if w == 0 || h == 0 {
+        return None;
+    }
+    let swap = decoder
+        .orientation()
+        .ok()
+        .is_some_and(orientation_swaps_axes);
+    Some(if swap { (h, w) } else { (w, h) })
+}
+
+fn encode_tiff_decoder_to_png<R: std::io::BufRead + Seek>(reader: R) -> Result<Vec<u8>, String> {
+    use image::{ImageDecoder, ImageEncoder};
+    let mut decoder = image::codecs::tiff::TiffDecoder::new(reader)
+        .map_err(|e| format!("Invalid TIFF image: {e}"))?;
+    decoder
+        .set_limits(tiff_decode_limits())
+        .map_err(|e| format!("TIFF image exceeds decode limits: {e}"))?;
+    let orientation = decoder.orientation().ok();
+    let mut img = image::DynamicImage::from_decoder(decoder)
+        .map_err(|e| format!("Failed to decode TIFF image: {e}"))?;
+    if let Some(orientation) = orientation {
+        img.apply_orientation(orientation);
+    }
+
+    let mut png_bytes = Vec::new();
+    let encoder = image::codecs::png::PngEncoder::new_with_quality(
+        &mut png_bytes,
+        image::codecs::png::CompressionType::Fast,
+        image::codecs::png::FilterType::NoFilter,
+    );
+    if img.color().has_alpha() {
+        let rgba = img.into_rgba8();
+        let (w, h) = rgba.dimensions();
+        encoder
+            .write_image(rgba.as_raw(), w, h, image::ColorType::Rgba8.into())
+            .map_err(|e| format!("Failed to encode TIFF as PNG: {e}"))?;
+    } else {
+        let rgb = img.into_rgb8();
+        let (w, h) = rgb.dimensions();
+        encoder
+            .write_image(rgb.as_raw(), w, h, image::ColorType::Rgb8.into())
+            .map_err(|e| format!("Failed to encode TIFF as PNG: {e}"))?;
+    }
+    Ok(png_bytes)
+}
+
+pub fn decode_tiff_to_png(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    if bytes.is_empty() || (bytes.len() as u64) > MAX_TIFF_INPUT_BYTES {
+        return Err("TIFF input is empty or exceeds the size limit".into());
+    }
+    encode_tiff_decoder_to_png(std::io::Cursor::new(bytes))
+}
+
+pub fn decode_tiff_file_to_png(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let file = std::fs::File::open(path).map_err(|e| format!("Cannot open TIFF file: {e}"))?;
+    let len = file
+        .metadata()
+        .map_err(|e| format!("Cannot inspect TIFF file: {e}"))?
+        .len();
+    if len == 0 || len > MAX_TIFF_INPUT_BYTES {
+        return Err("TIFF file is empty or exceeds the size limit".into());
+    }
+    encode_tiff_decoder_to_png(std::io::BufReader::new(file))
 }
 
 pub fn check_animation_status(bytes: &[u8]) -> AnimationInfo {
@@ -957,14 +1087,27 @@ pub fn read_media_dimensions_from_path(path: &std::path::Path, ext: &str) -> Opt
     if ext.eq_ignore_ascii_case("avif") {
         return read_avif_dimensions(slice).or_else(|| read_dimensions_from_bytes(slice));
     }
+    if is_tiff_ext(ext) {
+        let _ = file.seek(SeekFrom::Start(0));
+        return read_tiff_dimensions_from_reader(std::io::BufReader::new(file))
+            .or_else(|| read_dimensions_from_bytes(slice));
+    }
     if let Some(dims) = read_dimensions_from_bytes(slice) {
         return Some(dims);
     }
-    if ext.eq_ignore_ascii_case("jpg") || ext.eq_ignore_ascii_case("jpeg") {
+    if ext.eq_ignore_ascii_case("jpg")
+        || ext.eq_ignore_ascii_case("jpeg")
+        || ext.eq_ignore_ascii_case("jfif")
+    {
         let _ = file.seek(SeekFrom::Start(0));
         return read_jpeg_dimensions_from_reader(&mut file);
     }
-    image::image_dimensions(path).ok()
+    image::ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?
+        .into_dimensions()
+        .ok()
 }
 
 /// Probe media dimensions from a non-seekable stream (such as a ZIP archive entry).
@@ -979,7 +1122,10 @@ pub fn read_media_dimensions_from_stream<R: Read>(
     if ext.eq_ignore_ascii_case("mp4") {
         return read_mp4_dimensions_stream(reader);
     }
-    if ext.eq_ignore_ascii_case("jpg") || ext.eq_ignore_ascii_case("jpeg") {
+    if ext.eq_ignore_ascii_case("jpg")
+        || ext.eq_ignore_ascii_case("jpeg")
+        || ext.eq_ignore_ascii_case("jfif")
+    {
         return read_jpeg_dimensions_from_reader(reader);
     }
     let limit = 65_536u64.min(entry_size) as usize;
@@ -993,6 +1139,10 @@ pub fn read_media_dimensions_from_stream<R: Read>(
     }
     if ext.eq_ignore_ascii_case("avif") {
         return read_avif_dimensions(&buf).or_else(|| read_dimensions_from_bytes(&buf));
+    }
+    if is_tiff_ext(ext) {
+        return read_tiff_dimensions_from_reader(std::io::Cursor::new(&buf))
+            .or_else(|| read_dimensions_from_bytes(&buf));
     }
     read_dimensions_from_bytes(&buf)
 }

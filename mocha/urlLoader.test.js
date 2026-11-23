@@ -1554,6 +1554,10 @@ describe('UrlLoader and Imgur extractor direct URL handling', () => {
     it('identifies direct media URLs across supported formats', () => {
       assert.equal(isDirectMediaUrl('https://example.test/video.mp4'), true);
       assert.equal(isDirectMediaUrl('https://example.test/photo.jpg?size=large'), true);
+      assert.equal(isDirectMediaUrl('https://example.test/photo.jfif'), true);
+      assert.equal(isDirectMediaUrl('https://example.test/bitmap.dib'), true);
+      assert.equal(isDirectMediaUrl('https://example.test/scan.tif'), true);
+      assert.equal(isDirectMediaUrl('https://example.test/scan.tiff'), true);
       assert.equal(isDirectMediaUrl('https://example.test/anim.gif'), true);
       assert.equal(isDirectMediaUrl('https://example.test/page.html'), false);
       assert.equal(isDirectMediaUrl('https://example.test/gallery/123'), false);
@@ -2993,6 +2997,10 @@ describe('direct image extractor', () => {
   it('matches any-host raster URLs and rejects other shapes', () => {
     assert.equal(DirectExtractor.match('https://example.com/assets/shot.png'), true);
     assert.equal(DirectExtractor.match('https://example.com/assets/photo.JPG?token=abc'), true);
+    assert.equal(DirectExtractor.match('https://example.com/assets/photo.jfif'), true);
+    assert.equal(DirectExtractor.match('https://example.com/assets/bitmap.dib'), true);
+    assert.equal(DirectExtractor.match('https://example.com/assets/scan.tif'), true);
+    assert.equal(DirectExtractor.match('https://example.com/assets/scan.TIFF'), true);
     assert.equal(DirectExtractor.match('https://example.com/a/b/c.webp#frag'), true);
     assert.equal(DirectExtractor.match('https://example.com/a.gif'), true);
     assert.equal(DirectExtractor.match('https://example.com/a.svg'), true);
@@ -3079,6 +3087,16 @@ describe('direct document rejection', () => {
 
     const jpg = stubBytes([0xFF, 0xD8, 0xFF, 0xE0]);
     assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.jpg', jpg)).filename, 'a.jpg');
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.jfif', jpg)).filename, 'a.jfif');
+
+    const dib = stubBytes([...Buffer.from('BMXXXX')]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.dib', dib)).filename, 'a.dib');
+
+    const tiffLe = stubBytes([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.tif', tiffLe)).filename, 'a.tif');
+
+    const tiffBe = stubBytes([0x4D, 0x4D, 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08]);
+    assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.tiff', tiffBe)).filename, 'a.tiff');
 
     const svg = stubBytes([...Buffer.from('<svg xmlns="http://www.w3.org/2000/svg">')]);
     assert.equal((await DirectExtractor.parseDirectUrl('https://example.com/a.svg', svg)).filename, 'a.svg');

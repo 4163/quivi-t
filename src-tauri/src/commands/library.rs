@@ -353,7 +353,7 @@ fn cleanup_capture_staging(misc: &Path) {
             || !parts[0].bytes().all(|byte| byte.is_ascii_hexdigit())
             || !matches!(
                 parts[1],
-                "png" | "jpg" | "gif" | "webp" | "bmp" | "ico" | "avif" | "svg"
+                "png" | "jpg" | "gif" | "webp" | "bmp" | "ico" | "avif" | "svg" | "tiff"
             )
             || (parts.len() == 4 && parts[3].parse::<u128>().is_err())
         {
