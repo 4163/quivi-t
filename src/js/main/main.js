@@ -14,6 +14,7 @@ import {
   getHighlightedLibrary,
   navigateHighlightedLibrary,
   focusFileList,
+  focusFileSearch as focusPanelSearch,
   isFileListFocused,
   getFileListViewportRange,
   clearLibraryPathCaches,
@@ -43,7 +44,7 @@ import { activateImportProvider, MISC_PROVIDER } from '../filepanel/libraryStore
 import { initViewerAudio, ViewerAudio } from '../viewer/viewerAudio.js';
 import { ManhwaAudio } from '../viewer/manhwaAudio.js';
 import { initWorkspace } from './workspace.js';
-import { workspaceSurface, ViewportCore } from '../shared/workspaceHost.js';
+import { workspaceSurface, hostsWorkspaceSurface, ViewportCore } from '../shared/workspaceHost.js';
 import { requestWorkspace, getSessionPreview, registerPreviewStateProvider } from '../shared/workspaceSession.js';
 import { createWorkspaceControls } from '../shared/workspaceControls.js';
 import {
@@ -157,6 +158,16 @@ const actionCtx = {
   isLibraryFocused: () => !!document.activeElement?.closest('#file-panel-library, .library-provider-list'),
   get keyboardPanStep() { return keyboardPanStep; },
   get wheelPanStep() { return wheelPanStep; },
+  focusFileSearch: async () => {
+    if (hostsWorkspaceSurface('fileList')) {
+      focusPanelSearch();
+    } else {
+      if (window.__TAURI__) {
+        await window.__TAURI__.core.invoke('open_workspace_window', { surface: 'fileList' }).catch(console.error);
+      }
+      await requestWorkspace('workspace-file-list', 'filePanel', 'focusSearch').catch(console.error);
+    }
+  },
   get alignListItemTop() { return alignListItemTop; },
   get alignListItemBottom() { return alignListItemBottom; },
   get navigateManhwa() { return navigateManhwa; },
@@ -166,6 +177,7 @@ const actionCtx = {
 const workspaceControls = createWorkspaceControls({ actionCtx, Viewer, getVisibleImageIndices,
   revealListTop,
   focusFileList,
+  focusFileSearch: focusPanelSearch,
   strip: { alignListItemTop, alignListItemBottom, navigateManhwa, pageStrip, jumpManhwa } });
 
 function bindMenuCommands() {

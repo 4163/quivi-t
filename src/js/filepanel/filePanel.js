@@ -3200,14 +3200,6 @@ export function initFilePanel(deps) {
 
   // File-list keyboard navigation for virtualized list.
   fileListUl.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
-      e.preventDefault();
-      e.stopPropagation();
-      fileSearchInput?.focus();
-      fileSearchInput?.select();
-      return;
-    }
-
     if (e.altKey || e.ctrlKey || e.metaKey) return;
 
     const state = Core.getState();
@@ -3445,6 +3437,17 @@ export function initFilePanel(deps) {
 export function focusFileList() {
   if (fileListUl) {
     fileListUl.focus();
+  }
+}
+
+export function focusFileSearch() {
+  if (!Core.getState().fileListVisible) {
+    Core.setFileListVisible(true, { persist: true });
+  }
+  const input = fileSearchInput || document.getElementById('file-panel-search');
+  if (input) {
+    input.focus();
+    input.select();
   }
 }
 

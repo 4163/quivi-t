@@ -309,11 +309,25 @@ export function bindKeyboardShortcuts({ Core, dispatchAction, dispatchKeyboardPa
       return;
     }
     syncModifierKeys(e);
-    if (isInteractiveKeyTarget(e)) {
-      return;
-    }
 
     const config = Core.getState().config;
+    const isCtrlF = ((e.ctrlKey && !e.metaKey) || (e.metaKey && !e.ctrlKey)) && !e.altKey && !e.shiftKey && (e.key === 'f' || e.key === 'F');
+    const ctrlFAction = isCtrlF ? (findAction(config, 'Ctrl+f') || findAction(config, 'Meta+f')) : null;
+    if (ctrlFAction) {
+      e.preventDefault();
+    }
+
+    if (isInteractiveKeyTarget(e)) {
+      if (e.target?.id === 'file-panel-search') {
+        activeKeys.add(e.key.toLowerCase());
+        const actionId = findAction(config, formatKeysCombo(activeKeys, activeButtons));
+        if (actionId === 'cmd-focus-file-search') {
+          e.preventDefault();
+          dispatchAction(actionId);
+        }
+      }
+      return;
+    }
 
     if (e.key === 'Enter' && !e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && (!document.activeElement || document.activeElement === document.body)) {
       const state = Core.getState();
