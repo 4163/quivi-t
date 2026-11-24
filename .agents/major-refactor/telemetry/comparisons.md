@@ -3,7 +3,7 @@
 Branch: `refactor/decoupling-and-perf`
 Status: Initialized. All units `U01` through `U11` await Telemetry A baseline capture.
 
-This ledger tracks pre-refactor (Telemetry A) and post-refactor (Telemetry B) measurements for every execution unit in [roadmap.md](file:///D:/Projects/QuiviT/.agents/major-refactor/roadmap.md). No unit moves past Telemetry B until baseline and post JSON files exist on disk, every parity gate passes, and every measured delta meets or beats its target with zero regressions.
+This ledger tracks pre-refactor (Telemetry A) and post-refactor (Telemetry B) measurements for every execution unit in [roadmap.md](../roadmap.md). No unit moves past Telemetry B until baseline and post JSON files exist on disk, every parity gate passes, and every measured delta meets or beats its target with zero regressions.
 
 ## Four-suite commands and artifact convention
 
