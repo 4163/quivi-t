@@ -11,7 +11,7 @@ import {
   setLastInitiator
 } from './workspaceSession.js';
 
-export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleImageIndices, revealListTop, focusFileList }) {
+export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleImageIndices, revealListTop, focusFileList, focusFileSearch }) {
   let remoteVisibleIndices = getSessionStripVisibleIndices() || [];
   let remoteFileListAtTop = false;
   let localFileListAtTop = true;
@@ -147,6 +147,14 @@ export function createWorkspaceControls({ actionCtx, Viewer, strip, getVisibleIm
               window.focus?.();
             }
             focusFileList?.();
+          },
+          focusSearch: async () => {
+            if (window.__TAURI__) {
+              await window.__TAURI__.window.getCurrentWindow().setFocus().catch(console.error);
+            } else {
+              window.focus?.();
+            }
+            focusFileSearch?.();
           }
         } : {
           setFileListAtTop: isAtTop => {

@@ -370,6 +370,9 @@ export const ACTION_REGISTRY = [
   },
   { id: 'cmd-open-metadata', label: 'Open Metadata', defaultBinds: [], category: 'File Operations',
     run: (ctx) => ctx.openMetadataWindow()
+  },
+  { id: 'cmd-focus-file-search', label: 'Find in File List', defaultBinds: 'Ctrl+f', category: 'File Operations', owner: 'window',
+    run: (ctx) => ctx.focusFileSearch?.()
   }
 ];
 

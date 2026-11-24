@@ -56,7 +56,7 @@ Counts above were verified on disk. Two files are structurally cohesive: `import
 - **Status: Cohesive (`S05-05` [Warning] [Agreed] scoped fixes, `L89-91`, `L136-141`).**
   Zero DOM dependencies, clean dependency injection for `invoke`, `FsUtils`, `loadUrl`, `cancelUrlImport`, `sanitizeSvg`, `activateMisc`, and `libraryUpdated`, and clean single-flight `active` locking.
   **Agreed fix.**
-  1. Track `currentPhase` in closure state so `getActivity()` (`L89-91`) reports `'resolving'`, `'preparing'`, and `'opening'` accurately instead of hardcoding `'receiving'` whenever `active` is set, which breaks detached `?surface=fileList` initial sync in `workspaceControls.js:162`.
+  1. Track `currentPhase` in closure state so `getActivity()` (`L89-91`) reports `'resolving'`, `'preparing'`, and `'opening'` accurately instead of hardcoding `'receiving'` whenever `active` is set, which breaks detached `?surface=fileList` initial sync in `workspaceControls.js:170`.
   2. Guard `payload.svgText == null` (`L141`) instead of strict `=== null`.
   3. Wrap `new URL(payload.url)` in `completeDrop` (`L136-138`) so scheme-less strings throw a clean validation error rather than a raw `TypeError: Invalid URL`.
   4. Add `mocha/importActions.test.js` to cover all exported paths, where unit tests are currently missing.
@@ -79,7 +79,7 @@ Counts above were verified on disk. Two files are structurally cohesive: `import
   - Replace `urlLoader.js:33` `libraryStore.js` import with `onProviderImported(providerDir)` injected from `main.js`.
   - Remove `_urlOverlay` and `openPrompt` from `urlLoader.js`; route `cmd-use-url` via `actionCtx.openUrlPrompt` directly to `urlOverlay.show`.
   - Keep `urlLoader.js` as sole writer of `_workspaceStatuses` (cap `4096`, rollback on failed `retryGalleryDownload`); S04 drops duplicate `syncWorkspaceDownloadStatus` calls from `filePanel.js:427,434`.
-  - Preserve `workspaceControls.js:159` whitelisted `UrlLoader` RPC methods, `getFileListViewportRange()`, `menubar.js` cached `fetchManifest()`, `importActions` <-> `main/dropzone.js` (`quivit-drop` `owner: 'main'`), and all `quivit-library-*` / `quivit-download-*` / `quivit-status-flash` events.
+  - Preserve `workspaceControls.js:167` whitelisted `UrlLoader` RPC methods, `getFileListViewportRange()`, `menubar.js` cached `fetchManifest()`, `importActions` <-> `main/dropzone.js` (`quivit-drop` `owner: 'main'`), and all `quivit-library-*` / `quivit-download-*` / `quivit-status-flash` events.
 - **Sync C / Sync F (`shared/svgUtils.js` <-> S07 `viewerPipelines.js`):** Preserve exact DOM-free exports (`expandSvgEntities`, `prepareSvgForCanvas`, `resolveSvgDimensions`) for `viewerPipelines.js:11,94,109,770,1474,1516`.
 - **Sync C / Sync E (`commands/{network,library}.rs` <-> S10, S08):** Preserve `fetch_text`, `fetch_bytes`, `fetch_extractor_text`, `download_to_file`, `cancel_download`, `verify_image_magic`, `get_library_dir`, `move_library`, `read_library_tree`, `library-relocated`, and `quivit-download-threshold` (`{ requestId, queueGeneration }`). Adopt S10's `cancel_scope: Option<String>` on `crate::network::DownloadCancelFlag` (`download_to_file` and `cancel_download`) so gallery cutovers never cancel background raw downloads (`urlLoader.js:1825`), and rely on S08's `.tmp` filter in `watchers.rs` for staging writes.
 
@@ -88,7 +88,7 @@ Counts above were verified on disk. Two files are structurally cohesive: `import
 ### Locked contracts
 
 - `e2e/specs/08-url-loader.e2e.js`: `#cmd-use-url`, `#url-overlay`, `#url-input`, `.library-provider-header`, `.library-provider-list .item-label`, `fetch_extractor_text`, `fetch_text`, `download_to_file`, `verify_image_magic`, and `gallery.json` sidecar schema.
-- `src/js/urlLoader.js` exported `UrlLoader` methods exposed via `src/js/shared/workspaceControls.js:159`, `Core.setPlaceholderCheck`, `FsUtils.setDirectoryPreparationHook`, and the `extractors/README.md` module contract.
+- `src/js/urlLoader.js` exported `UrlLoader` methods exposed via `src/js/shared/workspaceControls.js:167`, `Core.setPlaceholderCheck`, `FsUtils.setDirectoryPreparationHook`, and the `extractors/README.md` module contract.
 - `e2e/scenarios/mangadex-chapters.json`: container stepping actions in `ACTION_REGISTRY`.
 
 ### Suite matrix

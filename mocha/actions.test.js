@@ -97,6 +97,13 @@ describe('Actions registry and keybindings', () => {
 
       await dispatch('cmd-fit-height', null, fakeCtx);
       assert.equal(fitModeSet, 'height');
+
+      let searchFocused = false;
+      const searchCtx = {
+        focusFileSearch: () => { searchFocused = true; }
+      };
+      await dispatch('cmd-focus-file-search', null, searchCtx);
+      assert.equal(searchFocused, true);
     });
 
     it('gracefully ignores unknown action IDs without throwing', async () => {
