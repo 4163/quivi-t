@@ -492,3 +492,7 @@ pub async fn show_from_tray(app: tauri::AppHandle) -> Result<(), String> {
         .ok_or_else(|| "main window not found".to_string())?;
     main.set_focus().map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+#[path = "tests/windows_tests.rs"]
+mod tests;

@@ -1,0 +1,6 @@
+{
+  "command": "npm run e2e -- --agent --spec e2e/specs/06-configuration.e2e.js",
+  "passed": 2,
+  "failed": 0,
+  "duration_ms": 18373
+}

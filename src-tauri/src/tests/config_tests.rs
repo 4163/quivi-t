@@ -159,13 +159,13 @@ fn test_e2e_suite_non_persistence_and_detection() {
     assert_eq!(config.frontend_data["theme"], "dark");
 
     // Without environment or CLI flags, is_e2e_suite is false
-    std::env::remove_var("QUIVIT_E2E_SUITE");
+    let _lock = OVERRIDE_ENV_LOCK.lock().unwrap();
+    let _guard = OverrideEnvGuard::set(&[("QUIVIT_E2E_SUITE", None)]);
     assert!(!is_e2e_suite());
 
     // When QUIVIT_E2E_SUITE is present, is_e2e_suite returns true
     std::env::set_var("QUIVIT_E2E_SUITE", "1");
     assert!(is_e2e_suite());
-    std::env::remove_var("QUIVIT_E2E_SUITE");
 }
 
 fn temp_override_dir(name: &str) -> std::path::PathBuf {
@@ -325,4 +325,204 @@ fn test_override_in_file_flag_honored() {
     assert!(loaded.frontend_data.get("favorites").is_none());
     assert_eq!(loaded.frontend_data["theme"], "dark");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+struct TempDirGuard(PathBuf);
+
+impl TempDirGuard {
+    fn new(name: &str) -> Self {
+        Self(temp_override_dir(name))
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn config_with_library_path(path: &str) -> AppConfig {
+    let mut config = AppConfig::default();
+    config.frontend_data = serde_json::json!({ LIBRARY_PATH_KEY: path });
+    config
+}
+
+#[test]
+fn test_display_path_normalization_and_verbatim_strip() {
+    assert_eq!(
+        display_path(Path::new(r"C:\Users\demo\Library")),
+        r"C:\Users\demo\Library"
+    );
+    assert_eq!(
+        display_path(Path::new("C:/Users/demo/Library")),
+        r"C:\Users\demo\Library"
+    );
+
+    #[cfg(windows)]
+    {
+        assert_eq!(
+            display_path(Path::new(r"\\?\C:\Users\demo\Library")),
+            r"C:\Users\demo\Library"
+        );
+        assert_eq!(
+            display_path(Path::new(r"\\?\UNC\server\share\dir")),
+            r"\\server\share\dir"
+        );
+    }
+}
+
+#[test]
+fn test_same_library_location() {
+    let normal = config_with_library_path(r"C:\Users\demo\Library");
+    let other = config_with_library_path(r"C:\Users\demo\Other");
+    assert_eq!(same_library_location(&normal, &other), Ok(false));
+
+    let slashed = config_with_library_path("C:/Users/demo/Library");
+    assert_eq!(same_library_location(&normal, &slashed), Ok(true));
+
+    #[cfg(windows)]
+    {
+        let different_case = config_with_library_path(r"c:\users\demo\library");
+        assert_eq!(same_library_location(&normal, &different_case), Ok(true));
+
+        let verbatim = config_with_library_path(r"\\?\C:\Users\demo\Library");
+        assert_eq!(same_library_location(&normal, &verbatim), Ok(true));
+    }
+
+    let relative = config_with_library_path("relative/library");
+    assert!(same_library_location(&relative, &normal).is_err());
+    assert!(same_library_location(&normal, &relative).is_err());
+}
+
+#[test]
+fn test_normalize_library_location_paths() {
+    let mut config = AppConfig::default();
+    config.frontend_data = serde_json::json!({
+        "library_path": r"\\?\C:/Users/demo/Library",
+        "last_opened_path": r"\\?\C:/Users/demo/Library/Comics",
+        "last_active_image": {
+            "container": r"\\?\C:/Users/demo/Library/Comics/vol1.zip",
+            "path": r"\\?\C:/Users/demo/Library/Comics/cover.png"
+        },
+        "favorites": {
+            "loadouts": [
+                {
+                    "name": "Default",
+                    "items": [
+                        { "path": r"\\?\C:/Users/demo/Library/img.png" },
+                        { "path": r"\\?\C:/Users/demo/Library/archive.zip|page/01.png" }
+                    ]
+                }
+            ]
+        },
+        "directory_sort": {
+            r"\\?\C:/Users/demo/Library/Comics": "name_asc"
+        },
+        "retired_library_paths": [
+            r"\\?\C:/Old/Library",
+            r"\\?\UNC\server\share\old_lib"
+        ]
+    });
+
+    normalize_library_location_paths(&mut config);
+
+    #[cfg(windows)]
+    let prefix = "";
+    #[cfg(not(windows))]
+    let prefix = r"\\?\";
+
+    assert_eq!(
+        config.frontend_data["library_path"],
+        format!(r"{prefix}C:\Users\demo\Library")
+    );
+    assert_eq!(
+        config.frontend_data["last_opened_path"],
+        format!(r"{prefix}C:\Users\demo\Library\Comics")
+    );
+    assert_eq!(
+        config.frontend_data["last_active_image"]["container"],
+        format!(r"{prefix}C:\Users\demo\Library\Comics\vol1.zip")
+    );
+    assert_eq!(
+        config.frontend_data["last_active_image"]["path"],
+        format!(r"{prefix}C:\Users\demo\Library\Comics\cover.png")
+    );
+
+    let items = config.frontend_data["favorites"]["loadouts"][0]["items"]
+        .as_array()
+        .unwrap();
+    assert_eq!(items[0]["path"], format!(r"{prefix}C:\Users\demo\Library\img.png"));
+    assert_eq!(
+        items[1]["path"],
+        format!(r"{prefix}C:\Users\demo\Library\archive.zip|page/01.png")
+    );
+
+    let sort_map = config.frontend_data["directory_sort"].as_object().unwrap();
+    assert!(sort_map.get(r"\\?\C:/Users/demo/Library/Comics").is_none());
+    assert_eq!(
+        sort_map.get(&format!(r"{prefix}C:\Users\demo\Library\Comics")),
+        Some(&serde_json::json!("name_asc"))
+    );
+
+    let retired = config.frontend_data["retired_library_paths"]
+        .as_array()
+        .unwrap();
+    assert_eq!(retired[0], format!(r"{prefix}C:\Old\Library"));
+    #[cfg(windows)]
+    assert_eq!(retired[1], r"\\server\share\old_lib");
+}
+
+#[test]
+fn test_remove_roaming_files_and_nonexistent_dir() {
+    let dir = TempDirGuard::new("remove_roaming");
+    for name in ROAMING_FILES {
+        std::fs::write(dir.path().join(name), "data").unwrap();
+    }
+    assert!(dir.path().join("custom_css.css").exists());
+
+    remove_roaming_files(dir.path());
+    for name in ROAMING_FILES {
+        assert!(!dir.path().join(name).exists(), "{name} should be removed");
+    }
+
+    let missing_dir = dir.path().join("does_not_exist");
+    assert!(!missing_dir.exists());
+    remove_roaming_files(&missing_dir);
+    assert!(!missing_dir.exists());
+}
+
+#[test]
+fn test_apply_pending_config_to_disk() {
+    let _lock = OVERRIDE_ENV_LOCK.lock().unwrap();
+    let dir = TempDirGuard::new("apply_pending");
+    let config_path = dir.path().join("quivit_config.json");
+    std::fs::write(
+        &config_path,
+        r#"{
+            "portable_mode": false,
+            "frontend_data": {
+                "single_instance": true,
+                "pending_single_instance": false
+            }
+        }"#,
+    )
+    .unwrap();
+
+    let _guard = OverrideEnvGuard::set(&[
+        ("QUIVIT_CONFIG_DIR", Some(dir.path().to_str().unwrap())),
+        ("QUIVIT_PORTABLE", None),
+    ]);
+
+    apply_pending_config_to_disk();
+
+    let persisted: AppConfig = read_json_file(&config_path).unwrap();
+    assert_eq!(persisted.frontend_data["single_instance"], false);
+    assert!(persisted
+        .frontend_data
+        .get("pending_single_instance")
+        .is_none());
 }

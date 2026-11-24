@@ -191,3 +191,7 @@ pub fn spawn_config_file_watcher(app: tauri::AppHandle) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/watchers_tests.rs"]
+mod tests;

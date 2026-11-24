@@ -127,3 +127,7 @@ pub fn forward_file_open(args: &[OsString]) -> Result<bool, String> {
         .map_err(|err| format!("Could not start {}: {err}", target.display()))?;
     Ok(true)
 }
+
+#[cfg(test)]
+#[path = "../tests/direct_open_tests.rs"]
+mod tests;

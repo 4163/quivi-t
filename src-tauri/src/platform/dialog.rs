@@ -95,3 +95,7 @@ pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
 pub fn pick_folder(_owner: Option<isize>) -> Result<Option<String>, String> {
     Err("pick_folder is only supported on Windows".into())
 }
+
+#[cfg(test)]
+#[path = "../tests/dialog_tests.rs"]
+mod tests;

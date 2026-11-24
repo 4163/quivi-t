@@ -33,3 +33,7 @@ pub fn url_decode(input: &str) -> String {
     }
     String::from_utf8(decoded).unwrap_or_default()
 }
+
+#[cfg(test)]
+#[path = "tests/utils_tests.rs"]
+mod tests;
