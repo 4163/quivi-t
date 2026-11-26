@@ -2,7 +2,7 @@
 
 You are the coordinator for a `/swarm` audit, code review, performance investigation, and roadmap-generation session on branch `refactor/decoupling-and-perf`.
 
-Read `.agents/skills/swarm_pane/SKILL.md` before briefing or adding the first workers, then run `swarm{action:"models", all:true}` to inspect exact model identifiers.
+Read `swarm_pane/SKILL.md` before briefing or adding the first workers, then run `swarm{action:"models", all:true}` to inspect exact model identifiers.
 
 ## Mission and boundaries
 
