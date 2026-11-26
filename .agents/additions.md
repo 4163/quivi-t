@@ -10,13 +10,6 @@
 
 *Items deliberately deferred until after the initial release. Low priority by design: do not start without re-validating the need.*
 
-### Update Availability Indicator
-- Add a lightweight GitHub releases check on startup that displays an update notice in the `.menubar-spacer` area (right-aligned, pointing toward the GitHub button).
-- When an update is available: show a sentence like "Version X.Y.Z is available: you are X versions behind" inside the menubar spacer. Temporarily reroute the GitHub button to the releases page for that session.
-- No auto-download or auto-install: this intentionally avoids an auto-update system, which is out of scope and conflicts with the portable-first goals.
-- Fail silently when offline or rate-limited.
-- **Important:** Must be implemented and tested after the first actual release is published on GitHub, otherwise there's nothing to compare against.
-
 ### PDF Document Support
 - Treat PDF files as navigatable multi-page containers.
 - Use a lightweight viewer overlay (matching existing overlay patterns like password and import) to indicate multi-page navigation and show the first page as a preview, keeping interaction clear without unnecessary complexity.

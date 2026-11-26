@@ -25,7 +25,7 @@ import { applyTheme, applyCustomCss } from '../shared/theme.js';
 import { syncShellBackground } from '../shellBackground.js';
 import { DEFAULT_KEYBOARD_PAN_STEP, DEFAULT_WHEEL_PAN_STEP } from '../keybinds.js';
 import { Statusbar } from '../menubar/statusbar.js';
-import { initMenuBar, syncViewMenu } from '../menubar.js';
+import { initMenuBar, syncViewMenu, getGithubTargetUrl } from '../menubar.js';
 import * as Chrome from '../menubar/chrome.js';
 import { initFullscreen, toggleFullscreen, syncFullscreenState, syncKeyLabel } from './fullscreen.js';
 
@@ -149,6 +149,7 @@ const actionCtx = {
   get getHighlightedLibrary() { return getHighlightedLibrary; },
   get navigateHighlightedLibrary() { return navigateHighlightedLibrary; },
   get openMetadataWindow() { return openMetadataWindow; },
+  getGithubUrl: () => getGithubTargetUrl(),
   get toggleFullscreen() { return toggleFullscreen; },
   get UrlLoader() { return UrlLoader; },
   get ViewerAudio() { return ViewerAudio; },

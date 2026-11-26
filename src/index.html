@@ -203,7 +203,9 @@
       </ul>
     </div>
 
-    <div class="menubar-spacer" data-tauri-drag-region></div>
+    <div class="menubar-spacer" data-tauri-drag-region>
+      <span id="update-indicator" class="update-indicator" hidden aria-live="polite"></span>
+    </div>
     <button id="cmd-github" class="menu-link" type="button">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path fill="currentColor"
@@ -523,7 +525,12 @@
     <span class="status-fit">Loading...</span>
     <span class="status-scaling">Loading...</span>
     <span class="status-filter">Loading...</span>
-    <span class="status-version">v1.0.0</span>
+    <span class="status-version" aria-label="Freya (v1.0.0)">
+      <span class="status-version-viewport" aria-hidden="true">
+        <span class="status-version-codename">Freya</span>
+        <span class="status-version-number">v1.0.0</span>
+      </span>
+    </span>
   </footer>
 
   <!-- Scripts, decoupled load order -->
