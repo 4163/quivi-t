@@ -45,6 +45,32 @@ body.resizing-col {
 
 .menubar-spacer {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 2px 0 12px;
+  overflow: hidden;
+}
+
+.update-indicator {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-11-5);
+  color: var(--text-muted);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.update-indicator[hidden] {
+  display: none;
+}
+
+.menu-link.has-update {
+  color: var(--accent);
 }
 
 .menu-link {
@@ -2735,7 +2761,61 @@ body.is-importing-url .header-cell:hover {
 }
 
 .status-version {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  margin: -2.453px -8px -2.453px 0;
+  padding: 2.453px 8px 2.453px 0;
   color: var(--text-dim);
+  cursor: default;
+}
+
+.status-version-viewport {
+  display: inline-grid;
+  align-items: center;
+  overflow: hidden;
+  line-height: 1.25;
+}
+
+.status-version-codename,
+.status-version-number {
+  grid-area: 1 / 1;
+  justify-self: end;
+  white-space: nowrap;
+  transition:
+    translate 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.15s ease,
+    color 0.15s ease;
+}
+
+.status-version-codename {
+  translate: 0 0;
+  opacity: 1;
+}
+
+.status-version-number {
+  translate: 0 100%;
+  opacity: 0;
+}
+
+.status-version:hover .status-version-codename {
+  translate: 0 -100%;
+  opacity: 0;
+}
+
+.status-version:hover .status-version-number {
+  translate: 0 0;
+  opacity: 1;
+  color: var(--text-muted);
+}
+
+.status-version.no-codename .status-version-codename {
+  display: none;
+}
+
+.status-version.no-codename .status-version-number {
+  translate: 0 0;
+  opacity: 1;
 }
 
 .status-manhwa.hold-flicker-hidden {

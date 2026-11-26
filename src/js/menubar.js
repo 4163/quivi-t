@@ -29,6 +29,20 @@ import {
 import { fetchManifest } from './urlLoader.js';
 import { FsUtils } from './fsUtils.js';
 import { WORKSPACE_SURFACES, WORKSPACE_POSITIONS, isWorkspaceDetached, workspacePositionLabel } from './services/workspaceLayout.js';
+import {
+  FALLBACK_APP_VERSION,
+  GITHUB_REPO_URL,
+  GITHUB_RELEASES_URL,
+  GITHUB_RELEASES_API_URL,
+  evaluateReleasesUpdate
+} from './services/appVersion.js';
+import { workspaceSurface } from './shared/workspaceHost.js';
+
+let githubTargetUrl = GITHUB_REPO_URL;
+
+export function getGithubTargetUrl() {
+  return githubTargetUrl;
+}
 
 export function initMenuBar() {
   bindMenus();
@@ -36,6 +50,55 @@ export function initMenuBar() {
   renderFavoritesMenu();
   bindImportsDropdown();
   renderImportsMenu();
+  if (!workspaceSurface) checkForUpdates();
+}
+
+function applyUpdateNotice(update) {
+  const indicator = document.getElementById('update-indicator');
+  const githubBtn = document.getElementById('cmd-github');
+  if (!update) {
+    githubTargetUrl = GITHUB_REPO_URL;
+    if (indicator) {
+      indicator.hidden = true;
+      indicator.textContent = '';
+    }
+    if (githubBtn) {
+      githubBtn.classList.remove('has-update');
+      githubBtn.removeAttribute('title');
+    }
+    return;
+  }
+
+  githubTargetUrl = GITHUB_RELEASES_URL;
+  if (indicator) {
+    indicator.textContent = update.label;
+    indicator.hidden = false;
+  }
+  if (githubBtn) {
+    githubBtn.classList.add('has-update');
+    githubBtn.title = 'Open QuiviT Releases on GitHub';
+  }
+}
+
+async function checkForUpdates() {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (typeof invoke !== 'function') return;
+
+  try {
+    const getVersion = window.__TAURI__?.app?.getVersion;
+    const currentVersion = typeof getVersion === 'function'
+      ? (await getVersion().catch(() => FALLBACK_APP_VERSION)) || FALLBACK_APP_VERSION
+      : FALLBACK_APP_VERSION;
+
+    const raw = await invoke('fetch_text', {
+      url: GITHUB_RELEASES_API_URL,
+      headers: { Accept: 'application/vnd.github+json' }
+    });
+    const releases = JSON.parse(raw);
+    applyUpdateNotice(evaluateReleasesUpdate(currentVersion, releases));
+  } catch {
+    // Fail silently when offline, rate-limited, or before any release exists.
+  }
 }
 
 const AIM_DELAY = 120;

@@ -205,16 +205,16 @@ Status summary: 15 of 15 owned files audited. 11 files carry agreed remediation 
 1. **Architecture verdict on CPU (`pica.js`) vs WebGL Lanczos.** Static single-image Lanczos must stay on `pica.js` for visual parity: `pica.js` applies adaptive downscale filter radius plus unsharp masking (`unsharpAmount: 80, unsharpRadius: 0.6, unsharpThreshold: 2`), whereas `lanczosWebGL.js` uses a fixed 6x6 source-texel kernel that aliases at `scale < 0.5`.
 2. **Full IPC re-fetch and re-decode on every pan/zoom settle (`blobImage.js:48-52`, `lanczos.js:85`).** `getCleanImageCrop()` bypasses `_textureCache`, omits `resp.ok` and `AbortSignal`, and re-fetches the entire source file over `quivit://` and re-decodes it on CPU after every 80 ms pan/zoom settle.
 3. **Dead `getCleanImage()` and single-slot race (`blobImage.js:15-46`).** `getCleanImage()` has zero active production callers (only the dead `glRuntime.js:290` branch) and uses a single module-level `_pendingSrc` string that cancels and closes valid bitmaps if two URLs load concurrently.
-4. **Pure-service boundary and precision issues (`lanczos.js:4-7, 32, 42-43, 72`).** `lanczos.js` calls `window.pica()` directly (blocking Node Mocha tests and parser-blocking `index.html:531`), reads DOM `viewport.clientWidth/Height`, destructures 5 unused local variables (`tx, ty, rotation, flipX, flipY` at line `32`), and checks exact float equality `scale === 1` at line `72` instead of an epsilon (`Math.abs(scale - 1) < 1e-4`).
+4. **Pure-service boundary and precision issues (`lanczos.js:4-7, 32, 42-43, 72`).** `lanczos.js` calls `window.pica()` directly (blocking Node Mocha tests and parser-blocking `index.html:538`), reads DOM `viewport.clientWidth/Height`, destructures 5 unused local variables (`tx, ty, rotation, flipX, flipY` at line `32`), and checks exact float equality `scale === 1` at line `72` instead of an epsilon (`Math.abs(scale - 1) < 1e-4`).
 
 **Fix.**
 - Refactor `blobImage.js` to cache decoded `ImageBitmap` instances in its `BoundedMap(TEXTURE_CACHE_CAPACITY)` with per-URL `_pending` deduplication `Map` (eliminating the single-slot `_pendingSrc` race), `resp.ok` checking, and `AbortSignal` support. Have `getCleanImageCrop(src, sx, sy, sw, sh, { signal })` crop directly from the cached `ImageBitmap` via `createImageBitmap(cachedBitmap, sx, sy, sw, sh)` (or accept an `HTMLCanvasElement` directly for ICO composites, eliminating `viewerPipelines.js:231` `toDataURL`).
-- Decouple `lanczos.js` from `window` and DOM nodes: accept an injected or lazy `pica` loader (coordinating with S02 `#54` `defer`/lazy-load of `src/js/vendors/pica.js` at `index.html:531`) and plain `{ width, height }` viewport dimensions, pass an `AbortController` signal cancelled by `cancel()`, remove unused destructured variables at line `32`, and replace `scale === 1` at line `72` with `Math.abs(scale - 1) < 1e-4`.
+- Decouple `lanczos.js` from `window` and DOM nodes: accept an injected or lazy `pica` loader (coordinating with S02 `#54` `defer`/lazy-load of `src/js/vendors/pica.js` at `index.html:538`) and plain `{ width, height }` viewport dimensions, pass an `AbortController` signal cancelled by `cancel()`, remove unused destructured variables at line `32`, and replace `scale === 1` at line `72` with `Math.abs(scale - 1) < 1e-4`.
 
 **Acceptance criteria.**
 - Repeated pan/zoom settles on the same image in static Lanczos mode trigger zero repeat `fetch()` calls (100% cache hit in `blobImage.js`).
 - `mocha/lanczos.test.js` and `mocha/blobImage.test.js` run cleanly in Node with zero `window` or DOM globals.
-- `index.html:531` `pica.js` loads deferred or on first static Lanczos render without blocking startup or detached `?surface=fileList`.
+- `index.html:538` `pica.js` loads deferred or on first static Lanczos render without blocking startup or detached `?surface=fileList`.
 
 ---
 
@@ -246,7 +246,7 @@ Status summary: 15 of 15 owned files audited. 11 files carry agreed remediation 
 **Files:** `src/js/services/registry.js:1-37`, `src/js/services/filterModules.js:1-21`
 
 **Problem.**
-1. **Duplicated scaler and filter labels (`registry.js:6-23`).** `menubar.js:798-803` (`FILTER_LABELS`), `menubar.js:863` (`scalingLabels`), and `menubar/statusbar.js:22-26` (`SCALING_LABELS`) duplicate labels already declared in `registry.js` because `registry.js` exports `FILTER_BY_ID` but not `SCALER_BY_ID`.
+1. **Duplicated scaler and filter labels (`registry.js:6-23`).** `menubar.js:861-866` (`FILTER_LABELS`), `menubar.js:926` (`scalingLabels`), and `menubar/statusbar.js:23-27` (`SCALING_LABELS`) duplicate labels already declared in `registry.js` because `registry.js` exports `FILTER_BY_ID` but not `SCALER_BY_ID`.
 2. **Null safety and dead property (`registry.js:16, 22`).** `SCALERS[2]` carries an unread `pipeline: 'lanczos'` property, and `activeFilterId(frontendData)` throws if `frontendData` is null or undefined.
 3. **Eager static parse of `anime4k/chains.js` (`filterModules.js:1-4`).** `filterModules.js` statically imports `anime4k.js` -> `anime4k/chains.js` (1,588 lines, ~202 KB) at startup even when no filter is active or in detached `?surface=fileList`. Its `switch (id)` (`12-17`) can also be a plain lookup map.
 
@@ -278,7 +278,7 @@ Status summary: 15 of 15 owned files audited. 11 files carry agreed remediation 
 Verified against `.agents/major-refactor/cross-split-seams.md` (`#116`, ratified in `#128`):
 
 - **Sync A (Main HTML, CSS, and CSP with S02 and S08).**
-  - `src/index.html`: Zero new `<template>` elements required by S07. Locked IDs preserved: `#viewer-lanczos-canvas` (`L409`), `#viewer-svg-pump` (`L417`), `#viewer-filter-canvas` (`L418`), `#manhwa-filter-canvas` (`L385`), `#manhwa-svg-pump-layer` (`L389`). Coordinate `defer` or lazy loading of `src/js/vendors/pica.js` (`L531`) with `lanczos.js` (`S07-08`).
+  - `src/index.html`: Zero new `<template>` elements required by S07. Locked IDs preserved: `#viewer-lanczos-canvas` (`L411`), `#viewer-svg-pump` (`L419`), `#viewer-filter-canvas` (`L420`), `#manhwa-filter-canvas` (`L387`), `#manhwa-svg-pump-layer` (`L391`). Coordinate `defer` or lazy loading of `src/js/vendors/pica.js` (`L538`) with `lanczos.js` (`S07-08`).
   - `src/css/main.css` -> `viewer.css` (S02): All S07 canvas, SVG-pump, `[data-filter]`, and `.manhwa-warmup`/`.manhwa-exit-warmup` rules move intact into `viewer.css`. S07 removes dead `.style.removeProperty('width'|'height')` calls in `glRuntime.js` and `viewerPipelines.js` while keeping `--crop-left/top/w/h` CSS custom properties on `#viewer-lanczos-canvas`.
   - `src-tauri/tauri.conf.json:12` CSP (S08 R2): Confirmed explicit CSP (`connect-src` with `quivit:`, `http://quivit.localhost`, `asset:`, `blob:`, `data:`; `script-src`/`worker-src` with `'self' blob: 'wasm-unsafe-eval'`) covers `textureCache.js`/`blobImage.js` fetches, SVG blob pumps, and `pica.js` WASM/Blob workers.
 - **Sync B (Viewer, Registry, and Probes with S06, S02, and S01).**

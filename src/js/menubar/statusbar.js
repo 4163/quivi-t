@@ -3,6 +3,7 @@ import { Core } from '../core.js';
 import { activeFilterId, FILTER_BY_ID } from '../services/registry.js';
 import { getEffectiveScaling } from '../services/viewerMath.js';
 import { copyTextToClipboard } from '../shared/clipboard.js';
+import { FALLBACK_APP_VERSION, formatVersionLabel, getVersionCodename } from '../services/appVersion.js';
 
 const FIT_LABELS = Object.freeze({
   'window': 'Window',
@@ -38,6 +39,9 @@ let statusSpread;
 let spreadIndicator;
 let statusManhwa;
 let manhwaIndicator;
+let statusVersion;
+let statusVersionCodename;
+let statusVersionNumber;
 const MIN_REFRESH_DURATION_MS = 200;
 const FLASH_MESSAGE_DURATION_MS = 3000;
 let _refreshTimer = null;
@@ -61,6 +65,10 @@ export const Statusbar = {
     spreadIndicator = document.getElementById('spread-indicator');
     statusManhwa = document.querySelector('.status-manhwa');
     manhwaIndicator = document.getElementById('manhwa-indicator');
+    statusVersion = document.querySelector('.status-version');
+    statusVersionCodename = document.querySelector('.status-version-codename');
+    statusVersionNumber = document.querySelector('.status-version-number');
+    this.syncVersion();
     this.syncSpreadIndicator(Core.getState());
     this.syncManhwaIndicator(Core.getState());
     this.update(Core.getState());
@@ -422,5 +430,27 @@ export const Statusbar = {
     if (statusbar.classList.contains('action-latched') !== latched) {
       statusbar.classList.toggle('action-latched', latched);
     }
+  },
+
+  applyVersion(version) {
+    if (!statusVersion) return;
+    const versionLabel = formatVersionLabel(version);
+    const codename = getVersionCodename(version);
+    if (statusVersionCodename) statusVersionCodename.textContent = codename;
+    if (statusVersionNumber) statusVersionNumber.textContent = versionLabel;
+    statusVersion.classList.toggle('no-codename', !codename);
+    statusVersion.setAttribute('aria-label', codename ? `${codename} (${versionLabel})` : versionLabel);
+  },
+
+  syncVersion() {
+    if (!statusVersion) return;
+    const getVersion = typeof window !== 'undefined' ? window.__TAURI__?.app?.getVersion : null;
+    if (typeof getVersion !== 'function') {
+      this.applyVersion(FALLBACK_APP_VERSION);
+      return;
+    }
+    Promise.resolve(getVersion())
+      .then((version) => this.applyVersion(version || FALLBACK_APP_VERSION))
+      .catch(() => this.applyVersion(FALLBACK_APP_VERSION));
   }
 };

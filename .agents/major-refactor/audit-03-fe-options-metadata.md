@@ -29,7 +29,7 @@ Both pages load `src/js/shared/themePrePaint.js` before `<style id="custom-css">
 
 ### S03-02 `[Blocking]` Keybind slot drift and markup errors (`src/options.html:157-423,431,624,704,706`)
 
-Upstream `79223d1` removed the dead "Viewport position" section (5 orphaned `cmd-window-viewport-*` slots and the duplicate `id="workspace-keybind-note"`), and `0530a66` added the `cmd-focus-file-search` slot (`L419-422`, matching `src/js/services/actions.js:374-376`). Live comparison of `src/options.html` against `ACTION_REGISTRY` still shows one slot-coverage gap and three markup defects.
+Upstream `79223d1` removed the dead "Viewport position" section (5 orphaned `cmd-window-viewport-*` slots and the duplicate `id="workspace-keybind-note"`), and `0530a66` added the `cmd-focus-file-search` slot (`L419-422`, matching `src/js/services/actions.js:375-377`). Live comparison of `src/options.html` against `ACTION_REGISTRY` still shows one slot-coverage gap and three markup defects.
 
 1. Out of the categorized actions in `ACTION_REGISTRY`, 8 actions lack keybind slots in `src/options.html`: `cmd-filter-off` (`View`), `cmd-spread-off` (`Spread View`), `cmd-col-ext`, `cmd-col-dims`, `cmd-col-date`, `cmd-col-size`, `cmd-toggle-cursor-autohide`, and `cmd-quit` (`Window & UI`). `options.html` also splits `Scale Method` (`L243`) and `Filters` (`L256`) out of `View` and lists `cmd-refresh` (`L188`) under `Navigation` instead of `File Operations`.
 2. `src/options.html:431` and `L624` contain literal markdown backticks around `<i>` tags (`\`<i>Open with</i>\`` and `\`<i>Ctrl+Shift+Alt+C</i>\``).

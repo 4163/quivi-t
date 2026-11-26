@@ -4,6 +4,7 @@
 
 import { FILTERS, activeFilterId } from './registry.js';
 import { WORKSPACE_SURFACES, WORKSPACE_POSITIONS, workspacePositionLabel } from './workspaceLayout.js';
+import { GITHUB_REPO_URL } from './appVersion.js';
 
 function navigationOwner(ctx, payload) {
   return !payload?.fileList && (ctx.isFavoritesFocused?.() || ctx.isLibraryFocused?.()) ? 'window' : 'main';
@@ -256,8 +257,8 @@ export const ACTION_REGISTRY = [
     }
   },
   { id: 'cmd-github', label: 'GitHub Repository', defaultBinds: [],
-    run: async () => {
-      const url = 'https://github.com/4163/quivi-t';
+    run: async (ctx) => {
+      const url = ctx?.getGithubUrl?.() || GITHUB_REPO_URL;
       if (window.__TAURI__?.opener?.openUrl) {
         await window.__TAURI__.opener.openUrl(url);
       } else {

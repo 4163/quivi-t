@@ -22,12 +22,12 @@ Counts above were verified on disk. Two files are structurally cohesive: `import
   1. `src/js/services/downloadQueue.js`: pure `DownloadQueue` (`L344-739`) and `orderItemsBySort` (`L1723-1740`). Replace `_refreshWhenComplete` global reach-ins with an injected `onQueueComplete` callback, and expose public queue methods (`getStatusSnapshot()`, `hasCompleteDisplayRanks()`, `setUserAnchor()`, `getFirstPendingInDisplayOrder()`) so external callers stop touching private `_activeQueue` fields.
   2. `src/js/urlloader/extractorRegistry.js`: URL/stem helpers (`L185-211, L1088-1119`), manifest/result validators (`L90-181, L758-806, L956-1084`), and dynamic Blob-URL loader/cache (`L79-88, L743-756, L810-952`) preserving the `extractors/README.md` module contract.
   3. `src/js/urlloader/gallerySidecar.js`: pure match vocabulary (`L1247-1337, L1524-1533`) and sidecar read/write/cleanup/stub resolution (`L1135-1243, L1342-1679, L2251-2283, L2428-2640, L2870-2900`).
-  4. `src/js/urlloader/networkClient.js`: Tauri network/file IPC proxies (`L215-255, L295-298, L897-906`) plus `sanitizeSvgText`, `downloadSanitizedSvg`, and `sanitizeSvgDocument` (`L259-293`) backed by an explicit DOMPurify adapter coordinated with S02's `defer`/lazy-load of `src/js/vendors/purify.min.js` (`src/index.html:532`).
+  4. `src/js/urlloader/networkClient.js`: Tauri network/file IPC proxies (`L215-255, L295-298, L897-906`) plus `sanitizeSvgText`, `downloadSanitizedSvg`, and `sanitizeSvgDocument` (`L259-293`) backed by an explicit DOMPurify adapter coordinated with S02's `defer`/lazy-load of `src/js/vendors/purify.min.js` (`src/index.html:539`).
   5. `src/js/urlLoader.js`: thin coordinator (`UrlLoader.init`, `getWorkspaceDownloadState`, `_loadUrlWithLibraryDir`, `_startGalleryQueue`, `handleLibraryRelocation`, detached `_workspaceStatuses` proxy, and named re-exports).
 
 - **`S05-02` [Blocking] [Agreed] Cross-module reach-in and duplicate download status ownership (`L33`, `L51`, `L1812`, `L1993`, `L2129`, `L2234`, `L2657`, `L2791-2795`, `L2909`, `L2921-2928`).**
   1. `urlLoader.js:33` imports `activateImportProvider` from `./filepanel/libraryStore.js` (S04) and calls it at `L1812, L1993, L2129, L2234`, violating non-DOM coordinator independence when `importActions.js:38` already injects `activateMisc`.
-  2. `urlLoader.js:51, L2909` holds `_urlOverlay` (S02) solely so `openPrompt()` (`L2791-2795`) can call `_urlOverlay.show(opts)` for `actions.js:277`.
+  2. `urlLoader.js:51, L2909` holds `_urlOverlay` (S02) solely so `openPrompt()` (`L2791-2795`) can call `_urlOverlay.show(opts)` for `actions.js:278`.
   3. In detached `?surface=fileList`, `urlLoader.js:2921-2928` and `src/js/filepanel/filePanel.js:425-434` both listen to `quivit-download-status` and `quivit-download-complete` and call `syncWorkspaceDownloadStatus()`. On `quivit-download-complete`, each listener allocates a separate `{ destPath, status: 'completed' }` object, bypassing the `detail === _lastSyncedStatusDetail` check (`L2657`) and running the sync twice.
   **Agreed fix.** Inject `onProviderImported(providerDir)` into `UrlLoader.init` from `main.js` (removing `L33`). Remove `_urlOverlay` and `openPrompt` from `urlLoader.js`, routing `cmd-use-url` through `actionCtx.openUrlPrompt` directly to `urlOverlay.show(payload)`. Keep `urlLoader.js` as sole writer of `_workspaceStatuses`, drop `syncWorkspaceDownloadStatus` calls from `filePanel.js:427,434`, and delete `_lastSyncedStatusDetail`.
 
@@ -74,7 +74,7 @@ Counts above were verified on disk. Two files are structurally cohesive: `import
 
 ## Cross-split seams
 
-- **Sync A (`index.html` and CSP <-> S02, S08):** Coordinate `defer`/lazy-loading of `src/js/vendors/purify.min.js` (`src/index.html:532`) with `urlloader/networkClient.js` SVG import sanitization. Under R2 (`src-tauri/tauri.conf.json:12`), `script-src` / `worker-src` retains `'self' blob: 'wasm-unsafe-eval'` so `loadExtractorModule` dynamic `Blob` URL `import()` keeps working.
+- **Sync A (`index.html` and CSP <-> S02, S08):** Coordinate `defer`/lazy-loading of `src/js/vendors/purify.min.js` (`src/index.html:539`) with `urlloader/networkClient.js` SVG import sanitization. Under R2 (`src-tauri/tauri.conf.json:12`), `script-src` / `worker-src` retains `'self' blob: 'wasm-unsafe-eval'` so `loadExtractorModule` dynamic `Blob` URL `import()` keeps working.
 - **Sync C (`libraryStore.js`, `filePanel.js`, `urlOverlay.js`, `menubar.js`, `actions.js`, `workspaceControls.js` <-> S01, S02, S04):**
   - Replace `urlLoader.js:33` `libraryStore.js` import with `onProviderImported(providerDir)` injected from `main.js`.
   - Remove `_urlOverlay` and `openPrompt` from `urlLoader.js`; route `cmd-use-url` via `actionCtx.openUrlPrompt` directly to `urlOverlay.show`.
