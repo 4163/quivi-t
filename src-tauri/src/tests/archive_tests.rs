@@ -2,6 +2,35 @@ use super::*;
 use crate::formats::*;
 
 use std::fs;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
+
+static ARCHIVE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+struct TempDir(PathBuf);
+
+impl TempDir {
+    fn new(prefix: &str) -> Self {
+        let n = ARCHIVE_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "quivit-archive-test-{prefix}-{}-{n}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        Self(dir)
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
 
 fn test_file(name: &str) -> std::path::PathBuf {
     // Tests run with CWD = src-tauri; test files live under the repo root.
@@ -14,14 +43,14 @@ fn test_file(name: &str) -> std::path::PathBuf {
 
 #[test]
 fn archive_entry_temp_path_rejects_escape_paths() {
-    let temp_dir = std::env::temp_dir().join("QuiviT-test-path-safety");
+    let temp_dir = TempDir::new("path-safety");
 
-    assert!(archive_entry_temp_path(&temp_dir, "folder/page.jpg").is_some());
-    assert!(archive_entry_temp_path(&temp_dir, "folder\\page.jpg").is_some());
-    assert!(archive_entry_temp_path(&temp_dir, "../page.jpg").is_none());
-    assert!(archive_entry_temp_path(&temp_dir, "folder/../../page.jpg").is_none());
-    assert!(archive_entry_temp_path(&temp_dir, "/absolute/page.jpg").is_none());
-    assert!(archive_entry_temp_path(&temp_dir, "").is_none());
+    assert!(archive_entry_temp_path(temp_dir.path(), "folder/page.jpg").is_some());
+    assert!(archive_entry_temp_path(temp_dir.path(), "folder\\page.jpg").is_some());
+    assert!(archive_entry_temp_path(temp_dir.path(), "../page.jpg").is_none());
+    assert!(archive_entry_temp_path(temp_dir.path(), "folder/../../page.jpg").is_none());
+    assert!(archive_entry_temp_path(temp_dir.path(), "/absolute/page.jpg").is_none());
+    assert!(archive_entry_temp_path(temp_dir.path(), "").is_none());
 }
 
 #[test]
@@ -138,6 +167,21 @@ fn archive_cache_bounds_open_archive_state() {
     assert_eq!(cache.current_zip_bytes(), 0);
 }
 
+#[test]
+fn archive_cache_max_open_archives_one_evicts_previous() {
+    let mut cache = ArchiveCache::new(2);
+    cache.set_max_open_archives(1);
+
+    cache.register_test_archive("first.cbz");
+    cache.insert_zip_entry("first.cbz", "p1", vec![1u8; 512]);
+    assert!(cache.contains_archive("first.cbz"));
+
+    cache.register_test_archive("second.cbz");
+    assert!(!cache.contains_archive("first.cbz"));
+    assert!(cache.contains_archive("second.cbz"));
+    assert_eq!(cache.current_zip_bytes(), 0);
+}
+
 // CJK encoding regression tests
 
 fn encoding_test_file(name: &str) -> std::path::PathBuf {
@@ -189,9 +233,7 @@ fn encrypted_test_file(name: &str) -> std::path::PathBuf {
 #[test]
 fn zip_corrupt_local_header_fails_fast_on_corrupt_entry_and_reads_valid_entry() {
     let path = encrypted_test_file("corrupt_local_header.zip");
-    if !path.exists() {
-        return;
-    }
+    assert!(path.exists(), "missing fixture: {}", path.display());
     let (files, _archive, _map, encryption) =
         list_zip_entries(path.to_str().unwrap(), None).expect("list corrupt header zip");
     assert_eq!(encryption, None);
@@ -217,12 +259,199 @@ fn zip_corrupt_local_header_fails_fast_on_corrupt_entry_and_reads_valid_entry() 
 }
 
 #[test]
-fn invalid_archive_zip_corrupt_tail_missing_eocd_fails_fast() {
-    let scratch_dir = std::env::temp_dir().join("quivit-test-fast-skip-zip");
-    let _ = fs::remove_dir_all(&scratch_dir);
-    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+fn read_plain_zip_entry_shared_caches_handles_concurrency_cjk_encrypted_and_non_zip() {
+    let cbz = test_file("cbz.cbz");
+    assert!(cbz.exists(), "missing fixture: {}", cbz.display());
+    let cbz_str = cbz.to_str().unwrap();
 
-    let fake_zip = scratch_dir.join("truncated_missing_eocd.zip");
+    let entries = list_archive_names(cbz_str).expect("list cbz");
+    let first_name = entries
+        .iter()
+        .find(|e| !e.is_dir)
+        .expect("cbz has file entry")
+        .name
+        .clone();
+
+    let state = Arc::new(RwLock::new(ArchiveCache::new(64)));
+    let first = read_plain_zip_entry_shared(&state, cbz_str, &first_name)
+        .expect("zip returns Some")
+        .expect("extract first entry");
+    assert!(!first.is_empty());
+
+    let second = read_plain_zip_entry_shared(&state, cbz_str, &first_name)
+        .expect("zip returns Some")
+        .expect("cache hit");
+    assert!(Arc::ptr_eq(&first, &second));
+
+    // Concurrent multi-thread reads on the same archive
+    let mut handles = Vec::new();
+    for _ in 0..4 {
+        let st = Arc::clone(&state);
+        let p = cbz_str.to_string();
+        let n = first_name.clone();
+        handles.push(std::thread::spawn(move || {
+            read_plain_zip_entry_shared(&st, &p, &n)
+                .expect("some")
+                .expect("ok")
+        }));
+    }
+    for h in handles {
+        let bytes = h.join().expect("join reader thread");
+        assert!(Arc::ptr_eq(&first, &bytes));
+    }
+
+    // CJK entry lookups
+    for name in ["shift_jis_test.zip", "gbk_test.zip", "euckr_test.zip"] {
+        let p = encoding_test_file(name);
+        assert!(p.exists(), "missing fixture: {}", p.display());
+        let p_str = p.to_str().unwrap();
+        let list = list_archive_names(p_str).expect("list cjk zip");
+        let cjk_entry = &list[0].name;
+        let data = read_plain_zip_entry_shared(&state, p_str, cjk_entry)
+            .expect("cjk zip returns Some")
+            .expect("extract cjk entry");
+        assert!(!data.is_empty());
+    }
+
+    // Non-ZIP returns None
+    let tar = test_file("tar.tar");
+    assert!(tar.exists(), "missing fixture: {}", tar.display());
+    assert!(read_plain_zip_entry_shared(&state, tar.to_str().unwrap(), "any.jpg").is_none());
+
+    // Locked encrypted ZIP returns None; unlocked encrypted ZIP returns Some(Ok(..))
+    let enc = encrypted_test_file("encrypted-123.zip");
+    assert!(enc.exists(), "missing fixture: {}", enc.display());
+    let enc_str = enc.to_str().unwrap();
+    let enc_state = RwLock::new(ArchiveCache::new(32));
+    {
+        let mut cache = enc_state.write().unwrap();
+        let res = cache
+            .prepare_archive(enc_str, None)
+            .expect("prepare locked zip");
+        assert!(res.encryption.is_some());
+    }
+    assert!(read_plain_zip_entry_shared(&enc_state, enc_str, "any.jpg").is_none());
+
+    let enc_entry = {
+        let mut cache = enc_state.write().unwrap();
+        let res = cache
+            .prepare_archive(enc_str, Some("123"))
+            .expect("unlock encrypted zip");
+        assert_eq!(res.encryption, None);
+        res.files
+            .into_iter()
+            .find(|f| !f.is_dir)
+            .expect("encrypted zip has entry")
+            .name
+    };
+    let decrypted = read_plain_zip_entry_shared(&enc_state, enc_str, &enc_entry)
+        .expect("unlocked zip returns Some")
+        .expect("decrypt entry");
+    assert!(!decrypted.is_empty());
+}
+
+#[test]
+fn read_entry_header_works_for_zip_and_temp_archive() {
+    let cbz = test_file("cbz.cbz");
+    assert!(cbz.exists(), "missing fixture: {}", cbz.display());
+    let cbz_str = cbz.to_str().unwrap();
+
+    let mut cache = ArchiveCache::new(32);
+    let cbz_res = cache.prepare_archive(cbz_str, None).expect("prepare cbz");
+    let cbz_entry = cbz_res
+        .files
+        .iter()
+        .find(|f| !f.is_dir)
+        .expect("cbz file")
+        .name
+        .clone();
+    let zip_hdr = cache
+        .read_entry_header(cbz_str, &cbz_entry, 64)
+        .expect("read zip header");
+    assert!(!zip_hdr.is_empty() && zip_hdr.len() <= 64);
+
+    let cbr = test_file("cbr.cbr");
+    assert!(cbr.exists(), "missing fixture: {}", cbr.display());
+    let cbr_str = cbr.to_str().unwrap();
+    let cbr_res = cache.prepare_archive(cbr_str, None).expect("prepare cbr");
+    let cbr_entry = cbr_res
+        .files
+        .iter()
+        .find(|f| !f.is_dir)
+        .expect("cbr file")
+        .name
+        .clone();
+    let rar_hdr = cache
+        .read_entry_header(cbr_str, &cbr_entry, 64)
+        .expect("read rar header");
+    assert!(!rar_hdr.is_empty() && rar_hdr.len() <= 64);
+    cache.drop_archive(cbr_str);
+}
+
+#[test]
+fn list_archive_names_and_tar_parity() {
+    for name in ["cbz.cbz", "cbr.cbr", "cb7.cb7", "tar.tar"] {
+        let path = test_file(name);
+        assert!(path.exists(), "missing fixture: {}", path.display());
+        let files = list_archive_names(path.to_str().unwrap())
+            .unwrap_or_else(|e| panic!("list_archive_names({name}) failed: {e}"));
+        assert!(!files.is_empty(), "{name} should contain entries");
+    }
+
+    let tar_path = test_file("tar.tar");
+    let tar_files = list_archive_names(tar_path.to_str().unwrap()).expect("list tar");
+    let mut expected_order = tar_files.clone();
+    sort_archive_entries(&mut expected_order);
+    let actual_names: Vec<&str> = tar_files.iter().map(|f| f.name.as_str()).collect();
+    let expected_names: Vec<&str> = expected_order.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(actual_names, expected_names);
+    for entry in &tar_files {
+        let ext = entry.name.rsplit('.').next().unwrap_or("");
+        assert!(
+            is_image_ext(ext) || is_metadata_ext(ext),
+            "unexpected tar entry extension: {}",
+            entry.name
+        );
+    }
+}
+
+#[test]
+fn drop_archive_removes_state_and_cleans_temp_dir() {
+    let tar_path = test_file("tar.tar");
+    assert!(tar_path.exists(), "missing fixture: {}", tar_path.display());
+    let tar_str = tar_path.to_str().unwrap();
+
+    let mut cache = ArchiveCache::new(32);
+    let res = cache.prepare_archive(tar_str, None).expect("prepare tar");
+    assert!(cache.contains_archive(tar_str));
+
+    let (temp_dir, _) = cache
+        .temp_extraction_state(tar_str)
+        .expect("temp extraction state");
+    let first_entry = res
+        .files
+        .iter()
+        .find(|f| !f.is_dir)
+        .expect("tar file")
+        .name
+        .clone();
+    let _ = cache
+        .read_entry_bytes(tar_str, &first_entry)
+        .expect("read tar entry")
+        .wait_for_data(&first_entry)
+        .expect("wait for tar extraction");
+    assert!(temp_dir.exists());
+
+    cache.drop_archive(tar_str);
+    assert!(!cache.contains_archive(tar_str));
+    assert!(!temp_dir.exists(), "temp dir should be removed on drop_archive");
+}
+
+#[test]
+fn invalid_archive_zip_corrupt_tail_missing_eocd_fails_fast() {
+    let scratch_dir = TempDir::new("fast-skip-zip");
+
+    let fake_zip = scratch_dir.path().join("truncated_missing_eocd.zip");
     let mut file = fs::File::create(&fake_zip).expect("create fake zip");
     use std::io::Write;
     file.write_all(b"PK\x03\x04").expect("write magic");
@@ -236,33 +465,25 @@ fn invalid_archive_zip_corrupt_tail_missing_eocd_fails_fast() {
         err.contains("End of Central Directory (EOCD) signature not found in archive tail"),
         "error should indicate tail EOCD check failed: {err}"
     );
-
-    let _ = fs::remove_dir_all(&scratch_dir);
 }
 
 #[test]
 fn invalid_archive_zip_invalid_magic_fails_fast() {
-    let scratch_dir = std::env::temp_dir().join("quivit-test-fast-skip-zip-magic");
-    let _ = fs::remove_dir_all(&scratch_dir);
-    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+    let scratch_dir = TempDir::new("fast-skip-zip-magic");
 
-    let fake_zip = scratch_dir.join("not_a_zip.zip");
+    let fake_zip = scratch_dir.path().join("not_a_zip.zip");
     fs::write(&fake_zip, b"<!DOCTYPE html><html>404 Not Found</html>").expect("write fake html");
 
     let res = list_zip_entries(fake_zip.to_str().unwrap(), None);
     assert!(res.is_err());
     assert!(res.err().unwrap().contains("missing PK signature header"));
-
-    let _ = fs::remove_dir_all(&scratch_dir);
 }
 
 #[test]
 fn invalid_archive_rar_invalid_magic_and_truncated() {
-    let scratch_dir = std::env::temp_dir().join("quivit-test-fast-skip-rar");
-    let _ = fs::remove_dir_all(&scratch_dir);
-    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+    let scratch_dir = TempDir::new("fast-skip-rar");
 
-    let small_rar = scratch_dir.join("too_small.rar");
+    let small_rar = scratch_dir.path().join("too_small.rar");
     fs::write(&small_rar, b"Rar!").expect("write small");
     let res = list_rar_entries(small_rar.to_str().unwrap(), None);
     assert!(res.is_err());
@@ -271,22 +492,18 @@ fn invalid_archive_rar_invalid_magic_and_truncated() {
         .unwrap()
         .contains("smaller than minimum RAR header"));
 
-    let bad_magic = scratch_dir.join("bad_magic.rar");
+    let bad_magic = scratch_dir.path().join("bad_magic.rar");
     fs::write(&bad_magic, b"NOT_A_RAR_FILE_HEADER").expect("write bad magic");
     let res = list_rar_entries(bad_magic.to_str().unwrap(), None);
     assert!(res.is_err());
     assert!(res.err().unwrap().contains("missing RAR signature header"));
-
-    let _ = fs::remove_dir_all(&scratch_dir);
 }
 
 #[test]
 fn invalid_archive_sevenz_invalid_magic_and_truncated() {
-    let scratch_dir = std::env::temp_dir().join("quivit-test-fast-skip-sevenz");
-    let _ = fs::remove_dir_all(&scratch_dir);
-    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+    let scratch_dir = TempDir::new("fast-skip-sevenz");
 
-    let small_7z = scratch_dir.join("too_small.7z");
+    let small_7z = scratch_dir.path().join("too_small.7z");
     fs::write(&small_7z, b"7z\xbc\xaf\x27\x1c").expect("write small");
     let res = list_7z_entries(small_7z.to_str().unwrap(), None);
     assert!(res.is_err());
@@ -295,13 +512,13 @@ fn invalid_archive_sevenz_invalid_magic_and_truncated() {
         .unwrap()
         .contains("smaller than minimum 7Z header"));
 
-    let bad_magic = scratch_dir.join("bad_magic.7z");
+    let bad_magic = scratch_dir.path().join("bad_magic.7z");
     fs::write(&bad_magic, [0u8; 32]).expect("write zeros");
     let res = list_7z_entries(bad_magic.to_str().unwrap(), None);
     assert!(res.is_err());
     assert!(res.err().unwrap().contains("missing 7Z signature header"));
 
-    let trunc_7z = scratch_dir.join("truncated.7z");
+    let trunc_7z = scratch_dir.path().join("truncated.7z");
     let mut header = [0u8; 32];
     header[0..6].copy_from_slice(&[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]);
     header[12..20].copy_from_slice(&1_000_000u64.to_le_bytes());
@@ -310,17 +527,13 @@ fn invalid_archive_sevenz_invalid_magic_and_truncated() {
     let res = list_7z_entries(trunc_7z.to_str().unwrap(), None);
     assert!(res.is_err());
     assert!(res.err().unwrap().contains("truncated archive header"));
-
-    let _ = fs::remove_dir_all(&scratch_dir);
 }
 
 #[test]
 fn invalid_archive_tar_invalid_checksum_and_truncated() {
-    let scratch_dir = std::env::temp_dir().join("quivit-test-fast-skip-tar");
-    let _ = fs::remove_dir_all(&scratch_dir);
-    fs::create_dir_all(&scratch_dir).expect("create scratch dir");
+    let scratch_dir = TempDir::new("fast-skip-tar");
 
-    let small_tar = scratch_dir.join("too_small.tar");
+    let small_tar = scratch_dir.path().join("too_small.tar");
     fs::write(&small_tar, b"tar data").expect("write small");
     let res = list_tar_entries(small_tar.to_str().unwrap());
     assert!(res.is_err());
@@ -329,12 +542,10 @@ fn invalid_archive_tar_invalid_checksum_and_truncated() {
         .unwrap()
         .contains("smaller than minimum TAR block"));
 
-    let garbage_tar = scratch_dir.join("garbage.tar");
+    let garbage_tar = scratch_dir.path().join("garbage.tar");
     let garbage = vec![0x42u8; 512];
     fs::write(&garbage_tar, garbage).expect("write garbage");
     let res = list_tar_entries(garbage_tar.to_str().unwrap());
     assert!(res.is_err());
     assert!(res.err().unwrap().contains("invalid header checksum"));
-
-    let _ = fs::remove_dir_all(&scratch_dir);
 }

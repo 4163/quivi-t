@@ -184,4 +184,76 @@ describe('04 - Archive Formats & Security', () => {
     const count = await filepanelPage.getItemCount();
     expect(count).toBeGreaterThan(0);
   });
+
+  it('completes scan_container_max_width and scan_container_dimensions on a CBZ archive', async () => {
+    const widthResult = await browser.executeAsync((archivePath, done) => {
+      let unlisten = null;
+      const timer = setTimeout(() => {
+        if (unlisten) unlisten();
+        done({ timedOut: true, maxWidth: 0 });
+      }, 10000);
+
+      window.__TAURI__.event.listen('manhwa-max-width', (event) => {
+        const payload = event.payload || {};
+        if (payload.container !== archivePath) return;
+        if (payload.done) {
+          clearTimeout(timer);
+          if (unlisten) unlisten();
+          done({ timedOut: false, maxWidth: payload.max_width || 0 });
+        }
+      }).then((fn) => {
+        unlisten = fn;
+        return window.__TAURI__.core.invoke('scan_container_max_width', {
+          container: archivePath,
+          isArchive: true,
+          password: null,
+        });
+      }).catch((err) => {
+        clearTimeout(timer);
+        if (unlisten) unlisten();
+        done({ error: String(err) });
+      });
+    }, fixtures.cbz);
+
+    expect(widthResult.error).toBeUndefined();
+    expect(widthResult.timedOut).toBe(false);
+    expect(widthResult.maxWidth).toBeGreaterThan(0);
+
+    const dimsResult = await browser.executeAsync((archivePath, done) => {
+      let unlisten = null;
+      const entries = [];
+      const timer = setTimeout(() => {
+        if (unlisten) unlisten();
+        done({ timedOut: true, count: entries.length });
+      }, 10000);
+
+      window.__TAURI__.event.listen('container-dimensions', (event) => {
+        const payload = event.payload || {};
+        if (payload.container !== archivePath) return;
+        if (Array.isArray(payload.entries)) {
+          entries.push(...payload.entries);
+        }
+        if (payload.done) {
+          clearTimeout(timer);
+          if (unlisten) unlisten();
+          done({ timedOut: false, count: entries.length });
+        }
+      }).then((fn) => {
+        unlisten = fn;
+        return window.__TAURI__.core.invoke('scan_container_dimensions', {
+          container: archivePath,
+          isArchive: true,
+          password: null,
+        });
+      }).catch((err) => {
+        clearTimeout(timer);
+        if (unlisten) unlisten();
+        done({ error: String(err) });
+      });
+    }, fixtures.cbz);
+
+    expect(dimsResult.error).toBeUndefined();
+    expect(dimsResult.timedOut).toBe(false);
+    expect(dimsResult.count).toBeGreaterThan(0);
+  });
 });

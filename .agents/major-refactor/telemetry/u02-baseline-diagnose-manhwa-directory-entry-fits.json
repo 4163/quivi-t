@@ -1,0 +1,7064 @@
+{
+  "scenario": "manhwa-directory-entry-fits",
+  "timestamp": "2026-11-27T09:53:49.944Z",
+  "totalBlackoutFrames": 0,
+  "totalAnomalies": 0,
+  "totalJankFrames": 1,
+  "steps": [
+    {
+      "actionId": "cmd-fit-none",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 323,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 0.3090909090909091
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.9
+        },
+        {
+          "data": {
+            "fitMode": [
+              "width",
+              "none"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 17.2
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 17.5
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 17.5
+        }
+      ],
+      "filename": "..",
+      "frameCount": 24,
+      "jankFrameCount": 0,
+      "stepIndex": 1
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 354,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "filename": [
+              "..",
+              "50-51.tif"
+            ],
+            "index": [
+              0,
+              9
+            ],
+            "src": [
+              "",
+              "http://quivit.localhost/tiff/RDpcUHJvamVjdHNcUXVpdmlUXHRlc3QtZmlsZXNcNTAtNTEudGlm"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 81.5
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 81.8
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 81.8
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 84
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 84
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 77.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 84.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 91.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 92.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 105,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 105.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 146.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 149.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 160.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 162.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 174.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 175.5
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 181.3
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 181.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 188.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 189.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 202.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 203.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 216.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 217.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 230.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 231.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 244,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 245.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 257.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 259.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 271.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 273.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 285.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 287
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 21,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 299.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 301.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 22,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 313.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 314.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 23,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 327.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 328
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 24,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 341.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 342
+        }
+      ],
+      "filename": "50-51.tif",
+      "frameCount": 24,
+      "jankFrameCount": 0,
+      "stepIndex": 2
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 360,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 2,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 3.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 4.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 17.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 18.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 31.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 32.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 45.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 46.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 59.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 60.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 73.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 73.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 87.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 87.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 101,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 101.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 115.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 115.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 128.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 130.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 142.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 143.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 156.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 157
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 170.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 171
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 184.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 184.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 198.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 198.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 212.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 212.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 226.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 226.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 239.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 240.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 253.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 310.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 309.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 311.8
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 312.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 21,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 323.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 323.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 22,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 337.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 345.8
+        },
+        {
+          "data": {
+            "filename": [
+              "50-51.tif",
+              "test-files"
+            ],
+            "index": [
+              9,
+              12
+            ],
+            "listLength": [
+              18,
+              15
+            ],
+            "src": [
+              "http://quivit.localhost/tiff/RDpcUHJvamVjdHNcUXVpdmlUXHRlc3QtZmlsZXNcNTAtNTEudGlm",
+              ""
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 357
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 359.2
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 359.2
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 359.2
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 359.2
+        }
+      ],
+      "filename": "test-files",
+      "frameCount": 22,
+      "jankFrameCount": 1,
+      "stepIndex": 3
+    },
+    {
+      "actionId": "cmd-fit-width",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 279,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 2.7
+        },
+        {
+          "data": {
+            "fitMode": [
+              "none",
+              "width"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 10.3
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 10.5
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 10.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 15.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 18.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 29.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 30.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 43.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 44.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 57.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 58.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 71.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 72
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 85.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 85.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 99.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 99.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 113.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 113.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 127,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 127.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 140.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 141.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 154.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 155.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 168.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 169.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 182.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 183
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 196.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 196.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 210.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 210.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 224.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 224.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 238,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 238.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 252,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 252.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 265.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 266.3
+        }
+      ],
+      "filename": "test-files",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 4
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 270,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 8.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 8.4
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT\\scripts",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 10.7
+        },
+        {
+          "data": {
+            "filename": [
+              "test-files",
+              ".."
+            ],
+            "index": [
+              12,
+              0
+            ],
+            "listLength": [
+              15,
+              1
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 17.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.8
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.9
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.9
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.9
+        }
+      ],
+      "filename": "..",
+      "frameCount": 19,
+      "jankFrameCount": 0,
+      "stepIndex": 5
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 274,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 7.5
+        },
+        {
+          "data": {
+            "filename": [
+              "..",
+              "scripts"
+            ],
+            "index": [
+              0,
+              9
+            ],
+            "listLength": [
+              1,
+              15
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 15.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 16.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 16.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 16.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 16.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 9.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 17.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 23.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 24.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 37.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 38
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 51.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 51.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 65.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 65.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 79.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 79.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 93.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 93.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 107,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 107.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 120.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 121.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 134.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 135.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 148.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 149.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 162.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 164.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 176.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 177.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 190.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 190.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 204.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 204.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 218.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 218.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 232.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 232.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 245.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 246.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 259.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 260.2
+        }
+      ],
+      "filename": "scripts",
+      "frameCount": 19,
+      "jankFrameCount": 0,
+      "stepIndex": 6
+    },
+    {
+      "actionId": "cmd-fit-width-if-larger",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 272,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0
+        },
+        {
+          "data": {
+            "fitMode": [
+              "width",
+              "width-if-larger"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 7.3
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 7.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 7.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 6.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 9.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 20.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 20.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 34,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 34.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 47.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 48.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 61.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 62.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 75.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 76.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 89.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 90
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 103.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 103.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 117.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 117.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 131.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 131.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 145.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 145.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 158.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 160.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 172.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 173.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 186.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 187.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 200.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 201.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 214.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 214.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 228.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 229
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 242.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 242.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 256.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 256.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 270.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 270.6
+        }
+      ],
+      "filename": "scripts",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 7
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 278,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 10.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 11.2
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT\\scripts",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 12.2
+        },
+        {
+          "data": {
+            "filename": [
+              "scripts",
+              ".."
+            ],
+            "index": [
+              9,
+              0
+            ],
+            "listLength": [
+              15,
+              1
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 19.2
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 20.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 20.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 20.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 20.5
+        }
+      ],
+      "filename": "..",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 8
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 276,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.3
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 13.3
+        },
+        {
+          "data": {
+            "filename": [
+              "..",
+              "scripts"
+            ],
+            "index": [
+              0,
+              9
+            ],
+            "listLength": [
+              1,
+              15
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 23.3
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 24.5
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 24.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 24.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 24.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 16.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 26.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 30.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 31.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 44.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 45.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 58.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 59
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 72.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 73.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 86.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 86.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 100.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 100.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 114.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 114.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 128,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 128.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 142,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 142.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 155.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 156.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 169.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 170.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 183.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 184
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 197.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 197.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 211.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 211.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 225.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 225.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 239.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 239.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 253.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 253.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 267,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 267.6
+        }
+      ],
+      "filename": "scripts",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 9
+    },
+    {
+      "actionId": "cmd-fit-height",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 278,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "fitMode": [
+              "width-if-larger",
+              "height"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 10.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 10.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 10.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 7.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 13.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 21.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 22.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 35.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 36
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 49.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 50
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 63.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 63.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 77.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 77.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 91.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 91.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 104.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 105.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 118.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 119.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 132.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 133.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 146.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 147
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 160.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 160.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 174.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 174.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 188.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 190.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 202.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 202.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 216,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 216.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 229.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 230.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 243.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 244.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 257.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 258.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 271.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 273.5
+        }
+      ],
+      "filename": "scripts",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 10
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 273,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 1.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 1.9
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT\\scripts",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 9.7
+        },
+        {
+          "data": {
+            "filename": [
+              "scripts",
+              ".."
+            ],
+            "index": [
+              9,
+              0
+            ],
+            "listLength": [
+              15,
+              1
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 15.2
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 16.3
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 16.3
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 16.3
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 16.3
+        }
+      ],
+      "filename": "..",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 11
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 270,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 14.8
+        },
+        {
+          "data": {
+            "filename": [
+              "..",
+              "scripts"
+            ],
+            "index": [
+              0,
+              9
+            ],
+            "listLength": [
+              1,
+              15
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 25.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 28
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 28
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 28
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 28
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 26.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 30.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 40.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 41.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 54.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 55
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 68.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 68.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 82.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 82.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 96.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 96.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 110.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 110.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 124,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 124.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 137.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 138.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 151.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 152.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 165.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 166.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 179.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 180.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 193.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 193.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 207.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 207.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 221.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 222
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 235.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 235.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 249.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 249.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 262.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 263.3
+        }
+      ],
+      "filename": "scripts",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 12
+    },
+    {
+      "actionId": "cmd-fit-height-if-larger",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 272,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 1.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 1.5
+        },
+        {
+          "data": {
+            "fitMode": [
+              "height",
+              "height-if-larger"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 8.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 8.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 8.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 15,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 17.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 28.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 29.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 42.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 43.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 56.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 57.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 70.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 71
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 84.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 84.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 98.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 99
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 112.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 113.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 126.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 126.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 140.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 140.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 153.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 154.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 167.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 168.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 181.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 182.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 195.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 196.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 209.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 209.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 223.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 224
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 237.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 238.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 251.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 251.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 265,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 266.8
+        }
+      ],
+      "filename": "scripts",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 13
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 273,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": -0.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 0.4
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT\\scripts",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 10.2
+        },
+        {
+          "data": {
+            "filename": [
+              "scripts",
+              ".."
+            ],
+            "index": [
+              9,
+              0
+            ],
+            "listLength": [
+              15,
+              1
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 17.2
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.5
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.5
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.5
+        }
+      ],
+      "filename": "..",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 14
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 263,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.1
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 7.4
+        },
+        {
+          "data": {
+            "filename": [
+              "..",
+              "scripts"
+            ],
+            "index": [
+              0,
+              9
+            ],
+            "listLength": [
+              1,
+              15
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 16.3
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.7
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.7
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 13.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 21.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 27.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 27.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 41.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 41.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 55.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 55.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 68.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 70
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 82.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 83.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 96.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 97.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 110.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 111.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 124.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 125.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 138.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 139.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 152.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 153.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 166.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 167.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 180.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 181
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 193.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 194.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 207.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 208.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 221.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 222.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 235.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 236.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 249.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 250.1
+        }
+      ],
+      "filename": "scripts",
+      "frameCount": 19,
+      "jankFrameCount": 0,
+      "stepIndex": 15
+    },
+    {
+      "actionId": "cmd-fit-best",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 283,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 4.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 5.5
+        },
+        {
+          "data": {
+            "fitMode": [
+              "height-if-larger",
+              "window"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 16.2
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 16.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 16.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 18,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 21
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 31.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 32.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 45.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 46.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 59.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 60.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 73.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 74.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 87.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 88.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 101.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 102
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 115.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 115.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 129.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 129.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 143.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 143.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 157,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 157.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 171,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 171.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 184.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 186.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 198.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 199.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 212.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 213
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 226.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 226.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 240.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 240.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 254.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 254.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 268,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 268.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 21,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 281.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 282.4
+        }
+      ],
+      "filename": "scripts",
+      "frameCount": 21,
+      "jankFrameCount": 0,
+      "stepIndex": 16
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 283,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 2.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 3.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 16.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 17.6
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT\\scripts",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 28.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 30.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 31.7
+        },
+        {
+          "data": {
+            "filename": [
+              "scripts",
+              ".."
+            ],
+            "index": [
+              9,
+              0
+            ],
+            "listLength": [
+              15,
+              1
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 40
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 43.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 43.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 43.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 43.7
+        }
+      ],
+      "filename": "..",
+      "frameCount": 21,
+      "jankFrameCount": 0,
+      "stepIndex": 17
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 275,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 7.8
+        },
+        {
+          "data": {
+            "filename": [
+              "..",
+              "scripts"
+            ],
+            "index": [
+              0,
+              9
+            ],
+            "listLength": [
+              1,
+              15
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 14.7
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 15.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 15.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 15.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 15.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 19.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 21.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 33.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 34.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 47.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 48.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 61.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 61.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 75.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 76
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 89.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 89.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 103.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 103.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 117.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 117.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 130.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 132.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 144.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 145.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 158.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 159.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 172.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 173
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 186.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 187.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 200.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 201.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 214.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 214.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 228.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 231.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 242.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 244.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 256,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 257
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 269.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 270.4
+        }
+      ],
+      "filename": "scripts",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 18
+    },
+    {
+      "actionId": "cmd-fit-window-if-larger",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 273,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 2.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 3.2
+        },
+        {
+          "data": {
+            "fitMode": [
+              "window",
+              "window-if-larger"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 9.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 9.2
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 9.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 16.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 18.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 30.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 30.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 44.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 44.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 58.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 58.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 72.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 72.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 85.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 86.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 99.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 100.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 113.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 114.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 127.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 128.3
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 141.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 142.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 155.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 156
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 169.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 170.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 183.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 183.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 197.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 197.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 211,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 211.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 224.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 225.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 238.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 239.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 252.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 253.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 266.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 267.1
+        }
+      ],
+      "filename": "scripts",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 19
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 271,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 1.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 1.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 15.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 16.6
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT\\scripts",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 17.9
+        },
+        {
+          "data": {
+            "filename": [
+              "scripts",
+              ".."
+            ],
+            "index": [
+              9,
+              0
+            ],
+            "listLength": [
+              15,
+              1
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 27
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 28.7
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 28.7
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 28.8
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 28.8
+        }
+      ],
+      "filename": "..",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 20
+    },
+    {
+      "actionId": "jump-to-index",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 272,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        },
+        {
+          "data": {
+            "debounceMs": 1500,
+            "immediate": false,
+            "lastActiveImage": null,
+            "lastOpenedPath": "D:\\Projects\\QuiviT",
+            "scrollZoomLatched": false
+          },
+          "event": "persist-config",
+          "source": "core",
+          "t": 8.2
+        },
+        {
+          "data": {
+            "filename": [
+              "..",
+              "scripts"
+            ],
+            "index": [
+              0,
+              9
+            ],
+            "listLength": [
+              1,
+              15
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 16.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 17.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 17.7
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 17.7
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 17.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 16.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 19.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 30.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 31.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 44.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 45.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 58.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 58.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 72.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 72.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 86.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 86.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 100.1,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 102.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 114,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 114.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 128,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 128.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 141.9,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 142.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 155.7,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 156.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 13,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 169.6,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 170
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 14,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 183.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 184
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 15,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 197.4,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 197.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 16,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 211.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 211.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 17,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 225.2,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 225.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 18,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 239,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 239.7
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 19,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 253,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 253.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 20,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 266.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 267.3
+        }
+      ],
+      "filename": "scripts",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 21
+    }
+  ]
+}

@@ -16,6 +16,17 @@ export const fixtures = {
   testBmp: path.resolve(testFilesRoot, 'BDレーベル.bmp'),
   testSvg: path.resolve(testFilesRoot, 'gfl-spinner.svg'),
   testIco: path.resolve(testFilesRoot, 'manhwa/single-ico/endfield.ico'),
+  testTiff: path.resolve(testFilesRoot, '50-51.tif'),
+
+  // Animated & still fixtures
+  animatedApng: path.resolve(testFilesRoot, 'animated/export_1785518835803.apng'),
+  animatedAvif: path.resolve(testFilesRoot, 'animated/export_1788174887667.avif'),
+  animatedWebp: path.resolve(testFilesRoot, 'animated/export_1785518859589.webp'),
+  animatedGif: path.resolve(testFilesRoot, 'animated/pixiv_final-gif.gif'),
+  stillApng: path.resolve(testFilesRoot, 'animated/still_single_frame.apng'),
+  stillAvif: path.resolve(testFilesRoot, 'animated/still_single_frame.avif'),
+  stillWebp: path.resolve(testFilesRoot, 'animated/still_single_frame.webp'),
+  stillGif: path.resolve(testFilesRoot, 'animated/single-frame.gif'),
 
   // Base archives
   zip: path.resolve(archivesDir, 'zip.zip'),

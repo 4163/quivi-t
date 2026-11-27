@@ -386,3 +386,7 @@ pub fn get_cached_native_icon_png_with_size(
         Ok(Some(png_bytes))
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/icons_tests.rs"]
+mod tests;

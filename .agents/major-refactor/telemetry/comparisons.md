@@ -1,7 +1,7 @@
 # Telemetry comparisons
 
 Branch: `refactor/decoupling-and-perf`
-Status: U01 Telemetry B complete (`[-]`, awaiting Commit gate B). Units `U02` through `U11` await Telemetry A.
+Status: U01 Telemetry B complete (`[-]`); U02 Telemetry A complete (`[-]`, awaiting Commit gate A). Units `U03` through `U11` await Telemetry A.
 
 This ledger tracks pre-refactor (Telemetry A) and post-refactor (Telemetry B) measurements for every execution unit in [roadmap.md](../roadmap.md). No unit moves past Telemetry B until baseline and post JSON files exist on disk, every parity gate passes, and every measured delta meets or beats its target with zero regressions.
 
@@ -34,7 +34,7 @@ Commit gate rule per unit:
 | Unit | Slug | Stage 3 split | Findings | Depends on | Parallel with | Status |
 |---|---|---|---|---|---|---|
 | `U01` | `be-core-windows-config` | S08 | `S08-01` to `S08-21` | None | None | Telemetry B `[-]` |
-| `U02` | `be-media-archives-protocol` | S09 | `S09-01` to `S09-10` | `U01` | None | Pending |
+| `U02` | `be-media-archives-protocol` | S09 | `S09-01` to `S09-10` | `U01` | None | Telemetry A `[-]` |
 | `U03` | `be-fs-library-network-drop` | S10 | `S10-01` to `S10-14` | `U01`, `U02` | None | Pending |
 | `U04` | `be-previews-registry` | S11 | `S11-01` to `S11-10` | `U02`, `U03` | `U05` | Pending |
 | `U05` | `fe-core-fs-workspace` | S01 | `S01-01` to `S01-19` | `U01`, `U03` | `U04` | Pending |
@@ -56,7 +56,7 @@ All nine modules flagged with zero unit test coverage in Stage 1 close during Te
 | `src/js/filepanel/libraryStore.js` and `favoritesStore.js` | `U08` | `mocha/libraryStore.test.js`, `mocha/favoritesStore.test.js`, `mocha/filePanelMath.test.js` plus `05-persistence` and `08-url-loader` E2E | Pending |
 | `src-tauri/src/windows.rs` | `U01` | `src-tauri/src/tests/windows_tests.rs` via `#[path]` plus `01-startup`, `06-configuration`, `07-os-integration` E2E | Telemetry B `[-]` |
 | `src-tauri/src/commands/watchers.rs` | `U01` | `src-tauri/src/tests/watchers_tests.rs` via `#[path]` plus coalesced `directory-changed` E2E | Telemetry B `[-]` |
-| `src-tauri/src/commands/animation.rs` | `U02` | `src-tauri/src/tests/animation_tests.rs` via `#[path]` plus `03-viewer`, `04-archives` E2E and `diagnose -- manhwa-width-span` | Pending |
+| `src-tauri/src/commands/animation.rs` | `U02` | `src-tauri/src/tests/animation_tests.rs` via `#[path]` plus `03-viewer`, `04-archives` E2E and `diagnose -- manhwa-width-span` | Telemetry A `[-]` |
 | `src-tauri/src/image_import.rs` | `U03` | `src-tauri/src/tests/image_import_tests.rs` via `#[path]` plus `07-os-integration` E2E | Pending |
 | `src-tauri/src/commands/drop.rs` and `platform/drop.rs` | `U03` | `src-tauri/src/tests/drop_tests.rs` via `#[path]` plus `07-os-integration` E2E | Pending |
 | `src-tauri/src/commands/registry.rs` | `U04` | `src-tauri/src/tests/registry_tests.rs` via `#[path]` (0 HKCU writes), `mocha/previewPlayer.test.js`, plus `06-configuration` and `07-os-integration` E2E | Pending |
@@ -160,15 +160,15 @@ Depends on: `U01`. Parallel with: None.
 
 | Metric or invariant | Baseline (Telemetry A) | Post (Telemetry B) | Pass criterion | Verdict |
 |---|---|---|---|---|
-| Cargo tests (`archives`, `formats`, `ico`, `protocol`, `animation`, `icons`, `thumbnails`) | Pending | Pending | 100% pass; `archive_tests` and `format_tests` mounted in `archives/mod.rs` and `formats/mod.rs` | Pending |
-| `ArchiveCache` write-lock stall during RAR/7z `check_is_animated` or ZIP prefetch | Blocks concurrent `/archive/` | Pending | 0 blocking waits on concurrent `read_plain_zip_entry_shared` / `/archive/` calls | Pending |
-| Unlocked ZIP CJK entry lookup and EOCD scan | O(N) `chardetng` scan + 128 KiB tail scan per miss | Pending | O(1) `Arc<HashMap>` `zip_index_map` hit; 4 KiB fast tail scan | Pending |
-| `list_tar_entries` on `test-files/_archives/tar.tar` (92 MB) | Full sequential read (Pending ms) | Pending | Seek-based O(entries) listing; measurable latency drop with 1:1 entry parity | Pending |
-| MP4 `moov` `size32 == 0` buffer allocation and chunked `ZipFile` read | 10 MiB upfront zero-alloc + short-read truncation | Pending | 0 upfront 10 MiB alloc (`min(64 KiB)` growth); full chunked stream read | Pending |
-| `protocol.rs` route collisions (`/archive/.../{icon,thumb,tiff}/...`) | HTTP 400 mismatch | Pending | Prefix-routed to `/archive/`; cached `/icon/` skips `spawn_blocking` | Pending |
-| `thumbnails.rs` non-matte disk reads and `NATIVE_ICON_CACHE` bound | Unconditional `source_has_transparency` open; unbounded `HashMap` | Pending | 0 disk opens when opaque/non-matte; `MAX_NATIVE_ICON_CACHE_ENTRIES` enforced; fast PNG encode | Pending |
-| Replay `ipcProtocolProbe` p95 `/archive/` and `check_is_animated` latency (`manhwa-buffer`, `manhwa-width-span`) | Pending | Pending | Lower p95 under concurrent prefetch; 0 protocol/IPC errors; 0 blackout frames | Pending |
-| Dead IPC `drop_all_archives_cache` removal and facade check | Present; `pub(crate) mod cache` | Pending | Removed from `commands/archives.rs` and `lib.rs`; `mod cache` private; all 13 active S09 IPCs intact | Pending |
+| Cargo tests (`archives`, `formats`, `ico`, `protocol`, `animation`, `icons`, `thumbnails`) | 182/182 passed (`archive_tests` 20, `format_tests` 22, `ico` 5, `protocol` 15, `animation` 5, `icons` 3, `thumbnails` 7; `archive_tests` and `format_tests` mounted in `lib.rs`) | Pending | 100% pass; `archive_tests` and `format_tests` mounted in `archives/mod.rs` and `formats/mod.rs` | Pending |
+| `ArchiveCache` write-lock stall during RAR/7z `check_is_animated` or ZIP prefetch | Blocks concurrent `/archive/` (`state.write()` held across `read_entry_header`, `prefetch_archive_entries`, `list_archive`) | Pending | 0 blocking waits on concurrent `read_plain_zip_entry_shared` / `/archive/` calls | Pending |
+| Unlocked ZIP CJK entry lookup and EOCD scan | O(N) `chardetng` scan + 128 KiB tail scan per miss (`zip_index_map` not forwarded) | Pending | O(1) `Arc<HashMap>` `zip_index_map` hit; 4 KiB fast tail scan | Pending |
+| `list_tar_entries` on `test-files/_archives/tar.tar` (92 MB) | Full sequential read (`list_archive_names_and_tar_parity` 140ms) | Pending | Seek-based O(entries) listing; measurable latency drop with 1:1 entry parity | Pending |
+| MP4 `moov` `size32 == 0` buffer allocation and chunked `ZipFile` read | 10 MiB upfront zero-alloc + single `read()` short-read truncation | Pending | 0 upfront 10 MiB alloc (`min(64 KiB)` growth); full chunked stream read | Pending |
+| `protocol.rs` route collisions (`/archive/.../{icon,thumb,tiff}/...`) | Substring `url.contains("/icon/")` dispatch; `parse_archive_url` subpath tests pass; `/icon/` always calls `spawn_blocking` | Pending | Prefix-routed to `/archive/`; cached `/icon/` skips `spawn_blocking` | Pending |
+| `thumbnails.rs` non-matte disk reads and `NATIVE_ICON_CACHE` bound | Unconditional `source_has_transparency` open; unbounded `HashMap` (`icons` 3, `thumbnails` 7 passing) | Pending | 0 disk opens when opaque/non-matte; `MAX_NATIVE_ICON_CACHE_ENTRIES` enforced; fast PNG encode | Pending |
+| Replay `ipcProtocolProbe` and E2E parity (`manhwa-width-span`, `manhwa-buffer`, `manhwa-directory-entry-fits`, `manhwa-gif-bridge`, `manhwa-video-bridge`) | 0 blackouts, 0 anomalies across all 5 scenarios (`manhwa-gif-bridge` asset fetch 8.4ms); E2E `03-viewer` 9/9, `04-archives` 7/7, `07-os-integration` 4/4 | Pending | Lower p95 under concurrent prefetch; 0 protocol/IPC errors; 0 blackout frames | Pending |
+| Dead IPC `drop_all_archives_cache` removal and facade check | Present; `pub(crate) mod cache`; Mocha 308/308 passed (`diagnosticsContract.test.js` green) | Pending | Removed from `commands/archives.rs` and `lib.rs`; `mod cache` private; all 13 active S09 IPCs intact | Pending |
 
 ---
 

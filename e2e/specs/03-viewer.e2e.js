@@ -282,5 +282,59 @@ describe('03 - Viewport & Viewer Controls', () => {
       { timeout: 5000, timeoutMsg: 'Bridge layer did not retire elements after legacy restore' }
     );
   });
+
+  it('opens and renders a TIFF image via protocol transcoding', async () => {
+    await browser.execute((filePath) => {
+      window.__TAURI__.event.emit('single-instance-open', filePath);
+    }, fixtures.testTiff);
+
+    await browser.waitUntil(
+      async () => !(await viewerPage.isDropOverlayVisible()) &&
+        (await statusbarPage.getFilenameText()).includes('50-51.tif'),
+      { timeout: 10000, timeoutMsg: 'TIFF image failed to open in viewer' }
+    );
+
+    await browser.waitUntil(
+      async () => {
+        return await browser.execute(() => {
+          const img = document.querySelector('.viewer-img.active');
+          return Boolean(img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0);
+        });
+      },
+      { timeout: 10000, timeoutMsg: 'Active viewer image did not finish loading TIFF' }
+    );
+  });
+
+  it('detects animated vs still formats via check_is_animated and opens an APNG', async () => {
+    const cases = [
+      { path: fixtures.animatedApng, expected: true },
+      { path: fixtures.animatedAvif, expected: true },
+      { path: fixtures.animatedWebp, expected: true },
+      { path: fixtures.animatedGif, expected: true },
+      { path: fixtures.stillApng, expected: false },
+      { path: fixtures.stillAvif, expected: false },
+      { path: fixtures.stillWebp, expected: false },
+      { path: fixtures.stillGif, expected: false },
+    ];
+
+    for (const { path: filePath, expected } of cases) {
+      const info = await browser.execute(async (target) => {
+        return await window.__TAURI__.core.invoke('check_is_animated', {
+          path: target,
+          archivePath: null,
+        });
+      }, filePath);
+      expect(info.is_animated).toBe(expected);
+    }
+
+    await browser.execute((filePath) => {
+      window.__TAURI__.event.emit('single-instance-open', filePath);
+    }, fixtures.animatedApng);
+
+    await browser.waitUntil(
+      async () => (await statusbarPage.getFilenameText()).includes('export_1785518835803.apng'),
+      { timeout: 8000, timeoutMsg: 'APNG fixture failed to load into viewer' }
+    );
+  });
 });
 

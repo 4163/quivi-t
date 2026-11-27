@@ -552,3 +552,7 @@ fn scan_temp_archive_dimensions(archive_path: &str, app: &tauri::AppHandle, gen:
     }
     emit_dims_batch(app, archive_path, batch, true, gen);
 }
+
+#[cfg(test)]
+#[path = "../tests/animation_tests.rs"]
+mod tests;

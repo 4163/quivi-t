@@ -53,6 +53,12 @@ fn parse_icon_url_decodes_path_and_extension_key() {
     assert_eq!(p2, path);
     assert_eq!(e2, ext_key);
     assert_eq!(s2, crate::platform::icons::IconSize::Large);
+
+    let url_32 = format!("http://quivit.localhost/icon/{encoded_path}/{encoded_ext}?size=32");
+    let (p3, e3, s3) = parse_icon_url(&url_32).expect("parse 32px icon URL");
+    assert_eq!(p3, path);
+    assert_eq!(e3, ext_key);
+    assert_eq!(s3, crate::platform::icons::IconSize::Large);
 }
 
 #[test]
@@ -167,4 +173,20 @@ fn archive_entry_response_transcodes_tiff_to_png() {
     assert_eq!(response.headers()["Content-Type"], "image/png");
     assert_eq!(response.headers()["Cache-Control"], "no-store");
     assert!(response.body().starts_with(b"\x89PNG\r\n\x1a\n"));
+
+    let bad_tiff = archive_entry_response("corrupt.tif", b"not-a-tiff", None);
+    assert_eq!(bad_tiff.status(), 422);
+}
+
+#[test]
+fn parse_archive_url_preserves_route_like_entry_subpaths() {
+    let archive_path = "E:\\Comics\\Pack.cbz";
+    let encoded_path = crate::utils::base64_encode(archive_path.as_bytes());
+
+    for subpath in ["icon/1.png", "thumb/1.png", "tiff/1.png"] {
+        let url = format!("http://quivit.localhost/archive/{encoded_path}/{subpath}");
+        let (parsed_path, entry_name) = parse_archive_url(&url).expect("parse archive subpath URL");
+        assert_eq!(parsed_path, archive_path);
+        assert_eq!(entry_name, subpath);
+    }
 }

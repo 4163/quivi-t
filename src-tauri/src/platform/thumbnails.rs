@@ -474,3 +474,7 @@ fn tiff_has_alpha(hdr: &[u8]) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+#[path = "../tests/thumbnails_tests.rs"]
+mod tests;
