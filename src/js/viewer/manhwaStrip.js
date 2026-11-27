@@ -2148,6 +2148,21 @@ function _applyFitMode(mode, targetImgIdx = null, alignTop = false, entry = fals
   }
 }
 
+function _selectShortColumnAnchor(mapped) {
+  _viewportProgram++;
+  try {
+    _anchorHoldover = null;
+    _anchorImgIdx = mapped;
+    _syncAnchorToCore();
+    if (_widthGateKey === null) {
+      _updateWindow();
+      _scheduleSettle();
+    }
+  } finally {
+    _viewportProgram--;
+  }
+}
+
 export function alignListItemTop(listIndex) {
   if (!_active || !_viewportState) return false;
   const mapped = _listToImgIdx.get(listIndex);
@@ -2156,9 +2171,7 @@ export function alignListItemTop(listIndex) {
   const vh = _viewport?.clientHeight || 800;
   const colH = (_layout.totalHeight || 0) * scale;
   if (colH <= vh + 0.5) {
-    _anchorHoldover = null;
-    _anchorImgIdx = mapped;
-    _syncAnchorToCore();
+    _selectShortColumnAnchor(mapped);
     return true;
   }
   _viewportProgram++;
@@ -2189,9 +2202,7 @@ export function alignListItemBottom(listIndex) {
   const vh = _viewport?.clientHeight || 800;
   const colH = (_layout.totalHeight || 0) * scale;
   if (colH <= vh + 0.5) {
-    _anchorHoldover = null;
-    _anchorImgIdx = mapped;
-    _syncAnchorToCore();
+    _selectShortColumnAnchor(mapped);
     return true;
   }
   _viewportProgram++;
@@ -2222,8 +2233,7 @@ export function centerListItem(listIndex) {
   const vh = _viewport?.clientHeight || 800;
   const colH = (_layout.totalHeight || 0) * scale;
   if (colH <= vh + 0.5) {
-    _anchorImgIdx = mapped;
-    _syncAnchorToCore();
+    _selectShortColumnAnchor(mapped);
     return true;
   }
   _viewportProgram++;
@@ -2863,9 +2873,7 @@ function _onStateChange(state) {
           alignListItemTop(state.index);
         }
       } else {
-        _anchorHoldover = null;
-        _anchorImgIdx = mapped;
-        _syncAnchorToCore();
+        _selectShortColumnAnchor(mapped);
       }
       _resumeMountedVideos();
     } else if (mapped === undefined) {

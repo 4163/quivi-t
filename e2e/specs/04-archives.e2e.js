@@ -185,6 +185,126 @@ describe('04 - Archive Formats & Security', () => {
     expect(count).toBeGreaterThan(0);
   });
 
+  it('renders short-column encrypted archives in manhwa mode when selecting an image', async () => {
+    const toggleManhwa = async () => {
+      await browser.execute(() => {
+        document.getElementById('cmd-toggle-manhwa')?.click();
+      });
+    };
+
+    const waitForManhwaImage = async (label) => {
+      await browser.waitUntil(
+        async () => !(await viewerPage.isDropOverlayVisible()),
+        { timeout: 8000, timeoutMsg: `Drop overlay did not dismiss for ${label}` }
+      );
+      await browser.waitUntil(
+        async () => {
+          return await browser.execute(() => {
+            const img = document.querySelector('#manhwa-strip .manhwa-slot img');
+            return Boolean(img && img.complete && img.naturalWidth > 0);
+          });
+        },
+        { timeout: 8000, timeoutMsg: `Manhwa slot image did not render for ${label}` }
+      );
+    };
+
+    try {
+      if (!(await viewerPage.isManhwaActive())) {
+        await toggleManhwa();
+        await browser.waitUntil(
+          async () => await viewerPage.isManhwaActive(),
+          { timeout: 5000, timeoutMsg: 'Viewport did not gain manhwa-active class' }
+        );
+      }
+
+      // Locked encrypted RAR: unlock via modal, then select image in short-column strip
+      await browser.execute((archivePath) => {
+        window.__TAURI__.event.emit('single-instance-open', archivePath);
+      }, fixtures.encryptedRar);
+
+      await browser.waitUntil(
+        async () => await passwordModalPage.isVisible(),
+        { timeout: 8000, timeoutMsg: 'Password modal did not appear for encrypted RAR' }
+      );
+      await passwordModalPage.unlockWith('123');
+      await browser.waitUntil(
+        async () => !(await passwordModalPage.isVisible()),
+        { timeout: 8000, timeoutMsg: 'Password modal did not dismiss for encrypted RAR' }
+      );
+
+      await browser.waitUntil(
+        async () => {
+          const text = await filepanelPage.breadcrumb.getText();
+          return text.toLowerCase().includes('encrypted-123.rar') && (await filepanelPage.getItemCount()) > 1;
+        },
+        { timeout: 10000, timeoutMsg: 'Encrypted RAR failed to load in manhwa mode' }
+      );
+
+      await filepanelPage.selectItemByIndex(1);
+      await waitForManhwaImage('encrypted-123.rar');
+
+      // Already-unlocked encrypted ZIP: reopen in manhwa mode and select image.
+      // If run in isolation (without the prior test having unlocked encryptedZip),
+      // unlock it first, switch away, and reopen to exercise the cached-password path.
+      const openArchive = async (archivePath) => {
+        await browser.execute((path) => {
+          window.__TAURI__.event.emit('single-instance-open', path);
+        }, archivePath);
+      };
+
+      const waitForArchiveLoaded = async (nameFragment, label, minCount = 2) => {
+        await browser.waitUntil(
+          async () => {
+            const text = await filepanelPage.breadcrumb.getText();
+            return text.toLowerCase().includes(nameFragment) && (await filepanelPage.getItemCount()) >= minCount;
+          },
+          { timeout: 10000, timeoutMsg: `${label} failed to load in manhwa mode` }
+        );
+      };
+
+      await openArchive(fixtures.encryptedZip);
+
+      let promptedForZip = false;
+      await browser.waitUntil(
+        async () => {
+          if (await passwordModalPage.isVisible()) {
+            promptedForZip = true;
+            return true;
+          }
+          const text = await filepanelPage.breadcrumb.getText();
+          return text.toLowerCase().includes('encrypted-123.zip') && (await filepanelPage.getItemCount()) > 1;
+        },
+        { timeout: 10000, timeoutMsg: 'Encrypted ZIP neither prompted for password nor loaded in manhwa mode' }
+      );
+
+      if (promptedForZip) {
+        await passwordModalPage.unlockWith('123');
+        await browser.waitUntil(
+          async () => !(await passwordModalPage.isVisible()),
+          { timeout: 8000, timeoutMsg: 'Password modal did not dismiss for encrypted ZIP' }
+        );
+        await waitForArchiveLoaded('encrypted-123.zip', 'Encrypted ZIP');
+
+        await openArchive(fixtures.cbz);
+        await waitForArchiveLoaded('cbz.cbz', 'CBZ', 1);
+
+        await openArchive(fixtures.encryptedZip);
+        await waitForArchiveLoaded('encrypted-123.zip', 'Encrypted ZIP');
+      }
+
+      await filepanelPage.selectItemByIndex(1);
+      await waitForManhwaImage('encrypted-123.zip');
+    } finally {
+      if (await viewerPage.isManhwaActive()) {
+        await toggleManhwa();
+        await browser.waitUntil(
+          async () => !(await viewerPage.isManhwaActive()),
+          { timeout: 5000, timeoutMsg: 'Viewport did not lose manhwa-active class' }
+        );
+      }
+    }
+  });
+
   it('completes scan_container_max_width and scan_container_dimensions on a CBZ archive', async () => {
     const widthResult = await browser.executeAsync((archivePath, done) => {
       let unlisten = null;
