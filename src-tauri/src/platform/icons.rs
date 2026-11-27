@@ -1,6 +1,6 @@
 #[cfg(windows)]
 use super::gdi::{
-    self, ScopedComInit, ScopedHgdiobj, ScopedMemDc, ScopedScreenDc,
+    self, ComInitError, ScopedComInit, ScopedHgdiobj, ScopedMemDc, ScopedScreenDc,
 };
 #[cfg(windows)]
 use std::collections::{HashMap, VecDeque};
@@ -12,13 +12,16 @@ use std::os::windows::ffi::OsStrExt;
 use std::sync::{Arc, Mutex};
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, GetDC, GetObjectW, SelectObject, BITMAP, DIB_RGB_COLORS,
+    CreateCompatibleDC, CreateDIBSection, GdiFlush, GetDC, GetObjectW, SelectObject, BITMAP,
+    DIB_RGB_COLORS,
 };
 #[cfg(windows)]
-use windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL};
+use windows::Win32::Storage::FileSystem::{
+    FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL, FILE_FLAGS_AND_ATTRIBUTES,
+};
 #[cfg(windows)]
 use windows::Win32::UI::Shell::{
-    SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_SMALLICON,
+    SHGetFileInfoW, SHFILEINFOW, SHGFI_FLAGS, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_SMALLICON,
     SHGFI_USEFILEATTRIBUTES,
 };
 #[cfg(windows)]
@@ -82,12 +85,17 @@ impl NativeIconCache {
 static NATIVE_ICON_CACHE: Mutex<Option<NativeIconCache>> = Mutex::new(None);
 
 #[cfg(windows)]
-fn icon_cache_key(ext_key: &str, size: IconSize) -> String {
-    let lower_ext = ext_key.to_ascii_lowercase();
+fn icon_cache_key_from_lower(lower_ext: &str, size: IconSize) -> String {
     match size {
-        IconSize::Small => lower_ext,
+        IconSize::Small => lower_ext.to_string(),
         IconSize::Large => format!("large:{}", lower_ext),
     }
+}
+
+#[cfg(windows)]
+fn icon_cache_key(ext_key: &str, size: IconSize) -> String {
+    let lower_ext = ext_key.to_ascii_lowercase();
+    icon_cache_key_from_lower(&lower_ext, size)
 }
 
 /// Drops the process-local shell icon cache after Windows changes a file association.
@@ -195,6 +203,161 @@ pub fn try_get_cached_native_icon_png_with_size(
     }
 }
 
+#[cfg(windows)]
+fn fetch_real_path_icon_png_sta(
+    query_name: Vec<u16>,
+    attrs: FILE_FLAGS_AND_ATTRIBUTES,
+    flags: SHGFI_FLAGS,
+) -> Result<Option<Vec<u8>>, String> {
+    match ScopedComInit::init_sta() {
+        Ok(_com) => fetch_icon_png(&query_name, attrs, flags),
+        Err(ComInitError::ChangedMode) => {
+            let handle = std::thread::Builder::new()
+                .name("shell-icon-sta".to_string())
+                .spawn(move || {
+                    let _com = ScopedComInit::init_sta().map_err(|e| e.to_string())?;
+                    fetch_icon_png(&query_name, attrs, flags)
+                })
+                .map_err(|e| format!("Failed to spawn STA icon thread: {e}"))?;
+            handle
+                .join()
+                .map_err(|_| "STA icon thread panicked".to_string())?
+        }
+        Err(err) => Err(err.to_string()),
+    }
+}
+
+#[cfg(windows)]
+fn fetch_icon_png(
+    query_name: &[u16],
+    attrs: FILE_FLAGS_AND_ATTRIBUTES,
+    flags: SHGFI_FLAGS,
+) -> Result<Option<Vec<u8>>, String> {
+    let mut shfi = SHFILEINFOW::default();
+    let res = unsafe {
+        SHGetFileInfoW(
+            windows::core::PCWSTR(query_name.as_ptr()),
+            attrs,
+            Some(&mut shfi),
+            std::mem::size_of::<SHFILEINFOW>() as u32,
+            flags,
+        )
+    };
+
+    if res == 0 || shfi.hIcon.is_invalid() {
+        return Ok(None);
+    }
+
+    let hicon = ScopedHicon(shfi.hIcon);
+
+    let mut icon_info = windows::Win32::UI::WindowsAndMessaging::ICONINFO::default();
+    if unsafe { GetIconInfo(hicon.0, &mut icon_info).is_err() } {
+        return Ok(None);
+    }
+
+    let _hbm_color = ScopedHgdiobj(icon_info.hbmColor.into());
+    let _hbm_mask = ScopedHgdiobj(icon_info.hbmMask.into());
+
+    // Monochrome icons have no hbmColor; hbmMask packs color and transparency (double height).
+    let (bmp_width, bmp_height) = if icon_info.hbmColor.is_invalid() {
+        if icon_info.hbmMask.is_invalid() {
+            return Ok(None);
+        }
+        let mut bmp = BITMAP::default();
+        let got = unsafe {
+            GetObjectW(
+                icon_info.hbmMask.into(),
+                std::mem::size_of::<BITMAP>() as i32,
+                Some(&mut bmp as *mut _ as *mut std::ffi::c_void),
+            )
+        };
+        if got == 0 {
+            return Ok(None);
+        }
+        (bmp.bmWidth, bmp.bmHeight / 2)
+    } else {
+        let mut bmp = BITMAP::default();
+        let got = unsafe {
+            GetObjectW(
+                icon_info.hbmColor.into(),
+                std::mem::size_of::<BITMAP>() as i32,
+                Some(&mut bmp as *mut _ as *mut std::ffi::c_void),
+            )
+        };
+        if got == 0 {
+            return Ok(None);
+        }
+        (bmp.bmWidth, bmp.bmHeight)
+    };
+
+    if bmp_width <= 0 || bmp_height <= 0 {
+        return Ok(None);
+    }
+    let (Ok(width), Ok(height)) = (u32::try_from(bmp_width), u32::try_from(bmp_height)) else {
+        return Ok(None);
+    };
+
+    let hdc_screen = ScopedScreenDc(unsafe { GetDC(None) });
+    let hdc_mem = ScopedMemDc(unsafe { CreateCompatibleDC(Some(hdc_screen.0)) });
+    let bmi = gdi::top_down_bgra_bitmap_info(width, height);
+    let mut bits_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+
+    let hbm_dib = unsafe {
+        CreateDIBSection(
+            Some(hdc_mem.0),
+            &bmi,
+            DIB_RGB_COLORS,
+            &mut bits_ptr,
+            None,
+            0,
+        )
+    };
+
+    let pixels = match hbm_dib {
+        Ok(h) if !h.is_invalid() => {
+            let _hbm_dib_guard = ScopedHgdiobj(h.into());
+            let old_bmp = unsafe { SelectObject(hdc_mem.0, h.into()) };
+
+            let draw_ok = unsafe {
+                DrawIconEx(
+                    hdc_mem.0,
+                    0,
+                    0,
+                    hicon.0,
+                    width as i32,
+                    height as i32,
+                    0,
+                    None,
+                    DI_NORMAL,
+                )
+                .is_ok()
+            };
+
+            let rgba = if draw_ok {
+                unsafe {
+                    let _ = GdiFlush();
+                    gdi::copy_bgra_to_rgba(bits_ptr as *const u8, width, height)
+                }
+            } else {
+                None
+            };
+
+            unsafe {
+                SelectObject(hdc_mem.0, old_bmp);
+            }
+
+            match rgba {
+                Some(rgba) => rgba,
+                None => return Ok(None),
+            }
+        }
+        _ => return Ok(None),
+    };
+
+    let png_bytes = gdi::encode_rgba_png_fast(&pixels, width, height)?;
+    Ok(Some(png_bytes))
+}
+
 pub fn get_cached_native_icon_png_with_size(
     path: &str,
     ext_key: &str,
@@ -206,10 +369,7 @@ pub fn get_cached_native_icon_png_with_size(
     #[cfg(windows)]
     {
         let lower_ext = ext_key.to_ascii_lowercase();
-        let cache_key = match size {
-            IconSize::Small => lower_ext.clone(),
-            IconSize::Large => format!("large:{}", lower_ext),
-        };
+        let cache_key = icon_cache_key_from_lower(&lower_ext, size);
 
         let cached = {
             let mut cache_guard = NATIVE_ICON_CACHE.lock().map_err(|e| e.to_string())?;
@@ -230,12 +390,6 @@ pub fn get_cached_native_icon_png_with_size(
         let is_real_path =
             lower_ext.contains('\\') || lower_ext.contains('/') || lower_ext.contains(':');
         let is_generic_folder = lower_ext == "__folder__";
-
-        let _com = if is_real_path {
-            Some(ScopedComInit::init()?)
-        } else {
-            None
-        };
 
         let size_flag = match size {
             IconSize::Small => SHGFI_SMALLICON,
@@ -271,111 +425,14 @@ pub fn get_cached_native_icon_png_with_size(
             )
         };
 
-        let mut shfi = SHFILEINFOW::default();
-        let res = unsafe {
-            SHGetFileInfoW(
-                windows::core::PCWSTR(query_name.as_ptr()),
-                attrs,
-                Some(&mut shfi),
-                std::mem::size_of::<SHFILEINFOW>() as u32,
-                flags,
-            )
-        };
-
-        if res == 0 || shfi.hIcon.is_invalid() {
-            return Ok(None);
-        }
-
-        let hicon = ScopedHicon(shfi.hIcon);
-
-        let mut icon_info = windows::Win32::UI::WindowsAndMessaging::ICONINFO::default();
-        if unsafe { GetIconInfo(hicon.0, &mut icon_info).is_err() } {
-            return Ok(None);
-        }
-
-        let _hbm_color = ScopedHgdiobj(icon_info.hbmColor.into());
-        let _hbm_mask = ScopedHgdiobj(icon_info.hbmMask.into());
-
-        let mut width: u32 = 0;
-        let mut height: u32 = 0;
-
-        // Monochrome icons don't have an hbmColor, they use hbmMask for both color and transparency (double height).
-        if icon_info.hbmColor.is_invalid() {
-            if !icon_info.hbmMask.is_invalid() {
-                let mut bmp = BITMAP::default();
-                unsafe {
-                    GetObjectW(
-                        icon_info.hbmMask.into(),
-                        std::mem::size_of::<BITMAP>() as i32,
-                        Some(&mut bmp as *mut _ as *mut std::ffi::c_void),
-                    );
-                }
-                width = bmp.bmWidth as u32;
-                height = (bmp.bmHeight / 2) as u32;
-            }
+        let Some(png_bytes) = (if is_real_path {
+            fetch_real_path_icon_png_sta(query_name, attrs, flags)?
         } else {
-            let mut bmp = BITMAP::default();
-            unsafe {
-                GetObjectW(
-                    icon_info.hbmColor.into(),
-                    std::mem::size_of::<BITMAP>() as i32,
-                    Some(&mut bmp as *mut _ as *mut std::ffi::c_void),
-                );
-            }
-            width = bmp.bmWidth as u32;
-            height = bmp.bmHeight as u32;
-        }
-
-        if width == 0 || height == 0 {
+            fetch_icon_png(&query_name, attrs, flags)?
+        }) else {
             return Ok(None);
-        }
-
-        let hdc_screen = ScopedScreenDc(unsafe { GetDC(None) });
-        let hdc_mem = ScopedMemDc(unsafe { CreateCompatibleDC(Some(hdc_screen.0)) });
-        let bmi = gdi::top_down_bgra_bitmap_info(width, height);
-        let mut bits_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
-
-        let hbm_dib = unsafe {
-            CreateDIBSection(
-                Some(hdc_mem.0),
-                &bmi,
-                DIB_RGB_COLORS,
-                &mut bits_ptr,
-                None,
-                0,
-            )
         };
 
-        let pixels = match hbm_dib {
-            Ok(h) if !h.is_invalid() => {
-                let _hbm_dib_guard = ScopedHgdiobj(h.into());
-                let old_bmp = unsafe { SelectObject(hdc_mem.0, h.into()) };
-
-                unsafe {
-                    let _ = DrawIconEx(
-                        hdc_mem.0,
-                        0,
-                        0,
-                        hicon.0,
-                        width as i32,
-                        height as i32,
-                        0,
-                        None,
-                        DI_NORMAL,
-                    );
-                }
-
-                let rgba = unsafe { gdi::copy_bgra_to_rgba(bits_ptr as *const u8, width, height) };
-
-                unsafe {
-                    SelectObject(hdc_mem.0, old_bmp);
-                }
-                rgba
-            }
-            _ => return Ok(None),
-        };
-
-        let png_bytes = gdi::encode_rgba_png_fast(&pixels, width, height)?;
         let shared: Arc<[u8]> = Arc::from(png_bytes.as_slice());
 
         {

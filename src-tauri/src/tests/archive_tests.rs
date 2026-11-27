@@ -180,6 +180,14 @@ fn archive_cache_max_open_archives_one_evicts_previous() {
     assert!(!cache.contains_archive("first.cbz"));
     assert!(cache.contains_archive("second.cbz"));
     assert_eq!(cache.current_zip_bytes(), 0);
+
+    // Overwriting an existing archive key subtracts its cached ZIP bytes and bumps generation.
+    let gen_before = cache.archive_generation("second.cbz").expect("initial gen");
+    cache.insert_zip_entry("second.cbz", "p1", vec![2u8; 768]);
+    assert_eq!(cache.current_zip_bytes(), 768);
+    cache.register_test_archive("second.cbz");
+    assert_eq!(cache.current_zip_bytes(), 0);
+    assert_ne!(cache.archive_generation("second.cbz"), Some(gen_before));
 }
 
 // CJK encoding regression tests

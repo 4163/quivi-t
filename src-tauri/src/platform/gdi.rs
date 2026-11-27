@@ -39,27 +39,40 @@ impl Drop for ScopedScreenDc {
     }
 }
 
-/// STA COM lifetime guard. Calls `CoUninitialize` only when this guard
-/// performed the initial `S_OK` initialization; `S_FALSE` and
-/// `RPC_E_CHANGED_MODE` (already initialized on an MTA thread) succeed without
-/// uninitializing on drop.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComInitError {
+    ChangedMode,
+    Failed(String),
+}
+
+impl std::fmt::Display for ComInitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ChangedMode => write!(f, "COM init failed: RPC_E_CHANGED_MODE"),
+            Self::Failed(msg) => f.write_str(msg),
+        }
+    }
+}
+
+/// STA COM lifetime guard. Every `S_OK` or `S_FALSE` call to `CoInitializeEx`
+/// increments the thread's COM refcount and must be paired with `CoUninitialize`
+/// on drop. `RPC_E_CHANGED_MODE` is returned as an error so callers never
+/// silently run STA-required shell APIs on an MTA thread.
 pub struct ScopedComInit {
     should_uninit: bool,
 }
 
 impl ScopedComInit {
-    pub fn init() -> Result<Self, String> {
+    pub fn init_sta() -> Result<Self, ComInitError> {
         let hr = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
-        if hr == S_OK {
+        if hr == S_OK || hr == S_FALSE {
             Ok(Self {
                 should_uninit: true,
             })
-        } else if hr == S_FALSE || hr == RPC_E_CHANGED_MODE {
-            Ok(Self {
-                should_uninit: false,
-            })
+        } else if hr == RPC_E_CHANGED_MODE {
+            Err(ComInitError::ChangedMode)
         } else {
-            Err(format!("COM init failed: {hr:?}"))
+            Err(ComInitError::Failed(format!("COM init failed: {hr:?}")))
         }
     }
 }
@@ -86,22 +99,30 @@ pub fn top_down_bgra_bitmap_info(width: u32, height: u32) -> BITMAPINFO {
 }
 
 /// Copies a 32-bit top-down BGRA DIB buffer into an RGBA `Vec<u8>` in a single pass.
+/// Returns `None` on null pointer, zero dimensions, or byte-length overflow.
 ///
 /// # Safety
 /// If `bits_ptr` is non-null, it must be valid for reads of `width * height * 4` bytes.
-pub unsafe fn copy_bgra_to_rgba(bits_ptr: *const u8, width: u32, height: u32) -> Vec<u8> {
+pub unsafe fn copy_bgra_to_rgba(
+    bits_ptr: *const u8,
+    width: u32,
+    height: u32,
+) -> Option<Vec<u8>> {
+    if bits_ptr.is_null() || width == 0 || height == 0 {
+        return None;
+    }
     let byte_len = (width as usize)
-        .saturating_mul(height as usize)
-        .saturating_mul(4);
-    if bits_ptr.is_null() || byte_len == 0 {
-        return vec![0u8; byte_len];
+        .checked_mul(height as usize)?
+        .checked_mul(4)?;
+    if byte_len > isize::MAX as usize {
+        return None;
     }
     let src = std::slice::from_raw_parts(bits_ptr, byte_len);
     let mut dst = Vec::with_capacity(byte_len);
     for px in src.chunks_exact(4) {
         dst.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
     }
-    dst
+    Some(dst)
 }
 
 pub fn encode_rgba_png_fast(pixels: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {

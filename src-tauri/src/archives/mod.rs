@@ -609,7 +609,7 @@ pub(crate) fn read_plain_zip_entry_shared(
         return None;
     }
 
-    let (password, index_map, zip_pool, already_registered) = {
+    let (password, index_map, zip_pool, generation) = {
         let cache = state.read().ok()?;
         if cache.is_archive_password_required(archive_path) {
             return None;
@@ -618,15 +618,16 @@ pub(crate) fn read_plain_zip_entry_shared(
             return Some(Ok(hit));
         }
         match cache.zip_lookup_state(archive_path) {
-            Some((pwd, map, pool)) => (pwd, map, pool, true),
-            None => (None, None, None, false),
+            Some((pwd, map, pool)) => (pwd, map, pool, cache.archive_generation(archive_path)),
+            None => (None, None, None, None),
         }
     };
 
-    let (password, index_map, zip_pool) = if already_registered {
-        (password, index_map, zip_pool)
+    let already_registered = generation.is_some();
+    let (password, index_map, zip_pool, generation) = if let Some(gen) = generation {
+        (password, index_map, zip_pool, Some(gen))
     } else {
-        let (lookup, evicted_dirs) = {
+        let (lookup, gen, evicted_dirs) = {
             let mut cache = state.write().ok()?;
             if cache.is_archive_password_required(archive_path) {
                 return None;
@@ -650,10 +651,11 @@ pub(crate) fn read_plain_zip_entry_shared(
             let lookup = cache
                 .zip_lookup_state(archive_path)
                 .unwrap_or((None, None, None));
-            (lookup, evicted)
+            let gen = cache.archive_generation(archive_path);
+            (lookup, gen, evicted)
         };
         spawn_remove_temp_dirs(evicted_dirs);
-        lookup
+        (lookup.0, lookup.1, lookup.2, gen)
     };
 
     let mut archive = match acquire_zip_handle(archive_path, zip_pool.as_ref(), already_registered)
@@ -676,10 +678,12 @@ pub(crate) fn read_plain_zip_entry_shared(
 
     {
         let mut cache = state.write().ok()?;
-        if let Some(hit) = cache.get_zip_entry(archive_path, entry_name) {
-            return Some(Ok(hit));
+        if generation.is_some() && cache.archive_generation(archive_path) == generation {
+            if let Some(hit) = cache.get_zip_entry(archive_path, entry_name) {
+                return Some(Ok(hit));
+            }
+            cache.insert_zip_entry(archive_path, entry_name, extracted.clone());
         }
-        cache.insert_zip_entry(archive_path, entry_name, extracted.clone());
     }
     Some(Ok(extracted))
 }
@@ -802,21 +806,34 @@ pub(crate) fn with_entry_stream_shared<T>(
     }
 }
 
-/// Unlocked full-entry read used by IPC commands (e.g., `get_archive_ico_frames`).
+/// Unlocked full-entry read used by IPC commands (e.g., `get_archive_ico_frames`)
+/// and the `quivit://` protocol handler.
 pub(crate) fn read_entry_bytes_shared(
     state: &RwLock<ArchiveCache>,
     archive_path: &str,
     entry_name: &str,
 ) -> Result<Vec<u8>, String> {
-    if let Some(res) = read_plain_zip_entry_shared(state, archive_path, entry_name) {
-        return res.map(|bytes| bytes.to_vec());
+    match ArchiveKind::from_path(archive_path)? {
+        ArchiveKind::Zip => match read_plain_zip_entry_shared(state, archive_path, entry_name) {
+            Some(res) => res.map(|bytes| bytes.to_vec()),
+            None => {
+                {
+                    let cache = state.read().map_err(|e| e.to_string())?;
+                    if cache.is_archive_password_required(archive_path) {
+                        return Err(format!("Archive is password-protected: {archive_path}"));
+                    }
+                }
+                let entry_data = {
+                    let mut cache = state.write().map_err(|e| e.to_string())?;
+                    cache.read_entry_bytes(archive_path, entry_name)?
+                };
+                entry_data.wait_for_data(entry_name)
+            }
+        },
+        ArchiveKind::Rar | ArchiveKind::SevenZ | ArchiveKind::Tar => {
+            resolve_temp_entry_shared(state, archive_path, entry_name)?.wait_for_data(entry_name)
+        }
     }
-
-    let entry_data = {
-        let mut cache = state.write().map_err(|e| e.to_string())?;
-        cache.read_entry_bytes(archive_path, entry_name)?
-    };
-    entry_data.wait_for_data(entry_name)
 }
 
 fn spawn_temp_extractor(

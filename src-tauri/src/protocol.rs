@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -40,7 +41,20 @@ enum TiffCacheKey {
     Archive {
         archive_path: String,
         entry_name: String,
+        len: u64,
+        mtime_nanos: u128,
     },
+}
+
+fn archive_paths_match(a: &str, b: &str) -> bool {
+    #[cfg(windows)]
+    {
+        a.eq_ignore_ascii_case(b)
+    }
+    #[cfg(not(windows))]
+    {
+        a == b
+    }
 }
 
 struct TiffPngCache {
@@ -49,6 +63,7 @@ struct TiffPngCache {
     total_bytes: usize,
     max_entries: usize,
     max_bytes: usize,
+    invalidation_gen: u64,
 }
 
 impl TiffPngCache {
@@ -59,7 +74,12 @@ impl TiffPngCache {
             total_bytes: 0,
             max_entries,
             max_bytes,
+            invalidation_gen: 0,
         }
+    }
+
+    fn invalidation_gen(&self) -> u64 {
+        self.invalidation_gen
     }
 
     fn get(&mut self, key: &TiffCacheKey) -> Option<Arc<[u8]>> {
@@ -95,7 +115,15 @@ impl TiffPngCache {
         self.order.push_back(key);
     }
 
+    fn insert_if_gen(&mut self, key: TiffCacheKey, png: Arc<[u8]>, expected_gen: u64) {
+        if self.invalidation_gen != expected_gen {
+            return;
+        }
+        self.insert(key, png);
+    }
+
     fn invalidate_archive(&mut self, archive_path: &str) {
+        self.invalidation_gen = self.invalidation_gen.wrapping_add(1);
         let mut removed_bytes = 0usize;
         self.entries.retain(|key, val| {
             let matches = matches!(
@@ -103,7 +131,7 @@ impl TiffPngCache {
                 TiffCacheKey::Archive {
                     archive_path: p,
                     ..
-                } if p == archive_path
+                } if archive_paths_match(p, archive_path)
             );
             if matches {
                 removed_bytes = removed_bytes.saturating_add(val.len());
@@ -117,12 +145,13 @@ impl TiffPngCache {
                 TiffCacheKey::Archive {
                     archive_path: p,
                     ..
-                } if p == archive_path
+                } if archive_paths_match(p, archive_path)
             )
         });
     }
 
     fn clear(&mut self) {
+        self.invalidation_gen = self.invalidation_gen.wrapping_add(1);
         self.entries.clear();
         self.order.clear();
         self.total_bytes = 0;
@@ -136,20 +165,26 @@ fn tiff_png_cache() -> &'static Mutex<TiffPngCache> {
         .get_or_init(|| Mutex::new(TiffPngCache::new(TIFF_PNG_CACHE_MAX_ENTRIES, TIFF_PNG_CACHE_MAX_BYTES)))
 }
 
-fn try_get_cached_tiff_png(key: &TiffCacheKey) -> Option<Arc<[u8]>> {
-    let cache = TIFF_PNG_CACHE.get()?;
-    let mut guard = cache.try_lock().ok()?;
-    guard.get(key)
-}
-
 fn get_cached_tiff_png(key: &TiffCacheKey) -> Option<Arc<[u8]>> {
     let mut guard = tiff_png_cache().lock().unwrap_or_else(|p| p.into_inner());
     guard.get(key)
 }
 
+fn get_cached_tiff_png_with_gen(key: &TiffCacheKey) -> (Option<Arc<[u8]>>, u64) {
+    let mut guard = tiff_png_cache().lock().unwrap_or_else(|p| p.into_inner());
+    let gen = guard.invalidation_gen();
+    let hit = guard.get(key);
+    (hit, gen)
+}
+
 fn insert_cached_tiff_png(key: TiffCacheKey, png: Arc<[u8]>) {
     let mut guard = tiff_png_cache().lock().unwrap_or_else(|p| p.into_inner());
     guard.insert(key, png);
+}
+
+fn insert_cached_tiff_png_if_gen(key: TiffCacheKey, png: Arc<[u8]>, expected_gen: u64) {
+    let mut guard = tiff_png_cache().lock().unwrap_or_else(|p| p.into_inner());
+    guard.insert_if_gen(key, png, expected_gen);
 }
 
 pub(crate) fn invalidate_tiff_cache_for_archive(archive_path: &str) {
@@ -166,8 +201,8 @@ pub(crate) fn clear_tiff_cache() {
     }
 }
 
-fn local_tiff_cache_key(path: &str) -> Result<TiffCacheKey, std::io::Error> {
-    let meta = std::fs::metadata(path)?;
+fn file_fingerprint(path: &str) -> Option<(u64, u128)> {
+    let meta = std::fs::metadata(path).ok()?;
     let len = meta.len();
     let mtime_nanos = meta
         .modified()
@@ -175,15 +210,30 @@ fn local_tiff_cache_key(path: &str) -> Result<TiffCacheKey, std::io::Error> {
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    Ok(TiffCacheKey::Local {
+    Some((len, mtime_nanos))
+}
+
+fn local_tiff_cache_key(path: &str) -> Option<TiffCacheKey> {
+    let (len, mtime_nanos) = file_fingerprint(path)?;
+    Some(TiffCacheKey::Local {
         path: path.to_string(),
         len,
         mtime_nanos,
     })
 }
 
+fn archive_tiff_cache_key(archive_path: &str, entry_name: &str) -> Option<TiffCacheKey> {
+    let (len, mtime_nanos) = file_fingerprint(archive_path)?;
+    Some(TiffCacheKey::Archive {
+        archive_path: archive_path.to_string(),
+        entry_name: entry_name.to_string(),
+        len,
+        mtime_nanos,
+    })
+}
+
 fn serve_local_tiff(path: &str) -> Response<Vec<u8>> {
-    let Ok(cache_key) = local_tiff_cache_key(path) else {
+    let Some(cache_key) = local_tiff_cache_key(path) else {
         return error_response(404, b"TIFF image not found or failed to decode");
     };
     if let Some(cached) = get_cached_tiff_png(&cache_key) {
@@ -273,35 +323,31 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
                 let app_handle = ctx.app_handle().clone();
                 let is_tiff = crate::formats::is_tiff_name(&entry_name);
 
-                if is_tiff {
-                    let tiff_key = TiffCacheKey::Archive {
-                        archive_path: archive_path.clone(),
-                        entry_name: entry_name.clone(),
-                    };
-                    if let Some(cached_png) = try_get_cached_tiff_png(&tiff_key) {
-                        responder.respond(no_store_png_response(cached_png.to_vec()));
+                if !is_tiff {
+                    if let Some(response) = try_cached_entry_response(
+                        &app_handle,
+                        &archive_path,
+                        &entry_name,
+                        range_header.as_deref(),
+                    ) {
+                        responder.respond(response);
                         return;
                     }
-                } else if let Some(response) = try_cached_entry_response(
-                    &app_handle,
-                    &archive_path,
-                    &entry_name,
-                    range_header.as_deref(),
-                ) {
-                    responder.respond(response);
-                    return;
                 }
 
                 tauri::async_runtime::spawn_blocking(move || {
                     if is_tiff {
-                        let tiff_key = TiffCacheKey::Archive {
-                            archive_path: archive_path.clone(),
-                            entry_name: entry_name.clone(),
+                        let tiff_key = archive_tiff_cache_key(&archive_path, &entry_name);
+                        let cache_gen = if let Some(ref key) = tiff_key {
+                            let (cached, gen) = get_cached_tiff_png_with_gen(key);
+                            if let Some(cached_png) = cached {
+                                responder.respond(no_store_png_response(cached_png.to_vec()));
+                                return;
+                            }
+                            Some(gen)
+                        } else {
+                            None
                         };
-                        if let Some(cached_png) = get_cached_tiff_png(&tiff_key) {
-                            responder.respond(no_store_png_response(cached_png.to_vec()));
-                            return;
-                        }
                         let state = app_handle.state::<std::sync::RwLock<ArchiveCache>>();
                         let response = match crate::archives::read_entry_bytes_shared(
                             &state,
@@ -310,7 +356,13 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
                         ) {
                             Ok(bytes) => match crate::formats::decode_tiff_to_png(&bytes) {
                                 Ok(png) => {
-                                    insert_cached_tiff_png(tiff_key, Arc::from(png.as_slice()));
+                                    if let (Some(key), Some(expected_gen)) = (tiff_key, cache_gen) {
+                                        insert_cached_tiff_png_if_gen(
+                                            key,
+                                            Arc::from(png.as_slice()),
+                                            expected_gen,
+                                        );
+                                    }
                                     no_store_png_response(png)
                                 }
                                 Err(_) => error_response(422, b"Failed to decode TIFF entry"),
@@ -327,7 +379,9 @@ pub fn register_quivit_protocol<R: tauri::Runtime>(
                         &archive_path,
                         &entry_name,
                     ) {
-                        Ok(data) => entry_response(&entry_name, &data, range_header.as_deref()),
+                        Ok(data) => {
+                            entry_response(&entry_name, Cow::Owned(data), range_header.as_deref())
+                        }
                         Err(_) => error_response(404, b"Entry not found or failed to extract"),
                     };
                     responder.respond(response);
@@ -474,7 +528,7 @@ fn try_cached_entry_response<R: tauri::Runtime>(
         .cached_zip_entry_bytes(archive_path, entry_name)
         .ok()
         .flatten()?;
-    Some(entry_response(entry_name, &data, range_header))
+    Some(entry_response(entry_name, Cow::Borrowed(&data), range_header))
 }
 
 fn error_response(status: u16, msg: impl Into<Vec<u8>>) -> Response<Vec<u8>> {
@@ -515,10 +569,14 @@ fn archive_entry_response(
             Err(_) => error_response(422, b"Failed to decode TIFF entry"),
         };
     }
-    entry_response(entry_name, data, range_header)
+    entry_response(entry_name, Cow::Borrowed(data), range_header)
 }
 
-fn entry_response(entry_name: &str, data: &[u8], range_header: Option<&str>) -> Response<Vec<u8>> {
+fn entry_response(
+    entry_name: &str,
+    data: Cow<'_, [u8]>,
+    range_header: Option<&str>,
+) -> Response<Vec<u8>> {
     let mime = crate::formats::guess_mime(entry_name);
     if let Some(range) = range_header.and_then(|range| parse_byte_range(range, data.len())) {
         let body = data[range.start..=range.end].to_vec();
@@ -541,7 +599,7 @@ fn entry_response(entry_name: &str, data: &[u8], range_header: Option<&str>) -> 
         .header("Content-Length", data.len().to_string())
         .header("Cache-Control", "no-store")
         .header("Access-Control-Allow-Origin", "*")
-        .body(data.to_vec())
+        .body(data.into_owned())
         .unwrap()
 }
 

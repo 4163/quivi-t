@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::formats::guess_mime;
@@ -130,7 +131,7 @@ fn parse_byte_range_rejects_unsupported_ranges() {
 
 #[test]
 fn entry_response_serves_valid_byte_ranges() {
-    let response = entry_response("page.jpg", &[0, 1, 2, 3, 4], Some("bytes=1-3"));
+    let response = entry_response("page.jpg", Cow::Borrowed(&[0, 1, 2, 3, 4]), Some("bytes=1-3"));
 
     assert_eq!(response.status(), 206);
     assert_eq!(response.headers()["Accept-Ranges"], "bytes");
@@ -142,7 +143,7 @@ fn entry_response_serves_valid_byte_ranges() {
 
 #[test]
 fn entry_response_ignores_invalid_byte_ranges() {
-    let response = entry_response("page.jpg", &[0, 1, 2, 3, 4], Some("bytes=10-11"));
+    let response = entry_response("page.jpg", Cow::Borrowed(&[0, 1, 2, 3, 4]), Some("bytes=10-11"));
 
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers()["Accept-Ranges"], "bytes");
@@ -153,7 +154,7 @@ fn entry_response_ignores_invalid_byte_ranges() {
 
 #[test]
 fn entry_response_uses_no_store_cache_control() {
-    let response = entry_response("page.jpg", &[0, 1, 2], None);
+    let response = entry_response("page.jpg", Cow::Borrowed(&[0, 1, 2]), None);
     assert_eq!(response.status(), 200);
     assert_eq!(response.headers()["Cache-Control"], "no-store");
 }
@@ -254,14 +255,20 @@ fn tiff_png_cache_hits_evicts_and_invalidates_by_archive() {
     let k1 = TiffCacheKey::Archive {
         archive_path: "a.cbz".to_string(),
         entry_name: "1.tif".to_string(),
+        len: 100,
+        mtime_nanos: 1,
     };
     let k2 = TiffCacheKey::Archive {
         archive_path: "a.cbz".to_string(),
         entry_name: "2.tif".to_string(),
+        len: 100,
+        mtime_nanos: 1,
     };
     let k3 = TiffCacheKey::Archive {
         archive_path: "b.cbz".to_string(),
         entry_name: "1.tif".to_string(),
+        len: 200,
+        mtime_nanos: 2,
     };
 
     let d1: Arc<[u8]> = Arc::from([1u8; 6].as_slice());
@@ -280,23 +287,36 @@ fn tiff_png_cache_hits_evicts_and_invalidates_by_archive() {
     assert!(cache.get(&k2).is_none());
     assert!(cache.get(&k3).is_some());
 
-    // Archive invalidation removes only a.cbz entries and preserves b.cbz.
+    // Archive invalidation removes only a.cbz entries (case-insensitively on Windows),
+    // preserves b.cbz, and bumps invalidation_gen so stale in-flight inserts are skipped.
+    let stale_gen = cache.invalidation_gen();
+    #[cfg(windows)]
+    cache.invalidate_archive("A.CBZ");
+    #[cfg(not(windows))]
     cache.invalidate_archive("a.cbz");
     assert!(cache.get(&k1).is_none());
     assert!(cache.get(&k3).is_some());
+    cache.insert_if_gen(k1.clone(), Arc::clone(&d1), stale_gen);
+    assert!(cache.get(&k1).is_none());
 
-    // Clear removes everything.
+    // Clear removes everything and bumps invalidation_gen.
+    let before_clear = cache.invalidation_gen();
     cache.clear();
     assert!(cache.get(&k3).is_none());
+    assert_ne!(cache.invalidation_gen(), before_clear);
 
     // Global cache invalidation hooks roundtrip.
     let global_a = TiffCacheKey::Archive {
         archive_path: "global-a.cbz".to_string(),
         entry_name: "p.tif".to_string(),
+        len: 10,
+        mtime_nanos: 1,
     };
     let global_b = TiffCacheKey::Archive {
         archive_path: "global-b.cbz".to_string(),
         entry_name: "p.tif".to_string(),
+        len: 20,
+        mtime_nanos: 2,
     };
     insert_cached_tiff_png(global_a.clone(), Arc::from([9u8; 4].as_slice()));
     insert_cached_tiff_png(global_b.clone(), Arc::from([8u8; 4].as_slice()));

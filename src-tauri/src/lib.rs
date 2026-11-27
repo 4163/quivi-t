@@ -198,6 +198,7 @@ pub fn run() {
                         guard.drop_all_archives();
                     }
                 }
+                crate::protocol::clear_tiff_cache();
                 crate::archives::cleanup_current_temp_dir();
             }
         });

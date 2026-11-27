@@ -28,6 +28,7 @@ pub(super) fn new_extract_notify() -> ExtractNotify {
 
 pub(super) struct SingleArchiveCache {
     archive_key: Arc<str>,
+    generation: u64,
     zip_entries: HashMap<Arc<str>, SharedEntryBytes>,
     zip_pool: Option<ZipArchivePool>,
     zip_index_map: Option<Arc<HashMap<String, usize>>>,
@@ -52,6 +53,7 @@ impl SingleArchiveCache {
         }
         Self {
             archive_key,
+            generation: 0,
             zip_entries: HashMap::new(),
             zip_pool: Some(Arc::new(Mutex::new(handles))),
             zip_index_map: zip_index_map.map(Arc::new),
@@ -71,6 +73,7 @@ impl SingleArchiveCache {
     ) -> Self {
         Self {
             archive_key,
+            generation: 0,
             zip_entries: HashMap::new(),
             zip_pool: None,
             zip_index_map: None,
@@ -239,6 +242,7 @@ pub struct ArchiveCache {
     temp_reg_notify: TempRegNotify,
     global_zip_capacity_bytes: usize,
     max_open_archives: usize,
+    next_generation: u64,
 }
 
 impl ArchiveCache {
@@ -253,7 +257,12 @@ impl ArchiveCache {
             temp_reg_notify: Arc::new((Mutex::new(0), Condvar::new())),
             global_zip_capacity_bytes: capacity_mb.saturating_mul(1024 * 1024),
             max_open_archives: MAX_OPEN_ARCHIVES,
+            next_generation: 0,
         }
+    }
+
+    pub(super) fn archive_generation(&self, archive_path: &str) -> Option<u64> {
+        self.archives.get(archive_path).map(|s| s.generation)
     }
 
     fn lock_lru(&self) -> MutexGuard<'_, ArchiveLruState> {
@@ -404,7 +413,6 @@ impl ArchiveCache {
                 front
             };
             self.remove_archive_zip_entries(old_archive.as_ref());
-            crate::protocol::invalidate_tiff_cache_for_archive(old_archive.as_ref());
             if let Some(mut removed) = self.archives.remove(old_archive.as_ref()) {
                 if defer_temp_cleanup {
                     if let Some(dir) = removed.take_temp_dir() {
@@ -436,11 +444,16 @@ impl ArchiveCache {
     pub(super) fn register_archive_deferred(
         &mut self,
         archive_key: Arc<str>,
-        archive: SingleArchiveCache,
+        mut archive: SingleArchiveCache,
         defer_temp_cleanup: bool,
     ) -> Vec<PathBuf> {
         let is_temp = archive.has_temp_dir();
         let mut evicted_dirs = Vec::new();
+        if self.archives.contains_key(archive_key.as_ref()) {
+            self.remove_archive_zip_entries(archive_key.as_ref());
+        }
+        self.next_generation = self.next_generation.wrapping_add(1);
+        archive.generation = self.next_generation;
         if let Some(mut previous) = self.archives.insert(Arc::clone(&archive_key), archive) {
             if defer_temp_cleanup {
                 if let Some(dir) = previous.take_temp_dir() {
@@ -461,7 +474,6 @@ impl ArchiveCache {
 
     pub(crate) fn drop_archive_deferred(&mut self, archive_path: &str) -> Vec<PathBuf> {
         self.remove_archive_zip_entries(archive_path);
-        crate::protocol::invalidate_tiff_cache_for_archive(archive_path);
         let mut dirs = Vec::new();
         if let Some(mut removed) = self.archives.remove(archive_path) {
             if let Some(dir) = removed.take_temp_dir() {
@@ -480,12 +492,7 @@ impl ArchiveCache {
     }
 
     pub(crate) fn drop_all_archives(&mut self) {
-        let paths: Vec<Arc<str>> = self.archives.keys().cloned().collect();
-        for path in paths {
-            self.remove_archive_zip_entries(path.as_ref());
-        }
         self.archives.clear();
-        crate::protocol::clear_tiff_cache();
         let mut lru = self.lock_lru();
         lru.archive_lru.clear();
         lru.global_zip_lru.clear();

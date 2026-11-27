@@ -19,7 +19,11 @@ pub fn list_archive(
     password: Option<String>,
     state: tauri::State<'_, RwLock<ArchiveCache>>,
 ) -> Result<ArchiveReadResult, String> {
-    prepare_archive_shared(&state, &archive_path, password.as_deref())
+    let result = prepare_archive_shared(&state, &archive_path, password.as_deref())?;
+    if result.encryption.is_some() {
+        crate::protocol::invalidate_tiff_cache_for_archive(&archive_path);
+    }
+    Ok(result)
 }
 
 #[tauri::command(async)]
@@ -31,6 +35,7 @@ pub fn drop_archive_cache(
         let mut cache = state.write().map_err(|e| e.to_string())?;
         cache.drop_archive_deferred(&archive_path)
     };
+    crate::protocol::invalidate_tiff_cache_for_archive(&archive_path);
     spawn_remove_temp_dirs(dirs);
     Ok(())
 }
