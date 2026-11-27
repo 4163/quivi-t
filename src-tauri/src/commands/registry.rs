@@ -359,7 +359,7 @@ pub async fn sync_preview_associations() -> Result<(), String> {
 
 #[cfg(windows)]
 fn provision_format_icons(app: &tauri::AppHandle) -> Result<(), String> {
-    let config_dir = crate::config::roaming_dir(app);
+    let config_dir = crate::commands::config::roaming_dir(app);
     let icon_dir = config_dir.join("icons");
     std::fs::create_dir_all(&icon_dir).map_err(|e| e.to_string())?;
 
@@ -442,7 +442,7 @@ fn register_associations_impl(
     {
         let exe_path = crate::platform::direct_open::release_exe()?;
         let exe_str = exe_path.to_string_lossy().into_owned();
-        let icon_dir = crate::config::roaming_dir_path(&app).join("icons");
+        let icon_dir = crate::commands::config::roaming_dir_path(&app).join("icons");
         for ext in &extensions {
             let icon_name = SUPPORTED_FORMATS
                 .iter()

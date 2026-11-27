@@ -16,27 +16,23 @@ use tauri::{Emitter, Manager};
 
 use archives::*;
 use commands::*;
-use config::*;
-use windows::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let config = crate::config::load_config_early();
+    let startup = crate::config::load_startup_config();
     // Single instance defaults to true unless config opts out. Forced true under E2E suite.
     let single_instance = if crate::config::is_e2e_suite() {
         true
     } else {
-        config
+        startup
+            .config
             .frontend_data
             .get("single_instance")
             .and_then(|v| v.as_bool())
             .unwrap_or(true)
     };
-    let cache_mb = config.archive_cache_mb.unwrap_or(128);
-    eprintln!(
-        "[QuiviT] config: {}",
-        crate::config::describe_config_source()
-    );
+    let cache_mb = startup.config.archive_cache_mb.unwrap_or(128);
+    eprintln!("[QuiviT] config: {}", startup.source_description);
 
     let mut builder = tauri::Builder::default();
 
@@ -74,8 +70,8 @@ pub fn run() {
                 tauri::WebviewUrl::App("index.html".into()),
             )
             .title("QuiviT")
-            .inner_size(MAIN_INITIAL_W, MAIN_INITIAL_H)
-            .min_inner_size(MAIN_MIN_W, MAIN_MIN_H)
+            .inner_size(windows::MAIN_INITIAL_W, windows::MAIN_INITIAL_H)
+            .min_inner_size(windows::MAIN_MIN_W, windows::MAIN_MIN_H)
             .visible(false)
             .devtools(true)
             .general_autofill_enabled(false);
@@ -85,18 +81,24 @@ pub fn run() {
 
             #[cfg(windows)]
             platform::drop::install(&main_window).map_err(std::io::Error::other)?;
-            #[cfg(windows)]
-            std::thread::spawn(|| {
-                let _ = commands::library::cleanup_abandoned_captures();
-            });
 
-            windows::apply_shell_background(&main_window, &config);
+            windows::apply_shell_background(&main_window, &startup.config);
             platform::icons::warmup();
             crate::commands::registry::spawn_launch_previews_sync(app.handle().clone());
-            crate::commands::watchers::spawn_config_file_watcher(app.handle().clone());
-            crate::commands::watchers::spawn_library_watcher(app.handle().clone());
+
             crate::archives::cache::acquire_temp_lock();
-            crate::archives::cache::cleanup_orphaned_temp_dirs();
+            let app_handle = app.handle().clone();
+            let config_path = startup.config_path;
+            std::thread::spawn(move || {
+                crate::commands::watchers::spawn_config_file_watcher_for_path(
+                    app_handle.clone(),
+                    config_path,
+                );
+                crate::commands::watchers::spawn_library_watcher(app_handle);
+                crate::archives::cache::cleanup_orphaned_temp_dirs();
+                #[cfg(windows)]
+                let _ = commands::library::cleanup_abandoned_captures();
+            });
 
             Ok(())
         });
@@ -108,21 +110,21 @@ pub fn run() {
         drop_archive_cache,
         drop_all_archives_cache,
         prefetch_archive_entries,
-        load_config,
-        get_config_dir,
-        get_active_config_info,
-        open_active_config_dir,
-        open_config_dir,
-        get_local_data_dir,
-        open_local_data_dir,
-        save_config,
-        open_options,
-        open_workspace_window,
-        close_workspace_window,
-        set_workspace_title,
-        fit_options_window,
-        open_metadata_window,
-        fit_metadata_window,
+        commands::config::load_config,
+        commands::config::get_config_dir,
+        commands::config::get_active_config_info,
+        commands::config::open_active_config_dir,
+        commands::config::open_config_dir,
+        commands::config::get_local_data_dir,
+        commands::config::open_local_data_dir,
+        commands::config::save_config,
+        commands::windows::open_options,
+        commands::windows::open_workspace_window,
+        commands::windows::close_workspace_window,
+        commands::windows::set_workspace_title,
+        commands::windows::fit_options_window,
+        commands::windows::open_metadata_window,
+        commands::windows::fit_metadata_window,
         get_drives,
         watch_directory,
         open_in_explorer,
@@ -142,10 +144,9 @@ pub fn run() {
         register_associations,
         unregister_associations,
         get_initial_args,
-        show_window,
-        hide_to_tray,
-        show_from_tray,
-        update_theme,
+        commands::windows::show_window,
+        commands::windows::hide_to_tray,
+        commands::windows::update_theme,
         pick_folder,
         check_is_animated,
         check_media_audio,
@@ -184,9 +185,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
                 windows::close_secondary_windows(window.app_handle());
-            }
-            #[cfg(windows)]
-            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                #[cfg(windows)]
                 platform::drop::shutdown();
             }
         })

@@ -153,10 +153,13 @@ pub fn spawn_library_watcher(app: tauri::AppHandle) {
 }
 
 pub fn spawn_config_file_watcher(app: tauri::AppHandle) {
+    spawn_config_file_watcher_for_path(app, crate::config::get_config_path());
+}
+
+pub fn spawn_config_file_watcher_for_path(app: tauri::AppHandle, config_path: PathBuf) {
     let state = app.state::<Mutex<WatcherState>>();
     let mut state = state.lock().unwrap();
 
-    let config_path = crate::config::get_config_path();
     if let Some(parent) = config_path.parent() {
         let parent_path = parent.to_path_buf();
         let app_clone = app.clone();

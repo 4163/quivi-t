@@ -196,19 +196,9 @@ pub fn ensure_library_write_allowed(path: &Path) -> Result<(), String> {
         ensure_library_root_writable(&library_root)?;
         return Ok(());
     }
-    let is_retired_path = config::load_config_early()
-        .frontend_data
-        .get(RETIRED_LIBRARY_PATHS_KEY)
-        .and_then(|value| value.as_array())
-        .is_some_and(|paths| {
-            paths
-                .iter()
-                .filter_map(|value| value.as_str())
-                .any(|retired| {
-                    let retired = Path::new(retired);
-                    retired.is_absolute() && path_is_within(path, retired)
-                })
-        });
+    let is_retired_path = config::retired_library_paths()
+        .iter()
+        .any(|retired| path_is_within(path, retired));
     if is_retired_path {
         return Err("This Library location was retired by a live move. Reload QuiviT before downloading or changing its files.".into());
     }
@@ -698,7 +688,8 @@ fn move_library_impl(
     mut config: AppConfig,
     destination: String,
 ) -> Result<LibraryMoveResult, String> {
-    let current = config::load_config(app_handle.clone());
+    let roaming_path = crate::commands::config::roaming_dir_path(&app_handle);
+    let current = config::load_config(&roaming_path);
     if current.portable_mode != config.portable_mode {
         return Err("Apply the config storage mode change before moving the Library.".into());
     }
@@ -782,7 +773,7 @@ fn move_library_impl(
     }
     remap_library_paths(&mut config, &source, &destination);
     retain_retired_library_path(&mut config, &current, &source, &destination);
-    if let Err(err) = config::save_config_unchecked(app_handle.clone(), config) {
+    if let Err(err) = config::save_config_unchecked(&roaming_path, config) {
         let _ = clear_owned_tree(&destination, &operation_id);
         let _ = fs::create_dir(&destination);
         return Err(format!(

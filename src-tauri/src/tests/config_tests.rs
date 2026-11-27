@@ -526,3 +526,173 @@ fn test_apply_pending_config_to_disk() {
         .get("pending_single_instance")
         .is_none());
 }
+
+#[test]
+fn test_roaming_to_portable_migration_does_not_recreate_missing_roaming_dir() {
+    let base = TempDirGuard::new("portable_migrate");
+
+    // Case 1: existing roaming files are all removed on migration.
+    let exe_dir = base.path().join("exe_existing");
+    let roaming_dir = base.path().join("roaming_existing");
+    std::fs::create_dir_all(&exe_dir).unwrap();
+    std::fs::create_dir_all(&roaming_dir).unwrap();
+    for name in ROAMING_FILES {
+        std::fs::write(roaming_dir.join(name), "stale").unwrap();
+    }
+
+    let mut portable_cfg = AppConfig::default();
+    portable_cfg.portable_mode = true;
+    portable_cfg.frontend_data = serde_json::json!({ "theme": "dark" });
+
+    save_config_unchecked_with_paths(&exe_dir, &roaming_dir, portable_cfg.clone()).unwrap();
+    assert!(exe_dir.join("quivit_config.json").is_file());
+    for name in ROAMING_FILES {
+        assert!(
+            !roaming_dir.join(name).exists(),
+            "{name} should be removed during roaming-to-portable migration"
+        );
+    }
+
+    // Case 2: missing roaming directory must stay absent.
+    let exe_dir_missing = base.path().join("exe_missing");
+    let missing_roaming = base.path().join("roaming_never_created");
+    std::fs::create_dir_all(&exe_dir_missing).unwrap();
+    assert!(!missing_roaming.exists());
+
+    save_config_unchecked_with_paths(&exe_dir_missing, &missing_roaming, portable_cfg).unwrap();
+    assert!(exe_dir_missing.join("quivit_config.json").is_file());
+    assert!(!missing_roaming.exists());
+}
+
+#[test]
+fn test_load_startup_config_promotes_pending_in_one_pass() {
+    let _lock = OVERRIDE_ENV_LOCK.lock().unwrap();
+    let dir = TempDirGuard::new("startup_promote");
+    let config_path = dir.path().join("quivit_config.json");
+    std::fs::write(
+        &config_path,
+        r#"{
+            "portable_mode": false,
+            "frontend_data": {
+                "single_instance": true,
+                "pending_single_instance": false,
+                "library_path": "C:\\StartupLib"
+            }
+        }"#,
+    )
+    .unwrap();
+
+    let _guard = OverrideEnvGuard::set(&[
+        ("QUIVIT_CONFIG_DIR", Some(dir.path().to_str().unwrap())),
+        ("QUIVIT_PORTABLE", None),
+    ]);
+
+    let startup = load_startup_config();
+    assert_eq!(startup.config_path, config_path);
+    assert!(startup.source_description.starts_with("override "));
+    assert_eq!(startup.config.frontend_data["single_instance"], false);
+    assert!(startup
+        .config
+        .frontend_data
+        .get("pending_single_instance")
+        .is_none());
+
+    let persisted: AppConfig = read_json_file(&config_path).unwrap();
+    assert_eq!(persisted.frontend_data["single_instance"], false);
+    assert!(persisted
+        .frontend_data
+        .get("pending_single_instance")
+        .is_none());
+    assert_eq!(
+        configured_library_dir().unwrap(),
+        PathBuf::from(r"C:\StartupLib")
+    );
+}
+
+#[test]
+fn test_library_config_cache_hits_and_invalidates() {
+    let _lock = OVERRIDE_ENV_LOCK.lock().unwrap();
+    let dir = TempDirGuard::new("library_cache");
+    let config_path = dir.path().join("quivit_config.json");
+    std::fs::write(
+        &config_path,
+        r#"{
+            "frontend_data": {
+                "library_path": "C:\\LibA",
+                "retired_library_paths": ["C:\\OldA"]
+            }
+        }"#,
+    )
+    .unwrap();
+
+    let _guard = OverrideEnvGuard::set(&[
+        ("QUIVIT_CONFIG_DIR", Some(dir.path().to_str().unwrap())),
+        ("QUIVIT_PORTABLE", None),
+    ]);
+    invalidate_library_cache();
+
+    assert_eq!(configured_library_dir().unwrap(), PathBuf::from(r"C:\LibA"));
+    assert_eq!(retired_library_paths(), vec![PathBuf::from(r"C:\OldA")]);
+
+    // Modify disk out-of-band: repeat reads must serve the cached values.
+    std::fs::write(
+        &config_path,
+        r#"{
+            "frontend_data": {
+                "library_path": "C:\\LibB",
+                "retired_library_paths": ["C:\\OldB"]
+            }
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(configured_library_dir().unwrap(), PathBuf::from(r"C:\LibA"));
+    assert_eq!(retired_library_paths(), vec![PathBuf::from(r"C:\OldA")]);
+
+    // Explicit invalidation refreshes immediately.
+    invalidate_library_cache();
+    assert_eq!(configured_library_dir().unwrap(), PathBuf::from(r"C:\LibB"));
+    assert_eq!(retired_library_paths(), vec![PathBuf::from(r"C:\OldB")]);
+
+    // Saving through save_config_unchecked invalidates the cache too.
+    let mut updated = AppConfig::default();
+    updated.frontend_data = serde_json::json!({
+        "library_path": r"C:\LibC",
+        "retired_library_paths": [r"C:\OldC"]
+    });
+    save_config_unchecked(dir.path(), updated).unwrap();
+    assert_eq!(configured_library_dir().unwrap(), PathBuf::from(r"C:\LibC"));
+    assert_eq!(retired_library_paths(), vec![PathBuf::from(r"C:\OldC")]);
+}
+
+#[test]
+fn test_descriptor_consistency_between_describe_and_active_info() {
+    let _lock = OVERRIDE_ENV_LOCK.lock().unwrap();
+    let dir = TempDirGuard::new("descriptor_consistency");
+
+    // Override split layout
+    {
+        let _guard = OverrideEnvGuard::set(&[
+            ("QUIVIT_CONFIG_DIR", Some(dir.path().to_str().unwrap())),
+            ("QUIVIT_PORTABLE", None),
+        ]);
+        let desc = describe_config_source();
+        let info = active_config_info();
+        assert_eq!(desc, format!("override {} (split files)", dir.path().display()));
+        assert_eq!(info.dir, dir.path().to_string_lossy());
+        assert_eq!(info.mode, "override (split files)");
+    }
+
+    // Override single-file layout
+    {
+        let _guard = OverrideEnvGuard::set(&[
+            ("QUIVIT_CONFIG_DIR", Some(dir.path().to_str().unwrap())),
+            ("QUIVIT_PORTABLE", Some("1")),
+        ]);
+        let desc = describe_config_source();
+        let info = active_config_info();
+        assert_eq!(desc, format!("override {} (single file)", dir.path().display()));
+        assert_eq!(info.dir, dir.path().to_string_lossy());
+        assert_eq!(info.mode, "override (single file)");
+    }
+}
