@@ -4,6 +4,8 @@ pub mod dialog;
 pub mod direct_open;
 #[cfg(windows)]
 pub mod drop;
+#[cfg(windows)]
+pub(crate) mod gdi;
 pub mod icons;
 pub mod previews;
 #[cfg(windows)]

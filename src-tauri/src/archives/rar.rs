@@ -1,13 +1,21 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::formats::{is_image_ext, is_metadata_ext};
 use crate::models::{ArchiveEncryptionStatus, FileEntry};
 
-use super::cache::{notify_extracted, write_temp_entry, ExtractNotify, FinishGuard};
+use super::cache::{
+    commit_temp_entry, notify_extracted, prepare_temp_entry_paths, ExtractNotify, FinishGuard,
+};
 use super::sort_archive_entries;
 
-pub(crate) fn validate_rar_header(archive_path: &str) -> Result<(), String> {
+fn is_password_error(msg: &str) -> bool {
+    msg.to_ascii_lowercase().contains("password")
+}
+
+pub(super) fn validate_rar_header(archive_path: &str) -> Result<(), String> {
     use std::io::Read;
 
     let mut file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
@@ -34,7 +42,7 @@ pub(crate) fn validate_rar_header(archive_path: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn list_rar_entries(
+pub(super) fn list_rar_entries(
     archive_path: &str,
     password: Option<&str>,
 ) -> Result<(Vec<FileEntry>, Option<ArchiveEncryptionStatus>), String> {
@@ -48,9 +56,7 @@ pub(crate) fn list_rar_entries(
     let archive = match builder.open_for_processing() {
         Ok(a) => a,
         Err(e) => {
-            let msg = e.to_string();
-            let msg_lower = msg.to_lowercase();
-            if msg_lower.contains("password") {
+            if is_password_error(&e.to_string()) {
                 let status = if password.is_some() {
                     ArchiveEncryptionStatus::PasswordIncorrect
                 } else {
@@ -98,9 +104,7 @@ pub(crate) fn list_rar_entries(
                                 iter = next_iter;
                             }
                             Err(e) => {
-                                let msg = e.to_string();
-                                let msg_lower = msg.to_lowercase();
-                                if msg_lower.contains("password") {
+                                if is_password_error(&e.to_string()) {
                                     encryption = Some(ArchiveEncryptionStatus::PasswordIncorrect);
                                     break;
                                 }
@@ -116,9 +120,7 @@ pub(crate) fn list_rar_entries(
             }
             Ok(None) => break,
             Err(e) => {
-                let msg = e.to_string();
-                let msg_lower = msg.to_lowercase();
-                if msg_lower.contains("password") {
+                if is_password_error(&e.to_string()) {
                     let status = if password.is_some() {
                         ArchiveEncryptionStatus::PasswordIncorrect
                     } else {
@@ -134,11 +136,11 @@ pub(crate) fn list_rar_entries(
     Ok((files, encryption))
 }
 
-pub(crate) fn extract_rar_to_temp(
+pub(super) fn extract_rar_to_temp(
     archive_path: String,
     temp_dir: PathBuf,
     notify: ExtractNotify,
-    cancel_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    cancel_flag: Arc<AtomicBool>,
     password: Option<String>,
 ) {
     let _finish_guard = FinishGuard(&notify);
@@ -155,7 +157,7 @@ pub(crate) fn extract_rar_to_temp(
     };
     let mut iter = archive;
     loop {
-        if cancel_flag.load(std::sync::atomic::Ordering::Relaxed) {
+        if cancel_flag.load(Ordering::Acquire) {
             break;
         }
         match iter.read_header() {
@@ -165,15 +167,25 @@ pub(crate) fn extract_rar_to_temp(
                 if !entry.is_directory() {
                     let ext = name.rsplit('.').next().unwrap_or("");
                     if is_image_ext(ext) || is_metadata_ext(ext) {
-                        if let Ok((data, next)) = header.read() {
-                            if write_temp_entry(&temp_dir, &name, |path| fs::write(path, &data))
-                                .is_some()
-                            {
-                                notify_extracted(&notify, &name);
+                        if let Some((tmp_path, out_path)) =
+                            prepare_temp_entry_paths(&temp_dir, &name, &cancel_flag)
+                        {
+                            match header.extract_to(&tmp_path) {
+                                Ok(next) => {
+                                    if commit_temp_entry(&tmp_path, &out_path, &cancel_flag)
+                                        .is_some()
+                                    {
+                                        notify_extracted(&notify, &name);
+                                    }
+                                    iter = next;
+                                    continue;
+                                }
+                                Err(_) => {
+                                    let _ = fs::remove_file(&tmp_path);
+                                    break;
+                                }
                             }
-                            iter = next;
-                            continue;
-                        } else {
+                        } else if cancel_flag.load(Ordering::Acquire) {
                             break;
                         }
                     }

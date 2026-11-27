@@ -1,20 +1,21 @@
 use std::fs;
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::formats::{is_image_ext, is_metadata_ext};
 use crate::models::FileEntry;
 
 use super::cache::{notify_extracted, write_temp_entry, ExtractNotify, FinishGuard};
-use super::decode_cjk_name;
+use super::encoding::decode_cjk_name;
 use super::sort_archive_entries;
 
-fn decode_tar_name<R: std::io::Read>(entry: &tar::Entry<'_, R>) -> String {
+fn decode_tar_name<R: Read>(entry: &tar::Entry<'_, R>) -> String {
     decode_cjk_name(&entry.path_bytes()).replace('\\', "/")
 }
 
-pub(crate) fn validate_tar_header(archive_path: &str) -> Result<fs::File, String> {
-    use std::io::{Read, Seek, SeekFrom};
-
+pub(super) fn validate_tar_header(archive_path: &str) -> Result<fs::File, String> {
     let mut file =
         fs::File::open(archive_path).map_err(|e| format!("Cannot open TAR archive: {e}"))?;
     let len = file
@@ -67,13 +68,13 @@ pub(crate) fn validate_tar_header(archive_path: &str) -> Result<fs::File, String
     Ok(file)
 }
 
-pub(crate) fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
+pub(super) fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, String> {
     let file = validate_tar_header(archive_path)?;
     let mut archive = tar::Archive::new(file);
 
     let mut files = Vec::new();
     let entries = archive
-        .entries()
+        .entries_with_seek()
         .map_err(|e| format!("Cannot read TAR entries: {e}"))?;
     for entry in entries {
         let entry = entry.map_err(|e| format!("Error reading TAR entry: {e}"))?;
@@ -100,23 +101,23 @@ pub(crate) fn list_tar_entries(archive_path: &str) -> Result<Vec<FileEntry>, Str
     Ok(files)
 }
 
-pub(crate) fn extract_tar_to_temp(
+pub(super) fn extract_tar_to_temp(
     archive_path: String,
     temp_dir: PathBuf,
     notify: ExtractNotify,
-    cancel_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    cancel_flag: Arc<AtomicBool>,
 ) {
     let _finish_guard = FinishGuard(&notify);
     let Ok(file) = validate_tar_header(&archive_path) else {
         return;
     };
-    let mut archive = tar::Archive::new(file);
+    let mut archive = tar::Archive::new(BufReader::new(file));
     let Ok(entries) = archive.entries() else {
         return;
     };
 
     for entry in entries {
-        if cancel_flag.load(std::sync::atomic::Ordering::Relaxed) {
+        if cancel_flag.load(Ordering::Acquire) {
             break;
         }
         let Ok(mut entry) = entry else {
@@ -132,9 +133,11 @@ pub(crate) fn extract_tar_to_temp(
             continue;
         }
 
-        if write_temp_entry(&temp_dir, &name, |path| {
-            let mut file = fs::File::create(path)?;
-            std::io::copy(&mut entry, &mut file)?;
+        if write_temp_entry(&temp_dir, &name, &cancel_flag, |path| {
+            let file = fs::File::create(path)?;
+            let mut writer = BufWriter::new(file);
+            std::io::copy(&mut entry, &mut writer)?;
+            writer.flush()?;
             Ok(())
         })
         .is_some()

@@ -1,21 +1,18 @@
 #[cfg(windows)]
-use base64::prelude::*;
+use super::gdi::{
+    self, ScopedComInit, ScopedHgdiobj, ScopedMemDc, ScopedScreenDc,
+};
 #[cfg(windows)]
-use image::RgbaImage;
-#[cfg(windows)]
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 #[cfg(windows)]
 use std::ffi::OsStr;
 #[cfg(windows)]
-use std::io::Cursor;
-#[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 #[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, GetObjectW, ReleaseDC,
-    SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HDC, HGDIOBJ,
+    CreateCompatibleDC, CreateDIBSection, GetDC, GetObjectW, SelectObject, BITMAP, DIB_RGB_COLORS,
 };
 #[cfg(windows)]
 use windows::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_NORMAL};
@@ -29,8 +26,69 @@ use windows::Win32::UI::WindowsAndMessaging::{
     DestroyIcon, DrawIconEx, GetIconInfo, DI_NORMAL, HICON,
 };
 
+pub(crate) const MAX_NATIVE_ICON_CACHE_ENTRIES: usize = 512;
+
 #[cfg(windows)]
-static NATIVE_ICON_CACHE: Mutex<Option<HashMap<String, Vec<u8>>>> = Mutex::new(None);
+struct NativeIconCache {
+    entries: HashMap<String, Arc<[u8]>>,
+    order: VecDeque<String>,
+}
+
+#[cfg(windows)]
+impl NativeIconCache {
+    fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+
+    fn get(&self, key: &str) -> Option<Arc<[u8]>> {
+        self.entries.get(key).cloned()
+    }
+
+    fn insert(&mut self, key: String, bytes: Arc<[u8]>) {
+        if let Some(slot) = self.entries.get_mut(&key) {
+            *slot = bytes;
+            return;
+        }
+        while self.entries.len() >= MAX_NATIVE_ICON_CACHE_ENTRIES {
+            let Some(evicted) = self.order.pop_front() else {
+                break;
+            };
+            self.entries.remove(&evicted);
+        }
+        self.order.push_back(key.clone());
+        self.entries.insert(key, bytes);
+    }
+
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.order.clear();
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[cfg(test)]
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+#[cfg(windows)]
+static NATIVE_ICON_CACHE: Mutex<Option<NativeIconCache>> = Mutex::new(None);
+
+#[cfg(windows)]
+fn icon_cache_key(ext_key: &str, size: IconSize) -> String {
+    let lower_ext = ext_key.to_ascii_lowercase();
+    match size {
+        IconSize::Small => lower_ext,
+        IconSize::Large => format!("large:{}", lower_ext),
+    }
+}
 
 /// Drops the process-local shell icon cache after Windows changes a file association.
 pub fn clear_cached_native_icons() -> Result<(), String> {
@@ -53,45 +111,6 @@ impl Drop for ScopedHicon {
         if !self.0.is_invalid() {
             unsafe {
                 let _ = DestroyIcon(self.0);
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-struct ScopedHgdiobj(HGDIOBJ);
-#[cfg(windows)]
-impl Drop for ScopedHgdiobj {
-    fn drop(&mut self) {
-        if !self.0.is_invalid() {
-            unsafe {
-                let _ = DeleteObject(self.0);
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-struct ScopedMemDc(HDC);
-#[cfg(windows)]
-impl Drop for ScopedMemDc {
-    fn drop(&mut self) {
-        if !self.0.is_invalid() {
-            unsafe {
-                let _ = DeleteDC(self.0);
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-struct ScopedScreenDc(HDC);
-#[cfg(windows)]
-impl Drop for ScopedScreenDc {
-    fn drop(&mut self) {
-        if !self.0.is_invalid() {
-            unsafe {
-                let _ = ReleaseDC(None, self.0);
             }
         }
     }
@@ -150,7 +169,7 @@ pub fn get_cached_native_icon(
 
     #[cfg(windows)]
     {
-        let base64_str = BASE64_STANDARD.encode(png_bytes);
+        let base64_str = crate::utils::base64_encode(&png_bytes);
         return Ok(Some(format!("data:image/png;base64,{}", base64_str)));
     }
 
@@ -158,8 +177,22 @@ pub fn get_cached_native_icon(
     return Ok(None);
 }
 
-pub fn get_cached_native_icon_png(path: &str, ext_key: &str) -> Result<Option<Vec<u8>>, String> {
-    get_cached_native_icon_png_with_size(path, ext_key, IconSize::Small)
+pub fn try_get_cached_native_icon_png_with_size(
+    ext_key: &str,
+    size: IconSize,
+) -> Option<std::sync::Arc<[u8]>> {
+    #[cfg(not(windows))]
+    {
+        let _ = (ext_key, size);
+        return None;
+    }
+
+    #[cfg(windows)]
+    {
+        let cache_key = icon_cache_key(ext_key, size);
+        let guard = NATIVE_ICON_CACHE.try_lock().ok()?;
+        guard.as_ref()?.get(&cache_key)
+    }
 }
 
 pub fn get_cached_native_icon_png_with_size(
@@ -172,21 +205,23 @@ pub fn get_cached_native_icon_png_with_size(
 
     #[cfg(windows)]
     {
-        let lower_ext = ext_key.to_string();
+        let lower_ext = ext_key.to_ascii_lowercase();
         let cache_key = match size {
             IconSize::Small => lower_ext.clone(),
             IconSize::Large => format!("large:{}", lower_ext),
         };
 
-        {
+        let cached = {
             let mut cache_guard = NATIVE_ICON_CACHE.lock().map_err(|e| e.to_string())?;
-            if let Some(cache) = cache_guard.as_mut() {
-                if let Some(png_bytes) = cache.get(&cache_key) {
-                    return Ok(Some(png_bytes.clone()));
-                }
+            if let Some(cache) = cache_guard.as_ref() {
+                cache.get(&cache_key)
             } else {
-                *cache_guard = Some(HashMap::new());
+                *cache_guard = Some(NativeIconCache::new());
+                None
             }
+        };
+        if let Some(png_bytes) = cached {
+            return Ok(Some(png_bytes.to_vec()));
         }
 
         // Drives and special folders use the real path so Windows resolves their
@@ -195,6 +230,12 @@ pub fn get_cached_native_icon_png_with_size(
         let is_real_path =
             lower_ext.contains('\\') || lower_ext.contains('/') || lower_ext.contains(':');
         let is_generic_folder = lower_ext == "__folder__";
+
+        let _com = if is_real_path {
+            Some(ScopedComInit::init()?)
+        } else {
+            None
+        };
 
         let size_flag = match size {
             IconSize::Small => SHGFI_SMALLICON,
@@ -245,7 +286,6 @@ pub fn get_cached_native_icon_png_with_size(
             return Ok(None);
         }
 
-        // Wrap HICON in RAII
         let hicon = ScopedHicon(shfi.hIcon);
 
         let mut icon_info = windows::Win32::UI::WindowsAndMessaging::ICONINFO::default();
@@ -253,7 +293,6 @@ pub fn get_cached_native_icon_png_with_size(
             return Ok(None);
         }
 
-        // Wrap color and mask in RAII
         let _hbm_color = ScopedHgdiobj(icon_info.hbmColor.into());
         let _hbm_mask = ScopedHgdiobj(icon_info.hbmMask.into());
 
@@ -293,16 +332,7 @@ pub fn get_cached_native_icon_png_with_size(
 
         let hdc_screen = ScopedScreenDc(unsafe { GetDC(None) });
         let hdc_mem = ScopedMemDc(unsafe { CreateCompatibleDC(Some(hdc_screen.0)) });
-
-        let mut bmi = BITMAPINFO::default();
-        bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
-        bmi.bmiHeader.biWidth = width as i32;
-        bmi.bmiHeader.biHeight = -(height as i32); // top-down
-        bmi.bmiHeader.biPlanes = 1;
-        bmi.bmiHeader.biBitCount = 32;
-        bmi.bmiHeader.biCompression = BI_RGB.0;
-
-        let mut pixels: Vec<u8> = vec![0; (width * height * 4) as usize];
+        let bmi = gdi::top_down_bgra_bitmap_info(width, height);
         let mut bits_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
 
         let hbm_dib = unsafe {
@@ -316,71 +346,42 @@ pub fn get_cached_native_icon_png_with_size(
             )
         };
 
-        if let Ok(h) = hbm_dib {
-            if h.is_invalid() {
-                return Ok(None);
-            }
-            let _hbm_dib_guard = ScopedHgdiobj(h.into());
-            let old_bmp = unsafe { SelectObject(hdc_mem.0, h.into()) };
+        let pixels = match hbm_dib {
+            Ok(h) if !h.is_invalid() => {
+                let _hbm_dib_guard = ScopedHgdiobj(h.into());
+                let old_bmp = unsafe { SelectObject(hdc_mem.0, h.into()) };
 
-            unsafe {
-                let _ = DrawIconEx(
-                    hdc_mem.0,
-                    0,
-                    0,
-                    hicon.0,
-                    width as i32,
-                    height as i32,
-                    0,
-                    None,
-                    DI_NORMAL,
-                );
-            }
-
-            if !bits_ptr.is_null() {
                 unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        bits_ptr as *const u8,
-                        pixels.as_mut_ptr(),
-                        pixels.len(),
+                    let _ = DrawIconEx(
+                        hdc_mem.0,
+                        0,
+                        0,
+                        hicon.0,
+                        width as i32,
+                        height as i32,
+                        0,
+                        None,
+                        DI_NORMAL,
                     );
                 }
+
+                let rgba = unsafe { gdi::copy_bgra_to_rgba(bits_ptr as *const u8, width, height) };
+
+                unsafe {
+                    SelectObject(hdc_mem.0, old_bmp);
+                }
+                rgba
             }
+            _ => return Ok(None),
+        };
 
-            unsafe {
-                SelectObject(hdc_mem.0, old_bmp);
-            }
-        } else {
-            return Ok(None);
-        }
-        // Convert BGRA to RGBA
-        for chunk in pixels.chunks_exact_mut(4) {
-            let b = chunk[0];
-            let r = chunk[2];
-            chunk[0] = r;
-            chunk[2] = b;
-        }
+        let png_bytes = gdi::encode_rgba_png_fast(&pixels, width, height)?;
+        let shared: Arc<[u8]> = Arc::from(png_bytes.as_slice());
 
-        let img = RgbaImage::from_raw(width, height, pixels).ok_or("Failed to create RgbaImage")?;
-        let mut buf = Cursor::new(Vec::new());
-        image::write_buffer_with_format(
-            &mut buf,
-            &img,
-            width,
-            height,
-            image::ColorType::Rgba8,
-            image::ImageFormat::Png,
-        )
-        .map_err(|e| e.to_string())?;
-
-        let png_bytes = buf.into_inner();
-
-        // Store in cache
         {
             let mut cache_guard = NATIVE_ICON_CACHE.lock().map_err(|e| e.to_string())?;
-            if let Some(cache) = cache_guard.as_mut() {
-                cache.insert(cache_key, png_bytes.clone());
-            }
+            let cache = cache_guard.get_or_insert_with(NativeIconCache::new);
+            cache.insert(cache_key, shared);
         }
 
         Ok(Some(png_bytes))

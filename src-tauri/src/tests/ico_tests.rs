@@ -1,4 +1,28 @@
-use super::{ico_frames_from_bytes, ico_spritesheet_from_bytes};
+use super::{ico_frames_from_bytes, ico_frames_from_path, ico_spritesheet_from_bytes, MAX_ICO_BYTES};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static ICO_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+struct TempDir(PathBuf);
+
+impl TempDir {
+    fn new(prefix: &str) -> Self {
+        let n = ICO_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "quivit-ico-test-{prefix}-{}-{n}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        Self(dir)
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
 
 fn png_bytes(width: u32, height: u32, fill: u8) -> Vec<u8> {
     let img = image::RgbaImage::from_pixel(width, height, image::Rgba([fill, 100, 150, 255]));
@@ -139,4 +163,83 @@ fn ico_frames_decodes_bmp_masked_entry() {
         .expect("decode payload png")
         .into_rgba8();
     assert_eq!(*decoded.get_pixel(0, 0), image::Rgba([90, 60, 30, 255]));
+}
+
+
+#[test]
+fn ico_frames_from_path_reads_valid_and_rejects_oversized() {
+    let dir = TempDir::new("path-limit");
+
+    // Valid ICO on disk
+    let valid_path = dir.0.join("valid.ico");
+    let ico = ico_container(&[png_bytes(4, 4, 180)]);
+    std::fs::write(&valid_path, &ico).expect("write valid ico");
+    let sizes = ico_frames_from_path(&valid_path).expect("read valid ico from path");
+    assert_eq!(sizes.len(), 1);
+    assert_eq!((sizes[0].width, sizes[0].height), (4, 4));
+
+    // Oversized ICO (> MAX_ICO_BYTES) rejected via metadata before reading
+    let oversized_path = dir.0.join("oversized.ico");
+    let file = std::fs::File::create(&oversized_path).expect("create oversized ico");
+    file.set_len(MAX_ICO_BYTES as u64 + 1)
+        .expect("set oversized length");
+    drop(file);
+    let err = ico_frames_from_path(&oversized_path).expect_err("oversized ico must be rejected");
+    assert!(err.contains("size limit"), "unexpected error: {err}");
+
+    // Empty / missing file rejection
+    let empty_path = dir.0.join("empty.ico");
+    std::fs::write(&empty_path, b"").expect("write empty ico");
+    assert!(ico_frames_from_path(&empty_path).is_err());
+    assert!(ico_frames_from_path(&dir.0.join("missing.ico")).is_err());
+}
+
+#[test]
+fn ico_frames_dedupes_overlapping_entries_and_caps_bmp_scan() {
+    // 1. Multiple directory entries sharing the exact same (offset, size) are deduplicated.
+    let single_bmp = bmp_masked_ico_2x2([30, 60, 90, 255]);
+    let dib = &single_bmp[22..];
+    let dup_count: u16 = 16;
+    let dir_end = 6 + (dup_count as usize) * 16;
+    let mut dup_ico = vec![0u8, 0, 1, 0];
+    dup_ico.extend_from_slice(&dup_count.to_le_bytes());
+    for _ in 0..dup_count {
+        let mut entry = [0u8; 16];
+        entry[0] = 2;
+        entry[1] = 2;
+        entry[4..6].copy_from_slice(&1u16.to_le_bytes());
+        entry[6..8].copy_from_slice(&32u16.to_le_bytes());
+        entry[8..12].copy_from_slice(&(dib.len() as u32).to_le_bytes());
+        entry[12..16].copy_from_slice(&(dir_end as u32).to_le_bytes());
+        dup_ico.extend_from_slice(&entry);
+    }
+    dup_ico.extend_from_slice(dib);
+
+    let sizes = ico_frames_from_bytes(&dup_ico).expect("duplicate span entries should dedupe cleanly");
+    assert_eq!(sizes.len(), 1);
+    assert_eq!((sizes[0].width, sizes[0].height), (2, 2));
+
+    // 2. Distinct overlapping BMP spans summing beyond MAX_ICO_BMP_SCAN_BYTES hit the scan cap.
+    let entries: u16 = 66;
+    let payload_len = 1024 * 1024usize; // 1 MiB payload -> 66 distinct shifted spans > 64 MiB cap
+    let scan_dir_end = 6 + (entries as usize) * 16;
+    let mut bomb_ico = Vec::with_capacity(scan_dir_end + payload_len);
+    bomb_ico.extend_from_slice(&[0, 0, 1, 0]);
+    bomb_ico.extend_from_slice(&entries.to_le_bytes());
+    for i in 0..entries as usize {
+        let offset = (scan_dir_end + i) as u32;
+        let size = (payload_len - i) as u32;
+        let mut entry = [0u8; 16];
+        entry[0] = 16;
+        entry[1] = 16;
+        entry[4..6].copy_from_slice(&1u16.to_le_bytes());
+        entry[6..8].copy_from_slice(&32u16.to_le_bytes());
+        entry[8..12].copy_from_slice(&size.to_le_bytes());
+        entry[12..16].copy_from_slice(&offset.to_le_bytes());
+        bomb_ico.extend_from_slice(&entry);
+    }
+    bomb_ico.resize(scan_dir_end + payload_len, 0u8);
+
+    let err = ico_frames_from_bytes(&bomb_ico).expect_err("overlapping BMP scan bomb must fail");
+    assert!(err.contains("scan limit"), "unexpected error: {err}");
 }

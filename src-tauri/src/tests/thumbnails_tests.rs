@@ -141,6 +141,13 @@ mod windows_tests {
         ico_24.extend_from_slice(&entry);
         assert!(!ico_has_alpha(&ico_24));
 
+        // wBitCount = 288 (0x0120: low byte 32, high byte 1) must be rejected as u16 != 32.
+        let mut ico_288 = vec![0u8, 0, 1, 0, 1, 0];
+        entry[6] = 0x20;
+        entry[7] = 0x01;
+        ico_288.extend_from_slice(&entry);
+        assert!(!ico_has_alpha(&ico_288));
+
         // Invalid / truncated
         assert!(!ico_has_alpha(&[]));
         assert!(!ico_has_alpha(&[0, 0, 2, 0, 1, 0]));
@@ -235,5 +242,60 @@ mod windows_tests {
             get_shell_thumbnail_png(anim_gif.to_str().unwrap(), 96).expect("anim gif ok"),
             None
         );
+    }
+
+    #[test]
+    fn should_reject_black_matte_short_circuits_source_probe() {
+        // 4x4 all-black border, opaque -> matte border present, no alpha -> invokes probe.
+        let mut opaque_black = vec![0u8; 4 * 4 * 4];
+        for px in opaque_black.chunks_exact_mut(4) {
+            px[3] = 255;
+        }
+        let mut probed = false;
+        assert!(should_reject_black_matte(&opaque_black, 4, 4, || {
+            probed = true;
+            true
+        }));
+        assert!(probed, "expected probe to run for opaque black-matte image");
+
+        // Same black border, but one pixel has alpha < 255 -> must NOT invoke probe.
+        let mut with_alpha = opaque_black.clone();
+        with_alpha[3] = 128;
+        let mut probed_alpha = false;
+        assert!(!should_reject_black_matte(&with_alpha, 4, 4, || {
+            probed_alpha = true;
+            true
+        }));
+        assert!(
+            !probed_alpha,
+            "probe must not run when thumbnail already has alpha"
+        );
+
+        // Opaque white image (no black matte border) -> must NOT invoke probe.
+        let white = vec![255u8; 4 * 4 * 4];
+        let mut probed_white = false;
+        assert!(!should_reject_black_matte(&white, 4, 4, || {
+            probed_white = true;
+            true
+        }));
+        assert!(
+            !probed_white,
+            "probe must not run when thumbnail has no black matte border"
+        );
+    }
+
+    #[test]
+    fn fast_png_encode_roundtrips_rgba_pixels() {
+        let pixels: Vec<u8> = vec![
+            255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 64, 10, 20, 30, 0,
+        ];
+        let encoded = gdi::encode_rgba_png_fast(&pixels, 2, 2).expect("fast png encode");
+        assert!(encoded.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+        let decoded = image::load_from_memory_with_format(&encoded, image::ImageFormat::Png)
+            .expect("decode fast png")
+            .to_rgba8();
+        assert_eq!(decoded.dimensions(), (2, 2));
+        assert_eq!(decoded.as_raw(), &pixels);
     }
 }

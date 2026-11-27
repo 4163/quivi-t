@@ -86,7 +86,7 @@ pub fn run() {
             platform::icons::warmup();
             crate::commands::registry::spawn_launch_previews_sync(app.handle().clone());
 
-            crate::archives::cache::acquire_temp_lock();
+            crate::archives::acquire_temp_lock();
             let app_handle = app.handle().clone();
             let config_path = startup.config_path;
             std::thread::spawn(move || {
@@ -95,7 +95,7 @@ pub fn run() {
                     config_path,
                 );
                 crate::commands::watchers::spawn_library_watcher(app_handle);
-                crate::archives::cache::cleanup_orphaned_temp_dirs();
+                crate::archives::cleanup_orphaned_temp_dirs();
                 #[cfg(windows)]
                 let _ = commands::library::cleanup_abandoned_captures();
             });
@@ -108,7 +108,6 @@ pub fn run() {
         find_directory_metadata,
         list_archive,
         drop_archive_cache,
-        drop_all_archives_cache,
         prefetch_archive_entries,
         commands::config::load_config,
         commands::config::get_config_dir,
@@ -199,18 +198,10 @@ pub fn run() {
                         guard.drop_all_archives();
                     }
                 }
-                crate::archives::cache::cleanup_current_temp_dir();
+                crate::archives::cleanup_current_temp_dir();
             }
         });
 }
-
-#[cfg(test)]
-#[path = "tests/archive_tests.rs"]
-mod archive_tests;
-
-#[cfg(test)]
-#[path = "tests/format_tests.rs"]
-mod format_tests;
 
 #[cfg(test)]
 #[path = "tests/temp_archive_tests.rs"]

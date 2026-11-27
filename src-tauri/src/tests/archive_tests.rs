@@ -549,3 +549,195 @@ fn invalid_archive_tar_invalid_checksum_and_truncated() {
     assert!(res.is_err());
     assert!(res.err().unwrap().contains("invalid header checksum"));
 }
+
+#[test]
+fn archive_cache_max_open_archives_zero_does_not_hang() {
+    let mut cache = ArchiveCache::new(2);
+    cache.set_max_open_archives(0);
+
+    cache.register_test_archive("only.cbz");
+    assert!(cache.contains_archive("only.cbz"));
+
+    cache.register_test_archive("next.cbz");
+    assert!(!cache.contains_archive("only.cbz"));
+    assert!(cache.contains_archive("next.cbz"));
+}
+
+#[test]
+fn drop_archive_deferred_returns_temp_dir_without_removing_under_lock() {
+    let scratch = TempDir::new("deferred-drop");
+    let fake_temp = scratch.path().join("extracted-temp");
+    fs::create_dir_all(&fake_temp).expect("create fake temp dir");
+    fs::write(fake_temp.join("01.png"), b"png").expect("write marker");
+
+    let mut cache = ArchiveCache::new(16);
+    let key: Arc<str> = Arc::from("deferred-test.rar");
+    let single = cache::SingleArchiveCache::with_temp_dir(
+        Arc::clone(&key),
+        fake_temp.clone(),
+        None,
+        None,
+    );
+    let cancel = single.cancel_flag();
+    cache.register_archive_deferred(key, single, true);
+
+    let deferred_dirs = cache.drop_archive_deferred("deferred-test.rar");
+    assert_eq!(deferred_dirs, vec![fake_temp.clone()]);
+    assert!(!cache.contains_archive("deferred-test.rar"));
+    assert!(cancel.load(AtomicOrdering::Acquire));
+    assert!(
+        fake_temp.exists(),
+        "drop_archive_deferred should defer fs::remove_dir_all to caller"
+    );
+
+    for dir in deferred_dirs {
+        fs::remove_dir_all(dir).expect("remove deferred dir");
+    }
+    assert!(!fake_temp.exists());
+}
+
+#[test]
+fn extract_state_tracks_extracted_order_without_duplicates() {
+    let notify = cache::new_extract_notify();
+    cache::notify_extracted(&notify, "01.png");
+    cache::notify_extracted(&notify, "02.png");
+    cache::notify_extracted(&notify, "01.png");
+    cache::notify_extracted(&notify, "03.png");
+
+    let (lock, _) = &*notify;
+    let guard = lock.lock().unwrap();
+    assert_eq!(guard.extracted_order, vec!["01.png", "02.png", "03.png"]);
+    assert_eq!(guard.extracted.len(), 3);
+
+    // Cursor progression slices only newly arrived items in O(1).
+    let mut cursor = 0usize;
+    let first_batch = guard.extracted_order[cursor..2].to_vec();
+    cursor = 2;
+    assert_eq!(first_batch, vec!["01.png", "02.png"]);
+    let second_batch = guard.extracted_order[cursor..].to_vec();
+    assert_eq!(second_batch, vec!["03.png"]);
+}
+
+#[test]
+fn read_plain_zip_entry_shared_does_not_block_while_read_entry_header_shared_waits() {
+    let cbz = test_file("cbz.cbz");
+    assert!(cbz.exists(), "missing fixture: {}", cbz.display());
+    let cbz_str = cbz.to_str().unwrap().to_string();
+    let cbz_entries = list_archive_names(&cbz_str).expect("list cbz");
+    let cbz_entry = cbz_entries
+        .iter()
+        .find(|e| !e.is_dir)
+        .expect("cbz has file")
+        .name
+        .clone();
+
+    let scratch = TempDir::new("nonblocking-header");
+    let pending_temp = scratch.path().join("pending-rar");
+    fs::create_dir_all(&pending_temp).expect("create pending temp dir");
+
+    let state = Arc::new(RwLock::new(ArchiveCache::new(64)));
+    let pending_key = "synthetic-pending.rar";
+    let notify = {
+        let mut cache = state.write().unwrap();
+        let key: Arc<str> = Arc::from(pending_key);
+        let single = cache::SingleArchiveCache::with_temp_dir(
+            Arc::clone(&key),
+            pending_temp.clone(),
+            None,
+            None,
+        );
+        let notify = single.notify();
+        cache.register_archive_deferred(key, single, true);
+        notify
+    };
+
+    let state_for_waiter = Arc::clone(&state);
+    let waiter = std::thread::spawn(move || {
+        read_entry_header_shared(&state_for_waiter, pending_key, "page01.png", 64)
+    });
+
+    // Give waiter a moment to enter wait_for_extracted_path.
+    std::thread::sleep(Duration::from_millis(40));
+
+    // Concurrent ZIP read must complete immediately without blocking on the pending RAR header wait.
+    let start = std::time::Instant::now();
+    let zip_bytes = read_plain_zip_entry_shared(&state, &cbz_str, &cbz_entry)
+        .expect("zip returns Some")
+        .expect("zip extract ok");
+    assert!(!zip_bytes.is_empty());
+    assert!(
+        start.elapsed() < Duration::from_secs(5),
+        "ZIP read stalled behind pending temp header read"
+    );
+
+    // Now fulfill the pending entry so the waiter completes cleanly.
+    let out_path = archive_entry_temp_path(&pending_temp, "page01.png").unwrap();
+    fs::write(&out_path, b"\x89PNG\r\n\x1a\nheader-bytes").expect("write pending entry");
+    cache::notify_extracted(&notify, "page01.png");
+    cache::notify_finished(&notify);
+
+    let hdr = waiter
+        .join()
+        .expect("join header waiter")
+        .expect("pending header read succeeds");
+    assert!(hdr.starts_with(b"\x89PNG\r\n\x1a\n"));
+}
+
+#[test]
+fn rar_streaming_extraction_works_for_plain_and_encrypted_archives() {
+    let state = RwLock::new(ArchiveCache::new(32));
+
+    let cbr = test_file("cbr.cbr");
+    assert!(cbr.exists(), "missing fixture: {}", cbr.display());
+    let cbr_str = cbr.to_str().unwrap();
+    let cbr_res = prepare_archive_shared(&state, cbr_str, None).expect("prepare cbr");
+    let cbr_entry = cbr_res
+        .files
+        .iter()
+        .find(|f| !f.is_dir)
+        .expect("cbr has entry")
+        .name
+        .clone();
+    let cbr_bytes =
+        read_entry_bytes_shared(&state, cbr_str, &cbr_entry).expect("extract cbr entry");
+    assert!(!cbr_bytes.is_empty());
+
+    let enc_rar = encrypted_test_file("encrypted-123.rar");
+    assert!(enc_rar.exists(), "missing fixture: {}", enc_rar.display());
+    let enc_str = enc_rar.to_str().unwrap();
+
+    let locked = prepare_archive_shared(&state, enc_str, None).expect("list locked rar");
+    assert_eq!(
+        locked.encryption,
+        Some(ArchiveEncryptionStatus::PasswordRequired)
+    );
+
+    let wrong = prepare_archive_shared(&state, enc_str, Some("wrong")).expect("list wrong pwd");
+    assert_eq!(
+        wrong.encryption,
+        Some(ArchiveEncryptionStatus::PasswordIncorrect)
+    );
+
+    let unlocked = prepare_archive_shared(&state, enc_str, Some("123")).expect("unlock rar");
+    assert_eq!(unlocked.encryption, None);
+    let enc_entry = unlocked
+        .files
+        .iter()
+        .find(|f| !f.is_dir)
+        .expect("encrypted rar has entry")
+        .name
+        .clone();
+    let enc_bytes =
+        read_entry_bytes_shared(&state, enc_str, &enc_entry).expect("extract encrypted rar entry");
+    assert!(!enc_bytes.is_empty());
+
+    let dirs = {
+        let mut cache = state.write().unwrap();
+        let mut d = cache.drop_archive_deferred(cbr_str);
+        d.extend(cache.drop_archive_deferred(enc_str));
+        d
+    };
+    for dir in dirs {
+        let _ = fs::remove_dir_all(dir);
+    }
+}

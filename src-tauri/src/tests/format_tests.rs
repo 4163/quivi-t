@@ -1,13 +1,43 @@
 use crate::formats::{
-    check_animation_status, check_mp4_has_audio, decode_tiff_file_to_png, decode_tiff_to_png,
-    is_archive_ext, is_image_ext, is_metadata_ext, is_tiff_ext, read_avif_dimensions,
-    read_ico_dimensions, read_jpeg_dimensions_from_reader, read_media_dimensions_from_path,
-    read_media_dimensions_from_stream, read_mp4_dimensions, read_mp4_dimensions_stream,
-    read_svg_dimensions, read_tiff_dimensions_from_reader,
+    check_animation_status, check_mp4_has_audio, check_mp4_has_audio_stream,
+    decode_tiff_file_to_png, decode_tiff_to_png, gif_has_transparency, guess_mime, ico_has_alpha,
+    is_archive_ext, is_image_ext, is_metadata_ext, is_tiff_ext, png_has_alpha,
+    read_avif_dimensions, read_ico_dimensions, read_jpeg_dimensions_from_reader,
+    read_media_dimensions_from_path, read_media_dimensions_from_stream, read_mp4_dimensions,
+    read_mp4_dimensions_stream, read_svg_dimensions, read_tiff_dimensions_from_reader,
+    tiff_has_alpha,
 };
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+struct ChunkedReader<'a> {
+    data: &'a [u8],
+    pos: usize,
+    chunk_size: usize,
+}
+
+impl<'a> ChunkedReader<'a> {
+    fn new(data: &'a [u8], chunk_size: usize) -> Self {
+        Self {
+            data,
+            pos: 0,
+            chunk_size,
+        }
+    }
+}
+
+impl Read for ChunkedReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.pos >= self.data.len() {
+            return Ok(0);
+        }
+        let n = buf.len().min(self.chunk_size).min(self.data.len() - self.pos);
+        buf[..n].copy_from_slice(&self.data[self.pos..self.pos + n]);
+        self.pos += n;
+        Ok(n)
+    }
+}
 
 static FORMAT_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -707,4 +737,208 @@ fn test_tiff_orientation_swap_file_decode_and_rejection() {
     assert!(decode_tiff_to_png(&[]).is_err());
     assert!(decode_tiff_to_png(b"not-a-tiff").is_err());
     assert!(decode_tiff_file_to_png(&repo_test_file("missing_file_for_tiff.tif")).is_err());
+}
+
+
+#[test]
+fn test_mp4_stream_chunked_read_and_zero_size_moov() {
+    let mp4_v0 = synthetic_mp4(0, 1280, 720, false);
+    assert_eq!(
+        read_mp4_dimensions_stream(&mut ChunkedReader::new(&mp4_v0, 7)),
+        Some((1280, 720))
+    );
+
+    let mp4_v1 = synthetic_mp4(1, 1920, 1080, false);
+    assert_eq!(
+        read_mp4_dimensions_stream(&mut ChunkedReader::new(&mp4_v1, 7)),
+        Some((1920, 1080))
+    );
+
+    let mp4_zero_moov = synthetic_mp4(0, 640, 480, true);
+    assert_eq!(
+        read_mp4_dimensions_stream(&mut ChunkedReader::new(&mp4_zero_moov, 7)),
+        Some((640, 480))
+    );
+
+    // Chunked audio stream with sized moov
+    let mut mp4_audio = ftyp_box(b"isom", &[*b"mp41"]);
+    let mut moov_audio = empty_box(b"moov");
+    moov_audio.extend_from_slice(b"\0\0\0\x10hdlrsoun\0\0\0\0");
+    let moov_len = moov_audio.len() as u32;
+    moov_audio[0..4].copy_from_slice(&moov_len.to_be_bytes());
+    mp4_audio.extend_from_slice(&moov_audio);
+    assert!(check_mp4_has_audio_stream(&mut ChunkedReader::new(
+        &mp4_audio, 7
+    )));
+
+    // Chunked audio stream with size32 == 0 moov (extends to EOF)
+    let mut mp4_audio_zero = ftyp_box(b"isom", &[*b"mp41"]);
+    mp4_audio_zero.extend_from_slice(&0u32.to_be_bytes());
+    mp4_audio_zero.extend_from_slice(b"moov");
+    mp4_audio_zero.extend_from_slice(b"\0\0\0\x10smhd\0\0\0\0\0\0\0\0");
+    assert!(check_mp4_has_audio_stream(&mut ChunkedReader::new(
+        &mp4_audio_zero,
+        7
+    )));
+
+    // Chunked video-only stream with size32 == 0 moov
+    assert!(!check_mp4_has_audio_stream(&mut ChunkedReader::new(
+        &mp4_zero_moov,
+        7
+    )));
+}
+
+#[test]
+fn test_read_avif_dimensions_ignores_fake_ispe_and_irot_in_mdat() {
+    let mut ispe_real = Vec::with_capacity(12);
+    ispe_real.extend_from_slice(&[0u8; 4]);
+    ispe_real.extend_from_slice(&320u32.to_be_bytes());
+    ispe_real.extend_from_slice(&240u32.to_be_bytes());
+    let ipco = box_wrap(b"ipco", &box_wrap(b"ispe", &ispe_real));
+    let iprp = box_wrap(b"iprp", &ipco);
+    let mut meta_payload = vec![0u8; 4];
+    meta_payload.extend_from_slice(&iprp);
+    let meta = box_wrap(b"meta", &meta_payload);
+
+    // Place a larger fake ispe (4096x4096) and fake 90-degree irot inside mdat.
+    let mut ispe_fake = Vec::with_capacity(12);
+    ispe_fake.extend_from_slice(&[0u8; 4]);
+    ispe_fake.extend_from_slice(&4096u32.to_be_bytes());
+    ispe_fake.extend_from_slice(&4096u32.to_be_bytes());
+    let mut mdat_payload = box_wrap(b"ispe", &ispe_fake);
+    mdat_payload.extend_from_slice(&box_wrap(b"irot", &[1]));
+
+    let mut avif = ftyp_box(b"avif", &[*b"avif", *b"mif1"]);
+    avif.extend_from_slice(&meta);
+    avif.extend_from_slice(&box_wrap(b"mdat", &mdat_payload));
+
+    assert_eq!(read_avif_dimensions(&avif), Some((320, 240)));
+}
+
+#[test]
+fn test_svg_animation_gate_skips_binary_and_accepts_bom() {
+    // Binary JPEG header containing raw "<svg><animate/>" text must not match SVG
+    let mut fake_jpeg = vec![0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0x20];
+    fake_jpeg.extend_from_slice(b"<svg><animate attributeName='x'/></svg>");
+    assert!(!check_animation_status(&fake_jpeg).is_animated);
+
+    // UTF-8 BOM + whitespace + <svg> with newline-delimited <set\n must match
+    let mut bom_svg = vec![0xEF, 0xBB, 0xBF];
+    bom_svg.extend_from_slice(b"  \n<svg><set\nattributeName='fill' to='red'/></svg>");
+    assert!(check_animation_status(&bom_svg).is_animated);
+}
+
+#[test]
+fn test_guess_mime() {
+    assert_eq!(guess_mime("photo.jpg"), "image/jpeg");
+    assert_eq!(guess_mime("photo.JPEG"), "image/jpeg");
+    assert_eq!(guess_mime("photo.jfif"), "image/jpeg");
+    assert_eq!(guess_mime("image.PNG"), "image/png");
+    assert_eq!(guess_mime("anim.gif"), "image/gif");
+    assert_eq!(guess_mime("pic.webp"), "image/webp");
+    assert_eq!(guess_mime("icon.svg"), "image/svg+xml");
+    assert_eq!(guess_mime("old.bmp"), "image/bmp");
+    assert_eq!(guess_mime("old.DIB"), "image/bmp");
+    assert_eq!(guess_mime("app.ico"), "image/x-icon");
+    assert_eq!(guess_mime("next.avif"), "image/avif");
+    assert_eq!(guess_mime("scan.tif"), "image/tiff");
+    assert_eq!(guess_mime("scan.TIFF"), "image/tiff");
+    assert_eq!(guess_mime("loop.apng"), "image/apng");
+    assert_eq!(guess_mime("clip.MP4"), "video/mp4");
+    assert_eq!(guess_mime("archive.cbz"), "application/octet-stream");
+    assert_eq!(guess_mime("noext"), "application/octet-stream");
+}
+
+#[test]
+fn test_header_alpha_helpers() {
+    // PNG: color types 4 and 6, plus palette + tRNS before IDAT
+    let make_png = |color_type: u8, before: Option<&[u8; 4]>, after: Option<&[u8; 4]>| {
+        let mut buf = b"\x89PNG\r\n\x1a\n".to_vec();
+        let mut ihdr = vec![0u8; 13];
+        ihdr[3] = 1;
+        ihdr[7] = 1;
+        ihdr[8] = 8;
+        ihdr[9] = color_type;
+        buf.extend_from_slice(&png_chunk(b"IHDR", &ihdr));
+        if let Some(t) = before {
+            buf.extend_from_slice(&png_chunk(t, &[0]));
+        }
+        buf.extend_from_slice(&png_chunk(b"IDAT", &[0u8; 4]));
+        if let Some(t) = after {
+            buf.extend_from_slice(&png_chunk(t, &[0]));
+        }
+        buf
+    };
+    assert!(png_has_alpha(&make_png(6, None, None)));
+    assert!(png_has_alpha(&make_png(4, None, None)));
+    assert!(!png_has_alpha(&make_png(2, None, None)));
+    assert!(png_has_alpha(&make_png(3, Some(b"tRNS"), None)));
+    assert!(!png_has_alpha(&make_png(3, None, Some(b"tRNS"))));
+    assert!(!png_has_alpha(b"\x89PNG\r\n\x1a\nshort"));
+
+    // GIF: transparent flag in GCE (with and without GCT)
+    let mut gif_trans = b"GIF89a\x01\x00\x01\x00\x00\x00\x00".to_vec();
+    gif_trans.extend_from_slice(&[0x21, 0xF9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x3B]);
+    assert!(gif_has_transparency(&gif_trans));
+
+    let mut gif_opaque = b"GIF89a\x01\x00\x01\x00\x00\x00\x00".to_vec();
+    gif_opaque.extend_from_slice(&[0x21, 0xF9, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3B]);
+    assert!(!gif_has_transparency(&gif_opaque));
+
+    let mut gif_gct = b"GIF89a\x01\x00\x01\x00\x80\x00\x00".to_vec();
+    gif_gct.extend_from_slice(&[0u8; 6]);
+    gif_gct.extend_from_slice(&[0x21, 0xF9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x3B]);
+    assert!(gif_has_transparency(&gif_gct));
+    assert!(!gif_has_transparency(b"GIF89a"));
+
+    // ICO: u16 wBitCount == 32 true, 24 false, 288 (0x0120, low byte 32) false!
+    let make_ico = |bit_count: u16| {
+        let mut ico = vec![0u8, 0, 1, 0, 1, 0];
+        let mut entry = [0u8; 16];
+        entry[0] = 16;
+        entry[1] = 16;
+        entry[6..8].copy_from_slice(&bit_count.to_le_bytes());
+        ico.extend_from_slice(&entry);
+        ico
+    };
+    assert!(ico_has_alpha(&make_ico(32)));
+    assert!(!ico_has_alpha(&make_ico(24)));
+    assert!(!ico_has_alpha(&make_ico(288)));
+    assert!(!ico_has_alpha(&[]));
+    assert!(!ico_has_alpha(&[0, 0, 2, 0, 1, 0]));
+
+    // TIFF: ExtraSamples tag 338 in LE and BE headers
+    let make_tiff = |le: bool, has_extra: bool| {
+        let mut buf = Vec::new();
+        if le {
+            buf.extend_from_slice(&[0x49, 0x49, 0x2A, 0x00]);
+            buf.extend_from_slice(&8u32.to_le_bytes());
+            buf.extend_from_slice(&2u16.to_le_bytes());
+        } else {
+            buf.extend_from_slice(&[0x4D, 0x4D, 0x00, 0x2A]);
+            buf.extend_from_slice(&8u32.to_be_bytes());
+            buf.extend_from_slice(&2u16.to_be_bytes());
+        }
+        let tags: [u16; 2] = if has_extra { [256, 338] } else { [256, 257] };
+        for tag in tags {
+            if le {
+                buf.extend_from_slice(&tag.to_le_bytes());
+                buf.extend_from_slice(&3u16.to_le_bytes());
+                buf.extend_from_slice(&1u32.to_le_bytes());
+                buf.extend_from_slice(&1u32.to_le_bytes());
+            } else {
+                buf.extend_from_slice(&tag.to_be_bytes());
+                buf.extend_from_slice(&3u16.to_be_bytes());
+                buf.extend_from_slice(&1u32.to_be_bytes());
+                buf.extend_from_slice(&1u32.to_be_bytes());
+            }
+        }
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf
+    };
+    assert!(tiff_has_alpha(&make_tiff(true, true)));
+    assert!(!tiff_has_alpha(&make_tiff(true, false)));
+    assert!(tiff_has_alpha(&make_tiff(false, true)));
+    assert!(!tiff_has_alpha(&make_tiff(false, false)));
+    assert!(!tiff_has_alpha(b"not-a-tiff"));
 }

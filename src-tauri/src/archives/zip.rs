@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
+use std::io::{Read, Seek, SeekFrom};
 
 use crate::formats::{is_image_ext, is_metadata_ext};
 use crate::models::{ArchiveEncryptionStatus, FileEntry};
@@ -7,9 +8,19 @@ use crate::models::{ArchiveEncryptionStatus, FileEntry};
 use super::cache::ZipArchive;
 use super::sort_archive_entries;
 
-pub(crate) fn validate_zip_header(archive_path: &str) -> Result<fs::File, String> {
-    use std::io::{Read, Seek, SeekFrom};
+const FAST_TAIL_SCAN: u64 = 4 * 1024;
+const MAX_TAIL_SCAN: u64 = 128 * 1024;
 
+fn tail_has_eocd(buf: &[u8]) -> bool {
+    buf.windows(4).rev().any(|w| {
+        matches!(
+            w,
+            [0x50, 0x4B, 0x05, 0x06] | [0x50, 0x4B, 0x06, 0x06] | [0x50, 0x4B, 0x06, 0x07]
+        )
+    })
+}
+
+pub(super) fn validate_zip_header(archive_path: &str) -> Result<fs::File, String> {
     let mut file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
     let len = file
         .metadata()
@@ -23,23 +34,27 @@ pub(crate) fn validate_zip_header(archive_path: &str) -> Result<fs::File, String
     }
 
     // Allow ZIPs with prepended data (SFX/offset archives): do not require PK at byte 0.
-    // EOCD presence is the reliable structural marker; magic at 0 is only a fallback
-    // diagnostic when EOCD is missing to preserve the "missing PK" error for non-ZIPs.
-    const MAX_TAIL_SCAN: u64 = 128 * 1024;
-    let tail_len = len.min(MAX_TAIL_SCAN) as usize;
-    let seek_offset = len - tail_len as u64;
-    file.seek(SeekFrom::Start(seek_offset))
+    // Scan the final 4 KiB backwards first to hit standard EOCDs on stack memory before
+    // falling back to the 128 KiB tail scan for archives with large trailing comments.
+    let fast_len = len.min(FAST_TAIL_SCAN) as usize;
+    file.seek(SeekFrom::Start(len - fast_len as u64))
         .map_err(|e| format!("Cannot seek archive tail: {e}"))?;
-
-    let mut tail_buf = vec![0u8; tail_len];
-    file.read_exact(&mut tail_buf)
+    let mut fast_buf = [0u8; FAST_TAIL_SCAN as usize];
+    file.read_exact(&mut fast_buf[..fast_len])
         .map_err(|e| format!("Cannot read archive tail: {e}"))?;
 
-    let has_eocd = tail_buf.windows(4).any(|w| w == [0x50, 0x4B, 0x05, 0x06]);
-    let has_zip64_eocd = tail_buf
-        .windows(4)
-        .any(|w| w == [0x50, 0x4B, 0x06, 0x06] || w == [0x50, 0x4B, 0x06, 0x07]);
-    if !has_eocd && !has_zip64_eocd {
+    let mut found_eocd = tail_has_eocd(&fast_buf[..fast_len]);
+    if !found_eocd && len > FAST_TAIL_SCAN {
+        let tail_len = len.min(MAX_TAIL_SCAN) as usize;
+        file.seek(SeekFrom::Start(len - tail_len as u64))
+            .map_err(|e| format!("Cannot seek archive tail: {e}"))?;
+        let mut tail_buf = vec![0u8; tail_len];
+        file.read_exact(&mut tail_buf)
+            .map_err(|e| format!("Cannot read archive tail: {e}"))?;
+        found_eocd = tail_has_eocd(&tail_buf);
+    }
+
+    if !found_eocd {
         file.seek(SeekFrom::Start(0))
             .map_err(|e| format!("Cannot reset archive cursor: {e}"))?;
         let mut magic = [0u8; 4];
@@ -60,19 +75,47 @@ pub(crate) fn validate_zip_header(archive_path: &str) -> Result<fs::File, String
     Ok(file)
 }
 
-pub(crate) fn open_zip_archive(archive_path: &str) -> Result<ZipArchive, String> {
+pub(super) fn open_zip_archive(archive_path: &str) -> Result<ZipArchive, String> {
     let file = validate_zip_header(archive_path)?;
     zip::ZipArchive::new(std::io::BufReader::new(file))
         .map_err(|e| format!("Invalid ZIP archive: {e}"))
 }
 
-fn decode_zip_entry_name<R: std::io::Read + std::io::Seek>(
-    entry: &zip::read::ZipFile<'_, R>,
-) -> String {
-    crate::archives::decode_cjk_name(entry.name_raw())
+pub(super) fn open_zip_archive_unchecked(archive_path: &str) -> Result<ZipArchive, String> {
+    let file = fs::File::open(archive_path).map_err(|e| format!("Cannot open archive: {e}"))?;
+    zip::ZipArchive::new(std::io::BufReader::new(file))
+        .map_err(|e| format!("Invalid ZIP archive: {e}"))
 }
 
-pub(crate) fn list_zip_entries(
+fn decode_zip_entry_name<R: Read + Seek>(entry: &zip::read::ZipFile<'_, R>) -> String {
+    super::encoding::decode_cjk_name(entry.name_raw())
+}
+
+fn push_fallback_entry(
+    archive_path: &str,
+    name: &str,
+    index: usize,
+    index_map: &mut HashMap<String, usize>,
+    files: &mut Vec<FileEntry>,
+) {
+    index_map.insert(name.to_string(), index);
+    let normalized = name.replace('\\', "/");
+    if normalized != name {
+        index_map.insert(normalized, index);
+    }
+    let ext = name.rsplit('.').next().unwrap_or("");
+    if is_image_ext(ext) || is_metadata_ext(ext) {
+        files.push(FileEntry::new_archive_entry(
+            name.to_string(),
+            format!("{archive_path}|{name}"),
+            ext.to_uppercase(),
+            String::new(),
+            0,
+        ));
+    }
+}
+
+pub(super) fn list_zip_entries(
     archive_path: &str,
     password: Option<&str>,
 ) -> Result<
@@ -133,57 +176,14 @@ pub(crate) fn list_zip_entries(
             }
             Err(zip::result::ZipError::InvalidPassword) => {
                 bad_password = true;
-                index_map.insert(name.clone(), i);
-                let normalized = name.replace('\\', "/");
-                if normalized != *name {
-                    index_map.insert(normalized, i);
-                }
-                let ext = name.rsplit('.').next().unwrap_or("");
-                if is_image_ext(ext) || is_metadata_ext(ext) {
-                    files.push(FileEntry::new_archive_entry(
-                        name.clone(),
-                        format!("{}|{}", archive_path, name),
-                        ext.to_uppercase(),
-                        "".to_string(),
-                        0,
-                    ));
-                }
+                push_fallback_entry(archive_path, name, i, &mut index_map, &mut files);
             }
             Err(zip::result::ZipError::UnsupportedArchive(err)) if err.contains("Password") => {
                 has_encrypted = true;
-                index_map.insert(name.clone(), i);
-                let normalized = name.replace('\\', "/");
-                if normalized != *name {
-                    index_map.insert(normalized, i);
-                }
-                let ext = name.rsplit('.').next().unwrap_or("");
-                if is_image_ext(ext) || is_metadata_ext(ext) {
-                    files.push(FileEntry::new_archive_entry(
-                        name.clone(),
-                        format!("{}|{}", archive_path, name),
-                        ext.to_uppercase(),
-                        "".to_string(),
-                        0,
-                    ));
-                }
+                push_fallback_entry(archive_path, name, i, &mut index_map, &mut files);
             }
             Err(_) => {
-                index_map.insert(name.clone(), i);
-                let normalized = name.replace('\\', "/");
-                if normalized != *name {
-                    index_map.insert(normalized, i);
-                }
-
-                let ext = name.rsplit('.').next().unwrap_or("");
-                if is_image_ext(ext) || is_metadata_ext(ext) {
-                    files.push(FileEntry::new_archive_entry(
-                        name.clone(),
-                        format!("{}|{}", archive_path, name),
-                        ext.to_uppercase(),
-                        "".to_string(),
-                        0,
-                    ));
-                }
+                push_fallback_entry(archive_path, name, i, &mut index_map, &mut files);
                 skipped_count += 1;
             }
         }
@@ -208,7 +208,7 @@ pub(crate) fn list_zip_entries(
     Ok((files, archive, index_map, encryption))
 }
 
-fn get_zip_entry_by_index<'a, R: std::io::Read + std::io::Seek>(
+fn get_zip_entry_by_index<'a, R: Read + Seek>(
     archive: &'a mut zip::ZipArchive<R>,
     idx: usize,
     password: Option<&str>,
@@ -219,7 +219,7 @@ fn get_zip_entry_by_index<'a, R: std::io::Read + std::io::Seek>(
     }
 }
 
-fn get_zip_entry_by_name<'a, R: std::io::Read + std::io::Seek>(
+fn get_zip_entry_by_name<'a, R: Read + Seek>(
     archive: &'a mut zip::ZipArchive<R>,
     name: &str,
     password: Option<&str>,
@@ -230,89 +230,63 @@ fn get_zip_entry_by_name<'a, R: std::io::Read + std::io::Seek>(
     }
 }
 
-pub(crate) fn read_zip_entry_by_decoded_name<R: std::io::Read + std::io::Seek>(
+pub(super) fn with_zip_entry_reader<R: Read + Seek, T>(
     archive: &mut zip::ZipArchive<R>,
     entry_name: &str,
     index_map: Option<&HashMap<String, usize>>,
     password: Option<&str>,
-) -> Result<Vec<u8>, String> {
+    f: impl FnOnce(&mut zip::read::ZipFile<'_, R>) -> Result<T, String>,
+) -> Result<T, String> {
     if let Some(index) = index_map.and_then(|m| m.get(entry_name).copied()) {
         let mut entry = get_zip_entry_by_index(archive, index, password)
             .map_err(|e| format!("Error reading ZIP entry: {e}"))?;
-        let mut buf = Vec::with_capacity(entry.size() as usize);
-        std::io::Read::read_to_end(&mut entry, &mut buf)
-            .map_err(|e| format!("Error reading entry: {e}"))?;
-        return Ok(buf);
+        return f(&mut entry);
     }
 
     if let Ok(mut entry) = get_zip_entry_by_name(archive, entry_name, password) {
-        let mut buf = Vec::with_capacity(entry.size() as usize);
-        if std::io::Read::read_to_end(&mut entry, &mut buf).is_ok() {
-            return Ok(buf);
-        }
+        return f(&mut entry);
     }
 
     let total = archive.len();
     for i in 0..total {
         if let Ok(mut entry) = get_zip_entry_by_index(archive, i, password) {
-            let decoded_name = decode_zip_entry_name(&entry);
-            if decoded_name == entry_name {
-                let mut buf = Vec::with_capacity(entry.size() as usize);
-                std::io::Read::read_to_end(&mut entry, &mut buf)
-                    .map_err(|e| format!("Error reading entry: {e}"))?;
-                return Ok(buf);
+            if decode_zip_entry_name(&entry) == entry_name {
+                return f(&mut entry);
             }
         }
     }
 
-    Err(format!("Cannot find ZIP entry: {}", entry_name))
+    Err(format!("Cannot find ZIP entry: {entry_name}"))
 }
 
-pub(crate) fn extract_zip_entry(
-    archive_path: &str,
+pub(super) fn read_zip_entry_by_decoded_name<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
     entry_name: &str,
+    index_map: Option<&HashMap<String, usize>>,
     password: Option<&str>,
 ) -> Result<Vec<u8>, String> {
-    let mut archive = open_zip_archive(archive_path)?;
-    read_zip_entry_by_decoded_name(&mut archive, entry_name, None, password)
+    with_zip_entry_reader(archive, entry_name, index_map, password, |entry| {
+        let mut buf = Vec::with_capacity(entry.size() as usize);
+        entry
+            .read_to_end(&mut buf)
+            .map_err(|e| format!("Error reading entry: {e}"))?;
+        Ok(buf)
+    })
 }
 
-pub(crate) fn read_zip_entry_header<R: std::io::Read + std::io::Seek>(
+pub(super) fn read_zip_entry_header<R: Read + Seek>(
     archive: &mut zip::ZipArchive<R>,
     entry_name: &str,
     limit: usize,
     index_map: Option<&HashMap<String, usize>>,
     password: Option<&str>,
 ) -> Result<Vec<u8>, String> {
-    use std::io::Read;
-
-    let try_limited = |entry: &mut zip::read::ZipFile<'_, R>| -> Result<Vec<u8>, String> {
+    with_zip_entry_reader(archive, entry_name, index_map, password, |entry| {
         let mut buf = Vec::with_capacity(limit.min(entry.size() as usize));
-        let mut take = entry.take(limit as u64);
-        take.read_to_end(&mut buf)
+        entry
+            .take(limit as u64)
+            .read_to_end(&mut buf)
             .map_err(|e| format!("Error reading ZIP entry header: {e}"))?;
         Ok(buf)
-    };
-
-    if let Some(index) = index_map.and_then(|m| m.get(entry_name).copied()) {
-        let mut entry = get_zip_entry_by_index(archive, index, password)
-            .map_err(|e| format!("Error reading ZIP entry header: {e}"))?;
-        return try_limited(&mut entry);
-    }
-
-    if let Ok(mut entry) = get_zip_entry_by_name(archive, entry_name, password) {
-        return try_limited(&mut entry);
-    }
-
-    let total = archive.len();
-    for i in 0..total {
-        if let Ok(mut entry) = get_zip_entry_by_index(archive, i, password) {
-            let decoded_name = decode_zip_entry_name(&entry);
-            if decoded_name == entry_name {
-                return try_limited(&mut entry);
-            }
-        }
-    }
-
-    Err(format!("Cannot find ZIP entry: {}", entry_name))
+    })
 }

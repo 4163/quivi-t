@@ -1,14 +1,16 @@
+use std::path::Path;
 use std::sync::RwLock;
 
-use crate::archives::ArchiveCache;
-use crate::ico::ico_frames_from_bytes;
+use crate::archives::{
+    prepare_archive_shared, read_entry_bytes_shared, read_plain_zip_entry_shared,
+    spawn_remove_temp_dirs, ArchiveCache,
+};
+use crate::ico::{ico_frames_from_bytes, ico_frames_from_path};
 use crate::models::ArchiveReadResult;
-use std::fs;
 
 #[tauri::command(async)]
 pub fn get_ico_frames(path: String) -> Result<Vec<crate::models::IcoSize>, String> {
-    let data = fs::read(&path).map_err(|e| format!("Cannot read ICO file: {e}"))?;
-    ico_frames_from_bytes(&data)
+    ico_frames_from_path(Path::new(&path))
 }
 
 #[tauri::command(async)]
@@ -17,8 +19,7 @@ pub fn list_archive(
     password: Option<String>,
     state: tauri::State<'_, RwLock<ArchiveCache>>,
 ) -> Result<ArchiveReadResult, String> {
-    let mut cache = state.write().map_err(|e| e.to_string())?;
-    cache.prepare_archive(&archive_path, password.as_deref())
+    prepare_archive_shared(&state, &archive_path, password.as_deref())
 }
 
 #[tauri::command(async)]
@@ -26,17 +27,11 @@ pub fn drop_archive_cache(
     archive_path: String,
     state: tauri::State<'_, RwLock<ArchiveCache>>,
 ) -> Result<(), String> {
-    let mut cache = state.write().map_err(|e| e.to_string())?;
-    cache.drop_archive(&archive_path);
-    Ok(())
-}
-
-#[tauri::command(async)]
-pub fn drop_all_archives_cache(
-    state: tauri::State<'_, RwLock<ArchiveCache>>,
-) -> Result<(), String> {
-    let mut cache = state.write().map_err(|e| e.to_string())?;
-    cache.drop_all_archives();
+    let dirs = {
+        let mut cache = state.write().map_err(|e| e.to_string())?;
+        cache.drop_archive_deferred(&archive_path)
+    };
+    spawn_remove_temp_dirs(dirs);
     Ok(())
 }
 
@@ -46,14 +41,9 @@ pub fn prefetch_archive_entries(
     entries: Vec<String>,
     state: tauri::State<'_, RwLock<ArchiveCache>>,
 ) -> Result<(), String> {
-    let ext = archive_path.rsplit('.').next().unwrap_or("");
-    if !ext.eq_ignore_ascii_case("zip") && !ext.eq_ignore_ascii_case("cbz") {
-        return Ok(());
-    }
-
     for entry_name in entries {
-        if let Ok(mut cache) = state.write() {
-            let _ = cache.read_entry_bytes(&archive_path, &entry_name);
+        if read_plain_zip_entry_shared(&state, &archive_path, &entry_name).is_none() {
+            break;
         }
     }
 
@@ -66,11 +56,7 @@ pub fn get_archive_ico_frames(
     entry_name: String,
     state: tauri::State<'_, RwLock<ArchiveCache>>,
 ) -> Result<Vec<crate::models::IcoSize>, String> {
-    let entry_data = state
-        .write()
-        .map_err(|e| e.to_string())?
-        .read_entry_bytes(&archive_path, &entry_name)?;
-    let data = entry_data.wait_for_data(&entry_name)?;
+    let data = read_entry_bytes_shared(&state, &archive_path, &entry_name)?;
     ico_frames_from_bytes(&data)
 }
 

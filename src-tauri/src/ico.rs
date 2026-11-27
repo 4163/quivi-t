@@ -1,10 +1,10 @@
 use std::collections::HashSet;
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 
 use image::{DynamicImage, ImageFormat, ImageReader, RgbaImage};
 
 const MAX_ICO_BYTES: usize = 64 * 1024 * 1024;
-const MAX_ICO_ENTRIES: usize = 1_024;
+const MAX_ICO_BMP_SCAN_BYTES: usize = MAX_ICO_BYTES;
 const MAX_ICO_DIMENSION: u32 = 4_096;
 const MAX_ICO_PIXELS_BYTES: u64 = 128 * 1024 * 1024;
 
@@ -15,49 +15,67 @@ fn decode_image(bytes: &[u8], format: ImageFormat) -> Result<RgbaImage, String> 
     limits.max_alloc = Some(MAX_ICO_PIXELS_BYTES);
     let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
     reader.limits(limits);
-    reader.decode().map(DynamicImage::into_rgba8).map_err(|error| error.to_string())
+    reader
+        .decode()
+        .map(DynamicImage::into_rgba8)
+        .map_err(|error| error.to_string())
 }
 
 fn decoded_ico_frames(data: &[u8]) -> Result<Vec<RgbaImage>, String> {
     if data.len() < 6 || data.len() > MAX_ICO_BYTES {
         return Err("ICO input is outside the supported size limit.".into());
     }
-    let count = u16::from_le_bytes([data[4], data[5]]) as usize;
-    if data[..4] != [0, 0, 1, 0] || count == 0 || count > MAX_ICO_ENTRIES
-        || data.len() < 6 + count * 16 {
+    let Some(dir_iter) = crate::formats::parse_ico_dir(data) else {
         return Err("Invalid ICO file structure".into());
-    }
+    };
+    let dir_end = 6 + dir_iter.len() * 16;
     let mut frames = Vec::new();
     let mut dimensions = HashSet::new();
+    let mut seen_spans = HashSet::new();
+    let mut bmp_scan_bytes = 0usize;
     let mut decoded_bytes = 0u64;
-    for i in 0..count {
-        let entry = 6 + i * 16;
-        let offset = u32::from_le_bytes(data[entry + 12..entry + 16].try_into().unwrap()) as usize;
-        let size = u32::from_le_bytes(data[entry + 8..entry + 12].try_into().unwrap()) as usize;
-        let Some(end) = offset.checked_add(size).filter(|end| *end <= data.len()) else { continue };
-        if offset < 6 + count * 16 { continue; }
+
+    for entry in dir_iter {
+        let offset = entry.offset as usize;
+        let size = entry.size as usize;
+        let Some(end) = offset.checked_add(size).filter(|end| *end <= data.len()) else {
+            continue;
+        };
+        if offset < dir_end || !seen_spans.insert((entry.offset, entry.size)) {
+            continue;
+        }
         let bytes = &data[offset..end];
         let decoded = if bytes.starts_with(b"\x89PNG") {
             decode_image(bytes, ImageFormat::Png)
         } else {
+            bmp_scan_bytes = bmp_scan_bytes.saturating_add(bytes.len());
+            if bmp_scan_bytes > MAX_ICO_BMP_SCAN_BYTES {
+                return Err("ICO BMP payload exceeds the scan limit.".into());
+            }
             // A single-entry container preserves ICO-specific BMP masks.
             let mut synthetic = Vec::with_capacity(22 + bytes.len());
             synthetic.extend_from_slice(&[0, 0, 1, 0, 1, 0]);
-            synthetic.extend_from_slice(&data[entry..entry + 12]);
+            synthetic.extend_from_slice(&entry.raw_entry[..12]);
             synthetic.extend_from_slice(&22u32.to_le_bytes());
             synthetic.extend_from_slice(bytes);
             decode_image(&synthetic, ImageFormat::Ico)
         };
         let Ok(frame) = decoded else { continue };
-        if !dimensions.insert((frame.width(), frame.height())) { continue; }
+        if !dimensions.insert((frame.width(), frame.height())) {
+            continue;
+        }
         decoded_bytes += frame.as_raw().len() as u64;
         if decoded_bytes > MAX_ICO_PIXELS_BYTES {
             return Err("ICO frames exceed the decoded image limit.".into());
         }
         frames.push(frame);
     }
+
     if frames.is_empty() {
-        frames.push(decode_image(data, ImageFormat::Ico).map_err(|error| format!("Failed to decode ICO: {error}"))?);
+        frames.push(
+            decode_image(data, ImageFormat::Ico)
+                .map_err(|error| format!("Failed to decode ICO: {error}"))?,
+        );
     }
     frames.sort_by(|a, b| b.width().cmp(&a.width()));
     Ok(frames)
@@ -65,7 +83,9 @@ fn decoded_ico_frames(data: &[u8]) -> Result<Vec<RgbaImage>, String> {
 
 pub(crate) fn ico_spritesheet_from_bytes(data: &[u8]) -> Result<RgbaImage, String> {
     let frames = decoded_ico_frames(data)?;
-    let width = frames.iter().try_fold(0u32, |sum, frame| sum.checked_add(frame.width()))
+    let width = frames
+        .iter()
+        .try_fold(0u32, |sum, frame| sum.checked_add(frame.width()))
         .ok_or("ICO spritesheet width overflow.")?;
     let height = frames.iter().map(RgbaImage::height).max().unwrap_or(0);
     if width == 0 || height == 0 || u64::from(width) * u64::from(height) * 4 > MAX_ICO_PIXELS_BYTES {
@@ -81,6 +101,23 @@ pub(crate) fn ico_spritesheet_from_bytes(data: &[u8]) -> Result<RgbaImage, Strin
     Ok(spritesheet)
 }
 
+pub fn ico_frames_from_path(path: &std::path::Path) -> Result<Vec<crate::models::IcoSize>, String> {
+    let file = std::fs::File::open(path)
+        .map_err(|error| format!("Failed to open ICO file: {error}"))?;
+    let len = file
+        .metadata()
+        .map_err(|error| format!("Failed to inspect ICO file: {error}"))?
+        .len();
+    if len < 6 || len > MAX_ICO_BYTES as u64 {
+        return Err("ICO input is outside the supported size limit.".into());
+    }
+    let mut bytes = Vec::with_capacity(len as usize);
+    file.take(MAX_ICO_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("Failed to read ICO file: {error}"))?;
+    ico_frames_from_bytes(&bytes)
+}
+
 pub fn ico_frames_from_bytes(data: &[u8]) -> Result<Vec<crate::models::IcoSize>, String> {
     let frames = decoded_ico_frames(data)?;
     let mut sizes = Vec::with_capacity(frames.len());
@@ -89,14 +126,22 @@ pub fn ico_frames_from_bytes(data: &[u8]) -> Result<Vec<crate::models::IcoSize>,
         let mut png_bytes = Vec::new();
         {
             use image::ImageEncoder;
-            let encoder = image::codecs::png::PngEncoder::new(&mut png_bytes);
-            encoder.write_image(rgba.as_raw(), width, height, image::ColorType::Rgba8.into())
+            let encoder = image::codecs::png::PngEncoder::new_with_quality(
+                &mut png_bytes,
+                image::codecs::png::CompressionType::Fast,
+                image::codecs::png::FilterType::NoFilter,
+            );
+            encoder
+                .write_image(rgba.as_raw(), width, height, image::ColorType::Rgba8.into())
                 .map_err(|error| format!("Failed to encode PNG: {error}"))?;
         }
         sizes.push(crate::models::IcoSize {
             width,
             height,
-            data_url: format!("data:image/png;base64,{}", crate::utils::base64_encode(&png_bytes)),
+            data_url: format!(
+                "data:image/png;base64,{}",
+                crate::utils::base64_encode(&png_bytes)
+            ),
         });
     }
     Ok(sizes)

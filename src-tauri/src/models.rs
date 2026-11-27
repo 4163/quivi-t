@@ -156,6 +156,13 @@ pub struct AnimationInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DimensionEntry {
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TempArchiveOrigin {
     pub archive_path: String,
     pub entry_name: String,
