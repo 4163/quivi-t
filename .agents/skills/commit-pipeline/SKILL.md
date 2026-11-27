@@ -47,6 +47,13 @@ Write pull request descriptions from the branch diff against base (`git log <bas
   2. **Key changes:** Bulleted list grouped by subsystem or concern with bold lead-ins (e.g. `- Return-first imports: ...`, `- Optimistic Library deletion: ...`). Explain what changed and why, emphasizing contract adjustments, boundary fixes, and performance wins.
   3. **Verification:** Concluding statement of automated checks, targeted test suites, and passing test counts verified before merge (e.g. `node --check`, `cargo test <target>`, `npm test, 196 passing`).
 
+## GitHub links and mentions
+
+Apply these rules across commit headers, commit bodies, and pull request titles and descriptions:
+
+- Omit `#` before slice, task, and roadmap item numbers (write `2.1.1` or `item 2.1.1`, never `#2.1.1`). GitHub auto-links `#<digits>` to issues and pull requests even inside backticks, which attaches commits to unrelated history. Reserve `#<digits>` strictly for intentional GitHub issue or pull request references.
+- Omit `@` before role names, agent labels, and handles (write `coordinator` or `worker`, never `@coordinator`). GitHub treats `@<name>` as a user mention, which notifies unrelated accounts. Reserve `@<name>` strictly for intentional GitHub user or team mentions.
+
 ## Serving messages to the user
 
 When asked to generate or format a commit message or a pull request description:
