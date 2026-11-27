@@ -164,3 +164,18 @@ fn test_selected_exe_switch_variants() {
         );
     }
 }
+
+#[test]
+fn test_write_if_changed_skips_identical_content() {
+    let base = TempDirGuard::new("write_if_changed");
+    let file = base.path().join("release.path");
+
+    assert!(write_if_changed(&file, r"C:\QuiviT\quivit.exe"));
+    assert_eq!(fs::read_to_string(&file).unwrap(), r"C:\QuiviT\quivit.exe");
+
+    assert!(!write_if_changed(&file, r"C:\QuiviT\quivit.exe"));
+    assert_eq!(fs::read_to_string(&file).unwrap(), r"C:\QuiviT\quivit.exe");
+
+    assert!(write_if_changed(&file, r"D:\QuiviT\quivit.exe"));
+    assert_eq!(fs::read_to_string(&file).unwrap(), r"D:\QuiviT\quivit.exe");
+}

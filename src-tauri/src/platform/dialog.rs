@@ -1,3 +1,43 @@
+#[cfg(windows)]
+struct ScopedCoInit {
+    initialized: bool,
+}
+
+#[cfg(windows)]
+impl ScopedCoInit {
+    fn new() -> Self {
+        let hr = unsafe {
+            windows::Win32::System::Com::CoInitializeEx(
+                None,
+                windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
+            )
+        };
+        Self {
+            initialized: hr.is_ok(),
+        }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for ScopedCoInit {
+    fn drop(&mut self) {
+        if self.initialized {
+            unsafe {
+                windows::Win32::System::Com::CoUninitialize();
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+unsafe fn pwstr_to_string(pwstr: windows::core::PWSTR) -> Result<String, String> {
+    let result = pwstr
+        .to_string()
+        .map_err(|e| format!("Path conversion failed: {e}"));
+    windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.0.cast()));
+    result
+}
+
 /// Show a native folder picker. Windows Library virtual folders (Documents,
 /// Pictures, Videos, Music) resolve to their default save location on disk.
 ///
@@ -6,31 +46,11 @@
 #[cfg(windows)]
 pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
-        COINIT_APARTMENTTHREADED,
-    };
+    use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
     use windows::Win32::UI::Shell::{
         FileOpenDialog, IFileOpenDialog, IShellItem, IShellLibrary, ShellLibrary, DSFT_DETECT,
         FOS_PICKFOLDERS, SIGDN_DESKTOPABSOLUTEPARSING, SIGDN_FILESYSPATH,
     };
-
-    struct ScopedCoInit;
-    impl ScopedCoInit {
-        fn new() -> Self {
-            unsafe {
-                let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            }
-            Self
-        }
-    }
-    impl Drop for ScopedCoInit {
-        fn drop(&mut self) {
-            unsafe {
-                CoUninitialize();
-            }
-        }
-    }
 
     let _co_init = ScopedCoInit::new();
 
@@ -57,10 +77,7 @@ pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
 
         // Try direct filesystem path first (works for normal folders)
         if let Ok(path_pwstr) = item.GetDisplayName(SIGDN_FILESYSPATH) {
-            let path = path_pwstr
-                .to_string()
-                .map_err(|e| format!("Path conversion failed: {e}"))?;
-            return Ok(Some(path));
+            return Ok(Some(pwstr_to_string(path_pwstr)?));
         }
 
         // Virtual folder. Try resolving as a Windows Library.
@@ -71,7 +88,7 @@ pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
                 if let Ok(default_folder) = library.GetDefaultSaveFolder::<IShellItem>(DSFT_DETECT)
                 {
                     if let Ok(path_pwstr) = default_folder.GetDisplayName(SIGDN_FILESYSPATH) {
-                        if let Ok(path) = path_pwstr.to_string() {
+                        if let Ok(path) = pwstr_to_string(path_pwstr) {
                             return Ok(Some(path));
                         }
                     }
@@ -81,10 +98,7 @@ pub fn pick_folder(owner: Option<isize>) -> Result<Option<String>, String> {
 
         // Fallback for virtual folders such as "This PC": return the parsing name.
         if let Ok(path_pwstr) = item.GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING) {
-            let path = path_pwstr
-                .to_string()
-                .map_err(|e| format!("Path conversion failed: {e}"))?;
-            return Ok(Some(path));
+            return Ok(Some(pwstr_to_string(path_pwstr)?));
         }
 
         Err("Selected folder is virtual and could not be resolved".into())

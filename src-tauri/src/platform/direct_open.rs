@@ -40,6 +40,13 @@ pub fn release_exe() -> Result<PathBuf, String> {
     recorded_exe("release.path", "release")
 }
 
+fn write_if_changed(path: &Path, content: &str) -> bool {
+    if fs::read_to_string(path).is_ok_and(|existing| existing == content) {
+        return false;
+    }
+    fs::write(path, content.as_bytes()).is_ok()
+}
+
 pub fn record_current_exe() {
     if crate::config::is_e2e_suite() {
         return;
@@ -56,13 +63,12 @@ pub fn record_current_exe() {
     } else {
         "release.path"
     };
-    let _ = fs::write(dir.join(profile), exe.to_string_lossy().as_bytes());
+    let exe_str = exe.to_string_lossy();
+    write_if_changed(&dir.join(profile), &exe_str);
     if cfg!(debug_assertions) {
         if let Some(root) = Path::new(env!("CARGO_MANIFEST_DIR")).parent() {
-            let _ = fs::write(
-                dir.join("project-root.path"),
-                root.to_string_lossy().as_bytes(),
-            );
+            let root_str = root.to_string_lossy();
+            write_if_changed(&dir.join("project-root.path"), &root_str);
         }
     }
 }

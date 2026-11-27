@@ -9,7 +9,7 @@
   "app": {
     "withGlobalTauri": true,
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; script-src 'self' blob: 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' quivit: http://quivit.localhost asset: http://asset.localhost https://asset.localhost blob: data:; media-src 'self' quivit: http://quivit.localhost asset: http://asset.localhost https://asset.localhost blob: data:; connect-src 'self' ipc: http://ipc.localhost quivit: http://quivit.localhost asset: http://asset.localhost https://asset.localhost blob: data:",
       "assetProtocol": {
         "enable": true,
         "scope": ["**"]

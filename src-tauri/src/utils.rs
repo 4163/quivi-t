@@ -9,13 +9,18 @@ pub fn base64_decode(input: &str) -> Option<String> {
 }
 
 pub fn base64_decode_bytes(input: &str) -> Option<Vec<u8>> {
-    let input = input.replace('-', "+").replace('_', "/");
-    let padding = (4 - input.len() % 4) % 4;
-    let padded = format!("{}{}", input, "=".repeat(padding));
-    BASE64_STANDARD.decode(padded).ok()
+    let trimmed = input.trim_end_matches('=');
+    if trimmed.as_bytes().iter().any(|&b| b == b'-' || b == b'_') {
+        BASE64_URL_SAFE_NO_PAD.decode(trimmed).ok()
+    } else {
+        BASE64_STANDARD_NO_PAD.decode(trimmed).ok()
+    }
 }
 
 pub fn url_decode(input: &str) -> String {
+    if !input.as_bytes().contains(&b'%') {
+        return input.to_string();
+    }
     let bytes = input.as_bytes();
     let mut decoded: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut i = 0;

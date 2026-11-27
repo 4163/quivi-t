@@ -142,6 +142,7 @@ pub fn read_directory_impl(
         target_filename: target_filename.to_string(),
         directory: dir.to_string_lossy().into_owned(),
         parent_directory: parent_dir_str,
+        has_gallery_sidecar: false,
     })
 }
 

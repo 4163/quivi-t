@@ -8,5 +8,7 @@ pub mod icons;
 pub mod previews;
 #[cfg(windows)]
 pub mod process;
+#[cfg(windows)]
+pub mod shell;
 pub mod temp_archive;
 pub mod thumbnails;

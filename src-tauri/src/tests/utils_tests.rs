@@ -35,8 +35,30 @@ fn test_base64_decode_bytes_variants_and_errors() {
         );
     }
 
+    // 4-byte payload produces '==' double padding; verify all four variants decode cleanly.
+    let double_padded_binary = &[0xfb, 0xff, 0xfe, 0x00];
+    let std_double_padded = base64_encode(double_padded_binary);
+    assert!(std_double_padded.ends_with("=="));
+    let std_double_unpadded = std_double_padded.trim_end_matches('=');
+    let url_double_padded = std_double_padded.replace('+', "-").replace('/', "_");
+    let url_double_unpadded = std_double_unpadded.replace('+', "-").replace('/', "_");
+
+    for variant in [
+        &std_double_padded[..],
+        std_double_unpadded,
+        &url_double_padded[..],
+        &url_double_unpadded[..],
+    ] {
+        assert_eq!(
+            base64_decode_bytes(variant).as_deref(),
+            Some(double_padded_binary.as_slice())
+        );
+    }
+
     assert_eq!(base64_decode_bytes("!!!not-base64!!!"), None);
     assert_eq!(base64_decode_bytes("abcde"), None);
+    // Mixed URL-safe and standard alphabet characters are rejected.
+    assert_eq!(base64_decode_bytes("-+/="), None);
 
     // Valid base64 of invalid UTF-8 decodes as bytes but not as a UTF-8 string.
     let invalid_utf8 = &[0xff, 0xfe, 0xfd];
@@ -50,7 +72,9 @@ fn test_base64_decode_bytes_variants_and_errors() {
 
 #[test]
 fn test_url_decode() {
+    assert_eq!(url_decode(""), "");
     assert_eq!(url_decode("plain/path/file.png"), "plain/path/file.png");
+    assert_eq!(url_decode(r"C:\写真\日本語\file.png"), r"C:\写真\日本語\file.png");
     assert_eq!(url_decode("hello%20world%2F%E6%97%A5"), "hello world/日");
     assert_eq!(url_decode("%"), "%");
     assert_eq!(url_decode("%2"), "%2");

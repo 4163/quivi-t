@@ -21,7 +21,7 @@ This document records the ratified Stage 3 Step 4 consensus across all 11 splits
 ## Ratified cross-split resolutions (R1 to R7)
 
 **R1. Keep DevTools enabled in release builds (`S08`, `S11`).**
-`README.md:150` states that Developer Tools stays enabled so users can inspect elements and debug custom CSS. S08 keeps `"devtools"` in `src-tauri/Cargo.toml:25` and `.devtools(true)` on app windows in `src-tauri/src/lib.rs:80` and `src-tauri/src/windows.rs:147,251,295`. Only the Windows Explorer preview pane at `src-tauri/src/platform/previews/windows/image_pane.rs:415` stays gated on `cfg!(debug_assertions)`. S08 still removes the unused `encoding_rs = "0.8"` direct dependency at `src-tauri/Cargo.toml:44`.
+`README.md:150` states that Developer Tools stays enabled so users can inspect elements and debug custom CSS. S08 keeps `"devtools"` in `src-tauri/Cargo.toml:25` and `.devtools(true)` on app windows in `src-tauri/src/lib.rs:80` and `src-tauri/src/windows.rs:147,251,295`. Only the Windows Explorer preview pane at `src-tauri/src/platform/previews/windows/image_pane.rs:415` stays gated on `cfg!(debug_assertions)`. S08 keeps `encoding_rs = "0.8"` at `src-tauri/Cargo.toml:44` with a comment documenting why: `chardetng v1.0.0` depends on `encoding_rs` with `default-features = false`, so the direct entry is required for `alloc` feature unification enabling `Encoding::decode` at `src-tauri/src/archives/encoding.rs:13` (adds zero extra crates; amended via U01 Batch 2 Tier 2 arbiter resolution).
 
 **R2. Complete CSP directives in `tauri.conf.json` (`S08`, `S01` to `S07`, `S09`).**
 Replacing `"csp": null` at `src-tauri/tauri.conf.json:12` requires explicit directives that cover every runtime fetch, media load, dynamic extractor, and WASM worker:

@@ -111,7 +111,16 @@ pub async fn save_config(app_handle: tauri::AppHandle, config: AppConfig) -> Res
             return Err("Use the Library location control to move the Library. Settings saves cannot change its path.".into());
         }
 
-        config::save_config_unchecked(&roaming_path, config)
+        let old_config_path = config::get_config_path();
+        config::save_config_unchecked(&roaming_path, config)?;
+        let new_config_path = config::get_config_path();
+        if new_config_path != old_config_path {
+            crate::commands::watchers::spawn_config_file_watcher_for_path(
+                app_handle,
+                new_config_path,
+            );
+        }
+        Ok(())
     })
     .await
     .map_err(|e| format!("Failed to save config: {e}"))?

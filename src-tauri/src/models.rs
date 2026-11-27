@@ -73,6 +73,8 @@ pub struct DirectoryReadResult {
     pub target_filename: String,
     pub directory: String,
     pub parent_directory: Option<String>,
+    #[serde(default)]
+    pub has_gallery_sidecar: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

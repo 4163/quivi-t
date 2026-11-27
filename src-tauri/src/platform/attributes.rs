@@ -35,6 +35,10 @@ pub fn set_hidden_attribute(path: &Path, hidden: bool) -> Result<(), String> {
             attrs & !FILE_ATTRIBUTE_HIDDEN
         };
 
+        if new_attrs == attrs {
+            return Ok(());
+        }
+
         // Write updated attributes.
         let result = windows::Win32::Storage::FileSystem::SetFileAttributesW(
             windows::core::PCWSTR(wide_path.as_ptr()),
