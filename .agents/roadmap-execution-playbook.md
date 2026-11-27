@@ -8,7 +8,7 @@ Start a fresh chat on `Gemini 4 Neon High`, run `/familiarize`, then run:
 /orchestrate @[.agents/roadmap-execution-playbook.md]
 ```
 
-Optional overrides: add a unit or batch after the file, such as `U02` or `U01 batch 2`. With no arguments, the orchestrator automatically picks up the next unfinished pass from [roadmap.md](major-refactor/roadmap.md).
+Optional overrides: add a unit, batch, or checkpoint fix target after the file, such as `U02`, `U01 batch 2`, or `fix U02`. With no arguments, the orchestrator automatically picks up the next unfinished pass from [roadmap.md](major-refactor/roadmap.md).
 
 ## Orchestrator procedure
 
@@ -38,6 +38,24 @@ Optional overrides: add a unit or batch after the file, such as `U02` or `U01 ba
 - **Tier 1, routine mismatch or in-slice bug:** When a worker hits a plan-vs-code contradiction or an unexpected bug, it posts `@coordinator [blocker]` or `@coordinator [finding]` with `file:line` proof and a concise proposed fix, then waits. The `Neon High` orchestrator verifies the proof against the unit audit, [cross-split-seams.md](major-refactor/cross-split-seams.md), and `Locked contracts` and replies once: approve as proposed, send an adjusted fix with green light to implement, or defer it as a downstream note in [roadmap.md](major-refactor/roadmap.md).
 - **Tier 2, factual pushback or locked-contract clash:** Trigger only if the worker pushes back once with concrete local proof that the orchestrator's adjusted fix fails, or if resolving the blocker appears to require bending `Locked contracts`, `R1` to `R7`, or `Sync A` to `F`. Spawn **1 fresh `Neon High` read-only arbiter** for a bounded consensus pass of at most 2 rounds with the orchestrator and owning worker. Prefer any contract-preserving fix first; if preserving the contract is technically impossible, agree on the smallest safe amendment, update all affected callers plus the matching lines in [roadmap.md](major-refactor/roadmap.md) and [cross-split-seams.md](major-refactor/cross-split-seams.md), have the owning worker apply and locally test it, and require the arbiter's post-fix `[Agree]` sign-off before integration checks.
 - **Mid-run user pause:** Pause mid-session only for non-technical stops such as quota 429, missing external fixtures or tools, or a trade-off that changes user-facing behavior with no behavior-preserving workaround. Resolve technical blockers autonomously and present them in the handoff for commit-gate review.
+
+## User-flagged checkpoint fixes
+
+When the user reports an issue at Commit gate A, between Pass B batches, or at Commit gate B, resolve it autonomously inside the active `/orchestrate` session (or a fresh `fix UXX` session) and keep [roadmap.md](major-refactor/roadmap.md) free of bug-chase items or history logs.
+
+1. **Triage and reproduce first.** Inspect the active unit's diff (`git diff <unit-base>..HEAD`) and prove the failure with a failing targeted test or replay diagnostic (`cargo test`, `mocha`, `e2e --spec`, or `diagnose`) before patching code.
+2. **Decide scope autonomously.**
+   - **Unit regression or blocking issue in owned files:** fix in place.
+   - **Blocking pre-existing issue in a downstream unit's files:** apply the minimal root-cause fix now so the gate passes, and add a 1-line note on the downstream unit in [roadmap.md](major-refactor/roadmap.md) so the later unit does not duplicate or overwrite it.
+   - **Non-blocking pre-existing issue outside this unit:** log a 1-line downstream note on the owning unit in [roadmap.md](major-refactor/roadmap.md) and report it in the handoff.
+   - **Test, probe, or telemetry defect:** fix the test or probe and refresh only the affected telemetry.
+   - Pause mid-fix only for the non-technical stops listed under **Mid-run user pause**.
+3. **Fix via `/orchestrate` workers.** Flip the open gate item (`#UXX-TA`, `#UXX-TB`, or an uncommitted `#UXX-NN` item) from `[-]` to `[~]`. Reuse the waiting slice worker via `post_message` if still in the same Pass B session, or spawn 1 focused worker (up to 2 if strictly file-disjoint; `Neon High` for concurrency, COM, GPU, or lifecycle bugs, `Neon Medium` otherwise). The worker must add a targeted regression test covering the repro, apply the minimal root-cause fix, and pass local checks. Trigger Tier 2 arbiter review if the fix touches `Locked contracts`, `R1` to `R7`, or `Sync A` to `F`.
+4. **Refresh affected verification and hand off.**
+   - **Commit gate A:** re-run affected baseline suite(s), overwrite their `uXX-baseline-*.json`, and update matching rows in [comparisons.md](major-refactor/telemetry/comparisons.md).
+   - **Between Pass B batches:** run targeted blast-radius tests and type or syntax checks without writing telemetry JSON.
+   - **Commit gate B:** rebuild the debug binary if Rust changed, re-run the new regression test plus every `#UXX-TB` suite in the fix's blast radius, overwrite the affected `uXX-post-*.json` files, and update [comparisons.md](major-refactor/telemetry/comparisons.md).
+   - Flip `[~]` back to `[-]`, report the issue, root cause, fix, regression test proof, and updated `git status --short` in the handoff, and re-present the smoke check for manual commit.
 
 ## Guardrails
 
