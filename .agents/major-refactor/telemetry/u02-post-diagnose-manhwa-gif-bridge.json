@@ -1,0 +1,493 @@
+{
+  "scenario": "manhwa-gif-bridge",
+  "timestamp": "2026-11-27T22:48:10.157Z",
+  "totalBlackoutFrames": 0,
+  "totalAnomalies": 0,
+  "totalJankFrames": 0,
+  "steps": [
+    {
+      "actionId": "cmd-toggle-manhwa",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 295,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 2,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 0.6640625
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [
+              {
+                "bottom": 470,
+                "colIdx": "0",
+                "nw": 1200,
+                "top": 22
+              },
+              {
+                "bottom": 964,
+                "colIdx": "1",
+                "nw": 746,
+                "top": 469
+              }
+            ],
+            "stripImgRect": {
+              "h": 448,
+              "left": 372,
+              "top": 22,
+              "w": 797
+            },
+            "stripImgVisible": false,
+            "t": -8.8,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 1.6
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [
+              {
+                "bottom": 470,
+                "colIdx": "0",
+                "nw": 1200,
+                "top": 22
+              },
+              {
+                "bottom": 964,
+                "colIdx": "1",
+                "nw": 746,
+                "top": 469
+              }
+            ],
+            "stripImgRect": {
+              "h": 448,
+              "left": 372,
+              "top": 22,
+              "w": 797
+            },
+            "stripImgVisible": false,
+            "t": 2.3,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 3
+        },
+        {
+          "data": {
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgif%5Cno_loop.gif?_reset=1795819689868"
+          },
+          "event": "image-decode-start",
+          "source": "viewer",
+          "t": 9.4
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgif%5Cno_loop.gif"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 17.8
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgif%5Cno_loop.gif"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 17.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "0.85",
+              "sy": "0.85",
+              "tx": "0px",
+              "ty": "0px"
+            },
+            "bridgeRect": {
+              "h": 574,
+              "left": 260,
+              "top": 73,
+              "w": 1020
+            },
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 16.2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 19.6
+        },
+        {
+          "data": {
+            "isSpread": [
+              false,
+              true
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 25.3
+        },
+        {
+          "data": {
+            "route": "asset"
+          },
+          "event": "fetch-start",
+          "source": "protocol",
+          "t": 25.5
+        },
+        {
+          "data": {
+            "role": "active",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgif%5Cno_loop.gif?_reset=1795819689868"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 25.9
+        },
+        {
+          "data": {
+            "elapsedMs": 19.5,
+            "naturalHeight": 675,
+            "naturalWidth": 1200,
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgif%5Cno_loop.gif?_reset=1795819689868"
+          },
+          "event": "image-decode-end",
+          "source": "viewer",
+          "t": 28.9
+        },
+        {
+          "data": {
+            "role": "active",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgif%5Cno_loop.gif?_reset=1795819689868"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 33.1
+        },
+        {
+          "data": {
+            "role": "active",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgif%5Cno_loop.gif?_reset=1795819689868"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 33.1
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 574,
+              "w": 1020
+            },
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "0.85",
+              "sy": "0.85",
+              "tx": "0px",
+              "ty": "0px"
+            },
+            "bridgeRect": {
+              "h": 574,
+              "left": 260,
+              "top": 73,
+              "w": 1020
+            },
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 30.1,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 34.6
+        },
+        {
+          "data": {
+            "elapsedMs": 10,
+            "route": "asset",
+            "status": 200
+          },
+          "event": "fetch-end",
+          "source": "protocol",
+          "t": 35.4
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 574,
+              "w": 1020
+            },
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "0.85",
+              "sy": "0.85",
+              "tx": "0px",
+              "ty": "0px"
+            },
+            "bridgeRect": {
+              "h": 574,
+              "left": 260,
+              "top": 73,
+              "w": 1020
+            },
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 43.9,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 44.5
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgif%5Cno_loop.gif"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 44.7
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgif%5Cno_loop.gif"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 44.7
+        },
+        {
+          "data": {
+            "canvasId": "viewer-filter-canvas",
+            "ready": true
+          },
+          "event": "canvas-ready-change",
+          "source": "viewer",
+          "t": 59.4
+        },
+        {
+          "data": {
+            "filter": "phosphor"
+          },
+          "event": "viewport-filter-change",
+          "source": "viewer",
+          "t": 59.4
+        },
+        {
+          "data": {
+            "canvasId": "manhwa-filter-canvas",
+            "ready": false
+          },
+          "event": "canvas-ready-change",
+          "source": "viewer",
+          "t": 59.4
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 574,
+              "w": 1020
+            },
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 57.9,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 60
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 574,
+              "w": 1020
+            },
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 71.7,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 72.6
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 574,
+              "w": 1020
+            },
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 85.6,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 86.2
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 574,
+              "w": 1020
+            },
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 99.5,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 100
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 574,
+              "w": 1020
+            },
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 113.4,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 113.9
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 574,
+              "w": 1020
+            },
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 127.2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 127.8
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 574,
+              "w": 1020
+            },
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 141.2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 141.8
+        }
+      ],
+      "filename": "no_loop.gif",
+      "frameCount": 22,
+      "jankFrameCount": 0,
+      "stepIndex": 1
+    }
+  ]
+}

@@ -1,0 +1,424 @@
+{
+  "scenario": "manhwa-width-span",
+  "timestamp": "2026-11-27T22:47:25.120Z",
+  "totalBlackoutFrames": 0,
+  "totalAnomalies": 0,
+  "totalJankFrames": 1,
+  "steps": [
+    {
+      "actionId": "cmd-toggle-manhwa",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 382,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": 0,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.9
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 22.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 22.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 22.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 22.1
+        }
+      ],
+      "filename": "..",
+      "frameCount": 19,
+      "jankFrameCount": 1,
+      "stepIndex": 1
+    },
+    {
+      "actionId": "cmd-fit-width",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 283,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 0.3090909090909091
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.3
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 11.8
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 11.8
+        }
+      ],
+      "filename": "..",
+      "frameCount": 21,
+      "jankFrameCount": 0,
+      "stepIndex": 2
+    },
+    {
+      "actionId": "cmd-zoom-in",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 386,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 0.3090909090909091
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.1
+        }
+      ],
+      "filename": "..",
+      "frameCount": 28,
+      "jankFrameCount": 0,
+      "stepIndex": 3
+    },
+    {
+      "actionId": "cmd-pan-right",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 287,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 0.3461818181818182
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        }
+      ],
+      "filename": "..",
+      "frameCount": 22,
+      "jankFrameCount": 0,
+      "stepIndex": 4
+    },
+    {
+      "actionId": "cmd-pan-right",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 269,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 0.3461818181818182
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.1
+        }
+      ],
+      "filename": "..",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 5
+    },
+    {
+      "actionId": "cmd-pan-left",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 277,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 0.3090909090909091
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 259.2
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 259.2
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 269.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 269.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 272.5
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 272.5
+        }
+      ],
+      "filename": "..",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 6
+    },
+    {
+      "actionId": "cmd-pan-left",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 282,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 0.3090909090909091
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.2
+        }
+      ],
+      "filename": "..",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 7
+    },
+    {
+      "actionId": "cmd-fit-width-if-larger",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 274,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 0.3090909090909091
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.1
+        },
+        {
+          "data": {
+            "fitMode": [
+              "width",
+              "width-if-larger"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 9
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 9.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 9.1
+        }
+      ],
+      "filename": "..",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 8
+    },
+    {
+      "actionId": "cmd-zoom-100",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 275,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 0.3090909090909091
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.3
+        }
+      ],
+      "filename": "..",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 9
+    },
+    {
+      "actionId": "cmd-toggle-manhwa",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 288,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 18.4
+        }
+      ],
+      "filename": "..",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 10
+    }
+  ]
+}

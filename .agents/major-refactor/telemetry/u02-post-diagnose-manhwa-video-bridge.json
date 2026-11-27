@@ -1,0 +1,548 @@
+{
+  "scenario": "manhwa-video-bridge",
+  "timestamp": "2026-11-27T22:48:28.785Z",
+  "totalBlackoutFrames": 0,
+  "totalAnomalies": 0,
+  "totalJankFrames": 2,
+  "steps": [
+    {
+      "actionId": "cmd-toggle-manhwa",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 293,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": 0,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.7
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 21
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 21.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 21.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 21.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 34.8
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 34.8
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 34.8
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 34.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 57.5,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 63.4
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": false,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 127,
+            "viewportManhwa": true
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 132.7
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 140.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 140.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 140.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 140.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 245.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 245.1
+        }
+      ],
+      "filename": "1 - I just really like the animation in this OP. Bibury does more to establish chara.mp4",
+      "frameCount": 2,
+      "jankFrameCount": 1,
+      "stepIndex": 1
+    },
+    {
+      "actionId": "cmd-toggle-manhwa",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 426,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 2,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": null,
+            "zoomScale": 1.1943793911007026
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.1
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/C%3A%5CUsers%5Cx4163%5CAppData%5CLocal%5CQuiviT%5Clibrary%5CImgur%5CJust%20some%20Witch%20Watch%20OP%20clips%5C1%20-%20I%20just%20really%20like%20the%20animation%20in%20this%20OP.%20Bibury%20does%20more%20to%20establish%20chara.mp4"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 149
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/C%3A%5CUsers%5Cx4163%5CAppData%5CLocal%5CQuiviT%5Clibrary%5CImgur%5CJust%20some%20Witch%20Watch%20OP%20clips%5C1%20-%20I%20just%20really%20like%20the%20animation%20in%20this%20OP.%20Bibury%20does%20more%20to%20establish%20chara.mp4"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 149
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "1.1943793911007026",
+              "sy": "1.1943793911007026",
+              "tx": "0px",
+              "ty": "0px"
+            },
+            "bridgeRect": {
+              "h": 573,
+              "left": 260,
+              "top": 73,
+              "w": 1020
+            },
+            "bridgeVisible": true,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 15.2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 150.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "1.1943793911007026",
+              "sy": "1.1943793911007026",
+              "tx": "0px",
+              "ty": "0px"
+            },
+            "bridgeRect": {
+              "h": 573,
+              "left": 260,
+              "top": 73,
+              "w": 1020
+            },
+            "bridgeVisible": true,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 140.3,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 154.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "1.1943793911007026",
+              "sy": "1.1943793911007026",
+              "tx": "0px",
+              "ty": "0px"
+            },
+            "bridgeRect": {
+              "h": 573,
+              "left": 260,
+              "top": 73,
+              "w": 1020
+            },
+            "bridgeVisible": true,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 154.2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 157.1
+        },
+        {
+          "data": {
+            "isSpread": [
+              false,
+              true
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 173.3
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": "http://asset.localhost/C%3A%5CUsers%5Cx4163%5CAppData%5CLocal%5CQuiviT%5Clibrary%5CImgur%5CJust%20some%20Witch%20Watch%20OP%20clips%5C1%20-%20I%20just%20really%20like%20the%20animation%20in%20this%20OP.%20Bibury%20does%20more%20to%20establish%20chara.mp4"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 173.5
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": "http://asset.localhost/C%3A%5CUsers%5Cx4163%5CAppData%5CLocal%5CQuiviT%5Clibrary%5CImgur%5CJust%20some%20Witch%20Watch%20OP%20clips%5C1%20-%20I%20just%20really%20like%20the%20animation%20in%20this%20OP.%20Bibury%20does%20more%20to%20establish%20chara.mp4"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 173.5
+        },
+        {
+          "data": {
+            "role": "active",
+            "src": "http://asset.localhost/C%3A%5CUsers%5Cx4163%5CAppData%5CLocal%5CQuiviT%5Clibrary%5CImgur%5CJust%20some%20Witch%20Watch%20OP%20clips%5C1%20-%20I%20just%20really%20like%20the%20animation%20in%20this%20OP.%20Bibury%20does%20more%20to%20establish%20chara.mp4"
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 173.5
+        },
+        {
+          "data": {
+            "role": "active",
+            "src": "http://asset.localhost/C%3A%5CUsers%5Cx4163%5CAppData%5CLocal%5CQuiviT%5Clibrary%5CImgur%5CJust%20some%20Witch%20Watch%20OP%20clips%5C1%20-%20I%20just%20really%20like%20the%20animation%20in%20this%20OP.%20Bibury%20does%20more%20to%20establish%20chara.mp4"
+          },
+          "event": "video-role-change",
+          "source": "viewer",
+          "t": 173.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 168.1,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 175.1
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 182,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 183.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 195.9,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 196.5
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 209.8,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 210.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 223.7,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 224.2
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 237.5,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 238
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 251.4,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 251.8
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 265.4,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 265.9
+        },
+        {
+          "data": {
+            "activeImgRect": null,
+            "activeImgVisible": false,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 279.2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 279.8
+        }
+      ],
+      "filename": "1 - I just really like the animation in this OP. Bibury does more to establish chara.mp4",
+      "frameCount": 22,
+      "jankFrameCount": 1,
+      "stepIndex": 2
+    }
+  ]
+}
