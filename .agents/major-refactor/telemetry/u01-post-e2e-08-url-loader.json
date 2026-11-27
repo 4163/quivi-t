@@ -1,0 +1,6 @@
+{
+  "command": "npm run e2e -- --agent --spec e2e/specs/08-url-loader.e2e.js",
+  "passed": 1,
+  "failed": 0,
+  "duration_ms": 17531
+}

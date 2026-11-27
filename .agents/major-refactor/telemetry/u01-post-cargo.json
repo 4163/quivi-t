@@ -1,0 +1,6 @@
+{
+  "command": "cargo test --manifest-path src-tauri/Cargo.toml",
+  "passed": 150,
+  "failed": 0,
+  "duration_ms": 16154
+}

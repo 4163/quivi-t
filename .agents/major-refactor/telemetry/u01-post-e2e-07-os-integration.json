@@ -1,0 +1,6 @@
+{
+  "command": "npm run e2e -- --agent --spec e2e/specs/07-os-integration.e2e.js",
+  "passed": 4,
+  "failed": 0,
+  "duration_ms": 17658
+}

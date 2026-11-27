@@ -1,0 +1,6 @@
+{
+  "command": "npm run e2e -- --agent --spec e2e/specs/01-startup.e2e.js",
+  "passed": 3,
+  "failed": 0,
+  "duration_ms": 17352
+}

@@ -1,0 +1,1598 @@
+{
+  "scenario": "sample-navigation",
+  "timestamp": "2026-11-27T09:31:58.030Z",
+  "totalBlackoutFrames": 0,
+  "totalAnomalies": 0,
+  "totalJankFrames": 1,
+  "steps": [
+    {
+      "actionId": "cmd-next",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 294,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": 0,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.9
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1202,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": -9.2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 1.8
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1202,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 2.7
+        },
+        {
+          "data": {
+            "delta": 1,
+            "fromIndex": 13,
+            "isSpread": false,
+            "listLength": 18,
+            "spreadEnabled": false,
+            "spreadStep": 1
+          },
+          "event": "navigate-call",
+          "source": "core",
+          "t": 10.3
+        },
+        {
+          "data": {
+            "filename": [
+              "export_1785518878919.png",
+              "gfl-spinner.svg"
+            ],
+            "index": [
+              13,
+              14
+            ],
+            "src": [
+              "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cexport_1785518878919.png",
+              "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 18.8
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1202,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 15.8,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 21.7
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cexport_1785518878919.png"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 66
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cexport_1785518878919.png"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 66
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cexport_1785518878919.png"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 66
+        },
+        {
+          "data": {
+            "role": "active",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 66
+        },
+        {
+          "data": {
+            "role": "active",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 66
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "0.5868814729574223",
+              "sy": "0.5868814729574223",
+              "tx": "0px",
+              "ty": "262.84162830840046px"
+            },
+            "bridgeRect": {
+              "h": 1202,
+              "left": 260,
+              "top": 22,
+              "w": 1020
+            },
+            "bridgeVisible": true,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 57.5,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 68.4
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "0.5868814729574223",
+              "sy": "0.5868814729574223",
+              "tx": "0px",
+              "ty": "262.84162830840046px"
+            },
+            "bridgeRect": {
+              "h": 1202,
+              "left": 260,
+              "top": 22,
+              "w": 1020
+            },
+            "bridgeVisible": true,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 71.4,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 72
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cexport_1785518878919.png"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 72.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cexport_1785518878919.png"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 72.4
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 238,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 250.8
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 251.9,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 255.3
+        }
+      ],
+      "filename": "gfl-spinner.svg",
+      "frameCount": 7,
+      "jankFrameCount": 1,
+      "stepIndex": 1
+    },
+    {
+      "actionId": "cmd-next",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 281,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": 0,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0
+        },
+        {
+          "data": {
+            "delta": 1,
+            "fromIndex": 14,
+            "isSpread": false,
+            "listLength": 18,
+            "spreadEnabled": false,
+            "spreadStep": 1
+          },
+          "event": "navigate-call",
+          "source": "core",
+          "t": 6.7
+        },
+        {
+          "data": {
+            "filename": [
+              "gfl-spinner.svg",
+              "koi.svg"
+            ],
+            "index": [
+              14,
+              15
+            ],
+            "src": [
+              "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg",
+              "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Ckoi.svg"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 10.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 10.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 10.1
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 10.1
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 72.2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 101.3
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 105.3
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 105.3
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 105.3
+        },
+        {
+          "data": {
+            "role": "active",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Ckoi.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 105.3
+        },
+        {
+          "data": {
+            "role": "active",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Ckoi.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 105.3
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "3.984375",
+              "sy": "3.984375",
+              "tx": "0px",
+              "ty": "173.8671875px"
+            },
+            "bridgeRect": {
+              "h": 1022,
+              "left": 259,
+              "top": 23,
+              "w": 1022
+            },
+            "bridgeVisible": true,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 100,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 107.3
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "3.984375",
+              "sy": "3.984375",
+              "tx": "0px",
+              "ty": "173.8671875px"
+            },
+            "bridgeRect": {
+              "h": 1022,
+              "left": 259,
+              "top": 23,
+              "w": 1022
+            },
+            "bridgeVisible": true,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 114,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 114.6
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 114.8
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 114.8
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 127.8,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 128.3
+        }
+      ],
+      "filename": "koi.svg",
+      "frameCount": 4,
+      "jankFrameCount": 0,
+      "stepIndex": 2
+    },
+    {
+      "actionId": "cmd-fit-width",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 297,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": 0,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": -6.4,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 5.6
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 7.5,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 12.8
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 21.4,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 21.9
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 35.4,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 35.8
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 49.2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 51.4
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 63.2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 63.6
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 77.1,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 77.4
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 91,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 91.4
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 104.9,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 105.2
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 118.8,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 119.1
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 132.7,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 133
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 146.5,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 146.9
+        }
+      ],
+      "filename": "koi.svg",
+      "frameCount": 22,
+      "jankFrameCount": 0,
+      "stepIndex": 3
+    },
+    {
+      "actionId": "cmd-prev",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 285,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": 0,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.1
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": -0.7,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 0.7
+        },
+        {
+          "data": {
+            "delta": -1,
+            "fromIndex": 15,
+            "isSpread": false,
+            "listLength": 18,
+            "spreadEnabled": false,
+            "spreadStep": 1
+          },
+          "event": "navigate-call",
+          "source": "core",
+          "t": 7
+        },
+        {
+          "data": {
+            "filename": [
+              "koi.svg",
+              "gfl-spinner.svg"
+            ],
+            "index": [
+              15,
+              14
+            ],
+            "spreadStep": [
+              1,
+              2
+            ],
+            "src": [
+              "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Ckoi.svg",
+              "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 9.9
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 10
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 10
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": null
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 10
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1360,
+              "w": 1020
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 13.3,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 16.1
+        },
+        {
+          "data": {
+            "spreadStep": [
+              2,
+              1
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 19.4
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Ckoi.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 19.7
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Ckoi.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 19.7
+        },
+        {
+          "data": {
+            "role": "bridge",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Ckoi.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 19.7
+        },
+        {
+          "data": {
+            "role": "active",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg?_reset=1795771917473"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 19.7
+        },
+        {
+          "data": {
+            "role": "active",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Cgfl-spinner.svg?_reset=1795771917473"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 19.7
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "1.02",
+              "sy": "1.02",
+              "tx": "0px",
+              "ty": "341.70500000000004px"
+            },
+            "bridgeRect": {
+              "h": 1360,
+              "left": 260,
+              "top": 22,
+              "w": 1020
+            },
+            "bridgeVisible": true,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 27.1,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 29.2
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": {
+              "sx": "1.02",
+              "sy": "1.02",
+              "tx": "0px",
+              "ty": "341.70500000000004px"
+            },
+            "bridgeRect": {
+              "h": 1360,
+              "left": 260,
+              "top": 22,
+              "w": 1020
+            },
+            "bridgeVisible": true,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 41,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 41.4
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Ckoi.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 41.5
+        },
+        {
+          "data": {
+            "role": "idle",
+            "src": "http://asset.localhost/D%3A%5CProjects%5CQuiviT%5Ctest-files%5Ckoi.svg"
+          },
+          "event": "img-role-change",
+          "source": "viewer",
+          "t": 41.5
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 54.9,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 55.4
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 68.8,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 69.2
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 82.7,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 83.2
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 96.6,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 97
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 110.5,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 110.9
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 124.4,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 125
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 138.3,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 138.7
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 152.1,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 154.3
+        }
+      ],
+      "filename": "gfl-spinner.svg",
+      "frameCount": 21,
+      "jankFrameCount": 0,
+      "stepIndex": 4
+    },
+    {
+      "actionId": "cmd-fit-best",
+      "anomalies": [],
+      "anomalyCount": 0,
+      "blackoutDetails": [],
+      "blackoutFrameCount": 0,
+      "durationMs": 271,
+      "events": [
+        {
+          "data": {
+            "mountedSlotCount": 0,
+            "spacerBottom": 0,
+            "spacerTop": 0,
+            "ty": 0,
+            "zoomScale": 1
+          },
+          "event": "strip-metrics",
+          "source": "viewer",
+          "t": 0.1
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 1022,
+              "w": 1022
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 1,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 0.1,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 2
+        },
+        {
+          "data": {
+            "fitMode": [
+              "width",
+              "window"
+            ]
+          },
+          "event": "state-change",
+          "source": "core",
+          "t": 7.8
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 675,
+              "w": 675
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 2,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 14.1,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 15.9
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 675,
+              "w": 675
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 3,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 27.9,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 28.3
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 675,
+              "w": 675
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 4,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 41.9,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 42.3
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 675,
+              "w": 675
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 5,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 55.6,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 56
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 675,
+              "w": 675
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 6,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 69.7,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 70
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 675,
+              "w": 675
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 7,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 83.5,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 84.1
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 675,
+              "w": 675
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 8,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 97.4,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 97.9
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 675,
+              "w": 675
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 9,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 111.3,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 111.6
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 675,
+              "w": 675
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 10,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 125.2,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 144.3
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 675,
+              "w": 675
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 11,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 139,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 145.3
+        },
+        {
+          "data": {
+            "activeImgRect": {
+              "h": 675,
+              "w": 675
+            },
+            "activeImgVisible": true,
+            "anyVisible": true,
+            "bridgeProps": null,
+            "bridgeRect": null,
+            "bridgeVisible": false,
+            "frameCount": 12,
+            "mountedSlots": [],
+            "stripImgRect": null,
+            "stripImgVisible": false,
+            "t": 152.9,
+            "viewportManhwa": false
+          },
+          "event": "frame-detail",
+          "source": "viewer",
+          "t": 153.5
+        }
+      ],
+      "filename": "gfl-spinner.svg",
+      "frameCount": 20,
+      "jankFrameCount": 0,
+      "stepIndex": 5
+    }
+  ]
+}

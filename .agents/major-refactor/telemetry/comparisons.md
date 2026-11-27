@@ -1,7 +1,7 @@
 # Telemetry comparisons
 
 Branch: `refactor/decoupling-and-perf`
-Status: U01 Telemetry A baseline captured (`[-]`, awaiting Commit gate A). Units `U02` through `U11` await Telemetry A.
+Status: U01 Telemetry B complete (`[-]`, awaiting Commit gate B). Units `U02` through `U11` await Telemetry A.
 
 This ledger tracks pre-refactor (Telemetry A) and post-refactor (Telemetry B) measurements for every execution unit in [roadmap.md](../roadmap.md). No unit moves past Telemetry B until baseline and post JSON files exist on disk, every parity gate passes, and every measured delta meets or beats its target with zero regressions.
 
@@ -33,7 +33,7 @@ Commit gate rule per unit:
 
 | Unit | Slug | Stage 3 split | Findings | Depends on | Parallel with | Status |
 |---|---|---|---|---|---|---|
-| `U01` | `be-core-windows-config` | S08 | `S08-01` to `S08-21` | None | None | Telemetry A `[-]` |
+| `U01` | `be-core-windows-config` | S08 | `S08-01` to `S08-21` | None | None | Telemetry B `[-]` |
 | `U02` | `be-media-archives-protocol` | S09 | `S09-01` to `S09-10` | `U01` | None | Pending |
 | `U03` | `be-fs-library-network-drop` | S10 | `S10-01` to `S10-14` | `U01`, `U02` | None | Pending |
 | `U04` | `be-previews-registry` | S11 | `S11-01` to `S11-10` | `U02`, `U03` | `U05` | Pending |
@@ -54,8 +54,8 @@ All nine modules flagged with zero unit test coverage in Stage 1 close during Te
 | `src/js/fsUtils.js` | `U05` | Mocha suites for `fsUtils` and extracted `services/{mediaFormats,mediaUrls,listNavigation}.js` plus E2E and `diagnose` | Pending |
 | `src/js/shared/workspace*` | `U05`, `U06`, `U08`, `U10`, `U01` | Mocha suites for `workspaceLayout`, `workspaceHost`, `workspaceSession`, `workspaceControls` plus detached `?surface=fileList` E2E parity | Pending |
 | `src/js/filepanel/libraryStore.js` and `favoritesStore.js` | `U08` | `mocha/libraryStore.test.js`, `mocha/favoritesStore.test.js`, `mocha/filePanelMath.test.js` plus `05-persistence` and `08-url-loader` E2E | Pending |
-| `src-tauri/src/windows.rs` | `U01` | `src-tauri/src/tests/windows_tests.rs` via `#[path]` plus `01-startup`, `06-configuration`, `07-os-integration` E2E | Telemetry A `[-]` |
-| `src-tauri/src/commands/watchers.rs` | `U01` | `src-tauri/src/tests/watchers_tests.rs` via `#[path]` plus coalesced `directory-changed` E2E | Telemetry A `[-]` |
+| `src-tauri/src/windows.rs` | `U01` | `src-tauri/src/tests/windows_tests.rs` via `#[path]` plus `01-startup`, `06-configuration`, `07-os-integration` E2E | Telemetry B `[-]` |
+| `src-tauri/src/commands/watchers.rs` | `U01` | `src-tauri/src/tests/watchers_tests.rs` via `#[path]` plus coalesced `directory-changed` E2E | Telemetry B `[-]` |
 | `src-tauri/src/commands/animation.rs` | `U02` | `src-tauri/src/tests/animation_tests.rs` via `#[path]` plus `03-viewer`, `04-archives` E2E and `diagnose -- manhwa-width-span` | Pending |
 | `src-tauri/src/image_import.rs` | `U03` | `src-tauri/src/tests/image_import_tests.rs` via `#[path]` plus `07-os-integration` E2E | Pending |
 | `src-tauri/src/commands/drop.rs` and `platform/drop.rs` | `U03` | `src-tauri/src/tests/drop_tests.rs` via `#[path]` plus `07-os-integration` E2E | Pending |
@@ -109,14 +109,14 @@ Depends on: None. Parallel with: None.
 
 | Metric or invariant | Baseline (Telemetry A) | Post (Telemetry B) | Pass criterion | Verdict |
 |---|---|---|---|---|
-| Cargo tests (`config`, `windows`, `watchers`, `utils`, `direct_open`, `dialog`, `attributes`) | 134/134 passed (`config` 19, `windows` 5, `watchers` 3, `utils` 3, `direct_open` 4, `dialog` 2, `attributes` 2; 0 inline `#[cfg(test)]` in S08) | Pending | 100% pass, 0 inline `#[cfg(test)]` in S08 files | Pending |
-| `base64_decode_bytes` temp `String` allocations per call | 4 (measured in audit) | Pending | 0 intermediate `String` allocations; 100% parity on URL-safe and standard inputs | Pending |
-| Startup `quivit_config.json` reads before first paint | 3 to 5 reads | Pending | 1 read in `lib.rs::run()`; `cleanup_orphaned_temp_dirs` and watchers off main thread | Pending |
-| `open_workspace_window` disk config reads and theme clobber | 5-file `load_config` read | Pending | 0 disk reads; inherits `active_tauri_theme()` without clobbering live preview | Pending |
-| `watch_directory` multi-file burst events | 1 event per raw FS event | Pending | Coalesced with 250ms trailing debounce; 0 events for `.tmp` sibling files | Pending |
-| `fit_options_window` / `fit_metadata_window` bounds | Unclamped | Pending | Enforced `400..=560` and `280..=600` in Rust; 0 hidden-window tray flash | Pending |
-| R2 CSP console violations across E2E `01`, `05`, `06`, `07`, `08` and `sample-navigation` | `"csp": null` (E2E `01` 3/3, `05` 4/4, `06` 2/2, `07` 4/4, `08` 1/1; `sample-navigation` 0 blackouts, 0 anomalies) | Pending | 0 CSP errors across `quivit:`, `asset:`, `blob:`, `data:`, WASM workers, `#custom-css` | Pending |
-| Dead IPC and dependency removal | `show_from_tray`, `encoding_rs`, 3 dialog perms present; Mocha 308/308 passed | Pending | All removed cleanly; `devtools` retained per R1; `diagnosticsContract.test.js` green | Pending |
+| Cargo tests (`config`, `windows`, `watchers`, `utils`, `direct_open`, `dialog`, `attributes`) | 134/134 passed (`config` 19, `windows` 5, `watchers` 3, `utils` 3, `direct_open` 4, `dialog` 2, `attributes` 2; 0 inline `#[cfg(test)]` in S08) | 150/150 passed (`config` 23, `windows` 10, `watchers` 9, `utils` 3, `direct_open` 5, `dialog` 2, `attributes` 2; 0 inline `#[cfg(test)]` in S08) | 100% pass, 0 inline `#[cfg(test)]` in S08 files | Pass |
+| `base64_decode_bytes` temp `String` allocations per call | 4 (measured in audit) | 0 temp `String` allocations (`trim_end_matches('=')` + direct `NO_PAD` decode; `utils_tests` 3/3 passed) | 0 intermediate `String` allocations; 100% parity on URL-safe and standard inputs | Pass |
+| Startup `quivit_config.json` reads before first paint | 3 to 5 reads | 1 read via `load_startup_config()` in `lib.rs::run()`; pending promotion runs before first read; watchers, orphaned temp cleanup, and capture cleanup offloaded off main thread | 1 read in `lib.rs::run()`; `cleanup_orphaned_temp_dirs` and watchers off main thread | Pass |
+| `open_workspace_window` disk config reads and theme clobber | 5-file `load_config` read | 0 disk reads; inherits `active_tauri_theme()` and `main.theme()` via `shell_background_color()`; serialized by `WINDOW_CREATE_LOCK` | 0 disk reads; inherits `active_tauri_theme()` without clobbering live preview | Pass |
+| `watch_directory` multi-file burst events | 1 event per raw FS event | 250ms trailing debounce (`spawn_debounced_emitter`); `.tmp` excluded in directory and library watchers; parent watcher filters to `Remove` / `Modify(Name)` on `child_path` (`watchers_tests` 9/9 passed) | Coalesced with 250ms trailing debounce; 0 events for `.tmp` sibling files | Pass |
+| `fit_options_window` / `fit_metadata_window` bounds | Unclamped | Enforced `400..=560` (`clamp_options_width`) and `280..=600` (`clamp_metadata_height`); `TrayHiddenTracker` tracks visible secondary windows only (`windows_tests` 10/10 passed) | Enforced `400..=560` and `280..=600` in Rust; 0 hidden-window tray flash | Pass |
+| R2 CSP console violations across E2E `01`, `05`, `06`, `07`, `08` and `sample-navigation` | `"csp": null` (E2E `01` 3/3, `05` 4/4, `06` 2/2, `07` 4/4, `08` 1/1; `sample-navigation` 0 blackouts, 0 anomalies) | Explicit R2 CSP + `dangerousDisableAssetCspModification: ["style-src"]` active; 0 CSP violations across E2E `01` 3/3, `05` 4/4, `06` 3/3 (live + reload custom CSS), `07` 4/4, `08` 1/1; `sample-navigation` 0 blackouts, 0 anomalies | 0 CSP errors across `quivit:`, `asset:`, `blob:`, `data:`, WASM workers, `#custom-css` | Pass |
+| Dead IPC and dependency removal | `show_from_tray`, `encoding_rs`, 3 dialog perms present; Mocha 308/308 passed | `show_from_tray` removed (0 refs); 3 unused dialog perms removed; `encoding_rs = "0.8"` retained with comment per U01-18 Tier 2 arbiter resolution (`chardetng` `alloc` unification); `devtools` retained per R1; Mocha 308/308 passed (`diagnosticsContract.test.js` green) | All removed cleanly (amended U01-18: `encoding_rs` retained); `devtools` retained per R1; `diagnosticsContract.test.js` green | Pass (U01-18 amended) |
 
 ---
 
