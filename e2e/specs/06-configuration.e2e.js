@@ -101,4 +101,134 @@ describe('06 - Options & Configuration Window', () => {
       { timeout: 5000, timeoutMsg: 'Main window did not synchronize theme' }
     );
   });
+
+  it('applies custom CSS without CSP violations across live save and reload', async () => {
+    const probeRule = ':root { --quivit-csp-probe: 42; }';
+
+    const saveCustomCssInOptions = async (cssText) => {
+      const handles = await browser.getWindowHandles();
+      if (handles.length === 1) {
+        await optionsPage.openOptions();
+      }
+      await optionsPage.switchToOptionsWindow();
+      await optionsPage.selectTab('tab-customization');
+      await optionsPage.customCssTextarea.waitForDisplayed({ timeout: 5000 });
+
+      await browser.execute((value) => {
+        const textarea = document.getElementById('opt-custom-css');
+        if (!textarea) throw new Error('#opt-custom-css not found');
+        textarea.value = value;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      }, cssText);
+
+      await optionsPage.save();
+      await browser.waitUntil(
+        async () => {
+          const text = await optionsPage.statusMessage.getText();
+          return text.toLowerCase().includes('saved');
+        },
+        { timeout: 6000, timeoutMsg: 'Save options did not report success' }
+      );
+
+      await optionsPage.close();
+      await browser.waitUntil(
+        async () => (await browser.getWindowHandles()).length === 1,
+        { timeout: 6000, timeoutMsg: 'Options window handle remained open after close' }
+      );
+      await menubarPage.ensureMainWindow();
+    };
+
+    await menubarPage.ensureMainWindow();
+    await browser.execute(() => {
+      window.__quivitCspViolations = [];
+      if (!window.__quivitCspListenerAttached) {
+        window.__quivitCspListenerAttached = true;
+        window.addEventListener('securitypolicyviolation', (e) => {
+          window.__quivitCspViolations.push({
+            violatedDirective: e.violatedDirective,
+            effectiveDirective: e.effectiveDirective,
+            blockedURI: e.blockedURI,
+          });
+        });
+      }
+    });
+
+    try {
+      await saveCustomCssInOptions(probeRule);
+
+      // Verify theme.js applyCustomCss applied the custom CSS on main without CSP blocking
+      await browser.waitUntil(
+        async () => {
+          const val = await browser.execute(() =>
+            getComputedStyle(document.documentElement)
+              .getPropertyValue('--quivit-csp-probe')
+              .trim()
+          );
+          return val === '42';
+        },
+        { timeout: 5000, timeoutMsg: 'Custom CSS probe variable was not applied on main window' }
+      );
+
+      const storedCss = await browser.execute(() => localStorage.getItem('quivit-custom-css') || '');
+      expect(storedCss).toContain('--quivit-csp-probe');
+
+      const liveViolations = await browser.execute(() => window.__quivitCspViolations || []);
+      expect(liveViolations).toEqual([]);
+
+      // Reload main window to exercise themePrePaint.js inline style injection on startup
+      await browser.refresh();
+      await menubarPage.menubar.waitForDisplayed({ timeout: 8000 });
+
+      await browser.waitUntil(
+        async () => {
+          const val = await browser.execute(() =>
+            getComputedStyle(document.documentElement)
+              .getPropertyValue('--quivit-csp-probe')
+              .trim()
+          );
+          return val === '42';
+        },
+        { timeout: 5000, timeoutMsg: 'Custom CSS probe variable was not applied after reload' }
+      );
+
+      // Verify dynamic inline <style> application triggers zero CSP violations
+      const dynamicResult = await browser.execute(async () => {
+        const violations = [];
+        const onViolation = (e) => {
+          violations.push({
+            violatedDirective: e.violatedDirective,
+            effectiveDirective: e.effectiveDirective,
+            blockedURI: e.blockedURI,
+          });
+        };
+        window.addEventListener('securitypolicyviolation', onViolation);
+        const style = document.createElement('style');
+        style.id = 'quivit-csp-probe-dynamic';
+        style.textContent = ':root { --quivit-csp-probe-dynamic: 99; }';
+        document.head.appendChild(style);
+        const value = getComputedStyle(document.documentElement)
+          .getPropertyValue('--quivit-csp-probe-dynamic')
+          .trim();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        style.remove();
+        window.removeEventListener('securitypolicyviolation', onViolation);
+        return { value, violations };
+      });
+      expect(dynamicResult.value).toBe('99');
+      expect(dynamicResult.violations).toEqual([]);
+    } finally {
+      await saveCustomCssInOptions('');
+      await browser.waitUntil(
+        async () => {
+          const val = await browser.execute(() =>
+            getComputedStyle(document.documentElement)
+              .getPropertyValue('--quivit-csp-probe')
+              .trim()
+          );
+          return val === '';
+        },
+        { timeout: 5000, timeoutMsg: 'Custom CSS probe variable was not cleared after cleanup' }
+      );
+    }
+  });
 });
